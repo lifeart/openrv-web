@@ -10,7 +10,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ## Features
 
 ### Media Support
-- Single images (PNG, JPEG, WebP, JPEG XL, HEIC/HEIF, EXR, Radiance HDR)
+- Single images (PNG, JPEG, WebP, GIF, BMP, TIFF, AVIF, JPEG XL, HEIC/HEIF, EXR/SXR, DPX/Cineon, Radiance HDR, RAW preview formats)
 - **EXR Format Support** - full HDR image loading via WebAssembly decoder
   - Float32 texture support for HDR precision
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
@@ -33,7 +33,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - ISOBMFF container parsing for gainmap extraction and `colr(nclx)` HDR transfer detection (HLG/PQ)
   - HDR reconstruction: sRGB-to-linear base + gain map with configurable headroom
   - Standalone HEIC builder for gainmap item decoding (wraps raw HEVC data with hvcC config)
-- Video files (MP4, WebM)
+- Video files (Mediabunny containers: MP4/M4V/3GP/3G2, MOV/QuickTime, MKV/WebM, OGG/OGV/OGX; plus AVI browser fallback)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
   - **Missing frame detection** - automatically detect and indicate gaps in sequences
@@ -324,6 +324,8 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Configurable sync elements: playback, view (pan/zoom), color adjustments, annotations
   - Host/participant role distinction
   - Reconnection handling with exponential backoff
+  - Supports signaling server failover via `VITE_NETWORK_SIGNALING_SERVERS` (comma-separated `wss://` / `ws://` URLs)
+  - WebRTC peer connections include public STUN/TURN defaults (Google, Cloudflare, OpenRelay) for cross-network/NAT traversal
   - Keyboard shortcut: Shift+N to toggle network panel
 
 ## Installation
@@ -639,7 +641,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (10400+ tests)
+# Run unit tests (12200+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -655,7 +657,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **10400+ unit tests** across 251 test files and **103 e2e test suites**:
+The codebase includes comprehensive test coverage with **12200+ unit tests** across 294 test files and **103 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
 - **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)

@@ -30,6 +30,7 @@ export interface NetworkControlEvents extends EventMap {
   leaveRoom: void;
   syncSettingsChanged: SyncSettings;
   copyLink: string;
+  applyResponseLink: string;
   panelToggled: boolean;
 }
 
@@ -38,10 +39,22 @@ export interface NetworkControlEvents extends EventMap {
 export interface NetworkControlState {
   connectionState: ConnectionState;
   roomInfo: RoomInfo | null;
+  isHost: boolean;
   users: SyncUser[];
   syncSettings: SyncSettings;
+  pinCode: string;
+  shareLink: string;
+  shareLinkKind: 'invite' | 'response' | 'generic';
+  responseToken: string;
+  linkedRoomCode: string | null;
+  linkedRoomAutoJoinArmed: boolean;
   isPanelOpen: boolean;
   rtt: number;
+}
+
+interface MediaSyncConfirmationOptions {
+  fileCount: number;
+  totalBytes: number;
 }
 
 export class NetworkControl extends EventEmitter<NetworkControlEvents> {
@@ -58,11 +71,24 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private connectingPanel!: HTMLElement;
   private userListContainer!: HTMLElement;
   private roomCodeDisplay!: HTMLElement;
+  private shareLinkLabel!: HTMLElement;
+  private shareLinkInput!: HTMLInputElement;
+  private copyLinkButton!: HTMLButtonElement;
+  private responseLinkInput!: HTMLInputElement;
+  private applyResponseSection!: HTMLElement;
+  private responseTokenSection!: HTMLElement;
+  private responseTokenInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
+  private pinCodeInput!: HTMLInputElement;
   private errorDisplay!: HTMLElement;
+  private infoDisplay!: HTMLElement;
+  private mediaSyncPrompt!: HTMLElement;
+  private mediaSyncPromptText!: HTMLElement;
+  private pendingMediaPromptResolver: ((accepted: boolean) => void) | null = null;
 
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -70,14 +96,26 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.state = {
       connectionState: 'disconnected',
       roomInfo: null,
+      isHost: false,
       users: [],
       syncSettings: { ...DEFAULT_SYNC_SETTINGS },
+      pinCode: this.generateDefaultPinCode(),
+      shareLink: '',
+      shareLinkKind: 'generic',
+      responseToken: '',
+      linkedRoomCode: null,
+      linkedRoomAutoJoinArmed: false,
       isPanelOpen: false,
       rtt: 0,
     };
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionPanel();
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.closePanel();
+      }
+    };
 
     // Container
     this.container = document.createElement('div');
@@ -227,6 +265,87 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
     this.panel.appendChild(this.errorDisplay);
 
+    this.infoDisplay = document.createElement('div');
+    this.infoDisplay.dataset.testid = 'network-info-display';
+    this.infoDisplay.style.cssText = `
+      display: none;
+      padding: 8px 12px;
+      background: rgba(var(--accent-primary-rgb), 0.12);
+      color: var(--text-primary);
+      font-size: 11px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+    this.panel.appendChild(this.infoDisplay);
+
+    // Media sync confirmation prompt
+    this.mediaSyncPrompt = document.createElement('div');
+    this.mediaSyncPrompt.dataset.testid = 'network-media-sync-prompt';
+    this.mediaSyncPrompt.style.cssText = `
+      display: none;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+      background: rgba(var(--accent-primary-rgb), 0.08);
+    `;
+
+    const mediaPromptLabel = document.createElement('div');
+    mediaPromptLabel.style.cssText = `
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    `;
+    mediaPromptLabel.textContent = 'Media Sync';
+    this.mediaSyncPrompt.appendChild(mediaPromptLabel);
+
+    this.mediaSyncPromptText = document.createElement('div');
+    this.mediaSyncPromptText.style.cssText = `
+      color: var(--text-primary);
+      font-size: 11px;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    `;
+    this.mediaSyncPrompt.appendChild(this.mediaSyncPromptText);
+
+    const mediaPromptActions = document.createElement('div');
+    mediaPromptActions.style.cssText = 'display: flex; gap: 8px;';
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.dataset.testid = 'network-media-sync-accept';
+    acceptBtn.textContent = 'Accept';
+    acceptBtn.style.cssText = `
+      flex: 1;
+      padding: 6px 10px;
+      background: var(--accent-primary);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+    `;
+    acceptBtn.addEventListener('click', () => this.resolveMediaPrompt(true));
+    mediaPromptActions.appendChild(acceptBtn);
+
+    const declineBtn = document.createElement('button');
+    declineBtn.dataset.testid = 'network-media-sync-decline';
+    declineBtn.textContent = 'Decline';
+    declineBtn.style.cssText = `
+      flex: 1;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    declineBtn.addEventListener('click', () => this.resolveMediaPrompt(false));
+    mediaPromptActions.appendChild(declineBtn);
+
+    this.mediaSyncPrompt.appendChild(mediaPromptActions);
+    this.panel.appendChild(this.mediaSyncPrompt);
+
     // Disconnected state panel
     this.disconnectedPanel = this.buildDisconnectedPanel();
     this.panel.appendChild(this.disconnectedPanel);
@@ -246,6 +365,64 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     const panel = document.createElement('div');
     panel.dataset.testid = 'network-disconnected-panel';
     panel.style.cssText = 'padding: 12px;';
+
+    // PIN section
+    const pinSection = document.createElement('div');
+    pinSection.style.cssText = 'margin-bottom: 12px;';
+
+    const pinLabel = document.createElement('div');
+    pinLabel.textContent = 'PIN Code';
+    pinLabel.style.cssText = `
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    `;
+    pinSection.appendChild(pinLabel);
+
+    this.pinCodeInput = document.createElement('input');
+    this.pinCodeInput.dataset.testid = 'network-pin-code-input';
+    this.pinCodeInput.type = 'text';
+    this.pinCodeInput.placeholder = '4-10 digit PIN';
+    this.pinCodeInput.maxLength = 10;
+    this.pinCodeInput.value = this.state.pinCode;
+    this.pinCodeInput.style.cssText = `
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+      letter-spacing: 1px;
+    `;
+    this.pinCodeInput.addEventListener('focus', () => {
+      this.pinCodeInput.style.borderColor = 'var(--accent-primary)';
+    });
+    this.pinCodeInput.addEventListener('blur', () => {
+      this.pinCodeInput.style.borderColor = 'var(--border-primary)';
+    });
+    this.pinCodeInput.addEventListener('input', () => {
+      const digits = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
+      this.pinCodeInput.value = digits;
+      this.state.pinCode = digits;
+
+      if (
+        this.state.linkedRoomCode &&
+        this.state.linkedRoomAutoJoinArmed &&
+        (this.state.connectionState === 'disconnected' || this.state.connectionState === 'error') &&
+        digits.length >= 4
+      ) {
+        this.state.linkedRoomAutoJoinArmed = false;
+        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: 'User' });
+      }
+    });
+    pinSection.appendChild(this.pinCodeInput);
+    panel.appendChild(pinSection);
 
     // Create Room section
     const createSection = document.createElement('div');
@@ -273,6 +450,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       createBtn.style.background = 'var(--accent-primary)';
     });
     createBtn.addEventListener('click', () => {
+      this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
       this.emit('createRoom', { userName: this.state.syncSettings ? 'Host' : 'User' });
     });
     createSection.appendChild(createBtn);
@@ -398,6 +576,176 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
     panel.appendChild(this.roomCodeDisplay);
 
+    // Share URL display
+    const shareSection = document.createElement('div');
+    shareSection.style.cssText = `
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+
+    this.shareLinkLabel = document.createElement('div');
+    this.shareLinkLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    this.shareLinkLabel.textContent = 'Share URL';
+    shareSection.appendChild(this.shareLinkLabel);
+
+    this.shareLinkInput = document.createElement('input');
+    this.shareLinkInput.dataset.testid = 'network-share-link-input';
+    this.shareLinkInput.type = 'text';
+    this.shareLinkInput.readOnly = true;
+    this.shareLinkInput.placeholder = 'Create or join a room to get a share URL';
+    this.shareLinkInput.value = this.state.shareLink;
+    this.shareLinkInput.style.cssText = `
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+    `;
+    this.shareLinkInput.addEventListener('focus', () => {
+      this.shareLinkInput.select();
+    });
+    shareSection.appendChild(this.shareLinkInput);
+    panel.appendChild(shareSection);
+
+    // Host: apply guest WebRTC response URL/token
+    this.applyResponseSection = document.createElement('div');
+    this.applyResponseSection.style.cssText = `
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+
+    const responseLabel = document.createElement('div');
+    responseLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    responseLabel.textContent = 'Guest Response (Host)';
+    this.applyResponseSection.appendChild(responseLabel);
+
+    const responseRow = document.createElement('div');
+    responseRow.style.cssText = 'display: flex; gap: 6px;';
+
+    this.responseLinkInput = document.createElement('input');
+    this.responseLinkInput.dataset.testid = 'network-response-link-input';
+    this.responseLinkInput.type = 'text';
+    this.responseLinkInput.placeholder = 'Paste response URL/token';
+    this.responseLinkInput.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+    `;
+    responseRow.appendChild(this.responseLinkInput);
+
+    const applyResponseBtn = document.createElement('button');
+    applyResponseBtn.dataset.testid = 'network-apply-response-button';
+    applyResponseBtn.textContent = 'Apply';
+    applyResponseBtn.style.cssText = `
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.12s ease;
+      flex-shrink: 0;
+    `;
+    applyResponseBtn.addEventListener('click', () => {
+      const value = this.responseLinkInput.value.trim();
+      if (!value) {
+        this.showError('Paste a WebRTC response URL before applying.');
+        return;
+      }
+      this.hideError();
+      this.emit('applyResponseLink', value);
+    });
+    responseRow.appendChild(applyResponseBtn);
+
+    this.applyResponseSection.appendChild(responseRow);
+    panel.appendChild(this.applyResponseSection);
+
+    // Guest: generated response token to send back to host
+    this.responseTokenSection = document.createElement('div');
+    this.responseTokenSection.style.cssText = `
+      display: none;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+
+    const tokenLabel = document.createElement('div');
+    tokenLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    tokenLabel.textContent = 'Response Token (Send To Host)';
+    this.responseTokenSection.appendChild(tokenLabel);
+
+    const tokenRow = document.createElement('div');
+    tokenRow.style.cssText = 'display: flex; gap: 6px;';
+
+    this.responseTokenInput = document.createElement('input');
+    this.responseTokenInput.dataset.testid = 'network-response-token-input';
+    this.responseTokenInput.type = 'text';
+    this.responseTokenInput.readOnly = true;
+    this.responseTokenInput.placeholder = 'Token is generated from invite URL';
+    this.responseTokenInput.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+    `;
+    tokenRow.appendChild(this.responseTokenInput);
+
+    const copyTokenBtn = document.createElement('button');
+    copyTokenBtn.dataset.testid = 'network-copy-response-token-button';
+    copyTokenBtn.textContent = 'Copy';
+    copyTokenBtn.style.cssText = `
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.12s ease;
+      flex-shrink: 0;
+    `;
+    copyTokenBtn.addEventListener('click', async () => {
+      const token = this.state.responseToken.trim();
+      if (!token) {
+        this.showError('Response token is not available yet.');
+        return;
+      }
+      this.hideError();
+      try {
+        await navigator.clipboard.writeText(token);
+        copyTokenBtn.textContent = 'Copied!';
+        copyTokenBtn.style.color = 'var(--success)';
+        setTimeout(() => {
+          copyTokenBtn.textContent = 'Copy';
+          copyTokenBtn.style.color = 'var(--text-primary)';
+        }, 2000);
+      } catch {
+        this.showError('Clipboard unavailable. Copy token from the field manually.');
+      }
+    });
+    tokenRow.appendChild(copyTokenBtn);
+
+    this.responseTokenSection.appendChild(tokenRow);
+    panel.appendChild(this.responseTokenSection);
+
     // User list
     const usersSection = document.createElement('div');
     usersSection.style.cssText = `
@@ -471,10 +819,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     const actionsSection = document.createElement('div');
     actionsSection.style.cssText = 'padding: 8px 12px; display: flex; gap: 8px;';
 
-    const copyBtn = document.createElement('button');
-    copyBtn.dataset.testid = 'network-copy-link-button';
-    copyBtn.textContent = 'Copy Link';
-    copyBtn.style.cssText = `
+    this.copyLinkButton = document.createElement('button');
+    this.copyLinkButton.dataset.testid = 'network-copy-link-button';
+    this.copyLinkButton.textContent = 'Copy Link';
+    this.copyLinkButton.style.cssText = `
       flex: 1;
       padding: 6px 12px;
       background: var(--bg-tertiary);
@@ -485,20 +833,26 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       font-size: 11px;
       transition: all 0.12s ease;
     `;
-    copyBtn.addEventListener('click', () => {
-      const code = this.state.roomInfo?.roomCode ?? '';
-      const link = `${window.location.origin}${window.location.pathname}?room=${code}`;
+    this.copyLinkButton.addEventListener('click', () => {
+      const link = this.state.shareLink.trim();
+      if (!link) {
+        this.showError('Create or join a room before copying a share link.');
+        return;
+      }
+
+      this.hideError();
+      this.setShareLink(link);
       this.emit('copyLink', link);
 
       // Visual feedback
-      copyBtn.textContent = 'Copied!';
-      copyBtn.style.color = 'var(--success)';
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
       setTimeout(() => {
-        copyBtn.textContent = 'Copy Link';
-        copyBtn.style.color = 'var(--text-primary)';
+        this.copyLinkButton.style.color = 'var(--text-primary)';
+        this.updateShareLinkUI();
       }, 2000);
     });
-    actionsSection.appendChild(copyBtn);
+    actionsSection.appendChild(this.copyLinkButton);
 
     const leaveBtn = document.createElement('button');
     leaveBtn.dataset.testid = 'network-leave-button';
@@ -526,6 +880,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     actionsSection.appendChild(leaveBtn);
 
     panel.appendChild(actionsSection);
+    this.updateShareLinkUI();
     return panel;
   }
 
@@ -554,6 +909,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     // Add listeners
     requestAnimationFrame(() => {
       document.addEventListener('click', this.boundHandleOutsideClick);
+      document.addEventListener('keydown', this.boundHandleKeyDown);
       window.addEventListener('scroll', this.boundHandleReposition, true);
       window.addEventListener('resize', this.boundHandleReposition);
     });
@@ -570,11 +926,13 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     // Remove listeners
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
 
     // Clear error
     this.hideError();
+    this.resolveMediaPrompt(false);
 
     this.emit('panelToggled', false);
   }
@@ -596,7 +954,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   }
 
   private handleJoinRoom(): void {
-    const code = this.roomCodeInput.value.trim().toUpperCase();
+    const code = this.roomCodeInput.value.trim().toUpperCase() || this.state.linkedRoomCode || '';
+    if (this.pinCodeInput) {
+      this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
+    }
     if (!code || code.length < 9) {
       this.showError('Please enter a valid room code (XXXX-XXXX)');
       return;
@@ -609,17 +970,103 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   setConnectionState(state: ConnectionState): void {
     this.state.connectionState = state;
+    if (state === 'disconnected' || state === 'error') {
+      this.state.isHost = false;
+      this.state.responseToken = '';
+      this.state.shareLinkKind = 'generic';
+      this.hideInfo();
+    }
+    if ((state === 'disconnected' || state === 'error') && this.state.linkedRoomCode) {
+      this.state.linkedRoomAutoJoinArmed = true;
+    }
     this.updateButtonStyle();
     this.updatePanelVisibility();
+    this.updateShareLinkUI();
+  }
+
+  setIsHost(isHost: boolean): void {
+    this.state.isHost = isHost;
+    if (isHost) {
+      this.state.shareLinkKind = 'invite';
+      this.state.responseToken = '';
+    }
+    this.updateShareLinkUI();
+  }
+
+  setPinCode(pinCode: string): void {
+    const normalized = pinCode.replace(/\D/g, '').slice(0, 10);
+    this.state.pinCode = normalized;
+    if (this.pinCodeInput) {
+      this.pinCodeInput.value = normalized;
+    }
+    this.refreshShareLinkFromState();
+  }
+
+  getPinCode(): string {
+    return this.state.pinCode;
+  }
+
+  setShareLink(link: string): void {
+    this.state.shareLink = link;
+    if (this.shareLinkInput) {
+      this.shareLinkInput.value = link;
+    }
+    this.updateShareLinkUI();
+  }
+
+  setShareLinkKind(kind: 'invite' | 'response' | 'generic'): void {
+    this.state.shareLinkKind = kind;
+    this.updateShareLinkUI();
+  }
+
+  setResponseToken(token: string): void {
+    this.state.responseToken = token.trim();
+    if (this.responseTokenInput) {
+      this.responseTokenInput.value = this.state.responseToken;
+    }
+    this.updateShareLinkUI();
+  }
+
+  setJoinRoomCodeFromLink(roomCode: string | null): void {
+    const normalized = this.normalizeRoomCode(roomCode);
+    this.state.linkedRoomCode = normalized;
+    this.state.linkedRoomAutoJoinArmed = Boolean(normalized);
+    this.updateJoinRoomInputState();
+  }
+
+  promptMediaSyncConfirmation(options: MediaSyncConfirmationOptions): Promise<boolean> {
+    if (!this.isOpen) {
+      this.openPanel();
+    }
+
+    const fileLabel = options.fileCount === 1 ? 'file' : 'files';
+    this.mediaSyncPromptText.textContent = `Incoming transfer: ${options.fileCount} ${fileLabel} (${this.formatBytes(options.totalBytes)}).`;
+    this.mediaSyncPrompt.style.display = 'block';
+
+    if (this.pendingMediaPromptResolver) {
+      this.pendingMediaPromptResolver(false);
+      this.pendingMediaPromptResolver = null;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      this.pendingMediaPromptResolver = resolve;
+    });
   }
 
   setRoomInfo(info: RoomInfo | null): void {
     this.state.roomInfo = info;
+    if (!info) {
+      this.state.responseToken = '';
+      this.state.shareLinkKind = 'generic';
+    }
     this.updateRoomCodeDisplay();
+    this.refreshShareLinkFromState();
+    this.updateShareLinkUI();
   }
 
   setUsers(users: SyncUser[]): void {
     this.state.users = users;
+    this.updateRoomCodeDisplay();
     this.updateUserList();
     this.updateBadge();
   }
@@ -636,6 +1083,35 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideError(): void {
     this.errorDisplay.style.display = 'none';
     this.errorDisplay.textContent = '';
+  }
+
+  showInfo(message: string): void {
+    this.infoDisplay.textContent = message;
+    this.infoDisplay.style.display = 'block';
+  }
+
+  hideInfo(): void {
+    this.infoDisplay.style.display = 'none';
+    this.infoDisplay.textContent = '';
+  }
+
+  private resolveMediaPrompt(accepted: boolean): void {
+    if (this.pendingMediaPromptResolver) {
+      const resolver = this.pendingMediaPromptResolver;
+      this.pendingMediaPromptResolver = null;
+      resolver(accepted);
+    }
+    if (this.mediaSyncPrompt) {
+      this.mediaSyncPrompt.style.display = 'none';
+    }
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
 
   // ---- UI Updates ----
@@ -676,6 +1152,74 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.connectedPanel.style.display = connectionState === 'connected' ? 'flex' : 'none';
   }
 
+  private updateJoinRoomInputState(): void {
+    if (!this.roomCodeInput) return;
+
+    if (this.state.linkedRoomCode) {
+      this.roomCodeInput.value = this.state.linkedRoomCode;
+      this.roomCodeInput.readOnly = true;
+      this.roomCodeInput.title = 'Room code is provided by the shared link';
+      this.roomCodeInput.style.opacity = '0.8';
+      this.roomCodeInput.style.cursor = 'not-allowed';
+    } else {
+      this.roomCodeInput.readOnly = false;
+      this.roomCodeInput.title = '';
+      this.roomCodeInput.style.opacity = '1';
+      this.roomCodeInput.style.cursor = 'text';
+    }
+  }
+
+  private updateShareLinkUI(): void {
+    if (!this.shareLinkLabel || !this.copyLinkButton || !this.applyResponseSection || !this.responseTokenSection) {
+      return;
+    }
+
+    const kind = this.state.shareLinkKind;
+    const hasResponseToken = this.state.responseToken.length > 0;
+
+    if (kind === 'response' || hasResponseToken) {
+      this.shareLinkLabel.textContent = 'Response URL (Send To Host)';
+      this.copyLinkButton.textContent = 'Copy Response URL';
+    } else if (this.state.isHost || kind === 'invite') {
+      this.shareLinkLabel.textContent = 'Invite URL (Send To Guest)';
+      this.copyLinkButton.textContent = 'Copy Invite URL';
+    } else {
+      this.shareLinkLabel.textContent = 'Share URL';
+      this.copyLinkButton.textContent = 'Copy Link';
+    }
+
+    this.applyResponseSection.style.display = this.state.isHost ? 'block' : 'none';
+    this.responseTokenSection.style.display = hasResponseToken ? 'block' : 'none';
+    if (this.responseTokenInput) {
+      this.responseTokenInput.value = this.state.responseToken;
+    }
+  }
+
+  private buildRoomLink(): string {
+    const code = this.state.roomInfo?.roomCode ?? '';
+    if (!code) return '';
+
+    const url = new URL(window.location.href);
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('room', code);
+    if (this.state.pinCode) {
+      url.searchParams.set('pin', this.state.pinCode);
+    }
+    return url.toString();
+  }
+
+  private refreshShareLinkFromState(): void {
+    this.setShareLink(this.buildRoomLink());
+  }
+
+  private normalizeRoomCode(roomCode: string | null): string | null {
+    if (!roomCode) return null;
+    const raw = roomCode.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 8);
+    if (raw.length !== 8) return null;
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
+  }
+
   private updateRoomCodeDisplay(): void {
     const info = this.state.roomInfo;
     if (!info) {
@@ -694,8 +1238,16 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     code.style.cssText = 'color: var(--text-primary); font-family: var(--font-mono); font-weight: 600; letter-spacing: 1px;';
     code.textContent = info.roomCode;
 
+    const participants = document.createElement('span');
+    participants.dataset.testid = 'network-room-user-count';
+    participants.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-left: 6px;';
+    const currentUsers = Math.max(this.state.users.length, info.users.length, 1);
+    const maxUsers = Math.max(info.maxUsers || 0, currentUsers);
+    participants.textContent = `${currentUsers}/${maxUsers}`;
+
     this.roomCodeDisplay.appendChild(label);
     this.roomCodeDisplay.appendChild(code);
+    this.roomCodeDisplay.appendChild(participants);
   }
 
   private updateUserList(): void {
@@ -770,11 +1322,16 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     return { ...this.state };
   }
 
+  private generateDefaultPinCode(): string {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
   render(): HTMLElement {
     return this.container;
   }
 
   dispose(): void {
+    this.resolveMediaPrompt(false);
     this.closePanel();
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);

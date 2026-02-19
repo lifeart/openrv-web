@@ -26,6 +26,7 @@ import type { ToneMappingControl } from './ui/components/ToneMappingControl';
 import type { ColorControls } from './ui/components/ColorControls';
 import type { CompareControl } from './ui/components/CompareControl';
 import type { FilterControl } from './ui/components/FilterControl';
+import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
 import type { CDLControl } from './ui/components/CDLControl';
 import type { TransformControl } from './ui/components/TransformControl';
 import type { LensControl } from './ui/components/LensControl';
@@ -42,6 +43,7 @@ import {
   updateWaveform as _updateWaveform,
   updateVectorscope as _updateVectorscope,
   updateGamutDiagram as _updateGamutDiagram,
+  computeHistogramData as _computeHistogramData,
   createScopeScheduler,
 } from './handlers/scopeHandlers';
 import {
@@ -89,6 +91,7 @@ export interface SessionBridgeContext {
   getChannelSelect(): ChannelSelect;
   getStackControl(): StackControl;
   getFilterControl(): FilterControl;
+  getNoiseReductionControl?(): NoiseReductionControl;
   getCDLControl(): CDLControl;
   getTransformControl(): TransformControl;
   getLensControl(): LensControl;
@@ -101,10 +104,18 @@ export class AppSessionBridge {
   private context: SessionBridgeContext;
   private scopeScheduler: ReturnType<typeof createScopeScheduler>;
   private unsubscribers: Array<() => void> = [];
+  private _onHistogramData: ((data: import('./ui/components/Histogram').HistogramData) => void) | null = null;
 
   constructor(context: SessionBridgeContext) {
     this.context = context;
-    this.scopeScheduler = createScopeScheduler(context);
+    this.scopeScheduler = createScopeScheduler(context, {
+      onHistogramData: (data) => this._onHistogramData?.(data),
+    });
+  }
+
+  /** Set callback to receive histogram data after scope updates (for mini histogram in panels). */
+  setHistogramDataCallback(cb: ((data: import('./ui/components/Histogram').HistogramData) => void) | null): void {
+    this._onHistogramData = cb;
   }
 
   /**
@@ -189,10 +200,23 @@ export class AppSessionBridge {
   }
 
   /**
-   * Update histogram with current frame data
+   * Update histogram with current frame data.
+   * Also feeds the mini histogram callback if registered.
    */
   updateHistogram(): void {
     _updateHistogram(this.context);
+
+    // Feed mini histogram in right panel (even when full Histogram overlay isn't visible)
+    if (this._onHistogramData) {
+      const histogram = this.context.getHistogram();
+      // If full histogram was visible, it already computed fresh data
+      const histData = histogram.isVisible()
+        ? histogram.getData()
+        : _computeHistogramData(this.context);
+      if (histData) {
+        this._onHistogramData(histData);
+      }
+    }
   }
 
   /**

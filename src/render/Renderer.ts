@@ -84,11 +84,14 @@ export class Renderer implements RendererBackend {
   private falseColorLUTTexture: WebGLTexture | null = null;
   private lut3DTexture: WebGLTexture | null = null;
   private filmLUTTexture: WebGLTexture | null = null;
+  private inlineLUTTexture: WebGLTexture | null = null;
 
   // --- Pre-allocated temp buffers for LUT conversions ---
   private falseColorRGBABuffer: Uint8Array | null = null;
   private lut3DRGBABuffer: Float32Array | null = null;
   private lut3DRGBABufferSize = 0; // tracks the LUT size the buffer was allocated for
+  private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
+  private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
 
   // --- RGBA16F FBO for renderImageToFloat (WebGPU HDR blit path) ---
   private hdrFBO: WebGLFramebuffer | null = null;
@@ -140,6 +143,11 @@ export class Renderer implements RendererBackend {
   // so resetting to 'srgb' after each upload just to set it back next frame
   // wastes ~0.5ms per frame in try/catch overhead.
   private _currentUnpackColorSpace: string = 'srgb';
+
+  // User-applied transform (rotation/flip from TransformControl)
+  private _userRotation: 0 | 90 | 180 | 270 = 0;
+  private _userFlipH = false;
+  private _userFlipV = false;
 
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
@@ -422,10 +430,13 @@ export class Renderer implements RendererBackend {
       );
     }
 
-    // Set texture rotation for VideoFrame sources that don't have container rotation applied.
-    // 0=0°, 1=90°CW, 2=180°, 3=270°CW
-    const rotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
-    this.displayShader.setUniformInt('u_texRotation', Math.round(rotation / 90) % 4);
+    // Combine video rotation metadata with user-applied rotation.
+    // Both are in degrees (0, 90, 180, 270). The shader uniform is 0-3.
+    const videoRotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
+    const totalRotation = (Math.round(videoRotation / 90) + Math.round(this._userRotation / 90)) % 4;
+    this.displayShader.setUniformInt('u_texRotation', totalRotation);
+    this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
+    this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
     // Set texel size for clarity/sharpen (based on source image dimensions)
     if (image.width > 0 && image.height > 0) {
@@ -476,6 +487,11 @@ export class Renderer implements RendererBackend {
         this.ensureFilmLUTTexture();
         gl.activeTexture(gl.TEXTURE4);
         gl.bindTexture(gl.TEXTURE_2D, this.filmLUTTexture);
+      },
+      bindInlineLUTTexture: () => {
+        this.ensureInlineLUTTexture();
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
       },
       getCanvasSize: () => ({
         width: this.canvas?.width ?? 0,
@@ -570,6 +586,56 @@ export class Renderer implements RendererBackend {
       // Film LUT is 256x1 RGB packed as RGBA (alpha=255)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, LUT_1D_SIZE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, s.filmLUTData);
       sm.clearTextureDirtyFlag('filmLUTDirty');
+    }
+  }
+
+  private ensureInlineLUTTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const sm = this.stateManager as ShaderStateManager;
+    const s = sm.getInternalState();
+
+    if (!this.inlineLUTTexture) {
+      this.inlineLUTTexture = gl.createTexture();
+    }
+
+    if (s.inlineLUTDirty && s.inlineLUTData) {
+      const lutSize = s.inlineLUTSize;
+      const channels = s.inlineLUTChannels;
+
+      gl.activeTexture(gl.TEXTURE5);
+      gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+      if (channels === 3) {
+        // 3-channel: de-interleave [R0,G0,B0, R1,G1,B1, ...] into 3 rows:
+        //   row 0: [R0, R1, ..., R(n-1)]
+        //   row 1: [G0, G1, ..., G(n-1)]
+        //   row 2: [B0, B1, ..., B(n-1)]
+        // Upload as (lutSize x 3) R32F texture
+        const totalElements = lutSize * 3;
+        if (!this.inlineLUTDeinterleavedBuffer || this.inlineLUTDeinterleavedBufferSize !== totalElements) {
+          this.inlineLUTDeinterleavedBuffer = new Float32Array(totalElements);
+          this.inlineLUTDeinterleavedBufferSize = totalElements;
+        }
+        const dst = this.inlineLUTDeinterleavedBuffer;
+        const src = s.inlineLUTData;
+        for (let i = 0; i < lutSize; i++) {
+          dst[i] = src[i * 3]!;                 // R row
+          dst[lutSize + i] = src[i * 3 + 1]!;   // G row
+          dst[lutSize * 2 + i] = src[i * 3 + 2]!; // B row
+        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, lutSize, 3, 0, gl.RED, gl.FLOAT, dst);
+      } else {
+        // 1-channel luminance: upload as (lutSize x 1) R32F texture
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, lutSize, 1, 0, gl.RED, gl.FLOAT, s.inlineLUTData);
+      }
+
+      sm.clearTextureDirtyFlag('inlineLUTDirty');
     }
   }
 
@@ -796,6 +862,16 @@ export class Renderer implements RendererBackend {
     return this.gl;
   }
 
+  /**
+   * Set user-applied rotation and flip (from TransformControl).
+   * Combined with video rotation metadata in the vertex shader.
+   */
+  setUserTransform(rotation: 0 | 90 | 180 | 270, flipH: boolean, flipV: boolean): void {
+    this._userRotation = rotation;
+    this._userFlipH = flipH;
+    this._userFlipV = flipV;
+  }
+
   // --- Thin wrapper setters delegating to ShaderStateManager ---
 
   setColorAdjustments(adjustments: ColorAdjustments): void {
@@ -816,6 +892,30 @@ export class Renderer implements RendererBackend {
 
   getColorInversion(): boolean {
     return this.stateManager.getColorInversion();
+  }
+
+  setPremultMode(mode: number): void {
+    this.stateManager.setPremultMode(mode);
+  }
+
+  getPremultMode(): number {
+    return this.stateManager.getPremultMode();
+  }
+
+  setDitherMode(mode: number): void {
+    this.stateManager.setDitherMode(mode);
+  }
+
+  getDitherMode(): number {
+    return this.stateManager.getDitherMode();
+  }
+
+  setQuantizeBits(bits: number): void {
+    this.stateManager.setQuantizeBits(bits);
+  }
+
+  getQuantizeBits(): number {
+    return this.stateManager.getQuantizeBits();
   }
 
   setToneMappingState(state: ToneMappingState): void {
@@ -1017,59 +1117,66 @@ export class Renderer implements RendererBackend {
       this.scopePBOCachedPixels = new Float32Array(pixelCount);
     }
 
-    // Neutralize display settings so scopes show scene-referred data
+    // Neutralize display/tone-mapping output so scopes show scene-referred data
     const prevDisplayState = this.stateManager.getDisplayColorState();
     this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const prevToneMappingState = this.stateManager.getToneMappingState();
 
     // Step 1: Render current frame to scope FBO
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
+    const disableToneMappingForScopes = prevHdrMode !== 'sdr' && prevToneMappingState.enabled;
+    if (disableToneMappingForScopes) {
+      this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
+    }
     this.hdrOutputMode = 'hlg';
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scopeFBO);
-    gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    this.renderImage(image, 0, 0, 1, 1);
-    this.hdrOutputMode = prevHdrMode;
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.scopeFBO);
+      gl.viewport(0, 0, width, height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.renderImage(image, 0, 0, 1, 1);
 
-    // Step 2: Consume any PBO whose GPU fence has signaled
-    for (let i = 0; i < 2; i++) {
-      const fence = this.scopePBOFences[i];
-      if (fence && gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED) {
-        gl.deleteSync(fence);
-        this.scopePBOFences[i] = null;
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
-        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.scopePBOCachedPixels!);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      // Step 2: Consume any PBO whose GPU fence has signaled
+      for (let i = 0; i < 2; i++) {
+        const fence = this.scopePBOFences[i];
+        if (fence && gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED) {
+          gl.deleteSync(fence);
+          this.scopePBOFences[i] = null;
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
+          gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.scopePBOCachedPixels!);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          this.scopePBOReady = true;
+        }
+      }
+
+      // Step 3: Start async readPixels into an idle PBO
+      for (let i = 0; i < 2; i++) {
+        if (!this.scopePBOFences[i]) {
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          this.scopePBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+          gl.flush();
+          break;
+        }
+      }
+
+      // Step 4: First-frame fallback — sync readPixels (one-time stall)
+      if (!this.scopePBOReady) {
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.scopePBOCachedPixels!);
         this.scopePBOReady = true;
       }
-    }
-
-    // Step 3: Start async readPixels into an idle PBO
-    for (let i = 0; i < 2; i++) {
-      if (!this.scopePBOFences[i]) {
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        this.scopePBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-        gl.flush();
-        break;
+    } finally {
+      this.hdrOutputMode = prevHdrMode;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+      this.stateManager.setDisplayColorState(prevDisplayState);
+      if (disableToneMappingForScopes) {
+        this.stateManager.setToneMappingState(prevToneMappingState);
       }
     }
-
-    // Step 4: First-frame fallback — sync readPixels (one-time stall)
-    if (!this.scopePBOReady) {
-      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.scopePBOCachedPixels!);
-      this.scopePBOReady = true;
-    }
-
-    // Unbind FBO and restore viewport
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
-
-    // Restore display state
-    this.stateManager.setDisplayColorState(prevDisplayState);
 
     return this.scopePBOCachedPixels;
   }
@@ -1081,29 +1188,36 @@ export class Renderer implements RendererBackend {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
 
-    // Neutralize display settings so scopes show scene-referred data
+    // Neutralize display/tone-mapping output so scopes show scene-referred data
     const prevDisplayState = this.stateManager.getDisplayColorState();
     this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const prevToneMappingState = this.stateManager.getToneMappingState();
 
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
+    const disableToneMappingForScopes = prevHdrMode !== 'sdr' && prevToneMappingState.enabled;
+    if (disableToneMappingForScopes) {
+      this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
+    }
     this.hdrOutputMode = 'hlg';
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    this.renderImage(image, 0, 0, 1, 1);
-    this.hdrOutputMode = prevHdrMode;
-
     const pixels = new Float32Array(width * height * RGBA_CHANNELS);
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
-
-    // Restore display state
-    this.stateManager.setDisplayColorState(prevDisplayState);
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.viewport(0, 0, width, height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.renderImage(image, 0, 0, 1, 1);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
+    } finally {
+      this.hdrOutputMode = prevHdrMode;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+      this.stateManager.setDisplayColorState(prevDisplayState);
+      if (disableToneMappingForScopes) {
+        this.stateManager.setToneMappingState(prevToneMappingState);
+      }
+    }
 
     return gl.getError() === gl.NO_ERROR ? pixels : null;
   }
@@ -1748,7 +1862,10 @@ export class Renderer implements RendererBackend {
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
-    this.displayShader.setUniformInt('u_texRotation', 0); // SDR: no texture rotation
+    // Apply user rotation/flip (SDR has no video rotation metadata)
+    this.displayShader.setUniformInt('u_texRotation', Math.round(this._userRotation / 90) % 4);
+    this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
+    this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
     // SDR frames always use headroom=1.0 (no HDR expansion)
     this.displayShader.setUniform('u_hdrHeadroom', 1.0);
@@ -1819,11 +1936,14 @@ export class Renderer implements RendererBackend {
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
     if (this.filmLUTTexture) gl.deleteTexture(this.filmLUTTexture);
+    if (this.inlineLUTTexture) gl.deleteTexture(this.inlineLUTTexture);
 
     // Release cached LUT conversion buffers
     this.falseColorRGBABuffer = null;
     this.lut3DRGBABuffer = null;
     this.lut3DRGBABufferSize = 0;
+    this.inlineLUTDeinterleavedBuffer = null;
+    this.inlineLUTDeinterleavedBufferSize = 0;
 
     // Release HDR FBO resources
     if (this.hdrFBOTexture) gl.deleteTexture(this.hdrFBOTexture);

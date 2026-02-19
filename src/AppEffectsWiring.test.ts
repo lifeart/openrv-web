@@ -20,6 +20,21 @@ function createMockContext() {
   const deinterlaceControl = new EventEmitter();
   const filmEmulationControl = new EventEmitter();
   const stabilizationControl = new EventEmitter();
+  const noiseReductionControl = Object.assign(new EventEmitter(), {
+    getParams: vi.fn(() => ({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 })),
+  });
+  const watermarkControl = Object.assign(new EventEmitter(), {
+    getState: vi.fn(() => ({
+      enabled: false,
+      imageUrl: null,
+      position: 'bottom-right',
+      customX: 0.9,
+      customY: 0.9,
+      scale: 1,
+      opacity: 0.7,
+      margin: 20,
+    })),
+  });
   const perspectiveCorrectionControl = Object.assign(new EventEmitter(), {
     setParams: vi.fn(),
   });
@@ -37,6 +52,8 @@ function createMockContext() {
     setDeinterlaceParams: vi.fn(),
     setFilmEmulationParams: vi.fn(),
     setStabilizationParams: vi.fn(),
+    setNoiseReductionParams: vi.fn(),
+    setWatermarkState: vi.fn(),
     setPerspectiveParams: vi.fn(),
     getPerspectiveGridOverlay: vi.fn(() => perspectiveGridOverlay),
     setOnCropRegionChanged: vi.fn((cb: (region: unknown) => void) => {
@@ -61,6 +78,8 @@ function createMockContext() {
       deinterlaceControl,
       filmEmulationControl,
       stabilizationControl,
+      noiseReductionControl,
+      watermarkControl,
       perspectiveCorrectionControl,
     },
     sessionBridge,
@@ -76,6 +95,8 @@ function createMockContext() {
     deinterlaceControl,
     filmEmulationControl,
     stabilizationControl,
+    noiseReductionControl,
+    watermarkControl,
     perspectiveCorrectionControl,
     perspectiveGridOverlay,
     sessionBridge,
@@ -217,5 +238,36 @@ describe('wireEffectsControls', () => {
     expect(mock.viewer.setStabilizationParams).toHaveBeenCalledWith(params);
     expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-014: noise reduction paramsChanged calls viewer.setNoiseReductionParams', () => {
+    const params = { strength: 35, luminanceStrength: 40, chromaStrength: 50, radius: 3 };
+    mock.noiseReductionControl.emit('paramsChanged', params);
+
+    expect(mock.viewer.setNoiseReductionParams).toHaveBeenCalledWith(params);
+    expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-015: watermark stateChanged calls viewer.setWatermarkState + syncGTOStore', () => {
+    const state = {
+      enabled: true,
+      imageUrl: 'blob:test',
+      position: 'top-left',
+      customX: 0.1,
+      customY: 0.1,
+      scale: 0.5,
+      opacity: 0.6,
+      margin: 8,
+    };
+    mock.watermarkControl.emit('stateChanged', state);
+
+    expect(mock.viewer.setWatermarkState).toHaveBeenCalledWith(state);
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-016: initializes viewer noise/watermark state from control defaults', () => {
+    expect(mock.viewer.setNoiseReductionParams).toHaveBeenCalledWith(mock.noiseReductionControl.getParams());
+    expect(mock.viewer.setWatermarkState).toHaveBeenCalledWith(mock.watermarkControl.getState());
   });
 });

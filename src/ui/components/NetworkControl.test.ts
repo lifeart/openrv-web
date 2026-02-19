@@ -143,6 +143,35 @@ describe('NetworkControl', () => {
 
       expect(handler).toHaveBeenCalled();
     });
+
+    it('NCC-014: linked room code allows join using only PIN entry', () => {
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.setJoinRoomCodeFromLink('ABCD1234');
+      control.openPanel();
+
+      const roomInput = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
+      expect(roomInput.value).toBe('ABCD-1234');
+      expect(roomInput.readOnly).toBe(true);
+
+      const pinInput = document.querySelector('[data-testid="network-pin-code-input"]') as HTMLInputElement;
+      pinInput.value = '1234';
+      pinInput.dispatchEvent(new Event('input'));
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'User' });
+    });
+
+    it('NCC-015: linked room code is used when Join button is clicked', () => {
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.setJoinRoomCodeFromLink('WXYZ5678');
+      control.openPanel();
+
+      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
+      joinBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'WXYZ-5678', userName: 'User' });
+    });
   });
 
   describe('user list', () => {
@@ -276,6 +305,133 @@ describe('NetworkControl', () => {
       const link = handler.mock.calls[0]![0] as string;
       expect(link).toContain('room=TEST-CODE');
     });
+
+    it('NCC-031b: does not emit copyLink when room info is missing', () => {
+      const handler = vi.fn();
+      control.on('copyLink', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo(null);
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      expect(copyBtn).toBeTruthy();
+      copyBtn.click();
+
+      expect(handler).not.toHaveBeenCalled();
+      const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
+      expect(errorDisplay.style.display).toBe('block');
+      expect(errorDisplay.textContent).toContain('Create or join a room');
+    });
+
+    it('NCC-032: shows share URL in connected panel', () => {
+      control.setConnectionState('connected');
+      control.setPinCode('1234');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const shareInput = document.querySelector('[data-testid="network-share-link-input"]') as HTMLInputElement;
+      expect(shareInput).toBeTruthy();
+      expect(shareInput.value).toContain('room=TEST-CODE');
+      expect(shareInput.value).toContain('pin=1234');
+    });
+
+    it('NCC-033: emits applyResponseLink when response URL is provided', () => {
+      const handler = vi.fn();
+      control.on('applyResponseLink', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.setIsHost(true);
+      control.openPanel();
+
+      const responseInput = document.querySelector('[data-testid="network-response-link-input"]') as HTMLInputElement;
+      const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
+      responseInput.value = 'https://example.test/?rtc=token';
+      applyBtn.click();
+
+      expect(handler).toHaveBeenCalledWith('https://example.test/?rtc=token');
+    });
+
+    it('NCC-034: shows error when applying empty WebRTC response URL', () => {
+      const handler = vi.fn();
+      control.on('applyResponseLink', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.setIsHost(true);
+      control.openPanel();
+
+      const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
+      applyBtn.click();
+
+      expect(handler).not.toHaveBeenCalled();
+      const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
+      expect(errorDisplay.style.display).toBe('block');
+      expect(errorDisplay.textContent).toContain('Paste a WebRTC response URL');
+    });
+
+    it('NCC-035: guest response token mode shows token section and response copy label', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'host-user',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.setIsHost(false);
+      control.setShareLinkKind('response');
+      control.setResponseToken('guest-token-123');
+      control.openPanel();
+
+      const tokenInput = document.querySelector('[data-testid="network-response-token-input"]') as HTMLInputElement;
+      expect(tokenInput.value).toBe('guest-token-123');
+      const copyLinkBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      expect(copyLinkBtn.textContent).toBe('Copy Response URL');
+    });
+
+    it('NCC-036: host mode shows apply response section and hides token section', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.setIsHost(true);
+      control.setResponseToken('');
+      control.openPanel();
+
+      const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
+      expect(applyBtn).toBeTruthy();
+      const tokenSection = document.querySelector('[data-testid="network-response-token-input"]')?.parentElement?.parentElement as HTMLElement;
+      expect(tokenSection.style.display).toBe('none');
+    });
   });
 
   describe('keyboard handler', () => {
@@ -305,6 +461,94 @@ describe('NetworkControl', () => {
 
       const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
       expect(errorDisplay.style.display).toBe('none');
+    });
+  });
+
+  describe('media sync confirmation', () => {
+    it('NCC-080: promptMediaSyncConfirmation resolves true when accepted', async () => {
+      control.openPanel();
+      const decisionPromise = control.promptMediaSyncConfirmation({
+        fileCount: 2,
+        totalBytes: 2048,
+      });
+
+      const prompt = document.querySelector('[data-testid="network-media-sync-prompt"]') as HTMLElement;
+      expect(prompt).toBeTruthy();
+      expect(prompt.style.display).toBe('block');
+
+      const acceptBtn = document.querySelector('[data-testid="network-media-sync-accept"]') as HTMLButtonElement;
+      acceptBtn.click();
+
+      await expect(decisionPromise).resolves.toBe(true);
+      expect(prompt.style.display).toBe('none');
+    });
+
+    it('NCC-081: promptMediaSyncConfirmation resolves false when declined', async () => {
+      control.openPanel();
+      const decisionPromise = control.promptMediaSyncConfirmation({
+        fileCount: 1,
+        totalBytes: 512,
+      });
+
+      const declineBtn = document.querySelector('[data-testid="network-media-sync-decline"]') as HTMLButtonElement;
+      declineBtn.click();
+
+      await expect(decisionPromise).resolves.toBe(false);
+    });
+  });
+
+  describe('Escape key handling (M-14)', () => {
+    it('NCC-M14a: pressing Escape while the panel is open should close it', async () => {
+      vi.useFakeTimers();
+      control.openPanel();
+
+      const panel = document.querySelector('[data-testid="network-panel"]') as HTMLElement;
+      expect(panel.style.display).toBe('flex');
+
+      // Advance past requestAnimationFrame to register the keydown listener
+      vi.advanceTimersByTime(16);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(panel.style.display).toBe('none');
+      vi.useRealTimers();
+    });
+
+    it('NCC-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      const panel = document.querySelector('[data-testid="network-panel"]');
+      // Panel may or may not be in DOM when closed
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      // Should remain closed — no errors thrown
+      if (panel) {
+        expect((panel as HTMLElement).style.display).not.toBe('flex');
+      }
+    });
+
+    it('NCC-M14c: the keydown listener should be removed when the panel closes', () => {
+      vi.useFakeTimers();
+      control.openPanel();
+      vi.advanceTimersByTime(16);
+
+      const spy = vi.spyOn(document, 'removeEventListener');
+      control.closePanel();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('NCC-M14d: the keydown listener should be removed on dispose', () => {
+      vi.useFakeTimers();
+      control.openPanel();
+      vi.advanceTimersByTime(16);
+
+      const spy = vi.spyOn(document, 'removeEventListener');
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+      vi.useRealTimers();
     });
   });
 

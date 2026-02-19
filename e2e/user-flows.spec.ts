@@ -481,12 +481,12 @@ test.describe('Playback and Timeline Workflow', () => {
       state = await getSessionState(page);
       expect(state.playbackSpeed).toBe(8);
 
-      // Click to cycle back to 1x
+      // Click to wrap to slow-motion presets
       await speedButton.click();
       await page.waitForTimeout(200);
 
       state = await getSessionState(page);
-      expect(state.playbackSpeed).toBe(1);
+      expect(state.playbackSpeed).toBe(0.1);
     }
 
     // Test K key for stopping playback (this should work)

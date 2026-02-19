@@ -15,6 +15,7 @@ type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 function createMockSession(): Session {
   return {
     gtoData: null,
+    currentSource: { width: 1920, height: 1080 },
   } as unknown as Session;
 }
 
@@ -48,13 +49,18 @@ function createMockContext(): SessionBridgeContext {
     setGTOStore: vi.fn(),
   };
   const matteOverlay = { setSettings: vi.fn() };
-  const viewer = { getMatteOverlay: () => matteOverlay, setTransform: vi.fn() };
+  const viewer = {
+    getMatteOverlay: () => matteOverlay,
+    setTransform: vi.fn(),
+    setNoiseReductionParams: vi.fn(),
+  };
   const colorControls = { setAdjustments: vi.fn() };
   const filterControl = { setSettings: vi.fn() };
+  const noiseReductionControl = { setParams: vi.fn() };
   const cdlControl = { setCDL: vi.fn() };
   const transformControl = { setTransform: vi.fn() };
   const lensControl = { setParams: vi.fn() };
-  const cropControl = { setState: vi.fn() };
+  const cropControl = { setState: vi.fn(), setUncropState: vi.fn() };
   const channelSelect = { setChannel: vi.fn() };
   const stereoControl = { setState: vi.fn() };
   const stereoEyeTransformControl = { setState: vi.fn() };
@@ -72,6 +78,7 @@ function createMockContext(): SessionBridgeContext {
     getViewer: () => viewer,
     getColorControls: () => colorControls,
     getFilterControl: () => filterControl,
+    getNoiseReductionControl: () => noiseReductionControl,
     getCDLControl: () => cdlControl,
     getTransformControl: () => transformControl,
     getLensControl: () => lensControl,
@@ -234,6 +241,14 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getCDLControl().setCDL).toHaveBeenCalledWith(cdl);
   });
 
+  it('PERH-U018b: settingsLoaded restores noise reduction on viewer and control', () => {
+    const noiseReduction = { strength: 40, luminanceStrength: 55, chromaStrength: 70, radius: 3 };
+    handlers.settingsLoaded!({ noiseReduction } as any);
+
+    expect(context.getViewer().setNoiseReductionParams).toHaveBeenCalledWith(noiseReduction);
+    expect(context.getNoiseReductionControl!().setParams).toHaveBeenCalledWith(noiseReduction);
+  });
+
   it('PERH-U019: settingsLoaded restores transform on both control and viewer', () => {
     const transform = { x: 10, y: 20 };
     handlers.settingsLoaded!({ transform } as any);
@@ -254,6 +269,30 @@ describe('bindPersistenceHandlers', () => {
     handlers.settingsLoaded!({ crop } as any);
 
     expect(context.getCropControl().setState).toHaveBeenCalledWith(crop);
+  });
+
+  it('PERH-U035: settingsLoaded restores uncrop state by converting to padding format', () => {
+    handlers.settingsLoaded!({
+      uncrop: { active: true, x: 100, y: 50, width: 2120, height: 1180 },
+    } as any);
+
+    expect(context.getCropControl().setUncropState).toHaveBeenCalledWith({
+      enabled: true,
+      paddingMode: 'per-side',
+      padding: 0,
+      paddingTop: 50,
+      paddingRight: 100,   // 2120 - 1920 - 100
+      paddingBottom: 50,   // 1180 - 1080 - 50
+      paddingLeft: 100,
+    });
+  });
+
+  it('PERH-U036: settingsLoaded does not apply uncrop when active is false', () => {
+    handlers.settingsLoaded!({
+      uncrop: { active: false, x: 100, y: 50, width: 2120, height: 1180 },
+    } as any);
+
+    expect(context.getCropControl().setUncropState).not.toHaveBeenCalled();
   });
 
   it('PERH-U022: settingsLoaded restores channel mode', () => {

@@ -2,7 +2,7 @@
  * PerspectiveCorrectionControl Unit Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PerspectiveCorrectionControl } from './PerspectiveCorrectionControl';
 import { DEFAULT_PERSPECTIVE_PARAMS } from '../../transform/PerspectiveCorrection';
 
@@ -132,16 +132,37 @@ describe('PerspectiveCorrectionControl', () => {
       expect(topLeftX).not.toBeNull();
       expect(topLeftY).not.toBeNull();
 
-      // Change the input value and dispatch change event
+      // Change the input value and dispatch input event (live update)
       topLeftX.value = '0.15';
-      topLeftX.dispatchEvent(new Event('change'));
+      topLeftX.dispatchEvent(new Event('input'));
 
       topLeftY.value = '0.25';
-      topLeftY.dispatchEvent(new Event('change'));
+      topLeftY.dispatchEvent(new Event('input'));
 
       const params = control.getParams();
       expect(params.topLeft.x).toBeCloseTo(0.15);
       expect(params.topLeft.y).toBeCloseTo(0.25);
+    });
+
+    it('PC-L54a: corner input should emit change on every keystroke via input event', () => {
+      control.show();
+      const topLeftX = document.querySelector('[data-testid="perspective-topLeft-x"]') as HTMLInputElement;
+      expect(topLeftX).not.toBeNull();
+
+      const callback = vi.fn();
+      control.on('perspectiveChanged', callback);
+
+      // Simulate typing each keystroke: '0', '0.', '0.3'
+      topLeftX.value = '0';
+      topLeftX.dispatchEvent(new Event('input'));
+      expect(callback).toHaveBeenCalledTimes(1);
+
+      topLeftX.value = '0.3';
+      topLeftX.dispatchEvent(new Event('input'));
+      expect(callback).toHaveBeenCalledTimes(2);
+
+      // Verify the params reflect the latest value
+      expect(control.getParams().topLeft.x).toBeCloseTo(0.3);
     });
 
     it('PC-008: quality dropdown updates params correctly', () => {
@@ -155,6 +176,33 @@ describe('PerspectiveCorrectionControl', () => {
       qualitySelect.dispatchEvent(new Event('change'));
 
       expect(control.getParams().quality).toBe('bicubic');
+    });
+  });
+
+  describe('label/checkbox accessibility (M-19)', () => {
+    it('PC-M19a: checkbox has a unique id attribute', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="perspective-enabled-checkbox"]') as HTMLInputElement;
+      expect(checkbox.id).toBe('perspective-enabled-checkbox');
+    });
+
+    it('PC-M19b: label has htmlFor matching the checkbox id', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="perspective-enabled-checkbox"]') as HTMLInputElement;
+      const label = checkbox.parentElement!.querySelector('label') as HTMLLabelElement;
+      expect(label.htmlFor).toBe(checkbox.id);
+    });
+
+    it('PC-M19c: clicking the label toggles the checkbox state', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="perspective-enabled-checkbox"]') as HTMLInputElement;
+      const label = checkbox.parentElement!.querySelector('label') as HTMLLabelElement;
+
+      expect(checkbox.checked).toBe(false);
+      label.click();
+      expect(checkbox.checked).toBe(true);
+      label.click();
+      expect(checkbox.checked).toBe(false);
     });
   });
 
@@ -176,6 +224,96 @@ describe('PerspectiveCorrectionControl', () => {
       control.show();
       // Should have accent color styling
       expect(button.style.color).toContain('accent');
+    });
+  });
+
+  describe('Escape key handling (M-14)', () => {
+    it('PC-M14a: pressing Escape while the panel is open should close it', () => {
+      control.show();
+      expect(control.isOpen).toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('PC-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      expect(control.isOpen).toBe(false);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('PC-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.hide();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('PC-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
+  describe('focus management (M-18)', () => {
+    it('PC-M18a: when the panel opens, focus should move to the first interactive element inside it', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="perspective-enabled-checkbox"]') as HTMLInputElement;
+      expect(document.activeElement).toBe(checkbox);
+    });
+
+    it('PC-M18b: when the panel closes, focus should return to the toggle button', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      control.show();
+      control.hide();
+      const button = el.querySelector('[data-testid="perspective-control-button"]') as HTMLButtonElement;
+      expect(document.activeElement).toBe(button);
+      document.body.removeChild(el);
+    });
+  });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('PC-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="perspective-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('PC-M15b: toggle button aria-expanded should be "false" when panel is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="perspective-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('PC-M15c: toggle button aria-expanded should be "true" when panel is open', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="perspective-control-button"]') as HTMLButtonElement;
+      control.show();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('PC-M15d: panel container should have role="dialog" attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="perspective-panel"]') as HTMLElement;
+      expect(panel.getAttribute('role')).toBe('dialog');
+    });
+
+    it('PC-M15e: panel container should have aria-label attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="perspective-panel"]') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Perspective Correction Settings');
     });
   });
 });

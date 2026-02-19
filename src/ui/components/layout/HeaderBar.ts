@@ -1,7 +1,7 @@
 /**
  * HeaderBar - Top bar with file operations, playback controls, and utilities
  *
- * Layout: [File Ops] | [Playback Controls] | [Timecode Display] | [Volume] [Help]
+ * Layout: [File Ops] | [Playback Controls] | [Timecode Display] | [Layout] [Volume] [Help]
  * Height: 40px
  */
 
@@ -13,8 +13,11 @@ import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
 import { ThemeControl } from '../ThemeControl';
-import { showAlert } from '../shared/Modal';
+import { showAlert, showPrompt } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
+import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
+import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
+import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -28,6 +31,7 @@ export interface HeaderBarEvents extends EventMap {
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private container: HTMLElement;
+  private wrapper: HTMLElement;
   private session: Session;
   private volumeControl: VolumeControl;
   private exportControl: ExportControl;
@@ -43,6 +47,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private sessionNameDisplay!: HTMLElement;
   private autoSaveSlot!: HTMLElement;
   private networkSlot!: HTMLElement;
+  private panelsSlot!: HTMLElement;
   private fullscreenButton!: HTMLButtonElement;
   private presentationButton!: HTMLButtonElement;
 
@@ -55,6 +60,22 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private _isImageMode = false;
   private _imageTransitionTimers: ReturnType<typeof setTimeout>[] = [];
 
+  // Track the active speed menu cleanup callback for disposal
+  private _activeSpeedMenuCleanup: (() => void) | null = null;
+  private _activeHelpMenuCleanup: (() => void) | null = null;
+  private _activeLayoutMenuCleanup: (() => void) | null = null;
+  private _layoutPresets: Pick<LayoutPreset, 'id' | 'label'>[] = [];
+  private _activeLayoutPresetId: LayoutPresetId | null = null;
+  private _layoutPresetApply: ((presetId: LayoutPresetId) => void) | null = null;
+  private helpButton!: HTMLButtonElement;
+  private layoutButton!: HTMLButtonElement;
+
+  // Overflow fade indicators
+  private fadeLeft!: HTMLElement;
+  private fadeRight!: HTMLElement;
+  private _scrollHandler: (() => void) | null = null;
+  private _resizeHandler: (() => void) | null = null;
+
   constructor(session: Session) {
     super();
     this.session = session;
@@ -63,9 +84,17 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.timecodeDisplay = new TimecodeDisplay(session);
     this.themeControl = new ThemeControl();
 
-    // Create container
+    // Create wrapper (position: relative to anchor fade overlays)
+    this.wrapper = document.createElement('div');
+    this.wrapper.className = 'header-bar';
+    this.wrapper.style.cssText = `
+      position: relative;
+      flex-shrink: 0;
+    `;
+
+    // Create scrollable container
     this.container = document.createElement('div');
-    this.container.className = 'header-bar';
+    this.container.className = 'header-bar-scroll';
     this.container.setAttribute('role', 'banner');
     this.container.style.cssText = `
       height: 40px;
@@ -84,11 +113,82 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
     // Hide scrollbar for WebKit browsers
     const scrollStyle = document.createElement('style');
-    scrollStyle.textContent = `.header-bar::-webkit-scrollbar { display: none; }`;
+    scrollStyle.textContent = `.header-bar-scroll::-webkit-scrollbar { display: none; }`;
     this.container.appendChild(scrollStyle);
+
+    this.wrapper.appendChild(this.container);
+
+    // Create overflow fade indicators
+    this.createOverflowFades();
 
     this.createControls();
     this.bindEvents();
+  }
+
+  /**
+   * Create left/right gradient fade overlays that indicate hidden
+   * scrollable content. They are absolutely positioned over the
+   * scrollable container edges and toggled via a scroll listener.
+   */
+  private createOverflowFades(): void {
+    const fadeBase = `
+      position: absolute;
+      top: 0;
+      width: 24px;
+      height: 40px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 1;
+    `;
+
+    // Left fade
+    this.fadeLeft = document.createElement('div');
+    this.fadeLeft.className = 'header-fade-left';
+    this.fadeLeft.dataset.testid = 'header-fade-left';
+    this.fadeLeft.setAttribute('aria-hidden', 'true');
+    this.fadeLeft.style.cssText = `
+      ${fadeBase}
+      left: 0;
+      background: linear-gradient(to right, var(--bg-primary), transparent);
+    `;
+    this.wrapper.appendChild(this.fadeLeft);
+
+    // Right fade
+    this.fadeRight = document.createElement('div');
+    this.fadeRight.className = 'header-fade-right';
+    this.fadeRight.dataset.testid = 'header-fade-right';
+    this.fadeRight.setAttribute('aria-hidden', 'true');
+    this.fadeRight.style.cssText = `
+      ${fadeBase}
+      right: 0;
+      background: linear-gradient(to left, var(--bg-primary), transparent);
+    `;
+    this.wrapper.appendChild(this.fadeRight);
+
+    // Scroll handler to show/hide fades based on scroll position
+    this._scrollHandler = () => this.updateOverflowFades();
+    this._resizeHandler = () => this.updateOverflowFades();
+
+    this.container.addEventListener('scroll', this._scrollHandler);
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  /**
+   * Update visibility of left/right overflow fade indicators
+   * based on the current scroll position of the container.
+   */
+  updateOverflowFades(): void {
+    const { scrollLeft, scrollWidth, clientWidth } = this.container;
+    const threshold = 2; // small tolerance for sub-pixel rounding
+
+    // Show left fade when scrolled away from the start
+    const showLeft = scrollLeft > threshold;
+    this.fadeLeft.style.opacity = showLeft ? '1' : '0';
+
+    // Show right fade when there is more content to the right
+    const showRight = scrollLeft + clientWidth < scrollWidth - threshold;
+    this.fadeRight.style.opacity = showRight ? '1' : '0';
   }
 
   private createControls(): void {
@@ -100,7 +200,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = 'image/*,video/*,.rv,.gto';
+    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl`;
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -114,14 +214,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
 
-    // Open button (media)
-    fileGroup.appendChild(this.createIconButton('folder', 'Open', () => this.fileInput.click(), 'Open media file'));
+    // Open button (media) — icon-only for compactness
+    fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
-    // Save Project button
-    fileGroup.appendChild(this.createIconButton('save', 'Save', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
+    // Save Project button — icon-only
+    fileGroup.appendChild(this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
 
-    // Open Project button
-    fileGroup.appendChild(this.createIconButton('folder-open', 'Project', () => this.projectInput.click(), 'Open project'));
+    // Open Project button — icon-only
+    fileGroup.appendChild(this.createIconButton('folder-open', '', () => this.projectInput.click(), 'Open project'));
 
     // Export dropdown
     fileGroup.appendChild(this.exportControl.render());
@@ -157,6 +257,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     playbackGroup.appendChild(this.createIconButton('step-back', '', () => this.session.stepBackward(), 'Step back (\u2190)'));
 
     this.playButton = this.createIconButton('play', '', () => this.session.togglePlayback(), 'Play/Pause (Space)');
+    this.playButton.setAttribute('aria-pressed', 'false');
     this.playButton.style.width = '36px';
     playbackGroup.appendChild(this.playButton);
 
@@ -165,7 +266,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Loop mode button
     this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
-    this.loopButton.style.minWidth = '70px';
+    this.loopButton.style.minWidth = '28px';
     this.loopButton.style.marginLeft = '8px';
     playbackGroup.appendChild(this.loopButton);
 
@@ -203,6 +304,24 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.networkSlot.style.cssText = 'display: flex; align-items: center;';
     utilityGroup.appendChild(this.networkSlot);
 
+    // Panel toggles slot (populated by AppControlRegistry)
+    this.panelsSlot = document.createElement('div');
+    this.panelsSlot.dataset.testid = 'panels-slot';
+    this.panelsSlot.style.cssText = 'display: flex; align-items: center; gap: 2px;';
+    utilityGroup.appendChild(this.panelsSlot);
+
+    // Layout presets dropdown (populated by App.ts)
+    this.layoutButton = this.createCompactButton(
+      '',
+      () => this.showLayoutMenu(this.layoutButton),
+      'Layout presets (Alt+1..Alt+4)',
+      'grid',
+    );
+    this.layoutButton.dataset.testid = 'layout-menu-button';
+    this.layoutButton.setAttribute('aria-haspopup', 'menu');
+    this.layoutButton.setAttribute('aria-expanded', 'false');
+    utilityGroup.appendChild(this.layoutButton);
+
     // Presentation mode button
     this.presentationButton = this.createIconButton('monitor', '', () => this.emit('presentationToggle', undefined), 'Presentation Mode (Ctrl+Shift+P)');
     this.presentationButton.dataset.testid = 'presentation-mode-button';
@@ -222,17 +341,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     themeElement.style.marginLeft = '8px';
     utilityGroup.appendChild(themeElement);
 
-    // Help button
-    const helpButton = this.createIconButton('help', '', () => this.emit('showShortcuts', undefined), 'Keyboard shortcuts');
-    helpButton.style.marginLeft = '8px';
-    utilityGroup.appendChild(helpButton);
-
-    // Custom key binding button
-    const keyBindingButton = this.createIconButton('keyboard', '', () => this.emit('showCustomKeyBindings', undefined), 'Custom key bindings');
-    keyBindingButton.style.marginLeft = '4px';
-    utilityGroup.appendChild(keyBindingButton);
+    // Help dropdown button (combines Keyboard Shortcuts + Custom Key Bindings)
+    this.helpButton = this.createIconButton('help', '', () => this.showHelpMenu(this.helpButton), 'Help & Key Bindings');
+    this.helpButton.dataset.testid = 'help-menu-button';
+    this.helpButton.setAttribute('aria-haspopup', 'menu');
+    this.helpButton.style.marginLeft = '8px';
+    utilityGroup.appendChild(this.helpButton);
 
     this.container.appendChild(utilityGroup);
+    this.updateLayoutButtonState();
   }
 
   private createGroup(): HTMLElement {
@@ -263,126 +380,58 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private createIconButton(icon: string, label: string, onClick: () => void, title?: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.title = title || label;
-    // Set aria-label for icon-only buttons (no text label)
-    if (!label && title) {
-      button.setAttribute('aria-label', title);
-    }
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-secondary);
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      height: 28px;
-      min-width: 28px;
-    `;
-
-    // SVG icons for cleaner look
     const iconSvg = this.getIcon(icon);
-    if (iconSvg) {
-      button.innerHTML = iconSvg;
-      if (label) {
-        const span = document.createElement('span');
-        span.textContent = label;
-        span.style.marginLeft = '4px';
-        button.appendChild(span);
-      }
-    } else {
-      button.textContent = label;
+    if (label) {
+      return sharedCreateButton(label, onClick, {
+        variant: 'icon',
+        size: 'md',
+        title: title || label,
+        icon: iconSvg || undefined,
+      });
     }
-
-    button.addEventListener('mouseenter', () => {
-      button.style.background = 'var(--bg-hover)';
-      button.style.borderColor = 'var(--border-secondary)';
-      button.style.color = 'var(--text-primary)';
+    return sharedCreateIconButton(iconSvg || '', onClick, {
+      variant: 'icon',
+      size: 'md',
+      title: title || label,
     });
-
-    button.addEventListener('mouseleave', () => {
-      button.style.background = 'transparent';
-      button.style.borderColor = 'transparent';
-      button.style.color = 'var(--text-secondary)';
-    });
-
-    button.addEventListener('mousedown', () => {
-      button.style.background = 'var(--bg-active)';
-    });
-
-    button.addEventListener('mouseup', () => {
-      button.style.background = 'var(--bg-hover)';
-    });
-
-    button.addEventListener('click', onClick);
-    return button;
   }
 
-  private createCompactButton(text: string, onClick: () => void, title?: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.textContent = text;
-    button.title = title || '';
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-secondary);
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: 28px;
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      button.style.background = 'var(--bg-hover)';
-      button.style.borderColor = 'var(--border-secondary)';
-      button.style.color = 'var(--text-primary)';
+  private createCompactButton(text: string, onClick: () => void, title?: string, icon?: IconName): HTMLButtonElement {
+    return sharedCreateButton(text, onClick, {
+      variant: 'ghost',
+      size: 'md',
+      title,
+      icon: icon ? getIconSvg(icon, 'sm') : undefined,
     });
-
-    button.addEventListener('mouseleave', () => {
-      button.style.background = 'transparent';
-      button.style.borderColor = 'transparent';
-      button.style.color = 'var(--text-secondary)';
-    });
-
-    button.addEventListener('click', onClick);
-    return button;
   }
 
   private getIcon(name: string): string {
     const icons: Record<string, string> = {
-      'folder': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
-      'folder-open': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1M3 13h18l-2 7H5l-2-7z"/></svg>',
-      'save': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
-      'skip-back': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
-      'step-back': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/></svg>',
-      'play': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
-      'pause': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
-      'step-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/></svg>',
-      'skip-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
-      'help': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-      'keyboard': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
-      'maximize': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
-      'minimize': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
-      'monitor': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+      'folder': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+      'folder-open': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1M3 13h18l-2 7H5l-2-7z"/></svg>',
+      'save': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+      'skip-back': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
+      'step-back': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/></svg>',
+      'play': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
+      'pause': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+      'step-forward': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/></svg>',
+      'skip-forward': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
+      'help': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      'keyboard': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
+      'maximize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+      'minimize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
+      'monitor': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
     };
     return icons[name] || '';
   }
 
   private createSessionNameDisplay(): HTMLElement {
-    const container = document.createElement('div');
+    const container = document.createElement('button');
+    container.type = 'button';
     container.className = 'session-name-display';
     container.dataset.testid = 'session-name-display';
+    container.setAttribute('aria-label', 'Rename session');
+    container.title = 'Rename session';
     container.style.cssText = `
       display: flex;
       align-items: center;
@@ -391,16 +440,19 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       min-width: 80px;
       padding: 4px 8px;
       border-radius: 4px;
-      cursor: default;
-      transition: background 0.12s ease;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
       flex-shrink: 0;
+      transition: all 0.12s ease;
     `;
 
     // Icon
     const icon = document.createElement('span');
-    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
+    icon.innerHTML = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
     icon.style.cssText = `
-      color: var(--text-muted);
+      color: currentColor;
       display: flex;
       align-items: center;
       flex-shrink: 0;
@@ -420,15 +472,44 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     nameText.textContent = 'Untitled';
     container.appendChild(nameText);
 
-    // Hover effect
-    container.addEventListener('mouseenter', () => {
+    container.addEventListener('pointerenter', () => {
       container.style.background = 'var(--bg-hover)';
+      container.style.borderColor = 'var(--border-secondary)';
+      container.style.color = 'var(--text-primary)';
     });
-    container.addEventListener('mouseleave', () => {
+    container.addEventListener('pointerleave', () => {
       container.style.background = 'transparent';
+      container.style.borderColor = 'transparent';
+      container.style.color = 'var(--text-secondary)';
     });
+    container.addEventListener('click', () => {
+      void this.promptRenameSession();
+    });
+    container.addEventListener('keydown', (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        void this.promptRenameSession();
+      }
+    });
+    applyA11yFocus(container);
 
     return container;
+  }
+
+  private async promptRenameSession(): Promise<void> {
+    const currentName = this.session.metadata.displayName || '';
+    const renamed = await showPrompt('Enter session name', {
+      title: 'Rename Session',
+      placeholder: 'Untitled',
+      defaultValue: currentName,
+      confirmText: 'Rename',
+    });
+
+    if (renamed === null) {
+      return;
+    }
+
+    this.session.setDisplayName(renamed);
   }
 
   private updateSessionNameDisplay(): void {
@@ -438,6 +519,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     if (nameText) {
       const displayName = metadata.displayName || 'Untitled';
       nameText.textContent = displayName;
+      this.sessionNameDisplay.setAttribute('aria-label', `Session name: ${displayName}. Click to rename.`);
 
       // Build tooltip with name and comment
       let tooltip = displayName;
@@ -450,6 +532,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       if (metadata.version > 0) {
         tooltip += `\nSession version: ${metadata.version}`;
       }
+      tooltip += '\n\nClick to rename';
 
       this.sessionNameDisplay.title = tooltip;
     }
@@ -468,7 +551,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createSpeedButton(): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.testid = 'playback-speed-button';
-    button.title = 'Playback speed: Click to increase, Shift+Click to decrease, Right-click for menu (J/K/L keys)';
+    button.title = 'Playback speed: Click to cycle forward, Shift+Click to cycle backward, Right-click or Shift+Enter for menu (J/K/L keys)';
+    button.setAttribute('aria-haspopup', 'menu');
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -487,13 +571,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       margin-left: 4px;
     `;
 
-    button.addEventListener('mouseenter', () => {
+    button.addEventListener('pointerenter', () => {
       button.style.background = 'var(--bg-hover)';
       button.style.borderColor = 'var(--border-secondary)';
       button.style.color = 'var(--text-primary)';
     });
 
-    button.addEventListener('mouseleave', () => {
+    button.addEventListener('pointerleave', () => {
       const speed = this.session.playbackSpeed;
       if (speed !== 1) {
         button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
@@ -514,13 +598,24 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       this.showSpeedMenu(button);
     });
 
+    // Keyboard activation: Shift+Enter or Shift+Space opens the speed menu
+    button.addEventListener('keydown', (e) => {
+      if (e.shiftKey && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        this.showSpeedMenu(button);
+      }
+    });
+
     // Initial state
     this.updateSpeedButtonText(button);
     return button;
   }
 
   private showSpeedMenu(anchor: HTMLElement): void {
-    // Remove any existing speed menu
+    // Remove any existing speed menu via tracked cleanup
+    if (this._activeSpeedMenuCleanup) {
+      this._activeSpeedMenuCleanup();
+    }
     const existingMenu = document.getElementById('speed-preset-menu');
     if (existingMenu) {
       existingMenu.remove();
@@ -528,6 +623,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     const menu = document.createElement('div');
     menu.id = 'speed-preset-menu';
+    menu.setAttribute('role', 'menu');
     menu.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -540,22 +636,33 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
 
     const currentSpeed = this.session.playbackSpeed;
+    let activeItem: HTMLButtonElement | null = null;
 
     for (const preset of PLAYBACK_SPEED_PRESETS) {
       const item = document.createElement('button');
       item.dataset.testid = `speed-preset-${preset}`;
+      item.setAttribute('role', 'menuitem');
+      item.tabIndex = -1;
       item.textContent = `${preset}x`;
+
+      const isActive = preset === currentSpeed;
+      if (isActive) {
+        item.setAttribute('aria-checked', 'true');
+        activeItem = item;
+      }
+
       item.style.cssText = `
         display: block;
         width: 100%;
         padding: 6px 12px;
-        background: ${preset === currentSpeed ? 'var(--accent-primary)' : 'transparent'};
-        color: ${preset === currentSpeed ? 'white' : 'var(--text-primary)'};
+        background: ${isActive ? 'var(--accent-primary)' : 'transparent'};
+        color: ${isActive ? 'white' : 'var(--text-primary)'};
         border: none;
         text-align: left;
         cursor: pointer;
         font-size: 12px;
         font-family: monospace;
+        outline: none;
       `;
 
       item.addEventListener('mouseenter', () => {
@@ -565,6 +672,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       });
 
       item.addEventListener('mouseleave', () => {
+        if (preset !== currentSpeed) {
+          item.style.background = 'transparent';
+        }
+      });
+
+      item.addEventListener('focus', () => {
+        if (preset !== currentSpeed) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+
+      item.addEventListener('blur', () => {
         if (preset !== currentSpeed) {
           item.style.background = 'transparent';
         }
@@ -590,6 +709,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Pitch correction toggle
     const pitchItem = document.createElement('button');
     pitchItem.dataset.testid = 'pitch-correction-toggle';
+    pitchItem.setAttribute('role', 'menuitem');
+    pitchItem.tabIndex = -1;
     const pitchEnabled = this.session.preservesPitch;
     pitchItem.textContent = `${pitchEnabled ? '\u2713 ' : '  '}Preserve Pitch`;
     pitchItem.style.cssText = `
@@ -603,6 +724,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       cursor: pointer;
       font-size: 12px;
       font-family: monospace;
+      outline: none;
     `;
 
     pitchItem.addEventListener('mouseenter', () => {
@@ -613,12 +735,57 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       pitchItem.style.background = 'transparent';
     });
 
+    pitchItem.addEventListener('focus', () => {
+      pitchItem.style.background = 'var(--bg-hover)';
+    });
+
+    pitchItem.addEventListener('blur', () => {
+      pitchItem.style.background = 'transparent';
+    });
+
     pitchItem.addEventListener('click', () => {
       this.session.preservesPitch = !this.session.preservesPitch;
       removeMenu();
     });
 
     menu.appendChild(pitchItem);
+
+    // Keyboard navigation for the menu
+    const getMenuItems = (): HTMLElement[] => {
+      return Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    };
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items = getMenuItems();
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          items[nextIndex]?.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          items[prevIndex]?.focus();
+          break;
+        }
+        case 'Escape': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+        case 'Tab': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+      }
+    });
 
     // Position the menu below the button
     const rect = anchor.getBoundingClientRect();
@@ -627,10 +794,17 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     document.body.appendChild(menu);
 
+    // Focus the active item, or the first item if none is active
+    const focusTarget = activeItem || getMenuItems()[0];
+    if (focusTarget) {
+      focusTarget.focus();
+    }
+
     // Cleanup function to remove menu and listener
     const removeMenu = () => {
       menu.remove();
       document.removeEventListener('click', closeMenu);
+      this._activeSpeedMenuCleanup = null;
     };
 
     // Close menu when clicking outside
@@ -640,6 +814,273 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       }
     };
     setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+    // Track the active menu cleanup for disposal
+    this._activeSpeedMenuCleanup = removeMenu;
+  }
+
+  private showHelpMenu(anchor: HTMLElement): void {
+    // Remove any existing help menu
+    if (this._activeHelpMenuCleanup) {
+      this._activeHelpMenuCleanup();
+    }
+
+    const menu = document.createElement('div');
+    menu.id = 'help-menu';
+    menu.dataset.testid = 'help-menu-dropdown';
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = `
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      padding: 4px 0;
+      z-index: 10000;
+      min-width: 180px;
+    `;
+
+    const items: { icon: string; label: string; action: () => void }[] = [
+      { icon: 'help', label: 'Keyboard Shortcuts', action: () => this.emit('showShortcuts', undefined) },
+      { icon: 'keyboard', label: 'Custom Key Bindings', action: () => this.emit('showCustomKeyBindings', undefined) },
+    ];
+
+    for (const { icon, label, action } of items) {
+      const item = document.createElement('button');
+      item.setAttribute('role', 'menuitem');
+      item.dataset.testid = `help-menu-${icon}`;
+      item.tabIndex = -1;
+      item.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 12px;
+        background: transparent;
+        color: var(--text-primary);
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        outline: none;
+      `;
+
+      const iconEl = document.createElement('span');
+      iconEl.innerHTML = this.getIcon(icon);
+      iconEl.style.cssText = 'display: flex; align-items: center;';
+      item.appendChild(iconEl);
+
+      const labelEl = document.createElement('span');
+      labelEl.textContent = label;
+      item.appendChild(labelEl);
+
+      item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg-hover)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+      item.addEventListener('focus', () => { item.style.background = 'var(--bg-hover)'; });
+      item.addEventListener('blur', () => { item.style.background = 'transparent'; });
+      item.addEventListener('click', () => { action(); removeMenu(); });
+
+      menu.appendChild(item);
+    }
+
+    // Keyboard navigation
+    const getMenuItems = (): HTMLElement[] => Array.from(menu.querySelectorAll('[role="menuitem"]'));
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const menuItems = getMenuItems();
+      const currentIndex = menuItems.indexOf(document.activeElement as HTMLElement);
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const nextIndex = currentIndex < menuItems.length - 1 ? currentIndex + 1 : 0;
+          menuItems[nextIndex]?.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : menuItems.length - 1;
+          menuItems[prevIndex]?.focus();
+          break;
+        }
+        case 'Escape':
+        case 'Tab': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+      }
+    });
+
+    // Position below the button
+    const rect = anchor.getBoundingClientRect();
+    const menuWidth = 180;
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+
+    document.body.appendChild(menu);
+
+    // Focus first item
+    const firstItem = getMenuItems()[0];
+    if (firstItem) firstItem.focus();
+
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      this._activeHelpMenuCleanup = null;
+    };
+
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        removeMenu();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+    this._activeHelpMenuCleanup = removeMenu;
+  }
+
+  private showLayoutMenu(anchor: HTMLElement): void {
+    if (!this._layoutPresetApply || this._layoutPresets.length === 0) {
+      return;
+    }
+
+    if (this._activeLayoutMenuCleanup) {
+      this._activeLayoutMenuCleanup();
+    }
+
+    const existingMenu = document.getElementById('layout-preset-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+
+    const menu = document.createElement('div');
+    menu.id = 'layout-preset-menu';
+    menu.dataset.testid = 'layout-menu-dropdown';
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = `
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      padding: 4px 0;
+      z-index: 10000;
+      min-width: 140px;
+    `;
+
+    let activeItem: HTMLButtonElement | null = null;
+
+    for (const preset of this._layoutPresets) {
+      const item = document.createElement('button');
+      item.dataset.testid = `layout-menu-${preset.id}`;
+      item.setAttribute('role', 'menuitemradio');
+      item.tabIndex = -1;
+      const isActive = preset.id === this._activeLayoutPresetId;
+      item.setAttribute('aria-checked', String(isActive));
+      item.textContent = `${isActive ? '\u2713 ' : '  '}${preset.label}`;
+      item.style.cssText = `
+        display: block;
+        width: 100%;
+        padding: 6px 12px;
+        background: ${isActive ? 'var(--accent-primary)' : 'transparent'};
+        color: ${isActive ? 'white' : 'var(--text-primary)'};
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        outline: none;
+      `;
+
+      if (isActive) {
+        activeItem = item;
+      }
+
+      item.addEventListener('mouseenter', () => {
+        if (!isActive) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+      item.addEventListener('mouseleave', () => {
+        if (!isActive) {
+          item.style.background = 'transparent';
+        }
+      });
+      item.addEventListener('focus', () => {
+        if (!isActive) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+      item.addEventListener('blur', () => {
+        if (!isActive) {
+          item.style.background = 'transparent';
+        }
+      });
+
+      item.addEventListener('click', () => {
+        this._layoutPresetApply?.(preset.id);
+        removeMenu();
+      });
+
+      menu.appendChild(item);
+    }
+
+    const getMenuItems = (): HTMLElement[] => Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items = getMenuItems();
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          items[nextIndex]?.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          items[prevIndex]?.focus();
+          break;
+        }
+        case 'Escape':
+        case 'Tab': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+      }
+    });
+
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    if (left < 8) left = 8;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+    document.body.appendChild(menu);
+
+    const focusTarget = activeItem || getMenuItems()[0];
+    focusTarget?.focus();
+    this.layoutButton.setAttribute('aria-expanded', 'true');
+
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      this.layoutButton.setAttribute('aria-expanded', 'false');
+      this._activeLayoutMenuCleanup = null;
+    };
+
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        removeMenu();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+    this._activeLayoutMenuCleanup = removeMenu;
   }
 
   private cycleSpeed(direction: number): void {
@@ -647,16 +1088,27 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
 
     if (direction > 0) {
-      // Cycle forward (increase speed)
-      if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
-        const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
+      // Cycle forward through all presets, wrapping from max to min.
+      if (currentIndex >= 0) {
+        const nextIndex = (currentIndex + 1) % PLAYBACK_SPEED_PRESETS.length;
+        const nextSpeed = PLAYBACK_SPEED_PRESETS[nextIndex];
         if (nextSpeed !== undefined) {
           this.session.playbackSpeed = nextSpeed;
           return;
         }
       }
-      // Reset to 1x when at max or not a preset
-      this.session.playbackSpeed = 1;
+
+      // Not a preset: jump to nearest higher preset, or wrap to min.
+      const higherPreset = PLAYBACK_SPEED_PRESETS.find(p => p > currentSpeed);
+      if (higherPreset !== undefined) {
+        this.session.playbackSpeed = higherPreset;
+        return;
+      }
+
+      const minPreset = PLAYBACK_SPEED_PRESETS[0];
+      if (minPreset !== undefined) {
+        this.session.playbackSpeed = minPreset;
+      }
     } else {
       // Cycle backward (decrease speed)
       if (currentIndex > 0) {
@@ -711,7 +1163,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     };
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
-    this.loopButton.innerHTML = `${getIconSvg(iconName, 'sm')}<span style="margin-left:4px">${label}</span>`;
+    this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
+    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode`);
   }
 
   private updateDirectionButton(): void {
@@ -725,6 +1178,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private updatePlayButton(): void {
     const icon = this.session.isPlaying ? 'pause' : 'play';
     this.playButton.innerHTML = this.getIcon(icon);
+    this.playButton.setAttribute('aria-pressed', this.session.isPlaying ? 'true' : 'false');
   }
 
   private async handleFileSelect(e: Event): Promise<void> {
@@ -734,9 +1188,44 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     const fileArray = Array.from(files);
 
+    // Check for .rvedl files in the selection
+    const edlFile = fileArray.find(f => f.name.endsWith('.rvedl'));
+    if (edlFile) {
+      try {
+        const text = await edlFile.text();
+        const entries = this.session.loadEDL(text);
+        if (entries.length > 0) {
+          // Build a summary of the loaded EDL sources
+          const uniqueSources = new Set(entries.map(e => {
+            // Extract filename from full path for display
+            const parts = e.sourcePath.split('/');
+            return parts[parts.length - 1] || e.sourcePath;
+          }));
+          const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
+          const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
+          showAlert(
+            `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
+            `from ${edlFile.name} referencing ${uniqueSources.size} ` +
+            `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
+            `Source paths are local filesystem references. ` +
+            `Load the corresponding media files to resolve them.`,
+            { type: 'info', title: 'EDL Loaded' }
+          );
+          this.emit('fileLoaded', undefined);
+        } else {
+          showAlert(`No valid entries found in ${edlFile.name}.`, { type: 'warning', title: 'EDL Empty' });
+        }
+      } catch (err) {
+        console.error('Failed to load RVEDL file:', err);
+        showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      input.value = '';
+      return;
+    }
+
     // Check for .rv or .gto files in the selection
     const sessionFile = fileArray.find(f => f.name.endsWith('.rv') || f.name.endsWith('.gto'));
-    
+
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources
       const availableFiles = new Map<string, File>();
@@ -754,7 +1243,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         console.error('Failed to load session file:', err);
         showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
-      
+
       // Clear input
       input.value = '';
       return;
@@ -833,6 +1322,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.on('metadataChanged', () => this.updateSessionNameDisplay());
   }
 
+  private updateLayoutButtonState(): void {
+    const hasPresets = this._layoutPresets.length > 0 && this._layoutPresetApply !== null;
+    this.layoutButton.disabled = !hasPresets;
+    this.layoutButton.setAttribute('aria-disabled', String(!hasPresets));
+
+    const baseTitle = 'Layout presets (Alt+1..Alt+4)';
+    const activePreset = this._layoutPresets.find(p => p.id === this._activeLayoutPresetId);
+    this.layoutButton.title = activePreset
+      ? `${baseTitle} (Current: ${activePreset.label})`
+      : baseTitle;
+  }
+
   // Public accessors for child controls
   getVolumeControl(): VolumeControl {
     return this.volumeControl;
@@ -852,10 +1353,31 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.updateDirectionButton();
     this.updateSpeedButton();
     this.updateSessionNameDisplay();
-    return this.container;
+    return this.wrapper;
   }
 
   dispose(): void {
+    // Remove any open menus from document.body
+    if (this._activeSpeedMenuCleanup) {
+      this._activeSpeedMenuCleanup();
+    }
+    if (this._activeHelpMenuCleanup) {
+      this._activeHelpMenuCleanup();
+    }
+    if (this._activeLayoutMenuCleanup) {
+      this._activeLayoutMenuCleanup();
+    }
+
+    // Remove overflow fade listeners
+    if (this._scrollHandler) {
+      this.container.removeEventListener('scroll', this._scrollHandler);
+      this._scrollHandler = null;
+    }
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler);
+      this._resizeHandler = null;
+    }
+
     // Clear image mode transition timers
     for (const timer of this._imageTransitionTimers) {
       clearTimeout(timer);
@@ -897,6 +1419,41 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   /**
+   * Set panel toggle elements (Info Panel, Snapshots, Playlist) to display in the header utility group
+   */
+  setPanelToggles(element: HTMLElement): void {
+    this.panelsSlot.innerHTML = '';
+    this.panelsSlot.appendChild(element);
+  }
+
+  /**
+   * Configure layout presets for the header layout menu.
+   */
+  setLayoutPresets(
+    presets: Pick<LayoutPreset, 'id' | 'label'>[],
+    onApply: (presetId: LayoutPresetId) => void,
+  ): void {
+    this._layoutPresets = [...presets];
+    this._layoutPresetApply = onApply;
+    this.updateLayoutButtonState();
+  }
+
+  /**
+   * Update currently active layout preset in the layout menu.
+   */
+  setActiveLayoutPreset(presetId: LayoutPresetId | null): void {
+    this._activeLayoutPresetId = presetId;
+    this.updateLayoutButtonState();
+  }
+
+  /**
+   * Get the panels slot element
+   */
+  getPanelsSlot(): HTMLElement {
+    return this.panelsSlot;
+  }
+
+  /**
    * Update the fullscreen button icon based on fullscreen state
    */
   setFullscreenState(isFullscreen: boolean): void {
@@ -910,15 +1467,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
    * Update the presentation mode button active state
    */
   setPresentationState(isEnabled: boolean): void {
-    if (isEnabled) {
-      this.presentationButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      this.presentationButton.style.borderColor = 'var(--accent-primary)';
-      this.presentationButton.style.color = 'var(--accent-primary)';
-    } else {
-      this.presentationButton.style.background = 'transparent';
-      this.presentationButton.style.borderColor = 'transparent';
-      this.presentationButton.style.color = 'var(--text-secondary)';
-    }
+    setButtonActive(this.presentationButton, isEnabled, 'icon');
   }
 
   /**

@@ -1,5 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { type CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML } from '../../color/ColorProcessingFacade';
+import { type CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML, parseCC, parseCCC } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 
@@ -17,6 +17,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   // Slider references for updates
   private sliders: Map<string, HTMLInputElement> = new Map();
   private valueLabels: Map<string, HTMLSpanElement> = new Map();
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -90,6 +91,13 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     // Close panel on outside click
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hidePanel();
+      }
+    };
   }
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
@@ -387,12 +395,14 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
   }
 
   hidePanel(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
   }
 
   reset(): void {
@@ -421,7 +431,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   private async loadCDL(): Promise<void> {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.cdl,.xml';
+    input.accept = '.cdl,.ccc,.cc,.xml';
 
     input.onchange = async () => {
       const file = input.files?.[0];
@@ -429,11 +439,28 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
 
       try {
         const text = await file.text();
-        const parsed = parseCDLXML(text);
-        if (parsed) {
-          this.setCDL(parsed);
+        const ext = file.name.split('.').pop()?.toLowerCase();
+
+        if (ext === 'cc') {
+          // Single ColorCorrection file
+          const entry = parseCC(text);
+          this.setCDL(entry);
+        } else if (ext === 'ccc') {
+          // ColorCorrectionCollection -- use first entry by default
+          const entries = parseCCC(text);
+          if (entries.length === 0) {
+            showAlert('CCC file contains no ColorCorrection entries', { type: 'error', title: 'CDL Error' });
+            return;
+          }
+          this.setCDL(entries[0]!);
         } else {
-          showAlert('Failed to parse CDL file', { type: 'error', title: 'CDL Error' });
+          // .cdl or .xml -- use existing parser
+          const parsed = parseCDLXML(text);
+          if (parsed) {
+            this.setCDL(parsed);
+          } else {
+            showAlert('Failed to parse CDL file', { type: 'error', title: 'CDL Error' });
+          }
         }
       } catch (err) {
         showAlert(`Error loading CDL: ${err}`, { type: 'error', title: 'CDL Error' });
@@ -488,6 +515,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     // Remove body-mounted panel if present
     if (this.panel.parentNode) {

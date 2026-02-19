@@ -7,29 +7,6 @@ import { injectA11yStyles } from './injectA11yStyles';
 import { FocusManager } from './FocusManager';
 import { AriaAnnouncer } from './AriaAnnouncer';
 
-// Mock createButton used by Modal
-vi.mock('../components/shared/Button', () => ({
-  createButton: vi.fn((text: string, onClick: () => void, options?: { variant?: string; minWidth?: string; icon?: string; title?: string; size?: string }) => {
-    const btn = document.createElement('button');
-    btn.textContent = text;
-    btn.title = options?.title || '';
-    if (!text && options?.title) {
-      btn.setAttribute('aria-label', options.title);
-    }
-    btn.addEventListener('click', onClick);
-    return btn;
-  }),
-  createIconButton: vi.fn((icon: string, onClick: () => void, options?: Record<string, unknown>) => {
-    const btn = document.createElement('button');
-    btn.innerHTML = icon;
-    btn.title = (options?.title as string) || '';
-    btn.addEventListener('click', onClick);
-    return btn;
-  }),
-  setButtonActive: vi.fn(),
-  applyA11yFocus: vi.fn(() => () => {}),
-}));
-
 describe('Keyboard Navigation Integration', () => {
   let tabBar: TabBar;
   let contextToolbar: ContextToolbar;
@@ -144,7 +121,7 @@ describe('Keyboard Navigation Integration', () => {
 
     it('KEY-002b: Tab bar buttons are <button> elements with click handlers', () => {
       const buttons = tabBar.getButtons();
-      expect(buttons.length).toBe(5);
+      expect(buttons.length).toBe(6);
       for (const btn of buttons) {
         expect(btn.tagName).toBe('BUTTON');
       }

@@ -7,6 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HeaderBar } from './HeaderBar';
 import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
+import * as Modal from '../shared/Modal';
+import type { LayoutPreset } from '../../layout/LayoutStore';
 
 describe('HeaderBar', () => {
   let headerBar: HeaderBar;
@@ -33,6 +35,7 @@ describe('HeaderBar', () => {
 
   afterEach(() => {
     headerBar.dispose();
+    vi.restoreAllMocks();
   });
 
   describe('initialization', () => {
@@ -64,18 +67,21 @@ describe('HeaderBar', () => {
 
   describe('mobile scroll support', () => {
     it('HDR-U013: container has overflow-x auto for horizontal scrolling', () => {
-      const el = headerBar.render();
-      expect(el.style.overflowX).toBe('auto');
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      expect(scrollContainer.style.overflowX).toBe('auto');
     });
 
     it('HDR-U014: container has overflow-y hidden', () => {
-      const el = headerBar.render();
-      expect(el.style.overflowY).toBe('hidden');
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      expect(scrollContainer.style.overflowY).toBe('hidden');
     });
 
     it('HDR-U015: container hides scrollbar via scrollbar-width none', () => {
-      const el = headerBar.render();
-      expect(el.style.scrollbarWidth).toBe('none');
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      expect(scrollContainer.style.scrollbarWidth).toBe('none');
     });
 
     it('HDR-U016: webkit scrollbar style element is present', () => {
@@ -96,9 +102,10 @@ describe('HeaderBar', () => {
     });
 
     it('HDR-U018: dividers have flex-shrink 0', () => {
-      const el = headerBar.render();
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
       // Dividers are 1px-wide elements with border-primary background
-      const children = Array.from(el.children) as HTMLElement[];
+      const children = Array.from(scrollContainer.children) as HTMLElement[];
       const dividers = children.filter(
         (c) => c.style.width === '1px' && c.style.height === '24px'
       );
@@ -121,6 +128,8 @@ describe('HeaderBar', () => {
       const input = el.querySelector('input[type="file"]') as HTMLInputElement;
       expect(input.accept).toContain('image/*');
       expect(input.accept).toContain('video/*');
+      expect(input.accept).toContain('.avif');
+      expect(input.accept).toContain('.mkv');
       expect(input.accept).toContain('.rv');
       expect(input.accept).toContain('.gto');
     });
@@ -260,6 +269,40 @@ describe('HeaderBar', () => {
       // Pause icon uses rect shapes
       expect(playBtn.innerHTML).toContain('rect');
     });
+
+    it('HB-L55a: play button should have aria-pressed="true" when playing', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const playBtn = Array.from(buttons).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+      // Simulate playback started
+      (session as any)._isPlaying = true;
+      session.emit('playbackChanged', true);
+
+      expect(playBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('HB-L55b: play button should have aria-pressed="false" when paused', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const playBtn = Array.from(buttons).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+      // Initial state is paused
+      expect(playBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Also verify it goes back to false after stopping
+      (session as any)._isPlaying = true;
+      session.emit('playbackChanged', true);
+      expect(playBtn.getAttribute('aria-pressed')).toBe('true');
+
+      (session as any)._isPlaying = false;
+      session.emit('playbackChanged', false);
+      expect(playBtn.getAttribute('aria-pressed')).toBe('false');
+    });
   });
 
   describe('loop mode button', () => {
@@ -282,14 +325,14 @@ describe('HeaderBar', () => {
       expect(session.loopMode).toBe('loop');
     });
 
-    it('HDR-U051: loop button shows current mode label', () => {
+    it('HDR-U051: loop button shows current mode via aria-label', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode')
+        btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode')
       ) as HTMLButtonElement;
 
-      expect(loopBtn.textContent).toContain('Loop');
+      expect(loopBtn.getAttribute('aria-label')).toContain('Loop');
     });
   });
 
@@ -340,18 +383,11 @@ describe('HeaderBar', () => {
 
       expect(session.playbackSpeed).toBe(1);
 
-      speedBtn.click();
-      expect(session.playbackSpeed).toBe(2);
-
-      speedBtn.click();
-      expect(session.playbackSpeed).toBe(4);
-
-      speedBtn.click();
-      expect(session.playbackSpeed).toBe(8);
-
-      speedBtn.click();
-      // Should wrap to 1x
-      expect(session.playbackSpeed).toBe(1);
+      const expectedSequence = [2, 4, 8, 0.1, 0.25, 0.5, 1];
+      for (const expectedSpeed of expectedSequence) {
+        speedBtn.click();
+        expect(session.playbackSpeed).toBe(expectedSpeed);
+      }
     });
 
     it('HDR-U072: speed button has blue styling when not at 1x', () => {
@@ -425,52 +461,135 @@ describe('HeaderBar', () => {
   });
 
   describe('utility buttons', () => {
-    it('HDR-U090: has help button', () => {
+    it('HDR-U090: has help menu button', () => {
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const helpBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Keyboard shortcuts')
-      );
-      expect(helpBtn).not.toBeUndefined();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]');
+      expect(helpBtn).not.toBeNull();
     });
 
-    it('HDR-U091: clicking help button emits showShortcuts event', () => {
+    it('HDR-U091: clicking help menu opens dropdown with shortcuts option', () => {
       const callback = vi.fn();
       headerBar.on('showShortcuts', callback);
 
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const helpBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Keyboard shortcuts')
-      ) as HTMLButtonElement;
-
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
       helpBtn.click();
+
+      // Dropdown should appear on document.body
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      expect(dropdown).not.toBeNull();
+
+      // Click the shortcuts menu item
+      const shortcutsItem = dropdown!.querySelector('[data-testid="help-menu-help"]') as HTMLButtonElement;
+      expect(shortcutsItem).not.toBeNull();
+      shortcutsItem.click();
 
       expect(callback).toHaveBeenCalled();
     });
 
-    it('HDR-U092: has key bindings button', () => {
+    it('HDR-U092: help dropdown has key bindings option', () => {
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const keyBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Custom key bindings')
-      );
-      expect(keyBtn).not.toBeUndefined();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const keyBindingsItem = dropdown!.querySelector('[data-testid="help-menu-keyboard"]');
+      expect(keyBindingsItem).not.toBeNull();
     });
 
-    it('HDR-U093: clicking key bindings button emits showCustomKeyBindings event', () => {
+    it('HDR-U093: clicking key bindings option emits showCustomKeyBindings event', () => {
       const callback = vi.fn();
       headerBar.on('showCustomKeyBindings', callback);
 
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const keyBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Custom key bindings')
-      ) as HTMLButtonElement;
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
 
-      keyBtn.click();
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const keyBindingsItem = dropdown!.querySelector('[data-testid="help-menu-keyboard"]') as HTMLButtonElement;
+      keyBindingsItem.click();
 
       expect(callback).toHaveBeenCalled();
+    });
+
+    it('HDR-U094: layout menu button exists and is disabled without preset config', () => {
+      const el = headerBar.render();
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      expect(layoutBtn).not.toBeNull();
+      expect(layoutBtn.disabled).toBe(true);
+      expect(layoutBtn.title).toBe('Layout presets (Alt+1..Alt+4)');
+      expect(layoutBtn.textContent).toBe('');
+    });
+
+    it('HDR-U094a: layout menu button uses grid icon', () => {
+      const el = headerBar.render();
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      expect(layoutBtn).not.toBeNull();
+      expect(layoutBtn.querySelector('svg')).not.toBeNull();
+      expect(layoutBtn.innerHTML).toContain('line x1="9"');
+    });
+
+    it('HDR-U094b: configured layout menu opens and applies selected preset', () => {
+      const onApply = vi.fn();
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
+        { id: 'default', label: 'Default' },
+        { id: 'color', label: 'Color' },
+      ];
+
+      headerBar.setLayoutPresets(presets, onApply);
+      headerBar.setActiveLayoutPreset('default');
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      expect(layoutBtn.disabled).toBe(false);
+      layoutBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="layout-menu-dropdown"]');
+      expect(dropdown).not.toBeNull();
+
+      const defaultItem = dropdown!.querySelector('[data-testid="layout-menu-default"]') as HTMLButtonElement;
+      const colorItem = dropdown!.querySelector('[data-testid="layout-menu-color"]') as HTMLButtonElement;
+      expect(defaultItem.getAttribute('aria-checked')).toBe('true');
+      expect(defaultItem.textContent).toContain('\u2713');
+
+      colorItem.click();
+      expect(onApply).toHaveBeenCalledWith('color');
+      expect(document.querySelector('[data-testid="layout-menu-dropdown"]')).toBeNull();
+
+      document.body.removeChild(el);
+    });
+  });
+
+  describe('panels slot', () => {
+    it('HDR-U095: getPanelsSlot returns a container element', () => {
+      headerBar.render();
+      const slot = headerBar.getPanelsSlot();
+      expect(slot).toBeInstanceOf(HTMLElement);
+      expect(slot.dataset.testid).toBe('panels-slot');
+    });
+
+    it('HDR-U096: setPanelToggles replaces slot content', () => {
+      headerBar.render();
+      const el = document.createElement('div');
+      el.textContent = 'panel toggles';
+      headerBar.setPanelToggles(el);
+      expect(headerBar.getPanelsSlot().textContent).toContain('panel toggles');
+    });
+
+    it('HDR-U097: setPanelToggles clears previous content', () => {
+      headerBar.render();
+      const el1 = document.createElement('div');
+      el1.textContent = 'old';
+      headerBar.setPanelToggles(el1);
+
+      const el2 = document.createElement('div');
+      el2.textContent = 'new';
+      headerBar.setPanelToggles(el2);
+
+      expect(headerBar.getPanelsSlot().textContent).not.toContain('old');
+      expect(headerBar.getPanelsSlot().textContent).toContain('new');
     });
   });
 
@@ -550,13 +669,13 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode')
+        btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode')
       ) as HTMLButtonElement;
 
       session.loopMode = 'pingpong';
       session.emit('loopModeChanged', 'pingpong');
 
-      expect(loopBtn.textContent).toContain('Ping');
+      expect(loopBtn.getAttribute('aria-label')).toContain('Ping');
     });
 
     it('HDR-U121: updates direction button when direction changes', () => {
@@ -637,20 +756,75 @@ describe('HeaderBar', () => {
         headerBar.dispose();
       }).not.toThrow();
     });
+
+    it('HB-L50a: dispose() should remove any open speed menu from document.body', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Open the speed menu via contextmenu
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      // Verify the menu is in the DOM
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+
+      // Dispose the HeaderBar while the menu is open
+      headerBar.dispose();
+
+      // The speed menu should have been removed from document.body
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('HB-L50b: dispose() should remove any open layout menu from document.body', () => {
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
+        { id: 'default', label: 'Default' },
+        { id: 'color', label: 'Color' },
+      ];
+      headerBar.setLayoutPresets(presets, vi.fn());
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      layoutBtn.click();
+
+      expect(document.getElementById('layout-preset-menu')).not.toBeNull();
+
+      headerBar.dispose();
+
+      expect(document.getElementById('layout-preset-menu')).toBeNull();
+      document.body.removeChild(el);
+    });
   });
 
   describe('speed button edge cases', () => {
-    it('HDR-U150: speed resets to 1x after reaching max preset', () => {
+    it('HDR-U150: speed wraps to minimum preset after reaching max preset', () => {
       const el = headerBar.render();
       const speedBtn = el.querySelector(
         '[data-testid="playback-speed-button"]'
       ) as HTMLButtonElement;
 
-      // Click through all presets (1 -> 2 -> 4 -> 8 -> back to 1)
+      // Click through to max speed (1 -> 2 -> 4 -> 8), then wrap to min.
       speedBtn.click(); // 2
       speedBtn.click(); // 4
       speedBtn.click(); // 8
-      speedBtn.click(); // back to 1
+      speedBtn.click(); // wrap to 0.1
+
+      expect(session.playbackSpeed).toBe(0.1);
+      expect(speedBtn.textContent).toBe('0.1x');
+    });
+
+    it('HDR-U150b: speed returns to 1x after a full forward cycle', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      for (let i = 0; i < PLAYBACK_SPEED_PRESETS.length; i++) {
+        speedBtn.click();
+      }
 
       expect(session.playbackSpeed).toBe(1);
       expect(speedBtn.textContent).toBe('1x');
@@ -756,6 +930,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
       expect(sessionNameDisplay).not.toBeNull();
+      expect(sessionNameDisplay?.tagName).toBe('BUTTON');
     });
 
     it('HDR-U161: session name display shows "Untitled" by default', () => {
@@ -770,17 +945,10 @@ describe('HeaderBar', () => {
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
       const nameText = sessionNameDisplay?.querySelector('.session-name-text');
 
-      // Simulate metadata change
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'My Session',
         comment: 'Test comment',
-        version: 2,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(nameText?.textContent).toBe('My Session');
     });
@@ -789,17 +957,10 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change with comment
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'Test Session',
         comment: 'This is a test comment',
-        version: 2,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).toContain('Test Session');
       expect(sessionNameDisplay.title).toContain('This is a test comment');
@@ -809,17 +970,11 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change with different origin
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'External Session',
-        comment: '',
         version: 3,
         origin: 'rv-desktop',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).toContain('Created in: rv-desktop');
     });
@@ -828,17 +983,10 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'Versioned Session',
-        comment: '',
         version: 5,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).toContain('Session version: 5');
     });
@@ -847,17 +995,10 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change with default origin
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'Local Session',
-        comment: '',
-        version: 2,
         origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).not.toContain('Created in:');
     });
@@ -867,35 +1008,82 @@ describe('HeaderBar', () => {
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
       const nameText = sessionNameDisplay?.querySelector('.session-name-text');
 
-      // Simulate metadata change with empty displayName
-      (session as any)._metadata = {
-        displayName: '',
-        comment: '',
-        version: 2,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      session.updateMetadata({ displayName: '' });
 
       expect(nameText?.textContent).toBe('Untitled');
     });
 
-    it('HDR-U168: session name display has hover effect', () => {
+    it('HDR-U168: session name display has interactive hover styling', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Initial state
-      expect(sessionNameDisplay.style.background).toBeFalsy();
-
-      // Simulate mouseenter
-      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
+      expect(sessionNameDisplay.style.background).toContain('transparent');
+      sessionNameDisplay.dispatchEvent(new Event('pointerenter'));
       expect(sessionNameDisplay.style.background).toContain('var(--bg-hover)');
+    });
 
-      // Simulate mouseleave
-      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseleave'));
-      expect(sessionNameDisplay.style.background).toBe('transparent');
+    it('HB-L51a: session name has button affordances consistent with header controls', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      expect(sessionNameDisplay.style.cursor).toBe('pointer');
+      expect(sessionNameDisplay.style.transition).toContain('all 0.12s ease');
+
+      sessionNameDisplay.dispatchEvent(new Event('pointerenter'));
+      expect(sessionNameDisplay.style.borderColor).toContain('var(--border-secondary)');
+
+      sessionNameDisplay.dispatchEvent(new Event('pointerleave'));
+      expect(sessionNameDisplay.style.borderColor).toContain('transparent');
+    });
+
+    it('HDR-U169: clicking session name prompts for rename and updates metadata', async () => {
+      const promptSpy = vi.spyOn(Modal, 'showPrompt').mockResolvedValue('Renamed Session');
+      const setDisplayNameSpy = vi.spyOn(session, 'setDisplayName');
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLButtonElement;
+      const nameText = sessionNameDisplay.querySelector('.session-name-text');
+
+      sessionNameDisplay.click();
+
+      await vi.waitFor(() => {
+        expect(promptSpy).toHaveBeenCalledWith('Enter session name', expect.objectContaining({
+          title: 'Rename Session',
+          confirmText: 'Rename',
+          defaultValue: '',
+        }));
+      });
+      await vi.waitFor(() => {
+        expect(setDisplayNameSpy).toHaveBeenCalledWith('Renamed Session');
+      });
+      expect(nameText?.textContent).toBe('Renamed Session');
+    });
+
+    it('HDR-U170: canceling rename leaves session name unchanged', async () => {
+      vi.spyOn(Modal, 'showPrompt').mockResolvedValue(null);
+      const setDisplayNameSpy = vi.spyOn(session, 'setDisplayName');
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLButtonElement;
+      const nameText = sessionNameDisplay.querySelector('.session-name-text');
+
+      sessionNameDisplay.click();
+
+      await vi.waitFor(() => {
+        expect(Modal.showPrompt).toHaveBeenCalled();
+      });
+      expect(setDisplayNameSpy).not.toHaveBeenCalled();
+      expect(nameText?.textContent).toBe('Untitled');
+    });
+
+    it('HDR-U171: F2 key opens rename prompt from session name control', async () => {
+      vi.spyOn(Modal, 'showPrompt').mockResolvedValue(null);
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLButtonElement;
+
+      sessionNameDisplay.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+
+      await vi.waitFor(() => {
+        expect(Modal.showPrompt).toHaveBeenCalled();
+      });
     });
   });
 
@@ -1018,10 +1206,8 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       headerBar.setImageMode(true);
       vi.advanceTimersByTime(350);
-      const helpBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Keyboard shortcuts')
-      );
-      expect(helpBtn).toBeDefined();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]');
+      expect(helpBtn).not.toBeNull();
       expect((helpBtn as HTMLElement).closest('[style*="display: none"]')).toBeNull();
     });
 
@@ -1144,9 +1330,10 @@ describe('HeaderBar', () => {
     });
 
     it('HDR-U221: dividers are hidden in image mode (regression: untested elements)', () => {
-      const el = headerBar.render();
-      // Count all 1px-wide dividers in the header
-      const allDividers = Array.from(el.children).filter(
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      // Count all 1px-wide dividers in the header scroll container
+      const allDividers = Array.from(scrollContainer.children).filter(
         (child) => (child as HTMLElement).style.width === '1px'
       ) as HTMLElement[];
       // There should be at least the two playback dividers
@@ -1167,6 +1354,517 @@ describe('HeaderBar', () => {
         (d) => d.style.display === 'none'
       );
       expect(stillHidden.length).toBe(0);
+    });
+  });
+
+  describe('keyboard focus ring (H-11)', () => {
+    it('HB-H11a: createIconButton() should call applyA11yFocus on the created button', () => {
+      const el = headerBar.render();
+      // Pick an icon button - the help menu button
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      // applyA11yFocus registers a focus listener that sets outline on keyboard focus.
+      // Simulate keyboard focus (no preceding mousedown).
+      helpBtn.dispatchEvent(new Event('focus'));
+      expect(helpBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(helpBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('HB-H11b: createCompactButton() should call applyA11yFocus on the created button', () => {
+      const el = headerBar.render();
+      // The loop button is created via createCompactButton
+      const loopBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('loop mode')
+      ) as HTMLButtonElement;
+
+      // Simulate keyboard focus (no preceding mousedown).
+      loopBtn.dispatchEvent(new Event('focus'));
+      expect(loopBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(loopBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('HB-H11c: when a header button receives focus via keyboard (Tab), it should have a visible focus ring', () => {
+      const el = headerBar.render();
+      // Pick the fullscreen button
+      const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
+
+      // Simulate Tab focus (no mousedown before focus)
+      fullscreenBtn.dispatchEvent(new Event('focus'));
+      expect(fullscreenBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(fullscreenBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('HB-H11d: when a header button receives focus via mouse click, it should NOT show the focus ring', () => {
+      const el = headerBar.render();
+      // Pick the fullscreen button
+      const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
+
+      // Simulate mouse click: pointerdown fires before focus
+      fullscreenBtn.dispatchEvent(new PointerEvent('pointerdown'));
+      fullscreenBtn.dispatchEvent(new Event('focus'));
+      expect(fullscreenBtn.style.outline).not.toBe('2px solid var(--accent-primary)');
+    });
+  });
+
+  describe('SVG icons aria-hidden (H-12)', () => {
+    it('ICN-H12c: HeaderBar getIcon() SVGs should have aria-hidden="true"', () => {
+      const el = headerBar.render();
+      // All SVG elements within buttons should have aria-hidden="true"
+      const svgs = el.querySelectorAll('button svg');
+      expect(svgs.length).toBeGreaterThan(0);
+      svgs.forEach((svg) => {
+        expect(svg.getAttribute('aria-hidden')).toBe('true');
+      });
+    });
+
+    it('ICN-H12c-play: play button icon SVG has aria-hidden="true"', () => {
+      const el = headerBar.render();
+      const playBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+      const svg = playBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('ICN-H12c-update: play button icon SVG retains aria-hidden after playback state change', () => {
+      const el = headerBar.render();
+      const playBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+      // Simulate playback started (switches to pause icon)
+      (session as any)._isPlaying = true;
+      session.emit('playbackChanged', true);
+
+      const svg = playBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('ICN-H12c-fullscreen: fullscreen button icon SVG has aria-hidden after state change', () => {
+      const el = headerBar.render();
+      const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
+
+      // Toggle fullscreen state (switches icon from maximize to minimize)
+      headerBar.setFullscreenState(true);
+
+      const svg = fullscreenBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('ICN-H12c-session: session name display icon SVG has aria-hidden="true"', () => {
+      const el = headerBar.render();
+      const sessionDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+      const svg = sessionDisplay.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  describe('overflow fade indicators (L-52)', () => {
+    it('HB-L52a: header creates fade indicator elements and has scroll event handling', () => {
+      const el = headerBar.render();
+
+      // Verify left and right fade elements exist via data-testid
+      const fadeLeft = el.querySelector('[data-testid="header-fade-left"]') as HTMLElement;
+      const fadeRight = el.querySelector('[data-testid="header-fade-right"]') as HTMLElement;
+      expect(fadeLeft).not.toBeNull();
+      expect(fadeRight).not.toBeNull();
+
+      // Both fades should have pointer-events: none to not block interactions
+      expect(fadeLeft.style.pointerEvents).toBe('none');
+      expect(fadeRight.style.pointerEvents).toBe('none');
+
+      // Both fades should be aria-hidden
+      expect(fadeLeft.getAttribute('aria-hidden')).toBe('true');
+      expect(fadeRight.getAttribute('aria-hidden')).toBe('true');
+
+      // Both fades should be positioned absolutely
+      expect(fadeLeft.style.position).toBe('absolute');
+      expect(fadeRight.style.position).toBe('absolute');
+
+      // Both fades should start hidden (opacity 0) since jsdom scrollWidth === clientWidth
+      expect(fadeLeft.style.opacity).toBe('0');
+      expect(fadeRight.style.opacity).toBe('0');
+
+      // The updateOverflowFades method should exist and be callable
+      expect(typeof headerBar.updateOverflowFades).toBe('function');
+      expect(() => headerBar.updateOverflowFades()).not.toThrow();
+    });
+
+    it('HB-L52b: dispose removes scroll and resize listeners without error', () => {
+      headerBar.render();
+
+      // Should not throw when disposing (which removes scroll/resize listeners)
+      expect(() => headerBar.dispose()).not.toThrow();
+
+      // Calling dispose again should also be safe
+      expect(() => headerBar.dispose()).not.toThrow();
+    });
+
+    it('HB-L52c: fade indicators have gradient backgrounds', () => {
+      const el = headerBar.render();
+      const fadeLeft = el.querySelector('[data-testid="header-fade-left"]') as HTMLElement;
+      const fadeRight = el.querySelector('[data-testid="header-fade-right"]') as HTMLElement;
+
+      // Left fade should gradient from bg-primary to transparent (left to right)
+      expect(fadeLeft.style.background).toContain('linear-gradient');
+      expect(fadeLeft.style.background).toContain('to right');
+
+      // Right fade should gradient from bg-primary to transparent (right to left)
+      expect(fadeRight.style.background).toContain('linear-gradient');
+      expect(fadeRight.style.background).toContain('to left');
+    });
+
+    it('HB-L52d: wrapper has position relative for absolute fade positioning', () => {
+      const el = headerBar.render();
+      expect(el.style.position).toBe('relative');
+    });
+  });
+
+  describe('touch/pointer event support (L-60)', () => {
+    // jsdom does not provide PointerEvent, so we polyfill it for these tests
+    const PointerEventPolyfill = class extends MouseEvent {
+      constructor(type: string, params?: MouseEventInit) {
+        super(type, params);
+      }
+    };
+    if (typeof globalThis.PointerEvent === 'undefined') {
+      (globalThis as any).PointerEvent = PointerEventPolyfill;
+    }
+
+    it('HB-L60a: header buttons should respond to pointerenter/pointerleave for hover styling (touch support)', () => {
+      const el = headerBar.render();
+      // Pick an icon button - the help menu button (created via createIconButton)
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      // Initial state: transparent background
+      expect(helpBtn.style.background).toBe('transparent');
+
+      // Simulate pointerenter (fires for both mouse and touch)
+      helpBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('var(--bg-hover)');
+      expect(helpBtn.style.borderColor).toBe('var(--border-secondary)');
+      expect(helpBtn.style.color).toBe('var(--text-primary)');
+
+      // Simulate pointerleave
+      helpBtn.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('transparent');
+      expect(helpBtn.style.borderColor).toBe('transparent');
+      expect(helpBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HB-L60b: compact buttons should respond to pointerenter/pointerleave (touch support)', () => {
+      const el = headerBar.render();
+      // The loop button is created via createCompactButton
+      const loopBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('loop mode')
+      ) as HTMLButtonElement;
+
+      // Initial state: transparent background
+      expect(loopBtn.style.background).toBe('transparent');
+
+      // Simulate pointerenter
+      loopBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      expect(loopBtn.style.background).toBe('var(--bg-hover)');
+      expect(loopBtn.style.color).toBe('var(--text-primary)');
+
+      // Simulate pointerleave
+      loopBtn.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(loopBtn.style.background).toBe('transparent');
+      expect(loopBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HB-L60c: speed button should respond to pointerenter/pointerleave (touch support)', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      // Simulate pointerenter
+      speedBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      expect(speedBtn.style.background).toBe('var(--bg-hover)');
+      expect(speedBtn.style.color).toBe('var(--text-primary)');
+
+      // Simulate pointerleave (speed is 1x, so should go transparent)
+      speedBtn.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(speedBtn.style.background).toBe('transparent');
+      expect(speedBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HB-L60d: icon buttons should respond to pointerdown/pointerup for active state (touch support)', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      // Simulate pointerdown (active press) - uses variant active state
+      helpBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
+
+      // Simulate pointerup
+      helpBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('var(--bg-hover)');
+    });
+
+    it('HB-L60e: header buttons should NOT respond to mouseenter for hover styling (replaced by pointer events)', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      // Initial state: transparent background
+      expect(helpBtn.style.background).toBe('transparent');
+
+      // Dispatch mouseenter - should NOT change styling (listeners use pointerenter now)
+      helpBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('transparent');
+    });
+  });
+
+  describe('speed menu keyboard accessibility (M-22)', () => {
+    /** Helper: opens the speed menu and returns the menu element */
+    function openSpeedMenu(el: HTMLElement, method: 'contextmenu' | 'shift-enter' | 'shift-space' = 'contextmenu'): HTMLElement {
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      if (method === 'contextmenu') {
+        speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      } else if (method === 'shift-enter') {
+        speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+      } else if (method === 'shift-space') {
+        speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', shiftKey: true, bubbles: true }));
+      }
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+      return menu!;
+    }
+
+    afterEach(() => {
+      // Cleanup any leftover menus
+      document.getElementById('speed-preset-menu')?.remove();
+    });
+
+    it('SPD-M22a: Shift+Enter on the speed button should open the speed preset menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22a-space: Shift+Space on the speed button should open the speed preset menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', shiftKey: true, bubbles: true }));
+
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22a-haspopup: speed button should have aria-haspopup="menu"', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      expect(speedBtn.getAttribute('aria-haspopup')).toBe('menu');
+    });
+
+    it('SPD-M22b: Speed menu container should have role="menu"', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      expect(menu.getAttribute('role')).toBe('menu');
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22c: Speed menu items should have role="menuitem"', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = menu.querySelectorAll('[role="menuitem"]');
+      // Should have speed presets + pitch correction toggle
+      expect(menuItems.length).toBe(PLAYBACK_SPEED_PRESETS.length + 1);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d: ArrowDown should navigate to next speed menu item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+
+      // Focus the first item
+      menuItems[0]!.focus();
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      // Press ArrowDown
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[1]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d-up: ArrowUp should navigate to previous speed menu item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+
+      // Focus the second item
+      menuItems[1]!.focus();
+      expect(document.activeElement).toBe(menuItems[1]);
+
+      // Press ArrowUp
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d-wrap-down: ArrowDown wraps from last to first item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+      const lastItem = menuItems[menuItems.length - 1]!;
+
+      // Focus the last item
+      lastItem.focus();
+      expect(document.activeElement).toBe(lastItem);
+
+      // Press ArrowDown should wrap to first
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d-wrap-up: ArrowUp wraps from first to last item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+
+      // Focus the first item
+      menuItems[0]!.focus();
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      // Press ArrowUp should wrap to last
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[menuItems.length - 1]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22e: Pressing Escape should close the speed menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+
+      // Press Escape
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22e-focus: Pressing Escape returns focus to the speed button', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      const menu = openSpeedMenu(el);
+
+      // Press Escape
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(document.activeElement).toBe(speedBtn);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22f: The currently active speed should have aria-checked="true"', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Default speed is 1x
+      const menu = openSpeedMenu(el);
+      const activeItem = menu.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(activeItem).not.toBeNull();
+      expect(activeItem.getAttribute('aria-checked')).toBe('true');
+
+      // Other items should NOT have aria-checked
+      const otherItem = menu.querySelector('[data-testid="speed-preset-2"]') as HTMLElement;
+      expect(otherItem.hasAttribute('aria-checked')).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22f-2x: When speed is 2x, the 2x item should have aria-checked="true"', () => {
+      session.playbackSpeed = 2;
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const item2x = menu.querySelector('[data-testid="speed-preset-2"]') as HTMLElement;
+      expect(item2x.getAttribute('aria-checked')).toBe('true');
+
+      const item1x = menu.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(item1x.hasAttribute('aria-checked')).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22f-visual: The active speed item should have accent background color', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const activeItem = menu.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(activeItem.style.background).toContain('var(--accent-primary)');
+      expect(activeItem.style.color).toBe('white');
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22-focus-active: Menu should focus the active speed item on open', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Default speed is 1x, so the 1x item should be focused
+      openSpeedMenu(el);
+      const activeItem = document.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(document.activeElement).toBe(activeItem);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22-tab: Tab should close the menu and return focus to button', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      const menu = openSpeedMenu(el);
+
+      // Press Tab
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+      expect(document.activeElement).toBe(speedBtn);
+
+      document.body.removeChild(el);
     });
   });
 });

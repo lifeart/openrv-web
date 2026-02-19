@@ -79,6 +79,19 @@ export function wireEffectsControls(ctx: AppWiringContext): void {
     persistenceManager.syncGTOStore();
   });
 
+  // Noise reduction control -> viewer
+  controls.noiseReductionControl.on('paramsChanged', (params) => {
+    viewer.setNoiseReductionParams(params);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
+  // Watermark control -> viewer
+  controls.watermarkControl.on('stateChanged', (state) => {
+    viewer.setWatermarkState(state);
+    persistenceManager.syncGTOStore();
+  });
+
   // Perspective grid overlay -> control + viewer (bidirectional)
   viewer.getPerspectiveGridOverlay().on('cornersChanged', (params) => {
     controls.perspectiveCorrectionControl.setParams(params);
@@ -86,4 +99,8 @@ export function wireEffectsControls(ctx: AppWiringContext): void {
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
   });
+
+  // Ensure viewer state matches control defaults on startup.
+  viewer.setNoiseReductionParams(controls.noiseReductionControl.getParams());
+  viewer.setWatermarkState(controls.watermarkControl.getState());
 }

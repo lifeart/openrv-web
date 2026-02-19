@@ -81,6 +81,12 @@ describe('TabBar', () => {
       expect(btn).not.toBeNull();
     });
 
+    it('TAB-U026: has qc tab button', () => {
+      const el = tabBar.render();
+      const btn = el.querySelector('[data-tab-id="qc"]');
+      expect(btn).not.toBeNull();
+    });
+
     it('TAB-U025: all tabs have buttons', () => {
       const el = tabBar.render();
       for (const tab of TABS) {
@@ -242,6 +248,12 @@ describe('TabBar', () => {
       expect(tabBar.activeTab).toBe('annotate');
     });
 
+    it('TAB-U076: 6 key selects qc tab', () => {
+      const handled = tabBar.handleKeyboard('6');
+      expect(handled).toBe(true);
+      expect(tabBar.activeTab).toBe('qc');
+    });
+
     it('TAB-U075: unhandled key returns false', () => {
       const handled = tabBar.handleKeyboard('x');
       expect(handled).toBe(false);
@@ -271,8 +283,8 @@ describe('TabBar', () => {
   });
 
   describe('TABS constant', () => {
-    it('TAB-U100: TABS has 5 tabs', () => {
-      expect(TABS.length).toBe(5);
+    it('TAB-U100: TABS has 6 tabs', () => {
+      expect(TABS.length).toBe(6);
     });
 
     it('TAB-U101: all tabs have id, label, icon, shortcut', () => {
@@ -284,9 +296,9 @@ describe('TabBar', () => {
       }
     });
 
-    it('TAB-U102: tab shortcuts are 1 through 5', () => {
+    it('TAB-U102: tab shortcuts are 1 through 6', () => {
       const shortcuts = TABS.map(t => t.shortcut);
-      expect(shortcuts).toEqual(['1', '2', '3', '4', '5']);
+      expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6']);
     });
   });
 });

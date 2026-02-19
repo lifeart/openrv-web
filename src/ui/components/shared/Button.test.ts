@@ -11,6 +11,15 @@ import {
   createIconButton,
 } from './Button';
 
+// PointerEvent polyfill for jsdom
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class extends MouseEvent {
+    constructor(type: string, params?: MouseEventInit) {
+      super(type, params);
+    }
+  };
+}
+
 describe('createButton', () => {
   describe('basic creation', () => {
     it('BTN-U001: creates a button element', () => {
@@ -148,6 +157,11 @@ describe('createButton', () => {
       const btn = createButton('Click', () => {});
       expect(btn.style.cssText).toContain('var(--bg-active)');
     });
+
+    it('BTN-U056: overlay variant has overlay-border background', () => {
+      const btn = createButton('Click', () => {}, { variant: 'overlay' });
+      expect(btn.style.cssText).toContain('var(--overlay-border)');
+    });
   });
 
   describe('sizes', () => {
@@ -180,6 +194,16 @@ describe('createButton', () => {
       const btn = createButton('Click', () => {}, { size: 'lg' });
       expect(btn.style.fontSize).toBe('13px');
     });
+
+    it('BTN-U066: xs size has 20px height', () => {
+      const btn = createButton('Click', () => {}, { size: 'xs' });
+      expect(btn.style.height).toBe('20px');
+    });
+
+    it('BTN-U067: xs size has 9px font', () => {
+      const btn = createButton('Click', () => {}, { size: 'xs' });
+      expect(btn.style.fontSize).toBe('9px');
+    });
   });
 
   describe('active state', () => {
@@ -197,49 +221,99 @@ describe('createButton', () => {
       const btn = createButton('Click', () => {}, { active: true });
       expect(btn.style.cssText).toContain('border-color: var(--accent-primary)');
     });
+
+    it('BTN-U073: active button has active class', () => {
+      const btn = createButton('Click', () => {}, { active: true });
+      expect(btn.classList.contains('active')).toBe(true);
+    });
+
+    it('BTN-U074: non-active button does not have active class', () => {
+      const btn = createButton('Click', () => {});
+      expect(btn.classList.contains('active')).toBe(false);
+    });
   });
 
-  describe('hover and mouse events', () => {
-    it('BTN-U080: mouseenter changes background on non-active button', () => {
+  describe('hover and pointer events', () => {
+    it('BTN-U080: pointerenter changes background on non-active button', () => {
       const btn = createButton('Click', () => {});
-      const originalBg = btn.style.background;
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(btn.style.background).not.toBe(originalBg);
-      expect(btn.style.cssText).toContain('var(--border-primary)'); // hover color
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      // default variant hover background is var(--border-primary)
+      expect(btn.style.background).toBe('var(--border-primary)');
     });
 
-    it('BTN-U081: mouseleave restores original background', () => {
+    it('BTN-U081: pointerleave restores original background', () => {
       const btn = createButton('Click', () => {});
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      btn.dispatchEvent(new MouseEvent('mouseleave'));
-      expect(btn.style.cssText).toContain('var(--bg-active)'); // original
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      btn.dispatchEvent(new PointerEvent('pointerleave'));
+      expect(btn.style.background).toBe('var(--bg-active)');
     });
 
-    it('BTN-U082: mousedown applies active highlight color', () => {
+    it('BTN-U082: pointerdown applies active highlight color', () => {
       const btn = createButton('Click', () => {});
-      btn.dispatchEvent(new MouseEvent('mousedown'));
-      expect(btn.style.cssText).toContain('var(--accent-primary)');
+      btn.dispatchEvent(new PointerEvent('pointerdown'));
+      expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
     });
 
-    it('BTN-U083: mouseup after mousedown shows hover state', () => {
+    it('BTN-U083: pointerup after pointerdown shows hover state', () => {
       const btn = createButton('Click', () => {});
-      btn.dispatchEvent(new MouseEvent('mousedown'));
-      btn.dispatchEvent(new MouseEvent('mouseup'));
-      expect(btn.style.cssText).toContain('var(--border-primary)'); // hover color
+      btn.dispatchEvent(new PointerEvent('pointerdown'));
+      btn.dispatchEvent(new PointerEvent('pointerup'));
+      // default variant hover background is var(--border-primary)
+      expect(btn.style.background).toBe('var(--border-primary)');
     });
 
     it('BTN-U084: disabled button does not change style on hover', () => {
       const btn = createButton('Click', () => {}, { disabled: true });
-      const originalStyle = btn.style.cssText;
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(btn.style.cssText).toBe(originalStyle);
+      const originalBg = btn.style.background;
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      expect(btn.style.background).toBe(originalBg);
     });
 
-    it('BTN-U085: active button does not change on mouseenter', () => {
+    it('BTN-U085: active button does not change on pointerenter', () => {
       const btn = createButton('Click', () => {}, { active: true });
-      const originalStyle = btn.style.cssText;
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(btn.style.cssText).toBe(originalStyle);
+      const originalBg = btn.style.background;
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      expect(btn.style.background).toBe(originalBg);
+    });
+
+    it('BTN-U086: active button stays active after pointerleave', () => {
+      const btn = createButton('Click', () => {}, { active: true, variant: 'ghost' });
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      btn.dispatchEvent(new PointerEvent('pointerleave'));
+      expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
+    });
+  });
+
+  describe('borderRadius option', () => {
+    it('BTN-U110: custom borderRadius overrides default', () => {
+      const btn = createButton('Click', () => {}, { borderRadius: '2px' });
+      expect(btn.style.borderRadius).toBe('2px');
+    });
+
+    it('BTN-U111: default borderRadius is 4px', () => {
+      const btn = createButton('Click', () => {});
+      expect(btn.style.borderRadius).toBe('4px');
+    });
+  });
+
+  describe('a11y focus handling', () => {
+    it('BTN-U120: does not have outline:none in base style', () => {
+      const btn = createButton('Click', () => {});
+      expect(btn.style.outline).not.toBe('none');
+    });
+
+    it('BTN-U121: keyboard focus shows focus ring', () => {
+      const btn = createButton('Click', () => {});
+      btn.dispatchEvent(new FocusEvent('focus'));
+      expect(btn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(btn.style.outlineOffset).toBe('2px');
+    });
+
+    it('BTN-U122: blur clears focus ring', () => {
+      const btn = createButton('Click', () => {});
+      btn.dispatchEvent(new FocusEvent('focus'));
+      btn.dispatchEvent(new FocusEvent('blur'));
+      expect(btn.style.outline).toBe('');
     });
   });
 });
@@ -248,26 +322,43 @@ describe('setButtonActive', () => {
   it('BTN-U090: setButtonActive(true) applies accent highlight', () => {
     const btn = createButton('Click', () => {});
     setButtonActive(btn, true);
-    expect(btn.style.cssText).toContain('var(--accent-primary)');
+    expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
+    expect(btn.classList.contains('active')).toBe(true);
   });
 
   it('BTN-U091: setButtonActive(false) removes accent highlight', () => {
     const btn = createButton('Click', () => {}, { active: true });
     setButtonActive(btn, false);
-    expect(btn.style.cssText).not.toContain('rgba(var(--accent-primary-rgb), 0.15)');
-    expect(btn.style.cssText).toContain('var(--bg-active)');
+    expect(btn.style.background).toBe('var(--bg-active)');
+    expect(btn.classList.contains('active')).toBe(false);
   });
 
   it('BTN-U092: setButtonActive with primary variant applies accent-active', () => {
     const btn = createButton('Click', () => {}, { variant: 'primary' });
     setButtonActive(btn, true, 'primary');
-    expect(btn.style.cssText).toContain('var(--accent-active)');
+    expect(btn.style.background).toBe('var(--accent-active)');
   });
 
   it('BTN-U093: setButtonActive with danger variant uses error color', () => {
     const btn = createButton('Click', () => {}, { variant: 'danger' });
     setButtonActive(btn, true, 'danger');
-    expect(btn.style.cssText).toContain('var(--error)');
+    expect(btn.style.background).toBe('var(--error)');
+  });
+
+  it('BTN-U094: setButtonActive toggles active class', () => {
+    const btn = createButton('Click', () => {});
+    setButtonActive(btn, true, 'ghost');
+    expect(btn.classList.contains('active')).toBe(true);
+    setButtonActive(btn, false, 'ghost');
+    expect(btn.classList.contains('active')).toBe(false);
+  });
+
+  it('BTN-U095: pointerleave after setButtonActive(true) preserves active state', () => {
+    const btn = createButton('Click', () => {}, { variant: 'ghost' });
+    setButtonActive(btn, true, 'ghost');
+    btn.dispatchEvent(new PointerEvent('pointerenter'));
+    btn.dispatchEvent(new PointerEvent('pointerleave'));
+    expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
   });
 });
 

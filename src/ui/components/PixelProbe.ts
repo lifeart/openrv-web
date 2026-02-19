@@ -60,6 +60,9 @@ export const DEFAULT_PIXEL_PROBE_STATE: PixelProbeState = {
   floatPrecision: 3,
 };
 
+const OVERLAY_CURSOR_PADDING = 20;
+const OVERLAY_INTERACTION_MARGIN = 24;
+
 /**
  * Calculate the average RGBA values over an NxN area centered at (x, y).
  * Exported for unit testing.
@@ -140,9 +143,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private lockIndicator!: HTMLElement;
   private sampleSizeLabel!: HTMLElement;
   private sourceModeLabel!: HTMLElement;
+  private precisionButton!: HTMLButtonElement;
   private formatButtons: Map<string, HTMLButtonElement> = new Map();
   private sampleSizeButtons: Map<SampleSize, HTMLButtonElement> = new Map();
   private sourceModeButtons: Map<SourceMode, HTMLButtonElement> = new Map();
+  private valueRows: Map<string, HTMLElement> = new Map();
+  private overlayInteractionActive = false;
 
 
   constructor() {
@@ -178,7 +184,26 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     `;
 
     this.createOverlayContent();
+    this.bindOverlayInteractionEvents();
 
+  }
+
+  private bindOverlayInteractionEvents(): void {
+    this.overlay.addEventListener('mouseenter', () => {
+      this.overlayInteractionActive = true;
+    });
+    this.overlay.addEventListener('mouseleave', () => {
+      this.overlayInteractionActive = false;
+    });
+    this.overlay.addEventListener('focusin', () => {
+      this.overlayInteractionActive = true;
+    });
+    this.overlay.addEventListener('focusout', (event: FocusEvent) => {
+      const nextTarget = event.relatedTarget as Node | null;
+      if (!nextTarget || !this.overlay.contains(nextTarget)) {
+        this.overlayInteractionActive = false;
+      }
+    });
   }
 
   private createOverlayContent(): void {
@@ -369,7 +394,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Float precision toggle button
     const precisionBtn = document.createElement('button');
-    precisionBtn.textContent = 'P3/P6';
+    precisionBtn.textContent = 'P3';
     precisionBtn.dataset.testid = 'pixel-probe-precision-toggle';
     precisionBtn.setAttribute('aria-label', 'Toggle float precision between 3 and 6 decimal places');
     precisionBtn.style.cssText = `
@@ -389,12 +414,14 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       precisionBtn.style.background = 'var(--border-primary)';
     });
     precisionBtn.addEventListener('mouseleave', () => {
-      precisionBtn.style.background = 'var(--bg-secondary)';
+      this.updatePrecisionButton();
     });
+    this.precisionButton = precisionBtn;
     formatRow.appendChild(precisionBtn);
 
     this.overlay.appendChild(formatRow);
     this.updateFormatButtons();
+    this.updatePrecisionButton();
 
     // Copy hint
     const hint = document.createElement('div');
@@ -558,14 +585,15 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       gap: 6px;
       padding: 3px 6px;
       border-radius: 3px;
+      border: 1px solid transparent;
       cursor: pointer;
       transition: background 0.1s ease;
     `;
     row.addEventListener('mouseenter', () => {
-      row.style.background = 'var(--bg-hover)';
+      this.applyValueRowStyle(copyKey, row, true);
     });
     row.addEventListener('mouseleave', () => {
-      row.style.background = 'transparent';
+      this.applyValueRowStyle(copyKey, row, false);
     });
     row.addEventListener('click', () => this.copyValue(copyKey));
 
@@ -588,8 +616,21 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     row.appendChild(labelEl);
     row.appendChild(valueEl);
     container.appendChild(row);
+    this.valueRows.set(copyKey, row);
+    this.applyValueRowStyle(copyKey, row, false);
 
     return valueEl;
+  }
+
+  private applyValueRowStyle(copyKey: string, row: HTMLElement, hovered: boolean): void {
+    if (hovered) {
+      row.style.background = 'var(--bg-hover)';
+      return;
+    }
+
+    const isActive = copyKey === this.state.format;
+    row.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.14)' : 'transparent';
+    row.style.borderColor = isActive ? 'rgba(var(--accent-primary-rgb), 0.45)' : 'transparent';
   }
 
   /**
@@ -937,6 +978,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         btn.style.color = 'var(--text-secondary)';
       }
     }
+
+    for (const [copyKey, row] of this.valueRows) {
+      this.applyValueRowStyle(copyKey, row, false);
+    }
   }
 
   /**
@@ -1026,8 +1071,30 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   setFloatPrecision(precision: 3 | 6): void {
     this.floatPrecision = precision;
     this.state.floatPrecision = precision;
+    this.updatePrecisionButton();
     this.updateDisplay();
     this.emit('stateChanged', { ...this.state });
+  }
+
+  private updatePrecisionButton(): void {
+    if (!this.precisionButton) return;
+
+    const isHighPrecision = this.floatPrecision === 6;
+    this.precisionButton.textContent = isHighPrecision ? 'P6' : 'P3';
+    this.precisionButton.setAttribute('aria-pressed', isHighPrecision ? 'true' : 'false');
+    this.precisionButton.title = isHighPrecision
+      ? 'High precision (6 decimals). Click to switch to 3 decimals.'
+      : 'Standard precision (3 decimals). Click to switch to 6 decimals.';
+
+    if (isHighPrecision) {
+      this.precisionButton.style.background = 'var(--accent-primary)';
+      this.precisionButton.style.borderColor = 'var(--accent-primary)';
+      this.precisionButton.style.color = 'var(--text-on-accent)';
+    } else {
+      this.precisionButton.style.background = 'var(--bg-secondary)';
+      this.precisionButton.style.borderColor = 'var(--border-secondary)';
+      this.precisionButton.style.color = 'var(--text-secondary)';
+    }
   }
 
   /**
@@ -1086,6 +1153,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
    */
   hide(): void {
     this.overlay.style.display = 'none';
+    this.overlayInteractionActive = false;
   }
 
   /**
@@ -1094,18 +1162,30 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   setOverlayPosition(clientX: number, clientY: number): void {
     if (!this.state.enabled) return;
 
-    const padding = 20;
+    if (this.overlayInteractionActive) return;
+
     const overlayRect = this.overlay.getBoundingClientRect();
 
-    let x = clientX + padding;
-    let y = clientY + padding;
+    if (overlayRect.width > 0 && overlayRect.height > 0) {
+      const withinInteractionZone =
+        clientX >= overlayRect.left - OVERLAY_INTERACTION_MARGIN &&
+        clientX <= overlayRect.right + OVERLAY_INTERACTION_MARGIN &&
+        clientY >= overlayRect.top - OVERLAY_INTERACTION_MARGIN &&
+        clientY <= overlayRect.bottom + OVERLAY_INTERACTION_MARGIN;
+      if (withinInteractionZone) {
+        return;
+      }
+    }
+
+    let x = clientX + OVERLAY_CURSOR_PADDING;
+    let y = clientY + OVERLAY_CURSOR_PADDING;
 
     // Keep within viewport
     if (x + overlayRect.width > window.innerWidth) {
-      x = clientX - overlayRect.width - padding;
+      x = clientX - overlayRect.width - OVERLAY_CURSOR_PADDING;
     }
     if (y + overlayRect.height > window.innerHeight) {
-      y = clientY - overlayRect.height - padding;
+      y = clientY - overlayRect.height - OVERLAY_CURSOR_PADDING;
     }
 
     this.overlay.style.left = `${Math.max(0, x)}px`;
@@ -1154,5 +1234,6 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.formatButtons.clear();
     this.sampleSizeButtons.clear();
     this.sourceModeButtons.clear();
+    this.valueRows.clear();
   }
 }

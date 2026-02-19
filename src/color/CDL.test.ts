@@ -13,6 +13,8 @@ import {
   applyCDLToImageData,
   parseCDLXML,
   exportCDLXML,
+  parseCC,
+  parseCCC,
 } from './CDL';
 import { createTestImageData, createSampleCDL } from '../../test/utils';
 
@@ -54,9 +56,9 @@ describe('CDL', () => {
 
   describe('applyCDLToValue', () => {
     it('CDL-002: slope multiplies input value', () => {
-      // slope=2, input=128 -> (128/255) * 2 = 1.003... clamped to 1 -> 255
+      // slope=2, input=128 -> (128/255) * 2 = 1.003... -> 256.0 (no upper clamp)
       const result = applyCDLToValue(128, 2, 0, 1);
-      expect(result).toBe(255); // Clamped at max
+      expect(result).toBeCloseTo(256, 0);
     });
 
     it('slope=1 produces no change', () => {
@@ -90,10 +92,10 @@ describe('CDL', () => {
       expect(Number.isNaN(result)).toBe(false);
     });
 
-    it('CDL-012: output is clamped to 0-255 range', () => {
-      // Very high slope
+    it('CDL-012: preserves HDR headroom while clamping negative values', () => {
+      // Very high slope should preserve values above 255 in this math utility.
       const resultHigh = applyCDLToValue(200, 10, 0, 1);
-      expect(resultHigh).toBe(255);
+      expect(resultHigh).toBeCloseTo(2000, 0);
 
       // Negative offset
       const resultLow = applyCDLToValue(10, 1, -0.5, 1);
@@ -128,7 +130,7 @@ describe('CDL', () => {
     it('saturation > 1 increases color intensity', () => {
       const result = applySaturation(200, 100, 100, 2);
       // Should push colors further from gray
-      expect(result.r).toBeGreaterThan(200);
+      expect(result.r).toBeGreaterThan(255);
     });
   });
 
@@ -300,6 +302,296 @@ describe('CDL', () => {
       expect(parsed!.power.g).toBeCloseTo(original.power.g, 5);
       expect(parsed!.power.b).toBeCloseTo(original.power.b, 5);
       expect(parsed!.saturation).toBeCloseTo(original.saturation, 5);
+    });
+  });
+
+  describe('HDR behavior', () => {
+    it('CDL-HDR-001: applyCDL() preserves values > 255 (HDR super-whites)', () => {
+      const cdl: CDLValues = {
+        slope: { r: 2, g: 2, b: 2 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      };
+      // Input 204 ≈ 0.8 normalized; slope=2 → 1.6 normalized → 408
+      const result = applyCDL(204, 204, 204, cdl);
+      expect(result.r).toBeGreaterThan(255);
+      expect(result.g).toBeGreaterThan(255);
+      expect(result.b).toBeGreaterThan(255);
+    });
+
+    it('CDL-HDR-002: applyCDL() with slope=2.0 on input 0.8 produces ~1.6 (not clamped)', () => {
+      // 0.8 normalized = 204 in 0-255 range
+      const result = applyCDLToValue(204, 2, 0, 1);
+      // Expected: (204/255) * 2 * 255 = 408
+      expect(result).toBeCloseTo(408, 0);
+      expect(result).toBeGreaterThan(255);
+    });
+
+    it('CDL-HDR-003: applyCDL() with negative after SOP is clamped to 0 (not NaN)', () => {
+      // Large negative offset forces value below 0 before power
+      const result = applyCDLToValue(10, 1, -0.5, 2);
+      expect(result).toBe(0);
+      expect(Number.isNaN(result)).toBe(false);
+    });
+
+    it('CDL-HDR-004: applySaturation() preserves values > 255', () => {
+      // High-value input simulating HDR post-SOP data
+      const result = applySaturation(400, 200, 100, 1.2);
+      // Red should exceed 255 (pushed further from luma by saturation > 1)
+      expect(result.r).toBeGreaterThan(255);
+    });
+
+    it('CDL-HDR-005: applySaturation() does NOT clamp to 255', () => {
+      // With saturation=1.0, values should pass through unchanged
+      const result = applySaturation(500, 300, 100, 1);
+      expect(result.r).toBe(500);
+      expect(result.g).toBe(300);
+      expect(result.b).toBe(100);
+    });
+
+    it('CDL-HDR-006: applySaturation() clamps negatives to 0', () => {
+      // High saturation on near-zero channel can push it negative
+      const result = applySaturation(255, 0, 0, 3);
+      // Green and blue are pushed below 0 by high saturation
+      expect(result.g).toBe(0);
+      expect(result.b).toBe(0);
+      expect(result.r).toBeGreaterThan(0);
+    });
+
+    it('CDL-HDR-007: CPU CDL matches GPU formula for standard [0,1] inputs', () => {
+      // GPU formula: out = pow(max(in * slope + offset, 0), power)
+      const testCases = [
+        { input: 128, slope: 1.2, offset: 0.05, power: 0.9 },
+        { input: 64, slope: 0.8, offset: -0.02, power: 1.1 },
+        { input: 200, slope: 1.5, offset: 0.1, power: 0.8 },
+      ];
+
+      for (const { input, slope, offset, power } of testCases) {
+        const cpuResult = applyCDLToValue(input, slope, offset, power);
+        // Manually compute GPU formula
+        const normalized = input / 255;
+        const sopResult = Math.max(normalized * slope + offset, 0);
+        const gpuResult = Math.pow(sopResult, power) * 255;
+        expect(cpuResult).toBeCloseTo(gpuResult, 4);
+      }
+    });
+
+    it('CDL-HDR-008: CPU CDL matches GPU formula for HDR inputs [0, 4.0]', () => {
+      // Test with values that produce HDR output (>1.0 normalized, >255 in 0-255 range)
+      const testCases = [
+        { input: 255, slope: 2.0, offset: 0.5, power: 1.0 },   // → ~2.5 normalized
+        { input: 200, slope: 3.0, offset: 0.0, power: 0.8 },   // → high HDR
+        { input: 255, slope: 4.0, offset: 0.0, power: 1.2 },   // → ~4.0^1.2
+      ];
+
+      for (const { input, slope, offset, power } of testCases) {
+        const cpuResult = applyCDLToValue(input, slope, offset, power);
+        // GPU formula
+        const normalized = input / 255;
+        const sopResult = Math.max(normalized * slope + offset, 0);
+        const gpuResult = Math.pow(sopResult, power) * 255;
+        expect(cpuResult).toBeCloseTo(gpuResult, 4);
+      }
+    });
+
+    it('CDL-HDR-009: CPU saturation matches GPU mix() formula', () => {
+      const cdl: CDLValues = {
+        slope: { r: 1.5, g: 1.0, b: 0.8 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 0.7,
+      };
+      const result = applyCDL(200, 150, 100, cdl);
+      // Manually compute GPU path: SOP then saturation via mix()
+      const r = (200 / 255) * 1.5, g = (150 / 255) * 1.0, b = (100 / 255) * 0.8;
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const expectedR = (luma + (r - luma) * 0.7) * 255;
+      const expectedG = (luma + (g - luma) * 0.7) * 255;
+      const expectedB = (luma + (b - luma) * 0.7) * 255;
+      expect(result.r).toBeCloseTo(expectedR, 2);
+      expect(result.g).toBeCloseTo(expectedG, 2);
+      expect(result.b).toBeCloseTo(expectedB, 2);
+    });
+
+    it('CDL-ROUND-001: exportCDLXML() → parseCDLXML() round-trip preserves values', () => {
+      const original: CDLValues = {
+        slope: { r: 2.5, g: 0.75, b: 1.333333 },
+        offset: { r: 0.1, g: -0.05, b: 0.025 },
+        power: { r: 0.8, g: 1.2, b: 1.0 },
+        saturation: 0.85,
+      };
+
+      const xml = exportCDLXML(original);
+      const parsed = parseCDLXML(xml);
+
+      expect(parsed).not.toBeNull();
+      expect(parsed!.slope.r).toBeCloseTo(original.slope.r, 5);
+      expect(parsed!.slope.g).toBeCloseTo(original.slope.g, 5);
+      expect(parsed!.slope.b).toBeCloseTo(original.slope.b, 5);
+      expect(parsed!.offset.r).toBeCloseTo(original.offset.r, 5);
+      expect(parsed!.offset.g).toBeCloseTo(original.offset.g, 5);
+      expect(parsed!.offset.b).toBeCloseTo(original.offset.b, 5);
+      expect(parsed!.power.r).toBeCloseTo(original.power.r, 5);
+      expect(parsed!.power.g).toBeCloseTo(original.power.g, 5);
+      expect(parsed!.power.b).toBeCloseTo(original.power.b, 5);
+      expect(parsed!.saturation).toBeCloseTo(original.saturation, 5);
+    });
+  });
+
+  describe('parseCC', () => {
+    it('CDL-020: parses a valid <ColorCorrection> with correct slope/offset/power/saturation', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection id="shot_001">
+  <SOPNode>
+    <Slope>1.2 0.9 1.1</Slope>
+    <Offset>0.01 -0.02 0.03</Offset>
+    <Power>1.0 1.1 0.95</Power>
+  </SOPNode>
+  <SatNode>
+    <Saturation>0.85</Saturation>
+  </SatNode>
+</ColorCorrection>`;
+
+      const result = parseCC(xml);
+
+      expect(result.slope).toEqual({ r: 1.2, g: 0.9, b: 1.1 });
+      expect(result.offset).toEqual({ r: 0.01, g: -0.02, b: 0.03 });
+      expect(result.power).toEqual({ r: 1.0, g: 1.1, b: 0.95 });
+      expect(result.saturation).toBe(0.85);
+      expect(result.id).toBe('shot_001');
+    });
+
+    it('CDL-021: missing <Slope> element uses default slope [1,1,1]', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection>
+  <SOPNode>
+    <Offset>0.1 0.2 0.3</Offset>
+    <Power>1.0 1.0 1.0</Power>
+  </SOPNode>
+</ColorCorrection>`;
+
+      const result = parseCC(xml);
+
+      expect(result.slope).toEqual({ r: 1.0, g: 1.0, b: 1.0 });
+      expect(result.offset).toEqual({ r: 0.1, g: 0.2, b: 0.3 });
+    });
+
+    it('CDL-022: non-numeric slope text throws with message containing "slope"', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection>
+  <SOPNode>
+    <Slope>abc def ghi</Slope>
+  </SOPNode>
+</ColorCorrection>`;
+
+      expect(() => parseCC(xml)).toThrow(/slope/i);
+    });
+
+    it('CDL-023: wrong root element throws with descriptive message', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<SomeOtherElement>
+  <SOPNode>
+    <Slope>1.0 1.0 1.0</Slope>
+  </SOPNode>
+</SomeOtherElement>`;
+
+      expect(() => parseCC(xml)).toThrow(/ColorCorrection/);
+    });
+
+    it('CDL-024: invalid XML throws descriptive error', () => {
+      const xml = `<<< not valid xml at all >>>`;
+
+      expect(() => parseCC(xml)).toThrow();
+    });
+  });
+
+  describe('parseCCC', () => {
+    it('CDL-030: parses a collection with 3 entries', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrectionCollection>
+  <ColorCorrection id="cc1">
+    <SOPNode>
+      <Slope>1.1 1.0 0.9</Slope>
+      <Offset>0.01 0.0 -0.01</Offset>
+      <Power>1.0 1.0 1.0</Power>
+    </SOPNode>
+    <SatNode><Saturation>1.0</Saturation></SatNode>
+  </ColorCorrection>
+  <ColorCorrection id="cc2">
+    <SOPNode>
+      <Slope>0.8 1.2 1.0</Slope>
+      <Offset>0.0 0.05 0.0</Offset>
+      <Power>1.1 0.9 1.0</Power>
+    </SOPNode>
+    <SatNode><Saturation>0.9</Saturation></SatNode>
+  </ColorCorrection>
+  <ColorCorrection id="cc3">
+    <SOPNode>
+      <Slope>1.0 1.0 1.0</Slope>
+      <Offset>0.0 0.0 0.0</Offset>
+      <Power>1.0 1.0 1.0</Power>
+    </SOPNode>
+    <SatNode><Saturation>1.2</Saturation></SatNode>
+  </ColorCorrection>
+</ColorCorrectionCollection>`;
+
+      const entries = parseCCC(xml);
+
+      expect(entries).toHaveLength(3);
+      expect(entries[0]!.slope).toEqual({ r: 1.1, g: 1.0, b: 0.9 });
+      expect(entries[1]!.slope).toEqual({ r: 0.8, g: 1.2, b: 1.0 });
+      expect(entries[2]!.saturation).toBe(1.2);
+    });
+
+    it('CDL-031: entries have correct IDs from id attributes', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrectionCollection>
+  <ColorCorrection id="shot_010">
+    <SOPNode>
+      <Slope>1.0 1.0 1.0</Slope>
+    </SOPNode>
+  </ColorCorrection>
+  <ColorCorrection id="shot_020">
+    <SOPNode>
+      <Slope>1.5 1.5 1.5</Slope>
+    </SOPNode>
+  </ColorCorrection>
+</ColorCorrectionCollection>`;
+
+      const entries = parseCCC(xml);
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0]!.id).toBe('shot_010');
+      expect(entries[1]!.id).toBe('shot_020');
+    });
+
+    it('CDL-032: invalid XML throws descriptive error', () => {
+      const xml = `<<< not valid xml >>>`;
+
+      expect(() => parseCCC(xml)).toThrow();
+    });
+
+    it('CDL-033: wrong root element throws with descriptive message', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection>
+  <SOPNode>
+    <Slope>1.0 1.0 1.0</Slope>
+  </SOPNode>
+</ColorCorrection>`;
+
+      expect(() => parseCCC(xml)).toThrow(/ColorCorrectionCollection/);
+    });
+
+    it('CDL-034: empty collection (0 entries) returns empty array', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrectionCollection>
+</ColorCorrectionCollection>`;
+
+      const entries = parseCCC(xml);
+
+      expect(entries).toHaveLength(0);
+      expect(entries).toEqual([]);
     });
   });
 });

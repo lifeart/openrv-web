@@ -84,6 +84,20 @@ describe('PaintRenderer', () => {
       expect(canvas.height).toBe(1080);
     });
 
+    it('RND-009A: supports custom output canvas size with image offset', () => {
+      renderer.renderAnnotations([], {
+        width: 1920,
+        height: 1080,
+        canvasWidth: 2200,
+        canvasHeight: 1300,
+        offsetX: 80,
+        offsetY: 40,
+      });
+      const canvas = renderer.getCanvas();
+      expect(canvas.width).toBe(2200);
+      expect(canvas.height).toBe(1300);
+    });
+
     it('RND-010: renders pen stroke annotation', () => {
       const stroke: PenStroke = {
         type: 'pen',

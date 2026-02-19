@@ -5,18 +5,10 @@
  * retime, display, overlay, channel, format, layout, OCIO, ICC, etc.)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTODTO } from 'gto-js';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
-
-// Mock the NodeFactory
-vi.mock('../../nodes/base/NodeFactory', () => ({
-  NodeFactory: {
-    isRegistered: vi.fn(),
-    create: vi.fn(),
-  },
-}));
 
 // Create a mock GTODTO object
 function createMockDTO(config: {
@@ -180,10 +172,6 @@ function createMockDTO(config: {
 }
 
 describe('GTOGraphLoader - Property Parsing', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -201,8 +189,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -222,7 +210,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      const result = loadGTOGraph(dto as never);
+      const result = loadGTOGraph(dto);
 
       expect(result.nodes.size).toBe(1);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('slope', [1.1, 1.0, 0.9]);
@@ -243,8 +231,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -264,7 +252,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotate', 90);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('flip', true);
@@ -284,8 +272,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -301,7 +289,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('composite', 'over');
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('mode', 'wipe');
@@ -322,8 +310,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -338,7 +326,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('outputIndex', 2);
     });
@@ -355,8 +343,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -371,7 +359,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('k1', 0.1);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('k2', 0.05);
@@ -396,8 +384,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -427,7 +415,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('lensWarpActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('k1', 0.1);
@@ -464,8 +452,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -496,7 +484,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('squeeze', 2.0);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('squeezeX', 1.8);
@@ -527,8 +515,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -549,7 +537,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('exposure', 1.5);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('gamma', 2.2);
@@ -572,8 +560,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -596,7 +584,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('invert', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('normalize', true);
@@ -621,8 +609,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -645,7 +633,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlColorspace', 'aceslog');
@@ -670,8 +658,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -692,7 +680,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLut', [0, 0.25, 0.5, 0.75, 1.0]);
@@ -713,8 +701,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const testMatrix = [
         1, 0, 0, 0,
@@ -738,7 +726,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('outputMatrix', testMatrix);
     });
@@ -757,8 +745,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -775,7 +763,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('visualScale', 2.0);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('visualOffset', 10);
@@ -798,8 +786,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -819,7 +807,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('warpActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('warpStyle', 1);
@@ -841,8 +829,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -861,7 +849,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('explicitActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('explicitFirstOutputFrame', 10);
@@ -886,8 +874,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -915,7 +903,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('displayColorActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('channelOrder', 'BGRA');
@@ -949,8 +937,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -973,7 +961,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('adoptedNeutral', true);
@@ -998,8 +986,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1019,7 +1007,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('stereoType', 'pair');
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('stereoSwap', true);
@@ -1041,8 +1029,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1061,7 +1049,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceStereoSwap', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceStereoRelativeOffset', 0.1);
@@ -1082,8 +1070,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1103,7 +1091,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeFlip', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeFlop', false);
@@ -1125,8 +1113,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1152,7 +1140,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayShow', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayNextRectId', 3);
@@ -1174,8 +1162,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1205,7 +1193,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayRectangles', [
         { id: 0, width: 0.2, height: 0.1, color: [1, 0, 0, 1], position: [0.1, 0.2], eye: 0, active: true },
@@ -1225,8 +1213,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1252,7 +1240,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayTexts', [
         expect.objectContaining({
@@ -1277,8 +1265,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1310,7 +1298,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayWindows', [
         expect.objectContaining({
@@ -1337,8 +1325,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1355,7 +1343,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('channelMapChannels', ['R', 'G', 'B', 'A']);
     });
@@ -1372,8 +1360,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1390,7 +1378,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('formatChannels', ['luminance', 'alpha']);
     });
@@ -1409,8 +1397,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1433,7 +1421,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutMode', 'grid');
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutSpacing', 2.0);
@@ -1456,8 +1444,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1482,7 +1470,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchFps', 30.0);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchSize', [1920, 1080]);
@@ -1507,8 +1495,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1534,7 +1522,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioVolume', 0.8);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioBalance', -0.5);
@@ -1562,8 +1550,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1608,7 +1596,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioFunction', 'color');
@@ -1642,8 +1630,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1670,7 +1658,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccSamples2D', 512);
@@ -1693,8 +1681,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1712,7 +1700,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorExposureActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorExposure', 1.5);
@@ -1730,8 +1718,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1749,7 +1737,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorCurveActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorContrast', 0.5);
@@ -1768,8 +1756,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1790,7 +1778,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorTemperatureActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorInWhitePrimary', [0.31, 0.33]);
@@ -1811,8 +1799,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1830,7 +1818,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorSaturationActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorSaturation', 1.5);
@@ -1849,8 +1837,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1874,7 +1862,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlFile', '/path/to/grade.cdl');
@@ -1898,8 +1886,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1916,7 +1904,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearToSRGBActive', true);
     });
@@ -1933,8 +1921,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1952,7 +1940,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('gaussianSigma', 0.1);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('gaussianRadius', 15.0);
@@ -1971,8 +1959,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1992,7 +1980,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('unsharpActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('unsharpAmount', 2.0);
@@ -2012,8 +2000,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -2032,7 +2020,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('clarityActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('clarityAmount', 0.5);
@@ -2052,8 +2040,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -2073,7 +2061,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotateActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotateDegrees', 90);
@@ -2094,8 +2082,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -2115,7 +2103,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('primaryConvertActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('primaryConvertInPrimaries', 'Rec709');
@@ -2136,8 +2124,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -2157,7 +2145,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('dispTransformActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('dispTransformTranslate', [100, 50]);

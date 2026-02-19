@@ -19,9 +19,12 @@ import { CDLControl } from './ui/components/CDLControl';
 import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
 import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import { GamutMappingControl } from './ui/components/GamutMappingControl';
 import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
 import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
 import { StabilizationControl } from './ui/components/StabilizationControl';
+import { NoiseReductionControl } from './ui/components/NoiseReductionControl';
+import { WatermarkControl } from './ui/components/WatermarkControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
@@ -46,9 +49,11 @@ import { BackgroundPatternControl } from './ui/components/BackgroundPatternContr
 import { OCIOControl } from './ui/components/OCIOControl';
 import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
 import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
+import { LUTPipelinePanel } from './ui/components/LUTPipelinePanel';
 import { HistoryPanel } from './ui/components/HistoryPanel';
 import { InfoPanel } from './ui/components/InfoPanel';
 import { MarkerListPanel } from './ui/components/MarkerListPanel';
+import { NotePanel } from './ui/components/NotePanel';
 import { CacheIndicator } from './ui/components/CacheIndicator';
 import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
 import { AutoSaveManager } from './core/session/AutoSaveManager';
@@ -60,13 +65,50 @@ import { PlaylistPanel } from './ui/components/PlaylistPanel';
 import { PresentationMode } from './utils/ui/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
+import { ShotGridConfigUI } from './integrations/ShotGridConfig';
+import { ShotGridPanel } from './ui/components/ShotGridPanel';
+import type { NetworkSyncConfig } from './network/types';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
+import { setButtonActive, applyA11yFocus } from './ui/components/shared/Button';
+import { getIconSvg } from './ui/components/shared/Icons';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { RightPanelContent } from './ui/layout/panels/RightPanelContent';
+import { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
+import { TimelineEditor } from './ui/components/TimelineEditor';
+import { createPanel, createPanelHeader, type Panel } from './ui/components/shared/Panel';
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
 import type { DisplayCapabilities } from './color/DisplayCapabilities';
 import type { AppSessionBridge } from './AppSessionBridge';
+import type { HeaderBar } from './ui/components/layout/HeaderBar';
+
+function parseSignalingServerList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const values = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .filter((value) => /^wss?:\/\//i.test(value));
+
+  return Array.from(new Set(values));
+}
+
+function resolveNetworkSyncConfigFromEnv(): Partial<NetworkSyncConfig> {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+  const raw =
+    env.VITE_NETWORK_SIGNALING_SERVERS ??
+    env.VITE_NETWORK_SIGNALING_URLS ??
+    env.VITE_NETWORK_SIGNALING_URL;
+
+  const signalingServers = parseSignalingServerList(raw);
+  if (signalingServers.length === 0) return {};
+
+  return {
+    serverUrl: signalingServers[0],
+    serverUrls: signalingServers,
+  };
+}
 
 /**
  * Dependencies required by AppControlRegistry to create all controls.
@@ -89,6 +131,7 @@ export class AppControlRegistry {
   readonly cdlControl: CDLControl;
   readonly curvesControl: CurvesControl;
   readonly ocioControl: OCIOControl;
+  readonly lutPipelinePanel: LUTPipelinePanel;
 
   // View tab - Navigation
   readonly zoomControl: ZoomControl;
@@ -115,6 +158,7 @@ export class AppControlRegistry {
   readonly parControl: PARControl;
   readonly backgroundPatternControl: BackgroundPatternControl;
   readonly displayProfileControl: DisplayProfileControl;
+  readonly gamutMappingControl: GamutMappingControl;
 
   // Effects tab
   readonly filterControl: FilterControl;
@@ -123,6 +167,9 @@ export class AppControlRegistry {
   readonly filmEmulationControl: FilmEmulationControl;
   readonly perspectiveCorrectionControl: PerspectiveCorrectionControl;
   readonly stabilizationControl: StabilizationControl;
+  readonly noiseReductionControl: NoiseReductionControl;
+  readonly watermarkControl: WatermarkControl;
+  readonly timelineEditor: TimelineEditor;
 
   // Transform tab
   readonly transformControl: TransformControl;
@@ -138,6 +185,11 @@ export class AppControlRegistry {
   readonly historyPanel: HistoryPanel;
   readonly infoPanel: InfoPanel;
   readonly markerListPanel: MarkerListPanel;
+  readonly notePanel: NotePanel;
+
+  // Layout panel content
+  readonly rightPanelContent: RightPanelContent;
+  readonly leftPanelContent: LeftPanelContent;
 
   // Cache
   readonly cacheIndicator: CacheIndicator;
@@ -155,8 +207,15 @@ export class AppControlRegistry {
   readonly networkSyncManager: NetworkSyncManager;
   readonly networkControl: NetworkControl;
 
+  // ShotGrid integration
+  readonly shotGridConfig: ShotGridConfigUI;
+  readonly shotGridPanel: ShotGridPanel;
+
   /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
   private registryUnsubscribers: (() => void)[] = [];
+  private readonly noiseReductionPanel: Panel;
+  private readonly watermarkPanel: Panel;
+  private readonly timelineEditorPanel: Panel;
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
@@ -174,6 +233,7 @@ export class AppControlRegistry {
     this.cdlControl = new CDLControl();
     this.curvesControl = new CurvesControl();
     this.ocioControl = new OCIOControl();
+    this.lutPipelinePanel = new LUTPipelinePanel(viewer.getLUTPipeline());
 
     // --- View tab - Navigation ---
     this.zoomControl = new ZoomControl();
@@ -200,6 +260,7 @@ export class AppControlRegistry {
     this.parControl = new PARControl();
     this.backgroundPatternControl = new BackgroundPatternControl();
     this.displayProfileControl = new DisplayProfileControl();
+    this.gamutMappingControl = new GamutMappingControl();
 
     // --- Effects tab ---
     this.filterControl = new FilterControl();
@@ -208,6 +269,24 @@ export class AppControlRegistry {
     this.filmEmulationControl = new FilmEmulationControl();
     this.perspectiveCorrectionControl = new PerspectiveCorrectionControl();
     this.stabilizationControl = new StabilizationControl();
+    this.noiseReductionControl = new NoiseReductionControl();
+    this.watermarkControl = new WatermarkControl(viewer.getWatermarkOverlay());
+
+    this.noiseReductionPanel = createPanel({ width: '320px', maxHeight: '70vh', align: 'right' });
+    this.noiseReductionPanel.element.appendChild(createPanelHeader('Noise Reduction'));
+    this.noiseReductionPanel.element.appendChild(this.noiseReductionControl.render());
+
+    this.watermarkPanel = createPanel({ width: '360px', maxHeight: '70vh', align: 'right' });
+    this.watermarkPanel.element.appendChild(createPanelHeader('Watermark'));
+    this.watermarkPanel.element.appendChild(this.watermarkControl.render());
+
+    this.timelineEditorPanel = createPanel({ width: 'clamp(400px, 60vw, 900px)', maxHeight: '70vh', align: 'right' });
+    this.timelineEditorPanel.element.appendChild(createPanelHeader('Timeline Editor'));
+    const timelineEditorHost = document.createElement('div');
+    timelineEditorHost.style.cssText = 'min-height: 220px;';
+    this.timelineEditorPanel.element.appendChild(timelineEditorHost);
+    this.timelineEditor = new TimelineEditor(timelineEditorHost, session);
+    this.timelineEditor.setTotalFrames(session.frameCount);
 
     // --- Transform tab ---
     this.transformControl = new TransformControl();
@@ -223,6 +302,15 @@ export class AppControlRegistry {
     this.historyPanel = new HistoryPanel(getGlobalHistoryManager());
     this.infoPanel = new InfoPanel();
     this.markerListPanel = new MarkerListPanel(session);
+    this.notePanel = new NotePanel(session);
+
+    // Mutual exclusion: NotePanel and MarkerListPanel overlap in the same position (bidirectional)
+    this.notePanel.setExclusiveWith(this.markerListPanel);
+    this.markerListPanel.setExclusiveWith(this.notePanel);
+
+    // --- Layout panel content ---
+    this.rightPanelContent = new RightPanelContent(this.scopesControl);
+    this.leftPanelContent = new LeftPanelContent(this.colorControls, getGlobalHistoryManager());
 
     // --- Cache ---
     this.cacheIndicator = new CacheIndicator(session, viewer);
@@ -235,11 +323,20 @@ export class AppControlRegistry {
     this.playlistManager = new PlaylistManager();
     this.playlistPanel = new PlaylistPanel(this.playlistManager);
 
+    // Mutual exclusion: only one panel can be open at a time
+    this.snapshotPanel.setExclusiveWith(this.playlistPanel);
+    this.playlistPanel.setExclusiveWith(this.snapshotPanel);
+
     // --- Presentation / Network ---
     this.presentationMode = new PresentationMode();
     this.presentationMode.loadPreference();
-    this.networkSyncManager = new NetworkSyncManager();
+    this.networkSyncManager = new NetworkSyncManager(resolveNetworkSyncConfigFromEnv());
     this.networkControl = new NetworkControl();
+
+    // --- ShotGrid integration ---
+    this.shotGridConfig = new ShotGridConfigUI();
+    this.shotGridPanel = new ShotGridPanel();
+    this.shotGridPanel.setConfigUI(this.shotGridConfig);
   }
 
   /**
@@ -250,10 +347,10 @@ export class AppControlRegistry {
     contextToolbar: ContextToolbar,
     viewer: Viewer,
     sessionBridge: AppSessionBridge,
+    headerBar: HeaderBar,
   ): void {
     // === VIEW TAB ===
-    // Organized into 5 logical groups with minimal dividers for compact layout
-    // Groups: Navigation | Comparison | Monitoring | Analysis | Overlays
+    // Organized into 3 logical groups: Navigation | Comparison | Display
     const viewContent = document.createElement('div');
     viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
 
@@ -270,21 +367,239 @@ export class AppControlRegistry {
     viewContent.appendChild(this.ghostFrameControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // --- GROUP 3: Monitoring (Scopes + Stack) ---
-    viewContent.appendChild(this.scopesControl.render());
+    // --- GROUP 3: Display (Stack, PAR, Background Pattern, Spotlight) ---
     viewContent.appendChild(this.stackControl.render());
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL, PAR) ---
-    viewContent.appendChild(this.safeAreasControl.render());
-    viewContent.appendChild(this.falseColorControl.render());
-    viewContent.appendChild(this.luminanceVisControl.render());
-    viewContent.appendChild(this.toneMappingControl.render());
-    viewContent.appendChild(this.zebraControl.render());
-    viewContent.appendChild(this.hslQualifierControl.render());
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
-    viewContent.appendChild(this.displayProfileControl.render());
+
+    // Missing-frame mode dropdown (matches stereo dropdown pattern)
+    const missingFrameContainer = document.createElement('div');
+    missingFrameContainer.dataset.testid = 'missing-frame-mode-select';
+    missingFrameContainer.style.cssText = `
+      display: flex; align-items: center; position: relative;
+    `;
+
+    type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
+    const missingModes: Array<{ label: string; value: MissingFrameMode }> = [
+      { label: 'Off', value: 'off' },
+      { label: 'Frame', value: 'show-frame' },
+      { label: 'Hold', value: 'hold' },
+      { label: 'Black', value: 'black' },
+    ];
+    let currentMissingMode: MissingFrameMode = viewer.getMissingFrameMode() as MissingFrameMode;
+    let isMissingDropdownOpen = false;
+
+    const missingButton = document.createElement('button');
+    missingButton.type = 'button';
+    missingButton.title = 'Missing frame mode';
+    missingButton.setAttribute('aria-haspopup', 'true');
+    missingButton.setAttribute('aria-expanded', 'false');
+    missingButton.style.cssText = `
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 80px;
+      gap: 4px;
+      outline: none;
+    `;
+
+    const updateMissingLabel = () => {
+      const current = missingModes.find(m => m.value === currentMissingMode);
+      missingButton.innerHTML = `${getIconSvg('image', 'sm')}<span style="margin-left: 4px;">Missing: ${current?.label ?? 'Off'}</span><span style="margin-left: 4px; font-size: 8px;">&#9660;</span>`;
+    };
+    updateMissingLabel();
+
+    const missingDropdown = document.createElement('div');
+    missingDropdown.dataset.testid = 'missing-frame-mode-dropdown';
+    missingDropdown.style.cssText = `
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      padding: 4px;
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      min-width: 140px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    `;
+
+    const updateMissingOptionStyles = () => {
+      missingDropdown.querySelectorAll<HTMLButtonElement>('button').forEach(opt => {
+        if (opt.dataset.value === currentMissingMode) {
+          opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+          opt.style.color = 'var(--accent-primary)';
+        } else {
+          opt.style.background = 'transparent';
+          opt.style.color = 'var(--text-primary)';
+        }
+      });
+    };
+
+    const positionMissingDropdown = () => {
+      if (!isMissingDropdownOpen) return;
+      const rect = missingButton.getBoundingClientRect();
+      missingDropdown.style.top = `${rect.bottom + 4}px`;
+      missingDropdown.style.left = `${rect.left}px`;
+    };
+
+    const closeMissingDropdown = () => {
+      isMissingDropdownOpen = false;
+      missingDropdown.style.display = 'none';
+      missingButton.setAttribute('aria-expanded', 'false');
+      missingButton.style.background = 'transparent';
+      missingButton.style.borderColor = 'transparent';
+      missingButton.style.color = 'var(--text-muted)';
+      document.removeEventListener('click', handleMissingOutsideClick);
+      window.removeEventListener('scroll', positionMissingDropdown, true);
+      window.removeEventListener('resize', positionMissingDropdown);
+    };
+
+    const openMissingDropdown = () => {
+      if (!document.body.contains(missingDropdown)) {
+        document.body.appendChild(missingDropdown);
+      }
+      isMissingDropdownOpen = true;
+      positionMissingDropdown();
+      missingDropdown.style.display = 'flex';
+      missingButton.setAttribute('aria-expanded', 'true');
+      missingButton.style.background = 'var(--bg-hover)';
+      missingButton.style.borderColor = 'var(--border-primary)';
+      document.addEventListener('click', handleMissingOutsideClick);
+      window.addEventListener('scroll', positionMissingDropdown, true);
+      window.addEventListener('resize', positionMissingDropdown);
+    };
+
+    const handleMissingOutsideClick = (e: MouseEvent) => {
+      if (!missingButton.contains(e.target as Node) && !missingDropdown.contains(e.target as Node)) {
+        closeMissingDropdown();
+      }
+    };
+
+    for (const mode of missingModes) {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.dataset.value = mode.value;
+      opt.textContent = mode.label;
+      opt.style.cssText = `
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        padding: 6px 10px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        border-radius: 3px;
+        transition: background 0.12s ease;
+      `;
+      if (mode.value === currentMissingMode) {
+        opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+        opt.style.color = 'var(--accent-primary)';
+      }
+      opt.addEventListener('mouseenter', () => {
+        opt.style.background = 'var(--bg-hover)';
+      });
+      opt.addEventListener('mouseleave', () => {
+        if (mode.value !== currentMissingMode) {
+          opt.style.background = 'transparent';
+        }
+      });
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentMissingMode = mode.value;
+        viewer.setMissingFrameMode(mode.value);
+        updateMissingLabel();
+        updateMissingOptionStyles();
+        closeMissingDropdown();
+      });
+      missingDropdown.appendChild(opt);
+    }
+
+    missingButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (isMissingDropdownOpen) closeMissingDropdown();
+      else openMissingDropdown();
+    });
+    missingButton.addEventListener('mouseenter', () => {
+      if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
+        missingButton.style.background = 'var(--bg-hover)';
+        missingButton.style.borderColor = 'var(--border-primary)';
+        missingButton.style.color = 'var(--text-primary)';
+      }
+    });
+    missingButton.addEventListener('mouseleave', () => {
+      if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
+        missingButton.style.background = 'transparent';
+        missingButton.style.borderColor = 'transparent';
+        missingButton.style.color = 'var(--text-muted)';
+      }
+    });
+    applyA11yFocus(missingButton);
+
+    missingFrameContainer.appendChild(missingButton);
+    viewContent.appendChild(missingFrameContainer);
+
+    // Timeline editor toggle button
+    const timelineEditorButton = ContextToolbar.createIconButton('edit', () => {
+      this.timelineEditorPanel.toggle(timelineEditorButton);
+      setButtonActive(timelineEditorButton, this.timelineEditorPanel.isVisible(), 'icon');
+    }, { title: 'Toggle visual timeline editor' });
+    timelineEditorButton.dataset.testid = 'timeline-editor-toggle-button';
+    viewContent.appendChild(timelineEditorButton);
+
+    // Spotlight Tool toggle button
+    const spotlightButton = ContextToolbar.createIconButton('sun', () => {
+      viewer.getSpotlightOverlay().toggle();
+    }, { title: 'Spotlight (Shift+Q)' });
+    spotlightButton.dataset.testid = 'spotlight-toggle-btn';
+    viewContent.appendChild(spotlightButton);
+
+    // Update spotlight button state when visibility changes
+    this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
+      setButtonActive(spotlightButton, state.enabled, 'icon');
+    }));
+
+    contextToolbar.setTabContent('view', viewContent);
+
+    // Initially hide per-eye controls (shown when stereo mode is activated)
+    this.updateStereoEyeControlsVisibility();
+
+    // === QC TAB ===
+    // Quality Control: analysis/measurement tools
+    const qcContent = document.createElement('div');
+    qcContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
+
+    // --- GROUP 1: Monitoring (Scopes) ---
+    qcContent.appendChild(this.scopesControl.render());
+    qcContent.appendChild(ContextToolbar.createDivider());
+
+    // --- GROUP 2: Analysis (SafeAreas, FalseColor, Luminance, Zebra, HSL) ---
+    qcContent.appendChild(this.safeAreasControl.render());
+    qcContent.appendChild(this.falseColorControl.render());
+    qcContent.appendChild(this.luminanceVisControl.render());
+    qcContent.appendChild(this.zebraControl.render());
+    qcContent.appendChild(this.hslQualifierControl.render());
+    qcContent.appendChild(ContextToolbar.createDivider());
+
+    // --- GROUP 3: Tools (Pixel Probe) ---
+    const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
+      viewer.getPixelProbe().toggle();
+    }, { title: 'Pixel Probe (Shift+I)' });
+    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
+    qcContent.appendChild(pixelProbeButton);
+
+    // Update pixel probe button state
+    this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
+      setButtonActive(pixelProbeButton, state.enabled, 'icon');
+    }));
 
     // Trigger re-render when false color state changes
     this.registryUnsubscribers.push(viewer.getFalseColor().on('stateChanged', () => {
@@ -341,126 +656,6 @@ export class AppControlRegistry {
       }
     });
 
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 5: Overlay Toggles (Probe, Spotlight, Info) ---
-    // Icon-only buttons for compact display
-
-    // Pixel Probe / Color Sampler toggle
-    const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
-      viewer.getPixelProbe().toggle();
-    }, { title: 'Pixel Probe (Shift+I)' });
-    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
-    viewContent.appendChild(pixelProbeButton);
-
-    // Update pixel probe button state
-    this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
-      if (state.enabled) {
-        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
-        pixelProbeButton.style.color = 'var(--accent-primary)';
-      } else {
-        pixelProbeButton.style.background = 'transparent';
-        pixelProbeButton.style.borderColor = 'transparent';
-        pixelProbeButton.style.color = 'var(--text-secondary)';
-      }
-    }));
-
-    // Spotlight Tool toggle button
-    const spotlightButton = ContextToolbar.createIconButton('sun', () => {
-      viewer.getSpotlightOverlay().toggle();
-    }, { title: 'Spotlight (Shift+Q)' });
-    spotlightButton.dataset.testid = 'spotlight-toggle-btn';
-    viewContent.appendChild(spotlightButton);
-
-    // Update spotlight button state when visibility changes
-    this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
-      if (state.enabled) {
-        spotlightButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        spotlightButton.style.borderColor = 'var(--accent-primary)';
-        spotlightButton.style.color = 'var(--accent-primary)';
-      } else {
-        spotlightButton.style.background = 'transparent';
-        spotlightButton.style.borderColor = 'transparent';
-        spotlightButton.style.color = 'var(--text-secondary)';
-      }
-    }));
-
-    // Info Panel toggle button
-    const infoPanelButton = ContextToolbar.createIconButton('info', () => {
-      this.infoPanel.toggle();
-      if (this.infoPanel.isEnabled()) {
-        sessionBridge.updateInfoPanel();
-      }
-    }, { title: 'Info Panel (Shift+Alt+I)' });
-    infoPanelButton.dataset.testid = 'info-panel-toggle';
-    viewContent.appendChild(infoPanelButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        infoPanelButton.style.borderColor = 'var(--accent-primary)';
-        infoPanelButton.style.color = 'var(--accent-primary)';
-      } else {
-        infoPanelButton.style.background = 'transparent';
-        infoPanelButton.style.borderColor = 'transparent';
-        infoPanelButton.style.color = 'var(--text-secondary)';
-      }
-    }));
-
-    // Snapshot Panel toggle button
-    let snapshotPanelOpen = false;
-    const snapshotButton = ContextToolbar.createIconButton('camera', () => {
-      this.snapshotPanel.toggle();
-      snapshotPanelOpen = !snapshotPanelOpen;
-      updateSnapshotButtonStyle();
-    }, { title: 'Snapshots (Ctrl+Shift+S)' });
-    snapshotButton.dataset.testid = 'snapshot-panel-toggle';
-    viewContent.appendChild(snapshotButton);
-
-    const updateSnapshotButtonStyle = () => {
-      if (snapshotPanelOpen) {
-        snapshotButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        snapshotButton.style.borderColor = 'var(--accent-primary)';
-        snapshotButton.style.color = 'var(--accent-primary)';
-      } else {
-        snapshotButton.style.background = 'transparent';
-        snapshotButton.style.borderColor = 'transparent';
-        snapshotButton.style.color = 'var(--text-secondary)';
-      }
-    };
-    this.registryUnsubscribers.push(this.snapshotPanel.on('closed', () => {
-      snapshotPanelOpen = false;
-      updateSnapshotButtonStyle();
-    }));
-
-    // Playlist Panel toggle button
-    let playlistPanelOpen = false;
-    const playlistButton = ContextToolbar.createIconButton('film', () => {
-      this.playlistPanel.toggle();
-      playlistPanelOpen = !playlistPanelOpen;
-      updatePlaylistButtonStyle();
-    }, { title: 'Playlist (Shift+Alt+P)' });
-    playlistButton.dataset.testid = 'playlist-panel-toggle';
-    viewContent.appendChild(playlistButton);
-
-    const updatePlaylistButtonStyle = () => {
-      if (playlistPanelOpen) {
-        playlistButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        playlistButton.style.borderColor = 'var(--accent-primary)';
-        playlistButton.style.color = 'var(--accent-primary)';
-      } else {
-        playlistButton.style.background = 'transparent';
-        playlistButton.style.borderColor = 'transparent';
-        playlistButton.style.color = 'var(--text-secondary)';
-      }
-    };
-    this.registryUnsubscribers.push(this.playlistPanel.on('closed', () => {
-      playlistPanelOpen = false;
-      updatePlaylistButtonStyle();
-    }));
-
     // Sync scope visibility with ScopesControl
     this.registryUnsubscribers.push(this.histogram.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('histogram', visible);
@@ -484,15 +679,17 @@ export class AppControlRegistry {
       }
     }));
 
-    contextToolbar.setTabContent('view', viewContent);
-
-    // Initially hide per-eye controls (shown when stereo mode is activated)
-    this.updateStereoEyeControlsVisibility();
+    contextToolbar.setTabContent('qc', qcContent);
 
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
     colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
     colorContent.appendChild(this.ocioControl.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
+    // Display Pipeline: Display Profile, Gamut Mapping, Tone Mapping
+    colorContent.appendChild(this.displayProfileControl.render());
+    colorContent.appendChild(this.gamutMappingControl.render());
+    colorContent.appendChild(this.toneMappingControl.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
@@ -510,13 +707,7 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(this.curvesControl.on('visibilityChanged', (visible) => {
-      if (visible) {
-        curvesButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        curvesButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        curvesButton.style.background = '';
-        curvesButton.style.borderColor = '';
-      }
+      setButtonActive(curvesButton, visible, 'ghost');
     }));
 
     // Color Wheels toggle button
@@ -529,16 +720,86 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(colorWheels.on('visibilityChanged', (visible) => {
-      if (visible) {
-        colorWheelsButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        colorWheelsButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        colorWheelsButton.style.background = '';
-        colorWheelsButton.style.borderColor = '';
-      }
+      setButtonActive(colorWheelsButton, visible, 'ghost');
+    }));
+
+    // LUT Pipeline toggle button
+    const lutPipelineButton = ContextToolbar.createButton('LUT Graph', () => {
+      this.lutPipelinePanel.toggle();
+    }, { title: 'Toggle LUT pipeline panel (Shift+L on Color tab)', icon: 'monitor' });
+    lutPipelineButton.dataset.testid = 'lut-pipeline-toggle-button';
+    colorContent.appendChild(lutPipelineButton);
+    this.registryUnsubscribers.push(this.lutPipelinePanel.on('visibilityChanged', (visible) => {
+      setButtonActive(lutPipelineButton, visible, 'ghost');
     }));
 
     contextToolbar.setTabContent('color', colorContent);
+
+    // === PANEL TOGGLES → HeaderBar utility area ===
+    // Info Panel, Snapshots, Playlist — accessible from any tab
+    const panelToggles = document.createElement('div');
+    panelToggles.style.cssText = 'display: flex; align-items: center; gap: 2px;';
+
+    // Info Panel toggle button
+    const infoPanelButton = ContextToolbar.createIconButton('info', () => {
+      this.infoPanel.toggle();
+      if (this.infoPanel.isEnabled()) {
+        sessionBridge.updateInfoPanel();
+      }
+    }, { title: 'Info Panel (Shift+Alt+I)' });
+    infoPanelButton.dataset.testid = 'info-panel-toggle';
+    panelToggles.appendChild(infoPanelButton);
+
+    this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
+      setButtonActive(infoPanelButton, visible, 'icon');
+    }));
+
+    // Snapshot Panel toggle button
+    const snapshotButton = ContextToolbar.createIconButton('camera', () => {
+      this.snapshotPanel.toggle();
+      updateSnapshotButtonStyle();
+    }, { title: 'Snapshots (Ctrl+Shift+Alt+S)' });
+    snapshotButton.dataset.testid = 'snapshot-panel-toggle';
+    panelToggles.appendChild(snapshotButton);
+
+    const updateSnapshotButtonStyle = () => {
+      setButtonActive(snapshotButton, this.snapshotPanel.isOpen(), 'icon');
+    };
+    this.registryUnsubscribers.push(this.snapshotPanel.on('visibilityChanged', () => {
+      updateSnapshotButtonStyle();
+    }));
+
+    // Playlist Panel toggle button
+    const playlistButton = ContextToolbar.createIconButton('film', () => {
+      this.playlistPanel.toggle();
+      updatePlaylistButtonStyle();
+    }, { title: 'Playlist (Shift+Alt+P)' });
+    playlistButton.dataset.testid = 'playlist-panel-toggle';
+    panelToggles.appendChild(playlistButton);
+
+    const updatePlaylistButtonStyle = () => {
+      setButtonActive(playlistButton, this.playlistPanel.isOpen(), 'icon');
+    };
+    this.registryUnsubscribers.push(this.playlistPanel.on('visibilityChanged', () => {
+      updatePlaylistButtonStyle();
+    }));
+
+    // ShotGrid Panel toggle button
+    const shotGridButton = ContextToolbar.createIconButton('cloud', () => {
+      this.shotGridPanel.toggle();
+      updateShotGridButtonStyle();
+    }, { title: 'ShotGrid' });
+    shotGridButton.dataset.testid = 'shotgrid-panel-toggle';
+    panelToggles.appendChild(shotGridButton);
+
+    const updateShotGridButtonStyle = () => {
+      setButtonActive(shotGridButton, this.shotGridPanel.isOpen(), 'icon');
+    };
+    this.registryUnsubscribers.push(this.shotGridPanel.on('visibilityChanged', () => {
+      updateShotGridButtonStyle();
+    }));
+
+    headerBar.setPanelToggles(panelToggles);
 
     // === EFFECTS TAB ===
     const effectsContent = document.createElement('div');
@@ -554,6 +815,21 @@ export class AppControlRegistry {
     effectsContent.appendChild(this.perspectiveCorrectionControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.stabilizationControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+
+    const noiseReductionButton = ContextToolbar.createButton('Denoise', () => {
+      this.noiseReductionPanel.toggle(noiseReductionButton);
+      setButtonActive(noiseReductionButton, this.noiseReductionPanel.isVisible(), 'ghost');
+    }, { title: 'Toggle noise reduction panel', icon: 'filter' });
+    noiseReductionButton.dataset.testid = 'noise-reduction-toggle-button';
+    effectsContent.appendChild(noiseReductionButton);
+
+    const watermarkButton = ContextToolbar.createButton('Watermark', () => {
+      this.watermarkPanel.toggle(watermarkButton);
+      setButtonActive(watermarkButton, this.watermarkPanel.isVisible(), 'ghost');
+    }, { title: 'Toggle watermark panel', icon: 'image' });
+    watermarkButton.dataset.testid = 'watermark-toggle-button';
+    effectsContent.appendChild(watermarkButton);
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -585,13 +861,7 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(this.historyPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        historyButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        historyButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        historyButton.style.background = '';
-        historyButton.style.borderColor = '';
-      }
+      setButtonActive(historyButton, visible, 'ghost');
     }));
 
     // Markers panel toggle button
@@ -603,13 +873,19 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(this.markerListPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        markersButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        markersButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        markersButton.style.background = '';
-        markersButton.style.borderColor = '';
-      }
+      setButtonActive(markersButton, visible, 'ghost');
+    }));
+
+    // Notes panel toggle button
+    const notesButton = ContextToolbar.createButton('Notes', () => {
+      this.notePanel.toggle();
+    }, { title: 'Toggle notes panel (Shift+Alt+N)', icon: 'note' });
+    notesButton.dataset.testid = 'notes-toggle-button';
+    annotateContent.appendChild(notesButton);
+
+    // Update button state when visibility changes
+    this.registryUnsubscribers.push(this.notePanel.on('visibilityChanged', (visible) => {
+      setButtonActive(notesButton, visible, 'ghost');
     }));
 
     contextToolbar.setTabContent('annotate', annotateContent);
@@ -626,6 +902,30 @@ export class AppControlRegistry {
     alignEl.style.display = isStereoActive ? 'inline-flex' : 'none';
   }
 
+  isNoiseReductionPanelVisible(): boolean {
+    return this.noiseReductionPanel.isVisible();
+  }
+
+  hideNoiseReductionPanel(): void {
+    this.noiseReductionPanel.hide();
+  }
+
+  isWatermarkPanelVisible(): boolean {
+    return this.watermarkPanel.isVisible();
+  }
+
+  hideWatermarkPanel(): void {
+    this.watermarkPanel.hide();
+  }
+
+  isTimelineEditorPanelVisible(): boolean {
+    return this.timelineEditorPanel.isVisible();
+  }
+
+  hideTimelineEditorPanel(): void {
+    this.timelineEditorPanel.hide();
+  }
+
   /**
    * Dispose all controls and managers.
    */
@@ -637,6 +937,13 @@ export class AppControlRegistry {
     this.registryUnsubscribers = [];
 
     this.ocioControl.dispose();
+    this.lutPipelinePanel.dispose();
+    this.timelineEditor.dispose();
+    this.timelineEditorPanel.dispose();
+    this.noiseReductionControl.dispose();
+    this.noiseReductionPanel.dispose();
+    this.watermarkControl.dispose();
+    this.watermarkPanel.dispose();
     this.ghostFrameControl.dispose();
     this.safeAreasControl.dispose();
     this.falseColorControl.dispose();
@@ -647,6 +954,9 @@ export class AppControlRegistry {
     this.historyPanel.dispose();
     this.infoPanel.dispose();
     this.markerListPanel.dispose();
+    this.notePanel.dispose();
+    this.rightPanelContent.dispose();
+    this.leftPanelContent.dispose();
     this.cacheIndicator.dispose();
     this.paintToolbar.dispose();
     this.colorControls.dispose();
@@ -659,6 +969,7 @@ export class AppControlRegistry {
     this.cdlControl.dispose();
     this.colorInversionToggle.dispose();
     this.displayProfileControl.dispose();
+    this.gamutMappingControl.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
     this.deinterlaceControl.dispose();
@@ -685,6 +996,8 @@ export class AppControlRegistry {
     this.presentationMode.dispose();
     this.networkSyncManager.dispose();
     this.networkControl.dispose();
+    this.shotGridConfig.dispose();
+    this.shotGridPanel.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

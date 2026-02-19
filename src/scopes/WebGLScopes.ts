@@ -244,6 +244,15 @@ void main() {
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade' | 'ycbcr';
 
+export interface WaveformRenderOptions {
+  channels?: {
+    r: boolean;
+    g: boolean;
+    b: boolean;
+  };
+  intensity?: number;
+}
+
 // Target resolution for analysis during playback (keeps scopes responsive)
 const PLAYBACK_TARGET_WIDTH = 320;
 const PLAYBACK_TARGET_HEIGHT = 180;
@@ -772,7 +781,8 @@ export class WebGLScopesProcessor {
 
   renderWaveform(
     outputCanvas: HTMLCanvasElement,
-    mode: WaveformMode = 'luma'
+    mode: WaveformMode = 'luma',
+    options?: WaveformRenderOptions,
   ): void {
     if (!this.isInitialized || !this.waveformProgram || this.vertexCount === 0) return;
 
@@ -792,8 +802,12 @@ export class WebGLScopesProcessor {
     gl.useProgram(this.waveformProgram);
     gl.uniform1i(this.waveformUniforms.u_image!, 0);
     gl.uniform2f(this.waveformUniforms.u_imageSize!, this.analysisWidth, this.analysisHeight);
+    const requestedIntensity = options?.intensity;
+    const waveformOpacity = typeof requestedIntensity === 'number' && Number.isFinite(requestedIntensity)
+      ? Math.max(0, Math.min(1, requestedIntensity))
+      : 0.08;
     // Opacity tuned to match CPU rendering brightness
-    gl.uniform1f(this.waveformUniforms.u_opacity!, 0.08);
+    gl.uniform1f(this.waveformUniforms.u_opacity!, mode === 'rgb' ? waveformOpacity : 0.08);
     // HDR: scale Y-axis to [0, maxValue] instead of [0, 1]
     gl.uniform1f(this.waveformUniforms.u_waveformMaxValue!, this.getMaxValue());
 
@@ -802,8 +816,11 @@ export class WebGLScopesProcessor {
       gl.uniform1i(this.waveformUniforms.u_channel!, 0);
       gl.drawArrays(gl.POINTS, 0, this.vertexCount);
     } else if (mode === 'rgb') {
+      const channels = options?.channels ?? { r: true, g: true, b: true };
       gl.uniform1i(this.waveformUniforms.u_mode!, 1);
-      for (let ch = 0; ch < 3; ch++) {
+      const enabledByChannel = [channels.r, channels.g, channels.b];
+      for (let ch = 0; ch < enabledByChannel.length; ch++) {
+        if (!enabledByChannel[ch]) continue;
         gl.uniform1i(this.waveformUniforms.u_channel!, ch);
         gl.drawArrays(gl.POINTS, 0, this.vertexCount);
       }

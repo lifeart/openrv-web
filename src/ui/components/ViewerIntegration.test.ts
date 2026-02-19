@@ -15,16 +15,6 @@ import { DEFAULT_TRANSFORM } from './TransformControl';
 import { DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { DEFAULT_CROP_STATE } from './CropControl';
 
-// Mock WebGLLUTProcessor
-vi.mock('../../color/WebGLLUT', () => ({
-  WebGLLUTProcessor: vi.fn().mockImplementation(() => ({
-    setLUT: vi.fn(),
-    hasLUT: vi.fn().mockReturnValue(false),
-    applyToCanvas: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
-
 // Helper to create a mock image source
 function createMockImageSource(width: number = 800, height: number = 600): MediaSource {
   const img = document.createElement('img');

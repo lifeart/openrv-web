@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkSyncManager } from './NetworkSyncManager';
 import type { ConnectionState, SyncUser } from './types';
+import { encodeWebRTCURLSignal } from './WebRTCURLSignaling';
 
 // Mock WebSocket (same as in WebSocketClient tests)
 vi.stubGlobal('WebSocket', class {
@@ -128,6 +129,98 @@ describe('NetworkSyncManager', () => {
     });
   });
 
+  describe('wss fallback', () => {
+    it('NSM-011b: createRoom falls back to local host room after reconnect failure on wss', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'wss://sync.openrv.local' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.createRoom('Host');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('connected');
+      expect(manager.isHost).toBe(true);
+      expect(manager.roomInfo).not.toBeNull();
+      expect(errorHandler).not.toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011c: joinRoom does not auto-fallback on reconnect failure (wss)', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'wss://sync.openrv.local' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.joinRoom('ABCD-1234', 'Guest');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('error');
+      expect(manager.roomInfo).toBeNull();
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011d: createRoom over ws:// does not auto-fallback', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'ws://localhost:1234' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.createRoom('Host');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('error');
+      expect(manager.roomInfo).toBeNull();
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011e: joinRoom over ws:// does not auto-fallback', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'ws://localhost:1234' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.joinRoom('ABCD-1234', 'Guest');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('error');
+      expect(manager.roomInfo).toBeNull();
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011f: applyServerlessResponseLink returns false when no pending invite exists', async () => {
+      const answerToken = encodeWebRTCURLSignal({
+        version: 1,
+        type: 'answer',
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostUserId: 'host-1',
+        guestUserId: 'guest-1',
+        guestUserName: 'Guest',
+        guestColor: '#4ade80',
+        createdAt: Date.now(),
+        sdp: 'v=0\no=- 2 2 IN IP4 127.0.0.1',
+      });
+
+      await expect(manager.applyServerlessResponseLink(answerToken)).resolves.toBe(false);
+    });
+  });
+
   describe('user presence', () => {
     it('NSM-012: emits usersChanged when user joins', () => {
       manager.simulateRoomCreated();
@@ -202,6 +295,7 @@ describe('NetworkSyncManager', () => {
         view: false,
         color: false,
         annotations: false,
+        cursor: true,
       });
 
       const settings = manager.syncSettings;
@@ -266,6 +360,17 @@ describe('NetworkSyncManager', () => {
       manager.simulateRoomCreated();
       manager.requestStateSync();
       // Should not throw
+    });
+
+    it('NSM-042b: requestMediaSync returns transfer ID when connected', () => {
+      manager.simulateRoomCreated();
+      const transferId = manager.requestMediaSync();
+      expect(transferId).toBeTruthy();
+    });
+
+    it('NSM-042c: requestMediaSync returns empty string when disconnected', () => {
+      const transferId = manager.requestMediaSync();
+      expect(transferId).toBe('');
     });
   });
 
@@ -342,6 +447,7 @@ describe('NetworkSyncManager', () => {
         view: true,
         color: false,
         annotations: false,
+        cursor: true,
       });
 
       // Should not throw, but should be suppressed
@@ -355,6 +461,7 @@ describe('NetworkSyncManager', () => {
         view: false,
         color: false,
         annotations: false,
+        cursor: true,
       });
 
       // Should not throw, but should be suppressed

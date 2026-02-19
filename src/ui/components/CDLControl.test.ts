@@ -9,11 +9,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CDLControl } from './CDLControl';
 import { DEFAULT_CDL, type CDLValues } from '../../color/ColorProcessingFacade';
 
-// Mock showAlert
-vi.mock('./shared/Modal', () => ({
-  showAlert: vi.fn(),
-}));
-
 describe('CDLControl', () => {
   let control: CDLControl;
 
@@ -379,6 +374,50 @@ describe('CDLControl', () => {
       expect(cdl.power.r).toBeLessThan(1);
       expect(cdl.power.g).toBeLessThan(1);
       expect(cdl.power.b).toBeLessThan(1);
+    });
+  });
+
+  describe('Escape key handling (M-14)', () => {
+    it('CDL-M14a: pressing Escape while the panel is open should close it', () => {
+      control.showPanel();
+      const panel = document.querySelector('.cdl-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(panel.style.display).toBe('none');
+    });
+
+    it('CDL-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      // Open then close so the panel element exists in DOM
+      control.showPanel();
+      control.hidePanel();
+      const panel = document.querySelector('.cdl-panel') as HTMLElement;
+      expect(panel.style.display).toBe('none');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(panel.style.display).toBe('none');
+    });
+
+    it('CDL-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.showPanel();
+      control.hidePanel();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('CDL-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.showPanel();
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
     });
   });
 

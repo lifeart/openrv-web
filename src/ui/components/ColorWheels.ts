@@ -146,6 +146,9 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
     // Wheel canvas - spec requires 120px minimum
     const canvas = document.createElement('canvas');
+    canvas.tabIndex = 0;
+    canvas.setAttribute('role', 'slider');
+    canvas.setAttribute('aria-label', `${label} color wheel`);
     canvas.style.cssText = `
       cursor: crosshair;
     `;
@@ -233,6 +236,56 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     // Double-click to reset wheel
     canvas.addEventListener('dblclick', () => {
       this.resetWheel(key);
+    });
+
+    // Keyboard navigation for accessibility
+    canvas.addEventListener('keydown', (e: KeyboardEvent) => {
+      const delta = 0.05;
+      let handled = false;
+      const values = this.state[key] as WheelValues;
+
+      switch (e.key) {
+        case 'ArrowRight':
+          this.saveStateForUndo();
+          values.r = Math.min(1, values.r + delta);
+          handled = true;
+          break;
+        case 'ArrowLeft':
+          this.saveStateForUndo();
+          values.r = Math.max(-1, values.r - delta);
+          handled = true;
+          break;
+        case 'ArrowUp':
+          this.saveStateForUndo();
+          values.g = Math.min(1, values.g + delta);
+          handled = true;
+          break;
+        case 'ArrowDown':
+          this.saveStateForUndo();
+          values.g = Math.max(-1, values.g - delta);
+          handled = true;
+          break;
+      }
+
+      if (handled) {
+        e.preventDefault();
+        // Derive blue from red/green (same as pointer interaction)
+        values.b = -(values.r * 0.5 + values.g * 0.5);
+
+        if (this.state.linked && key !== 'master') {
+          for (const otherKey of ['lift', 'gamma', 'gain'] as const) {
+            if (otherKey !== key) {
+              const otherValues = this.state[otherKey] as WheelValues;
+              otherValues.r = values.r;
+              otherValues.g = values.g;
+              otherValues.b = values.b;
+            }
+          }
+        }
+
+        this.redrawAllWheels();
+        this.emitChange();
+      }
     });
 
     row.appendChild(canvas);

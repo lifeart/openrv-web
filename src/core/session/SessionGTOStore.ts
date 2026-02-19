@@ -8,7 +8,9 @@ import { SessionGTOExporter } from './SessionGTOExporter';
 import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
 import { DEFAULT_TRANSFORM, DEFAULT_CROP_STATE } from '../../core/types/transform';
 import { isDefaultLensParams } from '../../transform/LensDistortion';
+import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 
 interface UpdateContext {
   session: Session;
@@ -29,13 +31,14 @@ export class SessionGTOStore {
 
     this.updateSessionObject(session, paintEngine);
     this.updatePaintObject(session, paintEngine);
-    this.updateColorAdjustments(viewer.getColorAdjustments());
+    this.updateColorAdjustments(viewer.getColorAdjustments(), viewer.getColorInversion());
     this.updateCDL(viewer.getCDL());
     this.updateTransform(viewer.getTransform());
     this.updateLens(viewer.getLensParams());
     this.updateCrop(session, viewer.getCropState());
     this.updateChannelMode(viewer.getChannelMode());
     this.updateStereo(viewer.getStereoState());
+    this.updateNoiseReduction(viewer.getNoiseReductionParams());
     if (scopesState) {
       this.updateScopes(scopesState);
     }
@@ -84,7 +87,7 @@ export class SessionGTOStore {
     this.replaceObject(nextObject, 'RVPaint');
   }
 
-  private updateColorAdjustments(adjustments: ColorAdjustments): void {
+  private updateColorAdjustments(adjustments: ColorAdjustments, colorInversion: boolean): void {
     const colorObject = this.ensureObject('RVColor', 'rvColor');
     const colorComponent = this.ensureComponent(colorObject, 'color');
 
@@ -93,6 +96,9 @@ export class SessionGTOStore {
     this.setProperty(colorComponent, 'contrast', 'float', 1, adjustments.contrast);
     this.setProperty(colorComponent, 'saturation', 'float', 1, adjustments.saturation);
     this.setProperty(colorComponent, 'offset', 'float', 1, adjustments.brightness);
+    this.setProperty(colorComponent, 'hue', 'float', 1, adjustments.hueRotation);
+    this.setProperty(colorComponent, 'invert', 'int', 1, colorInversion ? 1 : 0);
+    // unpremult is preserved from the deep-cloned GTO data automatically
 
     const displayObject = this.findObject('RVDisplayColor')?.obj;
     if (displayObject) {
@@ -111,6 +117,7 @@ export class SessionGTOStore {
     this.setProperty(cdlComponent, 'offset', 'float', 3, [[values.offset.r, values.offset.g, values.offset.b]]);
     this.setProperty(cdlComponent, 'power', 'float', 3, [[values.power.r, values.power.g, values.power.b]]);
     this.setProperty(cdlComponent, 'saturation', 'float', 1, values.saturation);
+    // noClamp is preserved from the deep-cloned GTO data automatically
   }
 
   private updateTransform(transform: {
@@ -141,22 +148,7 @@ export class SessionGTOStore {
     this.setProperty(component, 'translate', 'float', 2, [[transform.translate.x, transform.translate.y]]);
   }
 
-  private updateLens(params: {
-    k1: number;
-    k2: number;
-    k3?: number;
-    p1?: number;
-    p2?: number;
-    centerX: number;
-    centerY: number;
-    scale: number;
-    model?: 'brown' | 'opencv' | 'pfbarrel' | '3de4_radial_standard' | '3de4_anamorphic';
-    pixelAspectRatio?: number;
-    fx?: number;
-    fy?: number;
-    cropRatioX?: number;
-    cropRatioY?: number;
-  }): void {
+  private updateLens(params: LensDistortionParams): void {
     const target = this.ensureObject('RVLensWarp', 'rvLensWarp');
     const nodeComponent = this.ensureComponent(target, 'node');
     const warpComponent = this.ensureComponent(target, 'warp');
@@ -199,6 +191,26 @@ export class SessionGTOStore {
     }
     if (params.cropRatioY !== undefined) {
       this.setProperty(warpComponent, 'cropRatioY', 'float', 1, params.cropRatioY);
+    }
+
+    // 3DE4 Anamorphic Degree 6 coefficients
+    const coeffNames = [
+      'cx02', 'cx22', 'cx04', 'cx24', 'cx44', 'cx06', 'cx26', 'cx46', 'cx66',
+      'cy02', 'cy22', 'cy04', 'cy24', 'cy44', 'cy06', 'cy26', 'cy46', 'cy66',
+    ] as const;
+    for (const name of coeffNames) {
+      if (params[name] !== undefined) {
+        this.setProperty(warpComponent, name, 'float', 1, params[name]!);
+      }
+    }
+    if (params.lensRotation !== undefined) {
+      this.setProperty(warpComponent, 'lensRotation', 'float', 1, params.lensRotation);
+    }
+    if (params.squeeze_x !== undefined) {
+      this.setProperty(warpComponent, 'squeeze_x', 'float', 1, params.squeeze_x);
+    }
+    if (params.squeeze_y !== undefined) {
+      this.setProperty(warpComponent, 'squeeze_y', 'float', 1, params.squeeze_y);
     }
   }
 
@@ -259,6 +271,20 @@ export class SessionGTOStore {
     this.setProperty(component, 'type', 'string', 1, typeMap[stereo.mode] ?? 'off');
     this.setProperty(component, 'swap', 'int', 1, stereo.eyeSwap ? 1 : 0);
     this.setProperty(component, 'relativeOffset', 'float', 1, stereo.offset / 100);
+  }
+
+  private updateNoiseReduction(params: NoiseReductionParams): void {
+    const target = this.ensureObject('RVNoiseReduction', 'rvNoiseReduction');
+    const component = this.ensureComponent(target, 'node');
+
+    const strength = Math.max(0, Math.min(100, params.strength));
+    const radius = Math.max(1, Math.min(5, params.radius));
+    const threshold = Math.max(0, (100 - Math.max(0, Math.min(100, params.luminanceStrength))) / 10);
+
+    this.setProperty(component, 'active', 'int', 1, strength > 0 ? 1 : 0);
+    this.setProperty(component, 'amount', 'float', 1, strength / 100);
+    this.setProperty(component, 'radius', 'float', 1, radius);
+    this.setProperty(component, 'threshold', 'float', 1, threshold);
   }
 
   private updateScopes(scopes: ScopesState): void {

@@ -163,16 +163,6 @@ function testable(viewer: Viewer): TestableViewer {
   return viewer as unknown as TestableViewer;
 }
 
-// Mock WebGLLUTProcessor
-vi.mock('../../color/WebGLLUT', () => ({
-  WebGLLUTProcessor: vi.fn().mockImplementation(() => ({
-    setLUT: vi.fn(),
-    hasLUT: vi.fn().mockReturnValue(false),
-    applyToCanvas: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
-
 describe('Viewer', () => {
   let session: Session;
   let paintEngine: PaintEngine;
@@ -1238,6 +1228,8 @@ describe('Viewer', () => {
     it('VWR-FPS-004: refresh() sets pendingRender flag', () => {
       const tv = testable(viewer);
 
+      // Clear any pending render from construction
+      viewer.renderDirect();
       expect(tv.pendingRender).toBe(false);
       viewer.refresh();
       expect(tv.pendingRender).toBe(true);
@@ -1279,19 +1271,26 @@ describe('Viewer', () => {
     it('VWR-FPS-007: resize() also uses scheduleRender (sets pendingRender)', () => {
       const tv = testable(viewer);
 
+      // Clear any pending render from construction (syncLUTPipeline)
+      viewer.renderDirect();
       expect(tv.pendingRender).toBe(false);
       viewer.resize();
       expect(tv.pendingRender).toBe(true);
     });
 
-    it('VWR-FPS-008: pendingRender starts as false', () => {
+    it('VWR-FPS-008: pendingRender is false after renderDirect clears it', () => {
       const tv = testable(viewer);
-      // After construction, no render is pending
+      // Construction may schedule a render via syncLUTPipeline;
+      // renderDirect clears it.
+      viewer.renderDirect();
       expect(tv.pendingRender).toBe(false);
     });
 
     it('VWR-FPS-009: scheduleRender is no-op during playback (render storm prevention)', () => {
       const tv = testable(viewer);
+
+      // Clear any pending render from construction
+      viewer.renderDirect();
 
       // Simulate active playback
       tv.session = { ...tv.session, isPlaying: true };
@@ -1328,6 +1327,9 @@ describe('Viewer', () => {
 
     it('VWR-FPS-012: scheduleRender resumes after playback stops', () => {
       const tv = testable(viewer);
+
+      // Clear any pending render from construction
+      viewer.renderDirect();
 
       // Start playback — scheduleRender should be no-op
       tv.session = { ...tv.session, isPlaying: true };

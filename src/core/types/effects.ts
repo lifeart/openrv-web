@@ -51,6 +51,7 @@ export interface GamutMappingState {
   mode: GamutMappingMode;
   sourceGamut: GamutIdentifier;
   targetGamut: GamutIdentifier;
+  highlightOutOfGamut?: boolean;
 }
 
 export const DEFAULT_GAMUT_MAPPING_STATE: GamutMappingState = {

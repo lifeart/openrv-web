@@ -1,29 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Vectorscope } from './Vectorscope';
 
-// Type for mock processor
-interface MockScopesProcessor {
-  isReady: Mock;
-  setPlaybackMode: Mock;
-  setImage: Mock;
-  setFloatImage: Mock;
-  renderVectorscope: Mock;
-}
+// Hoist mock processor so it's accessible to both the vi.mock factory and test bodies.
+// WebGL2 is unavailable in jsdom, so getSharedScopesProcessor() must be mocked
+// for tests that verify GPU rendering interactions.
+const mockProcessor = vi.hoisted(() => ({
+  isReady: vi.fn(() => true),
+  setPlaybackMode: vi.fn(),
+  setImage: vi.fn(),
+  setFloatImage: vi.fn(),
+  renderVectorscope: vi.fn(),
+}));
 
-// Mock WebGLScopes module
-vi.mock('../../scopes/WebGLScopes', () => {
-  const mockProcessor: MockScopesProcessor = {
-    isReady: vi.fn(() => true),
-    setPlaybackMode: vi.fn(),
-    setImage: vi.fn(),
-    setFloatImage: vi.fn(),
-    renderVectorscope: vi.fn(),
-  };
-  return {
-    getSharedScopesProcessor: vi.fn(() => mockProcessor),
-    __mockProcessor: mockProcessor,
-  };
-});
+vi.mock('../../scopes/WebGLScopes', () => ({
+  getSharedScopesProcessor: vi.fn(() => mockProcessor),
+}));
 
 describe('Vectorscope', () => {
   let vectorscope: Vectorscope;
@@ -71,7 +62,7 @@ describe('Vectorscope', () => {
       const el = vectorscope.render();
       const closeButton = el.querySelector('[data-testid="vectorscope-close-button"]');
       expect(closeButton).not.toBeNull();
-      expect(closeButton?.textContent).toBe('×');
+      expect(closeButton?.textContent).toBe('\u00d7');
     });
   });
 
@@ -370,10 +361,7 @@ describe('Vectorscope updateFloat', () => {
     expect(() => vectorscope.updateFloat(floatData, 10, 10)).not.toThrow();
   });
 
-  it('VS-071: updateFloat uses GPU setFloatImage when available', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-071: updateFloat uses GPU setFloatImage when available', () => {
     const floatData = new Float32Array(10 * 10 * 4);
     vectorscope.updateFloat(floatData, 10, 10);
 
@@ -381,10 +369,7 @@ describe('Vectorscope updateFloat', () => {
     expect(mockProcessor.renderVectorscope).toHaveBeenCalled();
   });
 
-  it('VS-072: updateFloat sets playback mode on GPU processor', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-072: updateFloat sets playback mode on GPU processor', () => {
     vectorscope.setPlaybackMode(true);
     const floatData = new Float32Array(10 * 10 * 4);
     vectorscope.updateFloat(floatData, 10, 10);
@@ -392,10 +377,7 @@ describe('Vectorscope updateFloat', () => {
     expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
   });
 
-  it('VS-073: updateFloat preserves HDR values > 1.0', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-073: updateFloat preserves HDR values > 1.0', () => {
     const floatData = new Float32Array([3.5, 2.0, 1.5, 1.0]);
     vectorscope.updateFloat(floatData, 1, 1);
 
@@ -423,10 +405,7 @@ describe('Vectorscope updateFloat', () => {
     expect(vectorscope.getZoom()).toBe('auto');
   });
 
-  it('VS-075: updateFloat uses current zoom for GPU rendering', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-075: updateFloat uses current zoom for GPU rendering', () => {
     vectorscope.setZoom(2);
     const floatData = new Float32Array(10 * 10 * 4);
     vectorscope.updateFloat(floatData, 10, 10);
@@ -441,6 +420,32 @@ describe('Vectorscope updateFloat', () => {
 
     const floatData = new Float32Array(10 * 10 * 4);
     expect(() => vectorscope.updateFloat(floatData, 10, 10)).not.toThrow();
+  });
+
+  it('VS-077: cycleZoom redraws from cached HDR float frame', () => {
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(1);
+
+    vectorscope.cycleZoom(); // auto -> 1x
+
+    expect(vectorscope.getZoom()).toBe(1);
+    expect(mockProcessor.setFloatImage).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope.mock.calls[1]![1]).toBe(1);
+  });
+
+  it('VS-078: setZoom redraws from cached HDR float frame', () => {
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(1);
+
+    vectorscope.setZoom(2);
+
+    expect(vectorscope.getZoom()).toBe(2);
+    expect(mockProcessor.setFloatImage).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope.mock.calls[1]![1]).toBe(2);
   });
 });
 
@@ -565,10 +570,7 @@ describe('Vectorscope GPU rendering', () => {
     vectorscope.dispose();
   });
 
-  it('VS-050: update uses GPU rendering when available', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-050: update uses GPU rendering when available', () => {
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
 
@@ -576,10 +578,7 @@ describe('Vectorscope GPU rendering', () => {
     expect(mockProcessor.renderVectorscope).toHaveBeenCalled();
   });
 
-  it('VS-051: GPU rendering uses current zoom level', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-051: GPU rendering uses current zoom level', () => {
     vectorscope.setZoom(2);
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
@@ -588,10 +587,7 @@ describe('Vectorscope GPU rendering', () => {
     expect(call[1]).toBe(2); // zoom parameter
   });
 
-  it('VS-052: GPU rendering uses 4x zoom when set', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-052: GPU rendering uses 4x zoom when set', () => {
     vectorscope.setZoom(4);
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
@@ -600,10 +596,7 @@ describe('Vectorscope GPU rendering', () => {
     expect(call[1]).toBe(4);
   });
 
-  it('VS-053: setPlaybackMode updates GPU processor', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-053: setPlaybackMode updates GPU processor', () => {
     vectorscope.setPlaybackMode(true);
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
@@ -611,10 +604,7 @@ describe('Vectorscope GPU rendering', () => {
     expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
   });
 
-  it('VS-054: setPlaybackMode(false) updates GPU processor', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-054: setPlaybackMode(false) updates GPU processor', () => {
     vectorscope.setPlaybackMode(false);
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
@@ -627,10 +617,7 @@ describe('Vectorscope GPU rendering', () => {
     expect(() => vectorscope.setPlaybackMode(false)).not.toThrow();
   });
 
-  it('VS-056: GPU processor receives correct canvas', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
-
+  it('VS-056: GPU processor receives correct canvas', () => {
     vectorscope.render(); // Ensure canvas is created
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);

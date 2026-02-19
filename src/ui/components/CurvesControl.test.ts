@@ -9,35 +9,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CurvesControl } from './CurvesControl';
 import { type ColorCurvesData, createDefaultCurve, CURVE_PRESETS } from '../../color/ColorProcessingFacade';
 
-// Mock DraggableContainer
-vi.mock('./shared/DraggableContainer', () => ({
-  createDraggableContainer: vi.fn(() => {
-    const element = document.createElement('div');
-    element.dataset.testid = 'curves-control';
-    const content = document.createElement('div');
-    const controls = document.createElement('div');
-    element.appendChild(controls);
-    element.appendChild(content);
-    return {
-      element,
-      content,
-      controls,
-      show: vi.fn(),
-      hide: vi.fn(),
-      getPosition: vi.fn(() => ({ x: 10, y: 10 })),
-      setPosition: vi.fn(),
-      resetPosition: vi.fn(),
-      dispose: vi.fn(),
-    };
-  }),
-  createControlButton: vi.fn((text: string, title: string) => {
-    const btn = document.createElement('button');
-    btn.textContent = text;
-    btn.title = title;
-    return btn;
-  }),
-}));
-
 describe('CurvesControl', () => {
   let control: CurvesControl;
 

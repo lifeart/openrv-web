@@ -10,9 +10,304 @@ import {
   loadVideoFile,
   loadTwoVideoFiles,
   getSessionState,
+  waitForTestHelper,
 } from './fixtures';
 
+async function openTimelineEditorPanel(page: import('@playwright/test').Page) {
+  const toggle = page.locator('[data-testid="timeline-editor-toggle-button"]');
+  await toggle.scrollIntoViewIfNeeded();
+  await toggle.click();
+
+  const panel = page.locator('.dropdown-panel:has-text("Timeline Editor")').first();
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('.timeline-track')).toBeVisible();
+  return panel;
+}
+
+async function getPlaylistSnapshot(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+    if (!pm) return null;
+    const clips = pm.getClips().map((clip: any) => ({
+      sourceIndex: clip.sourceIndex,
+      sourceName: clip.sourceName,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+      duration: clip.duration,
+      globalStartFrame: clip.globalStartFrame,
+    }));
+    return {
+      clipCount: pm.getClipCount(),
+      enabled: pm.isEnabled(),
+      loopMode: pm.getLoopMode?.() ?? 'none',
+      clips,
+    };
+  });
+}
+
+async function getTimelineEditorEDL(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const app = (window as any).__OPENRV_TEST__?.app as any;
+    return app?.controls?.timelineEditor?.getEDL?.() ?? [];
+  });
+}
+
+async function dragFirstCutRightHandle(
+  page: import('@playwright/test').Page,
+  panel: import('@playwright/test').Locator,
+  deltaX = -24,
+) {
+  const firstCut = panel.locator('.timeline-cut').first();
+  await expect(firstCut).toBeVisible();
+  const rightHandle = firstCut.locator('.trim-handle').nth(1);
+
+  const handleBox = await rightHandle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  if (!handleBox) {
+    throw new Error('Trim handle is not interactable');
+  }
+
+  const startX = handleBox.x + handleBox.width / 2;
+  const startY = handleBox.y + handleBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY, { steps: 4 });
+  await page.mouse.up();
+}
+
 test.describe('Timeline Editor', () => {
+  test.describe('Timeline Editor Panel', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+      await loadTwoVideoFiles(page);
+      await page.waitForTimeout(200);
+
+      // Ensure deterministic starting state (no persisted playlist/session spillover).
+      await page.evaluate(() => {
+        const m = (window as any).__OPENRV_TEST__?.mutations;
+        const pm = m?.getPlaylistManager?.();
+        pm?.clear?.();
+        pm?.setEnabled?.(false);
+        pm?.setCurrentFrame?.(1);
+
+        const session = m?.getSession?.();
+        session?.setCurrentSource?.(0);
+        session?.goToFrame?.(1);
+        session.loopMode = 'loop';
+      });
+      await page.waitForFunction(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession?.();
+        return !!session && (session.currentSource?.duration ?? 0) > 1;
+      });
+      await page.waitForTimeout(100);
+    });
+
+    test('TL-EDIT-E021: should open Timeline Editor panel and render source cuts', async ({ page }) => {
+      const panel = await openTimelineEditorPanel(page);
+
+      const cuts = panel.locator('.timeline-cut');
+      await expect(cuts).toHaveCount(2);
+      await expect(cuts.nth(0)).not.toHaveText('');
+      await expect(cuts.nth(1)).not.toHaveText('');
+      await expect(panel.locator('.timeline-ruler')).toBeVisible();
+      await expect(panel.locator('.timeline-controls input[type="range"]')).toBeVisible();
+    });
+
+    test('TL-EDIT-E022: selecting a cut should seek to that cut position', async ({ page }) => {
+      const panel = await openTimelineEditorPanel(page);
+      const cuts = panel.locator('.timeline-cut');
+      await expect(cuts).toHaveCount(2);
+
+      await page.evaluate(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession?.();
+        session?.goToFrame?.(12);
+      });
+      await page.waitForTimeout(100);
+
+      const edl = await getTimelineEditorEDL(page);
+      expect(Array.isArray(edl)).toBe(true);
+      expect(edl.length).toBeGreaterThanOrEqual(2);
+      const target = edl[1];
+
+      const clicked = await page.evaluate(() => {
+        const panel = Array.from(document.querySelectorAll('.dropdown-panel'))
+          .find((el) => el.textContent?.includes('Timeline Editor'));
+        const secondCut = panel?.querySelectorAll('.timeline-cut')?.[1] as HTMLElement | undefined;
+        if (!secondCut) return false;
+        secondCut.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        return true;
+      });
+      expect(clicked).toBe(true);
+      await page.waitForTimeout(200);
+
+      const state = await getSessionState(page);
+      expect([target?.frame, target?.inPoint]).toContain(state.currentFrame);
+    });
+
+    test('TL-EDIT-E023: trimming a cut should populate playlist with edited ranges', async ({ page }) => {
+      const panel = await openTimelineEditorPanel(page);
+
+      const sourceDuration = await page.evaluate(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
+        return session?.getSourceByIndex?.(0)?.duration ?? 0;
+      });
+      expect(sourceDuration).toBeGreaterThan(1);
+
+      await dragFirstCutRightHandle(page, panel, -24);
+
+      await page.waitForFunction(() => {
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        return !!pm && pm.getClipCount() === 2;
+      });
+
+      const playlist = await getPlaylistSnapshot(page);
+      expect(playlist).not.toBeNull();
+      expect(playlist!.clipCount).toBe(2);
+      expect(playlist!.enabled).toBe(true);
+      expect(playlist!.loopMode).toBe('all');
+      expect(playlist!.clips[0]!.sourceIndex).toBe(0);
+      expect(playlist!.clips[1]!.sourceIndex).toBe(1);
+      expect(playlist!.clips[0]!.outPoint).toBeLessThan(sourceDuration);
+    });
+
+    test('TL-EDIT-E024: deleting a cut via context menu should reduce playlist clips', async ({ page }) => {
+      const panel = await openTimelineEditorPanel(page);
+      const cuts = panel.locator('.timeline-cut');
+      await expect(cuts).toHaveCount(2);
+
+      await cuts.nth(1).click({ button: 'right' });
+      const contextMenu = page.locator('.timeline-context-menu');
+      await expect(contextMenu).toBeVisible();
+      await contextMenu.locator('text=Delete Cut').click();
+      await expect(contextMenu).toBeHidden();
+
+      await expect(panel.locator('.timeline-cut')).toHaveCount(1);
+
+      const playlist = await getPlaylistSnapshot(page);
+      expect(playlist).not.toBeNull();
+      expect(playlist!.clipCount).toBe(1);
+      expect(playlist!.clips[0]!.sourceIndex).toBe(0);
+    });
+  });
+
+  test.describe('Timeline Editor Single Source Sync', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+      await loadVideoFile(page);
+      await page.waitForTimeout(200);
+
+      await page.evaluate(() => {
+        const m = (window as any).__OPENRV_TEST__?.mutations;
+        const pm = m?.getPlaylistManager?.();
+        pm?.clear?.();
+        pm?.setEnabled?.(false);
+        pm?.setCurrentFrame?.(1);
+
+        const session = m?.getSession?.();
+        session?.setCurrentSource?.(0);
+        session?.goToFrame?.(1);
+        session.loopMode = 'loop';
+      });
+      await page.waitForFunction(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession?.();
+        return !!session && (session.currentSource?.duration ?? 0) > 1;
+      });
+      await page.waitForTimeout(100);
+    });
+
+    test('TL-EDIT-E025: trimming single-source cut should constrain playback range', async ({ page }) => {
+      const sourceDuration = await page.evaluate(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession?.();
+        return session?.currentSource?.duration ?? 0;
+      });
+      expect(sourceDuration).toBeGreaterThan(1);
+
+      const panel = await openTimelineEditorPanel(page);
+      await expect(panel.locator('.timeline-cut')).toHaveCount(1);
+      await dragFirstCutRightHandle(page, panel, -24);
+
+      await page.waitForFunction(() => {
+        const m = (window as any).__OPENRV_TEST__?.mutations;
+        const pm = m?.getPlaylistManager?.();
+        const session = m?.getSession?.();
+        if (!pm || !session || pm.getClipCount() !== 1 || pm.isEnabled?.()) return false;
+        const clip = pm.getClipByIndex?.(0);
+        if (!clip) return false;
+        return session.inPoint === clip.inPoint && session.outPoint === clip.outPoint;
+      });
+
+      const trimmedState = await getSessionState(page);
+      expect(trimmedState.outPoint).toBeLessThan(sourceDuration);
+
+      await page.evaluate(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession?.();
+        if (!session) return;
+        session.goToFrame(session.outPoint);
+        session.stepForward?.();
+      });
+
+      const steppedState = await getSessionState(page);
+      expect(steppedState.currentFrame).toBe(steppedState.inPoint);
+
+      const playlist = await getPlaylistSnapshot(page);
+      expect(playlist).not.toBeNull();
+      expect(playlist!.clipCount).toBe(1);
+      expect(playlist!.enabled).toBe(false);
+    });
+
+    test('TL-EDIT-E027: single-source trim should honor "once" loop mode at boundary', async ({ page }) => {
+      const panel = await openTimelineEditorPanel(page);
+      await expect(panel.locator('.timeline-cut')).toHaveCount(1);
+      await dragFirstCutRightHandle(page, panel, -24);
+
+      await page.waitForFunction(() => {
+        const m = (window as any).__OPENRV_TEST__?.mutations;
+        const pm = m?.getPlaylistManager?.();
+        const session = m?.getSession?.();
+        if (!pm || !session || pm.getClipCount() !== 1 || pm.isEnabled?.()) return false;
+        const clip = pm.getClipByIndex?.(0);
+        if (!clip) return false;
+        return session.inPoint === clip.inPoint && session.outPoint === clip.outPoint;
+      });
+
+      await page.evaluate(() => {
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession?.();
+        if (!session) return;
+        session.loopMode = 'once';
+        session.goToFrame(session.outPoint);
+        session.stepForward?.();
+      });
+
+      const steppedState = await getSessionState(page);
+      expect(steppedState.currentFrame).toBe(steppedState.outPoint);
+    });
+
+    test('TL-EDIT-E026: timeline canvas should refresh immediately after edit', async ({ page }) => {
+      const panel = await openTimelineEditorPanel(page);
+      await expect(panel.locator('.timeline-cut')).toHaveCount(1);
+
+      await page.evaluate(() => {
+        const app = (window as any).__OPENRV_TEST__?.app as any;
+        const timeline = app?.timeline;
+        (window as any).__timelineRefreshCount = 0;
+        if (!timeline || typeof timeline.refresh !== 'function') return;
+        const originalRefresh = timeline.refresh.bind(timeline);
+        timeline.refresh = (...args: unknown[]) => {
+          (window as any).__timelineRefreshCount = ((window as any).__timelineRefreshCount ?? 0) + 1;
+          return originalRefresh(...args);
+        };
+      });
+
+      await dragFirstCutRightHandle(page, panel, -24);
+
+      await page.waitForFunction(() => ((window as any).__timelineRefreshCount ?? 0) > 0);
+    });
+  });
+
   test.describe('Timeline UI', () => {
     test('TL-EDIT-E001: should display timeline track when media is loaded', async ({ page }) => {
       await page.goto('/');

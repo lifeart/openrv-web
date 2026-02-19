@@ -1,12 +1,14 @@
 /**
  * ColorAPI - Public color adjustment methods for the OpenRV API
  *
- * Wraps ColorControls and CDLControl to expose color pipeline access.
+ * Wraps ColorControls, CDLControl, and CurvesControl to expose color pipeline access.
  */
 
-import type { ColorAdjustmentProvider, CDLProvider } from './types';
+import type { ColorAdjustmentProvider, CDLProvider, CurvesProvider } from './types';
 import type { ColorAdjustments } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
+import type { ColorCurvesData, CurveChannel, CurvePoint } from '../color/ColorCurves';
+import { createDefaultCurvesData } from '../color/ColorCurves';
 import { ValidationError } from '../core/errors';
 
 /**
@@ -28,13 +30,46 @@ export interface PublicColorAdjustments {
   blacks: number;
 }
 
+export interface PublicCurvePoint {
+  x: number;
+  y: number;
+}
+
+export interface PublicCurveChannel {
+  points: PublicCurvePoint[];
+  enabled: boolean;
+}
+
+export interface PublicColorCurvesData {
+  master: PublicCurveChannel;
+  red: PublicCurveChannel;
+  green: PublicCurveChannel;
+  blue: PublicCurveChannel;
+}
+
+export interface PublicCurveChannelUpdate {
+  points?: PublicCurvePoint[];
+  enabled?: boolean;
+}
+
+export interface PublicColorCurvesUpdate {
+  master?: PublicCurveChannelUpdate;
+  red?: PublicCurveChannelUpdate;
+  green?: PublicCurveChannelUpdate;
+  blue?: PublicCurveChannelUpdate;
+}
+
+const CURVE_CHANNELS: Array<keyof ColorCurvesData> = ['master', 'red', 'green', 'blue'];
+
 export class ColorAPI {
   private colorControls: ColorAdjustmentProvider;
   private cdlControl: CDLProvider;
+  private curvesControl: CurvesProvider;
 
-  constructor(colorControls: ColorAdjustmentProvider, cdlControl: CDLProvider) {
+  constructor(colorControls: ColorAdjustmentProvider, cdlControl: CDLProvider, curvesControl: CurvesProvider) {
     this.colorControls = colorControls;
     this.cdlControl = cdlControl;
+    this.curvesControl = curvesControl;
   }
 
   /**
@@ -201,6 +236,124 @@ export class ColorAPI {
       offset: { r: cdl.offset.r, g: cdl.offset.g, b: cdl.offset.b },
       power: { r: cdl.power.r, g: cdl.power.g, b: cdl.power.b },
       saturation: cdl.saturation,
+    };
+  }
+
+  /**
+   * Set color curves with support for per-channel partial updates.
+   *
+   * Any subset of channels can be provided. Within each channel update,
+   * `enabled` and/or `points` may be provided.
+   *
+   * @example
+   * ```ts
+   * openrv.color.setCurves({
+   *   red: { points: [{ x: 0, y: 0.05 }, { x: 1, y: 0.95 }] },
+   *   blue: { enabled: false }
+   * });
+   * ```
+   */
+  setCurves(curves: PublicColorCurvesUpdate): void {
+    if (typeof curves !== 'object' || curves === null || Array.isArray(curves)) {
+      throw new ValidationError('setCurves() requires an object');
+    }
+
+    const merged = this.curvesControl.getCurves();
+
+    for (const channel of CURVE_CHANNELS) {
+      if (!Object.prototype.hasOwnProperty.call(curves, channel)) {
+        continue;
+      }
+
+      const update = curves[channel];
+      if (typeof update !== 'object' || update === null || Array.isArray(update)) {
+        throw new ValidationError(`setCurves() "${channel}" must be an object`);
+      }
+
+      this.applyCurveChannelUpdate(merged[channel], channel, update);
+    }
+
+    this.curvesControl.setCurves(merged);
+  }
+
+  /**
+   * Get current curves.
+   *
+   * Returns a defensive deep copy of master/red/green/blue channels.
+   */
+  getCurves(): PublicColorCurvesData {
+    const curves = this.curvesControl.getCurves();
+    return {
+      master: this.copyCurveChannel(curves.master),
+      red: this.copyCurveChannel(curves.red),
+      green: this.copyCurveChannel(curves.green),
+      blue: this.copyCurveChannel(curves.blue),
+    };
+  }
+
+  /**
+   * Reset all curves to the default identity state.
+   */
+  resetCurves(): void {
+    this.curvesControl.setCurves(createDefaultCurvesData());
+  }
+
+  private applyCurveChannelUpdate(
+    channelState: CurveChannel,
+    channelName: keyof ColorCurvesData,
+    update: PublicCurveChannelUpdate
+  ): void {
+    if (Object.prototype.hasOwnProperty.call(update, 'enabled')) {
+      if (typeof update.enabled !== 'boolean') {
+        throw new ValidationError(`setCurves() "${channelName}.enabled" must be a boolean`);
+      }
+      channelState.enabled = update.enabled;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(update, 'points')) {
+      if (!Array.isArray(update.points) || update.points.length < 2) {
+        throw new ValidationError(`setCurves() "${channelName}.points" must be an array with at least 2 points`);
+      }
+
+      const normalizedPoints = update.points
+        .map((point, index) => this.validateCurvePoint(point, channelName, index))
+        .sort((a, b) => a.x - b.x);
+
+      channelState.points = normalizedPoints;
+    }
+  }
+
+  private validateCurvePoint(
+    point: unknown,
+    channelName: keyof ColorCurvesData,
+    index: number
+  ): CurvePoint {
+    if (typeof point !== 'object' || point === null || Array.isArray(point)) {
+      throw new ValidationError(`setCurves() "${channelName}.points[${index}]" must be an object`);
+    }
+
+    const record = point as Record<string, unknown>;
+    const x = record.x;
+    const y = record.y;
+    if (
+      typeof x !== 'number' ||
+      !Number.isFinite(x) ||
+      typeof y !== 'number' ||
+      !Number.isFinite(y)
+    ) {
+      throw new ValidationError(`setCurves() "${channelName}.points[${index}]" must have finite numeric x/y`);
+    }
+    if (x < 0 || x > 1 || y < 0 || y > 1) {
+      throw new ValidationError(`setCurves() "${channelName}.points[${index}]" x/y must be in [0, 1]`);
+    }
+
+    return { x, y };
+  }
+
+  private copyCurveChannel(channel: CurveChannel): PublicCurveChannel {
+    return {
+      enabled: channel.enabled,
+      points: channel.points.map((point) => ({ x: point.x, y: point.y })),
     };
   }
 }

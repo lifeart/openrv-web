@@ -8,6 +8,7 @@
 
 import { KeyCombination } from './KeyboardManager';
 import { DEFAULT_KEY_BINDINGS, KeyBindingKeys } from './KeyBindings';
+import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
 export interface CustomKeyBinding {
   action: string;
@@ -16,7 +17,8 @@ export interface CustomKeyBinding {
 }
 
 export class CustomKeyBindingsManager {
-  private static readonly STORAGE_KEY = 'openrv-custom-keybindings';
+  private static readonly STORAGE_KEY = PREFERENCE_STORAGE_KEYS.customKeyBindings;
+  private readonly preferences = getPreferencesManager();
   private customBindings: Map<string, CustomKeyBinding> = new Map();
   private onBindingsChanged?: () => void;
 
@@ -153,7 +155,7 @@ export class CustomKeyBindingsManager {
    */
   private loadFromStorage(): void {
     try {
-      const stored = localStorage.getItem(CustomKeyBindingsManager.STORAGE_KEY);
+      const stored = this.preferences.getString(CustomKeyBindingsManager.STORAGE_KEY);
       if (!stored) return;
 
       const data = JSON.parse(stored);
@@ -276,11 +278,9 @@ export class CustomKeyBindingsManager {
    * Save custom bindings to localStorage
    */
   private saveToStorage(): void {
-    try {
-      const data = Array.from(this.customBindings.values());
-      localStorage.setItem(CustomKeyBindingsManager.STORAGE_KEY, JSON.stringify(data));
-    } catch (err) {
-      console.warn('Failed to save custom key bindings:', err);
+    const data = Array.from(this.customBindings.values());
+    if (!this.preferences.setJSON(CustomKeyBindingsManager.STORAGE_KEY, data)) {
+      console.warn('Failed to save custom key bindings');
     }
   }
 

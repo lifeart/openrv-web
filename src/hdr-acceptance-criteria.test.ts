@@ -116,7 +116,7 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
     it('AC-P1-1.1d: every detection probe is wrapped in try/catch', () => {
       // Force all APIs to throw - detection should still succeed
       const originalMatchMedia = globalThis.matchMedia;
-      globalThis.matchMedia = vi.fn(() => { throw new Error('matchMedia broken'); });
+      globalThis.matchMedia = (() => { throw new Error('matchMedia broken'); }) as typeof globalThis.matchMedia;
 
       expect(() => detectDisplayCapabilities()).not.toThrow();
       const caps = detectDisplayCapabilities();
@@ -152,51 +152,25 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
     });
 
     it('AC-P1-1.2a: sets drawingBufferColorSpace to display-p3 when webglP3 is true', () => {
-      const mockGL = createMockGL({ supportP3: true });
-      const canvas = document.createElement('canvas');
-      canvas.getContext = vi.fn((contextId: string) => {
-        if (contextId === 'webgl2') return mockGL;
-        return null;
-      }) as typeof canvas.getContext;
-
       const caps = makeCaps({ webglP3: true });
-      renderer.initialize(canvas, caps);
+      const mockGL = initRendererWithMockGL(renderer, { supportP3: true }, { capabilities: caps });
 
-      expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('display-p3');
+      expect(mockGL.drawingBufferColorSpace).toBe('display-p3');
     });
 
     it('AC-P1-1.2b: does not touch drawingBufferColorSpace when webglP3 is false', () => {
-      const mockGL = createMockGL();
-      const canvas = document.createElement('canvas');
-      canvas.getContext = vi.fn((contextId: string) => {
-        if (contextId === 'webgl2') return mockGL;
-        return null;
-      }) as typeof canvas.getContext;
-
       const caps = makeCaps({ webglP3: false });
-      renderer.initialize(canvas, caps);
+      const mockGL = initRendererWithMockGL(renderer, {}, { capabilities: caps });
 
-      expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('srgb');
+      expect(mockGL.drawingBufferColorSpace).toBe('srgb');
     });
 
     it('AC-P1-1.2c: initialize accepts DisplayCapabilities parameter', () => {
-      const mockGL = createMockGL();
-      const canvas = document.createElement('canvas');
-      canvas.getContext = vi.fn((contextId: string) => {
-        if (contextId === 'webgl2') return mockGL;
-        return null;
-      }) as typeof canvas.getContext;
-
-      // Should accept optional capabilities
-      expect(() => renderer.initialize(canvas)).not.toThrow();
+      // Should accept optional capabilities (no caps)
+      expect(() => initRendererWithMockGL(renderer)).not.toThrow();
       expect(() => {
         const r2 = new Renderer();
-        const c2 = document.createElement('canvas');
-        c2.getContext = vi.fn((contextId: string) => {
-          if (contextId === 'webgl2') return createMockGL();
-          return null;
-        }) as typeof c2.getContext;
-        r2.initialize(c2, makeCaps());
+        initRendererWithMockGL(r2, {}, { capabilities: makeCaps() });
       }).not.toThrow();
     });
 
@@ -263,7 +237,7 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
 
     it('AC-P1-1.3c: falls back to sRGB context when colorSpace throws', () => {
       let callCount = 0;
-      HTMLCanvasElement.prototype.getContext = vi.fn(function (
+      HTMLCanvasElement.prototype.getContext = function (
         this: HTMLCanvasElement,
         contextId: string,
         options?: CanvasRenderingContext2DSettings,
@@ -273,10 +247,10 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
           if (callCount === 1 && options && 'colorSpace' in options) {
             throw new Error('Unsupported');
           }
-          return { canvas: this, fillRect: vi.fn() } as unknown as CanvasRenderingContext2D;
+          return { canvas: this, fillRect() {} } as unknown as CanvasRenderingContext2D;
         }
         return null;
-      }) as typeof HTMLCanvasElement.prototype.getContext;
+      } as typeof HTMLCanvasElement.prototype.getContext;
 
       const canvas = document.createElement('canvas');
       const ctx = safeCanvasContext2D(canvas, { alpha: false }, 'display-p3');
@@ -481,16 +455,17 @@ describe('Phase 2: HDR Extended Range Output', () => {
 
     it('AC-P2-2.1e: displayHDR reflects matchMedia dynamic-range high', () => {
       const originalMatchMedia = globalThis.matchMedia;
-      globalThis.matchMedia = vi.fn((query: string) => ({
+      const noop = () => {};
+      globalThis.matchMedia = ((query: string) => ({
         matches: query === '(dynamic-range: high)',
         media: query,
         onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }));
+        addListener: noop,
+        removeListener: noop,
+        addEventListener: noop,
+        removeEventListener: noop,
+        dispatchEvent: () => false,
+      })) as typeof globalThis.matchMedia;
 
       const caps = detectDisplayCapabilities();
       expect(caps.displayHDR).toBe(true);
@@ -504,31 +479,32 @@ describe('Phase 2: HDR Extended Range Output', () => {
     });
 
     it('AC-P2-2.1g: queryHDRHeadroom returns null when permission denied', async () => {
-      const mockGetScreenDetails = vi.fn().mockRejectedValue(new Error('Permission denied'));
-      (window as unknown as { getScreenDetails: typeof mockGetScreenDetails }).getScreenDetails = mockGetScreenDetails;
+      // getScreenDetails is declared optional on Window (webgl-hdr.d.ts)
+      window.getScreenDetails = () => Promise.reject(new Error('Permission denied'));
 
       const result = await queryHDRHeadroom();
       expect(result).toBeNull();
 
-      delete (window as unknown as { getScreenDetails?: unknown }).getScreenDetails;
+      delete window.getScreenDetails;
     });
 
     it('AC-P2-2.1h: queryHDRHeadroom returns positive number when available', async () => {
-      const mockGetScreenDetails = vi.fn().mockResolvedValue({
+      // getScreenDetails is declared optional on Window (webgl-hdr.d.ts)
+      window.getScreenDetails = () => Promise.resolve({
         currentScreen: { highDynamicRangeHeadroom: 3.5 },
-      });
-      (window as unknown as { getScreenDetails: typeof mockGetScreenDetails }).getScreenDetails = mockGetScreenDetails;
+        screens: [],
+      } as unknown as ScreenDetails);
 
       const result = await queryHDRHeadroom();
       expect(result).toBe(3.5);
 
-      delete (window as unknown as { getScreenDetails?: unknown }).getScreenDetails;
+      delete window.getScreenDetails;
     });
 
     it('AC-P2-2.1i: all detection failures are silent', () => {
       const consoleSpy = vi.spyOn(console, 'error');
       const originalMatchMedia = globalThis.matchMedia;
-      globalThis.matchMedia = vi.fn(() => { throw new Error('broken'); });
+      globalThis.matchMedia = (() => { throw new Error('broken'); }) as typeof globalThis.matchMedia;
 
       detectDisplayCapabilities();
 
@@ -593,7 +569,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
       renderer.setHDROutputMode('hlg', caps);
       renderer.setHDROutputMode('sdr', caps);
 
-      expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('display-p3');
+      expect(mockGL.drawingBufferColorSpace).toBe('display-p3');
     });
 
     it('AC-P2-2.2g: setHDROutputMode sdr reverts to sRGB when P3 not supported', () => {
@@ -603,7 +579,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
       renderer.setHDROutputMode('hlg', caps);
       renderer.setHDROutputMode('sdr', caps);
 
-      expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('srgb');
+      expect(mockGL.drawingBufferColorSpace).toBe('srgb');
     });
 
     it('AC-P2-2.2h: setHDROutputMode returns false when gl is null', () => {
@@ -660,20 +636,19 @@ describe('Phase 2: HDR Extended Range Output', () => {
 
     afterEach(() => {
       HTMLCanvasElement.prototype.getContext = originalGetContext;
-      vi.restoreAllMocks();
     });
 
     it('AC-P2-2.4a: returns HDR context when hlg mode and canvasHLG supported', () => {
-      const hlgCtx = { fillRect: vi.fn(), isHDR: true } as unknown as CanvasRenderingContext2D;
-      HTMLCanvasElement.prototype.getContext = vi.fn(function (
+      const hlgCtx = { fillRect() {}, isHDR: true } as unknown as CanvasRenderingContext2D;
+      HTMLCanvasElement.prototype.getContext = function (
         this: HTMLCanvasElement,
         contextId: string,
         options?: Record<string, unknown>,
       ) {
         if (contextId === '2d' && options?.colorSpace === 'rec2100-hlg') return hlgCtx;
-        if (contextId === '2d') return { fillRect: vi.fn() } as unknown as CanvasRenderingContext2D;
+        if (contextId === '2d') return { fillRect() {} } as unknown as CanvasRenderingContext2D;
         return null;
-      }) as typeof HTMLCanvasElement.prototype.getContext;
+      } as typeof HTMLCanvasElement.prototype.getContext;
 
       const caps = makeCaps({ canvasHLG: true });
       const result = createViewerCanvas(caps, 'hlg');
@@ -681,21 +656,19 @@ describe('Phase 2: HDR Extended Range Output', () => {
     });
 
     it('AC-P2-2.4b: falls back to P3 when HDR context creation fails', () => {
-      const p3Ctx = { fillRect: vi.fn(), isP3: true } as unknown as CanvasRenderingContext2D;
-      let callCount = 0;
-      HTMLCanvasElement.prototype.getContext = vi.fn(function (
+      const p3Ctx = { fillRect() {}, isP3: true } as unknown as CanvasRenderingContext2D;
+      HTMLCanvasElement.prototype.getContext = function (
         this: HTMLCanvasElement,
         contextId: string,
         options?: Record<string, unknown>,
       ) {
         if (contextId === '2d') {
-          callCount++;
           if (options?.colorSpace === 'rec2100-hlg') return null;
           if (options?.colorSpace === 'display-p3') return p3Ctx;
-          return { fillRect: vi.fn() } as unknown as CanvasRenderingContext2D;
+          return { fillRect() {} } as unknown as CanvasRenderingContext2D;
         }
         return null;
-      }) as typeof HTMLCanvasElement.prototype.getContext;
+      } as typeof HTMLCanvasElement.prototype.getContext;
 
       const caps = makeCaps({ canvasHLG: true, canvasP3: true });
       const result = createViewerCanvas(caps, 'hlg');
@@ -703,8 +676,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
     });
 
     it('AC-P2-2.4c: falls back to sRGB when both HDR and P3 fail', () => {
-      const srgbCtx = { fillRect: vi.fn(), isSRGB: true } as unknown as CanvasRenderingContext2D;
-      HTMLCanvasElement.prototype.getContext = vi.fn(function (
+      const srgbCtx = { fillRect() {}, isSRGB: true } as unknown as CanvasRenderingContext2D;
+      HTMLCanvasElement.prototype.getContext = function (
         this: HTMLCanvasElement,
         contextId: string,
         options?: Record<string, unknown>,
@@ -715,7 +688,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
           return srgbCtx;
         }
         return null;
-      }) as typeof HTMLCanvasElement.prototype.getContext;
+      } as typeof HTMLCanvasElement.prototype.getContext;
 
       const caps = makeCaps({ canvasHLG: true, canvasP3: true });
       const result = createViewerCanvas(caps, 'hlg');
@@ -751,21 +724,25 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps1 = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control1 = new ToneMappingControl(caps1);
       const el1 = control1.render();
-      expect(el1.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+      // Open dropdown so it is appended to document.body
+      (el1.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
       control1.dispose();
 
       // Only HLG available
       const caps2 = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: false });
       const control2 = new ToneMappingControl(caps2);
       const el2 = control2.render();
-      expect(el2.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+      (el2.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
       control2.dispose();
 
       // Only PQ available
       const caps3 = makeCaps({ displayHDR: true, webglHLG: false, webglPQ: true });
       const control3 = new ToneMappingControl(caps3);
       const el3 = control3.render();
-      expect(el3.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+      (el3.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
       control3.dispose();
     });
 
@@ -812,7 +789,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
-      expect(el.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
       control.dispose();
     });
 
@@ -820,9 +798,10 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
-      expect(el.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
-      expect(el.querySelector('[data-testid="hdr-mode-hlg"]')).not.toBeNull();
-      expect(el.querySelector('[data-testid="hdr-mode-pq"]')).not.toBeNull();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="hdr-mode-hlg"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="hdr-mode-pq"]')).not.toBeNull();
       control.dispose();
     });
 
@@ -840,7 +819,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.on('hdrModeChanged', listener);
 
       const el = control.render();
-      const hlgBtn = el.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
       hlgBtn.click();
 
       expect(listener).toHaveBeenCalledWith('hlg');
@@ -855,7 +835,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.on('hdrModeChanged', listener);
 
       const el = control.render();
-      const pqBtn = el.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const pqBtn = document.body.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
       pqBtn.click();
 
       expect(listener).toHaveBeenCalledWith('pq');
@@ -874,7 +855,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.on('hdrModeChanged', listener);
 
       const el = control.render();
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
       sdrBtn.click();
 
       expect(listener).toHaveBeenCalledWith('sdr');
@@ -890,7 +872,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
 
       // SDR is already the default, clicking it should not emit
       const el = control.render();
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
       sdrBtn.click();
 
       expect(listener).not.toHaveBeenCalled();
@@ -901,10 +884,11 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
 
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
-      const hlgBtn = el.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
-      const pqBtn = el.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
+      const pqBtn = document.body.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
 
       expect(sdrBtn.getAttribute('role')).toBe('menuitemradio');
       expect(hlgBtn.getAttribute('role')).toBe('menuitemradio');
@@ -922,9 +906,10 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
 
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
-      const hlgBtn = el.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
 
       hlgBtn.click();
 
@@ -968,11 +953,11 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const canvas = document.createElement('canvas');
       const configureFn = vi.fn();
 
-      // Add configureHighDynamicRange to canvas
-      (canvas as unknown as { configureHighDynamicRange: typeof configureFn }).configureHighDynamicRange = configureFn;
+      // configureHighDynamicRange is declared optional on HTMLCanvasElement (webgl-hdr.d.ts)
+      canvas.configureHighDynamicRange = configureFn;
 
       const mockGL = createMockGL({ supportHLG: true });
-      canvas.getContext = vi.fn((contextId: string) => {
+      canvas.getContext = ((contextId: string) => {
         if (contextId === 'webgl2') return mockGL;
         return null;
       }) as typeof canvas.getContext;
@@ -989,12 +974,13 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const renderer = new Renderer();
       const canvas = document.createElement('canvas');
 
-      (canvas as unknown as { configureHighDynamicRange: () => void }).configureHighDynamicRange = () => {
+      // configureHighDynamicRange is declared optional on HTMLCanvasElement (webgl-hdr.d.ts)
+      canvas.configureHighDynamicRange = () => {
         throw new Error('Not supported');
       };
 
       const mockGL = createMockGL({ supportHLG: true });
-      canvas.getContext = vi.fn((contextId: string) => {
+      canvas.getContext = ((contextId: string) => {
         if (contextId === 'webgl2') return mockGL;
         return null;
       }) as typeof canvas.getContext;
@@ -1006,15 +992,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
 
     it('AC-P2-2.6c: if method does not exist, no error occurs', () => {
       const renderer = new Renderer();
-      const canvas = document.createElement('canvas');
-      // canvas does NOT have configureHighDynamicRange
-      const mockGL = createMockGL({ supportHLG: true });
-      canvas.getContext = vi.fn((contextId: string) => {
-        if (contextId === 'webgl2') return mockGL;
-        return null;
-      }) as typeof canvas.getContext;
-
-      renderer.initialize(canvas);
+      // canvas does NOT have configureHighDynamicRange (canvasExtendedHDR not set)
+      initRendererWithMockGL(renderer, { supportHLG: true });
       const caps = makeCaps({ webglHLG: true });
       expect(() => renderer.setHDROutputMode('hlg', caps)).not.toThrow();
     });
@@ -1393,24 +1372,25 @@ describe('Phase 4: WebGPU Migration Path', () => {
       const canvas = document.createElement('canvas');
 
       const configureFn = vi.fn();
+      const noop = () => {};
       const mockContext = {
         configure: configureFn,
-        unconfigure: vi.fn(),
-        getCurrentTexture: vi.fn(),
+        unconfigure: noop,
+        getCurrentTexture: noop,
       };
 
-      const mockDevice = { destroy: vi.fn() };
+      const mockDevice = { destroy: noop };
       const mockAdapter = {
-        requestDevice: vi.fn().mockResolvedValue(mockDevice),
+        requestDevice: () => Promise.resolve(mockDevice),
       };
 
       const originalGpu = (navigator as unknown as Record<string, unknown>).gpu;
       (navigator as unknown as Record<string, unknown>).gpu = {
-        requestAdapter: vi.fn().mockResolvedValue(mockAdapter),
+        requestAdapter: () => Promise.resolve(mockAdapter),
       };
 
       try {
-        canvas.getContext = vi.fn((id: string) => {
+        canvas.getContext = ((id: string) => {
           if (id === 'webgpu') return mockContext;
           return null;
         }) as typeof canvas.getContext;
@@ -1444,23 +1424,24 @@ describe('Phase 4: WebGPU Migration Path', () => {
         }
       });
 
+      const noop = () => {};
       const mockContext = {
         configure: configureFn,
-        unconfigure: vi.fn(),
+        unconfigure: noop,
       };
 
-      const mockDevice = { destroy: vi.fn() };
+      const mockDevice = { destroy: noop };
       const mockAdapter = {
-        requestDevice: vi.fn().mockResolvedValue(mockDevice),
+        requestDevice: () => Promise.resolve(mockDevice),
       };
 
       const originalGpu = (navigator as unknown as Record<string, unknown>).gpu;
       (navigator as unknown as Record<string, unknown>).gpu = {
-        requestAdapter: vi.fn().mockResolvedValue(mockAdapter),
+        requestAdapter: () => Promise.resolve(mockAdapter),
       };
 
       try {
-        canvas.getContext = vi.fn((id: string) => {
+        canvas.getContext = ((id: string) => {
           if (id === 'webgpu') return mockContext;
           return null;
         }) as typeof canvas.getContext;

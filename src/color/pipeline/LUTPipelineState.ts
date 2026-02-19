@@ -14,6 +14,10 @@ export interface LUTStageState {
   lutData: LUT | null;
   intensity: number; // 0.0 to 1.0 blend factor
   source: 'manual' | 'ocio';
+  /** 4x4 input matrix (row-major flat[16]) applied before LUT sampling */
+  inMatrix: Float32Array | null;
+  /** 4x4 output matrix (row-major flat[16]) applied after LUT sampling */
+  outMatrix: Float32Array | null;
 }
 
 /** Pre-Cache stage extends base with bit-depth option */
@@ -43,6 +47,10 @@ export interface SerializableLUTStageState {
   intensity: number;
   source: 'manual' | 'ocio';
   lutData?: undefined;
+  /** 4x4 input matrix as plain number array (row-major flat[16]) */
+  inMatrix?: number[] | null;
+  /** 4x4 output matrix as plain number array (row-major flat[16]) */
+  outMatrix?: number[] | null;
 }
 
 /** Serializable version of pre-cache stage state */

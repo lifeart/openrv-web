@@ -19,8 +19,16 @@ export interface PlaylistPanelEvents extends EventMap {
   addCurrentSource: void;
   /** Emitted when user selects a clip */
   clipSelected: { clipId: string; sourceIndex: number; frame: number };
+  /** Emitted when panel visibility changes */
+  visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
   closed: void;
+}
+
+/** Interface for panels that support mutual exclusion */
+export interface ExclusivePanel {
+  isOpen(): boolean;
+  hide(): void;
 }
 
 export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
@@ -30,6 +38,8 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private playlistManager: PlaylistManager;
   private isVisible = false;
   private draggedClipId: string | null = null;
+  private exclusivePanel: ExclusivePanel | null = null;
+  private activeClipId: string | null = null;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -329,6 +339,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   }
 
   private createClipItem(clip: PlaylistClip, index: number): HTMLElement {
+    const isActive = clip.id === this.activeClipId;
     const item = document.createElement('div');
     item.className = 'playlist-clip-item';
     item.dataset.clipId = clip.id;
@@ -336,9 +347,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     item.style.cssText = `
       padding: 10px 12px;
       margin-bottom: 6px;
-      border: 1px solid var(--border-primary);
+      border: 1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-primary)'};
+      border-left: 3px solid ${isActive ? 'var(--accent-primary)' : 'transparent'};
       border-radius: 6px;
-      background: var(--bg-primary);
+      background: ${isActive ? 'rgba(var(--accent-primary-rgb), 0.08)' : 'var(--bg-primary)'};
       cursor: grab;
       transition: all 0.12s ease;
     `;
@@ -461,6 +473,79 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
     item.appendChild(infoRow);
 
+    // Trim controls
+    const trimRow = document.createElement('div');
+    trimRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+    `;
+
+    const inLabel = document.createElement('span');
+    inLabel.textContent = 'In';
+    trimRow.appendChild(inLabel);
+
+    const inInput = document.createElement('input');
+    inInput.type = 'number';
+    inInput.min = '1';
+    inInput.value = String(clip.inPoint);
+    inInput.title = 'Clip in point';
+    inInput.style.cssText = `
+      width: 58px;
+      padding: 2px 4px;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 11px;
+    `;
+    trimRow.appendChild(inInput);
+
+    const outLabel = document.createElement('span');
+    outLabel.textContent = 'Out';
+    trimRow.appendChild(outLabel);
+
+    const outInput = document.createElement('input');
+    outInput.type = 'number';
+    outInput.min = inInput.value;
+    outInput.value = String(clip.outPoint);
+    outInput.title = 'Clip out point';
+    outInput.style.cssText = inInput.style.cssText;
+    trimRow.appendChild(outInput);
+
+    const commitTrim = (): void => {
+      const nextIn = Number.parseInt(inInput.value, 10);
+      const nextOut = Number.parseInt(outInput.value, 10);
+      const valid = Number.isFinite(nextIn) && Number.isFinite(nextOut) && nextIn >= 1 && nextOut >= nextIn;
+      if (!valid) {
+        inInput.value = String(clip.inPoint);
+        outInput.value = String(clip.outPoint);
+        return;
+      }
+      if (nextIn !== clip.inPoint || nextOut !== clip.outPoint) {
+        this.playlistManager.updateClipPoints(clip.id, nextIn, nextOut);
+      }
+    };
+
+    const bindTrimInput = (input: HTMLInputElement): void => {
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          commitTrim();
+        }
+      });
+      input.addEventListener('change', commitTrim);
+      input.addEventListener('blur', commitTrim);
+    };
+
+    bindTrimInput(inInput);
+    bindTrimInput(outInput);
+    item.appendChild(trimRow);
+
     // Click to select/jump
     item.addEventListener('click', () => {
       this.emit('clipSelected', {
@@ -472,12 +557,16 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
     // Hover effects
     item.addEventListener('mouseenter', () => {
-      item.style.borderColor = 'var(--border-hover)';
-      item.style.background = 'var(--bg-hover)';
+      if (!isActive) {
+        item.style.borderColor = 'var(--border-hover)';
+        item.style.background = 'var(--bg-hover)';
+      }
     });
     item.addEventListener('mouseleave', () => {
-      item.style.borderColor = 'var(--border-primary)';
-      item.style.background = 'var(--bg-primary)';
+      if (!isActive) {
+        item.style.borderColor = 'var(--border-primary)';
+        item.style.background = 'var(--bg-primary)';
+      }
     });
 
     return item;
@@ -497,18 +586,30 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   }
 
   // Public methods
+
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  setExclusiveWith(panel: ExclusivePanel): void {
+    this.exclusivePanel = panel;
+  }
+
   show(): void {
+    // Close the exclusive panel if it is open
+    if (this.exclusivePanel?.isOpen()) {
+      this.exclusivePanel.hide();
+    }
     if (!document.body.contains(this.container)) {
       document.body.appendChild(this.container);
     }
     this.container.style.display = 'flex';
     this.isVisible = true;
+    this.emit('visibilityChanged', { open: true });
     this.renderList();
   }
 
   hide(): void {
     this.container.style.display = 'none';
     this.isVisible = false;
+    this.emit('visibilityChanged', { open: false });
     this.emit('closed', undefined);
   }
 
@@ -522,6 +623,20 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
   isOpen(): boolean {
     return this.isVisible;
+  }
+
+  /** Update the currently active/playing clip and re-render to highlight it */
+  setActiveClip(clipId: string | null): void {
+    if (this.activeClipId === clipId) return;
+    this.activeClipId = clipId;
+    if (this.isVisible) {
+      this.renderList();
+      // Auto-scroll to the active clip
+      if (clipId) {
+        const activeEl = this.listContainer.querySelector(`[data-clip-id="${clipId}"]`) as HTMLElement | null;
+        activeEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
   }
 
   render(): HTMLElement {

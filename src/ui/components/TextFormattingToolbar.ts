@@ -9,6 +9,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { TextAnnotation } from '../../paint/types';
 import { getIconSvg } from './shared/Icons';
+import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
 export interface TextFormattingToolbarEvents extends EventMap {
   formattingChanged: { bold: boolean; italic: boolean; underline: boolean };
@@ -86,42 +87,11 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
     title: string,
     onClick: () => void
   ): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.innerHTML = getIconSvg(icon, 'sm');
-    button.title = title;
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 4px;
-      border-radius: 4px;
-      cursor: pointer;
-      width: 26px;
-      height: 26px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!button.classList.contains('active')) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-primary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    return sharedCreateIconButton(getIconSvg(icon, 'sm'), onClick, {
+      variant: 'icon',
+      size: 'sm',
+      title,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!button.classList.contains('active')) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-muted)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
-    return button;
   }
 
   private bindEvents(): void {
@@ -224,17 +194,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   }
 
   private updateButtonState(button: HTMLButtonElement, isActive: boolean): void {
-    if (isActive) {
-      button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      button.style.borderColor = 'var(--accent-primary)';
-      button.style.color = 'var(--accent-primary)';
-      button.classList.add('active');
-    } else {
-      button.style.background = 'transparent';
-      button.style.borderColor = 'transparent';
-      button.style.color = 'var(--text-muted)';
-      button.classList.remove('active');
-    }
+    setButtonActive(button, isActive, 'icon');
   }
 
   private applyFormattingToActiveAnnotation(): void {

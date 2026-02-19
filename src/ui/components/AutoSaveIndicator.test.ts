@@ -344,7 +344,7 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const popover = element.querySelector('[data-testid="autosave-settings-popover"]');
+      const popover = document.body.querySelector('[data-testid="autosave-settings-popover"]');
       expect(popover).not.toBeNull();
     });
 
@@ -355,11 +355,11 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]');
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]');
       expect(slider).not.toBeNull();
       expect(slider!.value).toBe('10');
 
-      const label = element.querySelector('[data-testid="autosave-interval-label"]');
+      const label = document.body.querySelector('[data-testid="autosave-interval-label"]');
       expect(label?.textContent).toBe('Interval: 10 min');
     });
 
@@ -370,7 +370,7 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const toggle = element.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]');
+      const toggle = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]');
       expect(toggle).not.toBeNull();
       expect(toggle!.checked).toBe(false);
     });
@@ -382,11 +382,11 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]');
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]');
       expect(slider).not.toBeNull();
       expect(slider!.value).toBe('20');
 
-      const label = element.querySelector('[data-testid="autosave-versions-label"]');
+      const label = document.body.querySelector('[data-testid="autosave-versions-label"]');
       expect(label?.textContent).toBe('Max versions: 20');
     });
 
@@ -397,7 +397,7 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]')!;
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]')!;
       slider.value = '15';
       slider.dispatchEvent(new Event('input'));
 
@@ -411,7 +411,7 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const toggle = element.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]')!;
+      const toggle = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]')!;
       toggle.checked = false;
       toggle.dispatchEvent(new Event('change'));
 
@@ -425,11 +425,11 @@ describe('AutoSaveIndicator', () => {
 
       // Open
       element.click();
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
 
       // Close
       element.click();
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
     });
 
     it('AUTOSAVE-U037: clicking outside popover closes it', () => {
@@ -439,11 +439,11 @@ describe('AutoSaveIndicator', () => {
       document.body.appendChild(element);
 
       element.click();
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
 
       // Click outside
       document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
 
       document.body.removeChild(element);
     });
@@ -460,7 +460,7 @@ describe('AutoSaveIndicator', () => {
       element.click();
 
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
     });
 
     it('AUTOSAVE-U039: settings persist to localStorage on change', () => {
@@ -470,7 +470,7 @@ describe('AutoSaveIndicator', () => {
 
       element.click();
 
-      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]')!;
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]')!;
       slider.value = '20';
       slider.dispatchEvent(new Event('input'));
 
@@ -515,10 +515,10 @@ describe('AutoSaveIndicator', () => {
       const element = indicator.render();
 
       element.click();
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+      expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
     });
   });
 });

@@ -17,13 +17,15 @@
 // =============================================================================
 // CDL (Color Decision List)
 // =============================================================================
-export type { CDLValues } from './CDL';
+export type { CDLValues, CDLEntry } from './CDL';
 export {
   DEFAULT_CDL,
   isDefaultCDL,
   applyCDLToImageData,
   parseCDLXML,
   exportCDLXML,
+  parseCC,
+  parseCCC,
 } from './CDL';
 
 // =============================================================================

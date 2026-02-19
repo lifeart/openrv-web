@@ -527,4 +527,117 @@ describe('AudioPlaybackManager', () => {
       expect(errorListener.mock.calls[0][0].type).toBe('autoplay');
     });
   });
+
+  describe('audio scrubbing', () => {
+    beforeEach(async () => {
+      vi.useFakeTimers();
+
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+      await manager.loadFromVideo(video);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('SCRUB-001: scrubToFrame plays audio at correct timestamp', async () => {
+      // Frame 25 at 24fps → (25-1)/24 = 1.0s
+      manager.scrubToFrame(25, 24);
+
+      // Advance past debounce timer (30ms)
+      vi.advanceTimersByTime(30);
+
+      // Should have created a buffer source
+      expect(mockAudioContext.createBufferSource).toHaveBeenCalled();
+
+      // Get the created scrub source node
+      const lastResult = mockAudioContext.createBufferSource.mock.results[
+        mockAudioContext.createBufferSource.mock.results.length - 1
+      ];
+      const scrubSource = lastResult!.value;
+
+      // Should have started at the correct timestamp with snippet duration
+      expect(scrubSource.start).toHaveBeenCalledWith(0, 1.0, 0.05);
+      expect(scrubSource.buffer).toBe(mockAudioBuffer);
+      expect(scrubSource.connect).toHaveBeenCalledWith(mockGainNode);
+    });
+
+    it('SCRUB-002: rapid scrub debounces — only last scrub plays', async () => {
+      // Scrub rapidly across multiple frames
+      manager.scrubToFrame(10, 24);
+      manager.scrubToFrame(11, 24);
+      manager.scrubToFrame(12, 24);
+
+      // Before debounce fires, no createBufferSource call for snippets
+      // (the load sequence may have called createBufferSource already via play)
+      const callsBefore = mockAudioContext.createBufferSource.mock.calls.length;
+
+      // Advance past debounce timer
+      vi.advanceTimersByTime(30);
+
+      // Only one additional createBufferSource call should have been made (for the last scrub)
+      const callsAfter = mockAudioContext.createBufferSource.mock.calls.length;
+      expect(callsAfter - callsBefore).toBe(1);
+
+      // Verify it used the last frame's timestamp: (12-1)/24 = 0.458...
+      const scrubSource = mockAudioContext.createBufferSource.mock.results[
+        mockAudioContext.createBufferSource.mock.results.length - 1
+      ]!.value;
+      expect(scrubSource.start).toHaveBeenCalledWith(0, expect.closeTo(11 / 24, 5), 0.05);
+    });
+
+    it('SCRUB-003: no audio loaded — scrub is silent (no error)', () => {
+      // Create a fresh manager with no audio loaded
+      const freshManager = new AudioPlaybackManager();
+
+      // Should not throw
+      expect(() => freshManager.scrubToFrame(10, 24)).not.toThrow();
+
+      // No createBufferSource calls for scrubbing
+      const callsBefore = mockAudioContext.createBufferSource.mock.calls.length;
+      vi.advanceTimersByTime(30);
+      expect(mockAudioContext.createBufferSource.mock.calls.length).toBe(callsBefore);
+
+      freshManager.dispose();
+    });
+
+    it('SCRUB-004: scrub during active playback stops previous snippet', async () => {
+      vi.useRealTimers(); // Need real timers for play()
+      await manager.play();
+      vi.useFakeTimers();
+
+      // Now scrub — should stop any previous scrub snippet and start new one
+      manager.scrubToFrame(50, 24);
+      vi.advanceTimersByTime(30);
+
+      // The scrub should create a new buffer source (separate from the playback source)
+      expect(mockAudioContext.createBufferSource).toHaveBeenCalled();
+
+      const scrubSource = mockAudioContext.createBufferSource.mock.results[
+        mockAudioContext.createBufferSource.mock.results.length - 1
+      ]!.value;
+
+      // Scrub again — should stop the previous scrub snippet
+      manager.scrubToFrame(60, 24);
+
+      // The previous snippet's stop should be called
+      expect(scrubSource.stop).toHaveBeenCalled();
+      expect(scrubSource.disconnect).toHaveBeenCalled();
+    });
+
+    it('SCRUB-005: AudioContext suspended — no error thrown', async () => {
+      // Set context to suspended state
+      mockAudioContext.state = 'suspended';
+
+      const callsBefore = mockAudioContext.createBufferSource.mock.calls.length;
+
+      // Should not throw
+      expect(() => manager.scrubToFrame(24, 24)).not.toThrow();
+
+      // Advance timers — no snippet should be created
+      vi.advanceTimersByTime(30);
+      expect(mockAudioContext.createBufferSource.mock.calls.length).toBe(callsBefore);
+    });
+  });
 });

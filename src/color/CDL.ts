@@ -2,11 +2,10 @@
  * ASC CDL (Color Decision List) Types and Utilities
  *
  * CDL is an industry standard for color correction interchange.
- * The formula is: out = clamp((in * slope + offset) ^ power)
+ * The GPU-equivalent SOP formula is: out = pow(max(in * slope + offset, 0), power)
  * Then saturation is applied.
  */
 
-import { clamp } from '../utils/math';
 import { luminanceRec709 } from './PixelMath';
 
 export interface CDLValues {
@@ -18,6 +17,13 @@ export interface CDLValues {
   power: { r: number; g: number; b: number };
   // Saturation - default 1.0 (applied after SOP)
   saturation: number;
+}
+
+/**
+ * CDL entry with optional id (used by CCC collection files)
+ */
+export interface CDLEntry extends CDLValues {
+  id?: string;
 }
 
 export const DEFAULT_CDL: CDLValues = {
@@ -55,15 +61,15 @@ export function applyCDLToValue(
   v = v * slope + offset;
 
   // Clamp before power to avoid NaN from negative values
-  v = clamp(v, 0, 1);
+  v = Math.max(v, 0);
 
   // Apply power (gamma)
   if (power !== 1.0 && v > 0) {
     v = Math.pow(v, power);
   }
 
-  // Clamp final result
-  v = clamp(v, 0, 1);
+  // Keep only a lower bound here to preserve HDR headroom in CPU paths.
+  v = Math.max(v, 0);
 
   // Return to 0-255 range
   return v * 255;
@@ -88,9 +94,9 @@ export function applySaturation(
 
   // Interpolate between grayscale and color
   return {
-    r: clamp(luma + (r - luma) * saturation, 0, 255),
-    g: clamp(luma + (g - luma) * saturation, 0, 255),
-    b: clamp(luma + (b - luma) * saturation, 0, 255),
+    r: Math.max(0, luma + (r - luma) * saturation),
+    g: Math.max(0, luma + (g - luma) * saturation),
+    b: Math.max(0, luma + (b - luma) * saturation),
   };
 }
 
@@ -190,6 +196,128 @@ export function parseCDLXML(xml: string): CDLValues | null {
     console.warn('Failed to parse CDL XML:', e);
     return null;
   }
+}
+
+/**
+ * Parse three space-separated numbers from a text string.
+ * Throws with a descriptive error if the values are non-numeric.
+ */
+function parseTriple(text: string, label: string): { r: number; g: number; b: number } {
+  const parts = text.trim().split(/\s+/).map(Number);
+  const [r, g, b] = parts;
+  if (r === undefined || g === undefined || b === undefined || isNaN(r) || isNaN(g) || isNaN(b)) {
+    throw new Error(`Invalid ${label} values: "${text.trim()}" -- expected three numeric values`);
+  }
+  return { r, g, b };
+}
+
+/**
+ * Parse CDL values from a single <ColorCorrection> element.
+ * Used internally by parseCC, parseCCC, and parseCDLXML.
+ */
+function parseColorCorrectionElement(ccElement: Element): CDLEntry {
+  const id = ccElement.getAttribute('id') ?? undefined;
+
+  const cdl: CDLEntry = {
+    slope: { ...DEFAULT_CDL.slope },
+    offset: { ...DEFAULT_CDL.offset },
+    power: { ...DEFAULT_CDL.power },
+    saturation: DEFAULT_CDL.saturation,
+  };
+  if (id) {
+    cdl.id = id;
+  }
+
+  const sopNode = ccElement.querySelector('SOPNode');
+  if (sopNode) {
+    const slopeText = sopNode.querySelector('Slope')?.textContent;
+    if (slopeText) {
+      cdl.slope = parseTriple(slopeText, 'slope');
+    }
+
+    const offsetText = sopNode.querySelector('Offset')?.textContent;
+    if (offsetText) {
+      cdl.offset = parseTriple(offsetText, 'offset');
+    }
+
+    const powerText = sopNode.querySelector('Power')?.textContent;
+    if (powerText) {
+      cdl.power = parseTriple(powerText, 'power');
+    }
+  }
+
+  const satNode = ccElement.querySelector('SatNode');
+  if (satNode) {
+    const satText = satNode.querySelector('Saturation')?.textContent;
+    if (satText) {
+      const satVal = parseFloat(satText);
+      if (isNaN(satVal)) {
+        throw new Error(`Invalid saturation value: "${satText.trim()}"`);
+      }
+      cdl.saturation = satVal;
+    }
+  }
+
+  return cdl;
+}
+
+/**
+ * Parse a .cc file (single <ColorCorrection> root element).
+ * Throws with a descriptive error on invalid input.
+ */
+export function parseCC(xml: string): CDLEntry {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+
+  // Check for parse errors
+  const parseError = doc.querySelector('parsererror');
+  if (parseError) {
+    throw new Error(`Invalid XML: ${parseError.textContent}`);
+  }
+
+  const root = doc.documentElement;
+  // Strip namespace prefix for comparison (e.g., "cdl:ColorCorrection" -> "ColorCorrection")
+  const localName = root.localName || root.nodeName.split(':').pop()!;
+  if (localName !== 'ColorCorrection') {
+    throw new Error(
+      `Expected <ColorCorrection> root element, got <${root.nodeName}>`
+    );
+  }
+
+  return parseColorCorrectionElement(root);
+}
+
+/**
+ * Parse a .ccc file (ColorCorrectionCollection).
+ * Returns an array of CDLEntry values (may be empty for an empty collection).
+ * Throws with a descriptive error on invalid input.
+ */
+export function parseCCC(xml: string): CDLEntry[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+
+  // Check for parse errors
+  const parseError = doc.querySelector('parsererror');
+  if (parseError) {
+    throw new Error(`Invalid XML: ${parseError.textContent}`);
+  }
+
+  const root = doc.documentElement;
+  const localName = root.localName || root.nodeName.split(':').pop()!;
+  if (localName !== 'ColorCorrectionCollection') {
+    throw new Error(
+      `Expected <ColorCorrectionCollection> root element, got <${root.nodeName}>`
+    );
+  }
+
+  const corrections = root.querySelectorAll('ColorCorrection');
+  const entries: CDLEntry[] = [];
+
+  for (let i = 0; i < corrections.length; i++) {
+    entries.push(parseColorCorrectionElement(corrections[i]!));
+  }
+
+  return entries;
 }
 
 /**

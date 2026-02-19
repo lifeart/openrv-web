@@ -163,10 +163,22 @@ describe('ExportControl', () => {
       expect(() => control.off('copyRequested', callback)).not.toThrow();
     });
 
+    it('EXPORT-U041b: sourceExportRequested listener can be registered', () => {
+      const callback = vi.fn();
+      control.on('sourceExportRequested', callback);
+      expect(() => control.off('sourceExportRequested', callback)).not.toThrow();
+    });
+
     it('EXPORT-U042: sequenceExportRequested listener can be registered', () => {
       const callback = vi.fn();
       control.on('sequenceExportRequested', callback);
       expect(() => control.off('sequenceExportRequested', callback)).not.toThrow();
+    });
+
+    it('EXPORT-U042b: videoExportRequested listener can be registered', () => {
+      const callback = vi.fn();
+      control.on('videoExportRequested', callback);
+      expect(() => control.off('videoExportRequested', callback)).not.toThrow();
     });
 
     it('EXPORT-U043: rvSessionExportRequested listener can be registered', () => {
@@ -305,5 +317,255 @@ describe('ExportControl export request structure', () => {
     const [request] = callback.mock.calls[0];
     expect(request.quality).toBeGreaterThan(0);
     expect(request.quality).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('ExportControl Escape key handling (M-14)', () => {
+  let control: ExportControl;
+
+  beforeEach(() => {
+    control = new ExportControl();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    const el = control.render();
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  });
+
+  function getExportButton(): HTMLButtonElement {
+    return control.render().querySelector('button') as HTMLButtonElement;
+  }
+
+  it('EXPORT-M14a: pressing Escape while the dropdown is open should close it', () => {
+    const button = getExportButton();
+    button.click();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('EXPORT-M14b: pressing Escape while the dropdown is closed should have no effect', () => {
+    const button = getExportButton();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('EXPORT-M14c: the keydown listener should be removed when the dropdown closes', () => {
+    const spy = vi.spyOn(document, 'removeEventListener');
+
+    const button = getExportButton();
+    button.click(); // open
+    button.click(); // close
+
+    expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+    spy.mockRestore();
+  });
+
+  it('EXPORT-M14d: the keydown listener should be removed on dispose', () => {
+    const spy = vi.spyOn(document, 'removeEventListener');
+
+    const button = getExportButton();
+    button.click(); // open
+    control.dispose();
+
+    expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+    spy.mockRestore();
+  });
+});
+
+describe('ExportControl keyboard accessibility', () => {
+  let control: ExportControl;
+
+  beforeEach(() => {
+    control = new ExportControl();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    const el = control.render();
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  });
+
+  function getExportButton(): HTMLButtonElement {
+    return control.render().querySelector('button') as HTMLButtonElement;
+  }
+
+  function openDropdown(): void {
+    getExportButton().click();
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('.export-dropdown') as HTMLElement;
+  }
+
+  function getMenuItems(): HTMLElement[] {
+    const dropdown = getDropdown();
+    return dropdown ? Array.from(dropdown.querySelectorAll('[role="menuitem"]')) : [];
+  }
+
+  it('EXP-H10a: export menu items should be focusable via Tab key', () => {
+    openDropdown();
+    const items = getMenuItems();
+
+    expect(items.length).toBeGreaterThan(0);
+
+    // All menu items should be button elements (natively focusable)
+    items.forEach((item) => {
+      expect(item.tagName).toBe('BUTTON');
+    });
+
+    // Each item should have tabIndex -1 (focus managed programmatically)
+    items.forEach((item) => {
+      expect(item.tabIndex).toBe(-1);
+    });
+
+    // The first item should receive focus when menu opens
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it('EXP-H10b: export menu should support ArrowUp/ArrowDown navigation between items', () => {
+    openDropdown();
+    const items = getMenuItems();
+    const dropdown = getDropdown();
+
+    // First item is focused on open
+    expect(document.activeElement).toBe(items[0]);
+
+    // ArrowDown moves to the next item
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(items[1]);
+
+    // ArrowDown again moves to the third item
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(items[2]);
+
+    // ArrowUp moves back to second item
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(items[1]);
+
+    // ArrowUp moves back to first item
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(items[0]);
+
+    // ArrowUp from first item wraps to last item
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(items[items.length - 1]);
+
+    // ArrowDown from last item wraps to first item
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it('EXP-H10c: pressing Enter on a focused menu item should trigger its action', () => {
+    const callback = vi.fn();
+    control.on('exportRequested', callback);
+
+    openDropdown();
+    const items = getMenuItems();
+
+    // First item is "Save as PNG" - click it via Enter (which triggers click on button)
+    const firstItem = items[0] as HTMLButtonElement;
+    expect(document.activeElement).toBe(firstItem);
+    firstItem.click();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'png' })
+    );
+  });
+
+  it('EXP-H10c-2: selecting source export item should emit sourceExportRequested', () => {
+    const callback = vi.fn();
+    control.on('sourceExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const sourceItem = Array.from(dropdown.querySelectorAll('button'))
+      .find((btn) => btn.textContent?.includes('Save Source as PNG')) as HTMLButtonElement | undefined;
+
+    expect(sourceItem).toBeDefined();
+    sourceItem!.click();
+
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'png' })
+    );
+  });
+
+  it('EXP-H10c-3: selecting video export item should emit videoExportRequested', () => {
+    const callback = vi.fn();
+    control.on('videoExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const videoItem = Array.from(dropdown.querySelectorAll('button'))
+      .find((btn) => btn.textContent?.includes('Export MP4 In/Out Range')) as HTMLButtonElement | undefined;
+
+    expect(videoItem).toBeDefined();
+    videoItem!.click();
+
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ useInOutRange: true, includeAnnotations: true })
+    );
+  });
+
+  it('EXP-H10d: export button should have aria-haspopup="menu" attribute', () => {
+    const button = getExportButton();
+    expect(button.getAttribute('aria-haspopup')).toBe('menu');
+  });
+
+  it('EXP-H10e: export button should toggle aria-expanded when menu opens/closes', () => {
+    const button = getExportButton();
+
+    // Initially closed
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+
+    // Open the dropdown
+    button.click();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+
+    // Close the dropdown
+    button.click();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('EXP-H10f: export dropdown container should have role="menu" attribute', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    expect(dropdown.getAttribute('role')).toBe('menu');
+  });
+
+  it('EXP-M15e: export dropdown should have aria-label attribute', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    expect(dropdown.getAttribute('aria-label')).toBe('Export Settings');
+  });
+
+  it('EXP-H10g: pressing Escape should close the export menu', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const button = getExportButton();
+
+    // Dropdown should be visible
+    expect(dropdown.style.display).toBe('block');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+
+    // Press Escape
+    dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    // Dropdown should be hidden
+    expect(dropdown.style.display).toBe('none');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 });

@@ -54,6 +54,8 @@ const REQUIRED_METHODS: (keyof RendererBackend)[] = [
   'createTexture',
   'deleteTexture',
   'getContext',
+  'setPremultMode',
+  'getPremultMode',
 ];
 
 describe('RendererBackend interface compliance', () => {

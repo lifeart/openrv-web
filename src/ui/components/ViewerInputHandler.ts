@@ -96,6 +96,9 @@ export class ViewerInputHandler {
   // Drop zone overlay
   private dropOverlay: HTMLElement;
 
+  // Text input overlay state
+  private activeTextOverlay: HTMLTextAreaElement | null = null;
+
   constructor(
     private ctx: ViewerInputContext,
     dropOverlay: HTMLElement,
@@ -144,6 +147,9 @@ export class ViewerInputHandler {
     container.removeEventListener('dragover', this.onDragOver);
     container.removeEventListener('drop', this.onDrop);
     container.removeEventListener('contextmenu', this.onContextMenu);
+
+    // Clean up any active text input overlay
+    this.dismissTextOverlay(false);
   }
 
   // ======================================================================
@@ -263,10 +269,7 @@ export class ViewerInputHandler {
       } else if (tool === 'text') {
         const point = this.getCanvasPoint(e.clientX, e.clientY);
         if (point) {
-          const text = prompt('Enter text:');
-          if (text) {
-            paintEngine.addText(session.currentFrame, point, text);
-          }
+          this.showTextInputOverlay(e.clientX, e.clientY, point);
         }
       } else if (this.isShapeTool(tool)) {
         const point = this.getCanvasPoint(e.clientX, e.clientY);
@@ -562,6 +565,127 @@ export class ViewerInputHandler {
   };
 
   // ======================================================================
+  // Text input overlay
+  // ======================================================================
+
+  private showTextInputOverlay(clientX: number, clientY: number, point: StrokePoint): void {
+    // Dismiss any existing overlay first (commit its text)
+    if (this.activeTextOverlay) {
+      this.dismissTextOverlay(true);
+    }
+
+    const container = this.ctx.getContainer();
+    const containerRect = this.ctx.getContainerRect();
+
+    // Position relative to the container
+    const left = clientX - containerRect.left;
+    const top = clientY - containerRect.top;
+
+    const textarea = document.createElement('textarea');
+    textarea.dataset.testid = 'text-input-overlay';
+    textarea.style.cssText = `
+      position: absolute;
+      left: ${left}px;
+      top: ${top}px;
+      min-width: 120px;
+      min-height: 40px;
+      padding: 4px 6px;
+      font-family: sans-serif;
+      font-size: 14px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 3px;
+      outline: none;
+      resize: both;
+      z-index: 1000;
+      white-space: pre-wrap;
+      overflow: auto;
+    `;
+
+    // Store the canvas point for later use when committing
+    (textarea as HTMLTextAreaElement & { _canvasPoint: StrokePoint })._canvasPoint = point;
+
+    let committed = false;
+    const commit = (): void => {
+      if (committed) return;
+      committed = true;
+      const text = textarea.value.trim();
+      if (text) {
+        const paintEngine = this.ctx.getPaintEngine();
+        const session = this.ctx.getSession();
+        const canvasPoint = (textarea as HTMLTextAreaElement & { _canvasPoint: StrokePoint })._canvasPoint;
+        paintEngine.addText(session.currentFrame, canvasPoint, text);
+        this.ctx.renderPaint();
+      }
+      this.removeTextOverlay();
+    };
+
+    const cancel = (): void => {
+      if (committed) return;
+      committed = true;
+      this.removeTextOverlay();
+    };
+
+    textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cancel();
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        commit();
+      }
+    });
+
+    textarea.addEventListener('blur', () => {
+      // Use a microtask to allow Escape keydown to fire before blur commits
+      queueMicrotask(() => {
+        if (!committed) {
+          commit();
+        }
+      });
+    });
+
+    // Prevent pointer events on the textarea from triggering pan/paint
+    textarea.addEventListener('pointerdown', (e: PointerEvent) => {
+      e.stopPropagation();
+    });
+
+    container.appendChild(textarea);
+    this.activeTextOverlay = textarea;
+
+    // Auto-focus after appending to DOM
+    textarea.focus();
+  }
+
+  private removeTextOverlay(): void {
+    if (this.activeTextOverlay && this.activeTextOverlay.parentNode) {
+      this.activeTextOverlay.parentNode.removeChild(this.activeTextOverlay);
+    }
+    this.activeTextOverlay = null;
+  }
+
+  private dismissTextOverlay(commitText: boolean): void {
+    if (!this.activeTextOverlay) return;
+
+    if (commitText) {
+      const text = this.activeTextOverlay.value.trim();
+      if (text) {
+        const paintEngine = this.ctx.getPaintEngine();
+        const session = this.ctx.getSession();
+        const canvasPoint = (this.activeTextOverlay as HTMLTextAreaElement & { _canvasPoint: StrokePoint })._canvasPoint;
+        if (canvasPoint) {
+          paintEngine.addText(session.currentFrame, canvasPoint, text);
+          this.ctx.renderPaint();
+        }
+      }
+    }
+    this.removeTextOverlay();
+  }
+
+  // ======================================================================
   // Paint: live stroke rendering
   // ======================================================================
 
@@ -577,7 +701,19 @@ export class ViewerInputHandler {
     const paintRenderer = this.ctx.getPaintRenderer();
     const session = this.ctx.getSession();
     const dpr = window.devicePixelRatio || 1;
-    const renderOptions = { width: dw, height: dh, dpr };
+    const parsePx = (value: string): number => {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const renderOptions = {
+      width: dw,
+      height: dh,
+      canvasWidth: paintCanvas.width / dpr,
+      canvasHeight: paintCanvas.height / dpr,
+      offsetX: -Math.min(0, parsePx(paintCanvas.style.left)),
+      offsetY: -Math.min(0, parsePx(paintCanvas.style.top)),
+      dpr,
+    };
 
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     paintRenderer.renderAnnotations(annotations, renderOptions);
@@ -613,7 +749,19 @@ export class ViewerInputHandler {
     const paintRenderer = this.ctx.getPaintRenderer();
     const session = this.ctx.getSession();
     const dpr = window.devicePixelRatio || 1;
-    const renderOptions = { width: dw, height: dh, dpr };
+    const parsePx = (value: string): number => {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const renderOptions = {
+      width: dw,
+      height: dh,
+      canvasWidth: paintCanvas.width / dpr,
+      canvasHeight: paintCanvas.height / dpr,
+      offsetX: -Math.min(0, parsePx(paintCanvas.style.left)),
+      offsetY: -Math.min(0, parsePx(paintCanvas.style.top)),
+      dpr,
+    };
 
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     paintRenderer.renderAnnotations(annotations, renderOptions);

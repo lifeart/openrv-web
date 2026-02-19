@@ -9,10 +9,18 @@ import { PaintRenderer } from '../../paint/PaintRenderer';
 import { Transform2D } from './TransformControl';
 import { CropRegion } from './CropControl';
 import {
+  drawWithTransform,
   drawWithTransformFill,
   isFullCropRegion,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
+import {
+  compositeTimecodeFrameburn,
+  compositeFrameburn,
+  type FrameburnTimecodeOptions,
+  type FrameburnConfig,
+  type FrameburnContext,
+} from './FrameburnCompositor';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 
 /**
@@ -82,6 +90,27 @@ interface ExportParams {
   crop: { x: number; y: number } | null;
 }
 
+function getSourceElementForFrame(session: Session): CanvasImageSource | null {
+  const source = session.currentSource;
+  if (!source) return null;
+
+  const frame = session.currentFrame;
+  if (source.type === 'sequence') {
+    return session.getSequenceFrameSync(frame) ?? source.element ?? null;
+  }
+
+  if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+    const frameCanvas = session.getVideoFrameCanvas(frame);
+    if (frameCanvas) return frameCanvas;
+  }
+
+  if (source.fileSourceNode) {
+    return source.fileSourceNode.getCanvas() ?? source.fileSourceNode.getElement(0) ?? null;
+  }
+
+  return source.element ?? null;
+}
+
 /**
  * Compute export parameters from source dimensions, transform, and crop region.
  */
@@ -137,10 +166,16 @@ export function createExportCanvas(
   includeAnnotations: boolean,
   transform?: Transform2D,
   cropRegion?: CropRegion,
-  colorSpace?: 'srgb' | 'display-p3'
+  colorSpace?: 'srgb' | 'display-p3',
+  frameburnOptions?: FrameburnTimecodeOptions | null,
+  frameburnConfig?: FrameburnConfig | null,
+  frameburnContext?: FrameburnContext | null
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
-  if (!source?.element) return null;
+  if (!source) return null;
+
+  const element = getSourceElementForFrame(session);
+  if (!element) return null;
 
   const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } =
     computeExportParams(source.width, source.height, transform, cropRegion);
@@ -156,15 +191,13 @@ export function createExportCanvas(
   ctx.filter = filterString;
 
   // Draw image with optional transforms and crop
-  if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-    drawElementWithTransformAndCrop(
-      ctx, source.element,
-      source.width, source.height,
-      effectiveWidth, effectiveHeight,
-      outputWidth, outputHeight,
-      transform, crop, filterString
-    );
-  }
+  drawElementWithTransformAndCrop(
+    ctx, element,
+    source.width, source.height,
+    effectiveWidth, effectiveHeight,
+    outputWidth, outputHeight,
+    transform, crop, filterString
+  );
 
   // Reset filter for annotations
   ctx.filter = 'none';
@@ -188,6 +221,39 @@ export function createExportCanvas(
     }
   }
 
+  // Composite frameburn last so it stays readable over annotations.
+  compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
+  if (frameburnConfig && frameburnContext) {
+    compositeFrameburn(ctx, outputWidth, outputHeight, frameburnConfig, frameburnContext);
+  }
+
+  return canvas;
+}
+
+/**
+ * Create an export canvas for the underlying source frame (without display transforms,
+ * view filters, crop, or annotations). This matches OpenRV's
+ * `exportCurrentSourceFrame` behavior more closely than createExportCanvas().
+ */
+export function createSourceExportCanvas(
+  session: Session,
+  colorSpace?: 'srgb' | 'display-p3'
+): HTMLCanvasElement | null {
+  const source = session.currentSource;
+  if (!source) return null;
+
+  const element = getSourceElementForFrame(session);
+  if (!element) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = safeCanvasContext2D(canvas, {}, colorSpace === 'display-p3' ? 'display-p3' : undefined);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(element, 0, 0, source.width, source.height);
+
   return canvas;
 }
 
@@ -205,7 +271,10 @@ export async function renderFrameToCanvas(
   filterString: string,
   includeAnnotations: boolean,
   cropRegion?: CropRegion,
-  colorSpace?: 'srgb' | 'display-p3'
+  colorSpace?: 'srgb' | 'display-p3',
+  frameburnOptions?: FrameburnTimecodeOptions | null,
+  frameburnConfig?: FrameburnConfig | null,
+  frameburnContext?: FrameburnContext | null
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -222,8 +291,11 @@ export async function renderFrameToCanvas(
       await session.getSequenceFrameImage(frame);
     }
 
-    // For video, seek and wait
-    if (source.type === 'video' && source.element instanceof HTMLVideoElement) {
+    // For mediabunny video, fetch the decoded frame
+    if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      await session.fetchCurrentVideoFrame(frame);
+    } else if (source.type === 'video' && source.element instanceof HTMLVideoElement) {
+      // For non-mediabunny video, seek the HTMLVideoElement and wait
       const video = source.element;
       const targetTime = (frame - 1) / session.fps;
       if (Math.abs(video.currentTime - targetTime) > 0.01) {
@@ -239,9 +311,13 @@ export async function renderFrameToCanvas(
     }
 
     // Get the element to render
-    let element: HTMLImageElement | HTMLVideoElement | undefined;
+    let element: CanvasImageSource | undefined;
     if (source.type === 'sequence') {
       element = session.getSequenceFrameSync(frame) ?? undefined;
+    } else if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      element = session.getVideoFrameCanvas(frame) ?? undefined;
+    } else if (source.fileSourceNode) {
+      element = source.fileSourceNode.getCanvas() ?? source.fileSourceNode.getElement(0) ?? undefined;
     } else {
       element = source.element;
     }
@@ -294,6 +370,12 @@ export async function renderFrameToCanvas(
       }
     }
 
+    // Composite frameburn last so it stays readable over annotations.
+    compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
+    if (frameburnConfig && frameburnContext) {
+      compositeFrameburn(ctx, outputWidth, outputHeight, frameburnConfig, frameburnContext);
+    }
+
     return canvas;
   } finally {
     // Restore original frame
@@ -308,10 +390,35 @@ export function renderSourceToImageData(
   session: Session,
   sourceIndex: number,
   width: number,
-  height: number
+  height: number,
+  transform?: Transform2D,
 ): ImageData | null {
   const source = session.getSourceByIndex(sourceIndex);
-  if (!source?.element) return null;
+  if (!source) return null;
+
+  const frame = session.currentFrame;
+  let element: CanvasImageSource | null = source.element ?? null;
+
+  // Use sequence frame image for the current frame when available.
+  if (source.type === 'sequence' && source.sequenceFrames) {
+    const seqFrame = source.sequenceFrames[frame - 1]?.image;
+    if (seqFrame) {
+      element = seqFrame;
+    }
+  }
+
+  // Prefer mediabunny cached frame for frame-accurate A/B playback compare.
+  if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+    const frameCanvas = source.videoSourceNode.getCachedFrameCanvas(frame);
+    if (frameCanvas) {
+      element = frameCanvas;
+    } else {
+      // Queue async fetch for next render while falling back to current element.
+      source.videoSourceNode.getFrameAsync?.(frame).catch(() => {});
+    }
+  }
+
+  if (!element) return null;
 
   // Create temp canvas with willReadFrequently for getImageData performance
   const tempCanvas = document.createElement('canvas');
@@ -323,9 +430,14 @@ export function renderSourceToImageData(
   tempCtx.imageSmoothingEnabled = true;
   tempCtx.imageSmoothingQuality = 'high';
 
-  // Draw source element
-  if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-    tempCtx.drawImage(source.element, 0, 0, width, height);
+  const hasTransform = !!transform && (transform.rotation !== 0 || transform.flipH || transform.flipV);
+
+  // Draw source element with optional transform so compositing modes
+  // (blend/difference/stack) match the main viewer orientation.
+  if (hasTransform) {
+    drawWithTransform(tempCtx, element, width, height, transform!);
+  } else {
+    tempCtx.drawImage(element, 0, 0, width, height);
   }
 
   return tempCtx.getImageData(0, 0, width, height);

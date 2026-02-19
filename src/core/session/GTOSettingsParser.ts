@@ -9,9 +9,13 @@ import {
   getNumberValue,
   getNumberArray,
   getStringValue,
+  getStringArray,
 } from './AnnotationStore';
-import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
-import type { Transform2D, CropState } from '../../core/types/transform';
+import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
+import { DEFAULT_LINEARIZE_STATE, SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
+import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
+import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
@@ -68,7 +72,187 @@ export function parseInitialSettings(
     settings.scopes = scopes;
   }
 
+  const linearize = parseLinearize(dto);
+  if (linearize) {
+    settings.linearize = linearize;
+  }
+
+  const noiseReduction = parseNoiseReduction(dto);
+  if (noiseReduction) {
+    settings.noiseReduction = noiseReduction;
+  }
+
+  const uncrop = parseUncrop(dto);
+  if (uncrop) {
+    settings.uncrop = uncrop;
+  }
+
+  const outOfRange = parseOutOfRange(dto);
+  if (outOfRange !== undefined) {
+    settings.outOfRange = outOfRange;
+  }
+
+  const channelSwizzle = parseChannelSwizzle(dto);
+  if (channelSwizzle) {
+    settings.channelSwizzle = channelSwizzle;
+  }
+
   return Object.keys(settings).length > 0 ? settings : null;
+}
+
+/**
+ * Parse RVNoiseReduction settings and convert OpenRV scalar fields
+ * to the viewer's noise reduction parameter model.
+ */
+export function parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
+  const nodes = dto.byProtocol('RVNoiseReduction');
+  if (nodes.length === 0) return null;
+
+  const nodeComp = nodes.first().component('node');
+  if (!nodeComp?.exists()) return null;
+
+  const active = getNumberValue(nodeComp.property('active').value());
+  const amount = getNumberValue(nodeComp.property('amount').value());
+  const radius = getNumberValue(nodeComp.property('radius').value());
+  const threshold = getNumberValue(nodeComp.property('threshold').value());
+
+  if (
+    active === undefined &&
+    amount === undefined &&
+    radius === undefined &&
+    threshold === undefined
+  ) {
+    return null;
+  }
+
+  const strength = active === 0
+    ? 0
+    : Math.max(0, Math.min(100, Math.round((amount ?? 0) * 100)));
+  const radiusPx = Math.max(
+    1,
+    Math.min(5, Math.round(radius ?? DEFAULT_NOISE_REDUCTION_PARAMS.radius))
+  );
+  const luminanceStrength = Math.max(
+    0,
+    Math.min(100, Math.round(100 - ((threshold ?? 5) * 10)))
+  );
+  const chromaStrength = Math.max(
+    0,
+    Math.min(100, Math.round(Math.min(100, luminanceStrength * 1.5)))
+  );
+
+  return {
+    strength,
+    luminanceStrength,
+    chromaStrength,
+    radius: radiusPx,
+  };
+}
+
+/**
+ * Parse linearization settings from RVLinearize protocol nodes.
+ *
+ * Maps the OpenRV logtype integer to our LogCurveId system:
+ *   0 = none, 1 = Cineon, 2 = Viper (treated as Cineon with console warning), 3 = ARRI LogC3
+ *
+ * Also extracts sRGB2linear, Rec709ToLinear, fileGamma, and alphaType.
+ * Returns null when no RVLinearize node exists or all values are at defaults.
+ */
+export function parseLinearize(dto: GTODTO): LinearizeState | null {
+  const nodes = dto.byProtocol('RVLinearize');
+  if (nodes.length === 0) return null;
+
+  const node = nodes.first();
+
+  // Check node-level active flag
+  const nodeComp = node.component('node');
+  if (nodeComp?.exists()) {
+    const active = getNumberValue(nodeComp.property('active').value());
+    if (active !== undefined && active === 0) return null;
+  }
+
+  const colorComp = node.component('color');
+  if (!colorComp?.exists()) return null;
+
+  // Check color-level active flag
+  const colorActive = getNumberValue(colorComp.property('active').value());
+  if (colorActive !== undefined && colorActive === 0) return null;
+
+  const rawLogType = getNumberValue(colorComp.property('logtype').value()) ?? 0;
+  const sRGB2linear = getNumberValue(colorComp.property('sRGB2linear').value());
+  const rec709ToLinear = getNumberValue(colorComp.property('Rec709ToLinear').value());
+  const fileGamma = getNumberValue(colorComp.property('fileGamma').value());
+  const alphaType = getNumberValue(colorComp.property('alphaType').value());
+
+  // Map logtype: 0=none, 1=cineon, 2=viper, 3=logc3
+  let logType: 0 | 1 | 2 | 3 = 0;
+  if (rawLogType === 1) {
+    logType = 1;
+  } else if (rawLogType === 2) {
+    logType = 2;
+  } else if (rawLogType === 3) {
+    logType = 3;
+  }
+
+  const result: LinearizeState = {
+    logType,
+    sRGB2linear: sRGB2linear === 1,
+    rec709ToLinear: rec709ToLinear === 1,
+    fileGamma: typeof fileGamma === 'number' && Number.isFinite(fileGamma) ? fileGamma : 1.0,
+    alphaType: typeof alphaType === 'number' ? alphaType : 0,
+  };
+
+  // Return null if all values are at defaults (no actual linearize settings)
+  if (
+    result.logType === DEFAULT_LINEARIZE_STATE.logType &&
+    result.sRGB2linear === DEFAULT_LINEARIZE_STATE.sRGB2linear &&
+    result.rec709ToLinear === DEFAULT_LINEARIZE_STATE.rec709ToLinear &&
+    result.fileGamma === DEFAULT_LINEARIZE_STATE.fileGamma &&
+    result.alphaType === DEFAULT_LINEARIZE_STATE.alphaType
+  ) {
+    return null;
+  }
+
+  return result;
+}
+
+/**
+ * Sanitize a number: replace NaN and Infinity with a fallback value.
+ */
+function sanitizeNumber(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return value;
+}
+
+/**
+ * Extract a scalar value and optional per-channel RGB triple from a GTO property.
+ *
+ * If the property value is a number array with >= 3 elements, the first 3 are
+ * used as the per-channel triple. The scalar is still set from the first element
+ * to maintain backward compatibility. Arrays with 1 or 2 elements use the first
+ * element as the scalar. Empty arrays return undefined for both.
+ */
+function extractScalarAndRGB(
+  rawValue: unknown,
+  defaultScalar: number,
+): { scalar: number | undefined; rgb: [number, number, number] | undefined } {
+  const arr = getNumberArray(rawValue);
+  if (arr && arr.length >= 3) {
+    const r = sanitizeNumber(arr[0]!, defaultScalar);
+    const g = sanitizeNumber(arr[1]!, defaultScalar);
+    const b = sanitizeNumber(arr[2]!, defaultScalar);
+    return { scalar: r, rgb: [r, g, b] };
+  }
+  if (arr && arr.length >= 1) {
+    const scalar = sanitizeNumber(arr[0]!, defaultScalar);
+    return { scalar, rgb: undefined };
+  }
+  // Not an array — try as scalar
+  const scalar = getNumberValue(rawValue);
+  if (typeof scalar === 'number') {
+    return { scalar: sanitizeNumber(scalar, defaultScalar), rgb: undefined };
+  }
+  return { scalar: undefined, rgb: undefined };
 }
 
 /**
@@ -79,20 +263,63 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
   const colorNodes = dto.byProtocol('RVColor');
 
   if (colorNodes.length > 0) {
-    const colorComp = colorNodes.first().component('color');
+    const rvColorNode = colorNodes.first();
+    const colorComp = rvColorNode.component('color');
     if (colorComp?.exists()) {
-      const exposure = getNumberValue(colorComp.property('exposure').value());
-      const gamma = getNumberValue(colorComp.property('gamma').value());
-      const contrast = getNumberValue(colorComp.property('contrast').value());
-      const saturation = getNumberValue(colorComp.property('saturation').value());
-      const offset = getNumberValue(colorComp.property('offset').value());
+      // Exposure: default 0 (stops)
+      const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
+      if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
+      if (exposureResult.rgb) adjustments.exposureRGB = exposureResult.rgb;
 
-      if (typeof exposure === 'number') adjustments.exposure = exposure;
-      if (typeof gamma === 'number') adjustments.gamma = gamma;
-      if (typeof contrast === 'number') adjustments.contrast = contrast === 0 ? 1 : contrast;
+      // Gamma: default 1
+      const gammaResult = extractScalarAndRGB(colorComp.property('gamma').value(), 1);
+      if (typeof gammaResult.scalar === 'number') adjustments.gamma = gammaResult.scalar;
+      if (gammaResult.rgb) adjustments.gammaRGB = gammaResult.rgb;
+
+      // Contrast: default 1 (0 means identity in OpenRV, map to 1)
+      const contrastResult = extractScalarAndRGB(colorComp.property('contrast').value(), 1);
+      if (typeof contrastResult.scalar === 'number') {
+        adjustments.contrast = contrastResult.scalar === 0 ? 1 : contrastResult.scalar;
+      }
+      if (contrastResult.rgb) {
+        adjustments.contrastRGB = [
+          contrastResult.rgb[0] === 0 ? 1 : contrastResult.rgb[0],
+          contrastResult.rgb[1] === 0 ? 1 : contrastResult.rgb[1],
+          contrastResult.rgb[2] === 0 ? 1 : contrastResult.rgb[2],
+        ];
+      }
+
+      // Scale: default 1 (multiplicative, identity)
+      const scaleResult = extractScalarAndRGB(colorComp.property('scale').value(), 1);
+      if (typeof scaleResult.scalar === 'number') adjustments.scale = scaleResult.scalar;
+      if (scaleResult.rgb) adjustments.scaleRGB = scaleResult.rgb;
+
+      // Offset: default 0 (additive, identity)
+      // Per-channel float[3] → offsetRGB; scalar → offset (also used as brightness fallback)
+      const offsetResult = extractScalarAndRGB(colorComp.property('offset').value(), 0);
+      if (typeof offsetResult.scalar === 'number') adjustments.offset = offsetResult.scalar;
+      if (offsetResult.rgb) adjustments.offsetRGB = offsetResult.rgb;
+
+      const saturation = getNumberValue(colorComp.property('saturation').value());
+
       if (typeof saturation === 'number') adjustments.saturation = saturation;
-      if (typeof offset === 'number' && adjustments.brightness === undefined) {
-        adjustments.brightness = offset;
+      // Scalar offset doubles as brightness fallback when no explicit brightness is set
+      if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
+        adjustments.brightness = offsetResult.scalar;
+      }
+    }
+
+    // Extract luminanceLUT component (separate from 'color' component on RVColor node)
+    const lumLutComp = rvColorNode.component('luminanceLUT');
+    if (lumLutComp?.exists()) {
+      const active = getNumberValue(lumLutComp.property('active').value());
+      if (active != null && active !== 0) {
+        const lutArray = getNumberArray(lumLutComp.property('lut').value());
+        if (lutArray && lutArray.length > 0) {
+          const channels: 1 | 3 = (lutArray.length % 3 === 0) ? 3 : 1;
+          adjustments.inlineLUT = new Float32Array(lutArray);
+          adjustments.lutChannels = channels;
+        }
       }
     }
   }
@@ -246,7 +473,7 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   const cropRatioX = getNumberValue(warpComp.property('cropRatioX').value());
   const cropRatioY = getNumberValue(warpComp.property('cropRatioY').value());
 
-  const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic'] as const;
+  const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic', '3de4_anamorphic_degree_6'] as const;
   const parsedModel = validModels.includes(model as typeof validModels[number])
     ? (model as typeof validModels[number])
     : 'brown';
@@ -271,6 +498,60 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   if (center && center.length >= 2) {
     params.centerX = center[0]! - 0.5;
     params.centerY = center[1]! - 0.5;
+  }
+
+  // Parse 3DE4 anamorphic degree 6 coefficients
+  if (parsedModel === '3de4_anamorphic_degree_6') {
+    // X-direction coefficients
+    const cx02 = getNumberValue(warpComp.property('cx02').value());
+    const cx22 = getNumberValue(warpComp.property('cx22').value());
+    const cx04 = getNumberValue(warpComp.property('cx04').value());
+    const cx24 = getNumberValue(warpComp.property('cx24').value());
+    const cx44 = getNumberValue(warpComp.property('cx44').value());
+    const cx06 = getNumberValue(warpComp.property('cx06').value());
+    const cx26 = getNumberValue(warpComp.property('cx26').value());
+    const cx46 = getNumberValue(warpComp.property('cx46').value());
+    const cx66 = getNumberValue(warpComp.property('cx66').value());
+
+    // Y-direction coefficients
+    const cy02 = getNumberValue(warpComp.property('cy02').value());
+    const cy22 = getNumberValue(warpComp.property('cy22').value());
+    const cy04 = getNumberValue(warpComp.property('cy04').value());
+    const cy24 = getNumberValue(warpComp.property('cy24').value());
+    const cy44 = getNumberValue(warpComp.property('cy44').value());
+    const cy06 = getNumberValue(warpComp.property('cy06').value());
+    const cy26 = getNumberValue(warpComp.property('cy26').value());
+    const cy46 = getNumberValue(warpComp.property('cy46').value());
+    const cy66 = getNumberValue(warpComp.property('cy66').value());
+
+    // Optional parameters
+    const lensRotation = getNumberValue(warpComp.property('lensRotation').value());
+    const squeeze_x = getNumberValue(warpComp.property('squeeze_x').value());
+    const squeeze_y = getNumberValue(warpComp.property('squeeze_y').value());
+
+    if (cx02 !== undefined) params.cx02 = cx02;
+    if (cx22 !== undefined) params.cx22 = cx22;
+    if (cx04 !== undefined) params.cx04 = cx04;
+    if (cx24 !== undefined) params.cx24 = cx24;
+    if (cx44 !== undefined) params.cx44 = cx44;
+    if (cx06 !== undefined) params.cx06 = cx06;
+    if (cx26 !== undefined) params.cx26 = cx26;
+    if (cx46 !== undefined) params.cx46 = cx46;
+    if (cx66 !== undefined) params.cx66 = cx66;
+
+    if (cy02 !== undefined) params.cy02 = cy02;
+    if (cy22 !== undefined) params.cy22 = cy22;
+    if (cy04 !== undefined) params.cy04 = cy04;
+    if (cy24 !== undefined) params.cy24 = cy24;
+    if (cy44 !== undefined) params.cy44 = cy44;
+    if (cy06 !== undefined) params.cy06 = cy06;
+    if (cy26 !== undefined) params.cy26 = cy26;
+    if (cy46 !== undefined) params.cy46 = cy46;
+    if (cy66 !== undefined) params.cy66 = cy66;
+
+    if (lensRotation !== undefined) params.lensRotation = lensRotation;
+    if (squeeze_x !== undefined) params.squeeze_x = squeeze_x;
+    if (squeeze_y !== undefined) params.squeeze_y = squeeze_y;
   }
 
   return params;
@@ -430,4 +711,128 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
   }
 
   return null;
+}
+
+/**
+ * Parse uncrop settings from RVFormat protocol nodes.
+ *
+ * Extracts the `uncrop` component which contains:
+ *   - active: 0 or 1
+ *   - x, y: offset of data window inside display window
+ *   - width, height: display window dimensions
+ *
+ * Returns null when:
+ *   - No RVFormat node exists
+ *   - No uncrop component exists
+ *   - active is 0 or undefined
+ *   - width or height is <= 0
+ */
+export function parseUncrop(dto: GTODTO): UncropState | null {
+  const nodes = dto.byProtocol('RVFormat');
+  if (nodes.length === 0) return null;
+
+  const uncropComp = nodes.first().component('uncrop');
+  if (!uncropComp?.exists()) return null;
+
+  const active = getNumberValue(uncropComp.property('active').value());
+  if (active !== 1) return null;
+
+  const x = getNumberValue(uncropComp.property('x').value()) ?? 0;
+  const y = getNumberValue(uncropComp.property('y').value()) ?? 0;
+  const width = getNumberValue(uncropComp.property('width').value()) ?? 0;
+  const height = getNumberValue(uncropComp.property('height').value()) ?? 0;
+
+  // Treat non-positive dimensions as inactive
+  if (width <= 0 || height <= 0) return null;
+
+  return { active: true, x, y, width, height };
+}
+
+/**
+ * Parse out-of-range visualization mode from RVDisplayColor protocol nodes.
+ *
+ * OpenRV stores `color.outOfRange` as a boolean integer (0 or 1).
+ * We map:
+ *   - GTO value 0 -> mode 0 (off)
+ *   - GTO value 1 -> mode 2 (highlight, the OpenRV default behavior)
+ *
+ * Returns the mode number, or undefined if no RVDisplayColor node exists
+ * or the property is absent (meaning default mode 0).
+ */
+export function parseOutOfRange(dto: GTODTO): number | undefined {
+  const nodes = dto.byProtocol('RVDisplayColor');
+  if (nodes.length === 0) return undefined;
+
+  const displayComp = nodes.first().component('color');
+  if (!displayComp?.exists()) return undefined;
+
+  const rawValue = getNumberValue(displayComp.property('outOfRange').value());
+  if (rawValue === undefined) return undefined;
+
+  // GTO boolean: 1 = highlight mode (mode 2), 0 = off (mode 0)
+  return rawValue === 1 ? 2 : 0;
+}
+
+/**
+ * Map a channel name string to its swizzle index.
+ *
+ * "R" → 0, "G" → 1, "B" → 2, "A" → 3
+ * "0" / "zero" → SWIZZLE_ZERO (4, constant 0.0)
+ * "1" / "one"  → SWIZZLE_ONE  (5, constant 1.0)
+ * Unknown → returns the defaultIndex (original channel position)
+ */
+export function channelNameToSwizzleIndex(name: string, defaultIndex: number): number {
+  switch (name.toUpperCase()) {
+    case 'R': return 0;
+    case 'G': return 1;
+    case 'B': return 2;
+    case 'A': return 3;
+    case '0':
+    case 'ZERO': return SWIZZLE_ZERO;
+    case '1':
+    case 'ONE': return SWIZZLE_ONE;
+    default: return defaultIndex;
+  }
+}
+
+/**
+ * Parse channel swizzle from RVChannelMap protocol nodes.
+ *
+ * GTO format: `format.channels` is a string array like `["B", "G", "R", "A"]`
+ * defining how input channels map to output: output[0]=B, output[1]=G, etc.
+ *
+ * Returns null when no RVChannelMap node exists or when the mapping is identity.
+ */
+export function parseChannelSwizzle(dto: GTODTO): ChannelSwizzle | null {
+  const nodes = dto.byProtocol('RVChannelMap');
+  if (nodes.length === 0) return null;
+
+  const node = nodes.first();
+
+  // Check node-level active flag
+  const nodeComp = node.component('node');
+  if (nodeComp?.exists()) {
+    const active = getNumberValue(nodeComp.property('active').value());
+    if (active !== undefined && active === 0) return null;
+  }
+
+  const formatComp = node.component('format');
+  if (!formatComp?.exists()) return null;
+
+  const channelNames = getStringArray(formatComp.property('channels').value());
+  if (!channelNames || channelNames.length === 0) return null;
+
+  // Build the swizzle: for each output position, which source channel to read
+  const swizzle: ChannelSwizzle = [0, 1, 2, 3]; // identity default
+  const len = Math.min(channelNames.length, 4);
+  for (let i = 0; i < len; i++) {
+    swizzle[i] = channelNameToSwizzleIndex(channelNames[i]!, i);
+  }
+
+  // Return null if the result is identity (no-op)
+  if (swizzle[0] === 0 && swizzle[1] === 1 && swizzle[2] === 2 && swizzle[3] === 3) {
+    return null;
+  }
+
+  return swizzle;
 }

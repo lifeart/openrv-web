@@ -23,6 +23,9 @@ import type { FilterControl } from './ui/components/FilterControl';
 import type { TransformControl } from './ui/components/TransformControl';
 import type { CropControl } from './ui/components/CropControl';
 import type { LensControl } from './ui/components/LensControl';
+import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
+import type { WatermarkControl } from './ui/components/WatermarkControl';
+import type { PlaylistManager } from './core/session/PlaylistManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
 
 /**
@@ -43,6 +46,9 @@ export interface PersistenceManagerContext {
   transformControl: TransformControl;
   cropControl: CropControl;
   lensControl: LensControl;
+  noiseReductionControl?: NoiseReductionControl;
+  watermarkControl?: WatermarkControl;
+  playlistManager?: PlaylistManager;
 }
 
 export class AppPersistenceManager {
@@ -105,6 +111,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       )
@@ -123,6 +130,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       );
@@ -143,6 +151,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       );
@@ -167,6 +176,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       );
@@ -181,7 +191,8 @@ export class AppPersistenceManager {
    */
   async restoreSnapshot(id: string): Promise<void> {
     const { session, paintEngine, viewer, snapshotManager, snapshotPanel,
-            colorControls, cdlControl, filterControl, transformControl, cropControl, lensControl } = this.ctx;
+            colorControls, cdlControl, filterControl, transformControl, cropControl, lensControl,
+            noiseReductionControl, watermarkControl } = this.ctx;
     try {
       const state = await snapshotManager.getSnapshot(id);
       if (!state) {
@@ -199,6 +210,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         }
       );
 
@@ -209,6 +221,8 @@ export class AppPersistenceManager {
       if (state.transform) transformControl.setTransform(state.transform);
       if (state.crop) cropControl.setState(state.crop);
       if (state.lens) lensControl.setParams(state.lens);
+      if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+      if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
 
       // Close the panel
       snapshotPanel.hide();
@@ -232,6 +246,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         'project'
       );
@@ -277,6 +292,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         }
       );
 
@@ -362,7 +378,8 @@ export class AppPersistenceManager {
    */
   private async recoverAutoSave(id: string): Promise<void> {
     const { autoSaveManager, session, paintEngine, viewer,
-            colorControls, cdlControl, filterControl, transformControl, cropControl, lensControl } = this.ctx;
+            colorControls, cdlControl, filterControl, transformControl, cropControl, lensControl,
+            noiseReductionControl, watermarkControl } = this.ctx;
     try {
       const state = await autoSaveManager.getAutoSave(id);
       if (state) {
@@ -370,6 +387,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         });
 
         // Update UI controls with restored state
@@ -379,6 +397,8 @@ export class AppPersistenceManager {
         transformControl.setTransform(state.transform);
         cropControl.setState(state.crop);
         lensControl.setParams(state.lens);
+        if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+        if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
         // Note: wipe state is restored via viewer.setWipeState in SessionSerializer.fromJSON
 
         if (warnings.length > 0) {

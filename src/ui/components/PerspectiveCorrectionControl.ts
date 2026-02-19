@@ -26,6 +26,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
   private cornerInputs: Map<string, HTMLInputElement> = new Map();
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -50,6 +51,8 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     this.button.innerHTML = `${getIconSvg('grid', 'sm')}<span style="margin-left: 6px;">Perspective</span>`;
     this.button.dataset.testid = 'perspective-control-button';
     this.button.title = 'Perspective correction';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -85,6 +88,8 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     this.panel = document.createElement('div');
     this.panel.className = 'perspective-panel';
     this.panel.dataset.testid = 'perspective-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Perspective Correction Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -102,6 +107,13 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
 
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hide();
+      }
+    };
   }
 
   private handleDocumentClick(e: MouseEvent): void {
@@ -153,6 +165,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     this.enabledCheckbox = document.createElement('input');
     this.enabledCheckbox.type = 'checkbox';
     this.enabledCheckbox.checked = this.params.enabled;
+    this.enabledCheckbox.id = 'perspective-enabled-checkbox';
     this.enabledCheckbox.dataset.testid = 'perspective-enabled-checkbox';
     this.enabledCheckbox.style.cssText = 'cursor: pointer;';
     this.enabledCheckbox.addEventListener('change', () => {
@@ -161,9 +174,9 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     });
 
     const enabledLabel = document.createElement('label');
+    enabledLabel.htmlFor = 'perspective-enabled-checkbox';
     enabledLabel.textContent = 'Enabled';
     enabledLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer;';
-    enabledLabel.addEventListener('click', () => { this.enabledCheckbox!.click(); });
 
     enabledRow.appendChild(this.enabledCheckbox);
     enabledRow.appendChild(enabledLabel);
@@ -269,7 +282,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       font-size: 11px;
     `;
 
-    input.addEventListener('change', () => {
+    input.addEventListener('input', () => {
       const val = parseFloat(input.value);
       if (!isNaN(val)) {
         onChange(Math.max(-0.5, Math.min(1.5, val)));
@@ -315,13 +328,23 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     this.panel.style.left = `${Math.max(8, rect.right - 280)}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    this.enabledCheckbox?.focus();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.button.focus();
   }
 
   reset(): void {
@@ -383,6 +406,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

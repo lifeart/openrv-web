@@ -8,6 +8,10 @@
 import type { GTODTO } from 'gto-js';
 import { Graph } from '../graph/Graph';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
+import type { Note } from './NoteManager';
+import type { VersionGroup, VersionEntry } from './VersionManager';
+import { VALID_STATUSES } from './StatusManager';
+import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
 
 /**
@@ -70,6 +74,12 @@ export interface GTOParseResult {
     origin?: string;
     /** Contained node names (membership) */
     membershipContains?: string[];
+    /** Notes/comments */
+    notes?: Note[];
+    /** Version groups */
+    versionGroups?: VersionGroup[];
+    /** Shot statuses */
+    statuses?: StatusEntry[];
   };
 }
 
@@ -85,6 +95,7 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVImageSource: 'RVFileSource',
   RVMovieSource: 'RVVideoSource',
   RVSequenceSource: 'RVSequenceSource',
+  RVMovieProc: 'RVMovieProc',
 
   // Group nodes (containers)
   RVSequenceGroup: 'RVSequenceGroup',
@@ -375,18 +386,215 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (typeof ghostBefore === 'number') sessionInfo.paintEffects.ghostBefore = ghostBefore;
       if (typeof ghostAfter === 'number') sessionInfo.paintEffects.ghostAfter = ghostAfter;
     }
+
+    // Notes component
+    const notesComp = session.component('notes');
+    if (notesComp?.exists()) {
+      const totalNotes = notesComp.property('totalNotes').value() as number;
+      if (typeof totalNotes === 'number' && totalNotes > 0) {
+        const notes: Note[] = [];
+        for (let i = 1; i <= totalNotes; i++) {
+          const p = `note_${String(i).padStart(3, '0')}`;
+          const id = notesComp.property(`${p}_id`).value() as string;
+          const sourceIndex = notesComp.property(`${p}_sourceIndex`).value() as number;
+          const frameStart = notesComp.property(`${p}_frameStart`).value() as number;
+          const frameEnd = notesComp.property(`${p}_frameEnd`).value() as number;
+          const text = notesComp.property(`${p}_text`).value() as string;
+          const author = notesComp.property(`${p}_author`).value() as string;
+          const createdAt = notesComp.property(`${p}_createdAt`).value() as string;
+          const modifiedAt = notesComp.property(`${p}_modifiedAt`).value() as string;
+          const status = notesComp.property(`${p}_status`).value() as string;
+          const parentId = notesComp.property(`${p}_parentId`).value() as string;
+          const color = notesComp.property(`${p}_color`).value() as string;
+
+          if (typeof id === 'string' && id.length > 0) {
+            notes.push({
+              id,
+              sourceIndex: typeof sourceIndex === 'number' ? sourceIndex : 0,
+              frameStart: typeof frameStart === 'number' ? frameStart : 1,
+              frameEnd: typeof frameEnd === 'number' ? frameEnd : 1,
+              text: typeof text === 'string' ? text : '',
+              author: typeof author === 'string' ? author : '',
+              createdAt: typeof createdAt === 'string' ? createdAt : '',
+              modifiedAt: typeof modifiedAt === 'string' ? modifiedAt : '',
+              status: (status === 'open' || status === 'resolved' || status === 'wontfix') ? status : 'open',
+              parentId: (typeof parentId === 'string' && parentId.length > 0) ? parentId : null,
+              color: typeof color === 'string' ? color : '#fbbf24',
+            });
+          }
+        }
+        if (notes.length > 0) {
+          sessionInfo.notes = notes;
+        }
+      }
+    }
+
+    // Versions component
+    const versionsComp = session.component('versions');
+    if (versionsComp?.exists()) {
+      const groupCount = versionsComp.property('groupCount').value() as number;
+      if (typeof groupCount === 'number' && groupCount > 0) {
+        const versionGroups: VersionGroup[] = [];
+        for (let g = 0; g < groupCount; g++) {
+          const gp = `group_${String(g).padStart(3, '0')}`;
+          const id = versionsComp.property(`${gp}_id`).value() as string;
+          const shotName = versionsComp.property(`${gp}_shotName`).value() as string;
+          const activeVersionIndex = versionsComp.property(`${gp}_activeVersionIndex`).value() as number;
+          const versionCount = versionsComp.property(`${gp}_versionCount`).value() as number;
+
+          if (typeof id === 'string' && id.length > 0 && typeof versionCount === 'number') {
+            const versions: VersionEntry[] = [];
+            for (let v = 1; v <= versionCount; v++) {
+              const vp = `${gp}_v${String(v).padStart(3, '0')}`;
+              const versionNumber = versionsComp.property(`${vp}_versionNumber`).value() as number;
+              const sourceIndex = versionsComp.property(`${vp}_sourceIndex`).value() as number;
+              const label = versionsComp.property(`${vp}_label`).value() as string;
+              const addedAt = versionsComp.property(`${vp}_addedAt`).value() as string;
+
+              if (typeof versionNumber === 'number') {
+                versions.push({
+                  versionNumber,
+                  sourceIndex: typeof sourceIndex === 'number' ? sourceIndex : 0,
+                  label: typeof label === 'string' ? label : `v${versionNumber}`,
+                  addedAt: typeof addedAt === 'string' ? addedAt : '',
+                });
+              }
+            }
+            if (versions.length > 0) {
+              versionGroups.push({
+                id,
+                shotName: typeof shotName === 'string' ? shotName : '',
+                versions,
+                activeVersionIndex: (typeof activeVersionIndex === 'number' && activeVersionIndex >= 0 && activeVersionIndex < versions.length) ? activeVersionIndex : versions.length - 1,
+              });
+            }
+          }
+        }
+        if (versionGroups.length > 0) {
+          sessionInfo.versionGroups = versionGroups;
+        }
+      }
+    }
   }
 
   // Collect all objects and their connections
   const nodeInfos = new Map<string, GTONodeInfo>();
   const allObjects = dto.objects();
 
+  // Parse connection objects for graph topology (fallback when mode.inputs is absent)
+  // connections object has protocol 'connection' with:
+  //   evaluation.lhs[] / evaluation.rhs[] - parallel arrays: lhs[i] feeds into rhs[i]
+  //   top.nodes[] - root evaluation nodes
+  const connectionEdges: Array<{ lhs: string; rhs: string }> = [];
+  let connectionTopNodes: string[] = [];
+
+  for (const obj of allObjects) {
+    if (obj.protocol === 'connection') {
+      const evalComp = obj.component('evaluation');
+      if (evalComp?.exists()) {
+        const lhs = evalComp.property('lhs').value();
+        const rhs = evalComp.property('rhs').value();
+
+        if (Array.isArray(lhs) && Array.isArray(rhs)) {
+          if (lhs.length !== rhs.length) {
+            console.warn(
+              `connections object has mismatched lhs/rhs lengths: ${lhs.length} vs ${rhs.length}, using minimum`
+            );
+          }
+          const len = Math.min(lhs.length, rhs.length);
+          for (let i = 0; i < len; i++) {
+            const l = lhs[i];
+            const r = rhs[i];
+            if (typeof l === 'string' && typeof r === 'string') {
+              connectionEdges.push({ lhs: l, rhs: r });
+            }
+          }
+        } else {
+          console.warn('connections object has malformed evaluation: missing or invalid lhs/rhs arrays');
+        }
+      }
+
+      const topComp = obj.component('top');
+      if (topComp?.exists()) {
+        const topNodes = topComp.property('nodes').value();
+        if (Array.isArray(topNodes)) {
+          connectionTopNodes = topNodes.filter((v): v is string => typeof v === 'string');
+        }
+      }
+    }
+  }
+
+  // Track RVSourceGroup containers and their child source nodes
+  // In desktop OpenRV, source groups (e.g., 'sourceGroup000000') contain
+  // source nodes (e.g., 'sourceGroup000000_source'). The connections object
+  // references the group name, not the source node directly.
+  const sourceGroupChildren = new Map<string, string[]>();
+  const parsedStatuses: StatusEntry[] = [];
+  for (const obj of allObjects) {
+    if (obj.protocol === 'RVSourceGroup') {
+      // Find child source nodes by naming convention: <groupName>_source
+      const groupName = obj.name;
+      const children: string[] = [];
+      for (const child of allObjects) {
+        if (child.name.startsWith(groupName + '_') &&
+            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource')) {
+          children.push(child.name);
+        }
+      }
+      if (children.length > 0) {
+        sourceGroupChildren.set(groupName, children);
+      }
+
+      // Parse review component for shot status
+      const reviewComp = obj.component('review');
+      if (reviewComp?.exists()) {
+        const statusMatch = groupName.match(/sourceGroup(\d+)/);
+        if (statusMatch) {
+          const sourceIndex = parseInt(statusMatch[1]!, 10);
+          const status = reviewComp.property('status').value() as string;
+          const setBy = reviewComp.property('setBy').value() as string;
+          const setAt = reviewComp.property('setAt').value() as string;
+
+          if (typeof status === 'string' && (VALID_STATUSES as readonly string[]).includes(status)) {
+            parsedStatuses.push({
+              sourceIndex,
+              status: status as ShotStatus,
+              setBy: typeof setBy === 'string' ? setBy : '',
+              setAt: typeof setAt === 'string' ? setAt : '',
+            });
+          }
+        }
+      }
+    }
+  }
+  if (parsedStatuses.length > 0) {
+    sessionInfo.statuses = parsedStatuses;
+  }
+
+  // Build a map from rhs -> lhs[] for connection-based inputs (fallback)
+  // Resolve source group names to their child source nodes
+  const connectionInputsMap = new Map<string, string[]>();
+  for (const edge of connectionEdges) {
+    if (!connectionInputsMap.has(edge.rhs)) {
+      connectionInputsMap.set(edge.rhs, []);
+    }
+    const inputs = connectionInputsMap.get(edge.rhs)!;
+
+    // If lhs is a source group, resolve to its child source nodes
+    const children = sourceGroupChildren.get(edge.lhs);
+    if (children) {
+      inputs.push(...children);
+    } else {
+      inputs.push(edge.lhs);
+    }
+  }
+
   for (const obj of allObjects) {
     const protocol = obj.protocol;
     const name = obj.name;
 
     // Skip non-node objects
-    if (!protocol || protocol === 'RVSession') continue;
+    if (!protocol || protocol === 'RVSession' || protocol === 'connection') continue;
 
     const nodeInfo: GTONodeInfo = {
       name,
@@ -1675,6 +1883,16 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (Array.isArray(power)) nodeInfo.properties.cdlPower = power;
         if (typeof saturation === 'number') nodeInfo.properties.cdlSaturation = saturation;
         if (typeof noClamp === 'number') nodeInfo.properties.cdlNoClamp = noClamp !== 0;
+
+        // Resolve CDL file from availableFiles if specified
+        if (typeof file === 'string' && file && availableFiles && availableFiles.size > 0) {
+          const basename = file.split(/[/\\]/).pop();
+          if (basename && availableFiles.has(basename)) {
+            nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)!;
+          } else {
+            console.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
+          }
+        }
       }
     }
 
@@ -1856,18 +2074,42 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     graph.addNode(node);
   }
 
-  // Establish connections
+  // Establish connections from mode.inputs (authoritative per-node source)
+  const nodesConnectedViaModeInputs = new Set<string>();
   for (const [name, info] of nodeInfos) {
     const node = nodes.get(name);
     if (!node) continue;
 
-    for (const inputName of info.inputs) {
-      const inputNode = nodes.get(inputName);
-      if (inputNode) {
+    if (info.inputs.length > 0) {
+      nodesConnectedViaModeInputs.add(name);
+      for (const inputName of info.inputs) {
+        const inputNode = nodes.get(inputName);
+        if (inputNode) {
+          try {
+            graph.connect(inputNode, node);
+          } catch (err) {
+            console.warn(`Failed to connect ${inputName} -> ${name}:`, err);
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback: use connections object edges for nodes that had no mode.inputs
+  for (const [rhsName, lhsNames] of connectionInputsMap) {
+    // Skip if this node already got inputs from mode.inputs
+    if (nodesConnectedViaModeInputs.has(rhsName)) continue;
+
+    const rhsNode = nodes.get(rhsName);
+    if (!rhsNode) continue;
+
+    for (const lhsName of lhsNames) {
+      const lhsNode = nodes.get(lhsName);
+      if (lhsNode) {
         try {
-          graph.connect(inputNode, node);
+          graph.connect(lhsNode, rhsNode);
         } catch (err) {
-          console.warn(`Failed to connect ${inputName} -> ${name}:`, err);
+          console.warn(`Failed to connect (from connections) ${lhsName} -> ${rhsName}:`, err);
         }
       }
     }
@@ -1876,6 +2118,17 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   // Find root/view node
   if (sessionInfo.viewNode) {
     rootNode = nodes.get(sessionInfo.viewNode) ?? null;
+  }
+
+  // Fallback: use top.nodes from connections object
+  if (!rootNode && connectionTopNodes.length > 0) {
+    for (const topNodeName of connectionTopNodes) {
+      const topNode = nodes.get(topNodeName);
+      if (topNode) {
+        rootNode = topNode;
+        break;
+      }
+    }
   }
 
   // If no view node specified, find the node with no outputs (leaf node)

@@ -2,15 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Session, MediaSource } from './Session';
 import { Graph } from '../graph/Graph';
 
-// Mock SequenceLoader
-vi.mock('../../utils/media/SequenceLoader', () => ({
-  createSequenceInfo: vi.fn(),
-  preloadFrames: vi.fn(),
-  loadFrameImage: vi.fn(),
-  releaseDistantFrames: vi.fn(),
-  disposeSequence: vi.fn(),
-}));
-
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
     exists: () => data !== undefined,
@@ -91,6 +82,55 @@ describe('Session', () => {
 
     it('has empty marks initially', () => {
       expect(session.marks.size).toBe(0);
+    });
+  });
+
+  describe('metadata', () => {
+    it('SES-META-001: initializes metadata with defaults', () => {
+      expect(session.metadata.displayName).toBe('');
+      expect(session.metadata.comment).toBe('');
+      expect(session.metadata.version).toBe(2);
+      expect(session.metadata.origin).toBe('openrv-web');
+    });
+
+    it('SES-META-002: setDisplayName trims value and emits metadataChanged', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.setDisplayName('  My Session  ');
+
+      expect(session.metadata.displayName).toBe('My Session');
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ displayName: 'My Session' })
+      );
+    });
+
+    it('SES-META-003: setDisplayName does not emit when normalized value is unchanged', () => {
+      session.setDisplayName('Existing Name');
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.setDisplayName('  Existing Name  ');
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('SES-META-004: updateMetadata supports partial updates', () => {
+      session.setDisplayName('Session A');
+
+      session.updateMetadata({ comment: 'Review notes' });
+
+      expect(session.metadata.displayName).toBe('Session A');
+      expect(session.metadata.comment).toBe('Review notes');
+    });
+
+    it('SES-META-005: updateMetadata does not emit for empty no-op patch', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({});
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -723,7 +763,7 @@ describe('Session', () => {
 
   describe('disposal', () => {
     it('dispose cleans up all sources', () => {
-        const seqSource: MediaSource = { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] as any };
+        const seqSource: MediaSource = { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] };
         session.setSources([seqSource]);
         const disposeSpy = vi.spyOn(session as any, 'disposeSequenceSource');
 
@@ -741,7 +781,7 @@ describe('Session', () => {
 
         session.setSources([
             { type: 'video', name: 'v1', url: 'v1.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video },
-            { type: 'image', name: 'v2', url: 'v2.png', width: 100, height: 100, duration: 1, fps: 24, element: {} as any }
+            { type: 'image', name: 'v2', url: 'v2.png', width: 100, height: 100, duration: 1, fps: 24 }
         ]);
 
         session.setCurrentSource(1);
@@ -750,8 +790,8 @@ describe('Session', () => {
 
     it('toggleAB syncs frame with clamping', () => {
         session.setSources([
-            { type: 'image', name: 'a', url: 'a.png', width: 100, height: 100, duration: 100, fps: 24, element: {} as any },
-            { type: 'image', name: 'b', url: 'b.png', width: 100, height: 100, duration: 50, fps: 24, element: {} as any }
+            { type: 'image', name: 'a', url: 'a.png', width: 100, height: 100, duration: 100, fps: 24 },
+            { type: 'image', name: 'b', url: 'b.png', width: 100, height: 100, duration: 50, fps: 24 }
         ]);
         session.setSourceB(1);
         session.currentFrame = 80;
@@ -855,9 +895,9 @@ describe('Session', () => {
 
     it('A/B switching and clearing coverage', () => {
         session.setSources([
-            { type: 'image', name: 'a', url: 'a.png', width: 1, height: 1, duration: 1, fps: 24, element: {} as any },
-            { type: 'image', name: 'b', url: 'b.png', width: 1, height: 1, duration: 1, fps: 24, element: {} as any },
-            { type: 'image', name: 'c', url: 'c.png', width: 1, height: 1, duration: 1, fps: 24, element: {} as any }
+            { type: 'image', name: 'a', url: 'a.png', width: 1, height: 1, duration: 1, fps: 24 },
+            { type: 'image', name: 'b', url: 'b.png', width: 1, height: 1, duration: 1, fps: 24 },
+            { type: 'image', name: 'c', url: 'c.png', width: 1, height: 1, duration: 1, fps: 24 }
         ]);
         session.setSourceB(1);
 
@@ -896,7 +936,7 @@ describe('Session', () => {
         expect(await session.getSequenceFrameImage(1)).toBeNull();
         expect(session.getSequenceFrameSync(1)).toBeNull();
 
-        session.setSources([{ type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] as any }]);
+        session.setSources([{ type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] }]);
         expect(await session.getSequenceFrameImage(10)).toBeNull();
     });
 

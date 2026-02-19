@@ -160,6 +160,14 @@ export class KeyboardManager {
       }
     }
 
+    // Check if target is a <select> element - skip bare keys to allow native option selection
+    if (target instanceof HTMLSelectElement) {
+      const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+      if (!hasModifier) {
+        return true;
+      }
+    }
+
     // Also check for contenteditable elements
     if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') {
       return true;

@@ -561,6 +561,45 @@ describe('CropControl', () => {
     });
   });
 
+  describe('outside click to close', () => {
+    it('CC-L59a: clicking outside the CropControl panel should close it', () => {
+      const handler = vi.fn();
+      control.on('panelToggled', handler);
+
+      control.showPanel();
+      handler.mockClear();
+
+      // Create an element outside the panel and container
+      const outsideEl = document.createElement('div');
+      document.body.appendChild(outsideEl);
+
+      // Simulate a click on the outside element
+      const clickEvent = new MouseEvent('click', { bubbles: true });
+      outsideEl.dispatchEvent(clickEvent);
+
+      expect(handler).toHaveBeenCalledWith(false);
+
+      document.body.removeChild(outsideEl);
+    });
+
+    it('CC-L59b: clicking inside the CropControl panel should NOT close it', () => {
+      const handler = vi.fn();
+      control.on('panelToggled', handler);
+
+      control.showPanel();
+      handler.mockClear();
+
+      // Find the panel in the DOM and click inside it
+      const panel = document.querySelector('.crop-panel') as HTMLElement;
+      expect(panel).not.toBeNull();
+
+      const clickEvent = new MouseEvent('click', { bubbles: true });
+      panel.dispatchEvent(clickEvent);
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
   describe('aspect ratio select accessibility', () => {
     it('CRP-053: select has aria-label', () => {
       control.showPanel();

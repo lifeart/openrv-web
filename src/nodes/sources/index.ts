@@ -13,3 +13,4 @@ export type { SourceMetadata } from './BaseSourceNode';
 export { FileSourceNode } from './FileSourceNode';
 export { VideoSourceNode } from './VideoSourceNode';
 export { SequenceSourceNode } from './SequenceSourceNode';
+export { ProceduralSourceNode } from './ProceduralSourceNode';

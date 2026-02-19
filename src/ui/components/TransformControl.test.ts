@@ -238,43 +238,9 @@ describe('TransformControl', () => {
     });
   });
 
-  describe('handleKeyboard', () => {
-    it('TRN-029: R key rotates right', () => {
-      const result = control.handleKeyboard('r', false);
-      expect(result).toBe(true);
-      expect(control.getTransform().rotation).toBe(90);
-    });
-
-    it('TRN-030: Shift+R key rotates left', () => {
-      const result = control.handleKeyboard('r', true);
-      expect(result).toBe(true);
-      expect(control.getTransform().rotation).toBe(270);
-    });
-
-    it('TRN-031: H key toggles flipH', () => {
-      const result = control.handleKeyboard('h', false);
-      expect(result).toBe(true);
-      expect(control.getTransform().flipH).toBe(true);
-    });
-
-    it('TRN-032: V key returns false (not handled)', () => {
-      const result = control.handleKeyboard('v', false);
-      expect(result).toBe(false);
-    });
-
-    it('TRN-033: unknown key returns false', () => {
-      const result = control.handleKeyboard('x', false);
-      expect(result).toBe(false);
-    });
-
-    it('TRN-034: uppercase R key works', () => {
-      const result = control.handleKeyboard('R', false);
-      expect(result).toBe(true);
-    });
-
-    it('TRN-035: uppercase H key works', () => {
-      const result = control.handleKeyboard('H', false);
-      expect(result).toBe(true);
+  describe('handleKeyboard removed (dead code)', () => {
+    it('TC-L34a: TransformControl should NOT have a handleKeyboard method', () => {
+      expect('handleKeyboard' in control).toBe(false);
     });
   });
 
@@ -297,6 +263,78 @@ describe('TransformControl', () => {
       expect(DEFAULT_TRANSFORM.flipV).toBe(false);
       expect(DEFAULT_TRANSFORM.scale).toEqual({ x: 1, y: 1 });
       expect(DEFAULT_TRANSFORM.translate).toEqual({ x: 0, y: 0 });
+    });
+  });
+
+  describe('rotation status indicator', () => {
+    function getIndicator(): HTMLElement | null {
+      return control.render().querySelector('[data-testid="rotation-indicator"]');
+    }
+
+    it('TC-M27a: when rotation is 0, rotation indicator is hidden', () => {
+      const indicator = getIndicator();
+      expect(indicator).not.toBeNull();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TC-M27b-90: when rotation is 90, indicator shows 90\u00B0', () => {
+      control.rotateRight();
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('90\u00B0');
+    });
+
+    it('TC-M27b-180: when rotation is 180, indicator shows 180\u00B0', () => {
+      control.rotateRight();
+      control.rotateRight();
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('180\u00B0');
+    });
+
+    it('TC-M27b-270: when rotation is 270, indicator shows 270\u00B0', () => {
+      control.rotateLeft();
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('270\u00B0');
+    });
+
+    it('TC-M27c: after reset, indicator disappears', () => {
+      control.rotateRight(); // 90
+      control.rotateRight(); // 180
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('180\u00B0');
+
+      control.reset();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TC-M27d: setTransform updates indicator', () => {
+      control.setTransform({ ...DEFAULT_TRANSFORM, rotation: 270 });
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('270\u00B0');
+    });
+
+    it('TC-M27e: setTransform to 0 hides indicator', () => {
+      control.rotateRight();
+      control.setTransform({ ...DEFAULT_TRANSFORM, rotation: 0 });
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TC-M27f: full rotation cycle returns indicator to hidden', () => {
+      control.rotateRight(); // 90
+      control.rotateRight(); // 180
+      control.rotateRight(); // 270
+      control.rotateRight(); // 0
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
     });
   });
 

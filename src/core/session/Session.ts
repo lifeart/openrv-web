@@ -1,6 +1,7 @@
 import { SimpleReader, GTODTO } from 'gto-js';
 import type { GTOData } from 'gto-js';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { parseRVEDL, type RVEDLEntry } from '../../formats/RVEDLParser';
 import {
   SequenceFrame,
   SequenceInfo,
@@ -27,9 +28,10 @@ import {
   getNumberArray as _getNumberArray,
   getStringValue as _getStringValue,
 } from './AnnotationStore';
-import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
+import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
-import type { Transform2D, CropState } from '../../core/types/transform';
+import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
@@ -48,15 +50,22 @@ import {
   parseChannelMode as _parseChannelMode,
   parseStereo as _parseStereo,
   parseScopes as _parseScopes,
+  parseLinearize as _parseLinearize,
+  parseNoiseReduction as _parseNoiseReduction,
 } from './GTOSettingsParser';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import { PlaybackEngine } from './PlaybackEngine';
 import { MarkerManager, MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
+import { NoteManager } from './NoteManager';
+import { VersionManager } from './VersionManager';
+import { StatusManager } from './StatusManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
+import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { Logger } from '../../utils/Logger';
+import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 
 const log = new Logger('Session');
 
@@ -97,6 +106,11 @@ export interface GTOViewSettings {
   stereoEyeTransform?: StereoEyeTransformState;
   stereoAlignMode?: StereoAlignMode;
   scopes?: ScopesState;
+  linearize?: LinearizeState;
+  noiseReduction?: NoiseReductionParams;
+  uncrop?: UncropState;
+  outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
+  channelSwizzle?: ChannelSwizzle;
 }
 
 /**
@@ -163,10 +177,18 @@ export interface SessionEvents extends EventMap {
   // Sub-frame interpolation events
   interpolationEnabledChanged: boolean;
   subFramePositionChanged: SubFramePosition | null;
+  // EDL events
+  edlLoaded: RVEDLEntry[];
+  // Note/comment events
+  notesChanged: void;
+  versionsChanged: void;
+  statusChanged: { sourceIndex: number; status: string; previous: string };
+  statusesChanged: void;
 }
 
 // Re-export from centralized types for backward compatibility
 export type { LoopMode, MediaType } from '../types/session';
+export type { RVEDLEntry } from '../../formats/RVEDLParser';
 
 export interface MediaSource {
   type: MediaType;
@@ -197,9 +219,13 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Extracted managers
   private _markerManager = new MarkerManager();
+  private _noteManager = new NoteManager();
+  private _versionManager = new VersionManager();
+  private _statusManager = new StatusManager();
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
+  private _audioPlaybackManager = new AudioPlaybackManager();
 
   // Pre-detected HDR canvas resize tier from DisplayCapabilities.
   // Set via setHDRResizeTier() so VideoSourceNode can use it instead of re-probing.
@@ -299,6 +325,12 @@ export class Session extends EventEmitter<SessionEvents> {
   private _graphParseResult: GTOParseResult | null = null;
   private _gtoData: GTOData | null = null;
 
+  // Uncrop state parsed from GTO (stored for export round-trip)
+  private _uncropState: UncropState | null = null;
+
+  // EDL entries parsed from RVEDL file (pending source resolution)
+  private _edlEntries: RVEDLEntry[] = [];
+
 
   constructor() {
     super();
@@ -315,7 +347,13 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward PlaybackEngine events to Session events
-    this._playbackEngine.on('frameChanged', (frame) => this.emit('frameChanged', frame));
+    this._playbackEngine.on('frameChanged', (frame) => {
+      this.emit('frameChanged', frame);
+      // Audio scrub: play a short audio snippet when scrubbing (not during playback)
+      if (!this._playbackEngine.isPlaying) {
+        this._audioPlaybackManager.scrubToFrame(frame, this._playbackEngine.fps);
+      }
+    });
     this._playbackEngine.on('playbackChanged', (playing) => this.emit('playbackChanged', playing));
     this._playbackEngine.on('playDirectionChanged', (dir) => this.emit('playDirectionChanged', dir));
     this._playbackEngine.on('playbackSpeedChanged', (speed) => this.emit('playbackSpeedChanged', speed));
@@ -330,6 +368,19 @@ export class Session extends EventEmitter<SessionEvents> {
     // Wire manager callbacks
     this._markerManager.setCallbacks({
       onMarksChanged: (marks) => this.emit('marksChanged', marks),
+    });
+    this._noteManager.setCallbacks({
+      onNotesChanged: () => this.emit('notesChanged', undefined),
+    });
+    this._versionManager.setCallbacks({
+      onVersionsChanged: () => this.emit('versionsChanged', undefined),
+      onActiveVersionChanged: (_groupId, _entry) => {
+        // Session can handle source switching here if needed
+      },
+    });
+    this._statusManager.setCallbacks({
+      onStatusChanged: (sourceIndex, status, previous) => this.emit('statusChanged', { sourceIndex, status, previous }),
+      onStatusesChanged: () => this.emit('statusesChanged', undefined),
     });
     this._volumeManager.setCallbacks({
       onVolumeChanged: (v) => {
@@ -401,6 +452,11 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._gtoData;
   }
 
+  /** Audio playback manager for scrub audio and independent audio playback */
+  get audioPlaybackManager(): AudioPlaybackManager {
+    return this._audioPlaybackManager;
+  }
+
   get currentFrame(): number {
     return this._playbackEngine.currentFrame;
   }
@@ -442,6 +498,26 @@ export class Session extends EventEmitter<SessionEvents> {
     this._hdrResizeTier = tier;
   }
 
+  /** Uncrop state from GTO RVFormat (for export round-trip) */
+  get uncropState(): UncropState | null {
+    return this._uncropState;
+  }
+
+  set uncropState(state: UncropState | null) {
+    this._uncropState = state;
+  }
+
+  /**
+   * EDL entries parsed from the last loaded RVEDL file.
+   * Each entry describes a source path with in/out frame range.
+   * Returns an empty array if no EDL has been loaded.
+   * Source paths are local filesystem references and may need to be
+   * resolved by matching against loaded files.
+   */
+  get edlEntries(): readonly RVEDLEntry[] {
+    return this._edlEntries;
+  }
+
   /** Matte overlay settings */
   get matteSettings(): MatteSettings | null {
     return this._annotationStore.matteSettings;
@@ -457,9 +533,68 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._annotationStore;
   }
 
+  /** Note/comment manager */
+  get noteManager(): NoteManager {
+    return this._noteManager;
+  }
+
+  /** Version management (shot versioning) */
+  get versionManager(): VersionManager {
+    return this._versionManager;
+  }
+
+  /** Shot status tracking (review workflow) */
+  get statusManager(): StatusManager {
+    return this._statusManager;
+  }
+
   /** Session metadata (name, comment, version, origin) */
   get metadata(): SessionMetadata {
     return this._metadata;
+  }
+
+  /**
+   * Update one or more metadata fields and emit `metadataChanged`
+   * when the resulting metadata differs from the current value.
+   */
+  updateMetadata(patch: Partial<SessionMetadata>): void {
+    const current = this._metadata;
+    const next: SessionMetadata = {
+      displayName: patch.displayName !== undefined ? patch.displayName.trim() : current.displayName,
+      comment: patch.comment !== undefined ? patch.comment : current.comment,
+      version: patch.version !== undefined ? patch.version : current.version,
+      origin: patch.origin !== undefined ? patch.origin : current.origin,
+      creationContext: patch.creationContext !== undefined ? patch.creationContext : current.creationContext,
+      clipboard: patch.clipboard !== undefined ? patch.clipboard : current.clipboard,
+      membershipContains: patch.membershipContains !== undefined
+        ? [...patch.membershipContains]
+        : current.membershipContains,
+    };
+
+    const membershipChanged = next.membershipContains.length !== current.membershipContains.length
+      || next.membershipContains.some((value, index) => value !== current.membershipContains[index]);
+
+    const hasChanged = next.displayName !== current.displayName
+      || next.comment !== current.comment
+      || next.version !== current.version
+      || next.origin !== current.origin
+      || next.creationContext !== current.creationContext
+      || next.clipboard !== current.clipboard
+      || membershipChanged;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    this._metadata = next;
+    this.emit('metadataChanged', this._metadata);
+  }
+
+  /**
+   * Convenience helper to update the session display name.
+   */
+  setDisplayName(displayName: string): void {
+    this.updateMetadata({ displayName });
   }
 
   get playbackSpeed(): number {
@@ -938,6 +1073,21 @@ export class Session extends EventEmitter<SessionEvents> {
         this._annotationStore.setMatteSettings(result.sessionInfo.matte);
       }
 
+      // Apply notes
+      if (result.sessionInfo.notes && result.sessionInfo.notes.length > 0) {
+        this._noteManager.fromSerializable(result.sessionInfo.notes);
+      }
+
+      // Apply version groups
+      if (result.sessionInfo.versionGroups && result.sessionInfo.versionGroups.length > 0) {
+        this._versionManager.fromSerializable(result.sessionInfo.versionGroups);
+      }
+
+      // Apply statuses
+      if (result.sessionInfo.statuses && result.sessionInfo.statuses.length > 0) {
+        this._statusManager.fromSerializable(result.sessionInfo.statuses);
+      }
+
       // Apply session metadata
       if (result.sessionInfo.displayName || result.sessionInfo.comment ||
           result.sessionInfo.version || result.sessionInfo.origin ||
@@ -975,6 +1125,26 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     this.emit('sessionLoaded', undefined);
+  }
+
+  /**
+   * Parse an RVEDL (Edit Decision List) text, store the entries on the
+   * session, and emit an `edlLoaded` event.
+   *
+   * Each entry describes a source path with in/out frame range.
+   * In a web context the source paths reference local filesystem locations
+   * that cannot be loaded directly; the caller should present the entries
+   * to the user so they can resolve them by loading matching files.
+   *
+   * The parsed entries are accessible afterwards via {@link edlEntries}.
+   */
+  loadEDL(text: string): RVEDLEntry[] {
+    const entries = parseRVEDL(text);
+    this._edlEntries = entries;
+    if (entries.length > 0) {
+      this.emit('edlLoaded', entries);
+    }
+    return entries;
   }
 
   /**
@@ -1222,6 +1392,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const settings = this.parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight });
     if (settings) {
+      if (settings.uncrop) {
+        this._uncropState = settings.uncrop;
+      }
       this.emit('settingsLoaded', settings);
     }
   }
@@ -1285,6 +1458,16 @@ export class Session extends EventEmitter<SessionEvents> {
     return _parseScopes(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseLinearize()
+  private parseLinearize(dto: GTODTO): LinearizeState | null {
+    return _parseLinearize(dto);
+  }
+
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseNoiseReduction()
+  private parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
+    return _parseNoiseReduction(dto);
+  }
+
   // Annotation parsing methods - delegate to AnnotationStore.
   // Kept as methods on Session for backward compatibility (tests access via `(session as any)`).
 
@@ -1327,11 +1510,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   private getMediaType(file: File): MediaType {
-    const videoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
-    if (videoTypes.includes(file.type) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(file.name)) {
-      return 'video';
-    }
-    return 'image';
+    return detectMediaTypeFromFile(file);
   }
 
   async loadImage(name: string, url: string): Promise<void> {
@@ -2157,5 +2336,8 @@ export class Session extends EventEmitter<SessionEvents> {
       this.disposeVideoSource(source);
     }
     this.sources = [];
+    this._noteManager.dispose();
+    this._versionManager.dispose();
+    this._statusManager.dispose();
   }
 }

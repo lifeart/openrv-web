@@ -200,6 +200,9 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     const item = document.createElement('div');
     item.className = `safe-areas-item-${key}`;
     item.dataset.testid = `safe-areas-item-${key}`;
+    item.setAttribute('tabindex', '0');
+    item.setAttribute('role', 'checkbox');
+    item.setAttribute('aria-checked', 'false');
     item.style.cssText = `
       padding: 8px 12px;
       display: flex;
@@ -243,6 +246,14 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     item.addEventListener('click', (e) => {
       e.stopPropagation();
       onClick();
+    });
+
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+      }
     });
 
     return item;
@@ -328,8 +339,9 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
 
     // Update checkboxes
     const updateCheckbox = (key: keyof SafeAreasState, checked: boolean) => {
-      const item = this.dropdown.querySelector(`.safe-areas-item-${key}`);
+      const item = this.dropdown.querySelector(`.safe-areas-item-${key}`) as HTMLElement;
       if (item) {
+        item.setAttribute('aria-checked', String(checked));
         const checkbox = item.querySelector('.checkbox-indicator') as HTMLElement;
         if (checkbox) {
           if (checked) {

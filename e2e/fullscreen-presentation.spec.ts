@@ -337,4 +337,26 @@ test.describe('Fullscreen / Presentation Mode', () => {
     state = await getPresentationState(page);
     expect(state.enabled).toBe(false);
   });
+
+  test('FS-042: toggling presentation mode preserves toolbar button visibility/layout', async ({ page }) => {
+    const viewTabButton = page.locator('button[data-tab-id="view"]');
+    const zoomButton = page.locator('[data-testid="zoom-control-button"]');
+    const presentationButton = page.locator('[data-testid="presentation-mode-button"]');
+
+    await expect(viewTabButton).toBeVisible();
+    await expect(zoomButton).toBeVisible();
+
+    await presentationButton.click();
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await expect(viewTabButton).toBeVisible();
+    await expect(zoomButton).toBeVisible();
+
+    const tabBarDisplay = await page.locator('.tab-bar').evaluate((el) => getComputedStyle(el).display);
+    const toolbarDisplay = await page.locator('.context-toolbar').evaluate((el) => getComputedStyle(el).display);
+    expect(tabBarDisplay).toBe('flex');
+    expect(toolbarDisplay).toBe('flex');
+  });
 });

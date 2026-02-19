@@ -24,6 +24,7 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
   private cropValueLabel: HTMLSpanElement | null = null;
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -41,6 +42,8 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     this.button.innerHTML = `${getIconSvg('crosshair', 'sm')}<span style="margin-left: 6px;">Stabilize</span>`;
     this.button.dataset.testid = 'stabilization-control-button';
     this.button.title = 'Stabilization preview';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -77,6 +80,8 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     this.panel = document.createElement('div');
     this.panel.className = 'stabilization-panel';
     this.panel.dataset.testid = 'stabilization-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Stabilization Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -94,6 +99,13 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
 
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hide();
+      }
+    };
   }
 
   private handleDocumentClick(e: MouseEvent): void {
@@ -170,14 +182,15 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = initialValue;
+    checkbox.id = 'stabilization-enabled-checkbox';
     checkbox.dataset.testid = 'stabilization-enabled-checkbox';
     checkbox.style.cssText = 'cursor: pointer;';
     checkbox.addEventListener('change', () => onChange(checkbox.checked));
 
     const labelEl = document.createElement('label');
+    labelEl.htmlFor = 'stabilization-enabled-checkbox';
     labelEl.textContent = label;
     labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer;';
-    labelEl.addEventListener('click', () => { checkbox.click(); });
 
     row.appendChild(checkbox);
     row.appendChild(labelEl);
@@ -310,13 +323,23 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     this.panel.style.left = `${Math.max(8, rect.right - 280)}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    this.enabledCheckbox?.focus();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.button.focus();
   }
 
   reset(): void {
@@ -360,6 +383,7 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

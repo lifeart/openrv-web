@@ -106,8 +106,7 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
       const index = parseInt(this.presetSelect.value, 10);
       const preset = CURVE_PRESETS[index];
       if (preset) {
-        this.editor.setCurves(preset.curves);
-        this.emit('curvesChanged', this.editor.getCurves());
+        this.setCurves(preset.curves);
       }
     });
 
@@ -216,7 +215,6 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
     this.editor.resetAll();
     this.presetSelect.value = '0'; // Linear (Default)
     this.isResetting = false;
-    this.emit('curvesChanged', this.editor.getCurves());
   }
 
   private importCurves(): void {
@@ -231,9 +229,7 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
         const text = await file.text();
         const curves = importCurvesJSON(text);
         if (curves) {
-          this.editor.setCurves(curves);
-          this.updatePresetSelection();
-          this.emit('curvesChanged', curves);
+          this.setCurves(curves);
         } else {
           console.error('Invalid curves JSON file');
         }
@@ -271,6 +267,7 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
   setCurves(curves: ColorCurvesData): void {
     this.editor.setCurves(curves);
     this.updatePresetSelection();
+    this.emit('curvesChanged', this.editor.getCurves());
   }
 
   /**

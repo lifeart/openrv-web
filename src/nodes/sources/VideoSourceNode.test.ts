@@ -292,6 +292,32 @@ describe('VideoSourceNode', () => {
       testNode.dispose();
     });
 
+    it('VSN-HDR-008b: falls back to decoded VideoFrame colorSpace when track metadata is missing', async () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      internal.videoColorSpace = null;
+
+      const mockVideoFrame = {
+        colorSpace: { transfer: 'smpte2084', primaries: 'bt2020' },
+        close: vi.fn(),
+      };
+      const mockSample = {
+        toVideoFrame: vi.fn().mockReturnValue(mockVideoFrame),
+        close: vi.fn(),
+      };
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      const result = await testNode.fetchHDRFrame(1);
+
+      expect(result).not.toBeNull();
+      expect(result?.metadata.transferFunction).toBe('pq');
+      expect(result?.metadata.colorPrimaries).toBe('bt2020');
+      expect((internal.videoColorSpace as VideoColorSpaceInit | null)?.transfer).toBe('smpte2084');
+      expect((internal.videoColorSpace as VideoColorSpaceInit | null)?.primaries).toBe('bt2020');
+      expect(mockSample.close).toHaveBeenCalledOnce();
+
+      testNode.dispose();
+    });
+
     it('VSN-HDR-009: hasFrameCached checks HDR cache for HDR video', async () => {
       const { testNode, mockFrameExtractor } = setupHDRNode();
       const { mockSample } = createMockSample();

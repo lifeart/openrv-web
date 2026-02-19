@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.hoisted runs before vi.mock hoisting, so these are available in mock factories
-const { disposeMocks, createMockClass, createAsyncDisposeMockClass } = vi.hoisted(() => {
+const { disposeMocks, createMockClass } = vi.hoisted(() => {
   const disposeMocks: Record<string, ReturnType<typeof import('vitest')['vi']['fn']>> = {};
 
   function createMockClass(name: string) {
@@ -22,93 +22,138 @@ const { disposeMocks, createMockClass, createAsyncDisposeMockClass } = vi.hoiste
       setEyedropperCallback = vi.fn();
       deactivateEyedropper = vi.fn();
       createBadge = vi.fn(() => document.createElement('div'));
+      setExclusiveWith = vi.fn();
+      setTabContent = vi.fn();
     };
   }
 
-  function createAsyncDisposeMockClass(name: string) {
-    const disposeFn = vi.fn((): Promise<void> => Promise.resolve()) as any;
-    disposeMocks[name] = disposeFn;
-    return class {
-      dispose = disposeFn;
-      render = vi.fn(() => document.createElement('div'));
-      on = vi.fn(() => vi.fn());
-    };
-  }
-
-  return { disposeMocks, createMockClass, createAsyncDisposeMockClass };
+  return { disposeMocks, createMockClass };
 });
 
-// Mock all UI control imports
-vi.mock('./ui/components/PaintToolbar', () => ({ PaintToolbar: createMockClass('PaintToolbar') }));
-vi.mock('./ui/components/ColorControls', () => ({ ColorControls: createMockClass('ColorControls') }));
-vi.mock('./ui/components/TransformControl', () => ({ TransformControl: createMockClass('TransformControl') }));
-vi.mock('./ui/components/FilterControl', () => ({ FilterControl: createMockClass('FilterControl') }));
-vi.mock('./ui/components/CropControl', () => ({ CropControl: createMockClass('CropControl') }));
-vi.mock('./ui/components/CDLControl', () => ({ CDLControl: createMockClass('CDLControl') }));
-vi.mock('./ui/components/CurvesControl', () => ({ CurvesControl: createMockClass('CurvesControl') }));
-vi.mock('./ui/components/LensControl', () => ({ LensControl: createMockClass('LensControl') }));
-vi.mock('./ui/components/StackControl', () => ({ StackControl: createMockClass('StackControl') }));
-vi.mock('./ui/components/ChannelSelect', () => ({ ChannelSelect: createMockClass('ChannelSelect') }));
-vi.mock('./ui/components/StereoControl', () => ({ StereoControl: createMockClass('StereoControl') }));
-vi.mock('./ui/components/StereoEyeTransformControl', () => ({ StereoEyeTransformControl: createMockClass('StereoEyeTransformControl') }));
-vi.mock('./ui/components/StereoAlignControl', () => ({ StereoAlignControl: createMockClass('StereoAlignControl') }));
+// --- Mocks only for controls that cannot run in jsdom ---
+// Canvas 2D / WebGL dependencies in constructor:
 vi.mock('./ui/components/Histogram', () => ({ Histogram: createMockClass('Histogram') }));
 vi.mock('./ui/components/Waveform', () => ({ Waveform: createMockClass('Waveform') }));
 vi.mock('./ui/components/Vectorscope', () => ({ Vectorscope: createMockClass('Vectorscope') }));
-vi.mock('./ui/components/ZoomControl', () => ({ ZoomControl: createMockClass('ZoomControl') }));
-vi.mock('./ui/components/ScopesControl', () => ({ ScopesControl: createMockClass('ScopesControl') }));
-vi.mock('./ui/components/CompareControl', () => ({ CompareControl: createMockClass('CompareControl') }));
+vi.mock('./ui/components/GamutDiagram', () => ({ GamutDiagram: createMockClass('GamutDiagram') }));
+vi.mock('./ui/components/CurvesControl', () => ({ CurvesControl: createMockClass('CurvesControl') }));
+vi.mock('./ui/components/CacheIndicator', () => ({ CacheIndicator: createMockClass('CacheIndicator') }));
+// RightPanelContent transitively uses canvas via MiniHistogram:
+vi.mock('./ui/layout/panels/RightPanelContent', () => ({ RightPanelContent: createMockClass('RightPanelContent') }));
+// PaintToolbar / TextFormattingToolbar need a real PaintEngine with .on(), .brush, .color, etc.:
+vi.mock('./ui/components/PaintToolbar', () => ({ PaintToolbar: createMockClass('PaintToolbar') }));
+vi.mock('./ui/components/TextFormattingToolbar', () => ({ TextFormattingToolbar: createMockClass('TextFormattingToolbar') }));
+// These controls call .on() / .isVisible() / .isEnabled() on their overlay arg during construction:
 vi.mock('./ui/components/SafeAreasControl', () => ({ SafeAreasControl: createMockClass('SafeAreasControl') }));
 vi.mock('./ui/components/FalseColorControl', () => ({ FalseColorControl: createMockClass('FalseColorControl') }));
 vi.mock('./ui/components/LuminanceVisualizationControl', () => ({ LuminanceVisualizationControl: createMockClass('LuminanceVisualizationControl') }));
-vi.mock('./ui/components/ToneMappingControl', () => ({ ToneMappingControl: createMockClass('ToneMappingControl') }));
 vi.mock('./ui/components/ZebraControl', () => ({ ZebraControl: createMockClass('ZebraControl') }));
 vi.mock('./ui/components/HSLQualifierControl', () => ({ HSLQualifierControl: createMockClass('HSLQualifierControl') }));
-vi.mock('./ui/components/GhostFrameControl', () => ({ GhostFrameControl: createMockClass('GhostFrameControl') }));
-vi.mock('./ui/components/PARControl', () => ({ PARControl: createMockClass('PARControl') }));
-vi.mock('./ui/components/BackgroundPatternControl', () => ({ BackgroundPatternControl: createMockClass('BackgroundPatternControl') }));
-vi.mock('./ui/components/OCIOControl', () => ({ OCIOControl: createMockClass('OCIOControl') }));
-vi.mock('./ui/components/DisplayProfileControl', () => ({ DisplayProfileControl: createMockClass('DisplayProfileControl') }));
-vi.mock('./ui/components/ColorInversionToggle', () => ({ ColorInversionToggle: createMockClass('ColorInversionToggle') }));
-vi.mock('./ui/components/HistoryPanel', () => ({ HistoryPanel: createMockClass('HistoryPanel') }));
-vi.mock('./ui/components/InfoPanel', () => ({ InfoPanel: createMockClass('InfoPanel') }));
+// MarkerListPanel calls session.on() and session.marks in constructor:
 vi.mock('./ui/components/MarkerListPanel', () => ({ MarkerListPanel: createMockClass('MarkerListPanel') }));
-vi.mock('./ui/components/CacheIndicator', () => ({ CacheIndicator: createMockClass('CacheIndicator') }));
-vi.mock('./ui/components/TextFormattingToolbar', () => ({ TextFormattingToolbar: createMockClass('TextFormattingToolbar') }));
-vi.mock('./ui/components/AutoSaveIndicator', () => ({ AutoSaveIndicator: createMockClass('AutoSaveIndicator') }));
-vi.mock('./ui/components/SnapshotPanel', () => ({ SnapshotPanel: createMockClass('SnapshotPanel') }));
-vi.mock('./ui/components/PlaylistPanel', () => ({ PlaylistPanel: createMockClass('PlaylistPanel') }));
-vi.mock('./ui/components/NetworkControl', () => ({ NetworkControl: createMockClass('NetworkControl') }));
-vi.mock('./ui/components/DeinterlaceControl', () => ({ DeinterlaceControl: createMockClass('DeinterlaceControl') }));
-vi.mock('./ui/components/FilmEmulationControl', () => ({ FilmEmulationControl: createMockClass('FilmEmulationControl') }));
-
-// Manager / utility mocks
-vi.mock('./core/session/AutoSaveManager', () => ({ AutoSaveManager: createAsyncDisposeMockClass('AutoSaveManager') }));
-vi.mock('./core/session/SnapshotManager', () => ({ SnapshotManager: createMockClass('SnapshotManager') }));
-vi.mock('./core/session/PlaylistManager', () => ({ PlaylistManager: createMockClass('PlaylistManager') }));
-vi.mock('./utils/ui/PresentationMode', () => ({ PresentationMode: createMockClass('PresentationMode') }));
-vi.mock('./network/NetworkSyncManager', () => ({ NetworkSyncManager: createMockClass('NetworkSyncManager') }));
-
-vi.mock('./utils/HistoryManager', () => ({
-  getGlobalHistoryManager: vi.fn(() => ({})),
-}));
-
-// ContextToolbar is imported but not used by constructor/dispose - mock to avoid side effects
-vi.mock('./ui/components/layout/ContextToolbar', () => ({
-  ContextToolbar: createMockClass('ContextToolbar'),
-}));
+// NotePanel calls session.on() and session.noteManager in constructor:
+vi.mock('./ui/components/NotePanel', () => ({ NotePanel: createMockClass('NotePanel') }));
 
 import { AppControlRegistry } from './AppControlRegistry';
 
+/**
+ * Spy on a real control's dispose method and register it in disposeMocks
+ * so the existing assertions continue to work identically.
+ */
+function spyOnDispose(registry: AppControlRegistry, field: string, name: string) {
+  const control = (registry as any)[field];
+  const originalDispose = control.dispose.bind(control);
+  const spy = vi.fn(originalDispose);
+  control.dispose = spy;
+  disposeMocks[name] = spy;
+}
+
+/**
+ * Names of controls that use real implementations (not mocked).
+ * Map: disposeMocks name -> registry field name.
+ */
+const REAL_CONTROL_FIELDS: Record<string, string> = {
+  // No-arg pure DOM controls
+  ColorControls: 'colorControls',
+  TransformControl: 'transformControl',
+  FilterControl: 'filterControl',
+  CropControl: 'cropControl',
+  CDLControl: 'cdlControl',
+  LensControl: 'lensControl',
+  StackControl: 'stackControl',
+  ChannelSelect: 'channelSelect',
+  StereoControl: 'stereoControl',
+  StereoEyeTransformControl: 'stereoEyeTransformControl',
+  StereoAlignControl: 'stereoAlignControl',
+  ZoomControl: 'zoomControl',
+  ScopesControl: 'scopesControl',
+  CompareControl: 'compareControl',
+  GhostFrameControl: 'ghostFrameControl',
+  PARControl: 'parControl',
+  BackgroundPatternControl: 'backgroundPatternControl',
+  OCIOControl: 'ocioControl',
+  DisplayProfileControl: 'displayProfileControl',
+  ColorInversionToggle: 'colorInversionToggle',
+  ToneMappingControl: 'toneMappingControl',
+  LUTPipelinePanel: 'lutPipelinePanel',
+  NoiseReductionControl: 'noiseReductionControl',
+  WatermarkControl: 'watermarkControl',
+  TimelineEditor: 'timelineEditor',
+  InfoPanel: 'infoPanel',
+  NetworkControl: 'networkControl',
+  DeinterlaceControl: 'deinterlaceControl',
+  FilmEmulationControl: 'filmEmulationControl',
+  GamutMappingControl: 'gamutMappingControl',
+  AutoSaveIndicator: 'autoSaveIndicator',
+  // Controls with trivially-satisfiable args
+  HistoryPanel: 'historyPanel',
+  SnapshotPanel: 'snapshotPanel',
+  PlaylistPanel: 'playlistPanel',
+  // Layout panel using real ColorControls + real HistoryManager
+  LeftPanelContent: 'leftPanelContent',
+  // Managers with trivial constructors
+  SnapshotManager: 'snapshotManager',
+  PlaylistManager: 'playlistManager',
+  PresentationMode: 'presentationMode',
+  NetworkSyncManager: 'networkSyncManager',
+  AutoSaveManager: 'autoSaveManager',
+  ShotGridConfigUI: 'shotGridConfig',
+  ShotGridPanel: 'shotGridPanel',
+};
+
+/**
+ * After constructing an AppControlRegistry with real implementations,
+ * install dispose spies on all real controls so disposeMocks tracks them.
+ */
+function installDisposeSpies(registry: AppControlRegistry) {
+  for (const [name, field] of Object.entries(REAL_CONTROL_FIELDS)) {
+    spyOnDispose(registry, field, name);
+  }
+}
+
 function createMockDeps() {
   return {
-    session: { currentFrame: 1 } as any,
+    session: { currentFrame: 1, frameCount: 1, on: vi.fn(() => vi.fn()) } as any,
     viewer: {
       getSafeAreasOverlay: vi.fn(() => ({})),
       getFalseColor: vi.fn(() => ({})),
       getLuminanceVisualization: vi.fn(() => ({})),
       getZebraStripes: vi.fn(() => ({})),
       getHSLQualifier: vi.fn(() => ({})),
+      getWatermarkOverlay: vi.fn(() => undefined),
+      getLUTPipeline: vi.fn(() => ({
+        registerSource: vi.fn(),
+        setActiveSource: vi.fn(),
+        getSourceConfig: vi.fn(() => ({
+          preCacheLUT: { enabled: true, lutData: null, intensity: 1, lutName: null },
+          fileLUT: { enabled: true, lutData: null, intensity: 1, lutName: null },
+          lookLUT: { enabled: true, lutData: null, intensity: 1, lutName: null },
+        })),
+        getState: vi.fn(() => ({
+          displayLUT: { enabled: true, lutData: null, intensity: 1, lutName: null },
+        })),
+        getActiveSourceId: vi.fn(() => 'default'),
+      })),
     } as any,
     paintEngine: {} as any,
     displayCapabilities: {} as any,
@@ -131,6 +176,7 @@ describe('AppControlRegistry', () => {
   it('ACR-002: dispose() calls dispose on every control and manager', () => {
     const deps = createMockDeps();
     const registry = new AppControlRegistry(deps);
+    installDisposeSpies(registry);
 
     registry.dispose();
 
@@ -142,11 +188,18 @@ describe('AppControlRegistry', () => {
       'FalseColorControl',
       'LuminanceVisualizationControl',
       'ToneMappingControl',
+      'LUTPipelinePanel',
+      'NoiseReductionControl',
+      'WatermarkControl',
+      'TimelineEditor',
       'ZebraControl',
       'HSLQualifierControl',
       'HistoryPanel',
       'InfoPanel',
       'MarkerListPanel',
+      'NotePanel',
+      'RightPanelContent',
+      'LeftPanelContent',
       'CacheIndicator',
       'PaintToolbar',
       'ColorControls',
@@ -182,6 +235,8 @@ describe('AppControlRegistry', () => {
       'PresentationMode',
       'NetworkSyncManager',
       'NetworkControl',
+      'ShotGridConfigUI',
+      'ShotGridPanel',
       'AutoSaveManager',
     ];
 
@@ -204,6 +259,7 @@ describe('AppControlRegistry', () => {
   it('ACR-003: dispose() handles AutoSaveManager async dispose (returns promise)', () => {
     const deps = createMockDeps();
     const registry = new AppControlRegistry(deps);
+    installDisposeSpies(registry);
 
     // AutoSaveManager.dispose returns a Promise - the code calls .catch() on it
     registry.dispose();
@@ -213,5 +269,156 @@ describe('AppControlRegistry', () => {
     // Verify it returned a promise (thenable)
     const result = autoSaveDispose.mock.results[0]!.value;
     expect(result).toBeInstanceOf(Promise);
+  });
+
+  describe('setupTabContents – panel toggle buttons in HeaderBar panels slot', () => {
+    function createMockOverlay() {
+      return { on: vi.fn(() => vi.fn()), toggle: vi.fn(), enable: vi.fn(), disable: vi.fn() };
+    }
+
+    function createSetupDeps() {
+      const contextToolbar = { setTabContent: vi.fn() } as any;
+      const viewer = {
+        getSafeAreasOverlay: vi.fn(() => ({})),
+        getFalseColor: vi.fn(() => createMockOverlay()),
+        getLuminanceVisualization: vi.fn(() => ({})),
+        getZebraStripes: vi.fn(() => ({})),
+        getHSLQualifier: vi.fn(() => ({ pickColor: vi.fn() })),
+        getSpotlightOverlay: vi.fn(() => createMockOverlay()),
+        getMissingFrameMode: vi.fn(() => 'off'),
+        setMissingFrameMode: vi.fn(),
+        getPixelProbe: vi.fn(() => createMockOverlay()),
+        getContainer: vi.fn(() => document.createElement('div')),
+        getImageData: vi.fn(() => null),
+        getClippingOverlay: vi.fn(() => ({ enable: vi.fn(), disable: vi.fn() })),
+        getCanvasContainer: vi.fn(() => document.createElement('div')),
+        getColorWheels: vi.fn(() => createMockOverlay()),
+        refresh: vi.fn(),
+      } as any;
+      const sessionBridge = { updateInfoPanel: vi.fn() } as any;
+
+      // Build a real panels-slot element so we can inspect its children
+      const panelsSlot = document.createElement('div');
+      panelsSlot.dataset.testid = 'panels-slot';
+      const headerBar = {
+        setPanelToggles: vi.fn((el: HTMLElement) => {
+          panelsSlot.innerHTML = '';
+          panelsSlot.appendChild(el);
+        }),
+        getPanelsSlot: vi.fn(() => panelsSlot),
+      } as any;
+
+      return { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot };
+    }
+
+    it('ACR-004: panels slot receives panel toggle buttons after setupTabContents', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      // headerBar.setPanelToggles should have been called once with a container div
+      expect(headerBar.setPanelToggles).toHaveBeenCalledTimes(1);
+      const panelTogglesArg = headerBar.setPanelToggles.mock.calls[0][0] as HTMLElement;
+      expect(panelTogglesArg).toBeInstanceOf(HTMLElement);
+
+      // The container should now be inside the panels slot
+      expect(panelsSlot.contains(panelTogglesArg)).toBe(true);
+    });
+
+    it('ACR-005: panels slot contains exactly 4 toggle buttons (info, snapshots, playlist, shotgrid)', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const buttons = panelsSlot.querySelectorAll('button');
+      expect(buttons.length).toBe(4);
+    });
+
+    it('ACR-006: each panel toggle button has the correct data-testid', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const expectedTestIds = ['info-panel-toggle', 'snapshot-panel-toggle', 'playlist-panel-toggle', 'shotgrid-panel-toggle'];
+      for (const testid of expectedTestIds) {
+        const btn = panelsSlot.querySelector(`[data-testid="${testid}"]`);
+        expect(btn, `button with data-testid="${testid}" should exist`).not.toBeNull();
+        expect(btn!.tagName).toBe('BUTTON');
+      }
+    });
+
+    it('ACR-007: panel toggle container uses flex layout', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      // The container div passed to setPanelToggles should have flex layout
+      const panelTogglesContainer = headerBar.setPanelToggles.mock.calls[0][0] as HTMLElement;
+      expect(panelTogglesContainer.style.display).toBe('flex');
+      expect(panelTogglesContainer.style.alignItems).toBe('center');
+
+      // It should contain exactly the 4 buttons as direct children
+      const childButtons = panelTogglesContainer.querySelectorAll(':scope > button');
+      expect(childButtons.length).toBe(4);
+    });
+
+    it('ACR-008: missing-frame mode selector reflects viewer state and updates mode on change', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar } = createSetupDeps();
+
+      viewer.getMissingFrameMode.mockReturnValue('hold');
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const viewCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'view');
+      expect(viewCall).toBeDefined();
+      const viewContent = viewCall![1] as HTMLElement;
+      const container = viewContent.querySelector('[data-testid="missing-frame-mode-select"]') as HTMLElement | null;
+      expect(container).not.toBeNull();
+
+      // Button label should reflect current mode
+      const button = container!.querySelector('button') as HTMLButtonElement;
+      expect(button).not.toBeNull();
+      expect(button!.textContent).toContain('Hold');
+
+      // Open dropdown by clicking the button (appends to body like stereo control)
+      button!.click();
+      const dropdown = document.body.querySelector('[data-testid="missing-frame-mode-dropdown"]') as HTMLElement;
+      expect(dropdown).not.toBeNull();
+
+      // Click an option in the dropdown to change mode
+      const blackOption = dropdown.querySelector('button[data-value="black"]') as HTMLButtonElement;
+      expect(blackOption).not.toBeNull();
+      blackOption.click();
+      expect(viewer.setMissingFrameMode).toHaveBeenCalledWith('black');
+    });
+
+    it('ACR-009: effects/view toolbars include denoise, watermark, and timeline editor toggles', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const viewCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'view');
+      const effectsCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'effects');
+      expect(viewCall).toBeDefined();
+      expect(effectsCall).toBeDefined();
+
+      const viewContent = viewCall![1] as HTMLElement;
+      const effectsContent = effectsCall![1] as HTMLElement;
+
+      expect(viewContent.querySelector('[data-testid="timeline-editor-toggle-button"]')).not.toBeNull();
+      expect(effectsContent.querySelector('[data-testid="noise-reduction-toggle-button"]')).not.toBeNull();
+      expect(effectsContent.querySelector('[data-testid="watermark-toggle-button"]')).not.toBeNull();
+    });
   });
 });

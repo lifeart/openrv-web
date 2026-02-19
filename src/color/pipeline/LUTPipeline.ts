@@ -38,6 +38,8 @@ export const DEFAULT_LUT_STAGE: LUTStageState = {
   lutData: null,
   intensity: 1.0,
   source: 'manual',
+  inMatrix: null,
+  outMatrix: null,
 };
 
 /** Default state for the pre-cache stage */
@@ -340,6 +342,8 @@ function serializeStage(stage: LUTStageState): SerializableLUTStageState {
     intensity: stage.intensity,
     source: stage.source,
     lutData: undefined,
+    inMatrix: stage.inMatrix ? Array.from(stage.inMatrix) : null,
+    outMatrix: stage.outMatrix ? Array.from(stage.outMatrix) : null,
   };
 }
 

@@ -210,11 +210,63 @@ const RED_LOG3G10: LogCurveParams = {
 };
 
 /**
+ * Thomson Viper FilmStream Log (10-bit)
+ *
+ * Proprietary log encoding from the Thomson Viper camera.
+ * Uses different reference levels from Cineon: black=16, white=1000 in 10-bit.
+ * NOT a Cineon variant — has different reference black/white points and gamma.
+ */
+const VIPER: LogCurveParams = {
+  name: 'Thomson Viper Log',
+  id: 'viper',
+  toLinear: (v: number): number => {
+    // Viper log-to-linear conversion
+    // Reference black at 16 and white at 1000 (10-bit code values)
+    const refBlack = 16.0 / 1023.0;
+    const refWhite = 1000.0 / 1023.0;
+    const displayGamma = 0.6;
+
+    // Clamp to valid range
+    if (v <= refBlack) return 0.0;
+    if (v >= refWhite) return 1.0;
+
+    // Normalized position in the log range [0, 1]
+    const normalized = (v - refBlack) / (refWhite - refBlack);
+
+    // Log-to-linear: pow(10, (normalized - 1) * gamma), then normalize
+    // so that refBlack -> 0.0 and refWhite -> 1.0
+    const blackOffset = Math.pow(10, -displayGamma);
+    const linear = (Math.pow(10, (normalized - 1.0) * displayGamma) - blackOffset) / (1.0 - blackOffset);
+
+    return Math.max(0, linear);
+  },
+  toLog: (v: number): number => {
+    const refBlack = 16.0 / 1023.0;
+    const refWhite = 1000.0 / 1023.0;
+    const displayGamma = 0.6;
+
+    // Clamp input
+    const linear = Math.max(0.0001, Math.min(v, 1.0));
+
+    // Inverse of toLinear:
+    // linear = (pow(10, (norm - 1) * gamma) - blackOffset) / (1 - blackOffset)
+    // => linear * (1 - blackOffset) + blackOffset = pow(10, (norm - 1) * gamma)
+    // => (norm - 1) * gamma = log10(linear * (1 - blackOffset) + blackOffset)
+    // => norm = log10(linear * (1 - blackOffset) + blackOffset) / gamma + 1
+    const blackOffset = Math.pow(10, -displayGamma);
+    const norm = Math.log10(linear * (1.0 - blackOffset) + blackOffset) / displayGamma + 1.0;
+
+    return norm * (refWhite - refBlack) + refBlack;
+  },
+};
+
+/**
  * Available log curves collection
  */
 export const LOG_CURVES = {
   none: null,
   cineon: CINEON,
+  viper: VIPER,
   arri_logc3: ARRI_LOGC3,
   arri_logc4: ARRI_LOGC4,
   sony_slog3: SONY_SLOG3,
@@ -230,6 +282,7 @@ export function getLogCurveOptions(): Array<{ id: LogCurveId; name: string }> {
   return [
     { id: 'none', name: 'None (Linear)' },
     { id: 'cineon', name: CINEON.name },
+    { id: 'viper', name: VIPER.name },
     { id: 'arri_logc3', name: ARRI_LOGC3.name },
     { id: 'arri_logc4', name: ARRI_LOGC4.name },
     { id: 'sony_slog3', name: SONY_SLOG3.name },
@@ -272,6 +325,19 @@ export function buildLogToLinearGLSL(curveId: LogCurveId): string {
           float offset = 0.0108;
           float normalized = (v - refBlack) / (refWhite - refBlack);
           return max(0.0, (pow(10.0, normalized * 0.002 / gamma) - offset) / (1.0 - offset));
+        }
+      `;
+    case 'viper':
+      return `
+        float logToLinear(float v) {
+          float refBlack = 16.0 / 1023.0;
+          float refWhite = 1000.0 / 1023.0;
+          float displayGamma = 0.6;
+          if (v <= refBlack) return 0.0;
+          if (v >= refWhite) return 1.0;
+          float normalized = (v - refBlack) / (refWhite - refBlack);
+          float blackOffset = pow(10.0, -displayGamma);
+          return max(0.0, (pow(10.0, (normalized - 1.0) * displayGamma) - blackOffset) / (1.0 - blackOffset));
         }
       `;
     case 'arri_logc3':

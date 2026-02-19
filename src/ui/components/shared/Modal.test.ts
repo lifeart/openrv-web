@@ -8,17 +8,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { showAlert, showConfirm, showPrompt, showModal, closeModal } from './Modal';
 
-// Mock createButton
-vi.mock('./Button', () => ({
-  createButton: vi.fn((text: string, onClick: () => void, options?: { variant?: string; minWidth?: string; icon?: string; title?: string; size?: string }) => {
-    const btn = document.createElement('button');
-    btn.textContent = text;
-    btn.title = options?.title || '';
-    btn.addEventListener('click', onClick);
-    return btn;
-  }),
-}));
-
 describe('Modal showAlert', () => {
   afterEach(() => {
     closeModal();
@@ -372,23 +361,12 @@ describe('Modal event listener cleanup', () => {
   });
 
   it('MODAL-U056: alert removes keydown listener when OK clicked', async () => {
-    const originalAddEventListener = document.addEventListener;
-    const originalRemoveEventListener = document.removeEventListener;
-    let addCount = 0;
-    let removeCount = 0;
-
-    document.addEventListener = vi.fn((...args) => {
-      if (args[0] === 'keydown') addCount++;
-      return originalAddEventListener.apply(document, args as Parameters<typeof document.addEventListener>);
-    }) as typeof document.addEventListener;
-
-    document.removeEventListener = vi.fn((...args) => {
-      if (args[0] === 'keydown') removeCount++;
-      return originalRemoveEventListener.apply(document, args as Parameters<typeof document.removeEventListener>);
-    }) as typeof document.removeEventListener;
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
 
     const promise = showAlert('Test');
-    expect(addCount).toBe(1);
+    const keydownAdds = addSpy.mock.calls.filter(([type]) => type === 'keydown');
+    expect(keydownAdds).toHaveLength(1);
 
     const container = document.getElementById('modal-container');
     const okButton = Array.from(container?.querySelectorAll('button') || [])
@@ -396,30 +374,20 @@ describe('Modal event listener cleanup', () => {
     okButton?.click();
 
     await promise;
-    expect(removeCount).toBe(1);
+    const keydownRemoves = removeSpy.mock.calls.filter(([type]) => type === 'keydown');
+    expect(keydownRemoves).toHaveLength(1);
 
-    document.addEventListener = originalAddEventListener;
-    document.removeEventListener = originalRemoveEventListener;
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 
   it('MODAL-U057: confirm removes keydown listener when Cancel clicked', async () => {
-    const originalAddEventListener = document.addEventListener;
-    const originalRemoveEventListener = document.removeEventListener;
-    let addCount = 0;
-    let removeCount = 0;
-
-    document.addEventListener = vi.fn((...args) => {
-      if (args[0] === 'keydown') addCount++;
-      return originalAddEventListener.apply(document, args as Parameters<typeof document.addEventListener>);
-    }) as typeof document.addEventListener;
-
-    document.removeEventListener = vi.fn((...args) => {
-      if (args[0] === 'keydown') removeCount++;
-      return originalRemoveEventListener.apply(document, args as Parameters<typeof document.removeEventListener>);
-    }) as typeof document.removeEventListener;
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
 
     const promise = showConfirm('Test');
-    expect(addCount).toBe(1);
+    const keydownAdds = addSpy.mock.calls.filter(([type]) => type === 'keydown');
+    expect(keydownAdds).toHaveLength(1);
 
     const container = document.getElementById('modal-container');
     const cancelButton = Array.from(container?.querySelectorAll('button') || [])
@@ -427,30 +395,20 @@ describe('Modal event listener cleanup', () => {
     cancelButton?.click();
 
     await promise;
-    expect(removeCount).toBe(1);
+    const keydownRemoves = removeSpy.mock.calls.filter(([type]) => type === 'keydown');
+    expect(keydownRemoves).toHaveLength(1);
 
-    document.addEventListener = originalAddEventListener;
-    document.removeEventListener = originalRemoveEventListener;
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 
   it('MODAL-U058: prompt removes keydown listener when OK clicked', async () => {
-    const originalAddEventListener = document.addEventListener;
-    const originalRemoveEventListener = document.removeEventListener;
-    let addCount = 0;
-    let removeCount = 0;
-
-    document.addEventListener = vi.fn((...args) => {
-      if (args[0] === 'keydown') addCount++;
-      return originalAddEventListener.apply(document, args as Parameters<typeof document.addEventListener>);
-    }) as typeof document.addEventListener;
-
-    document.removeEventListener = vi.fn((...args) => {
-      if (args[0] === 'keydown') removeCount++;
-      return originalRemoveEventListener.apply(document, args as Parameters<typeof document.removeEventListener>);
-    }) as typeof document.removeEventListener;
+    const addSpy = vi.spyOn(document, 'addEventListener');
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
 
     const promise = showPrompt('Test');
-    expect(addCount).toBe(1);
+    const keydownAdds = addSpy.mock.calls.filter(([type]) => type === 'keydown');
+    expect(keydownAdds).toHaveLength(1);
 
     const container = document.getElementById('modal-container');
     const okButton = Array.from(container?.querySelectorAll('button') || [])
@@ -458,10 +416,11 @@ describe('Modal event listener cleanup', () => {
     okButton?.click();
 
     await promise;
-    expect(removeCount).toBe(1);
+    const keydownRemoves = removeSpy.mock.calls.filter(([type]) => type === 'keydown');
+    expect(keydownRemoves).toHaveLength(1);
 
-    document.addEventListener = originalAddEventListener;
-    document.removeEventListener = originalRemoveEventListener;
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 });
 

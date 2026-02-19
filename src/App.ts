@@ -25,6 +25,7 @@ import { KeyboardManager } from './utils/input/KeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { getThemeManager } from './utils/ui/ThemeManager';
+import { getCorePreferencesManager } from './core/PreferencesManager';
 import { FullscreenManager } from './utils/ui/FullscreenManager';
 import type { OpenRVAPIConfig } from './api/OpenRVAPI';
 import { AppKeyboardHandler } from './AppKeyboardHandler';
@@ -48,6 +49,16 @@ import { wireEffectsControls } from './AppEffectsWiring';
 import { wireTransformControls } from './AppTransformWiring';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
+import { NoteOverlay } from './ui/components/NoteOverlay';
+import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
+
+// Layout
+import { LayoutStore } from './ui/layout/LayoutStore';
+import { LayoutManager } from './ui/layout/LayoutManager';
+import { formatTimecode, formatDuration } from './handlers/infoPanelHandlers';
+import { SequenceGroupNode, type EDLEntry } from './nodes/groups/SequenceGroupNode';
+import { decodeSessionState, type SessionURLState } from './core/session/SessionURLManager';
+import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from './network/WebRTCURLSignaling';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -59,6 +70,7 @@ export class App {
   private contextToolbar: ContextToolbar;
   private paintEngine: PaintEngine;
   private controls: AppControlRegistry;
+  private noteOverlay: NoteOverlay;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -70,8 +82,13 @@ export class App {
   private networkBridge: AppNetworkBridge;
   private persistenceManager: AppPersistenceManager;
   private sessionBridge!: AppSessionBridge;
+  private shotGridBridge: ShotGridIntegrationBridge;
   private focusManager!: FocusManager;
   private ariaAnnouncer!: AriaAnnouncer;
+
+  // Customizable layout
+  private layoutStore: LayoutStore;
+  private layoutManager: LayoutManager;
 
   // Image mode: timer for timeline fade transition
   private _imageTransitionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -105,12 +122,24 @@ export class App {
       displayCapabilities: this.displayCapabilities,
     });
 
+    // Wire NoteOverlay into timeline for note visualization
+    this.noteOverlay = new NoteOverlay(this.session);
+    this.timeline.setNoteOverlay(this.noteOverlay);
+
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
 
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
     this.contextToolbar = new ContextToolbar();
+
+    // Create layout system (persists panel sizes/presets to localStorage)
+    this.layoutStore = new LayoutStore();
+    this.layoutManager = new LayoutManager(this.layoutStore);
+    this.headerBar.setLayoutPresets(
+      this.layoutStore.getPresets().map(({ id, label }) => ({ id, label })),
+      (presetId) => this.layoutStore.applyPreset(presetId),
+    );
     this.tabBar.on('tabChanged', (tabId: TabId) => {
       this.contextToolbar.setActiveTab(tabId);
       this.onTabChanged(tabId);
@@ -141,6 +170,14 @@ export class App {
     // Apply any stored custom bindings to the keyboard shortcuts
     this.keyboardHandler.refresh();
 
+    // Wire unified preferences facade with live subsystem references
+    getCorePreferencesManager().setSubsystems({
+      theme: getThemeManager(),
+      layout: this.layoutStore,
+      keyBindings: this.customKeyBindingsManager,
+      ocio: this.controls.ocioControl.getStateManager(),
+    });
+
     // Initialize persistence manager
     this.persistenceManager = new AppPersistenceManager({
       session: this.session,
@@ -157,6 +194,9 @@ export class App {
       transformControl: this.controls.transformControl,
       cropControl: this.controls.cropControl,
       lensControl: this.controls.lensControl,
+      noiseReductionControl: this.controls.noiseReductionControl,
+      watermarkControl: this.controls.watermarkControl,
+      playlistManager: this.controls.playlistManager,
     });
 
     // Initialize session bridge (session event handlers, scope updates, info panel)
@@ -179,6 +219,7 @@ export class App {
       getChannelSelect: () => this.controls.channelSelect,
       getStackControl: () => this.controls.stackControl,
       getFilterControl: () => this.controls.filterControl,
+      getNoiseReductionControl: () => this.controls.noiseReductionControl,
       getCDLControl: () => this.controls.cdlControl,
       getTransformControl: () => this.controls.transformControl,
       getLensControl: () => this.controls.lensControl,
@@ -194,8 +235,18 @@ export class App {
       networkSyncManager: this.controls.networkSyncManager,
       networkControl: this.controls.networkControl,
       headerBar: this.headerBar,
+      getSessionURLState: () => this.captureSessionURLState(),
+      applySessionURLState: (state) => this.applySessionURLState(state),
     });
     this.networkBridge.setup();
+
+    // ShotGrid integration bridge
+    this.shotGridBridge = new ShotGridIntegrationBridge({
+      session: this.session,
+      configUI: this.controls.shotGridConfig,
+      panel: this.controls.shotGridPanel,
+    });
+    this.shotGridBridge.setup();
 
     // Build the wiring context shared by all wiring modules
     const wiringCtx: AppWiringContext = {
@@ -219,6 +270,23 @@ export class App {
       getFullscreenManager: () => this.fullscreenManager,
     });
     wireStackControls(wiringCtx);
+
+    // Timeline editor wiring (EDL/SequenceGroup integration)
+    this.controls.timelineEditor.on('cutSelected', ({ cutIndex }) => this.handleTimelineEditorCutSelected(cutIndex));
+    this.controls.timelineEditor.on('cutTrimmed', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutMoved', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutDeleted', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutInserted', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutSplit', () => this.applyTimelineEditorEdits());
+
+    this.session.on('graphLoaded', () => this.syncTimelineEditorFromGraph());
+    this.session.on('durationChanged', () => this.syncTimelineEditorFromGraph());
+    this.session.on('sourceLoaded', () => this.syncTimelineEditorFromGraph());
+    this.controls.playlistManager.on('clipsChanged', () => {
+      if (!this.getSequenceGroupNodeFromGraph()) {
+        this.syncTimelineEditorFromGraph();
+      }
+    });
   }
 
   async mount(selector: string): Promise<void> {
@@ -251,6 +319,158 @@ export class App {
 
     // Initialize persistence (auto-save and snapshots)
     await this.persistenceManager.init();
+
+    // Optional URL bootstrap:
+    // - auto-join room from ?room=...&pin=...
+    // - apply initial shared session hash from #s=...
+    await this.handleURLBootstrap();
+  }
+
+  private captureSessionURLState(): SessionURLState {
+    const ocioState = this.controls.ocioControl.getState();
+    const source = this.session.currentSource;
+
+    return {
+      frame: this.session.currentFrame,
+      fps: this.session.fps,
+      inPoint: this.session.inPoint,
+      outPoint: this.session.outPoint,
+      sourceIndex: this.session.currentSourceIndex,
+      sourceUrl: source?.url,
+      sourceAIndex: this.session.sourceAIndex,
+      sourceBIndex: this.session.sourceBIndex >= 0 ? this.session.sourceBIndex : undefined,
+      currentAB: this.session.currentAB,
+      transform: this.viewer.getTransform(),
+      wipeMode: this.controls.compareControl.getWipeMode(),
+      wipePosition: this.controls.compareControl.getWipePosition(),
+      ocio: ocioState.enabled ? {
+        enabled: ocioState.enabled,
+        configName: ocioState.configName,
+        inputColorSpace: ocioState.inputColorSpace,
+        display: ocioState.display,
+        view: ocioState.view,
+        look: ocioState.look,
+      } : undefined,
+    };
+  }
+
+  private applySessionURLState(state: SessionURLState): void {
+    const syncStateManager = this.controls.networkSyncManager.getSyncStateManager();
+    syncStateManager.beginApplyRemote();
+    try {
+      if (this.session.sourceCount > 0) {
+        const sourceIndex = Math.max(0, Math.min(this.session.sourceCount - 1, state.sourceIndex));
+        this.session.setCurrentSource(sourceIndex);
+      }
+
+      if (typeof state.fps === 'number' && state.fps > 0) {
+        this.session.fps = state.fps;
+      }
+      if (typeof state.inPoint === 'number') {
+        this.session.setInPoint(state.inPoint);
+      }
+      if (typeof state.outPoint === 'number') {
+        this.session.setOutPoint(state.outPoint);
+      }
+
+      if (typeof state.sourceAIndex === 'number') {
+        this.session.setSourceA(state.sourceAIndex);
+      }
+      if (typeof state.sourceBIndex === 'number') {
+        this.session.setSourceB(state.sourceBIndex);
+      }
+      if (state.currentAB === 'A' || state.currentAB === 'B') {
+        this.session.setCurrentAB(state.currentAB);
+      }
+
+      if (typeof state.frame === 'number') {
+        this.session.goToFrame(state.frame);
+      }
+
+      if (state.transform) {
+        this.viewer.setTransform(state.transform);
+      }
+
+      if (typeof state.wipeMode === 'string') {
+        this.controls.compareControl.setWipeMode(state.wipeMode as any);
+      }
+      if (typeof state.wipePosition === 'number') {
+        this.controls.compareControl.setWipePosition(state.wipePosition);
+      }
+
+      if (state.ocio) {
+        this.controls.ocioControl.setState({
+          enabled: state.ocio.enabled ?? true,
+          configName: state.ocio.configName ?? this.controls.ocioControl.getState().configName,
+          inputColorSpace: state.ocio.inputColorSpace ?? this.controls.ocioControl.getState().inputColorSpace,
+          display: state.ocio.display ?? this.controls.ocioControl.getState().display,
+          view: state.ocio.view ?? this.controls.ocioControl.getState().view,
+          look: state.ocio.look ?? this.controls.ocioControl.getState().look,
+        });
+      }
+    } finally {
+      syncStateManager.endApplyRemote();
+    }
+  }
+
+  private async handleURLBootstrap(): Promise<void> {
+    const params = new URLSearchParams(window.location.search);
+    const roomCode = params.get('room');
+    const pinCode = params.get('pin');
+    const webrtcSignalToken = params.get(WEBRTC_URL_SIGNAL_PARAM);
+
+    if (roomCode) {
+      this.controls.networkControl.setJoinRoomCodeFromLink(roomCode.toUpperCase());
+    }
+
+    if (pinCode) {
+      this.controls.networkControl.setPinCode(pinCode);
+      this.controls.networkSyncManager.setPinCode(pinCode);
+    }
+
+    let handledServerlessOffer = false;
+    if (webrtcSignalToken) {
+      const signal = decodeWebRTCURLSignal(webrtcSignalToken);
+      if (signal?.type === 'offer') {
+        handledServerlessOffer = true;
+        const answerToken = await this.controls.networkSyncManager.joinServerlessRoomFromOfferToken(
+          webrtcSignalToken,
+          'User',
+          pinCode ?? signal.pinCode
+        );
+        if (answerToken) {
+          const responseURL = new URL(window.location.href);
+          responseURL.search = '';
+          responseURL.hash = '';
+          responseURL.searchParams.set('room', signal.roomCode);
+          const activePin = pinCode ?? signal.pinCode;
+          if (activePin) {
+            responseURL.searchParams.set('pin', activePin);
+          }
+          responseURL.searchParams.set(WEBRTC_URL_SIGNAL_PARAM, answerToken);
+          this.controls.networkControl.setShareLink(responseURL.toString());
+          this.controls.networkControl.setShareLinkKind('response');
+          this.controls.networkControl.setResponseToken(answerToken);
+          this.controls.networkControl.showInfo(
+            'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.'
+          );
+        }
+      } else if (signal?.type === 'answer') {
+        handledServerlessOffer = true;
+        this.controls.networkControl.showInfo(
+          'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.'
+        );
+      }
+    }
+
+    if (!handledServerlessOffer && roomCode && pinCode) {
+      this.controls.networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
+    }
+
+    const sharedState = decodeSessionState(window.location.hash);
+    if (sharedState) {
+      this.applySessionURLState(sharedState);
+    }
   }
 
   private createLayout(): void {
@@ -269,7 +489,7 @@ export class App {
     const contextToolbarEl = this.contextToolbar.render();
 
     // Setup tab contents via control registry
-    this.controls.setupTabContents(this.contextToolbar, this.viewer, this.sessionBridge);
+    this.controls.setupTabContents(this.contextToolbar, this.viewer, this.sessionBridge, this.headerBar);
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
@@ -286,12 +506,32 @@ export class App {
     const skipLink = this.focusManager.createSkipLink('main-content');
     this.container.appendChild(skipLink);
 
-    this.container.appendChild(headerBarEl);
-    this.container.appendChild(tabBarEl);
-    this.container.appendChild(contextToolbarEl);
-    this.container.appendChild(viewerEl);
-    this.container.appendChild(cacheIndicatorEl);
-    this.container.appendChild(timelineEl);
+    // === LAYOUT MANAGER ===
+    // Place top-bar elements into the layout manager's top section
+    const topSection = this.layoutManager.getTopSection();
+    topSection.appendChild(headerBarEl);
+    topSection.appendChild(tabBarEl);
+    topSection.appendChild(contextToolbarEl);
+
+    // Viewer goes in the center slot
+    this.layoutManager.getViewerSlot().appendChild(viewerEl);
+
+    // Cache indicator + timeline go in the bottom slot
+    const bottomSlot = this.layoutManager.getBottomSlot();
+    bottomSlot.appendChild(cacheIndicatorEl);
+    bottomSlot.appendChild(timelineEl);
+
+    // Mount layout root into app container
+    this.container.appendChild(this.layoutManager.getElement());
+
+    // Register panel content
+    this.layoutManager.addPanelTab('right', 'Inspector', this.controls.rightPanelContent.getElement());
+    this.layoutManager.addPanelTab('left', 'Color Tools', this.controls.leftPanelContent.getElement());
+
+    // Wire layout resize to viewer resize
+    this.layoutManager.on('viewerResized', () => {
+      this.viewer.resize();
+    });
 
     // Register focus zones (order defines F6 cycling order)
     this.focusManager.addZone({
@@ -335,7 +575,7 @@ export class App {
     this.tabBar.on('tabChanged', (tabId: TabId) => {
       const tabLabels: Record<TabId, string> = {
         view: 'View', color: 'Color', effects: 'Effects',
-        transform: 'Transform', annotate: 'Annotate',
+        transform: 'Transform', annotate: 'Annotate', qc: 'QC',
       };
       this.ariaAnnouncer.announce(`${tabLabels[tabId]} tab`);
     });
@@ -346,6 +586,16 @@ export class App {
       if (name) {
         this.ariaAnnouncer.announce(`File loaded: ${name}`);
       }
+    });
+
+    // Announce play/pause state changes
+    this.session.on('playbackChanged', (playing: boolean) => {
+      this.ariaAnnouncer.announce(playing ? 'Playback started' : 'Playback paused');
+    });
+
+    // Announce playback speed changes
+    this.session.on('playbackSpeedChanged', (speed: number) => {
+      this.ariaAnnouncer.announce(`Playback speed: ${speed}x`);
     });
 
     // Initialize FullscreenManager with the app container
@@ -451,6 +701,9 @@ export class App {
     // Add marker list panel to viewer container
     this.viewer.getContainer().appendChild(this.controls.markerListPanel.getElement());
 
+    // Add note panel to viewer container
+    this.viewer.getContainer().appendChild(this.controls.notePanel.getElement());
+
     // Wire up cursor color updates from viewer to info panel
     this.viewer.onCursorColorChange((color, position) => {
       if (this.controls.infoPanel.isEnabled()) {
@@ -461,6 +714,39 @@ export class App {
       }
     });
 
+    // Wire histogram data from scope scheduler to mini histogram in right panel
+    this.sessionBridge.setHistogramDataCallback((data) => {
+      this.controls.rightPanelContent.updateHistogram(data);
+    });
+
+    // Wire info updates to right panel alongside existing InfoPanel
+    const updateRightPanelInfo = () => {
+      const source = this.session.currentSource;
+      const fps = this.session.fps;
+      const currentFrame = this.session.currentFrame;
+      const totalFrames = source?.duration ?? 0;
+      const durationSeconds = totalFrames / (fps || 1);
+      this.controls.rightPanelContent.updateInfo({
+        filename: source?.name,
+        width: source?.width,
+        height: source?.height,
+        currentFrame,
+        totalFrames,
+        timecode: formatTimecode(currentFrame, fps),
+        duration: formatDuration(durationSeconds),
+        fps,
+      });
+    };
+    this.session.on('frameChanged', updateRightPanelInfo);
+    this.session.on('sourceLoaded', updateRightPanelInfo);
+
+    // Wire preset mode to panel sections
+    this.layoutStore.on('presetApplied', (presetId) => {
+      this.headerBar.setActiveLayoutPreset(presetId);
+      this.controls.rightPanelContent.setPresetMode(presetId);
+      this.controls.leftPanelContent.setPresetMode(presetId);
+    });
+
     // Bind all session event handlers (scopes, info panel, HDR auto-config, etc.)
     this.sessionBridge.bindSessionEvents();
 
@@ -468,6 +754,11 @@ export class App {
     const paintToolbarEl = this.controls.paintToolbar.render();
     paintToolbarEl.addEventListener('clearFrame', () => {
       this.paintEngine.clearFrame(this.session.currentFrame);
+    });
+
+    // Sync annotation version filter when A/B source changes
+    this.session.on('abSourceChanged', () => {
+      this.controls.paintToolbar.setAnnotationVersion(this.session.currentAB);
     });
   }
 
@@ -550,8 +841,20 @@ export class App {
       'playback.stepForward': () => this.session.stepForward(),
       'playback.stepBackward': () => this.session.stepBackward(),
       'playback.toggleDirection': () => this.session.togglePlayDirection(),
-      'playback.goToStart': () => this.session.goToStart(),
-      'playback.goToEnd': () => this.session.goToEnd(),
+      'playback.goToStart': () => {
+        if (this.controls.playlistManager.isEnabled()) {
+          this.goToPlaylistStart();
+          return;
+        }
+        this.session.goToStart();
+      },
+      'playback.goToEnd': () => {
+        if (this.controls.playlistManager.isEnabled()) {
+          this.goToPlaylistEnd();
+          return;
+        }
+        this.session.goToEnd();
+      },
       'playback.slower': () => this.session.decreaseSpeed(),
       'playback.stop': () => this.session.pause(),
       'playback.faster': () => {
@@ -574,6 +877,10 @@ export class App {
       },
       'timeline.setOutPointAlt': () => this.session.setOutPoint(),
       'timeline.toggleMark': () => this.session.toggleMark(),
+      'timeline.nextMarkOrBoundary': () => this.goToNextMarkOrBoundary(),
+      'timeline.previousMarkOrBoundary': () => this.goToPreviousMarkOrBoundary(),
+      'timeline.nextShot': () => this.goToNextShot(),
+      'timeline.previousShot': () => this.goToPreviousShot(),
       'timeline.resetInOut': () => {
         // R key - reset in/out points, but on Annotate tab, rectangle tool takes precedence
         if (this.tabBar.activeTab === 'annotate') {
@@ -624,11 +931,12 @@ export class App {
       'edit.redo': () => this.paintEngine.redo(),
       'annotation.previous': () => this.goToPreviousAnnotation(),
       'annotation.next': () => this.goToNextAnnotation(),
-      'tab.view': () => this.tabBar.handleKeyboard('1'),
-      'tab.color': () => this.tabBar.handleKeyboard('2'),
-      'tab.effects': () => this.tabBar.handleKeyboard('3'),
-      'tab.transform': () => this.tabBar.handleKeyboard('4'),
-      'tab.annotate': () => this.tabBar.handleKeyboard('5'),
+      'tab.view': () => this.tabBar.setActiveTab('view'),
+      'tab.color': () => this.tabBar.setActiveTab('color'),
+      'tab.effects': () => this.tabBar.setActiveTab('effects'),
+      'tab.transform': () => this.tabBar.setActiveTab('transform'),
+      'tab.annotate': () => this.tabBar.setActiveTab('annotate'),
+      'tab.qc': () => this.tabBar.setActiveTab('qc'),
       'paint.pan': () => this.controls.paintToolbar.handleKeyboard('v'),
       'paint.pen': () => this.controls.paintToolbar.handleKeyboard('p'),
       'paint.eraser': () => this.controls.paintToolbar.handleKeyboard('e'),
@@ -644,7 +952,13 @@ export class App {
       'channel.green': () => this.controls.channelSelect.handleKeyboard('G', true),
       'channel.blue': () => this.controls.channelSelect.handleKeyboard('B', true),
       'channel.alpha': () => this.controls.channelSelect.handleKeyboard('A', true),
-      'channel.luminance': () => this.controls.channelSelect.handleKeyboard('L', true),
+      'channel.luminance': () => {
+        if (this.tabBar.activeTab === 'color') {
+          this.controls.lutPipelinePanel.toggle();
+          return;
+        }
+        this.controls.channelSelect.handleKeyboard('L', true);
+      },
       'channel.grayscale': () => this.controls.channelSelect.handleKeyboard('Y', true),
       'channel.none': () => this.controls.channelSelect.handleKeyboard('N', true),
       'stereo.toggle': () => this.controls.stereoControl.handleKeyboard('3', true),
@@ -718,6 +1032,9 @@ export class App {
         if (this.controls.ocioControl) {
           this.controls.ocioControl.hide();
         }
+        if (this.controls.lutPipelinePanel?.getIsVisible()) {
+          this.controls.lutPipelinePanel.hide();
+        }
         if (this.controls.compareControl?.isDropdownVisible()) {
           this.controls.compareControl.close();
         }
@@ -731,6 +1048,21 @@ export class App {
         if (this.controls.displayProfileControl.isDropdownVisible()) {
           this.controls.displayProfileControl.closeDropdown();
         }
+        if (this.controls.notePanel.isVisible()) {
+          this.controls.notePanel.hide();
+        }
+        if (this.controls.shotGridPanel.isOpen()) {
+          this.controls.shotGridPanel.hide();
+        }
+        if (this.controls.isNoiseReductionPanelVisible()) {
+          this.controls.hideNoiseReductionPanel();
+        }
+        if (this.controls.isWatermarkPanelVisible()) {
+          this.controls.hideWatermarkPanel();
+        }
+        if (this.controls.isTimelineEditorPanelVisible()) {
+          this.controls.hideTimelineEditorPanel();
+        }
       },
       'snapshot.create': () => {
         this.persistenceManager.createQuickSnapshot();
@@ -740,6 +1072,28 @@ export class App {
       },
       'panel.playlist': () => {
         this.controls.playlistPanel.toggle();
+      },
+      'panel.notes': () => {
+        this.controls.notePanel.toggle();
+      },
+      'notes.addNote': () => {
+        this.controls.notePanel.addNoteAtCurrentFrame();
+      },
+      'notes.next': () => {
+        const frame = this.session.noteManager.getNextNoteFrame(
+          this.session.currentSourceIndex, this.session.currentFrame,
+        );
+        if (frame !== this.session.currentFrame) {
+          this.session.goToFrame(frame);
+        }
+      },
+      'notes.previous': () => {
+        const frame = this.session.noteManager.getPreviousNoteFrame(
+          this.session.currentSourceIndex, this.session.currentFrame,
+        );
+        if (frame !== this.session.currentFrame) {
+          this.session.goToFrame(frame);
+        }
       },
       'view.toggleFullscreen': () => {
         this.fullscreenManager?.toggle();
@@ -761,7 +1115,213 @@ export class App {
       'focus.previousZone': () => {
         this.focusManager.focusPreviousZone();
       },
+      'layout.default': () => this.layoutStore.applyPreset('default'),
+      'layout.review': () => this.layoutStore.applyPreset('review'),
+      'layout.color': () => this.layoutStore.applyPreset('color'),
+      'layout.paint': () => this.layoutStore.applyPreset('paint'),
     };
+  }
+
+  private getSequenceGroupNodeFromGraph(): SequenceGroupNode | null {
+    const graph = this.session.graph;
+    if (!graph) {
+      return null;
+    }
+    const node = graph.getAllNodes().find((candidate) => candidate instanceof SequenceGroupNode);
+    return node instanceof SequenceGroupNode ? node : null;
+  }
+
+  private handleTimelineEditorCutSelected(cutIndex: number): void {
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (sequenceNode) {
+      const entry = this.controls.timelineEditor.getEDL()[cutIndex];
+      if (entry) {
+        this.session.goToFrame(entry.frame);
+      }
+      return;
+    }
+
+    const playlistClip = this.controls.playlistManager.getClipByIndex(cutIndex);
+    if (playlistClip) {
+      this.jumpToPlaylistGlobalFrame(playlistClip.globalStartFrame);
+      return;
+    }
+
+    const entry = this.controls.timelineEditor.getEDL()[cutIndex];
+    if (!entry) {
+      return;
+    }
+
+    if (entry.source >= 0 && entry.source < this.session.sourceCount) {
+      if (this.session.currentSourceIndex !== entry.source) {
+        this.session.setCurrentSource(entry.source);
+      }
+      const targetFrame = Math.max(1, Math.min(entry.inPoint, this.session.frameCount));
+      this.session.goToFrame(targetFrame);
+    }
+  }
+
+  private buildFallbackTimelineEDLFromSources(): { edl: EDLEntry[]; labels: string[] } {
+    const edl: EDLEntry[] = [];
+    const labels: string[] = [];
+
+    let nextFrame = 1;
+    const sources = this.session.allSources;
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
+      if (!source) continue;
+
+      const duration = Math.max(1, source.duration || 1);
+      edl.push({
+        frame: nextFrame,
+        source: i,
+        inPoint: 1,
+        outPoint: duration,
+      });
+      labels.push(source.name || `Source ${i + 1}`);
+      nextFrame += duration;
+    }
+
+    return { edl, labels };
+  }
+
+  private normalizeTimelineEditorEDL(edl: EDLEntry[]): EDLEntry[] {
+    const sanitized = edl
+      .filter((entry) => Number.isFinite(entry.source))
+      .map((entry) => ({
+        frame: Math.max(1, Math.floor(entry.frame)),
+        source: Math.max(0, Math.floor(entry.source)),
+        inPoint: Math.max(1, Math.floor(entry.inPoint)),
+        outPoint: Math.max(Math.max(1, Math.floor(entry.inPoint)), Math.floor(entry.outPoint)),
+      }))
+      .sort((a, b) => a.frame - b.frame);
+
+    const normalized: EDLEntry[] = [];
+    let nextFrame = 1;
+
+    for (const entry of sanitized) {
+      normalized.push({
+        frame: nextFrame,
+        source: entry.source,
+        inPoint: entry.inPoint,
+        outPoint: entry.outPoint,
+      });
+      nextFrame += entry.outPoint - entry.inPoint + 1;
+    }
+
+    return normalized;
+  }
+
+  private syncTimelineEditorFromGraph(): void {
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (sequenceNode) {
+      this.controls.timelineEditor.loadFromSequenceNode(sequenceNode);
+      return;
+    }
+
+    const clips = this.controls.playlistManager.getClips();
+    if (clips.length > 0) {
+      this.controls.timelineEditor.loadFromEDL(
+        clips.map((clip) => ({
+          frame: clip.globalStartFrame,
+          source: clip.sourceIndex,
+          inPoint: clip.inPoint,
+          outPoint: clip.outPoint,
+        })),
+        clips.map((clip) => clip.sourceName),
+      );
+      return;
+    }
+
+    const fallback = this.buildFallbackTimelineEDLFromSources();
+    if (fallback.edl.length > 0) {
+      this.controls.timelineEditor.loadFromEDL(fallback.edl, fallback.labels);
+      return;
+    }
+
+    this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
+    this.controls.timelineEditor.loadFromEDL([]);
+  }
+
+  private applyTimelineEditorEditsToPlaylist(edl: EDLEntry[]): void {
+    const clips = edl
+      .filter((entry) => entry.source >= 0 && entry.source < this.session.sourceCount)
+      .map((entry) => {
+        const source = this.session.getSourceByIndex(entry.source);
+        return {
+          sourceIndex: entry.source,
+          sourceName: source?.name || `Source ${entry.source + 1}`,
+          inPoint: entry.inPoint,
+          outPoint: entry.outPoint,
+        };
+      });
+
+    this.controls.playlistManager.replaceClips(clips);
+
+    const playlistEnabled = this.controls.playlistManager.isEnabled();
+    if (clips.length === 0) {
+      if (playlistEnabled) {
+        this.controls.playlistManager.setEnabled(false);
+      }
+    } else if (clips.length === 1) {
+      // Single-cut edits should behave like native in/out trimming and use
+      // session loop mode directly (no playlist runtime takeover).
+      if (playlistEnabled) {
+        this.controls.playlistManager.setEnabled(false);
+      }
+
+      const clip = clips[0]!;
+      if (this.session.currentSourceIndex !== clip.sourceIndex) {
+        this.session.setCurrentSource(clip.sourceIndex);
+      }
+      this.session.setInPoint(clip.inPoint);
+      this.session.setOutPoint(clip.outPoint);
+      this.controls.playlistManager.setCurrentFrame(1);
+
+      if (this.session.currentFrame < clip.inPoint || this.session.currentFrame > clip.outPoint) {
+        this.session.goToFrame(clip.inPoint);
+      }
+    } else {
+      // Multi-cut timelines use playlist runtime for cross-cut playback.
+      if (!playlistEnabled) {
+        const mappedMode = this.session.loopMode === 'once' ? 'none' : 'all';
+        this.controls.playlistManager.setLoopMode(mappedMode);
+        this.controls.playlistManager.setEnabled(true);
+      } else if (
+        this.controls.playlistManager.getLoopMode() === 'none' &&
+        this.session.loopMode !== 'once'
+      ) {
+        // Preserve expected looping when user loop mode is not "once".
+        this.controls.playlistManager.setLoopMode('all');
+      }
+    }
+
+    // Force immediate timeline redraw after EDL edits so canvas reflects
+    // new in/out playback bounds without waiting for external resize.
+    this.timeline.refresh();
+    this.persistenceManager.syncGTOStore();
+  }
+
+  private applyTimelineEditorEdits(): void {
+    const normalizedEDL = this.normalizeTimelineEditorEDL(this.controls.timelineEditor.getEDL());
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (!sequenceNode) {
+      this.applyTimelineEditorEditsToPlaylist(normalizedEDL);
+      return;
+    }
+
+    sequenceNode.setEDL(normalizedEDL);
+
+    const totalDuration = Math.max(1, sequenceNode.getTotalDurationFromEDL());
+    this.session.setInPoint(1);
+    this.session.setOutPoint(totalDuration);
+    if (this.session.currentFrame > totalDuration) {
+      this.session.goToFrame(totalDuration);
+    }
+
+    this.controls.timelineEditor.loadFromEDL(normalizedEDL);
+    this.timeline.refresh();
+    this.persistenceManager.syncGTOStore();
   }
 
   private goToNextAnnotation(): void {
@@ -783,6 +1343,82 @@ export class App {
     if (sortedFrames[0] !== undefined) {
       this.session.goToFrame(sortedFrames[0]);
     }
+  }
+
+  private goToPlaylistStart(): void {
+    const firstClip = this.controls.playlistManager.getClipByIndex(0);
+    if (!firstClip) return;
+    this.jumpToPlaylistGlobalFrame(firstClip.globalStartFrame);
+  }
+
+  private goToPlaylistEnd(): void {
+    const count = this.controls.playlistManager.getClipCount();
+    const lastClip = this.controls.playlistManager.getClipByIndex(count - 1);
+    if (!lastClip) return;
+    this.jumpToPlaylistGlobalFrame(lastClip.globalStartFrame + lastClip.duration - 1);
+  }
+
+  private goToNextMarkOrBoundary(): void {
+    if (this.session.goToNextMarker() !== null) return;
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const mapping = this.controls.playlistManager.getClipAtFrame(this.controls.playlistManager.getCurrentFrame());
+    if (!mapping) return;
+
+    const nextClip = this.controls.playlistManager.getClipByIndex(mapping.clipIndex + 1);
+    if (!nextClip) return;
+    this.jumpToPlaylistGlobalFrame(nextClip.globalStartFrame);
+  }
+
+  private goToPreviousMarkOrBoundary(): void {
+    if (this.session.goToPreviousMarker() !== null) return;
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const globalFrame = this.controls.playlistManager.getCurrentFrame();
+    const mapping = this.controls.playlistManager.getClipAtFrame(globalFrame);
+    if (!mapping) return;
+
+    const currentClipStart = mapping.clip.globalStartFrame;
+    const targetIndex = globalFrame > currentClipStart
+      ? mapping.clipIndex
+      : mapping.clipIndex - 1;
+    if (targetIndex < 0) return;
+
+    const clip = this.controls.playlistManager.getClipByIndex(targetIndex);
+    if (!clip) return;
+    this.jumpToPlaylistGlobalFrame(clip.globalStartFrame);
+  }
+
+  private goToNextShot(): void {
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const result = this.controls.playlistManager.goToNextClip(
+      this.controls.playlistManager.getCurrentFrame()
+    );
+    if (result) this.jumpToPlaylistGlobalFrame(result.frame);
+  }
+
+  private goToPreviousShot(): void {
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const result = this.controls.playlistManager.goToPreviousClip(
+      this.controls.playlistManager.getCurrentFrame()
+    );
+    if (result) this.jumpToPlaylistGlobalFrame(result.frame);
+  }
+
+  private jumpToPlaylistGlobalFrame(globalFrame: number): void {
+    const mapping = this.controls.playlistManager.getClipAtFrame(globalFrame);
+    if (!mapping) return;
+
+    if (this.session.currentSourceIndex !== mapping.sourceIndex) {
+      this.session.setCurrentSource(mapping.sourceIndex);
+    }
+    this.session.setInPoint(mapping.clip.inPoint);
+    this.session.setOutPoint(mapping.clip.outPoint);
+    this.controls.playlistManager.setCurrentFrame(globalFrame);
+    this.controls.playlistPanel.setActiveClip(mapping.clip.id);
+    this.session.goToFrame(mapping.localFrame);
   }
 
   private goToPreviousAnnotation(): void {
@@ -857,6 +1493,7 @@ export class App {
       viewer: this.viewer,
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
+      curvesControl: this.controls.curvesControl,
     };
   }
 
@@ -880,18 +1517,23 @@ export class App {
     document.removeEventListener('visibilitychange', this.boundHandleVisibilityChange);
 
     this.viewer.dispose();
+    this.noteOverlay.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();
     this.contextToolbar.dispose();
     this.fullscreenManager?.dispose();
     this.networkBridge.dispose();
+    this.shotGridBridge.dispose();
     this.persistenceManager.dispose();
     this.sessionBridge.dispose();
     this.keyboardHandler.dispose();
     this.keyboardManager.detach();
     this.focusManager?.dispose();
     this.ariaAnnouncer?.dispose();
+
+    // Dispose layout
+    this.layoutManager.dispose();
 
     // Dispose all controls via the registry
     this.controls.dispose();

@@ -30,6 +30,14 @@ export interface PlaylistClip {
   duration: number;
 }
 
+/** Input shape for replacing playlist clips in one operation */
+export interface PlaylistClipInput {
+  sourceIndex: number;
+  sourceName: string;
+  inPoint: number;
+  outPoint: number;
+}
+
 /** Playlist state for serialization */
 export interface PlaylistState {
   /** List of clips */
@@ -111,6 +119,40 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     this.clips.push(clip);
     this.emit('clipsChanged', { clips: [...this.clips] });
     return clip;
+  }
+
+  /**
+   * Replace all clips in one atomic update.
+   * Emits a single clipsChanged event.
+   */
+  replaceClips(clips: PlaylistClipInput[]): void {
+    const nextClips: PlaylistClip[] = [];
+    let globalStartFrame = 1;
+
+    for (const clip of clips) {
+      const inPoint = Math.max(1, Math.floor(clip.inPoint));
+      const outPoint = Math.max(inPoint, Math.floor(clip.outPoint));
+      const duration = outPoint - inPoint + 1;
+
+      nextClips.push({
+        id: `clip-${this.nextClipId++}`,
+        sourceIndex: clip.sourceIndex,
+        sourceName: clip.sourceName,
+        inPoint,
+        outPoint,
+        globalStartFrame,
+        duration,
+      });
+
+      globalStartFrame += duration;
+    }
+
+    this.clips = nextClips;
+
+    const totalDuration = this.getTotalDuration();
+    this.currentFrame = Math.max(1, Math.min(this.currentFrame, totalDuration || 1));
+
+    this.emit('clipsChanged', { clips: [...this.clips] });
   }
 
   /**
@@ -258,6 +300,81 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     return { frame: prevGlobal, clipChanged: false };
+  }
+
+  /**
+   * Jump to the start of the next clip in the playlist.
+   * Wraps to first clip when loopMode='all'.
+   * Returns null if at end with no loop, or if playlist is empty.
+   */
+  goToNextClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
+    if (this.clips.length === 0) return null;
+
+    const currentMapping = this.getClipAtFrame(currentGlobalFrame);
+    if (!currentMapping) {
+      // Not on any clip — go to first clip
+      const firstClip = this.clips[0]!;
+      return { frame: firstClip.globalStartFrame, clip: firstClip };
+    }
+
+    const nextIndex = currentMapping.clipIndex + 1;
+    if (nextIndex < this.clips.length) {
+      const nextClip = this.clips[nextIndex]!;
+      return { frame: nextClip.globalStartFrame, clip: nextClip };
+    }
+
+    // At last clip
+    if (this.loopMode === 'all') {
+      const firstClip = this.clips[0]!;
+      return { frame: firstClip.globalStartFrame, clip: firstClip };
+    }
+
+    return null;
+  }
+
+  /**
+   * Jump to the start of the previous clip, or start of current clip if mid-clip.
+   * If already at the start of a clip (within 1 frame), goes to previous clip.
+   * Wraps to last clip when loopMode='all'.
+   * Returns null if at beginning with no loop, or if playlist is empty.
+   */
+  goToPreviousClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
+    if (this.clips.length === 0) return null;
+
+    const currentMapping = this.getClipAtFrame(currentGlobalFrame);
+    if (!currentMapping) {
+      // Not on any clip — go to last clip
+      const lastClip = this.clips[this.clips.length - 1]!;
+      return { frame: lastClip.globalStartFrame, clip: lastClip };
+    }
+
+    // If we're past the start of the clip (more than 1 frame in), go to start of current clip
+    if (currentGlobalFrame > currentMapping.clip.globalStartFrame + 1) {
+      return { frame: currentMapping.clip.globalStartFrame, clip: currentMapping.clip };
+    }
+
+    // At or near start of clip — go to previous clip
+    const prevIndex = currentMapping.clipIndex - 1;
+    if (prevIndex >= 0) {
+      const prevClip = this.clips[prevIndex]!;
+      return { frame: prevClip.globalStartFrame, clip: prevClip };
+    }
+
+    // At first clip
+    if (this.loopMode === 'all') {
+      const lastClip = this.clips[this.clips.length - 1]!;
+      return { frame: lastClip.globalStartFrame, clip: lastClip };
+    }
+
+    return null;
+  }
+
+  /**
+   * Get the clip that contains a given source index.
+   * Returns the first matching clip, or null if not found.
+   */
+  getClipForSource(sourceIndex: number): PlaylistClip | null {
+    return this.clips.find(c => c.sourceIndex === sourceIndex) ?? null;
   }
 
   /**
@@ -456,7 +573,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Parse timecode string to frame number
    */
   private timecodeToFrames(timecode: string, fps = 24): number {
-    const parts = timecode.split(':').map(Number);
+    // Normalize drop-frame semicolon separator to colon for parsing
+    const parts = timecode.replace(/;/g, ':').split(':').map(Number);
     if (parts.length !== 4) return 0;
     const hours = parts[0] ?? 0;
     const minutes = parts[1] ?? 0;
@@ -472,8 +590,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const lines = edl.split('\n');
     let importedCount = 0;
 
-    // Simple regex to match EDL edit lines
-    const editRegex = /^\d{3}\s+(\S+)\s+V\s+C\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})/;
+    // Simple regex to match EDL edit lines (supports both : and ; timecode separators)
+    const editRegex = /^\d{3}\s+(\S+)\s+V\s+C\s+(\d{2}:\d{2}:\d{2}[;:]\d{2})\s+(\d{2}:\d{2}:\d{2}[;:]\d{2})/;
 
     for (const line of lines) {
       const match = line.match(editRegex);

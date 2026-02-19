@@ -14,8 +14,8 @@ import {
 } from './OCIOPresets';
 
 describe('WORKFLOW_PRESETS', () => {
-  it('PRESET-U001: contains 8 presets', () => {
-    expect(WORKFLOW_PRESETS).toHaveLength(8);
+  it('PRESET-U001: contains 12 presets', () => {
+    expect(WORKFLOW_PRESETS).toHaveLength(12);
   });
 
   it('PRESET-U002: all presets have unique IDs', () => {
@@ -106,9 +106,12 @@ describe('getPresetsByCategory', () => {
     }
   });
 
-  it('PRESET-U023: returns 0 hdr presets', () => {
+  it('PRESET-U023: returns 4 hdr presets', () => {
     const presets = getPresetsByCategory('hdr');
-    expect(presets).toHaveLength(0);
+    expect(presets).toHaveLength(4);
+    for (const p of presets) {
+      expect(p.category).toBe('hdr');
+    }
   });
 
   it('PRESET-U024: total across all categories equals total presets', () => {

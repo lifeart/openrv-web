@@ -1,14 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Session, MediaSource } from './Session';
-
-// Mock SequenceLoader
-vi.mock('../../utils/media/SequenceLoader', () => ({
-  createSequenceInfo: vi.fn(),
-  preloadFrames: vi.fn(),
-  loadFrameImage: vi.fn(),
-  releaseDistantFrames: vi.fn(),
-  disposeSequence: vi.fn(),
-}));
+import { Session } from './Session';
 
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
@@ -32,21 +23,11 @@ const createMockDTO = (protocols: any) => {
   } as any;
 };
 
-class TestSession extends Session {
-  public setSources(s: MediaSource[]) {
-    this.sources = [];
-    s.forEach(src => {
-        this.addSource(src);
-        (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
-    });
-  }
-}
-
 describe('Session', () => {
-  let session: TestSession;
+  let session: Session;
 
   beforeEach(() => {
-    session = new TestSession();
+    session = new Session();
   });
 
   describe('graph', () => {

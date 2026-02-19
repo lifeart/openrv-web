@@ -1,31 +1,38 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { wireColorControls } from './AppColorWiring';
+import {
+  wireColorControls,
+  resolveOCIOBakeSize,
+  ACES_OCIO_BAKE_SIZE,
+  DEFAULT_OCIO_BAKE_SIZE,
+} from './AppColorWiring';
 import { EventEmitter } from './utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Lightweight test doubles
 // ---------------------------------------------------------------------------
 
-vi.mock('./utils/HistoryManager', () => ({
-  getGlobalHistoryManager: vi.fn(() => ({
-    recordAction: vi.fn(),
-  })),
-}));
+// Controls only need EventEmitter capabilities plus the methods that
+// wireColorControls actually calls. DOM-heavy real controls cannot be
+// instantiated in a test environment, so thin EventEmitter subclasses
+// are the appropriate approach here.
 
-class MockColorInversionToggle extends EventEmitter {}
-class MockColorControls extends EventEmitter {
-  getAdjustments = vi.fn(() => ({ exposure: 0, contrast: 0, saturation: 1 }));
-  setAdjustments = vi.fn();
+class StubColorInversionToggle extends EventEmitter {}
+class StubColorControls extends EventEmitter {
+  private adjustments = { exposure: 0, contrast: 0, saturation: 1 };
+  getAdjustments() { return { ...this.adjustments }; }
+  setAdjustments(adj: Record<string, number>) { this.adjustments = { ...adj } as any; }
 }
-class MockCDLControl extends EventEmitter {}
-class MockCurvesControl extends EventEmitter {}
-class MockOCIOControl extends EventEmitter {
+class StubCDLControl extends EventEmitter {}
+class StubCurvesControl extends EventEmitter {}
+class StubOCIOControl extends EventEmitter {
   private _processor = {
-    bakeTo3DLUT: vi.fn(() => new Float32Array(33 * 33 * 33 * 3)),
+    bakeTo3DLUT: vi.fn(() => new Float32Array(65 * 65 * 65 * 3)),
   };
-  getProcessor = vi.fn(() => this._processor);
+  getProcessor() { return this._processor; }
 }
-class MockDisplayProfileControl extends EventEmitter {}
+class StubDisplayProfileControl extends EventEmitter {}
+class StubGamutMappingControl extends EventEmitter {}
+class StubLUTPipelinePanel extends EventEmitter {}
 
 function createMockViewer() {
   return {
@@ -37,6 +44,8 @@ function createMockViewer() {
     setCurves: vi.fn(),
     setOCIOBakedLUT: vi.fn(),
     setDisplayColorState: vi.fn(),
+    setGamutMappingState: vi.fn(),
+    syncLUTPipeline: vi.fn(),
   };
 }
 
@@ -53,12 +62,14 @@ function createMockPersistenceManager() {
 }
 
 function createContext() {
-  const colorInversionToggle = new MockColorInversionToggle();
-  const colorControls = new MockColorControls();
-  const cdlControl = new MockCDLControl();
-  const curvesControl = new MockCurvesControl();
-  const ocioControl = new MockOCIOControl();
-  const displayProfileControl = new MockDisplayProfileControl();
+  const colorInversionToggle = new StubColorInversionToggle();
+  const colorControls = new StubColorControls();
+  const cdlControl = new StubCDLControl();
+  const curvesControl = new StubCurvesControl();
+  const ocioControl = new StubOCIOControl();
+  const displayProfileControl = new StubDisplayProfileControl();
+  const gamutMappingControl = new StubGamutMappingControl();
+  const lutPipelinePanel = new StubLUTPipelinePanel();
   const viewer = createMockViewer();
   const sessionBridge = createMockSessionBridge();
   const persistenceManager = createMockPersistenceManager();
@@ -74,6 +85,8 @@ function createContext() {
     curvesControl,
     ocioControl,
     displayProfileControl,
+    gamutMappingControl,
+    lutPipelinePanel,
     gamutDiagram,
   };
 
@@ -199,7 +212,7 @@ describe('wireColorControls', () => {
     ctx._controls.ocioControl.emit('stateChanged', ocioState);
 
     const processor = ctx._controls.ocioControl.getProcessor();
-    expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(33);
+    expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(ACES_OCIO_BAKE_SIZE);
     expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledTimes(1);
     expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(
       expect.any(Float32Array),
@@ -299,6 +312,47 @@ describe('wireColorControls', () => {
     );
   });
 
+  it('CW-008e: ocioControl stateChanged uses 33^3 LUT for non-ACES workflow', () => {
+    wireColorControls(ctx as any);
+
+    const ocioState = {
+      enabled: true,
+      configName: 'srgb',
+      customConfigPath: null,
+      inputColorSpace: 'sRGB',
+      detectedColorSpace: null,
+      workingColorSpace: 'Linear sRGB',
+      display: 'sRGB',
+      view: 'Standard',
+      look: 'None',
+    };
+    ctx._controls.ocioControl.emit('stateChanged', ocioState);
+
+    const processor = ctx._controls.ocioControl.getProcessor();
+    expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(DEFAULT_OCIO_BAKE_SIZE);
+  });
+
+  it('CW-011: gamutMappingChanged calls viewer.setGamutMappingState + scheduleUpdateScopes + syncGTOStore', () => {
+    wireColorControls(ctx as any);
+
+    const gmState = { mode: 'clip' as const, sourceGamut: 'rec2020' as const, targetGamut: 'srgb' as const };
+    ctx._controls.gamutMappingControl.emit('gamutMappingChanged', gmState);
+
+    expect(ctx._viewer.setGamutMappingState).toHaveBeenCalledWith(gmState);
+    expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('CW-012: lutPipelinePanel pipelineChanged syncs LUT pipeline + scopes + persistence', () => {
+    wireColorControls(ctx as any);
+
+    ctx._controls.lutPipelinePanel.emit('pipelineChanged', undefined);
+
+    expect(ctx._viewer.syncLUTPipeline).toHaveBeenCalled();
+    expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
   it('CW-010: returns ColorWiringState with null timer initially', () => {
     const state = wireColorControls(ctx as any);
 
@@ -320,7 +374,9 @@ describe('wireColorControls', () => {
       const state = wireColorControls(ctx as any);
 
       const adjustments = { exposure: 2, contrast: 0.5, saturation: 1 };
-      ctx._controls.colorControls.getAdjustments.mockReturnValue(adjustments);
+      // Set the adjustments so that getAdjustments() returns the new values
+      // when the debounce callback fires and reads current state.
+      ctx._controls.colorControls.setAdjustments(adjustments);
       ctx._controls.colorControls.emit('adjustmentsChanged', adjustments);
 
       expect(state.colorHistoryTimer).not.toBeNull();
@@ -329,5 +385,37 @@ describe('wireColorControls', () => {
 
       expect(state.colorHistoryTimer).toBeNull();
     });
+  });
+});
+
+describe('resolveOCIOBakeSize', () => {
+  it('CW-012: uses 65^3 for ACES config', () => {
+    expect(resolveOCIOBakeSize({
+      enabled: true,
+      configName: 'aces_1.2',
+      customConfigPath: null,
+      inputColorSpace: 'Auto',
+      detectedColorSpace: null,
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: 'None',
+      lookDirection: 'forward',
+    })).toBe(ACES_OCIO_BAKE_SIZE);
+  });
+
+  it('CW-013: uses 33^3 for non-ACES workflows', () => {
+    expect(resolveOCIOBakeSize({
+      enabled: true,
+      configName: 'srgb',
+      customConfigPath: null,
+      inputColorSpace: 'sRGB',
+      detectedColorSpace: null,
+      workingColorSpace: 'Linear sRGB',
+      display: 'sRGB',
+      view: 'Standard',
+      look: 'None',
+      lookDirection: 'forward',
+    })).toBe(DEFAULT_OCIO_BAKE_SIZE);
   });
 });

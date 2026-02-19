@@ -4,8 +4,14 @@ import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import type { NoteOverlay } from './NoteOverlay';
 
 export class Timeline {
+  /** Radius of the playhead drag handle circle in pixels */
+  static readonly PLAYHEAD_CIRCLE_RADIUS = 9;
+  /** Width of the invisible hit area around the playhead in pixels */
+  static readonly PLAYHEAD_HIT_AREA_WIDTH = 20;
+
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -28,6 +34,7 @@ export class Timeline {
   private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private initialRenderFrameId: number | null = null;
   private disposed = false;
+  private noteOverlay: NoteOverlay | null = null;
 
   // Colors are resolved at render time from CSS variables
   private getColors() {
@@ -92,6 +99,8 @@ export class Timeline {
       width: 100%;
       height: 100%;
       display: block;
+      cursor: pointer;
+      touch-action: none;
     `;
     this.container.appendChild(this.canvas);
 
@@ -103,10 +112,10 @@ export class Timeline {
   }
 
   private bindEvents(): void {
-    this.canvas.addEventListener('mousedown', this.onMouseDown);
+    this.canvas.addEventListener('pointerdown', this.onPointerDown);
     this.canvas.addEventListener('dblclick', this.onDoubleClick);
-    window.addEventListener('mousemove', this.onMouseMove);
-    window.addEventListener('mouseup', this.onMouseUp);
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    this.canvas.addEventListener('pointerup', this.onPointerUp);
 
     // Listen to session changes
     this.session.on('frameChanged', () => this.draw());
@@ -153,6 +162,14 @@ export class Timeline {
     this.paintEngine = paintEngine;
     this.subscribeToPaintEngine();
     this.draw();
+  }
+
+  /**
+   * Set note overlay for rendering note bars on timeline.
+   */
+  setNoteOverlay(overlay: NoteOverlay): void {
+    this.noteOverlay = overlay;
+    overlay.setRedrawCallback(() => this.draw());
   }
 
   /**
@@ -204,8 +221,8 @@ export class Timeline {
     if (!source || this.width === 0) return;
 
     const padding = 60;
-    const trackY = 35;
-    const trackHeight = 24;
+    const trackY = 0;
+    const trackHeight = 42;
     const trackWidth = this.width - padding * 2;
     const duration = source.duration ?? 1;
 
@@ -296,29 +313,32 @@ export class Timeline {
     this.session.goToFrame(nearestFrame);
   }
 
-  private onMouseDown = (e: MouseEvent): void => {
-    // Check if click is on the frame counter area (top region above the track)
+  private onPointerDown = (e: PointerEvent): void => {
     const rect = this.canvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const x = e.clientX - rect.left;
-    const trackY = 35;
 
-    if (y < trackY && x > this.width * 0.25 && x < this.width * 0.75) {
-      // Click on frame counter area - toggle timecode display
+    // Check if click is on the frame counter area (bottom info region)
+    const bottomInfoY = this.height - 20;
+    if (y > bottomInfoY - 10 && y < bottomInfoY + 10 && x > this.width * 0.25 && x < this.width * 0.75) {
       this.toggleTimecodeDisplay();
       return;
     }
 
     this.isDragging = true;
+    this.canvas.setPointerCapture(e.pointerId);
     this.seekToPosition(e.clientX);
   };
 
-  private onMouseMove = (e: MouseEvent): void => {
+  private onPointerMove = (e: PointerEvent): void => {
     if (!this.isDragging) return;
     this.seekToPosition(e.clientX);
   };
 
-  private onMouseUp = (): void => {
+  private onPointerUp = (e: PointerEvent): void => {
+    if (this.isDragging) {
+      this.canvas.releasePointerCapture(e.pointerId);
+    }
     this.isDragging = false;
   };
 
@@ -382,8 +402,8 @@ export class Timeline {
     ctx.fillRect(0, 0, width, height);
 
     const padding = 60;
-    const trackY = 35;
-    const trackHeight = 24;
+    const trackY = 0;
+    const trackHeight = 42;
     const trackWidth = width - padding * 2;
 
     // Get source info for full duration
@@ -521,77 +541,109 @@ export class Timeline {
         if (marker.note) {
           ctx.fillStyle = markerColor;
           ctx.beginPath();
-          ctx.arc(markX, trackY - 8, 3, 0, Math.PI * 2);
+          ctx.arc(markX, trackY + trackHeight + 4, 3, 0, Math.PI * 2);
           ctx.fill();
         }
       }
     }
 
+    // Draw note overlay bars (between marks and playhead)
+    if (this.noteOverlay) {
+      this.noteOverlay.update(
+        ctx, trackWidth, duration, padding,
+        this.session.currentSourceIndex, trackY, trackHeight,
+      );
+    }
+
     // Draw playhead
     const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
+
+    // Playhead hit area (invisible, for pointer interaction affordance)
+    // A transparent zone of at least 20px wide around the playhead
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+    ctx.fillRect(playheadX - Timeline.PLAYHEAD_HIT_AREA_WIDTH / 2, trackY - 10, Timeline.PLAYHEAD_HIT_AREA_WIDTH, trackHeight + 20);
 
     // Playhead glow
     ctx.fillStyle = colors.playheadShadow;
     ctx.beginPath();
-    ctx.arc(playheadX, trackY + trackHeight / 2, 12, 0, Math.PI * 2);
+    ctx.arc(playheadX, trackY + trackHeight / 2, 14, 0, Math.PI * 2);
     ctx.fill();
 
     // Playhead line
     ctx.fillStyle = colors.playhead;
-    ctx.fillRect(playheadX - 1.5, trackY - 6, 3, trackHeight + 12);
+    ctx.fillRect(playheadX - 1.5, trackY - 10, 3, trackHeight + 20);
 
-    // Playhead circle
+    // Playhead circle (drag handle)
     ctx.beginPath();
-    ctx.arc(playheadX, trackY - 6, 5, 0, Math.PI * 2);
+    ctx.arc(playheadX, trackY - 10, Timeline.PLAYHEAD_CIRCLE_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
     // Frame numbers / timecode
     const fps = this.session.fps;
     const isTimecode = this._timecodeDisplayMode === 'timecode';
+    const trackCenterY = trackY + trackHeight / 2;
+    const bottomInfoY = height - 20;
+    const safeMetric = (value: number | undefined, fallback: number): number => (
+      typeof value === 'number' && Number.isFinite(value) ? value : fallback
+    );
+    const drawMiddleAlignedText = (text: string, x: number, yCenter: number): TextMetrics => {
+      const metrics = ctx.measureText(text);
+      const ascent = safeMetric(metrics.actualBoundingBoxAscent, 8);
+      const descent = safeMetric(metrics.actualBoundingBoxDescent, 3);
+      const baselineY = yCenter + (ascent - descent) / 2;
+      if (!Number.isFinite(baselineY)) {
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, yCenter);
+        return metrics;
+      }
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(text, x, baselineY);
+      return metrics;
+    };
     ctx.font = '12px -apple-system, BlinkMacSystemFont, monospace';
 
     // Left frame number (always 1)
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
     const leftLabel = isTimecode ? formatTimecode(1, fps) : '1';
-    ctx.fillText(leftLabel, padding - 10, trackY + trackHeight / 2);
+    drawMiddleAlignedText(leftLabel, padding - 10, trackCenterY);
 
     // Right frame number (full duration)
     ctx.textAlign = 'left';
     const rightLabel = isTimecode ? formatTimecode(duration, fps) : String(duration);
-    ctx.fillText(rightLabel, width - padding + 10, trackY + trackHeight / 2);
+    drawMiddleAlignedText(rightLabel, width - padding + 10, trackCenterY);
 
-    // Current frame and in/out info (top center)
+    // Current frame and in/out info (bottom center)
     ctx.fillStyle = colors.text;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, monospace';
+    ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, monospace';
     const frameLabel = formatFrameDisplay(currentFrame, fps, this._timecodeDisplayMode);
     const inOutInfo = inPoint !== 1 || outPoint !== duration
       ? isTimecode
         ? ` [${formatTimecode(inPoint, fps)}-${formatTimecode(outPoint, fps)}]`
         : ` [${inPoint}-${outPoint}]`
       : '';
-    ctx.fillText(`${frameLabel}${inOutInfo}`, width / 2, 18);
+    const frameAndRangeLabel = `${frameLabel}${inOutInfo}`;
+    const frameLabelMetrics = drawMiddleAlignedText(frameAndRangeLabel, width / 2, bottomInfoY);
+    const frameLabelWidth = frameLabelMetrics.width;
 
     // Draw timecode mode indicator (small label showing current mode)
     const modeLabel = isTimecode ? 'TC' : 'F#';
     ctx.font = '9px -apple-system, BlinkMacSystemFont, monospace';
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'left';
-    // Position to the right of the frame display text
-    const frameLabelWidth = ctx.measureText(`${frameLabel}${inOutInfo}`).width;
-    ctx.fillText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, 18);
+    drawMiddleAlignedText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, bottomInfoY);
 
-    // Info text (bottom)
+    // Info text (bottom line)
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = colors.textDim;
+    const infoRowY = bottomInfoY;
 
     // Source info
     if (source) {
       ctx.textAlign = 'left';
       const typeLabel = source.type === 'video' ? '[VID]' : '[IMG]';
-      ctx.fillText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, height - 12);
+      drawMiddleAlignedText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, infoRowY);
     }
 
     // Playback info
@@ -601,7 +653,7 @@ export class Timeline {
     const fpsDisplay = this.session.isPlaying && effectiveFps > 0
       ? `${effectiveFps.toFixed(1)}/${this.session.fps} fps`
       : `${this.session.fps} fps`;
-    ctx.fillText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, height - 12);
+    drawMiddleAlignedText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, infoRowY);
   }
 
   refresh(): void {
@@ -615,10 +667,10 @@ export class Timeline {
       cancelAnimationFrame(this.initialRenderFrameId);
       this.initialRenderFrameId = null;
     }
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('resize', this.boundHandleResize);
-    this.canvas.removeEventListener('mousedown', this.onMouseDown);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
     this.thumbnailManager.dispose();
     getThemeManager().off('themeChanged', this.boundOnThemeChange);

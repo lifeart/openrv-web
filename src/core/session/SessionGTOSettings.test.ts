@@ -2,7 +2,7 @@
  * Session GTO Settings Round Trip Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Session, type GTOViewSettings } from './Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { Viewer } from '../../ui/components/Viewer';
@@ -12,15 +12,6 @@ import { DEFAULT_CDL } from '../../color/CDL';
 import { DEFAULT_TRANSFORM } from '../../ui/components/TransformControl';
 import { DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '../../ui/components/CropControl';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
-
-vi.mock('../../color/WebGLLUT', () => ({
-  WebGLLUTProcessor: vi.fn().mockImplementation(() => ({
-    setLUT: vi.fn(),
-    hasLUT: vi.fn().mockReturnValue(false),
-    applyToCanvas: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
 
 const GTO_TEXT = `GTOa (4)
 
@@ -213,6 +204,7 @@ describe('Session GTO settings round-trip', () => {
       contrast: 1.2,
       saturation: 0.8,
       brightness: 0.2,
+      offset: 0.1,
     });
     expect(viewer.getCDL()).toEqual({
       slope: { r: 1.1, g: 1.2, b: 1.3 },

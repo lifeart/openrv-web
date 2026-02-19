@@ -295,12 +295,36 @@ function createMockCDLControl() {
   return cdlControl;
 }
 
+function createMockCurvesControl() {
+  const cloneCurves = (curves: any) => ({
+    master: { enabled: curves.master.enabled, points: curves.master.points.map((p: any) => ({ x: p.x, y: p.y })) },
+    red: { enabled: curves.red.enabled, points: curves.red.points.map((p: any) => ({ x: p.x, y: p.y })) },
+    green: { enabled: curves.green.enabled, points: curves.green.points.map((p: any) => ({ x: p.x, y: p.y })) },
+    blue: { enabled: curves.blue.enabled, points: curves.blue.points.map((p: any) => ({ x: p.x, y: p.y })) },
+  });
+
+  const defaultCurves = {
+    master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+    red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+    green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+    blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+  };
+
+  const curvesControl = {
+    _curves: cloneCurves(defaultCurves),
+    getCurves: vi.fn(function(this: any) { return cloneCurves(this._curves); }),
+    setCurves: vi.fn(function(this: any, curves: any) { this._curves = cloneCurves(curves); }),
+  };
+  return curvesControl;
+}
+
 function createAPIConfig(): OpenRVAPIConfig {
   return {
     session: createMockSession(),
     viewer: createMockViewer(),
     colorControls: createMockColorControls() as any,
     cdlControl: createMockCDLControl() as any,
+    curvesControl: createMockCurvesControl() as any,
   };
 }
 
@@ -883,11 +907,13 @@ describe('ColorAPI', () => {
   let color: ColorAPI;
   let colorControls: any;
   let cdlControl: any;
+  let curvesControl: any;
 
   beforeEach(() => {
     colorControls = createMockColorControls();
     cdlControl = createMockCDLControl();
-    color = new ColorAPI(colorControls as any, cdlControl as any);
+    curvesControl = createMockCurvesControl();
+    color = new ColorAPI(colorControls as any, cdlControl as any, curvesControl as any);
   });
 
   it('API-U060: setAdjustments() validates values', () => {
@@ -1005,6 +1031,64 @@ describe('ColorAPI', () => {
     cdl1.offset.g = 999;
     const cdl2 = color.getCDL();
     expect(cdl2.offset.g).toBe(0.0);
+  });
+
+  it('API-U069i: setCurves() applies per-channel partial updates', () => {
+    color.setCurves({
+      red: {
+        points: [
+          { x: 0, y: 0.1 },
+          { x: 1, y: 0.9 },
+        ],
+      },
+      blue: { enabled: false },
+    });
+
+    expect(curvesControl.setCurves).toHaveBeenCalled();
+    const setArg = curvesControl.setCurves.mock.calls[0][0];
+    expect(setArg.red.points).toEqual([{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }]);
+    expect(setArg.blue.enabled).toBe(false);
+    expect(setArg.green.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+  });
+
+  it('API-U069j: setCurves() validates channel point ranges', () => {
+    expect(() => color.setCurves({
+      red: {
+        points: [
+          { x: -0.1, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+    } as any)).toThrow(/x\/y must be in \[0, 1\]/);
+  });
+
+  it('API-U069k: getCurves() returns a defensive copy', () => {
+    const curves1 = color.getCurves();
+    curves1.red.points[0]!.y = 0.6;
+
+    const curves2 = color.getCurves();
+    expect(curves2.red.points[0]!.y).toBe(0);
+  });
+
+  it('API-U069l: resetCurves() restores identity curves', () => {
+    color.setCurves({
+      master: {
+        points: [
+          { x: 0, y: 0.05 },
+          { x: 1, y: 0.95 },
+        ],
+      },
+    });
+
+    curvesControl.setCurves.mockClear();
+    color.resetCurves();
+
+    expect(curvesControl.setCurves).toHaveBeenCalledTimes(1);
+    const resetArg = curvesControl.setCurves.mock.calls[0][0];
+    expect(resetArg.master.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+    expect(resetArg.red.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+    expect(resetArg.green.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+    expect(resetArg.blue.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
   });
 });
 

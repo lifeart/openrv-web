@@ -176,6 +176,10 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
    * Remove the watermark image
    */
   removeImage(): void {
+    const hadImage = this.watermarkImage !== null || this.state.imageUrl !== null;
+    const wasEnabled = this.state.enabled;
+    if (!hadImage && !wasEnabled) return;
+
     if (this.state.imageUrl && this.state.imageUrl.startsWith('blob:')) {
       URL.revokeObjectURL(this.state.imageUrl);
     }
@@ -186,7 +190,9 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
     this.state.imageUrl = null;
     this.state.enabled = false;
 
-    this.emit('imageRemoved', undefined);
+    if (hadImage) {
+      this.emit('imageRemoved', undefined);
+    }
     this.emit('stateChanged', { ...this.state });
   }
 

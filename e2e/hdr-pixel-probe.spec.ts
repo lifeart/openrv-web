@@ -177,13 +177,13 @@ test.describe('HDR Pixel Probe - Precision Toggle', () => {
     await expect(precisionBtn).toBeVisible();
   });
 
-  test('HDR-PP-E021: precision toggle button displays P3/P6 label', async ({ page }) => {
+  test('HDR-PP-E021: precision toggle button displays current precision label', async ({ page }) => {
     await page.keyboard.press('Shift+i');
     await page.waitForTimeout(100);
 
     const precisionBtn = page.locator('[data-testid="pixel-probe-precision-toggle"]');
     const text = await precisionBtn.textContent();
-    expect(text).toBe('P3/P6');
+    expect(text).toBe('P3');
   });
 
   test('HDR-PP-E022: precision toggle changes decimal places from 3 to 6', async ({ page }) => {

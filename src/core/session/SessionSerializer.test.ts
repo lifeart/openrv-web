@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionSerializer, SessionComponents } from './SessionSerializer';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
+import { PaintEngine } from '../../paint/PaintEngine';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
@@ -275,6 +276,27 @@ describe('SessionSerializer', () => {
         expect(state.lutPath).toBe('test.cube');
     });
 
+    it('SER-012b: serializes noise reduction and watermark state', () => {
+      const components = createMockComponents();
+      const noise = { strength: 33, luminanceStrength: 60, chromaStrength: 80, radius: 3 };
+      const watermark = {
+        enabled: true,
+        imageUrl: 'https://example.com/wm.png',
+        position: 'top-right' as const,
+        customX: 0.9,
+        customY: 0.1,
+        scale: 0.5,
+        opacity: 0.4,
+        margin: 12,
+      };
+      (components.viewer.getNoiseReductionParams as ReturnType<typeof vi.fn>).mockReturnValue(noise);
+      (components.viewer.getWatermarkState as ReturnType<typeof vi.fn>).mockReturnValue(watermark);
+
+      const state = SessionSerializer.toJSON(components);
+      expect(state.noiseReduction).toEqual(noise);
+      expect(state.watermark).toEqual(watermark);
+    });
+
     it('SER-013: marks blob URLs with requiresReload and clears path', () => {
       const components = createMockComponents();
       (components.session as any).allSources = [{
@@ -310,6 +332,23 @@ describe('SessionSerializer', () => {
 
       expect(state.media[0]?.path).toBe('https://example.com/video.mp4');
       expect(state.media[0]?.requiresReload).toBeUndefined(); // Not set at all
+    });
+
+    it('SER-015: serializes playlist state when playlist manager is available', () => {
+      const components = createMockComponents();
+      const playlistState = {
+        clips: [{ id: 'clip-1', sourceIndex: 0, sourceName: 'shot', inPoint: 1, outPoint: 24, globalStartFrame: 1, duration: 24 }],
+        enabled: true,
+        currentFrame: 12,
+        loopMode: 'all',
+      } as const;
+
+      components.playlistManager = {
+        getState: vi.fn().mockReturnValue(playlistState),
+      } as any;
+
+      const state = SessionSerializer.toJSON(components);
+      expect(state.playlist).toEqual(playlistState);
     });
   });
 
@@ -471,19 +510,93 @@ describe('SessionSerializer', () => {
         const result = await SessionSerializer.fromJSON(state, components);
         expect(result.warnings).toContain('LUT "my.cube" requires manual loading');
     });
+
+    it('SER-011a: restores noise reduction and watermark state', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.noiseReduction = { strength: 45, luminanceStrength: 55, chromaStrength: 82, radius: 4 };
+      state.watermark = {
+        enabled: true,
+        imageUrl: 'https://example.com/watermark.png',
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.8,
+        margin: 16,
+      };
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setNoiseReductionParams).toHaveBeenCalledWith(state.noiseReduction);
+      expect(components.viewer.setWatermarkState).toHaveBeenCalledWith(state.watermark);
+    });
+
+    it('SER-011b: restores playlist state when playlist manager is available', async () => {
+      const components = createMockComponents();
+      const setState = vi.fn();
+
+      components.playlistManager = {
+        setState,
+        clear: vi.fn(),
+        setEnabled: vi.fn(),
+        setLoopMode: vi.fn(),
+        setCurrentFrame: vi.fn(),
+      } as any;
+
+      const state = SessionSerializer.createEmpty();
+      state.playlist = {
+        clips: [{ id: 'clip-1', sourceIndex: 0, sourceName: 'shot', inPoint: 5, outPoint: 15, globalStartFrame: 1, duration: 11 }],
+        enabled: true,
+        currentFrame: 7,
+        loopMode: 'single',
+      };
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(setState).toHaveBeenCalledWith(state.playlist);
+    });
+
+    it('SER-011c: clears playlist manager when project has no playlist state', async () => {
+      const components = createMockComponents();
+      const clear = vi.fn();
+      const setEnabled = vi.fn();
+      const setLoopMode = vi.fn();
+      const setCurrentFrame = vi.fn();
+
+      components.playlistManager = {
+        setState: vi.fn(),
+        clear,
+        setEnabled,
+        setLoopMode,
+        setCurrentFrame,
+      } as any;
+
+      const state = SessionSerializer.createEmpty();
+      delete state.playlist;
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(setEnabled).toHaveBeenCalledWith(false);
+      expect(setLoopMode).toHaveBeenCalledWith('none');
+      expect(setCurrentFrame).toHaveBeenCalledWith(1);
+    });
   });
 });
 
 /**
  * Creates mock SessionComponents for testing.
  *
- * This mock provides the minimal Session, PaintEngine, and Viewer interfaces
- * needed by SessionSerializer. Methods are vi.fn() mocks that can be spied on.
+ * Uses real PaintEngine (no-arg constructor, pure data operations).
+ * Session and Viewer remain mocked due to complex dependencies
+ * (network/filesystem access, WebGL/DOM canvas).
  *
  * Available session mocks: allSources, getPlaybackState, setPlaybackState,
  * loadImage, loadVideo, loadFile
  */
 function createMockComponents(): SessionComponents {
+  const paintEngine = new PaintEngine();
+  // Spy on loadFromAnnotations so tests can assert it was called
+  vi.spyOn(paintEngine, 'loadFromAnnotations');
+
   return {
     session: {
       allSources: [
@@ -494,16 +607,23 @@ function createMockComponents(): SessionComponents {
       loadImage: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
       loadVideo: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<[File], Promise<void>>().mockResolvedValue(undefined),
+      noteManager: {
+        toSerializable: vi.fn().mockReturnValue([]),
+        fromSerializable: vi.fn(),
+        dispose: vi.fn(),
+      },
+      versionManager: {
+        toSerializable: vi.fn().mockReturnValue([]),
+        fromSerializable: vi.fn(),
+        dispose: vi.fn(),
+      },
+      statusManager: {
+        toSerializable: vi.fn().mockReturnValue([]),
+        fromSerializable: vi.fn(),
+        dispose: vi.fn(),
+      },
     },
-    paintEngine: {
-      toJSON: vi.fn().mockReturnValue({
-        nextId: 1,
-        show: true,
-        frames: {},
-        effects: {}
-      }),
-      loadFromAnnotations: vi.fn()
-    },
+    paintEngine,
     viewer: {
       getPan: vi.fn().mockReturnValue({ x: 0, y: 0 }),
       getZoom: vi.fn().mockReturnValue(1.5),
@@ -515,6 +635,17 @@ function createMockComponents(): SessionComponents {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
+      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getWatermarkState: vi.fn().mockReturnValue({
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
+      }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
@@ -527,6 +658,8 @@ function createMockComponents(): SessionComponents {
       setLensParams: vi.fn(),
       setWipeState: vi.fn(),
       setStackLayers: vi.fn(),
+      setNoiseReductionParams: vi.fn(),
+      setWatermarkState: vi.fn(),
       setLUTIntensity: vi.fn(),
       setPARState: vi.fn(),
       setBackgroundPatternState: vi.fn(),

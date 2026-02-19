@@ -21,6 +21,8 @@ export interface ABCompareManagerCallbacks {
 export class ABCompareManager {
   private _sourceAIndex = 0;
   private _sourceBIndex = -1; // -1 means no B source assigned
+  private _sourceCIndex = -1; // -1 means no C source assigned
+  private _sourceDIndex = -1; // -1 means no D source assigned
   private _currentAB: 'A' | 'B' = 'A';
   private _syncPlayhead = true;
   private _callbacks: ABCompareManagerCallbacks | null = null;
@@ -53,6 +55,20 @@ export class ABCompareManager {
    */
   get sourceBIndex(): number {
     return this._sourceBIndex;
+  }
+
+  /**
+   * Get source C index (-1 if not assigned)
+   */
+  get sourceCIndex(): number {
+    return this._sourceCIndex;
+  }
+
+  /**
+   * Get source D index (-1 if not assigned)
+   */
+  get sourceDIndex(): number {
+    return this._sourceDIndex;
   }
 
   /**
@@ -133,6 +149,62 @@ export class ABCompareManager {
       return true; // Caller should switch to source A
     }
     return false;
+  }
+
+  /**
+   * Set source C by index (for quad view).
+   */
+  setSourceC(index: number, sourceCount: number): void {
+    if (index >= 0 && index < sourceCount && index !== this._sourceCIndex) {
+      this._sourceCIndex = index;
+    }
+  }
+
+  /**
+   * Set source D by index (for quad view).
+   */
+  setSourceD(index: number, sourceCount: number): void {
+    if (index >= 0 && index < sourceCount && index !== this._sourceDIndex) {
+      this._sourceDIndex = index;
+    }
+  }
+
+  /**
+   * Clear source C assignment.
+   */
+  clearSourceC(): void {
+    this._sourceCIndex = -1;
+  }
+
+  /**
+   * Clear source D assignment.
+   */
+  clearSourceD(): void {
+    this._sourceDIndex = -1;
+  }
+
+  /**
+   * Check if quad view is available (all four sources assigned and valid).
+   */
+  isQuadAvailable(sourceCount: number): boolean {
+    return (
+      this._sourceBIndex >= 0 && this._sourceBIndex < sourceCount &&
+      this._sourceCIndex >= 0 && this._sourceCIndex < sourceCount &&
+      this._sourceDIndex >= 0 && this._sourceDIndex < sourceCount
+    );
+  }
+
+  /**
+   * Get the source index for a given ABCD label.
+   * Returns -1 if not assigned.
+   */
+  getSourceIndex(label: 'A' | 'B' | 'C' | 'D'): number {
+    switch (label) {
+      case 'A': return this._sourceAIndex;
+      case 'B': return this._sourceBIndex;
+      case 'C': return this._sourceCIndex;
+      case 'D': return this._sourceDIndex;
+    }
   }
 
   /**

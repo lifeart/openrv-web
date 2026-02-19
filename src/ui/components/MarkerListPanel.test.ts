@@ -856,4 +856,64 @@ describe('MarkerListPanel', () => {
       alertSpy.mockRestore();
     });
   });
+
+  describe('actions bar', () => {
+    it('MARK-U160: actions bar is present in the panel', () => {
+      panel.show();
+      const actionsBar = panel.getElement().querySelector('[data-testid="marker-actions-bar"]');
+      expect(actionsBar).not.toBeNull();
+    });
+
+    it('MARK-U161: actions bar contains Export, Import, and Clear All buttons', () => {
+      panel.show();
+      const actionsBar = panel.getElement().querySelector('[data-testid="marker-actions-bar"]');
+      const exportBtn = actionsBar?.querySelector('[data-testid="marker-export-btn"]');
+      const importBtn = actionsBar?.querySelector('[data-testid="marker-import-btn"]');
+      const clearBtn = actionsBar?.querySelector('[data-testid="marker-clear-btn"]');
+      expect(exportBtn).not.toBeNull();
+      expect(importBtn).not.toBeNull();
+      expect(clearBtn).not.toBeNull();
+    });
+
+    it('MARK-U162: header only contains Add and Close buttons', () => {
+      panel.show();
+      const header = panel.getElement().querySelector('.marker-panel-header');
+      const addBtn = header?.querySelector('[data-testid="marker-add-btn"]');
+      const closeBtn = header?.querySelector('[data-testid="marker-close-btn"]');
+      const exportBtn = header?.querySelector('[data-testid="marker-export-btn"]');
+      const importBtn = header?.querySelector('[data-testid="marker-import-btn"]');
+      const clearBtn = header?.querySelector('[data-testid="marker-clear-btn"]');
+      expect(addBtn).not.toBeNull();
+      expect(closeBtn).not.toBeNull();
+      expect(exportBtn).toBeNull();
+      expect(importBtn).toBeNull();
+      expect(clearBtn).toBeNull();
+    });
+  });
+
+  describe('mutual exclusion', () => {
+    it('MARK-U170: show() closes exclusive panel if open', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('MARK-U171: show() does not close exclusive panel if already closed', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).not.toHaveBeenCalled();
+    });
+  });
 });

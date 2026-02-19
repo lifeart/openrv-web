@@ -121,7 +121,7 @@ describe('Renderer HDR Output Mode', () => {
       configurable: true,
     });
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return throwingGL;
       return null;
     }) as typeof canvas.getContext;
@@ -538,65 +538,70 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
   } {
     const locationToName = new Map<object, string>();
     const displayTransferCalls: Array<number> = [];
+    const noop = () => {};
 
     const gl = {
       canvas: document.createElement('canvas'),
       drawingBufferColorSpace: 'srgb',
-      getExtension: vi.fn(() => null),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getProgramInfoLog: vi.fn(() => ''),
-      deleteShader: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      getShaderInfoLog: vi.fn(() => ''),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      createBuffer: vi.fn(() => ({})),
-      bindBuffer: vi.fn(),
-      bufferData: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+      getExtension: () => null,
+      createProgram: () => ({}),
+      attachShader: noop,
+      linkProgram: noop,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteShader: noop,
+      createShader: () => ({}),
+      shaderSource: noop,
+      compileShader: noop,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      createVertexArray: () => ({}),
+      bindVertexArray: noop,
+      createBuffer: () => ({}),
+      bindBuffer: noop,
+      bufferData: noop,
+      enableVertexAttribArray: noop,
+      vertexAttribPointer: noop,
+      getUniformLocation(_program: WebGLProgram, name: string) {
         const sentinel = { __uniformName: name };
         locationToName.set(sentinel, name);
         return sentinel;
-      }),
-      getAttribLocation: vi.fn(() => 0),
-      useProgram: vi.fn(),
-      uniform1f: vi.fn(),
-      uniform1i: vi.fn((location: object, value: number) => {
+      },
+      getAttribLocation: () => 0,
+      useProgram: noop,
+      uniform1f: noop,
+      uniform1i(location: object, value: number) {
         const name = locationToName.get(location);
         if (name === 'u_displayTransfer') {
           displayTransferCalls.push(value);
         }
-      }),
-      uniform1fv: vi.fn(),
-      uniform2fv: vi.fn(),
-      uniform3fv: vi.fn(),
-      uniform4fv: vi.fn(),
-      uniformMatrix3fv: vi.fn(),
-      uniformMatrix4fv: vi.fn(),
-      activeTexture: vi.fn(),
-      bindTexture: vi.fn(),
-      drawArrays: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      createTexture: vi.fn(() => ({})),
-      deleteTexture: vi.fn(),
-      deleteVertexArray: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      texParameteri: vi.fn(),
-      texImage2D: vi.fn(),
-      texImage3D: vi.fn(),
-      texStorage3D: vi.fn(),
-      isContextLost: vi.fn(() => false),
+      },
+      uniform1fv: noop,
+      uniform2fv: noop,
+      uniform3fv: noop,
+      uniform4fv: noop,
+      uniform1iv: noop,
+      uniform2iv: noop,
+      uniform3iv: noop,
+      uniform4iv: noop,
+      uniformMatrix3fv: noop,
+      uniformMatrix4fv: noop,
+      activeTexture: noop,
+      bindTexture: noop,
+      drawArrays: noop,
+      viewport: noop,
+      clearColor: noop,
+      clear: noop,
+      createTexture: () => ({}),
+      deleteTexture: noop,
+      deleteVertexArray: noop,
+      deleteBuffer: noop,
+      deleteProgram: noop,
+      texParameteri: noop,
+      texImage2D: noop,
+      texImage3D: noop,
+      texStorage3D: noop,
+      isContextLost: () => false,
       // Constants
       VERTEX_SHADER: 0x8b31,
       FRAGMENT_SHADER: 0x8b30,
@@ -636,7 +641,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return tracking.gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -726,37 +731,38 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     } {
       const locationToName = new Map<object, string>();
       const uniform1fCalls = new Map<string, number[]>();
+      const noop = () => {};
 
       const gl = {
         canvas: document.createElement('canvas'),
         drawingBufferColorSpace: 'srgb',
-        getExtension: vi.fn(() => null),
-        createProgram: vi.fn(() => ({})),
-        attachShader: vi.fn(),
-        linkProgram: vi.fn(),
-        getProgramParameter: vi.fn(() => true),
-        getProgramInfoLog: vi.fn(() => ''),
-        deleteShader: vi.fn(),
-        createShader: vi.fn(() => ({})),
-        shaderSource: vi.fn(),
-        compileShader: vi.fn(),
-        getShaderParameter: vi.fn(() => true),
-        getShaderInfoLog: vi.fn(() => ''),
-        createVertexArray: vi.fn(() => ({})),
-        bindVertexArray: vi.fn(),
-        createBuffer: vi.fn(() => ({})),
-        bindBuffer: vi.fn(),
-        bufferData: vi.fn(),
-        enableVertexAttribArray: vi.fn(),
-        vertexAttribPointer: vi.fn(),
-        getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+        getExtension: () => null,
+        createProgram: () => ({}),
+        attachShader: noop,
+        linkProgram: noop,
+        getProgramParameter: () => true,
+        getProgramInfoLog: () => '',
+        deleteShader: noop,
+        createShader: () => ({}),
+        shaderSource: noop,
+        compileShader: noop,
+        getShaderParameter: () => true,
+        getShaderInfoLog: () => '',
+        createVertexArray: () => ({}),
+        bindVertexArray: noop,
+        createBuffer: () => ({}),
+        bindBuffer: noop,
+        bufferData: noop,
+        enableVertexAttribArray: noop,
+        vertexAttribPointer: noop,
+        getUniformLocation(_program: WebGLProgram, name: string) {
           const sentinel = { __uniformName: name };
           locationToName.set(sentinel, name);
           return sentinel;
-        }),
-        getAttribLocation: vi.fn(() => 0),
-        useProgram: vi.fn(),
-        uniform1f: vi.fn((location: object, value: number) => {
+        },
+        getAttribLocation: () => 0,
+        useProgram: noop,
+        uniform1f(location: object, value: number) {
           const name = locationToName.get(location);
           if (name === 'u_displayGamma' || name === 'u_displayBrightness') {
             if (!uniform1fCalls.has(name)) {
@@ -764,28 +770,34 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
             }
             uniform1fCalls.get(name)!.push(value);
           }
-        }),
-        uniform1i: vi.fn(),
-        uniform2fv: vi.fn(),
-        uniform3fv: vi.fn(),
-        uniformMatrix3fv: vi.fn(),
-        activeTexture: vi.fn(),
-        bindTexture: vi.fn(),
-        pixelStorei: vi.fn(),
-        createTexture: vi.fn(() => ({})),
-        deleteTexture: vi.fn(),
-        clear: vi.fn(),
-        clearColor: vi.fn(),
-        viewport: vi.fn(),
-        drawArrays: vi.fn(),
-        deleteBuffer: vi.fn(),
-        deleteVertexArray: vi.fn(),
-        deleteProgram: vi.fn(),
-        texParameteri: vi.fn(),
-        texImage2D: vi.fn(),
-        texImage3D: vi.fn(),
-        texStorage3D: vi.fn(),
-        isContextLost: vi.fn(() => false),
+        },
+        uniform1i: noop,
+        uniform2fv: noop,
+        uniform3fv: noop,
+        uniform4fv: noop,
+        uniform1iv: noop,
+        uniform2iv: noop,
+        uniform3iv: noop,
+        uniform4iv: noop,
+        uniformMatrix3fv: noop,
+        uniformMatrix4fv: noop,
+        activeTexture: noop,
+        bindTexture: noop,
+        pixelStorei: noop,
+        createTexture: () => ({}),
+        deleteTexture: noop,
+        clear: noop,
+        clearColor: noop,
+        viewport: noop,
+        drawArrays: noop,
+        deleteBuffer: noop,
+        deleteVertexArray: noop,
+        deleteProgram: noop,
+        texParameteri: noop,
+        texImage2D: noop,
+        texImage3D: noop,
+        texStorage3D: noop,
+        isContextLost: () => false,
         // Constants
         VERTEX_SHADER: 0x8b31,
         FRAGMENT_SHADER: 0x8b30,
@@ -824,7 +836,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -922,65 +934,70 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     const locationToName = new Map<object, string>();
     // All uniform1i calls recorded as [name, value]
     const uniform1iCalls: Array<[string, number]> = [];
+    const noop = () => {};
 
     const gl = {
       canvas: document.createElement('canvas'),
       drawingBufferColorSpace: 'srgb',
-      getExtension: vi.fn(() => null),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getProgramInfoLog: vi.fn(() => ''),
-      deleteShader: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      getShaderInfoLog: vi.fn(() => ''),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      createBuffer: vi.fn(() => ({})),
-      bindBuffer: vi.fn(),
-      bufferData: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+      getExtension: () => null,
+      createProgram: () => ({}),
+      attachShader: noop,
+      linkProgram: noop,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteShader: noop,
+      createShader: () => ({}),
+      shaderSource: noop,
+      compileShader: noop,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      createVertexArray: () => ({}),
+      bindVertexArray: noop,
+      createBuffer: () => ({}),
+      bindBuffer: noop,
+      bufferData: noop,
+      enableVertexAttribArray: noop,
+      vertexAttribPointer: noop,
+      getUniformLocation(_program: WebGLProgram, name: string) {
         const sentinel = { __uniformName: name };
         locationToName.set(sentinel, name);
         return sentinel;
-      }),
-      getAttribLocation: vi.fn(() => 0),
-      useProgram: vi.fn(),
-      uniform1f: vi.fn(),
-      uniform1i: vi.fn((location: object, value: number) => {
+      },
+      getAttribLocation: () => 0,
+      useProgram: noop,
+      uniform1f: noop,
+      uniform1i(location: object, value: number) {
         const name = locationToName.get(location);
         if (name) {
           uniform1iCalls.push([name, value]);
         }
-      }),
-      uniform1fv: vi.fn(),
-      uniform2fv: vi.fn(),
-      uniform3fv: vi.fn(),
-      uniform4fv: vi.fn(),
-      uniformMatrix3fv: vi.fn(),
-      uniformMatrix4fv: vi.fn(),
-      activeTexture: vi.fn(),
-      bindTexture: vi.fn(),
-      drawArrays: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      createTexture: vi.fn(() => ({})),
-      deleteTexture: vi.fn(),
-      deleteVertexArray: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      texParameteri: vi.fn(),
-      texImage2D: vi.fn(),
-      texImage3D: vi.fn(),
-      texStorage3D: vi.fn(),
-      isContextLost: vi.fn(() => false),
+      },
+      uniform1fv: noop,
+      uniform2fv: noop,
+      uniform3fv: noop,
+      uniform4fv: noop,
+      uniform1iv: noop,
+      uniform2iv: noop,
+      uniform3iv: noop,
+      uniform4iv: noop,
+      uniformMatrix3fv: noop,
+      uniformMatrix4fv: noop,
+      activeTexture: noop,
+      bindTexture: noop,
+      drawArrays: noop,
+      viewport: noop,
+      clearColor: noop,
+      clear: noop,
+      createTexture: () => ({}),
+      deleteTexture: noop,
+      deleteVertexArray: noop,
+      deleteBuffer: noop,
+      deleteProgram: noop,
+      texParameteri: noop,
+      texImage2D: noop,
+      texImage3D: noop,
+      texStorage3D: noop,
+      isContextLost: () => false,
       // Constants
       VERTEX_SHADER: 0x8b31,
       FRAGMENT_SHADER: 0x8b30,
@@ -1035,7 +1052,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return tracking.gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1241,13 +1258,13 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
 
     // Attach configureHighDynamicRange to canvas
-    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = () => {};
 
     const caps = makeCaps({
       displayHDR: true,
@@ -1267,7 +1284,7 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1290,11 +1307,11 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
-    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = () => {};
 
     const caps = makeCaps({
       displayHDR: true,
@@ -1326,7 +1343,7 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1352,11 +1369,11 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
-    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = () => {};
 
     const caps = makeCaps({
       displayHDR: true,
@@ -1413,61 +1430,68 @@ describe('Renderer HDR Headroom Uniform', () => {
   } {
     const locationToName = new Map<object, string>();
     const headroomCalls: number[] = [];
+    const noop = () => {};
 
     const gl = {
       canvas: document.createElement('canvas'),
       drawingBufferColorSpace: 'srgb',
-      getExtension: vi.fn(() => null),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getProgramInfoLog: vi.fn(() => ''),
-      deleteShader: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      getShaderInfoLog: vi.fn(() => ''),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      createBuffer: vi.fn(() => ({})),
-      bindBuffer: vi.fn(),
-      bufferData: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+      getExtension: () => null,
+      createProgram: () => ({}),
+      attachShader: noop,
+      linkProgram: noop,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteShader: noop,
+      createShader: () => ({}),
+      shaderSource: noop,
+      compileShader: noop,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      createVertexArray: () => ({}),
+      bindVertexArray: noop,
+      createBuffer: () => ({}),
+      bindBuffer: noop,
+      bufferData: noop,
+      enableVertexAttribArray: noop,
+      vertexAttribPointer: noop,
+      getUniformLocation(_program: WebGLProgram, name: string) {
         const sentinel = { __uniformName: name };
         locationToName.set(sentinel, name);
         return sentinel;
-      }),
-      getAttribLocation: vi.fn(() => 0),
-      useProgram: vi.fn(),
-      uniform1f: vi.fn((location: object, value: number) => {
+      },
+      getAttribLocation: () => 0,
+      useProgram: noop,
+      uniform1f(location: object, value: number) {
         const name = locationToName.get(location);
         if (name === 'u_hdrHeadroom') {
           headroomCalls.push(value);
         }
-      }),
-      uniform1i: vi.fn(),
-      uniform2fv: vi.fn(),
-      uniform3fv: vi.fn(),
-      uniformMatrix3fv: vi.fn(),
-      activeTexture: vi.fn(),
-      bindTexture: vi.fn(),
-      drawArrays: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      createTexture: vi.fn(() => ({})),
-      deleteTexture: vi.fn(),
-      deleteVertexArray: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      texParameteri: vi.fn(),
-      texImage2D: vi.fn(),
-      texImage3D: vi.fn(),
-      isContextLost: vi.fn(() => false),
+      },
+      uniform1i: noop,
+      uniform2fv: noop,
+      uniform3fv: noop,
+      uniform4fv: noop,
+      uniform1iv: noop,
+      uniform2iv: noop,
+      uniform3iv: noop,
+      uniform4iv: noop,
+      uniformMatrix3fv: noop,
+      uniformMatrix4fv: noop,
+      activeTexture: noop,
+      bindTexture: noop,
+      drawArrays: noop,
+      viewport: noop,
+      clearColor: noop,
+      clear: noop,
+      createTexture: () => ({}),
+      deleteTexture: noop,
+      deleteVertexArray: noop,
+      deleteBuffer: noop,
+      deleteProgram: noop,
+      texParameteri: noop,
+      texImage2D: noop,
+      texImage3D: noop,
+      isContextLost: () => false,
       // Constants
       VERTEX_SHADER: 0x8b31,
       FRAGMENT_SHADER: 0x8b30,
@@ -1512,7 +1536,7 @@ describe('Renderer HDR Headroom Uniform', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1543,7 +1567,7 @@ describe('Renderer HDR Headroom Uniform', () => {
     });
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1570,7 +1594,7 @@ describe('Renderer HDR Headroom Uniform', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1629,18 +1653,19 @@ describe('Renderer renderImageToFloat', () => {
     extendedGL.TEXTURE2 = 0x84c2;
     extendedGL.TEXTURE3 = 0x84c3;
 
-    // FBO methods
+    // FBO methods (asserted on in tests)
     extendedGL.createFramebuffer = vi.fn(() => ({}));
     extendedGL.bindFramebuffer = vi.fn();
     extendedGL.framebufferTexture2D = vi.fn();
     extendedGL.checkFramebufferStatus = vi.fn(() => 0x8cd5); // FRAMEBUFFER_COMPLETE
     extendedGL.deleteFramebuffer = vi.fn();
-    extendedGL.texImage3D = vi.fn();
-    extendedGL.uniform2fv = vi.fn();
-    extendedGL.uniform3fv = vi.fn();
-    extendedGL.uniformMatrix3fv = vi.fn();
+    // Stubs (not asserted on)
+    extendedGL.texImage3D = () => {};
+    extendedGL.uniform2fv = () => {};
+    extendedGL.uniform3fv = () => {};
+    extendedGL.uniformMatrix3fv = () => {};
 
-    // readPixels for float data (fills with a pattern)
+    // readPixels for float data (fills with a pattern) - asserted on
     extendedGL.readPixels = vi.fn(
       (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | Uint8Array) => {
         if (pixels instanceof Float32Array) {
@@ -1654,21 +1679,20 @@ describe('Renderer renderImageToFloat', () => {
       },
     );
 
-    // getParameter returns viewport for VIEWPORT queries
-    extendedGL.getParameter = vi.fn((param: number) => {
+    // getParameter returns viewport for VIEWPORT queries (not asserted as mock)
+    extendedGL.getParameter = (param: number) => {
       if (param === 0x0ba2) return new Int32Array([0, 0, 100, 100]); // VIEWPORT
       return null;
-    });
+    };
 
-    // getError returns NO_ERROR
-    extendedGL.getError = vi.fn(() => 0);
+    // getError returns NO_ERROR (not asserted as mock)
+    extendedGL.getError = () => 0;
 
-    // EXT_color_buffer_float support
-    const originalGetExtension = mockGL.getExtension as ReturnType<typeof vi.fn>;
+    // EXT_color_buffer_float support (asserted via .mock.calls)
     extendedGL.getExtension = vi.fn((name: string) => {
       if (name === 'EXT_color_buffer_float') return {};
       if (name === 'OES_texture_float_linear') return {};
-      return originalGetExtension(name);
+      return null;
     });
 
     return mockGL;
@@ -1678,7 +1702,7 @@ describe('Renderer renderImageToFloat', () => {
     const mockGL = createFBOCapableGL();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return mockGL;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1695,10 +1719,10 @@ describe('Renderer renderImageToFloat', () => {
   it('REN-FBO-002: returns null when EXT_color_buffer_float is unavailable', () => {
     const mockGL = createFBOCapableGL();
     // Override getExtension to not return EXT_color_buffer_float
-    (mockGL as unknown as Record<string, unknown>).getExtension = vi.fn(() => null);
+    (mockGL as unknown as Record<string, unknown>).getExtension = () => null;
 
     const canvas = document.createElement('canvas');
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1790,7 +1814,7 @@ describe('Renderer renderImageToFloat', () => {
   it('REN-FBO-009: returns null when readPixels fails (GL error)', () => {
     const mockGL = initWithFBOCapableGL();
     // Make getError return a non-zero error code after readPixels
-    (mockGL as unknown as { getError: ReturnType<typeof vi.fn> }).getError = vi.fn(() => 0x0500 as unknown); // GL_INVALID_ENUM
+    (mockGL as unknown as Record<string, unknown>).getError = () => 0x0500; // GL_INVALID_ENUM
 
     const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
     const result = renderer.renderImageToFloat(image, 4, 4);
@@ -1873,8 +1897,8 @@ describe('Renderer renderImageToFloat', () => {
   it('REN-FBO-015: returns null when FBO creation fails', () => {
     const mockGL = initWithFBOCapableGL();
     // Make checkFramebufferStatus return incomplete
-    (mockGL as unknown as { checkFramebufferStatus: ReturnType<typeof vi.fn> }).checkFramebufferStatus =
-      vi.fn(() => 0 as unknown); // not FRAMEBUFFER_COMPLETE
+    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
+      () => 0; // not FRAMEBUFFER_COMPLETE
 
     const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
     const result = renderer.renderImageToFloat(image, 4, 4);
@@ -1945,16 +1969,18 @@ describe('Renderer renderImageToFloatAsync', () => {
     extendedGL.TEXTURE2 = 0x84c2;
     extendedGL.TEXTURE3 = 0x84c3;
 
+    // FBO methods (bindFramebuffer/viewport asserted on in tests)
     extendedGL.createFramebuffer = vi.fn(() => ({}));
     extendedGL.bindFramebuffer = vi.fn();
     extendedGL.framebufferTexture2D = vi.fn();
     extendedGL.checkFramebufferStatus = vi.fn(() => 0x8cd5);
     extendedGL.deleteFramebuffer = vi.fn();
-    extendedGL.texImage3D = vi.fn();
-    extendedGL.uniform2fv = vi.fn();
-    extendedGL.uniform3fv = vi.fn();
-    extendedGL.uniformMatrix3fv = vi.fn();
-    extendedGL.getError = vi.fn(() => 0);
+    // Stubs (not asserted on)
+    extendedGL.texImage3D = () => {};
+    extendedGL.uniform2fv = () => {};
+    extendedGL.uniform3fv = () => {};
+    extendedGL.uniformMatrix3fv = () => {};
+    extendedGL.getError = () => 0;
 
     // PBO constants
     extendedGL.PIXEL_PACK_BUFFER = 0x88eb;
@@ -1967,7 +1993,7 @@ describe('Renderer renderImageToFloatAsync', () => {
     extendedGL.ALREADY_SIGNALED = 0x911a;
     extendedGL.TIMEOUT_EXPIRED = 0x911b;
 
-    // PBO / fence methods
+    // PBO / fence methods (asserted on in tests)
     let fenceCounter = 0;
     const fenceSignaled = new Map<number, boolean>();
 
@@ -1996,7 +2022,7 @@ describe('Renderer renderImageToFloatAsync', () => {
       },
     );
 
-    // readPixels fills Float32Array with FBO pattern (different from PBO pattern)
+    // readPixels fills Float32Array with FBO pattern (different from PBO pattern) - asserted on
     extendedGL.readPixels = vi.fn(
       (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | number) => {
         if (pixels instanceof Float32Array) {
@@ -2011,18 +2037,18 @@ describe('Renderer renderImageToFloatAsync', () => {
       },
     );
 
-    extendedGL.getParameter = vi.fn((param: number) => {
+    // Not asserted as mock
+    extendedGL.getParameter = (param: number) => {
       if (param === 0x0ba2) return new Int32Array([0, 0, 100, 100]);
       return null;
-    });
+    };
 
-    // EXT_color_buffer_float support
-    const originalGetExtension = mockGL.getExtension as ReturnType<typeof vi.fn>;
-    extendedGL.getExtension = vi.fn((name: string) => {
+    // EXT_color_buffer_float support (not asserted in PBO tests)
+    extendedGL.getExtension = (name: string) => {
       if (name === 'EXT_color_buffer_float') return {};
       if (name === 'OES_texture_float_linear') return {};
-      return originalGetExtension(name);
-    });
+      return null;
+    };
 
     // Helper to signal specific fences
     (mockGL as unknown as { _signalFence: (id: number) => void })._signalFence = (id: number) => {
@@ -2042,7 +2068,7 @@ describe('Renderer renderImageToFloatAsync', () => {
     const mockGL = createPBOCapableGL();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return mockGL;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -2058,10 +2084,10 @@ describe('Renderer renderImageToFloatAsync', () => {
 
   it('REN-PBO-002: returns null when EXT_color_buffer_float is unavailable', () => {
     const mockGL = createPBOCapableGL();
-    (mockGL as unknown as Record<string, unknown>).getExtension = vi.fn(() => null);
+    (mockGL as unknown as Record<string, unknown>).getExtension = () => null;
 
     const canvas = document.createElement('canvas');
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -2278,14 +2304,14 @@ describe('Renderer renderImageToFloatAsync', () => {
   it('REN-PBO-016: falls back to sync renderImageToFloat when PBO creation fails', () => {
     const mockGL = initWithPBOCapableGL();
     // Make createBuffer fail
-    (mockGL as unknown as Record<string, unknown>).createBuffer = vi.fn(() => null);
+    (mockGL as unknown as Record<string, unknown>).createBuffer = () => null;
 
     // Reset the renderer to force PBO re-creation
     renderer.dispose();
     renderer = new Renderer();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return mockGL;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -2324,13 +2350,13 @@ describe('Renderer renderImageToFloatAsync', () => {
   it('REN-PBO-018: returns null when FBO creation fails', () => {
     const mockGL = initWithPBOCapableGL();
     (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
-      vi.fn(() => 0); // not FRAMEBUFFER_COMPLETE
+      () => 0; // not FRAMEBUFFER_COMPLETE
 
     // Force FBO re-creation
     renderer.dispose();
     renderer = new Renderer();
     const canvas = document.createElement('canvas');
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -2362,7 +2388,7 @@ describe('Renderer detached ImageBitmap guard', () => {
     const detachedBitmap = {
       width: 0,
       height: 100,
-      close: vi.fn(),
+      close() {},
     };
 
     // Make it pass the instanceof check
@@ -2380,7 +2406,7 @@ describe('Renderer detached ImageBitmap guard', () => {
     const detachedBitmap = {
       width: 100,
       height: 0,
-      close: vi.fn(),
+      close() {},
     };
 
     if (typeof ImageBitmap !== 'undefined') {
@@ -2397,7 +2423,7 @@ describe('Renderer detached ImageBitmap guard', () => {
     const detachedBitmap = {
       width: 0,
       height: 0,
-      close: vi.fn(),
+      close() {},
     };
 
     if (typeof ImageBitmap !== 'undefined') {
@@ -2456,7 +2482,7 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     const tracking = createRotationTrackingGL();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return tracking.gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -2553,5 +2579,266 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     // 360 / 90 = 4, 4 % 4 = 0
     expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+  });
+});
+
+describe('Renderer scope tone mapping neutralization', () => {
+  function prepareScopeReadbackGL(renderer: Renderer) {
+    const gl = initRendererWithMockGL(renderer);
+    const FRAMEBUFFER = 0x8d40;
+    const VIEWPORT = 0x0ba2;
+    const NO_ERROR = 0;
+
+    const glExt = gl as unknown as Record<string, unknown>;
+    glExt.FRAMEBUFFER ??= FRAMEBUFFER;
+    glExt.VIEWPORT ??= VIEWPORT;
+    glExt.RGBA ??= 0x1908;
+    glExt.FLOAT ??= 0x1406;
+    glExt.NO_ERROR ??= NO_ERROR;
+    glExt.bindFramebuffer = () => {};
+    glExt.getParameter = (p: number) => (p === VIEWPORT ? new Int32Array([0, 0, 4, 4]) : 0);
+    glExt.readPixels = (
+      _x: number,
+      _y: number,
+      _w: number,
+      _h: number,
+      _format: number,
+      _type: number,
+      pixels: Float32Array
+    ) => {
+      if (pixels instanceof Float32Array) {
+        pixels.fill(0.5);
+      }
+    };
+    glExt.getError = () => NO_ERROR;
+  }
+
+  it('REN-SCOPE-TM-001: scope readback disables and restores tone mapping in HDR mode', () => {
+    const renderer = new Renderer();
+    prepareScopeReadbackGL(renderer);
+
+    const stateManager = (renderer as any).stateManager;
+    stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
+
+    const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
+    (renderer as any).hdrOutputMode = 'hlg';
+    (renderer as any).renderImage = () => {};
+
+    const result = (renderer as any).renderImageToFloatSync(
+      {} as IPImage,
+      2,
+      2,
+      {} as WebGLFramebuffer
+    ) as Float32Array | null;
+
+    expect(result).not.toBeNull();
+    expect(toneSpy).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
+    expect(toneSpy).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true, operator: 'aces' }));
+    expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+  });
+
+  it('REN-SCOPE-TM-002: scope readback keeps tone mapping unchanged in SDR mode', () => {
+    const renderer = new Renderer();
+    prepareScopeReadbackGL(renderer);
+
+    const stateManager = (renderer as any).stateManager;
+    stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
+
+    const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
+    (renderer as any).hdrOutputMode = 'sdr';
+    (renderer as any).renderImage = () => {};
+
+    const result = (renderer as any).renderImageToFloatSync(
+      {} as IPImage,
+      2,
+      2,
+      {} as WebGLFramebuffer
+    ) as Float32Array | null;
+
+    expect(result).not.toBeNull();
+    expect(toneSpy).not.toHaveBeenCalled();
+    expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+  });
+});
+
+// ==========================================================================
+// T1.5: LUT 3D Texture Tests
+// ==========================================================================
+
+describe('Renderer LUT 3D Texture (T1.5)', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('RENDER-LUT-001: setLUT with 65^3 data is accepted without error', () => {
+    initRendererWithMockGL(renderer);
+    const size = 65;
+    const lutData = new Float32Array(size * size * size * 3);
+    // Fill with identity ramp
+    for (let b = 0; b < size; b++) {
+      for (let g = 0; g < size; g++) {
+        for (let r = 0; r < size; r++) {
+          const idx = (b * size * size + g * size + r) * 3;
+          lutData[idx] = r / (size - 1);
+          lutData[idx + 1] = g / (size - 1);
+          lutData[idx + 2] = b / (size - 1);
+        }
+      }
+    }
+
+    expect(() => renderer.setLUT(lutData, size, 1.0)).not.toThrow();
+  });
+
+  it('RENDER-LUT-002: setLUT triggers 3D texture upload on next render', () => {
+    const mockGL = initRendererWithMockGL(renderer);
+    const size = 17;
+    const lutData = new Float32Array(size * size * size * 3);
+
+    renderer.setLUT(lutData, size, 1.0);
+    renderer.resize(100, 100);
+
+    const sourceCanvas = document.createElement('canvas');
+    renderer.renderSDRFrame(sourceCanvas);
+
+    // texImage3D should have been called for the 3D LUT texture upload
+    expect(mockGL.texImage3D).toHaveBeenCalled();
+  });
+
+  it('RENDER-LUT-003: setLUT with null clears LUT state', () => {
+    initRendererWithMockGL(renderer);
+    const size = 17;
+    const lutData = new Float32Array(size * size * size * 3);
+
+    renderer.setLUT(lutData, size, 1.0);
+    expect(() => renderer.setLUT(null, 0, 0)).not.toThrow();
+  });
+});
+
+describe('Renderer Premult/Unpremult Control', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('PREMULT-REN-001: setPremultMode(0) sets mode to off (default)', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(0);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+
+  it('PREMULT-REN-002: setPremultMode(1) sets mode to premultiply', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(1);
+    expect(renderer.getPremultMode()).toBe(1);
+  });
+
+  it('PREMULT-REN-003: setPremultMode(2) sets mode to unpremultiply', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(2);
+    expect(renderer.getPremultMode()).toBe(2);
+  });
+
+  it('PREMULT-REN-004: default premult mode is 0 (off)', () => {
+    initRendererWithMockGL(renderer);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+
+  it('PREMULT-REN-005: setPremultMode applies during renderSDRFrame', () => {
+    initRendererWithMockGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.setPremultMode(1);
+    renderer.resize(100, 100);
+    const result = renderer.renderSDRFrame(sourceCanvas);
+
+    expect(result).toBeInstanceOf(HTMLCanvasElement);
+  });
+
+  it('PREMULT-REN-006: setPremultMode(2) with unpremult applies during renderSDRFrame', () => {
+    initRendererWithMockGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.setPremultMode(2);
+    renderer.resize(100, 100);
+    const result = renderer.renderSDRFrame(sourceCanvas);
+
+    expect(result).toBeInstanceOf(HTMLCanvasElement);
+  });
+
+  it('PREMULT-REN-007: setPremultMode clamps invalid value to 0', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(99);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+
+  it('PREMULT-REN-008: setPremultMode clamps negative value to 0', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(-1);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+});
+
+describe('Renderer Dither + Quantize Visualization', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('DITHER-REN-001: setDitherMode/getDitherMode round-trip', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setDitherMode(1);
+    expect(renderer.getDitherMode()).toBe(1);
+
+    renderer.setDitherMode(2);
+    expect(renderer.getDitherMode()).toBe(2);
+
+    renderer.setDitherMode(0);
+    expect(renderer.getDitherMode()).toBe(0);
+  });
+
+  it('DITHER-REN-002: setQuantizeBits/getQuantizeBits round-trip', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setQuantizeBits(8);
+    expect(renderer.getQuantizeBits()).toBe(8);
+
+    renderer.setQuantizeBits(4);
+    expect(renderer.getQuantizeBits()).toBe(4);
+
+    renderer.setQuantizeBits(16);
+    expect(renderer.getQuantizeBits()).toBe(16);
+
+    renderer.setQuantizeBits(0);
+    expect(renderer.getQuantizeBits()).toBe(0);
+  });
+
+  it('DITHER-REN-003: default values are 0', () => {
+    initRendererWithMockGL(renderer);
+    expect(renderer.getDitherMode()).toBe(0);
+    expect(renderer.getQuantizeBits()).toBe(0);
+  });
+
+  it('DITHER-REN-004: invalid values are clamped', () => {
+    initRendererWithMockGL(renderer);
+
+    // ditherMode clamps to 0-2
+    renderer.setDitherMode(-1);
+    expect(renderer.getDitherMode()).toBe(0);
+
+    renderer.setDitherMode(3);
+    expect(renderer.getDitherMode()).toBe(2);
+
+    // quantizeBits clamps: 0=off, 1->2, >16->16, negative->0
+    renderer.setQuantizeBits(1);
+    expect(renderer.getQuantizeBits()).toBe(2);
+
+    renderer.setQuantizeBits(17);
+    expect(renderer.getQuantizeBits()).toBe(16);
+
+    renderer.setQuantizeBits(-5);
+    expect(renderer.getQuantizeBits()).toBe(0);
   });
 });

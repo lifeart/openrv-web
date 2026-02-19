@@ -55,11 +55,15 @@ export interface StrokePoint extends Point {
   pressure?: number; // 0-1, for variable width
 }
 
+/** Which A/B compare version an annotation belongs to. */
+export type AnnotationVersion = 'A' | 'B' | 'all';
+
 export interface PenStroke {
   type: 'pen';
   id: string;
   frame: number;
   user: string;
+  version?: AnnotationVersion;
   color: [number, number, number, number]; // RGBA 0-1
   width: number | number[]; // Single or per-point widths
   brush: BrushType;
@@ -77,6 +81,7 @@ export interface TextAnnotation {
   id: string;
   frame: number;
   user: string;
+  version?: AnnotationVersion;
   position: Point;
   color: [number, number, number, number];
   text: string;
@@ -102,6 +107,7 @@ export interface ShapeAnnotation {
   id: string;
   frame: number;
   user: string;
+  version?: AnnotationVersion;
   shapeType: ShapeType;
   // Bounding points (normalized 0-1)
   startPoint: Point; // First corner or start of line
@@ -141,6 +147,43 @@ export interface PaintSnapshot {
   show: boolean;
   frames: Record<number, Annotation[]>;
   effects: PaintEffects;
+}
+
+/** Controls which brush properties are modulated by pen pressure. */
+export interface PressureMapping {
+  /** Pressure modulates stroke width (default: true) */
+  width: boolean;
+  /** Pressure modulates opacity (default: false) */
+  opacity: boolean;
+  /** Pressure modulates color saturation (default: false) */
+  saturation: boolean;
+}
+
+export const DEFAULT_PRESSURE_MAPPING: PressureMapping = {
+  width: true,
+  opacity: false,
+  saturation: false,
+};
+
+/**
+ * Adjust the saturation of an RGBA color.
+ * @param color RGBA 0-1 array
+ * @param factor Saturation multiplier (0 = grayscale, 1 = unchanged)
+ * @returns New RGBA array with adjusted saturation
+ */
+export function adjustSaturation(
+  color: [number, number, number, number],
+  factor: number,
+): [number, number, number, number] {
+  const [r, g, b, a] = color;
+  // Luminance-weighted desaturation (Rec. 709)
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return [
+    luma + (r - luma) * factor,
+    luma + (g - luma) * factor,
+    luma + (b - luma) * factor,
+    a,
+  ];
 }
 
 // Default values

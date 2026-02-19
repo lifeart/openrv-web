@@ -5,18 +5,37 @@
  * RVLookLUT, RVCacheLUT, and RVPaint.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTODTO } from 'gto-js';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 
-// Mock the NodeFactory
-vi.mock('../../nodes/base/NodeFactory', () => ({
-  NodeFactory: {
-    isRegistered: vi.fn(),
-    create: vi.fn(),
-  },
-}));
+/**
+ * Creates a mock node and spies on NodeFactory to return it.
+ * The mock node's `properties.has` returns true for all keys by default
+ * (override via `hasFilter`), and `properties.setValue` is a vi.fn() spy.
+ */
+function setupMockNode(
+  type: string,
+  name: string,
+  hasFilter?: (key: string) => boolean,
+) {
+  const mockNode = {
+    type,
+    name,
+    properties: {
+      has: vi.fn(hasFilter ?? (() => true)),
+      setValue: vi.fn(),
+    },
+    inputs: [],
+    outputs: [],
+  };
+
+  vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+  vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
+
+  return mockNode;
+}
 
 // Create a mock GTODTO object
 function createMockDTO(config: {
@@ -180,29 +199,13 @@ function createMockDTO(config: {
 }
 
 describe('GTOGraphLoader - Node Types', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   describe('RVLinearize parsing', () => {
     it('parses RVLinearize node component active state', () => {
-      const mockNode = {
-        type: 'RVLinearize',
-        name: 'linearize',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLinearize', 'linearize');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -223,19 +226,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses RVLinearize color component transfer functions', () => {
-      const mockNode = {
-        type: 'RVLinearize',
-        name: 'linearize',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLinearize', 'linearize');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -277,19 +268,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses RVLinearize cineon component', () => {
-      const mockNode = {
-        type: 'RVLinearize',
-        name: 'linearize',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLinearize', 'linearize');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -317,19 +296,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses RVLinearize LUT component', () => {
-      const mockNode = {
-        type: 'RVLinearize',
-        name: 'linearize',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLinearize', 'linearize');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -365,19 +332,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses RVLinearize CDL component', () => {
-      const mockNode = {
-        type: 'RVLinearize',
-        name: 'linearize',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLinearize', 'linearize');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -399,7 +354,7 @@ describe('GTOGraphLoader - Node Types', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlSlope', [1.1, 1.0, 0.9]);
@@ -412,19 +367,7 @@ describe('GTOGraphLoader - Node Types', () => {
 
   describe('RVTransform2D parsing with scale and translate', () => {
     it('parses scale property', () => {
-      const mockNode = {
-        type: 'RVTransform2D',
-        name: 'transform',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -450,19 +393,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses translate property', () => {
-      const mockNode = {
-        type: 'RVTransform2D',
-        name: 'transform',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -488,19 +419,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses visibleBox component', () => {
-      const mockNode = {
-        type: 'RVTransform2D',
-        name: 'transform',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -532,19 +451,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses stencil component', () => {
-      const mockNode = {
-        type: 'RVTransform2D',
-        name: 'transform',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -578,19 +485,7 @@ describe('GTOGraphLoader - Node Types', () => {
 
   describe('RVLookLUT parsing', () => {
     it('parses RVLookLUT node component active state', () => {
-      const mockNode = {
-        type: 'RVLookLUT',
-        name: 'lookLut',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLookLUT', 'lookLut');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -611,19 +506,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses RVLookLUT lut component properties', () => {
-      const mockNode = {
-        type: 'RVLookLUT',
-        name: 'lookLut',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVLookLUT', 'lookLut');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -663,19 +546,7 @@ describe('GTOGraphLoader - Node Types', () => {
     });
 
     it('parses RVCacheLUT the same as RVLookLUT', () => {
-      const mockNode = {
-        type: 'RVCacheLUT',
-        name: 'cacheLut',
-        properties: {
-          has: vi.fn(() => true),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVCacheLUT', 'cacheLut');
 
       const dto = createMockDTO({
         sessions: [{ name: 'rv' }],
@@ -704,21 +575,9 @@ describe('GTOGraphLoader - Node Types', () => {
 
   describe('RVPaint parsing', () => {
     it('parses RVPaint frame filter properties', () => {
-      const mockNode = {
-        type: 'RVPaint',
-        name: 'paintNode',
-        properties: {
-          has: vi.fn((key: string) =>
-            ['paintExclude', 'paintInclude', 'paintNextId', 'paintShow', 'paintActive'].includes(key)
-          ),
-          setValue: vi.fn(),
-        },
-        inputs: [],
-        outputs: [],
-      };
-
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      const mockNode = setupMockNode('RVPaint', 'paintNode', (key: string) =>
+        ['paintExclude', 'paintInclude', 'paintNextId', 'paintShow', 'paintActive'].includes(key),
+      );
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -739,7 +598,7 @@ describe('GTOGraphLoader - Node Types', () => {
         ],
       });
 
-      loadGTOGraph(dto as never);
+      loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintExclude', [10, 20, 30]);

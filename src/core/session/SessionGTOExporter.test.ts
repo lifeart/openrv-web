@@ -809,6 +809,64 @@ describe('SessionGTOExporter.toGTOData (complete export)', () => {
         expect(components['root'].properties.name.data).toEqual(['MyProject']);
         expect(components['root'].properties.comment.data).toEqual(['Review session for shot 001']);
     });
+
+    it('exports RVFormat object with uncrop state when session has active uncrop', () => {
+        session.uncropState = { active: true, x: 100, y: 50, width: 2120, height: 1180 };
+
+        const gto = SessionGTOExporter.toGTOData(session, paintEngine);
+
+        const formatObj = gto.objects.find(o => o.protocol === 'RVFormat');
+        expect(formatObj).toBeDefined();
+        expect(formatObj?.name).toBe('sourceGroup000000_format');
+
+        const components = formatObj?.components as Record<string, any>;
+        const uncropComp = components['uncrop'];
+        expect(uncropComp).toBeDefined();
+        expect(uncropComp.properties.active.data).toEqual([1]);
+        expect(uncropComp.properties.x.data).toEqual([100]);
+        expect(uncropComp.properties.y.data).toEqual([50]);
+        expect(uncropComp.properties.width.data).toEqual([2120]);
+        expect(uncropComp.properties.height.data).toEqual([1180]);
+    });
+
+    it('does not export RVFormat object when session has no uncrop state', () => {
+        session.uncropState = null;
+
+        const gto = SessionGTOExporter.toGTOData(session, paintEngine);
+
+        const formatObj = gto.objects.find(o => o.protocol === 'RVFormat');
+        expect(formatObj).toBeUndefined();
+    });
+
+    it('OCIO-GTO-001: includes RVOCIO node when ocioSettings provided', () => {
+        const gto = SessionGTOExporter.toGTOData(session, paintEngine, {
+            ocioSettings: {
+                active: true,
+                display: 'sRGB',
+                view: 'ACES 1.0 SDR-video',
+                inColorSpace: 'ACEScg',
+                lut3DSize: 65,
+            },
+        });
+
+        const ocioObj = gto.objects.find(o => o.protocol === 'RVOCIO');
+        expect(ocioObj).toBeDefined();
+        expect(ocioObj?.name).toBe('display_ocio');
+
+        const components = ocioObj?.components as Record<string, any>;
+        expect(components['ocio'].properties.active.data).toEqual([1]);
+        expect(components['ocio'].properties.inColorSpace.data).toEqual(['ACEScg']);
+        expect(components['ocio'].properties.lut3DSize.data).toEqual([65]);
+        expect(components['ocio_display'].properties.display.data).toEqual(['sRGB']);
+        expect(components['ocio_display'].properties.view.data).toEqual(['ACES 1.0 SDR-video']);
+    });
+
+    it('OCIO-GTO-002: omits RVOCIO node when ocioSettings not provided', () => {
+        const gto = SessionGTOExporter.toGTOData(session, paintEngine, {});
+
+        const ocioObj = gto.objects.find(o => o.protocol === 'RVOCIO');
+        expect(ocioObj).toBeUndefined();
+    });
 });
 
 describe('SessionGTOExporter.buildLinearizeObject', () => {
@@ -1338,6 +1396,30 @@ describe('SessionGTOExporter.buildDisplayColorObject', () => {
         const components = result.components as Record<string, any>;
 
         expect(components['chromaticities']).toBeUndefined();
+    });
+
+    // OOR-EXP-001: Export outOfRange mode 2 → GTO value 1 (highlight mode maps to boolean true)
+    it('OOR-EXP-001: exports outOfRange highlight mode (2) as GTO value 1', () => {
+        // Internal mode 2 (highlight) should be exported as GTO value 1 (boolean true)
+        // The caller is responsible for mapping mode 2 → 1 before passing to the exporter
+        const result = SessionGTOExporter.buildDisplayColorObject('displayColorNode', {
+            outOfRange: 1,
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.outOfRange.data).toEqual([1]);
+    });
+
+    // OOR-EXP-002: Export outOfRange mode 0 → GTO value 0 (off mode maps to boolean false)
+    it('OOR-EXP-002: exports outOfRange off mode (0) as GTO value 0', () => {
+        const result = SessionGTOExporter.buildDisplayColorObject('displayColorNode', {
+            outOfRange: 0,
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.outOfRange.data).toEqual([0]);
     });
 });
 

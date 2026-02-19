@@ -9,6 +9,7 @@
 
 import { FalseColor, FalseColorPreset } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class FalseColorControl {
@@ -41,6 +42,8 @@ export class FalseColorControl {
     this.toggleButton.dataset.testid = 'false-color-control-button';
     this.toggleButton.innerHTML = `${getIconSvg('contrast', 'sm')} <span>False</span> ${getIconSvg('chevron-down', 'sm')}`;
     this.toggleButton.title = 'False color exposure display (Shift+Alt+F)';
+    this.toggleButton.setAttribute('aria-haspopup', 'dialog');
+    this.toggleButton.setAttribute('aria-expanded', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -71,9 +74,12 @@ export class FalseColorControl {
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.falseColor.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
+        this.toggleButton.style.borderColor = 'transparent';
         this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
+
+    applyA11yFocus(this.toggleButton);
 
     this.container.appendChild(this.toggleButton);
 
@@ -81,6 +87,8 @@ export class FalseColorControl {
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'false-color-dropdown';
     this.dropdown.dataset.testid = 'false-color-dropdown';
+    this.dropdown.setAttribute('role', 'dialog');
+    this.dropdown.setAttribute('aria-label', 'False Color Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -94,10 +102,6 @@ export class FalseColorControl {
     `;
 
     this.createDropdownContent();
-    this.container.appendChild(this.dropdown);
-
-    // Close dropdown on outside click
-    document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
     this.unsubscribers.push(this.falseColor.on('stateChanged', () => {
@@ -190,6 +194,11 @@ export class FalseColorControl {
 
       btn.addEventListener('click', () => {
         this.falseColor.setPreset(preset.key);
+        // Preset selection should produce an immediate visible result.
+        // Auto-enable false color when choosing a preset.
+        if (!this.falseColor.isEnabled()) {
+          this.falseColor.enable();
+        }
       });
 
       btn.addEventListener('mouseenter', () => {
@@ -312,13 +321,19 @@ export class FalseColorControl {
 
   private toggleDropdown(): void {
     this.isDropdownOpen = !this.isDropdownOpen;
+    this.toggleButton.setAttribute('aria-expanded', String(this.isDropdownOpen));
     if (this.isDropdownOpen) {
+      if (!document.body.contains(this.dropdown)) {
+        document.body.appendChild(this.dropdown);
+      }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
+      document.removeEventListener('click', this.handleOutsideClick);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -331,10 +346,12 @@ export class FalseColorControl {
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node)) {
+    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       if (this.isDropdownOpen) {
         this.isDropdownOpen = false;
+        this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
+        document.removeEventListener('click', this.handleOutsideClick);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -362,6 +379,9 @@ export class FalseColorControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    if (document.body.contains(this.dropdown)) {
+      document.body.removeChild(this.dropdown);
+    }
     this.presetButtons.clear();
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];

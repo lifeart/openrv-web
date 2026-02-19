@@ -1,8 +1,8 @@
 /**
- * CompareControl - Dropdown for comparison tools (Wipe + A/B + Difference Matte)
+ * CompareControl - Dropdown for comparison tools
  *
- * Combines Wipe mode controls, A/B source comparison, and difference matte into a single dropdown.
- * Shows active indicator when wipe is enabled, B source is selected, or difference matte is on.
+ * Combines Wipe mode, A/B source, Difference Matte, Blend Modes, and Quad View into a single dropdown.
+ * Shows active indicator when any comparison feature is enabled.
  *
  * Delegates all comparison state and logic to ComparisonManager.
  * This class is responsible only for DOM rendering and user interaction.
@@ -19,11 +19,12 @@ import {
   type BlendMode,
   type BlendModeState,
   type CompareState,
+  type QuadViewState,
 } from './ComparisonManager';
 
 // Re-export types so external consumers don't need to change imports
-export type { WipeMode, ABSource, BlendMode, BlendModeState, CompareState };
-export { DEFAULT_BLEND_MODE_STATE } from './ComparisonManager';
+export type { WipeMode, ABSource, BlendMode, BlendModeState, CompareState, QuadViewState };
+export { DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './ComparisonManager';
 
 export interface CompareControlEvents extends EventMap {
   wipeModeChanged: WipeMode;
@@ -32,6 +33,7 @@ export interface CompareControlEvents extends EventMap {
   abToggled: void;
   differenceMatteChanged: DifferenceMatteState;
   blendModeChanged: BlendModeState;
+  quadViewChanged: QuadViewState;
   stateChanged: CompareState;
 }
 
@@ -74,6 +76,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.button = document.createElement('button');
     this.button.dataset.testid = 'compare-control-button';
     this.button.title = 'Comparison tools: Wipe (Shift+W) and A/B (`)';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -118,6 +122,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'compare-dropdown';
     this.dropdown.dataset.testid = 'compare-dropdown';
+    this.dropdown.setAttribute('role', 'dialog');
+    this.dropdown.setAttribute('aria-label', 'Compare Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -128,6 +134,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       display: none;
       flex-direction: column;
       min-width: 160px;
+      max-height: min(75vh, 560px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
       gap: 8px;
     `;
@@ -166,6 +176,11 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       this.updateButtonLabel();
       this.updateDropdownStates();
       this.emit('blendModeChanged', state);
+    });
+    this.manager.on('quadViewChanged', (state) => {
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('quadViewChanged', state);
     });
     this.manager.on('stateChanged', (state) => {
       this.emit('stateChanged', state);
@@ -540,6 +555,105 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     this.dropdown.appendChild(blendSection);
 
+    // Divider
+    const divider4 = document.createElement('div');
+    divider4.style.cssText = 'height: 1px; background: var(--border-primary); margin: 4px 0;';
+    this.dropdown.appendChild(divider4);
+
+    // Quad View section
+    const quadSection = document.createElement('div');
+    quadSection.className = 'quad-view-section';
+    quadSection.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
+
+    const quadHeader = document.createElement('div');
+    quadHeader.textContent = 'Quad View';
+    quadHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    quadSection.appendChild(quadHeader);
+
+    // Quad view toggle button
+    const quadToggle = document.createElement('button');
+    quadToggle.dataset.testid = 'quad-view-toggle';
+    quadToggle.style.cssText = `
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 3px;
+      transition: background 0.12s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    `;
+    quadToggle.innerHTML = `${getIconSvg('columns', 'sm')}<span>Enable Quad View</span>`;
+    quadToggle.addEventListener('mouseenter', () => {
+      quadToggle.style.background = 'var(--bg-hover)';
+    });
+    quadToggle.addEventListener('mouseleave', () => {
+      this.updateQuadToggleStyle(quadToggle);
+    });
+    quadToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.setQuadViewEnabled(!this.isQuadViewEnabled());
+    });
+    quadSection.appendChild(quadToggle);
+
+    // Source assignment rows (shown when quad view is enabled)
+    const quadSourcesContainer = document.createElement('div');
+    quadSourcesContainer.className = 'quad-sources-container';
+    quadSourcesContainer.style.cssText = 'display: none; flex-direction: column; gap: 2px; padding: 4px 10px;';
+
+    const quadLabels = ['Top-Left', 'Top-Right', 'Bottom-Left', 'Bottom-Right'];
+    const sources: ABSource[] = ['A', 'B', 'C', 'D'];
+
+    for (let i = 0; i < 4; i++) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+
+      const label = document.createElement('span');
+      label.textContent = `${quadLabels[i]}:`;
+      label.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 75px;';
+
+      const select = document.createElement('select');
+      select.dataset.testid = `quad-source-${i}`;
+      select.dataset.quadrant = String(i);
+      select.style.cssText = `
+        flex: 1;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-secondary);
+        color: var(--text-primary);
+        padding: 3px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+      `;
+
+      for (const src of sources) {
+        const option = document.createElement('option');
+        option.value = src;
+        option.textContent = src;
+        if (managerState.quadView.sources[i] === src) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      }
+
+      select.addEventListener('change', (e) => {
+        const target = e.target as HTMLSelectElement;
+        const quadrant = parseInt(target.dataset.quadrant!, 10) as 0 | 1 | 2 | 3;
+        this.setQuadViewSource(quadrant, target.value as ABSource);
+      });
+
+      row.appendChild(label);
+      row.appendChild(select);
+      quadSourcesContainer.appendChild(row);
+    }
+
+    quadSection.appendChild(quadSourcesContainer);
+    this.dropdown.appendChild(quadSection);
+
     this.updateDropdownStates();
   }
 
@@ -579,7 +693,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const state = this.manager.getState();
     const parts: string[] = [];
 
-    if (state.differenceMatte.enabled) {
+    if (state.quadView.enabled) {
+      parts.push('Quad');
+    } else if (state.differenceMatte.enabled) {
       parts.push('Diff');
     } else if (state.blendMode.mode !== 'off') {
       const blendLabels: Record<BlendMode, string> = {
@@ -749,6 +865,29 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         if (valueSpan) valueSpan.textContent = `${Math.round(state.blendMode.blendRatio * 100)}%`;
       }
     }
+
+    // Update quad view controls
+    const quadSection = this.dropdown.querySelector('.quad-view-section');
+    if (quadSection) {
+      const quadToggle = quadSection.querySelector('[data-testid="quad-view-toggle"]') as HTMLButtonElement;
+      if (quadToggle) {
+        this.updateQuadToggleStyle(quadToggle);
+      }
+
+      const quadSourcesContainer = quadSection.querySelector('.quad-sources-container') as HTMLElement;
+      if (quadSourcesContainer) {
+        quadSourcesContainer.style.display = state.quadView.enabled ? 'flex' : 'none';
+
+        // Update select values
+        const quadSources = state.quadView.sources;
+        for (let i = 0; i < 4; i++) {
+          const select = quadSourcesContainer.querySelector(`[data-testid="quad-source-${i}"]`) as HTMLSelectElement;
+          if (select) {
+            select.value = quadSources[i as 0 | 1 | 2 | 3];
+          }
+        }
+      }
+    }
   }
 
   private updateBlendModeButtonStyle(button: HTMLButtonElement, mode: BlendMode): void {
@@ -772,6 +911,13 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     toggle.setAttribute('aria-pressed', String(isActive));
   }
 
+  private updateQuadToggleStyle(toggle: HTMLButtonElement): void {
+    const isActive = this.manager.isQuadViewEnabled();
+    toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+    toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    toggle.setAttribute('aria-pressed', String(isActive));
+  }
+
   private handleOutsideClick(e: MouseEvent): void {
     if (
       this.isOpen &&
@@ -784,9 +930,32 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
   private positionDropdown(): void {
     if (!this.isOpen) return;
+
     const rect = this.button.getBoundingClientRect();
-    this.dropdown.style.top = `${rect.bottom + 4}px`;
-    this.dropdown.style.left = `${rect.left}px`;
+    const dropdownRect = this.dropdown.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + dropdownRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - dropdownRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + dropdownRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - dropdownRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.dropdown.style.top = `${top}px`;
+    this.dropdown.style.left = `${left}px`;
   }
 
   private toggleDropdown(): void {
@@ -803,8 +972,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     }
 
     this.isOpen = true;
-    this.positionDropdown();
     this.dropdown.style.display = 'flex';
+    this.positionDropdown();
+    this.button.setAttribute('aria-expanded', 'true');
     this.button.style.background = 'var(--bg-hover)';
     this.button.style.borderColor = 'var(--border-primary)';
 
@@ -816,6 +986,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   private closeDropdown(): void {
     this.isOpen = false;
     this.dropdown.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonLabel();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);
@@ -1002,6 +1173,50 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    */
   getBlendRatio(): number {
     return this.manager.getBlendRatio();
+  }
+
+  // Quad View methods
+
+  /**
+   * Enable or disable quad view mode.
+   */
+  setQuadViewEnabled(enabled: boolean): void {
+    this.manager.setQuadViewEnabled(enabled);
+  }
+
+  /**
+   * Toggle quad view on/off.
+   */
+  toggleQuadView(): void {
+    this.manager.toggleQuadView();
+  }
+
+  /**
+   * Check if quad view is enabled.
+   */
+  isQuadViewEnabled(): boolean {
+    return this.manager.isQuadViewEnabled();
+  }
+
+  /**
+   * Set the source for a specific quadrant.
+   */
+  setQuadViewSource(quadrant: 0 | 1 | 2 | 3, source: ABSource): void {
+    this.manager.setQuadSource(quadrant, source);
+  }
+
+  /**
+   * Get quad view sources.
+   */
+  getQuadSources(): [ABSource, ABSource, ABSource, ABSource] {
+    return this.manager.getQuadSources();
+  }
+
+  /**
+   * Get the complete quad view state.
+   */
+  getQuadViewState(): QuadViewState {
+    return this.manager.getQuadViewState();
   }
 
   getState(): CompareState {

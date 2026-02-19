@@ -20,6 +20,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
   private blurSlider: HTMLInputElement | null = null;
   private sharpenSlider: HTMLInputElement | null = null;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -39,6 +40,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.filterButton.innerHTML = `${getIconSvg('sliders', 'sm')}<span style="margin-left: 6px;">Filters</span>`;
     this.filterButton.dataset.testid = 'filter-control-button';
     this.filterButton.title = 'Filter effects (Shift+Alt+E)';
+    this.filterButton.setAttribute('aria-haspopup', 'dialog');
+    this.filterButton.setAttribute('aria-expanded', 'false');
     this.filterButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -75,6 +78,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     // Create panel (rendered at body level)
     this.panel = document.createElement('div');
     this.panel.className = 'filter-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Filter Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -95,6 +100,13 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     // Close on outside click
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hide();
+      }
+    };
   }
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
@@ -180,7 +192,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
 
     const valueEl = document.createElement('span');
-    valueEl.textContent = String(initialValue);
+    valueEl.textContent = label === 'Blur' ? `${initialValue}px` : String(initialValue);
     valueEl.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     labelRow.appendChild(labelEl);
@@ -287,13 +299,23 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.filterButton.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    this.blurSlider?.focus();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.filterButton.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.filterButton.focus();
   }
 
   reset(): void {
@@ -345,6 +367,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     // Remove body-mounted panel if present
     if (this.panel.parentNode) {

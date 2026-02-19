@@ -23,16 +23,18 @@ class TestTimeline extends Timeline {
   }
 }
 
-// Mock WaveformRenderer
-vi.mock('../../audio/WaveformRenderer', () => ({
-  WaveformRenderer: vi.fn().mockImplementation(() => ({
-    loadFromVideo: vi.fn().mockResolvedValue(false),
-    clear: vi.fn(),
-    hasData: vi.fn().mockReturnValue(false),
-    getData: vi.fn().mockReturnValue(null),
-    render: vi.fn(),
-  })),
-}));
+// Polyfill PointerEvent for jsdom (which does not implement it)
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, params: PointerEventInit & MouseEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? '';
+    }
+  };
+}
 
 describe('Timeline', () => {
   let session: Session;
@@ -300,6 +302,263 @@ describe('Timeline', () => {
       timeline.drawCount = 0;
       timeline.toggleTimecodeDisplay();
       expect(timeline.drawCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('text rendering alignment', () => {
+    it('TML-033: renders bottom left/right info text with alphabetic baseline', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        fillText: ReturnType<typeof vi.fn>;
+      };
+      const baselineByCall: string[] = [];
+
+      ctx.fillText.mockImplementation(function (this: CanvasRenderingContext2D): void {
+        baselineByCall.push(this.textBaseline);
+      });
+
+      timeline.refresh();
+
+      expect(baselineByCall.length).toBeGreaterThanOrEqual(6);
+      expect(baselineByCall.slice(-2)).toEqual(['alphabetic', 'alphabetic']);
+    });
+
+    it('TML-034: measures center label width using the same font used to draw it', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        measureText: ReturnType<typeof vi.fn>;
+      };
+      const measureFonts: string[] = [];
+
+      ctx.measureText.mockImplementation(function (this: CanvasRenderingContext2D): TextMetrics {
+        measureFonts.push(this.font);
+        return { width: 100 } as TextMetrics;
+      });
+
+      timeline.refresh();
+
+      expect(measureFonts.length).toBeGreaterThan(0);
+      expect(measureFonts).toContain('bold 13px -apple-system, BlinkMacSystemFont, monospace');
+    });
+
+    it('TML-035: aligns metadata text on the same row as the center frame label', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        fillText: ReturnType<typeof vi.fn>;
+        measureText: ReturnType<typeof vi.fn>;
+      };
+      const metadataY: number[] = [];
+      let frameLabelY: number | null = null;
+
+      ctx.measureText.mockImplementation((): TextMetrics => (
+        { width: 100, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 3 } as TextMetrics
+      ));
+      ctx.fillText.mockImplementation((text: string, _x: number, y: number): void => {
+        if (text.startsWith('Frame')) {
+          frameLabelY = y;
+        }
+        if (text.includes('[VID]') || text.includes('fps')) {
+          metadataY.push(y);
+        }
+      });
+
+      timeline.refresh();
+
+      expect(frameLabelY).not.toBeNull();
+      expect(metadataY).toHaveLength(2);
+      expect(metadataY[0]).toBe(frameLabelY);
+      expect(metadataY[1]).toBe(frameLabelY);
+    });
+
+    it('TML-036: falls back to finite baseline when text metrics are invalid', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        fillText: ReturnType<typeof vi.fn>;
+        measureText: ReturnType<typeof vi.fn>;
+      };
+      const yByCall: number[] = [];
+
+      ctx.measureText.mockImplementation((): TextMetrics => (
+        { width: 100, actualBoundingBoxAscent: Number.NaN, actualBoundingBoxDescent: Number.NaN } as TextMetrics
+      ));
+      ctx.fillText.mockImplementation((_text: string, _x: number, y: number): void => {
+        yByCall.push(y);
+      });
+
+      timeline.refresh();
+
+      expect(yByCall.length).toBeGreaterThan(0);
+      expect(yByCall.every(Number.isFinite)).toBe(true);
+    });
+  });
+
+  describe('pointer events (touch support)', () => {
+    /**
+     * Helper to get the canvas element from a timeline's rendered container.
+     */
+    function getCanvas(tl: TestTimeline): HTMLCanvasElement {
+      const container = tl.render();
+      return container.querySelector('canvas')!;
+    }
+
+    it('TL-H05a: should register pointerdown (not mousedown) listener', () => {
+      // Create a fresh timeline so we can spy before bindEvents runs
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      // Spy on HTMLCanvasElement prototype before construction
+      const addEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const registeredEvents = addEventSpy.mock.calls.map(call => call[0]);
+      expect(registeredEvents).toContain('pointerdown');
+      expect(registeredEvents).not.toContain('mousedown');
+
+      addEventSpy.mockRestore();
+      tl.dispose();
+    });
+
+    it('TL-H05b: should register pointermove (not mousemove) listener', () => {
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      const canvasAddEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const canvasEvents = canvasAddEventSpy.mock.calls.map(call => call[0]);
+      expect(canvasEvents).toContain('pointermove');
+      expect(canvasEvents).not.toContain('mousemove');
+
+      canvasAddEventSpy.mockRestore();
+      tl.dispose();
+    });
+
+    it('TL-H05c: should register pointerup (not mouseup) listener', () => {
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      const canvasAddEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const canvasEvents = canvasAddEventSpy.mock.calls.map(call => call[0]);
+      expect(canvasEvents).toContain('pointerup');
+      expect(canvasEvents).not.toContain('mouseup');
+
+      canvasAddEventSpy.mockRestore();
+      tl.dispose();
+    });
+
+    it('TL-H05d: pointerdown on the timeline should call setPointerCapture', () => {
+      const canvas = getCanvas(timeline);
+
+      // Mock getBoundingClientRect on canvas for seekToPosition
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+
+      // jsdom does not implement setPointerCapture, so we add a mock
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      // Dispatch pointerdown on the track area
+      const pointerDownEvent = new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 50,
+        pointerId: 1,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(pointerDownEvent);
+
+      expect(canvas.setPointerCapture).toHaveBeenCalledWith(1);
+    });
+
+    it('TL-H05e: pointerup should call releasePointerCapture', () => {
+      const canvas = getCanvas(timeline);
+
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+
+      // jsdom does not implement pointer capture methods, so we add mocks
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      // First pointerdown to start dragging
+      const pointerDownEvent = new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 50,
+        pointerId: 42,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(pointerDownEvent);
+
+      // Now pointerup to stop dragging
+      const pointerUpEvent = new PointerEvent('pointerup', {
+        clientX: 500,
+        clientY: 50,
+        pointerId: 42,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(pointerUpEvent);
+
+      expect(canvas.releasePointerCapture).toHaveBeenCalledWith(42);
+    });
+
+    it('TL-H05f: timeline canvas cursor style should be pointer', () => {
+      const canvas = getCanvas(timeline);
+      expect(canvas.style.cursor).toBe('pointer');
+    });
+  });
+
+  describe('playhead hit area', () => {
+    it('TL-L47a: The playhead hit area should be at least 16px wide', () => {
+      // The playhead hit area width constant must be at least 16px
+      expect(Timeline.PLAYHEAD_HIT_AREA_WIDTH).toBeGreaterThanOrEqual(16);
+      // The playhead circle radius should be in the 8-10px range for a visible drag handle
+      expect(Timeline.PLAYHEAD_CIRCLE_RADIUS).toBeGreaterThanOrEqual(8);
+      expect(Timeline.PLAYHEAD_CIRCLE_RADIUS).toBeLessThanOrEqual(10);
     });
   });
 

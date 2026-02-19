@@ -10,10 +10,14 @@ import {
   getEXRInfo,
   extractLayerInfo,
   resolveChannelMapping,
+  applyUncrop,
   EXRCompression,
   EXRPixelType,
   EXRChannel,
   EXRHeader,
+  EXRBox2i,
+  EXRLevelMode,
+  EXRRoundingMode,
 } from './EXRDecoder';
 
 // EXR magic number
@@ -620,9 +624,11 @@ describe('EXRDecoder', () => {
       await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*B44/);
     });
 
-    it('EXR-U093: should reject DWAA compression', async () => {
-      const buffer = createTestEXR({ compression: EXRCompression.DWAA });
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*DWAA/);
+    it('EXR-U093: should accept DWAA as supported compression type', () => {
+      // DWAA is now a supported compression type
+      const info = getEXRInfo(createTestEXR({ compression: EXRCompression.DWAA }));
+      expect(info).not.toBeNull();
+      expect(info!.compression).toBe('DWAA');
     });
   });
 
@@ -722,9 +728,11 @@ describe('EXRDecoder', () => {
   });
 
   describe('corner cases - DWAB compression', () => {
-    it('EXR-U132: should reject DWAB compression', async () => {
-      const buffer = createTestEXR({ compression: EXRCompression.DWAB });
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*DWAB/);
+    it('EXR-U132: should accept DWAB as supported compression type', () => {
+      // DWAB is now a supported compression type
+      const info = getEXRInfo(createTestEXR({ compression: EXRCompression.DWAB }));
+      expect(info).not.toBeNull();
+      expect(info!.compression).toBe('DWAB');
     });
   });
 
@@ -1337,3 +1345,2310 @@ function createTestEXRWithUINT(): ArrayBuffer {
   }
   return resultUINT.buffer;
 }
+
+/**
+ * Part definition for multi-part EXR test generation
+ */
+interface TestPartDef {
+  name?: string;
+  type?: string;
+  view?: string;
+  width?: number;
+  height?: number;
+  channels?: string[];
+  pixelType?: EXRPixelType;
+  compression?: EXRCompression;
+  /** Value multiplier to distinguish parts (part 0 uses 1.0, part 1 uses this) */
+  valueMultiplier?: number;
+}
+
+/**
+ * Create a multi-part EXR file buffer for testing.
+ *
+ * Multi-part EXR format:
+ *   - Magic number (4 bytes)
+ *   - Version field with multiPart bit set (4 bytes)
+ *   - Part 0 header attributes ... terminated by null byte
+ *   - Part 1 header attributes ... terminated by null byte
+ *   - ...
+ *   - Empty header (single null byte) to end the headers section
+ *   - Offset table for part 0
+ *   - Offset table for part 1
+ *   - ...
+ *   - Chunk data (each chunk prefixed with part_number int32)
+ */
+function createMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer {
+  if (partDefs.length === 0) {
+    throw new Error('Must provide at least one part definition');
+  }
+
+  const bufParts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    bufParts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    bufParts.push(bytes);
+    bufParts.push(new Uint8Array([0])); // null terminator
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeHalf(value: number): void {
+    const buf = new Uint8Array(2);
+    const view = new DataView(buf.buffer);
+    const h = floatToHalf(value);
+    view.setUint16(0, h, true);
+    bufParts.push(buf);
+    offset += 2;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    bufParts.push(buf);
+    offset += 8;
+  }
+
+  /**
+   * Write a string attribute (type "string"): size is string length + null terminator
+   */
+  function writeStringAttribute(name: string, value: string): void {
+    writeString(name);      // attr name
+    writeString('string');   // attr type
+    const encoded = new TextEncoder().encode(value);
+    writeInt32(encoded.length + 1); // size includes null terminator
+    bufParts.push(encoded);
+    bufParts.push(new Uint8Array([0]));
+    offset += encoded.length + 1;
+  }
+
+  // ===== MAGIC + VERSION =====
+  writeUint32(EXR_MAGIC);
+  // Version 2 with multiPart bit (0x1000) set; nonImage bit (0x800) only when deep data parts exist
+  const hasDeepData = partDefs.some(p => p.type === 'deepscanline' || p.type === 'deeptile');
+  writeUint32(2 | 0x1000 | (hasDeepData ? 0x800 : 0));
+
+  // ===== PART HEADERS =====
+  for (const partDef of partDefs) {
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+    const compression = partDef.compression ?? EXRCompression.NONE;
+
+    // name attribute (required for multi-part)
+    if (partDef.name) {
+      writeStringAttribute('name', partDef.name);
+    }
+
+    // type attribute (required for multi-part)
+    if (partDef.type) {
+      writeStringAttribute('type', partDef.type);
+    }
+
+    // view attribute (optional, for stereo)
+    if (partDef.view) {
+      writeStringAttribute('view', partDef.view);
+    }
+
+    // channels attribute
+    writeString('channels');
+    writeString('chlist');
+    let channelListSize = 1; // null terminator
+    for (const ch of channels) {
+      channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+    }
+    writeInt32(channelListSize);
+
+    const sortedChannels = [...channels].sort();
+    for (const ch of sortedChannels) {
+      writeString(ch);
+      writeInt32(pixelType);
+      writeUint8(0); // pLinear
+      bufParts.push(new Uint8Array([0, 0, 0])); // reserved
+      offset += 3;
+      writeInt32(1); // xSampling
+      writeInt32(1); // ySampling
+    }
+    writeUint8(0); // End of channel list
+
+    // compression
+    writeString('compression');
+    writeString('compression');
+    writeInt32(1);
+    writeUint8(compression);
+
+    // dataWindow
+    writeString('dataWindow');
+    writeString('box2i');
+    writeInt32(16);
+    writeInt32(0);
+    writeInt32(0);
+    writeInt32(width - 1);
+    writeInt32(height - 1);
+
+    // displayWindow
+    writeString('displayWindow');
+    writeString('box2i');
+    writeInt32(16);
+    writeInt32(0);
+    writeInt32(0);
+    writeInt32(width - 1);
+    writeInt32(height - 1);
+
+    // lineOrder
+    writeString('lineOrder');
+    writeString('lineOrder');
+    writeInt32(1);
+    writeUint8(0);
+
+    // pixelAspectRatio
+    writeString('pixelAspectRatio');
+    writeString('float');
+    writeInt32(4);
+    writeFloat32(1.0);
+
+    // End of this part's header
+    writeUint8(0);
+  }
+
+  // Empty header to terminate the list of part headers
+  writeUint8(0);
+
+  // ===== OFFSET TABLES =====
+  // We need to compute where the scanline data will actually be,
+  // but we don't know yet. We'll use a two-pass approach:
+  // First compute the offset table sizes, then compute actual offsets.
+
+  const offsetTableStart = offset;
+
+  // Calculate total offset table size
+  let totalOffsetTableSize = 0;
+  const partBlockCounts: number[] = [];
+  for (const partDef of partDefs) {
+    const height = partDef.height ?? 2;
+    const compression = partDef.compression ?? EXRCompression.NONE;
+    const linesPerBlock = compression === EXRCompression.PIZ ? 32
+      : compression === EXRCompression.ZIP ? 16 : 1;
+    const numBlocks = Math.ceil(height / linesPerBlock);
+    partBlockCounts.push(numBlocks);
+    totalOffsetTableSize += numBlocks * 8;
+  }
+
+  const scanlineDataStart = offsetTableStart + totalOffsetTableSize;
+
+  // Compute chunk sizes for each part to determine offsets
+  // Multi-part chunk: partNumber(4) + y(4) + packedSize(4) + data
+  let currentDataOffset = scanlineDataStart;
+  const partChunkOffsets: bigint[][] = [];
+
+  for (let p = 0; p < partDefs.length; p++) {
+    const partDef = partDefs[p]!;
+    const width = partDef.width ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+
+    const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+    const scanlineSize = channels.length * width * bytesPerPixel;
+    const numBlocks = partBlockCounts[p]!;
+
+    const offsets: bigint[] = [];
+    for (let b = 0; b < numBlocks; b++) {
+      offsets.push(BigInt(currentDataOffset));
+      // chunk: partNumber(4) + y(4) + packedSize(4) + data(scanlineSize)
+      currentDataOffset += 4 + 4 + 4 + scanlineSize;
+    }
+    partChunkOffsets.push(offsets);
+  }
+
+  // Write offset tables
+  for (let p = 0; p < partDefs.length; p++) {
+    for (const off of partChunkOffsets[p]!) {
+      writeUint64(off);
+    }
+  }
+
+  // ===== SCANLINE DATA (with partNumber prefix) =====
+  for (let p = 0; p < partDefs.length; p++) {
+    const partDef = partDefs[p]!;
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+    const valueMult = partDef.valueMultiplier ?? (p === 0 ? 1.0 : (p + 1) * 0.1);
+
+    const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+    const scanlineSize = channels.length * width * bytesPerPixel;
+
+    const sortedChannels = [...channels].sort();
+
+    for (let y = 0; y < height; y++) {
+      writeInt32(p);           // Part number
+      writeInt32(y);           // Y coordinate
+      writeInt32(scanlineSize); // Packed size
+
+      for (const ch of sortedChannels) {
+        for (let x = 0; x < width; x++) {
+          let value = 0;
+          if (ch === 'R') value = valueMult * (x + y * width) / (width * height);
+          else if (ch === 'G') value = valueMult * 0.5;
+          else if (ch === 'B') value = valueMult * (1.0 - (x + y * width) / (width * height));
+          else if (ch === 'A') value = 1.0;
+
+          if (pixelType === EXRPixelType.HALF) {
+            writeHalf(value);
+          } else {
+            writeFloat32(value);
+          }
+        }
+      }
+    }
+  }
+
+  // Combine all parts
+  const totalLength = bufParts.reduce((sum, p) => sum + p.length, 0);
+  const result = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of bufParts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+
+  return result.buffer;
+}
+
+/**
+ * Create a multi-part EXR file with interleaved chunks from different parts.
+ * Instead of writing all chunks for part 0, then all for part 1, etc.,
+ * this writes: part0-line0, part1-line0, part0-line1, part1-line1, ...
+ * All parts must have the same height for simplicity.
+ */
+function createInterleavedMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer {
+  if (partDefs.length === 0) {
+    throw new Error('Must provide at least one part definition');
+  }
+
+  const bufParts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    bufParts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    bufParts.push(bytes);
+    bufParts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeHalf(value: number): void {
+    const buf = new Uint8Array(2);
+    const view = new DataView(buf.buffer);
+    const h = floatToHalf(value);
+    view.setUint16(0, h, true);
+    bufParts.push(buf);
+    offset += 2;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    bufParts.push(buf);
+    offset += 8;
+  }
+
+  function writeStringAttribute(name: string, value: string): void {
+    writeString(name);
+    writeString('string');
+    const encoded = new TextEncoder().encode(value);
+    writeInt32(encoded.length + 1);
+    bufParts.push(encoded);
+    bufParts.push(new Uint8Array([0]));
+    offset += encoded.length + 1;
+  }
+
+  // ===== MAGIC + VERSION =====
+  writeUint32(EXR_MAGIC);
+  const hasDeepData = partDefs.some(p => p.type === 'deepscanline' || p.type === 'deeptile');
+  writeUint32(2 | 0x1000 | (hasDeepData ? 0x800 : 0));
+
+  // ===== PART HEADERS =====
+  for (const partDef of partDefs) {
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+    const compression = partDef.compression ?? EXRCompression.NONE;
+
+    if (partDef.name) writeStringAttribute('name', partDef.name);
+    if (partDef.type) writeStringAttribute('type', partDef.type);
+    if (partDef.view) writeStringAttribute('view', partDef.view);
+
+    writeString('channels');
+    writeString('chlist');
+    let channelListSize = 1;
+    for (const ch of channels) {
+      channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+    }
+    writeInt32(channelListSize);
+    const sortedChannels = [...channels].sort();
+    for (const ch of sortedChannels) {
+      writeString(ch);
+      writeInt32(pixelType);
+      writeUint8(0);
+      bufParts.push(new Uint8Array([0, 0, 0]));
+      offset += 3;
+      writeInt32(1);
+      writeInt32(1);
+    }
+    writeUint8(0);
+
+    writeString('compression');
+    writeString('compression');
+    writeInt32(1);
+    writeUint8(compression);
+
+    writeString('dataWindow');
+    writeString('box2i');
+    writeInt32(16);
+    writeInt32(0);
+    writeInt32(0);
+    writeInt32(width - 1);
+    writeInt32(height - 1);
+
+    writeString('displayWindow');
+    writeString('box2i');
+    writeInt32(16);
+    writeInt32(0);
+    writeInt32(0);
+    writeInt32(width - 1);
+    writeInt32(height - 1);
+
+    writeString('lineOrder');
+    writeString('lineOrder');
+    writeInt32(1);
+    writeUint8(0);
+
+    writeString('pixelAspectRatio');
+    writeString('float');
+    writeInt32(4);
+    writeFloat32(1.0);
+
+    writeUint8(0); // End of this part's header
+  }
+  writeUint8(0); // Empty header terminator
+
+  // ===== OFFSET TABLES =====
+  const offsetTableStart = offset;
+  let totalOffsetTableSize = 0;
+  const partBlockCounts: number[] = [];
+  for (const partDef of partDefs) {
+    const height = partDef.height ?? 2;
+    const numBlocks = height; // linesPerBlock = 1 for NONE compression
+    partBlockCounts.push(numBlocks);
+    totalOffsetTableSize += numBlocks * 8;
+  }
+  const scanlineDataStart = offsetTableStart + totalOffsetTableSize;
+
+  // For interleaved layout, chunks are ordered:
+  //   part0-line0, part1-line0, part0-line1, part1-line1, ...
+  // We need to compute offsets for each part's chunks in this interleaved order.
+  const maxHeight = Math.max(...partDefs.map(p => p.height ?? 2));
+  let currentDataOffset = scanlineDataStart;
+
+  // Pre-compute all chunk offsets in interleaved order
+  const partOffsets: bigint[][] = partDefs.map(() => []);
+  for (let y = 0; y < maxHeight; y++) {
+    for (let p = 0; p < partDefs.length; p++) {
+      const partDef = partDefs[p]!;
+      const height = partDef.height ?? 2;
+      if (y >= height) continue;
+      const width = partDef.width ?? 2;
+      const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+      const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+      const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+      const scanlineSize = channels.length * width * bytesPerPixel;
+
+      partOffsets[p]!.push(BigInt(currentDataOffset));
+      currentDataOffset += 4 + 4 + 4 + scanlineSize; // partNumber + y + packedSize + data
+    }
+  }
+
+  // Write offset tables (per-part, in part order)
+  for (let p = 0; p < partDefs.length; p++) {
+    for (const off of partOffsets[p]!) {
+      writeUint64(off);
+    }
+  }
+
+  // ===== INTERLEAVED SCANLINE DATA =====
+  for (let y = 0; y < maxHeight; y++) {
+    for (let p = 0; p < partDefs.length; p++) {
+      const partDef = partDefs[p]!;
+      const height = partDef.height ?? 2;
+      if (y >= height) continue;
+      const width = partDef.width ?? 2;
+      const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+      const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+      const valueMult = partDef.valueMultiplier ?? (p === 0 ? 1.0 : (p + 1) * 0.1);
+      const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+      const scanlineSize = channels.length * width * bytesPerPixel;
+      const sortedChannels = [...channels].sort();
+
+      writeInt32(p);             // Part number
+      writeInt32(y);             // Y coordinate
+      writeInt32(scanlineSize);  // Packed size
+
+      for (const ch of sortedChannels) {
+        for (let x = 0; x < width; x++) {
+          let value = 0;
+          if (ch === 'R') value = valueMult * (x + y * width) / (width * height);
+          else if (ch === 'G') value = valueMult * 0.5;
+          else if (ch === 'B') value = valueMult * (1.0 - (x + y * width) / (width * height));
+          else if (ch === 'A') value = 1.0;
+
+          if (pixelType === EXRPixelType.HALF) {
+            writeHalf(value);
+          } else {
+            writeFloat32(value);
+          }
+        }
+      }
+    }
+  }
+
+  const totalLength = bufParts.reduce((sum, p) => sum + p.length, 0);
+  const result = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of bufParts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+  return result.buffer;
+}
+
+// ===== Multi-part EXR Tests =====
+
+describe('Multi-part EXR', () => {
+  describe('isEXRFile with multi-part', () => {
+    it('EXR-MP001: should return true for multi-part EXR magic bytes', () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'rgba', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        { name: 'depth', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+      expect(isEXRFile(buffer)).toBe(true);
+    });
+  });
+
+  describe('getEXRInfo with multi-part', () => {
+    it('EXR-MP010: should return part count and part info for multi-part EXR', () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'beauty', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 4, height: 4 },
+        { name: 'depth', type: 'scanlineimage', channels: ['R', 'G', 'B'], width: 4, height: 4 },
+      ]);
+
+      const info = getEXRInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.partCount).toBe(2);
+      expect(info!.parts).toBeDefined();
+      expect(info!.parts!.length).toBe(2);
+      expect(info!.parts![0]!.name).toBe('beauty');
+      expect(info!.parts![1]!.name).toBe('depth');
+      // Width/height should come from first part
+      expect(info!.width).toBe(4);
+      expect(info!.height).toBe(4);
+    });
+
+    it('EXR-MP011: should report view names for stereo parts', () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'left', type: 'scanlineimage', view: 'left', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        { name: 'right', type: 'scanlineimage', view: 'right', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+
+      const info = getEXRInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.parts![0]!.view).toBe('left');
+      expect(info!.parts![1]!.view).toBe('right');
+    });
+  });
+
+  describe('decodeEXR multi-part', () => {
+    it('EXR-MP020: should decode first part by default from 2-part RGBA file', async () => {
+      const buffer = createMultiPartTestEXR([
+        {
+          name: 'beauty',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'alternate',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data).toBeInstanceOf(Float32Array);
+      expect(result.data.length).toBe(2 * 2 * 4);
+
+      // Should have decoded part 0
+      expect(result.decodedPartIndex).toBe(0);
+      expect(result.parts).toBeDefined();
+      expect(result.parts!.length).toBe(2);
+
+      // Verify first pixel green = 1.0 * 0.5 (part 0 multiplier 1.0 * green base 0.5)
+      expect(result.data[1]).toBeCloseTo(0.5, 1);
+    });
+
+    it('EXR-MP021: should decode second part when partIndex=1', async () => {
+      const buffer = createMultiPartTestEXR([
+        {
+          name: 'beauty',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'alternate',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      const result = await decodeEXR(buffer, { partIndex: 1 });
+
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.decodedPartIndex).toBe(1);
+
+      // Verify first pixel green = 0.5 * 0.5 = 0.25 (part 1 multiplier 0.5 * green base 0.5)
+      // But the default multiplier for part index 1 is (1+1)*0.1 = 0.2 when not specified
+      // We specified 0.5, so green = 0.5 * 0.5 = 0.25
+      expect(result.data[1]).toBeCloseTo(0.25, 1);
+    });
+
+    it('EXR-MP022: should throw for out-of-range partIndex', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'only', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+
+      await expect(decodeEXR(buffer, { partIndex: 5 })).rejects.toThrow(/Part index 5 is out of range/);
+    });
+
+    it('EXR-MP023: should throw for negative partIndex', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'only', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+
+      await expect(decodeEXR(buffer, { partIndex: -1 })).rejects.toThrow(/Part index -1 is out of range/);
+    });
+
+    it('EXR-MP024: should include part info in result', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'rgba', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 4, height: 4 },
+        { name: 'normals', type: 'scanlineimage', channels: ['R', 'G', 'B'], width: 4, height: 4 },
+      ]);
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.parts).toBeDefined();
+      expect(result.parts!.length).toBe(2);
+      expect(result.parts![0]!.name).toBe('rgba');
+      expect(result.parts![0]!.type).toBe('scanlineimage');
+      expect(result.parts![0]!.channels).toEqual(expect.arrayContaining(['R', 'G', 'B', 'A']));
+      expect(result.parts![1]!.name).toBe('normals');
+      expect(result.parts![1]!.channels).toEqual(expect.arrayContaining(['R', 'G', 'B']));
+    });
+
+    it('EXR-MP025: should handle parts with different dimensions', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'hires', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 8, height: 8 },
+        { name: 'lores', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 4, height: 4 },
+      ]);
+
+      // Decode first part
+      const result0 = await decodeEXR(buffer);
+      expect(result0.width).toBe(8);
+      expect(result0.height).toBe(8);
+
+      // Decode second part
+      const result1 = await decodeEXR(buffer, { partIndex: 1 });
+      expect(result1.width).toBe(4);
+      expect(result1.height).toBe(4);
+    });
+
+    it('EXR-MP026: should decode multi-part with float32 pixel type', async () => {
+      const buffer = createMultiPartTestEXR([
+        {
+          name: 'float_part',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          pixelType: EXRPixelType.FLOAT,
+          valueMultiplier: 1.0,
+        },
+      ]);
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.data).toBeInstanceOf(Float32Array);
+      expect(result.data.length).toBe(2 * 2 * 4);
+    });
+  });
+
+  describe('deep data rejection', () => {
+    it('EXR-MP030: should throw descriptive error for deepscanline part', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_part', type: 'deepscanline', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/deep data/i);
+      await expect(decodeEXR(buffer)).rejects.toThrow(/deepscanline/);
+    });
+
+    it('EXR-MP031: should throw descriptive error for deeptile part', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_tile', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/deep data/i);
+      await expect(decodeEXR(buffer)).rejects.toThrow(/deeptile/);
+    });
+
+    it('EXR-MP032: should allow selecting a non-deep part when deep part exists', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_part', type: 'deepscanline', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        { name: 'scanline_part', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.7 },
+      ]);
+
+      // Selecting the deep part should fail
+      await expect(decodeEXR(buffer, { partIndex: 0 })).rejects.toThrow(/deep data/i);
+
+      // Selecting the scanline part should succeed
+      const result = await decodeEXR(buffer, { partIndex: 1 });
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.decodedPartIndex).toBe(1);
+    });
+  });
+
+  describe('multi-part stereo views', () => {
+    it('EXR-MP040: should report view names in part info', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'left', type: 'scanlineimage', view: 'left', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 1.0 },
+        { name: 'right', type: 'scanlineimage', view: 'right', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.8 },
+      ]);
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.parts![0]!.view).toBe('left');
+      expect(result.parts![1]!.view).toBe('right');
+    });
+
+    it('EXR-MP041: should decode right view when selected by partIndex', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'left', type: 'scanlineimage', view: 'left', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 1.0 },
+        { name: 'right', type: 'scanlineimage', view: 'right', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.5 },
+      ]);
+
+      const resultRight = await decodeEXR(buffer, { partIndex: 1 });
+      expect(resultRight.decodedPartIndex).toBe(1);
+      // Green from right view: 0.5 * 0.5 = 0.25
+      expect(resultRight.data[1]).toBeCloseTo(0.25, 1);
+    });
+  });
+
+  describe('exrToIPImage with multi-part', () => {
+    it('EXR-MP050: should include multi-part info in IPImage metadata', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'beauty', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        { name: 'normals', type: 'scanlineimage', channels: ['R', 'G', 'B'], width: 2, height: 2 },
+      ]);
+
+      const result = await decodeEXR(buffer);
+      const image = exrToIPImage(result, '/test/multipart.exr');
+
+      expect(image.metadata.attributes!.exrParts).toBeDefined();
+      expect(image.metadata.attributes!.exrDecodedPartIndex).toBe(0);
+    });
+  });
+
+  describe('multi-part with single part', () => {
+    it('EXR-MP060: should handle multi-part file that has only one part', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'only', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 4, height: 4, valueMultiplier: 1.0 },
+      ]);
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.decodedPartIndex).toBe(0);
+      expect(result.parts!.length).toBe(1);
+    });
+  });
+
+  describe('interleaved chunks', () => {
+    it('EXR-MP065: should decode correctly when chunks from different parts are interleaved', async () => {
+      const buffer = createInterleavedMultiPartTestEXR([
+        {
+          name: 'partA',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'partB',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      // Decode part 0 (partA) - must skip interleaved partB chunks
+      const result0 = await decodeEXR(buffer);
+      expect(result0.width).toBe(2);
+      expect(result0.height).toBe(2);
+      expect(result0.decodedPartIndex).toBe(0);
+      // Green channel for part 0: 1.0 * 0.5 = 0.5
+      expect(result0.data[1]).toBeCloseTo(0.5, 1);
+
+      // Decode part 1 (partB) - must skip interleaved partA chunks
+      const result1 = await decodeEXR(buffer, { partIndex: 1 });
+      expect(result1.width).toBe(2);
+      expect(result1.height).toBe(2);
+      expect(result1.decodedPartIndex).toBe(1);
+      // Green channel for part 1: 0.5 * 0.5 = 0.25
+      expect(result1.data[1]).toBeCloseTo(0.25, 1);
+    });
+  });
+
+  describe('partIndex validation', () => {
+    it('EXR-MP066: should throw descriptive error for NaN partIndex', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'test', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+      await expect(decodeEXR(buffer, { partIndex: NaN })).rejects.toThrow(/Invalid part index/);
+    });
+  });
+
+  describe('performance', () => {
+    it.skip('EXR-MP070: performance - decode 1920x1080 multi-part in < 500ms', async () => {
+      const buffer = createMultiPartTestEXR([
+        {
+          name: 'beauty',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 1920,
+          height: 1080,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'depth',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 1920,
+          height: 1080,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      const start = performance.now();
+      const result = await decodeEXR(buffer);
+      const elapsed = performance.now() - start;
+
+      expect(result.width).toBe(1920);
+      expect(result.height).toBe(1080);
+      expect(elapsed).toBeLessThan(500);
+    });
+  });
+});
+
+// ===== Uncrop (data window -> display window) Tests =====
+
+describe('EXR Uncrop (applyUncrop)', () => {
+  describe('applyUncrop - identity', () => {
+    it('EXR-UC001: should return data unchanged when windows are identical', () => {
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 2 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 2 };
+      const data = new Float32Array(4 * 3 * 4); // 4x3 RGBA
+      data[0] = 0.5; // mark first pixel red
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(3);
+      expect(result.data).toBe(data); // same reference
+    });
+  });
+
+  describe('applyUncrop - expansion', () => {
+    it('EXR-UC010: should expand a small data window into a larger display window', () => {
+      // Data window: 2x2 at (1,1)-(2,2)
+      // Display window: 4x4 at (0,0)-(3,3)
+      const dw: EXRBox2i = { xMin: 1, yMin: 1, xMax: 2, yMax: 2 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      const dwWidth = 2, dwHeight = 2;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill with known values: R=1, G=0.5, B=0.25, A=1
+      for (let i = 0; i < dwWidth * dwHeight; i++) {
+        data[i * 4 + 0] = 1.0;
+        data[i * 4 + 1] = 0.5;
+        data[i * 4 + 2] = 0.25;
+        data[i * 4 + 3] = 1.0;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Check that pixels outside data window are transparent black (0,0,0,0)
+      // Top-left corner (0,0) should be transparent
+      expect(result.data[0]).toBe(0);
+      expect(result.data[1]).toBe(0);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(0);
+
+      // Pixel at (1,1) should have our data (offset = (1*4+1)*4 = 20)
+      const idx = (1 * 4 + 1) * 4;
+      expect(result.data[idx + 0]).toBe(1.0);
+      expect(result.data[idx + 1]).toBe(0.5);
+      expect(result.data[idx + 2]).toBe(0.25);
+      expect(result.data[idx + 3]).toBe(1.0);
+
+      // Pixel at (2,2) should also have data
+      const idx2 = (2 * 4 + 2) * 4;
+      expect(result.data[idx2 + 0]).toBe(1.0);
+      expect(result.data[idx2 + 1]).toBe(0.5);
+
+      // Bottom-right corner (3,3) should be transparent
+      const idx3 = (3 * 4 + 3) * 4;
+      expect(result.data[idx3 + 0]).toBe(0);
+      expect(result.data[idx3 + 1]).toBe(0);
+      expect(result.data[idx3 + 2]).toBe(0);
+      expect(result.data[idx3 + 3]).toBe(0);
+    });
+
+    it('EXR-UC011: should place data at correct offset for non-zero display window origin', () => {
+      // Data window: (100,50)-(500,400) => 401x351
+      // Display window: (0,0)-(1919,1079) => 1920x1080
+      const dw: EXRBox2i = { xMin: 100, yMin: 50, xMax: 500, yMax: 400 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1919, yMax: 1079 };
+
+      const dwWidth = 401, dwHeight = 351;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill all data pixels with R=0.7, G=0.3, B=0.1, A=0.9
+      for (let i = 0; i < dwWidth * dwHeight; i++) {
+        data[i * 4 + 0] = 0.7;
+        data[i * 4 + 1] = 0.3;
+        data[i * 4 + 2] = 0.1;
+        data[i * 4 + 3] = 0.9;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(1920);
+      expect(result.height).toBe(1080);
+
+      // Pixel at (0,0) should be transparent black
+      expect(result.data[0]).toBe(0);
+      expect(result.data[3]).toBe(0);
+
+      // Pixel at (100,50) - the first data pixel
+      const idx = (50 * 1920 + 100) * 4;
+      expect(result.data[idx + 0]).toBeCloseTo(0.7, 5);
+      expect(result.data[idx + 1]).toBeCloseTo(0.3, 5);
+      expect(result.data[idx + 2]).toBeCloseTo(0.1, 5);
+      expect(result.data[idx + 3]).toBeCloseTo(0.9, 5);
+
+      // Pixel at (500,400) - the last data pixel
+      const idxLast = (400 * 1920 + 500) * 4;
+      expect(result.data[idxLast + 0]).toBeCloseTo(0.7, 5);
+      expect(result.data[idxLast + 3]).toBeCloseTo(0.9, 5);
+
+      // Pixel at (501,400) - just outside data window
+      const idxOutside = (400 * 1920 + 501) * 4;
+      expect(result.data[idxOutside + 0]).toBe(0);
+      expect(result.data[idxOutside + 3]).toBe(0);
+    });
+
+    it('EXR-UC012: fill pixels outside data window are transparent black (0,0,0,0)', () => {
+      const dw: EXRBox2i = { xMin: 1, yMin: 1, xMax: 1, yMax: 1 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 2, yMax: 2 };
+
+      // 1x1 data window
+      const data = new Float32Array(4);
+      data[0] = 0.8;
+      data[1] = 0.6;
+      data[2] = 0.4;
+      data[3] = 1.0;
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(3);
+      expect(result.height).toBe(3);
+
+      // Check all 9 pixels - only (1,1) should have data
+      for (let y = 0; y < 3; y++) {
+        for (let x = 0; x < 3; x++) {
+          const idx = (y * 3 + x) * 4;
+          if (x === 1 && y === 1) {
+            expect(result.data[idx + 0]).toBeCloseTo(0.8, 5);
+            expect(result.data[idx + 1]).toBeCloseTo(0.6, 5);
+            expect(result.data[idx + 2]).toBeCloseTo(0.4, 5);
+            expect(result.data[idx + 3]).toBe(1.0);
+          } else {
+            expect(result.data[idx + 0]).toBe(0);
+            expect(result.data[idx + 1]).toBe(0);
+            expect(result.data[idx + 2]).toBe(0);
+            expect(result.data[idx + 3]).toBe(0);
+          }
+        }
+      }
+    });
+  });
+
+  describe('applyUncrop - edge cases', () => {
+    it('EXR-UC020: should handle data window at display window origin', () => {
+      // Data window starts at (0,0) but is smaller than display window
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1, yMax: 1 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      const data = new Float32Array(2 * 2 * 4);
+      for (let i = 0; i < 4; i++) {
+        data[i * 4 + 0] = 1.0;
+        data[i * 4 + 3] = 1.0;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // (0,0) should have data
+      expect(result.data[0]).toBe(1.0);
+      // (2,0) should be transparent
+      const idx = (0 * 4 + 2) * 4;
+      expect(result.data[idx]).toBe(0);
+    });
+
+    it('EXR-UC021: should handle data window at bottom-right corner of display window', () => {
+      const dw: EXRBox2i = { xMin: 2, yMin: 2, xMax: 3, yMax: 3 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      const data = new Float32Array(2 * 2 * 4);
+      data[0] = 0.9; // first data pixel R
+      data[3] = 1.0; // first data pixel A
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // (0,0) should be transparent
+      expect(result.data[0]).toBe(0);
+      // (2,2) should have data
+      const idx = (2 * 4 + 2) * 4;
+      expect(result.data[idx]).toBeCloseTo(0.9, 5);
+    });
+  });
+
+  describe('applyUncrop - boundary clipping', () => {
+    it('EXR-UC040: data window larger than display window on all sides is clipped', () => {
+      // Data window extends beyond display window on every side
+      const dw: EXRBox2i = { xMin: -2, yMin: -1, xMax: 5, yMax: 4 };   // 8x6
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };  // 4x4
+
+      const dwWidth = 8, dwHeight = 6;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill each pixel with a recognizable pattern: R = normalized x, G = normalized y
+      for (let y = 0; y < dwHeight; y++) {
+        for (let x = 0; x < dwWidth; x++) {
+          const i = (y * dwWidth + x) * 4;
+          data[i + 0] = (x + 1) * 0.125;  // R: 0.125..1.0
+          data[i + 1] = (y + 1) * 0.125;  // G: 0.125..0.75
+          data[i + 2] = 0.5;
+          data[i + 3] = 1.0;
+        }
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // The visible region in data coords: x=2..5 (clipped to 2..5), y=1..4 (clipped to 1..4)
+      // Data pixel at data coords (2,1) maps to display (0,0)
+      // Its R value = (2+1)*0.125 = 0.375, G value = (1+1)*0.125 = 0.25
+      const idx00 = 0;
+      expect(result.data[idx00 + 0]).toBeCloseTo(0.375, 5);
+      expect(result.data[idx00 + 1]).toBe(0.25);
+      expect(result.data[idx00 + 3]).toBe(1.0);
+
+      // Data pixel at data coords (5,4) maps to display (3,3)
+      // Its R value = (5+1)*0.125 = 0.75, G value = (4+1)*0.125 = 0.625
+      const idx33 = (3 * 4 + 3) * 4;
+      expect(result.data[idx33 + 0]).toBe(0.75);
+      expect(result.data[idx33 + 1]).toBeCloseTo(0.625, 5);
+      expect(result.data[idx33 + 3]).toBe(1.0);
+
+      // All 16 pixels should be filled (no transparent black)
+      for (let i = 0; i < 4 * 4; i++) {
+        expect(result.data[i * 4 + 3]).toBe(1.0);
+      }
+    });
+
+    it('EXR-UC041: data window partially outside display window with negative offsets', () => {
+      // Data window starts before display window but overlaps partially
+      const dw: EXRBox2i = { xMin: -3, yMin: -2, xMax: 1, yMax: 1 };    // 5x4
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };   // 4x4
+
+      const dwWidth = 5, dwHeight = 4;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill all with recognizable value
+      for (let i = 0; i < dwWidth * dwHeight; i++) {
+        data[i * 4 + 0] = 0.25;
+        data[i * 4 + 1] = 0.5;
+        data[i * 4 + 2] = 0.75;
+        data[i * 4 + 3] = 1.0;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // The visible portion: data x=3..4 (display x=0..1), data y=2..3 (display y=0..1)
+      // (0,0) in display should have data
+      expect(result.data[0]).toBe(0.25);
+      expect(result.data[3]).toBe(1.0);
+
+      // (1,1) in display should have data
+      const idx11 = (1 * 4 + 1) * 4;
+      expect(result.data[idx11 + 0]).toBe(0.25);
+      expect(result.data[idx11 + 3]).toBe(1.0);
+
+      // (2,0) in display should be transparent (no data there)
+      const idx20 = (0 * 4 + 2) * 4;
+      expect(result.data[idx20 + 0]).toBe(0);
+      expect(result.data[idx20 + 3]).toBe(0);
+
+      // (0,2) in display should be transparent (no data there)
+      const idx02 = (2 * 4 + 0) * 4;
+      expect(result.data[idx02 + 0]).toBe(0);
+      expect(result.data[idx02 + 3]).toBe(0);
+
+      // (3,3) in display should be transparent
+      const idx33 = (3 * 4 + 3) * 4;
+      expect(result.data[idx33 + 0]).toBe(0);
+      expect(result.data[idx33 + 3]).toBe(0);
+    });
+
+    it('EXR-UC042: applyUncrop throws on data length mismatch', () => {
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1, yMax: 1 };   // 2x2 → expects 16 floats
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      // Wrong length: 3x2x4 = 24 instead of 2x2x4 = 16
+      const data = new Float32Array(24);
+
+      expect(() => applyUncrop(data, dw, dispW)).toThrow(/data length 24 does not match expected 16/);
+    });
+  });
+
+  describe('decodeEXR with uncrop', () => {
+    it('EXR-UC030: should produce display window dimensions when data window differs', async () => {
+      // Create a test EXR with data window smaller than display window
+      const buffer = createTestEXRWithUncrop({
+        dataWindow: { xMin: 10, yMin: 5, xMax: 29, yMax: 14 },  // 20x10
+        displayWindow: { xMin: 0, yMin: 0, xMax: 39, yMax: 19 }, // 40x20
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // Output should be display window size
+      expect(result.width).toBe(40);
+      expect(result.height).toBe(20);
+      expect(result.data.length).toBe(40 * 20 * 4);
+    });
+
+    it('EXR-UC031: should have transparent black padding around data', async () => {
+      const buffer = createTestEXRWithUncrop({
+        dataWindow: { xMin: 1, yMin: 1, xMax: 2, yMax: 2 },   // 2x2
+        displayWindow: { xMin: 0, yMin: 0, xMax: 3, yMax: 3 }, // 4x4
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // Top-left corner (0,0) should be transparent
+      expect(result.data[0]).toBe(0);
+      expect(result.data[1]).toBe(0);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(0);
+
+      // Data pixels at (1,1) should be non-zero
+      const idx = (1 * 4 + 1) * 4;
+      // Alpha should be 1.0 for data pixels
+      expect(result.data[idx + 3]).toBeCloseTo(1.0, 2);
+    });
+
+    it('EXR-UC032: should not change output when windows are identical', async () => {
+      const buffer = createTestEXR({ width: 4, height: 4 });
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+    });
+  });
+});
+
+/**
+ * Create a test EXR with separate data window and display window for uncrop testing.
+ * The data window pixels are filled with the standard test pattern (same as createTestEXR).
+ */
+function createTestEXRWithUncrop(options: {
+  dataWindow: EXRBox2i;
+  displayWindow: EXRBox2i;
+  channels?: string[];
+  pixelType?: EXRPixelType;
+}): ArrayBuffer {
+  const {
+    dataWindow,
+    displayWindow,
+    channels = ['R', 'G', 'B', 'A'],
+    pixelType = EXRPixelType.HALF,
+  } = options;
+
+  const dataWidth = dataWindow.xMax - dataWindow.xMin + 1;
+  const dataHeight = dataWindow.yMax - dataWindow.yMin + 1;
+
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    parts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    parts.push(bytes);
+    parts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeHalf(value: number): void {
+    const buf = new Uint8Array(2);
+    const view = new DataView(buf.buffer);
+    const h = floatToHalf(value);
+    view.setUint16(0, h, true);
+    parts.push(buf);
+    offset += 2;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    parts.push(buf);
+    offset += 8;
+  }
+
+  // Magic number
+  writeUint32(EXR_MAGIC);
+  writeUint32(2);
+
+  // channels attribute
+  writeString('channels');
+  writeString('chlist');
+  let channelListSize = 1;
+  for (const ch of channels) {
+    channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+  }
+  writeInt32(channelListSize);
+  const sortedChannels = [...channels].sort();
+  for (const ch of sortedChannels) {
+    writeString(ch);
+    writeInt32(pixelType);
+    writeUint8(0);
+    parts.push(new Uint8Array([0, 0, 0]));
+    offset += 3;
+    writeInt32(1);
+    writeInt32(1);
+  }
+  writeUint8(0);
+
+  // compression
+  writeString('compression');
+  writeString('compression');
+  writeInt32(1);
+  writeUint8(EXRCompression.NONE);
+
+  // dataWindow (the actual pixel region)
+  writeString('dataWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(dataWindow.xMin);
+  writeInt32(dataWindow.yMin);
+  writeInt32(dataWindow.xMax);
+  writeInt32(dataWindow.yMax);
+
+  // displayWindow (the full frame)
+  writeString('displayWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(displayWindow.xMin);
+  writeInt32(displayWindow.yMin);
+  writeInt32(displayWindow.xMax);
+  writeInt32(displayWindow.yMax);
+
+  // lineOrder
+  writeString('lineOrder');
+  writeString('lineOrder');
+  writeInt32(1);
+  writeUint8(0);
+
+  // pixelAspectRatio
+  writeString('pixelAspectRatio');
+  writeString('float');
+  writeInt32(4);
+  writeFloat32(1.0);
+
+  // End of header
+  writeUint8(0);
+
+  // Offset table
+  const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+  const scanlineSize = channels.length * dataWidth * bytesPerPixel;
+  const headerEnd = offset;
+  const offsetTableSize = dataHeight * 8;
+  const scanlineDataStart = headerEnd + offsetTableSize;
+
+  for (let y = 0; y < dataHeight; y++) {
+    const blockStart = BigInt(scanlineDataStart + y * (8 + scanlineSize));
+    writeUint64(blockStart);
+  }
+
+  // Scanline data - y coordinates are absolute (dataWindow.yMin + row)
+  for (let y = 0; y < dataHeight; y++) {
+    writeInt32(dataWindow.yMin + y); // Absolute Y coordinate
+    writeInt32(scanlineSize);
+
+    for (const ch of sortedChannels) {
+      for (let x = 0; x < dataWidth; x++) {
+        let value = 0;
+        if (ch === 'R') value = (x + y * dataWidth) / (dataWidth * dataHeight);
+        else if (ch === 'G') value = 0.5;
+        else if (ch === 'B') value = 1.0 - (x + y * dataWidth) / (dataWidth * dataHeight);
+        else if (ch === 'A') value = 1.0;
+
+        if (pixelType === EXRPixelType.HALF) {
+          writeHalf(value);
+        } else {
+          writeFloat32(value);
+        }
+      }
+    }
+  }
+
+  const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+  const result = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of parts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+  return result.buffer;
+}
+
+// ===== Tiled EXR Test Helpers =====
+
+/**
+ * Create a tiled EXR file buffer for testing.
+ * Generates uncompressed ONE_LEVEL tiled image with RGBA half-float data.
+ */
+function createTiledTestEXR(options: {
+  width?: number;
+  height?: number;
+  tileXSize?: number;
+  tileYSize?: number;
+  channels?: string[];
+  pixelType?: EXRPixelType;
+  compression?: EXRCompression;
+  levelMode?: EXRLevelMode;
+  roundingMode?: EXRRoundingMode;
+  dataWindow?: EXRBox2i;
+  displayWindow?: EXRBox2i;
+} = {}): ArrayBuffer {
+  const {
+    width = 4,
+    height = 4,
+    tileXSize = 2,
+    tileYSize = 2,
+    channels = ['R', 'G', 'B', 'A'],
+    pixelType = EXRPixelType.HALF,
+    compression = EXRCompression.NONE,
+    levelMode = EXRLevelMode.ONE_LEVEL,
+    roundingMode = EXRRoundingMode.ROUND_DOWN,
+  } = options;
+
+  const dataWindow = options.dataWindow ?? { xMin: 0, yMin: 0, xMax: width - 1, yMax: height - 1 };
+  const displayWindow = options.displayWindow ?? { xMin: 0, yMin: 0, xMax: width - 1, yMax: height - 1 };
+
+  const dataWidth = dataWindow.xMax - dataWindow.xMin + 1;
+  const dataHeight = dataWindow.yMax - dataWindow.yMin + 1;
+
+  const bufParts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    bufParts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    bufParts.push(bytes);
+    bufParts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeHalf(value: number): void {
+    const buf = new Uint8Array(2);
+    const view = new DataView(buf.buffer);
+    const h = floatToHalf(value);
+    view.setUint16(0, h, true);
+    bufParts.push(buf);
+    offset += 2;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    bufParts.push(buf);
+    offset += 8;
+  }
+
+  // Magic number
+  writeUint32(EXR_MAGIC);
+
+  // Version 2 with tiled bit (0x200)
+  writeUint32(2 | 0x200);
+
+  // === HEADER ATTRIBUTES ===
+
+  // channels attribute
+  writeString('channels');
+  writeString('chlist');
+  let channelListSize = 1;
+  for (const ch of channels) {
+    channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+  }
+  writeInt32(channelListSize);
+  const sortedChannels = [...channels].sort();
+  for (const ch of sortedChannels) {
+    writeString(ch);
+    writeInt32(pixelType);
+    writeUint8(0); // pLinear
+    bufParts.push(new Uint8Array([0, 0, 0])); // reserved
+    offset += 3;
+    writeInt32(1); // xSampling
+    writeInt32(1); // ySampling
+  }
+  writeUint8(0); // End of channel list
+
+  // compression attribute
+  writeString('compression');
+  writeString('compression');
+  writeInt32(1);
+  writeUint8(compression);
+
+  // dataWindow attribute
+  writeString('dataWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(dataWindow.xMin);
+  writeInt32(dataWindow.yMin);
+  writeInt32(dataWindow.xMax);
+  writeInt32(dataWindow.yMax);
+
+  // displayWindow attribute
+  writeString('displayWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(displayWindow.xMin);
+  writeInt32(displayWindow.yMin);
+  writeInt32(displayWindow.xMax);
+  writeInt32(displayWindow.yMax);
+
+  // lineOrder attribute
+  writeString('lineOrder');
+  writeString('lineOrder');
+  writeInt32(1);
+  writeUint8(0); // INCREASING_Y
+
+  // pixelAspectRatio attribute
+  writeString('pixelAspectRatio');
+  writeString('float');
+  writeInt32(4);
+  writeFloat32(1.0);
+
+  // tiles attribute
+  writeString('tiles');
+  writeString('tiledesc');
+  writeInt32(9); // xSize(4) + ySize(4) + modeByte(1)
+  writeInt32(tileXSize);
+  writeInt32(tileYSize);
+  const modeByte = (levelMode & 0xf) | ((roundingMode & 0xf) << 4);
+  writeUint8(modeByte);
+
+  // End of header
+  writeUint8(0);
+
+  // === OFFSET TABLE ===
+  const numXTiles = Math.ceil(dataWidth / tileXSize);
+  const numYTiles = Math.ceil(dataHeight / tileYSize);
+  const totalTiles = numXTiles * numYTiles;
+
+  const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+
+  // Calculate where tile data starts
+  const headerEnd = offset;
+  const offsetTableSize = totalTiles * 8;
+  const tileDataStart = headerEnd + offsetTableSize;
+
+  // Pre-compute tile data sizes and offsets
+  const tileOffsets: bigint[] = [];
+  let currentTileOffset = tileDataStart;
+  for (let ty = 0; ty < numYTiles; ty++) {
+    for (let tx = 0; tx < numXTiles; tx++) {
+      tileOffsets.push(BigInt(currentTileOffset));
+      const actualTileW = Math.min(tileXSize, dataWidth - tx * tileXSize);
+      const actualTileH = Math.min(tileYSize, dataHeight - ty * tileYSize);
+      const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
+      // tile header: tileX(4) + tileY(4) + levelX(4) + levelY(4) + packedSize(4) = 20
+      currentTileOffset += 20 + tileDataSize;
+    }
+  }
+
+  for (const off of tileOffsets) {
+    writeUint64(off);
+  }
+
+  // === TILE DATA ===
+  for (let ty = 0; ty < numYTiles; ty++) {
+    for (let tx = 0; tx < numXTiles; tx++) {
+      const actualTileW = Math.min(tileXSize, dataWidth - tx * tileXSize);
+      const actualTileH = Math.min(tileYSize, dataHeight - ty * tileYSize);
+      const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
+
+      writeInt32(tx);  // tileX
+      writeInt32(ty);  // tileY
+      writeInt32(0);   // levelX
+      writeInt32(0);   // levelY
+      writeInt32(tileDataSize); // packedSize
+
+      // Write pixel data: channels stored separately, in sorted order, line by line within tile
+      for (let line = 0; line < actualTileH; line++) {
+        const globalY = ty * tileYSize + line;
+        for (const ch of sortedChannels) {
+          for (let x = 0; x < actualTileW; x++) {
+            const globalX = tx * tileXSize + x;
+            let value = 0;
+            if (ch === 'R') value = (globalX + globalY * dataWidth) / (dataWidth * dataHeight);
+            else if (ch === 'G') value = 0.5;
+            else if (ch === 'B') value = 1.0 - (globalX + globalY * dataWidth) / (dataWidth * dataHeight);
+            else if (ch === 'A') value = 1.0;
+            else if (ch === 'Y') value = (globalX + globalY * dataWidth) / (dataWidth * dataHeight);
+
+            if (pixelType === EXRPixelType.HALF) {
+              writeHalf(value);
+            } else {
+              writeFloat32(value);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Combine all bufParts
+  const totalLength = bufParts.reduce((sum, p) => sum + p.length, 0);
+  const resultBuf = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of bufParts) {
+    resultBuf.set(part, pos);
+    pos += part.length;
+  }
+  return resultBuf.buffer;
+}
+
+/**
+ * Create a multi-part EXR file with a tiled part for testing.
+ */
+function createMultiPartTiledTestEXR(partDefs: (TestPartDef & {
+  tiled?: boolean;
+  tileXSize?: number;
+  tileYSize?: number;
+})[]): ArrayBuffer {
+  const bufParts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    bufParts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    bufParts.push(bytes);
+    bufParts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    bufParts.push(buf);
+    offset += 4;
+  }
+
+  function writeHalf(value: number): void {
+    const buf = new Uint8Array(2);
+    const view = new DataView(buf.buffer);
+    const h = floatToHalf(value);
+    view.setUint16(0, h, true);
+    bufParts.push(buf);
+    offset += 2;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    bufParts.push(buf);
+    offset += 8;
+  }
+
+  function writeStringAttribute(name: string, value: string): void {
+    writeString(name);
+    writeString('string');
+    const encoded = new TextEncoder().encode(value);
+    writeInt32(encoded.length + 1);
+    bufParts.push(encoded);
+    bufParts.push(new Uint8Array([0]));
+    offset += encoded.length + 1;
+  }
+
+  // ===== MAGIC + VERSION =====
+  writeUint32(EXR_MAGIC);
+  writeUint32(2 | 0x1000); // multiPart bit
+
+  // ===== PART HEADERS =====
+  for (const partDef of partDefs) {
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+    const compression = partDef.compression ?? EXRCompression.NONE;
+
+    if (partDef.name) writeStringAttribute('name', partDef.name);
+    if (partDef.type) writeStringAttribute('type', partDef.type);
+    if (partDef.view) writeStringAttribute('view', partDef.view);
+
+    // channels attribute
+    writeString('channels');
+    writeString('chlist');
+    let channelListSize = 1;
+    for (const ch of channels) {
+      channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+    }
+    writeInt32(channelListSize);
+    const sortedChannels = [...channels].sort();
+    for (const ch of sortedChannels) {
+      writeString(ch);
+      writeInt32(pixelType);
+      writeUint8(0);
+      bufParts.push(new Uint8Array([0, 0, 0]));
+      offset += 3;
+      writeInt32(1);
+      writeInt32(1);
+    }
+    writeUint8(0);
+
+    // compression
+    writeString('compression');
+    writeString('compression');
+    writeInt32(1);
+    writeUint8(compression);
+
+    // dataWindow
+    writeString('dataWindow');
+    writeString('box2i');
+    writeInt32(16);
+    writeInt32(0);
+    writeInt32(0);
+    writeInt32(width - 1);
+    writeInt32(height - 1);
+
+    // displayWindow
+    writeString('displayWindow');
+    writeString('box2i');
+    writeInt32(16);
+    writeInt32(0);
+    writeInt32(0);
+    writeInt32(width - 1);
+    writeInt32(height - 1);
+
+    // lineOrder
+    writeString('lineOrder');
+    writeString('lineOrder');
+    writeInt32(1);
+    writeUint8(0);
+
+    // pixelAspectRatio
+    writeString('pixelAspectRatio');
+    writeString('float');
+    writeInt32(4);
+    writeFloat32(1.0);
+
+    // tiles attribute for tiled parts
+    if (partDef.tiled) {
+      const txs = partDef.tileXSize ?? 2;
+      const tys = partDef.tileYSize ?? 2;
+      writeString('tiles');
+      writeString('tiledesc');
+      writeInt32(9);
+      writeInt32(txs);
+      writeInt32(tys);
+      writeUint8(0); // ONE_LEVEL, ROUND_DOWN
+    }
+
+    writeUint8(0); // End of this part's header
+  }
+  writeUint8(0); // Empty header terminator
+
+  // ===== OFFSET TABLES =====
+  const offsetTableStart = offset;
+  let totalOffsetTableSize = 0;
+  const partBlockCounts: number[] = [];
+
+  for (const partDef of partDefs) {
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    if (partDef.tiled) {
+      const txs = partDef.tileXSize ?? 2;
+      const tys = partDef.tileYSize ?? 2;
+      const numXTiles = Math.ceil(width / txs);
+      const numYTiles = Math.ceil(height / tys);
+      const numBlocks = numXTiles * numYTiles;
+      partBlockCounts.push(numBlocks);
+      totalOffsetTableSize += numBlocks * 8;
+    } else {
+      partBlockCounts.push(height); // 1 line per block for NONE compression
+      totalOffsetTableSize += height * 8;
+    }
+  }
+
+  const chunkDataStart = offsetTableStart + totalOffsetTableSize;
+
+  // Pre-compute chunk offsets and sizes
+  let currentDataOffset = chunkDataStart;
+  const partChunkOffsets: bigint[][] = [];
+
+  for (let p = 0; p < partDefs.length; p++) {
+    const partDef = partDefs[p]!;
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+    const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+
+    const offsets: bigint[] = [];
+
+    if (partDef.tiled) {
+      const txs = partDef.tileXSize ?? 2;
+      const tys = partDef.tileYSize ?? 2;
+      const numXTiles = Math.ceil(width / txs);
+      const numYTiles = Math.ceil(height / tys);
+
+      for (let ty = 0; ty < numYTiles; ty++) {
+        for (let tx = 0; tx < numXTiles; tx++) {
+          offsets.push(BigInt(currentDataOffset));
+          const actualTileW = Math.min(txs, width - tx * txs);
+          const actualTileH = Math.min(tys, height - ty * tys);
+          const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
+          // partNumber(4) + tileX(4) + tileY(4) + levelX(4) + levelY(4) + packedSize(4) + data
+          currentDataOffset += 24 + tileDataSize;
+        }
+      }
+    } else {
+      const scanlineSize = channels.length * width * bytesPerPixel;
+      for (let y = 0; y < height; y++) {
+        offsets.push(BigInt(currentDataOffset));
+        // partNumber(4) + y(4) + packedSize(4) + data
+        currentDataOffset += 12 + scanlineSize;
+      }
+    }
+    partChunkOffsets.push(offsets);
+  }
+
+  // Write offset tables
+  for (let p = 0; p < partDefs.length; p++) {
+    for (const off of partChunkOffsets[p]!) {
+      writeUint64(off);
+    }
+  }
+
+  // ===== CHUNK DATA =====
+  for (let p = 0; p < partDefs.length; p++) {
+    const partDef = partDefs[p]!;
+    const width = partDef.width ?? 2;
+    const height = partDef.height ?? 2;
+    const channels = partDef.channels ?? ['R', 'G', 'B', 'A'];
+    const pixelType = partDef.pixelType ?? EXRPixelType.HALF;
+    const valueMult = partDef.valueMultiplier ?? (p === 0 ? 1.0 : (p + 1) * 0.1);
+    const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+    const sortedChannels = [...channels].sort();
+
+    if (partDef.tiled) {
+      const txs = partDef.tileXSize ?? 2;
+      const tys = partDef.tileYSize ?? 2;
+      const numXTiles = Math.ceil(width / txs);
+      const numYTiles = Math.ceil(height / tys);
+
+      for (let ty = 0; ty < numYTiles; ty++) {
+        for (let tx = 0; tx < numXTiles; tx++) {
+          const actualTileW = Math.min(txs, width - tx * txs);
+          const actualTileH = Math.min(tys, height - ty * tys);
+          const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
+
+          writeInt32(p);            // partNumber
+          writeInt32(tx);           // tileX
+          writeInt32(ty);           // tileY
+          writeInt32(0);            // levelX
+          writeInt32(0);            // levelY
+          writeInt32(tileDataSize); // packedSize
+
+          for (let line = 0; line < actualTileH; line++) {
+            const globalY = ty * tys + line;
+            for (const ch of sortedChannels) {
+              for (let x = 0; x < actualTileW; x++) {
+                const globalX = tx * txs + x;
+                let value = 0;
+                if (ch === 'R') value = valueMult * (globalX + globalY * width) / (width * height);
+                else if (ch === 'G') value = valueMult * 0.5;
+                else if (ch === 'B') value = valueMult * (1.0 - (globalX + globalY * width) / (width * height));
+                else if (ch === 'A') value = 1.0;
+
+                if (pixelType === EXRPixelType.HALF) {
+                  writeHalf(value);
+                } else {
+                  writeFloat32(value);
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      const scanlineSize = channels.length * width * bytesPerPixel;
+      for (let y = 0; y < height; y++) {
+        writeInt32(p);            // partNumber
+        writeInt32(y);            // y coordinate
+        writeInt32(scanlineSize); // packedSize
+
+        for (const ch of sortedChannels) {
+          for (let x = 0; x < width; x++) {
+            let value = 0;
+            if (ch === 'R') value = valueMult * (x + y * width) / (width * height);
+            else if (ch === 'G') value = valueMult * 0.5;
+            else if (ch === 'B') value = valueMult * (1.0 - (x + y * width) / (width * height));
+            else if (ch === 'A') value = 1.0;
+
+            if (pixelType === EXRPixelType.HALF) {
+              writeHalf(value);
+            } else {
+              writeFloat32(value);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const totalLength = bufParts.reduce((sum, p) => sum + p.length, 0);
+  const resultBuf = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of bufParts) {
+    resultBuf.set(part, pos);
+    pos += part.length;
+  }
+  return resultBuf.buffer;
+}
+
+// ===== Tiled EXR Tests =====
+
+describe('EXR Tiled Image Support', () => {
+  describe('Basic tiled decoding', () => {
+    it('EXR-T001: should decode basic 4x4 tiled image with 2x2 tiles', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.channels).toBe(4);
+      expect(result.data).toBeInstanceOf(Float32Array);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Verify pixel values - first pixel should have R close to 0
+      expect(result.data[0]).toBeCloseTo(0, 1);
+      // Green should be 0.5
+      expect(result.data[1]).toBeCloseTo(0.5, 1);
+      // Alpha should be 1.0
+      expect(result.data[3]).toBeCloseTo(1.0, 1);
+    });
+
+    it('EXR-T002: should handle edge tiles (5x3 image with 2x2 tiles)', async () => {
+      const buffer = createTiledTestEXR({
+        width: 5,
+        height: 3,
+        tileXSize: 2,
+        tileYSize: 2,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(5);
+      expect(result.height).toBe(3);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(5 * 3 * 4);
+
+      // Verify no NaN values
+      for (let i = 0; i < result.data.length; i++) {
+        expect(Number.isNaN(result.data[i])).toBe(false);
+      }
+
+      // All alpha values should be 1.0
+      for (let i = 3; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBeCloseTo(1.0, 2);
+      }
+    });
+
+    it('EXR-T003: should decode single-tile image (tile covers entire image)', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 4,
+        tileYSize: 4,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Green channel should be 0.5
+      expect(result.data[1]).toBeCloseTo(0.5, 1);
+    });
+
+    it('EXR-T004: should decode tiled RGB (no alpha) image', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+        channels: ['R', 'G', 'B'],
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.channels).toBe(4); // Always 4 output channels
+
+      // Alpha should be filled with 1.0 (no A channel)
+      for (let i = 3; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBeCloseTo(1.0, 5);
+      }
+    });
+
+    it('EXR-T005: should decode tiled grayscale (Y channel) image', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+        channels: ['Y'],
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data).toBeInstanceOf(Float32Array);
+
+      // Y maps to R, G, B -- they should be equal for each pixel
+      for (let i = 0; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBeCloseTo(result.data[i + 1]!, 5);
+        expect(result.data[i]).toBeCloseTo(result.data[i + 2]!, 5);
+      }
+    });
+  });
+
+  describe('Tiled level mode rejection', () => {
+    it('EXR-T006: should reject MIPMAP_LEVELS tiled image', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+        levelMode: EXRLevelMode.MIPMAP_LEVELS,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR tile level mode.*MIPMAP_LEVELS/);
+    });
+
+    it('EXR-T007: should reject RIPMAP_LEVELS tiled image', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+        levelMode: EXRLevelMode.RIPMAP_LEVELS,
+      });
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR tile level mode.*RIPMAP_LEVELS/);
+    });
+  });
+
+  describe('Tiled header info', () => {
+    it('EXR-T008: should provide tileDesc in header via getEXRInfo', () => {
+      const buffer = createTiledTestEXR({
+        width: 8,
+        height: 8,
+        tileXSize: 4,
+        tileYSize: 4,
+      });
+
+      const info = getEXRInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.width).toBe(8);
+      expect(info!.height).toBe(8);
+    });
+
+    it('EXR-T009: should parse tileDesc values correctly', async () => {
+      const buffer = createTiledTestEXR({
+        width: 8,
+        height: 8,
+        tileXSize: 4,
+        tileYSize: 2,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.header.tileDesc).toBeDefined();
+      expect(result.header.tileDesc!.xSize).toBe(4);
+      expect(result.header.tileDesc!.ySize).toBe(2);
+      expect(result.header.tileDesc!.levelMode).toBe(EXRLevelMode.ONE_LEVEL);
+      expect(result.header.tileDesc!.roundingMode).toBe(EXRRoundingMode.ROUND_DOWN);
+      expect(result.header.tiled).toBe(true);
+    });
+  });
+
+  describe('Tiled with uncrop', () => {
+    it('EXR-T010: should apply uncrop with tiled image', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+        dataWindow: { xMin: 1, yMin: 1, xMax: 4, yMax: 4 },
+        displayWindow: { xMin: 0, yMin: 0, xMax: 5, yMax: 5 },
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // Output should be display window size: 6x6
+      expect(result.width).toBe(6);
+      expect(result.height).toBe(6);
+      expect(result.data.length).toBe(6 * 6 * 4);
+
+      // Top-left corner (0,0) should be transparent black
+      expect(result.data[0]).toBe(0);
+      expect(result.data[1]).toBe(0);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(0);
+    });
+  });
+
+  describe('Larger tiled images', () => {
+    it('EXR-T011: should decode large tiled image (64x64 with 16x16 tiles)', async () => {
+      const buffer = createTiledTestEXR({
+        width: 64,
+        height: 64,
+        tileXSize: 16,
+        tileYSize: 16,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(64);
+      expect(result.height).toBe(64);
+      expect(result.data.length).toBe(64 * 64 * 4);
+
+      // Verify no NaN
+      for (let i = 0; i < result.data.length; i++) {
+        expect(Number.isNaN(result.data[i])).toBe(false);
+      }
+    });
+
+    it('EXR-T012: should decode tiled float32 image', async () => {
+      const buffer = createTiledTestEXR({
+        width: 4,
+        height: 4,
+        tileXSize: 2,
+        tileYSize: 2,
+        pixelType: EXRPixelType.FLOAT,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data).toBeInstanceOf(Float32Array);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Green channel should be exactly 0.5 for float32
+      expect(result.data[1]).toBeCloseTo(0.5, 5);
+      // Alpha should be exactly 1.0
+      expect(result.data[3]).toBeCloseTo(1.0, 5);
+    });
+  });
+
+  describe('Multi-part tiled', () => {
+    it('EXR-T020: should decode tiled part in multi-part EXR', async () => {
+      const buffer = createMultiPartTiledTestEXR([
+        {
+          name: 'tiled_part',
+          type: 'tiledimage',
+          tiled: true,
+          tileXSize: 2,
+          tileYSize: 2,
+          channels: ['R', 'G', 'B', 'A'],
+          width: 4,
+          height: 4,
+          valueMultiplier: 1.0,
+        },
+      ]);
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.channels).toBe(4);
+      expect(result.data).toBeInstanceOf(Float32Array);
+      expect(result.data.length).toBe(4 * 4 * 4);
+      expect(result.decodedPartIndex).toBe(0);
+
+      // Green should be 0.5
+      expect(result.data[1]).toBeCloseTo(0.5, 1);
+    });
+
+    it('EXR-T021: should handle mixed tiled+scanline parts', async () => {
+      const buffer = createMultiPartTiledTestEXR([
+        {
+          name: 'scanline_part',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 4,
+          height: 4,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'tiled_part',
+          type: 'tiledimage',
+          tiled: true,
+          tileXSize: 2,
+          tileYSize: 2,
+          channels: ['R', 'G', 'B', 'A'],
+          width: 4,
+          height: 4,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      // Decode scanline part (index 0)
+      const result0 = await decodeEXR(buffer);
+      expect(result0.width).toBe(4);
+      expect(result0.height).toBe(4);
+      expect(result0.decodedPartIndex).toBe(0);
+      // Green for part 0: 1.0 * 0.5 = 0.5
+      expect(result0.data[1]).toBeCloseTo(0.5, 1);
+
+      // Decode tiled part (index 1)
+      const result1 = await decodeEXR(buffer, { partIndex: 1 });
+      expect(result1.width).toBe(4);
+      expect(result1.height).toBe(4);
+      expect(result1.decodedPartIndex).toBe(1);
+      // Green for part 1: 0.5 * 0.5 = 0.25
+      expect(result1.data[1]).toBeCloseTo(0.25, 1);
+    });
+  });
+});

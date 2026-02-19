@@ -45,6 +45,12 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   private videoElement: HTMLVideoElement | null = null;
   private useVideoFallback = false;
 
+  // For audio scrubbing
+  private scrubSourceNode: AudioBufferSourceNode | null = null;
+  private scrubDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly SCRUB_SNIPPET_DURATION = 0.05; // 50ms
+  private static readonly SCRUB_DEBOUNCE_MS = 30; // 30ms debounce
+
   get state(): AudioPlaybackState {
     return this._state;
   }
@@ -397,6 +403,87 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     }
   }
 
+  /**
+   * Play a short audio snippet at the corresponding timestamp for scrub feedback.
+   * Debounces rapid calls so only the last scrub position produces sound.
+   *
+   * @param frame - The 1-based frame number to scrub to
+   * @param fps - The frames-per-second of the current source
+   */
+  scrubToFrame(frame: number, fps: number): void {
+    // No audio loaded — silently return
+    if (!this.audioBuffer || !this.audioContext || !this.gainNode) {
+      return;
+    }
+
+    // Context suspended (autoplay policy) — silently return
+    if (this.audioContext.state === 'suspended') {
+      return;
+    }
+
+    // Cancel any pending debounce timer
+    if (this.scrubDebounceTimer !== null) {
+      clearTimeout(this.scrubDebounceTimer);
+      this.scrubDebounceTimer = null;
+    }
+
+    // Stop any currently-playing scrub snippet
+    this.stopScrubSnippet();
+
+    // Debounce: schedule the actual snippet playback
+    this.scrubDebounceTimer = setTimeout(() => {
+      this.scrubDebounceTimer = null;
+      this.playScrubSnippet(frame, fps);
+    }, AudioPlaybackManager.SCRUB_DEBOUNCE_MS);
+  }
+
+  private playScrubSnippet(frame: number, fps: number): void {
+    if (!this.audioBuffer || !this.audioContext || !this.gainNode) {
+      return;
+    }
+
+    // Compute audio timestamp (1-based frame → 0-based time)
+    const timestamp = (frame - 1) / fps;
+
+    // Clamp to valid range
+    const clampedTime = clamp(timestamp, 0, this.audioBuffer.duration);
+
+    // Create a short snippet source node
+    const snippetNode = this.audioContext.createBufferSource();
+    snippetNode.buffer = this.audioBuffer;
+    snippetNode.connect(this.gainNode);
+
+    // Schedule start and stop for the snippet duration
+    const snippetDuration = Math.min(
+      AudioPlaybackManager.SCRUB_SNIPPET_DURATION,
+      this.audioBuffer.duration - clampedTime
+    );
+
+    if (snippetDuration <= 0) return;
+
+    snippetNode.start(0, clampedTime, snippetDuration);
+    this.scrubSourceNode = snippetNode;
+
+    // Clean up reference when snippet ends naturally
+    snippetNode.onended = () => {
+      if (this.scrubSourceNode === snippetNode) {
+        this.scrubSourceNode = null;
+      }
+    };
+  }
+
+  private stopScrubSnippet(): void {
+    if (this.scrubSourceNode) {
+      try {
+        this.scrubSourceNode.stop();
+        this.scrubSourceNode.disconnect();
+      } catch {
+        // Ignore errors from already stopped nodes
+      }
+      this.scrubSourceNode = null;
+    }
+  }
+
   private updateGain(forceZero = false): void {
     const targetVolume = forceZero || this._muted ? 0 : this._volume;
 
@@ -441,6 +528,13 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   dispose(): void {
     this.pause();
     this.stopSourceNode();
+    this.stopScrubSnippet();
+
+    // Cancel any pending scrub debounce timer
+    if (this.scrubDebounceTimer !== null) {
+      clearTimeout(this.scrubDebounceTimer);
+      this.scrubDebounceTimer = null;
+    }
 
     if (this.gainNode) {
       this.gainNode.disconnect();

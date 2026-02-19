@@ -616,4 +616,54 @@ describe('ColorWheels', () => {
       expect(container).toBeNull();
     });
   });
+
+  describe('keyboard accessibility (L-40)', () => {
+    it('CW-L40a: color wheel canvas should have tabindex="0"', () => {
+      const canvases = parent.querySelectorAll('canvas');
+      expect(canvases.length).toBe(4); // Lift, Gamma, Gain, Master
+
+      canvases.forEach((canvas) => {
+        expect(canvas.getAttribute('tabindex')).toBe('0');
+        expect(canvas.getAttribute('role')).toBe('slider');
+        expect(canvas.getAttribute('aria-label')).toBeTruthy();
+      });
+    });
+
+    it('CW-L40b: arrow keys on focused canvas should move the position indicator', () => {
+      const stateHandler = vi.fn();
+      colorWheels.on('stateChanged', stateHandler);
+
+      // Get the first wheel canvas (Lift)
+      const canvas = parent.querySelector('.wheel-lift canvas') as HTMLCanvasElement;
+      expect(canvas).not.toBeNull();
+
+      // Press ArrowRight to increase red
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      let state = colorWheels.getState();
+      expect(state.lift.r).toBeCloseTo(0.05, 5);
+      expect(stateHandler).toHaveBeenCalled();
+
+      // Press ArrowUp to increase green
+      stateHandler.mockClear();
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      state = colorWheels.getState();
+      expect(state.lift.g).toBeCloseTo(0.05, 5);
+      expect(stateHandler).toHaveBeenCalled();
+
+      // Press ArrowLeft to decrease red
+      stateHandler.mockClear();
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      state = colorWheels.getState();
+      expect(state.lift.r).toBeCloseTo(0, 5);
+
+      // Press ArrowDown to decrease green
+      stateHandler.mockClear();
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      state = colorWheels.getState();
+      expect(state.lift.g).toBeCloseTo(0, 5);
+
+      // Blue should be derived from red and green
+      expect(state.lift.b).toBeCloseTo(-(state.lift.r * 0.5 + state.lift.g * 0.5), 5);
+    });
+  });
 });

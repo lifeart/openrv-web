@@ -30,6 +30,10 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
   // Source selector
   private sourceSelector: HTMLSelectElement;
 
+  // Help popover
+  private helpPopover: HTMLElement | null = null;
+  private boundHelpOutsideClick: ((e: MouseEvent) => void) | null = null;
+
   // Default source for single-source workflows
   private defaultSourceId = 'default';
 
@@ -83,6 +87,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     const resetBtn = this.createHeaderButton('Reset', 'lut-pipeline-reset', 'Reset all LUT stages');
     const closeBtn = this.createHeaderButton('X', 'lut-pipeline-close', 'Close panel');
 
+    helpBtn.addEventListener('click', () => this.toggleHelpPopover(helpBtn));
     resetBtn.addEventListener('click', () => this.resetAll());
     closeBtn.addEventListener('click', () => this.hide());
 
@@ -432,6 +437,61 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
     this.emit('pipelineChanged', undefined);
   }
 
+  private toggleHelpPopover(anchor: HTMLElement): void {
+    if (this.helpPopover) {
+      this.hideHelpPopover();
+      return;
+    }
+
+    const popover = document.createElement('div');
+    popover.dataset.testid = 'lut-pipeline-help-popover';
+    popover.style.cssText = `
+      position: absolute;
+      top: 40px;
+      right: 12px;
+      padding: 10px 12px;
+      background: var(--bg-secondary, #2a2a2a);
+      border: 1px solid var(--border-primary, #444);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      z-index: 10000;
+      width: 280px;
+      font-size: 11px;
+      color: var(--text-primary, #eee);
+      line-height: 1.5;
+    `;
+
+    popover.innerHTML = `
+      <div style="font-weight:600; margin-bottom:6px;">LUT Pipeline Stages</div>
+      <div style="margin-bottom:4px;"><b>Pre-Cache</b> — Applied at decode time in software, before caching.</div>
+      <div style="margin-bottom:4px;"><b>File</b> — Input transform (e.g. log-to-linear), GPU-applied per source.</div>
+      <div style="margin-bottom:4px;"><b>Corrections</b> — CDL, curves, and color adjustments (middle of chain).</div>
+      <div style="margin-bottom:4px;"><b>Look</b> — Creative grade / look, GPU-applied per source.</div>
+      <div><b>Display</b> — Display calibration LUT, session-wide.</div>
+    `;
+
+    this.panel.appendChild(popover);
+    this.helpPopover = popover;
+
+    this.boundHelpOutsideClick = (e: MouseEvent) => {
+      if (!popover.contains(e.target as Node) && e.target !== anchor) {
+        this.hideHelpPopover();
+      }
+    };
+    document.addEventListener('mousedown', this.boundHelpOutsideClick);
+  }
+
+  private hideHelpPopover(): void {
+    if (this.helpPopover) {
+      this.helpPopover.remove();
+      this.helpPopover = null;
+    }
+    if (this.boundHelpOutsideClick) {
+      document.removeEventListener('mousedown', this.boundHelpOutsideClick);
+      this.boundHelpOutsideClick = null;
+    }
+  }
+
   private resetAll(): void {
     this.pipeline.resetAll();
     this.syncUIFromPipeline();
@@ -440,6 +500,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
 
   /** Dispose the panel and remove from DOM */
   dispose(): void {
+    this.hideHelpPopover();
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);
     }

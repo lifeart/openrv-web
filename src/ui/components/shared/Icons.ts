@@ -28,6 +28,7 @@ export function createIcon(name: IconName, size: IconSize = 'md'): SVGSVGElement
   svg.setAttribute('stroke-width', '2');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
   svg.style.cssText = 'display: inline-block; vertical-align: middle; flex-shrink: 0;';
 
   const path = ICONS[name];
@@ -45,7 +46,7 @@ export function getIconSvg(name: IconName, size: IconSize = 'md'): string {
   const iconSize = ICON_SIZES[size];
   const path = ICONS[name] || '';
 
-  return `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; flex-shrink: 0;">${path}</svg>`;
+  return `<svg aria-hidden="true" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; flex-shrink: 0;">${path}</svg>`;
 }
 
 export type IconName = keyof typeof ICONS;
@@ -201,6 +202,9 @@ const ICONS = {
   // Timeline markers
   'marker': '<path d="M12 2L12 22"/><circle cx="12" cy="8" r="4" fill="currentColor"/>',
   'flag': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+
+  // Notes / Comments
+  'note': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 
   // In/Out points
   'bracket-left': '<path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/>',

@@ -8,7 +8,8 @@
  * - Sequence playback
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import path from 'path';
 import {
   loadSequenceFiles,
   loadSingleSequenceFrame,
@@ -19,6 +20,17 @@ import {
   imagesAreDifferent,
   waitForMediaLoaded,
 } from './fixtures';
+
+async function loadSequenceWithGap(page: Page): Promise<void> {
+  const sequenceDir = path.resolve(process.cwd(), 'sample/sequence');
+  const files = ['0001', '0002', '0004', '0005'].map((frameNum) =>
+    path.join(sequenceDir, `frame_${frameNum}.png`)
+  );
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(files);
+  await page.waitForTimeout(1000);
+}
 
 test.describe('Image Sequence Detection', () => {
   test.beforeEach(async ({ page }) => {
@@ -125,6 +137,55 @@ test.describe('Image Sequence Detection', () => {
 
       // Verify frames are visually different
       expect(imagesAreDifferent(frame1Screenshot, frame5Screenshot)).toBe(true);
+    });
+
+    test('SEQ-012: missing-frame mode switching updates gap rendering in show-frame/hold/black', async ({ page }) => {
+      await loadSequenceWithGap(page);
+      await waitForMediaLoaded(page);
+
+      const loadedState = await getSessionState(page);
+      expect(loadedState.mediaType).toBe('sequence');
+      expect(loadedState.frameCount).toBe(4);
+
+      // Frame index 3 corresponds to file frame_0004.png with a gap at frame 3.
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(120);
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+
+      const gapState = await getSessionState(page);
+      expect(gapState.currentFrame).toBe(3);
+
+      const modeButton = page.locator('[data-testid="missing-frame-mode-select"] button').first();
+      const overlay = page.locator('[data-testid="missing-frame-overlay"]').first();
+      const overlayFrameNumber = page.locator('[data-testid="missing-frame-number"]').first();
+
+      await expect(modeButton).toBeVisible();
+
+      await modeButton.click();
+      await page.locator('[data-testid="missing-frame-mode-dropdown"] button[data-value="show-frame"]').click();
+      await page.waitForTimeout(200);
+      await expect(overlay).toBeVisible();
+      await expect(overlayFrameNumber).toHaveText('Frame 3');
+      const showFrameScreenshot = await captureViewerScreenshot(page);
+
+      await modeButton.click();
+      await page.locator('[data-testid="missing-frame-mode-dropdown"] button[data-value="hold"]').click();
+      await page.waitForTimeout(200);
+      await expect(overlay).toBeVisible();
+      await expect(overlayFrameNumber).toHaveText('Frame 3');
+      const holdScreenshot = await captureViewerScreenshot(page);
+
+      await modeButton.click();
+      await page.locator('[data-testid="missing-frame-mode-dropdown"] button[data-value="black"]').click();
+      await page.waitForTimeout(200);
+      await expect(overlay).toBeVisible();
+      await expect(overlayFrameNumber).toHaveText('Frame 3');
+      const blackScreenshot = await captureViewerScreenshot(page);
+
+      expect(imagesAreDifferent(showFrameScreenshot, holdScreenshot)).toBe(true);
+      expect(imagesAreDifferent(holdScreenshot, blackScreenshot)).toBe(true);
+      expect(imagesAreDifferent(showFrameScreenshot, blackScreenshot)).toBe(true);
     });
   });
 

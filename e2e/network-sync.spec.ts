@@ -13,6 +13,8 @@ import { loadVideoFile, waitForTestHelper, getSessionState, getViewerState } fro
  */
 
 test.describe('Network Sync', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
@@ -21,23 +23,16 @@ test.describe('Network Sync', () => {
   });
 
   test('NET-001: network button is visible in the header', async ({ page }) => {
-    // The network / collaboration button should be visible in the header bar
-    const networkButton = page.locator(
-      'button[title*="Network"], button[title*="Collaborate"], button[title*="Share"], button[data-testid="network-button"], .header-bar button[aria-label*="network" i]'
-    ).first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await expect(networkButton).toBeVisible({ timeout: 3000 });
   });
 
   test('NET-002: network panel opens and closes', async ({ page }) => {
-    // Click the network button to open the panel
-    const networkButton = page.locator(
-      'button[title*="Network"], button[title*="Collaborate"], button[title*="Share"], button[data-testid="network-button"], .header-bar button[aria-label*="network" i]'
-    ).first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    // Network panel should be visible
-    const panel = page.locator('[data-testid="network-panel"], .network-panel, [role="dialog"]:has-text("Network"), [role="dialog"]:has-text("Collaborate")').first();
+    const panel = page.locator('[data-testid="network-panel"]').first();
     await expect(panel).toBeVisible({ timeout: 3000 });
 
     // Close by clicking the button again or pressing Escape
@@ -45,6 +40,143 @@ test.describe('Network Sync', () => {
     await page.waitForTimeout(300);
 
     await expect(panel).not.toBeVisible({ timeout: 3000 });
+  });
+
+  test('NET-003: shared room link auto-joins after entering only a PIN via UI', async ({ page }) => {
+    await page.goto('/?room=ABCD-EFGH');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
+    await networkButton.click();
+
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    await expect(disconnectedPanel).toBeVisible({ timeout: 3000 });
+
+    const roomCodeInput = disconnectedPanel.locator('[data-testid="network-room-code-input"]');
+    await expect(roomCodeInput).toHaveValue('ABCD-EFGH');
+    await expect(roomCodeInput).toHaveJSProperty('readOnly', true);
+
+    const pinInput = disconnectedPanel.locator('[data-testid="network-pin-code-input"]');
+    await pinInput.fill('1234');
+
+    await page.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string } } }).__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.connectionState !== 'disconnected');
+    });
+  });
+
+  test('NET-004: create room generates share link via UI with websocket fallback to host', async ({ page }) => {
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
+    await networkButton.click();
+
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    await expect(disconnectedPanel).toBeVisible({ timeout: 3000 });
+
+    const pinCode = '2468';
+    const pinInput = disconnectedPanel.locator('[data-testid="network-pin-code-input"]');
+    await pinInput.fill(pinCode);
+
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
+    await createButton.click();
+
+    await page.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string; roomCode: string | null; isHost: boolean } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.connectionState === 'connected' && state.roomCode && state.isHost);
+    }, null, { timeout: 5000 });
+
+    const networkState = await page.evaluate(() => {
+      return (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { roomCode: string | null; isHost: boolean } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.() ?? null;
+    });
+
+    expect(networkState).toBeTruthy();
+    expect(networkState?.isHost).toBe(true);
+    expect(networkState?.roomCode).toBeTruthy();
+
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    await expect(connectedPanel).toBeVisible({ timeout: 3000 });
+
+    const shareInput = connectedPanel.locator('[data-testid="network-share-link-input"]');
+    await expect(shareInput).toBeVisible({ timeout: 3000 });
+
+    const roomCode = networkState?.roomCode ?? '';
+    const initialShareLink = await shareInput.inputValue();
+    const initialURL = new URL(initialShareLink);
+    expect(initialURL.searchParams.get('room')).toBe(roomCode);
+    expect(initialURL.searchParams.get('pin')).toBe(pinCode);
+
+    const copyButton = connectedPanel.locator('[data-testid="network-copy-link-button"]');
+    await copyButton.click();
+
+    await expect(shareInput).toHaveValue(/#s=/);
+    await expect(shareInput).toHaveValue(/rtc=/);
+    const shareLinkWithState = await shareInput.inputValue();
+    const sharedURL = new URL(shareLinkWithState);
+    expect(sharedURL.searchParams.get('room')).toBe(roomCode);
+    expect(sharedURL.searchParams.get('pin')).toBe(pinCode);
+    expect(sharedURL.hash.startsWith('#s=')).toBe(true);
+    expect(sharedURL.searchParams.get('rtc')).toBeTruthy();
+  });
+
+  test('NET-006: serverless WebRTC URL flow connects host and guest via UI response link apply', async ({ page, context }) => {
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
+    await networkButton.click();
+
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    await expect(disconnectedPanel).toBeVisible({ timeout: 3000 });
+
+    await disconnectedPanel.locator('[data-testid="network-pin-code-input"]').fill('1357');
+    await disconnectedPanel.locator('[data-testid="network-create-room-button"]').click();
+
+    await page.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string; isHost: boolean } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.connectionState === 'connected' && state.isHost);
+    }, null, { timeout: 5000 });
+
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    await expect(connectedPanel).toBeVisible({ timeout: 3000 });
+    await connectedPanel.locator('[data-testid="network-copy-link-button"]').click();
+    const hostShareInput = connectedPanel.locator('[data-testid="network-share-link-input"]');
+    await expect(hostShareInput).toHaveValue(/rtc=/);
+    const hostShareLink = await hostShareInput.inputValue();
+    const inviteURL = new URL(hostShareLink);
+    expect(inviteURL.searchParams.get('rtc')).toBeTruthy();
+
+    const guestPage = await context.newPage();
+    await guestPage.goto(inviteURL.toString());
+    await guestPage.waitForSelector('#app');
+    await waitForTestHelper(guestPage);
+
+    const guestNetworkButton = guestPage.locator('[data-testid="network-sync-button"]').first();
+    await guestNetworkButton.click();
+    const guestConnectedPanel = guestPage.locator('[data-testid="network-connected-panel"]');
+    await expect(guestConnectedPanel).toBeVisible({ timeout: 5000 });
+    const guestShareInput = guestConnectedPanel.locator('[data-testid="network-share-link-input"]');
+    await expect(guestShareInput).toHaveValue(/rtc=/);
+    const guestResponseLink = await guestShareInput.inputValue();
+    const responseURL = new URL(guestResponseLink);
+    expect(responseURL.searchParams.get('rtc')).toBeTruthy();
+
+    await connectedPanel.locator('[data-testid="network-response-link-input"]').fill(responseURL.toString());
+    await connectedPanel.locator('[data-testid="network-apply-response-button"]').click();
+
+    await page.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.userCount >= 2);
+    }, null, { timeout: 10000 });
+
+    await guestPage.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.userCount >= 2);
+    }, null, { timeout: 10000 });
+
+    await guestPage.close();
   });
 
   // --- Skipped tests requiring mock WebSocket server fixture ---

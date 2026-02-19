@@ -216,7 +216,7 @@ describe('EffectProcessor', () => {
       const baseHash = computeEffectsHash(defaultState);
 
       type NumericColorKey = {
-        [K in keyof ColorAdjustments]: ColorAdjustments[K] extends number ? K : never;
+        [K in keyof ColorAdjustments]-?: ColorAdjustments[K] extends number ? K : never;
       }[keyof ColorAdjustments];
 
       const props: NumericColorKey[] = [

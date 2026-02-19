@@ -75,6 +75,24 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyM',
     description: 'Toggle mark at current frame'
   },
+  'timeline.nextMarkOrBoundary': {
+    code: 'ArrowRight',
+    alt: true,
+    description: 'Go to next mark or source boundary'
+  },
+  'timeline.previousMarkOrBoundary': {
+    code: 'ArrowLeft',
+    alt: true,
+    description: 'Go to previous mark or source boundary'
+  },
+  'timeline.nextShot': {
+    code: 'PageDown',
+    description: 'Go to next shot in playlist'
+  },
+  'timeline.previousShot': {
+    code: 'PageUp',
+    description: 'Go to previous shot in playlist'
+  },
   'timeline.resetInOut': {
     code: 'KeyR',
     description: 'Reset in/out points to full range'
@@ -247,6 +265,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'tab.annotate': {
     code: 'Digit5',
     description: 'Switch to Annotate tab'
+  },
+  'tab.qc': {
+    code: 'Digit6',
+    description: 'Switch to QC tab'
   },
 
   // Paint tools (handled by PaintToolbar component)
@@ -493,6 +515,32 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle playlist panel'
   },
 
+  // Notes panel
+  'panel.notes': {
+    code: 'KeyN',
+    shift: true,
+    alt: true,
+    description: 'Toggle notes panel'
+  },
+
+  // Notes quick-add + navigation
+  'notes.addNote': {
+    code: 'KeyN',
+    description: 'Add note at current frame'
+  },
+  'notes.next': {
+    code: 'BracketRight',
+    alt: true,
+    shift: true,
+    description: 'Go to next note'
+  },
+  'notes.previous': {
+    code: 'BracketLeft',
+    alt: true,
+    shift: true,
+    description: 'Go to previous note'
+  },
+
   // Info panel
   'view.toggleInfoPanel': {
     code: 'KeyI',
@@ -546,6 +594,28 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Quick disconnect from sync room'
   },
 
+  // Layout presets
+  'layout.default': {
+    code: 'Digit1',
+    alt: true,
+    description: 'Switch to Default layout'
+  },
+  'layout.review': {
+    code: 'Digit2',
+    alt: true,
+    description: 'Switch to Review layout'
+  },
+  'layout.color': {
+    code: 'Digit3',
+    alt: true,
+    description: 'Switch to Color layout'
+  },
+  'layout.paint': {
+    code: 'Digit4',
+    alt: true,
+    description: 'Switch to Paint layout'
+  },
+
   // Focus zone navigation
   'focus.nextZone': {
     code: 'F6',
@@ -555,6 +625,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'F6',
     shift: true,
     description: 'Focus previous zone'
+  },
+
+  // Help / cheat sheet
+  'help.toggleCheatSheet': {
+    code: 'Slash',
+    shift: true,
+    description: 'Toggle keyboard shortcuts cheat sheet'
   },
 };
 /**

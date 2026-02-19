@@ -5,10 +5,16 @@
  * - Visual cut representation as colored blocks
  * - Drag handles for trimming
  * - Drag to reorder cuts
- * - Context menu for delete/split operations
+ * - Context menu for delete/split/duplicate operations
+ * - Playhead indicator synchronized to session frame
+ * - Timecode display on cuts
+ * - Keyboard shortcuts for common operations
+ * - Ruler click-to-seek
+ * - Snap-to-cut-boundary during drag
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { formatTimecode } from '../../utils/media/Timecode';
 import type { Session } from '../../core/session/Session';
 import type { SequenceGroupNode, EDLEntry } from '../../nodes/groups/SequenceGroupNode';
 
@@ -28,6 +34,8 @@ export interface TimelineEditorEvents extends EventMap {
   cutSelected: { cutIndex: number };
   /** Selection cleared */
   selectionCleared: void;
+  /** Cut split at playhead */
+  cutSplit: { cutIndex: number; frame: number };
 }
 
 /**
@@ -71,7 +79,13 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   private cutsContainer: HTMLElement;
   private rulerContainer: HTMLElement;
   private controlsContainer: HTMLElement;
+  private playheadElement: HTMLElement;
+  private rulerPlayheadElement: HTMLElement;
   private zoomSlider: HTMLInputElement | null = null;
+  private zoomValueLabel: HTMLElement | null = null;
+  private infoLabel: HTMLElement | null = null;
+  private selectedInfoSep: HTMLElement | null = null;
+  private selectedInfoLabel: HTMLElement | null = null;
 
   // State
   private cuts: CutVisual[] = [];
@@ -82,12 +96,16 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   private dragType: 'move' | 'trim-in' | 'trim-out' | null = null;
   private dragStartX: number = 0;
   private dragStartFrame: number = 0;
+  private currentFrame: number = 1;
 
   // Bound event handlers for cleanup
   private boundMouseMove: (e: MouseEvent) => void;
   private boundMouseUp: () => void;
   private boundZoomInput: ((e: Event) => void) | null = null;
+  private boundKeyDown: (e: KeyboardEvent) => void;
   private activeContextMenuHandler: ((e: MouseEvent) => void) | null = null;
+  private unsubscribeFrameChanged: (() => void) | null = null;
+  private scrollSyncInProgress: boolean = false;
 
   constructor(container: HTMLElement, session: Session, sequenceNode?: SequenceGroupNode) {
     super();
@@ -99,6 +117,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     // Bind event handlers for cleanup
     this.boundMouseMove = this.handleMouseMove.bind(this);
     this.boundMouseUp = this.handleMouseUp.bind(this);
+    this.boundKeyDown = this.handleKeyDown.bind(this);
 
     // Create UI structure
     this.controlsContainer = this.createControlsContainer();
@@ -106,13 +125,56 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     this.timelineContainer = this.createTimelineContainer();
     this.cutsContainer = this.createCutsContainer();
 
+    // Playhead in cuts area
+    this.playheadElement = document.createElement('div');
+    this.playheadElement.className = 'timeline-playhead';
+    this.playheadElement.style.cssText = `
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: var(--accent-primary, #4a90d9);
+      pointer-events: none;
+      z-index: 10;
+      left: 0px;
+    `;
+
+    // Playhead triangle in ruler
+    this.rulerPlayheadElement = document.createElement('div');
+    this.rulerPlayheadElement.className = 'timeline-ruler-playhead';
+    this.rulerPlayheadElement.style.cssText = `
+      position: absolute;
+      bottom: 0;
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 6px solid var(--accent-primary, #4a90d9);
+      pointer-events: none;
+      z-index: 10;
+      left: 0px;
+      transform: translateX(-5px);
+    `;
+
+    this.cutsContainer.appendChild(this.playheadElement);
+    this.rulerContainer.appendChild(this.rulerPlayheadElement);
+
     this.timelineContainer.appendChild(this.cutsContainer);
 
     this.container.appendChild(this.controlsContainer);
     this.container.appendChild(this.rulerContainer);
     this.container.appendChild(this.timelineContainer);
 
+    // Make container focusable for keyboard shortcuts
+    this.container.setAttribute('tabindex', '0');
+    this.container.style.outline = 'none';
+
     this.setupEventListeners();
+
+    // Subscribe to session frame changes
+    this.unsubscribeFrameChanged = this._session.on('frameChanged', (frame: number) => {
+      this.updatePlayhead(frame);
+    });
 
     if (this.sequenceNode) {
       this.loadFromSequenceNode(this.sequenceNode);
@@ -125,33 +187,57 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   loadFromSequenceNode(node: SequenceGroupNode): void {
     this.sequenceNode = node;
     const edlEntries = node.getEDL();
-
-    this.cuts = [];
-    let currentFrame = 1;
-
     if (edlEntries.length > 0) {
-      for (let i = 0; i < edlEntries.length; i++) {
-        const entry = edlEntries[i]!;
-        const duration = entry.outPoint - entry.inPoint + 1;
-
-        this.cuts.push({
-          index: i,
-          startFrame: entry.frame,
-          endFrame: entry.frame + duration - 1,
-          sourceIndex: entry.source,
-          inPoint: entry.inPoint,
-          outPoint: entry.outPoint,
-          color: CUT_COLORS[entry.source % CUT_COLORS.length]!,
-          label: `Source ${entry.source + 1}`,
-        });
-
-        currentFrame = entry.frame + duration;
-      }
-      this.totalFrames = currentFrame;
-    } else {
-      // No EDL data - show empty timeline
-      this.totalFrames = node.getTotalDuration() || 100;
+      this.loadFromEDL(edlEntries);
+      return;
     }
+
+    // No EDL data - show empty timeline
+    this.cuts = [];
+    this.selectedCutIndex = -1;
+    this.totalFrames = Math.max(1, node.getTotalDuration() || 100);
+    this.render();
+  }
+
+  /**
+   * Load EDL data directly, with optional per-cut labels.
+   */
+  loadFromEDL(entries: EDLEntry[], labels?: string[]): void {
+    this.cuts = [];
+    let maxEndFrame = 1;
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (!entry) continue;
+
+      const inPoint = Math.max(1, Math.floor(entry.inPoint));
+      const outPoint = Math.max(inPoint, Math.floor(entry.outPoint));
+      const startFrame = Math.max(1, Math.floor(entry.frame));
+      const duration = outPoint - inPoint + 1;
+      const endFrame = startFrame + duration - 1;
+
+      this.cuts.push({
+        index: this.cuts.length,
+        startFrame,
+        endFrame,
+        sourceIndex: entry.source,
+        inPoint,
+        outPoint,
+        color: CUT_COLORS[entry.source % CUT_COLORS.length]!,
+        label: labels?.[i] ?? `Source ${entry.source + 1}`,
+      });
+
+      maxEndFrame = Math.max(maxEndFrame, endFrame);
+    }
+
+    if (this.selectedCutIndex >= this.cuts.length) {
+      this.selectedCutIndex = -1;
+      this.emit('selectionCleared', undefined);
+    }
+
+    this.totalFrames = this.cuts.length > 0
+      ? maxEndFrame
+      : Math.max(1, this.totalFrames);
 
     this.render();
   }
@@ -169,6 +255,9 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
    */
   setZoom(pixelsPerFrame: number): void {
     this.pixelsPerFrame = Math.max(0.5, Math.min(10, pixelsPerFrame));
+    if (this.zoomValueLabel) {
+      this.zoomValueLabel.textContent = `${this.pixelsPerFrame.toFixed(1)}x`;
+    }
     this.render();
   }
 
@@ -309,11 +398,57 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   }
 
   /**
+   * Split a cut at the given frame, creating two cuts from one
+   */
+  splitCutAtFrame(cutIndex: number, frame: number): void {
+    if (cutIndex < 0 || cutIndex >= this.cuts.length) return;
+
+    const cut = this.cuts[cutIndex]!;
+    // The frame is in timeline-space; convert to source-space offset
+    const offsetInCut = frame - cut.startFrame;
+    const splitSourceFrame = cut.inPoint + offsetInCut;
+
+    // Must be strictly inside the cut (not at start or end)
+    if (splitSourceFrame <= cut.inPoint || splitSourceFrame >= cut.outPoint) return;
+
+    const originalOutPoint = cut.outPoint;
+    const originalEndFrame = cut.endFrame;
+
+    // Trim the first half
+    cut.outPoint = splitSourceFrame - 1;
+    cut.endFrame = cut.startFrame + (cut.outPoint - cut.inPoint);
+
+    // Create second half
+    const newCut: CutVisual = {
+      index: cutIndex + 1,
+      startFrame: cut.endFrame + 1,
+      endFrame: originalEndFrame,
+      sourceIndex: cut.sourceIndex,
+      inPoint: splitSourceFrame,
+      outPoint: originalOutPoint,
+      color: cut.color,
+      label: cut.label,
+    };
+
+    // Update indices of subsequent cuts
+    for (let i = cutIndex + 1; i < this.cuts.length; i++) {
+      this.cuts[i]!.index = i + 1;
+    }
+
+    this.cuts.splice(cutIndex + 1, 0, newCut);
+
+    this.emit('cutSplit', { cutIndex, frame });
+    this.render();
+  }
+
+  /**
    * Render the timeline UI
    */
   render(): void {
     this.renderRuler();
     this.renderCuts();
+    this.updatePlayhead(this.currentFrame);
+    this.updateControlsInfo();
   }
 
   /**
@@ -323,6 +458,15 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     // Remove document-level event listeners
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+
+    // Remove keyboard listener
+    this.container.removeEventListener('keydown', this.boundKeyDown);
+
+    // Unsubscribe from session frame changes
+    if (this.unsubscribeFrameChanged) {
+      this.unsubscribeFrameChanged();
+      this.unsubscribeFrameChanged = null;
+    }
 
     // Clean up context menu handler if active
     if (this.activeContextMenuHandler) {
@@ -346,18 +490,63 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
 
   // Private methods
 
+  private get hasContent(): boolean {
+    return this.cuts.length > 0;
+  }
+
+  private updatePlayhead(frame: number): void {
+    this.currentFrame = frame;
+    const x = (frame - 1) * this.pixelsPerFrame;
+    this.playheadElement.style.left = `${x}px`;
+    this.rulerPlayheadElement.style.left = `${x}px`;
+
+    // Hide playhead when there are no cuts
+    const visible = this.hasContent;
+    this.playheadElement.style.display = visible ? '' : 'none';
+    this.rulerPlayheadElement.style.display = visible ? '' : 'none';
+  }
+
+  private updateControlsInfo(): void {
+    if (this.infoLabel) {
+      if (this.hasContent) {
+        this.infoLabel.textContent = `Total: ${this.totalFrames}f`;
+      } else {
+        this.infoLabel.textContent = 'No sources loaded';
+      }
+    }
+    if (this.selectedInfoLabel) {
+      if (this.selectedCutIndex >= 0 && this.selectedCutIndex < this.cuts.length) {
+        const cut = this.cuts[this.selectedCutIndex]!;
+        const fps = this._session.fps || 24;
+        const inTC = formatTimecode(cut.inPoint, fps);
+        const outTC = formatTimecode(cut.outPoint, fps);
+        this.selectedInfoLabel.textContent = `Selected: Cut ${this.selectedCutIndex + 1} (${inTC}\u2013${outTC})`;
+        this.selectedInfoLabel.style.display = '';
+        if (this.selectedInfoSep) this.selectedInfoSep.style.display = '';
+      } else {
+        this.selectedInfoLabel.textContent = '';
+        this.selectedInfoLabel.style.display = 'none';
+        if (this.selectedInfoSep) this.selectedInfoSep.style.display = 'none';
+      }
+    }
+  }
+
   private createControlsContainer(): HTMLElement {
     const container = document.createElement('div');
     container.className = 'timeline-controls';
     container.style.cssText = `
       display: flex;
-      gap: 8px;
+      gap: 12px;
       padding: 8px;
       background: var(--bg-secondary);
       border-bottom: 1px solid var(--border-primary);
+      align-items: center;
     `;
 
-    // Zoom controls
+    // Zoom controls group
+    const zoomGroup = document.createElement('div');
+    zoomGroup.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+
     const zoomLabel = document.createElement('span');
     zoomLabel.textContent = 'Zoom:';
     zoomLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
@@ -374,8 +563,36 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     };
     this.zoomSlider.addEventListener('input', this.boundZoomInput);
 
-    container.appendChild(zoomLabel);
-    container.appendChild(this.zoomSlider);
+    this.zoomValueLabel = document.createElement('span');
+    this.zoomValueLabel.textContent = `${this.pixelsPerFrame.toFixed(1)}x`;
+    this.zoomValueLabel.style.cssText = 'color: var(--text-muted); font-size: 11px; min-width: 32px;';
+
+    zoomGroup.appendChild(zoomLabel);
+    zoomGroup.appendChild(this.zoomSlider);
+    zoomGroup.appendChild(this.zoomValueLabel);
+
+    // Separator
+    const sep1 = document.createElement('div');
+    sep1.style.cssText = 'width: 1px; height: 16px; background: var(--border-primary);';
+
+    // Info section
+    this.infoLabel = document.createElement('span');
+    this.infoLabel.textContent = `Total: ${this.totalFrames}f`;
+    this.infoLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
+
+    // Separator (hidden when no selection)
+    this.selectedInfoSep = document.createElement('div');
+    this.selectedInfoSep.style.cssText = 'width: 1px; height: 16px; background: var(--border-primary); display: none;';
+
+    // Selected cut info
+    this.selectedInfoLabel = document.createElement('span');
+    this.selectedInfoLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px; display: none;';
+
+    container.appendChild(zoomGroup);
+    container.appendChild(sep1);
+    container.appendChild(this.infoLabel);
+    container.appendChild(this.selectedInfoSep);
+    container.appendChild(this.selectedInfoLabel);
 
     return container;
   }
@@ -431,10 +648,95 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     // Global mouse events for dragging (use bound handlers for cleanup)
     document.addEventListener('mousemove', this.boundMouseMove);
     document.addEventListener('mouseup', this.boundMouseUp);
+
+    // Keyboard shortcuts
+    this.container.addEventListener('keydown', this.boundKeyDown);
+
+    // Bidirectional scroll sync between ruler and timeline
+    this.rulerContainer.addEventListener('scroll', () => {
+      if (this.scrollSyncInProgress) return;
+      this.scrollSyncInProgress = true;
+      this.timelineContainer.scrollLeft = this.rulerContainer.scrollLeft;
+      this.scrollSyncInProgress = false;
+    });
+    this.timelineContainer.addEventListener('scroll', () => {
+      if (this.scrollSyncInProgress) return;
+      this.scrollSyncInProgress = true;
+      this.rulerContainer.scrollLeft = this.timelineContainer.scrollLeft;
+      this.scrollSyncInProgress = false;
+    });
+
+    // Ruler click-to-seek
+    this.rulerContainer.addEventListener('click', (e) => {
+      const rect = this.rulerContainer.getBoundingClientRect();
+      const clickX = e.clientX - rect.left + this.rulerContainer.scrollLeft;
+      const frame = Math.max(1, Math.round(clickX / this.pixelsPerFrame) + 1);
+      this._session.goToFrame(frame);
+    });
+  }
+
+  private handleKeyDown(e: KeyboardEvent): void {
+    switch (e.key) {
+      case 'Delete':
+      case 'Backspace':
+        if (this.selectedCutIndex >= 0) {
+          e.preventDefault();
+          this.deleteCut(this.selectedCutIndex);
+        }
+        break;
+      case 'Escape':
+        this.selectedCutIndex = -1;
+        this.emit('selectionCleared', undefined);
+        this.render();
+        break;
+      case 'ArrowLeft':
+        if (this.selectedCutIndex >= 0) {
+          e.preventDefault();
+          this.nudgeCut(this.selectedCutIndex, -1);
+        }
+        break;
+      case 'ArrowRight':
+        if (this.selectedCutIndex >= 0) {
+          e.preventDefault();
+          this.nudgeCut(this.selectedCutIndex, 1);
+        }
+        break;
+      case 'Tab':
+        if (this.cuts.length > 0) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            // Previous cut
+            this.selectedCutIndex = this.selectedCutIndex <= 0
+              ? this.cuts.length - 1
+              : this.selectedCutIndex - 1;
+          } else {
+            // Next cut
+            this.selectedCutIndex = this.selectedCutIndex >= this.cuts.length - 1
+              ? 0
+              : this.selectedCutIndex + 1;
+          }
+          this.emit('cutSelected', { cutIndex: this.selectedCutIndex });
+          this.render();
+        }
+        break;
+    }
+  }
+
+  private nudgeCut(cutIndex: number, deltaFrames: number): void {
+    if (cutIndex < 0 || cutIndex >= this.cuts.length) return;
+    const cut = this.cuts[cutIndex]!;
+    const newPosition = Math.max(1, cut.startFrame + deltaFrames);
+    this.moveCut(cutIndex, newPosition);
   }
 
   private renderRuler(): void {
-    this.rulerContainer.innerHTML = '';
+    // Preserve the ruler playhead; clear everything else
+    const children = Array.from(this.rulerContainer.children);
+    for (const child of children) {
+      if (child !== this.rulerPlayheadElement) {
+        child.remove();
+      }
+    }
 
     const width = this.totalFrames * this.pixelsPerFrame;
     this.rulerContainer.style.width = `${width}px`;
@@ -466,10 +768,43 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   }
 
   private renderCuts(): void {
-    this.cutsContainer.innerHTML = '';
+    // Preserve the playhead; clear everything else
+    const children = Array.from(this.cutsContainer.children);
+    for (const child of children) {
+      if (child !== this.playheadElement) {
+        child.remove();
+      }
+    }
 
     const width = this.totalFrames * this.pixelsPerFrame;
     this.cutsContainer.style.width = `${width}px`;
+
+    if (this.cuts.length === 0) {
+      // Empty state message anchored to the visible scroll area via the
+      // timelineContainer (the scrollable parent) so it stays centered even
+      // when the cutsContainer itself is narrower or wider than the viewport.
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'timeline-empty-state';
+      emptyMsg.textContent = 'No cuts in timeline. Load a sequence to begin editing.';
+      emptyMsg.style.cssText = `
+        color: var(--text-muted);
+        font-size: 12px;
+        padding: 16px;
+        text-align: center;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 300px;
+        pointer-events: none;
+      `;
+      this.cutsContainer.appendChild(emptyMsg);
+      return;
+    }
 
     for (const cut of this.cuts) {
       const cutEl = this.createCutElement(cut);
@@ -485,23 +820,45 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
 
     el.className = 'timeline-cut';
     el.dataset.index = String(cut.index);
+
+    const filterStyle = isSelected ? '' : 'filter: saturate(0.75) brightness(0.85);';
+    const boxShadow = isSelected ? 'box-shadow: 0 0 8px rgba(74, 144, 217, 0.4);' : '';
+    const gradientOverlay = isSelected
+      ? 'background-image: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.08) 100%);'
+      : '';
+
     el.style.cssText = `
       position: absolute;
       left: ${x}px;
       width: ${width}px;
       height: 100%;
-      background: ${cut.color};
+      background-color: ${cut.color};
+      ${gradientOverlay}
       border-radius: 4px;
       cursor: move;
       box-sizing: border-box;
       border: 2px solid ${isSelected ? 'var(--accent-primary)' : 'transparent'};
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      ${filterStyle}
+      ${boxShadow}
+      transition: filter 0.1s;
     `;
 
-    // Label
+    // Remove filter on hover for full vibrancy
+    el.addEventListener('mouseenter', () => {
+      el.style.filter = '';
+    });
+    el.addEventListener('mouseleave', () => {
+      if (cut.index !== this.selectedCutIndex) {
+        el.style.filter = 'saturate(0.75) brightness(0.85)';
+      }
+    });
+
+    // Top row: source label
     const label = document.createElement('span');
     label.textContent = cut.label;
     label.style.cssText = `
@@ -512,6 +869,26 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       white-space: nowrap;
     `;
     el.appendChild(label);
+
+    // Bottom row: timecode metadata (only when cut is wide enough)
+    if (width > 60) {
+      const fps = this._session.fps || 24;
+      const inTC = formatTimecode(cut.inPoint, fps);
+      const outTC = formatTimecode(cut.outPoint, fps);
+      const duration = cut.outPoint - cut.inPoint + 1;
+
+      const metaRow = document.createElement('span');
+      metaRow.textContent = `${inTC}\u2013${outTC} | ${duration}f`;
+      metaRow.style.cssText = `
+        font-size: 9px;
+        color: white;
+        opacity: 0.7;
+        pointer-events: none;
+        white-space: nowrap;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      `;
+      el.appendChild(metaRow);
+    }
 
     // Trim handles
     const leftHandle = this.createTrimHandle('left');
@@ -546,23 +923,33 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   private createTrimHandle(side: 'left' | 'right'): HTMLElement {
     const handle = document.createElement('div');
     handle.className = 'trim-handle';
+
+    const gripBorder = side === 'left'
+      ? 'border-left: 2px dotted rgba(255,255,255,0.4);'
+      : 'border-right: 2px dotted rgba(255,255,255,0.4);';
+
     handle.style.cssText = `
       position: absolute;
       ${side}: 0;
       top: 0;
-      width: 8px;
+      width: 10px;
       height: 100%;
       cursor: ew-resize;
       background: rgba(255,255,255,0.3);
-      opacity: 0;
-      transition: opacity 0.1s;
+      opacity: 0.25;
+      transition: opacity 0.1s, background 0.1s;
+      ${gripBorder}
     `;
 
     handle.addEventListener('mouseenter', () => {
       handle.style.opacity = '1';
+      handle.style.background = 'rgba(255,255,255,0.5)';
     });
     handle.addEventListener('mouseleave', () => {
-      if (!this.isDragging) handle.style.opacity = '0';
+      if (!this.isDragging) {
+        handle.style.opacity = '0.25';
+        handle.style.background = 'rgba(255,255,255,0.3)';
+      }
     });
 
     handle.addEventListener('mousedown', (e) => {
@@ -592,6 +979,35 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     this.dragStartFrame = startFrame;
   }
 
+  private getSnapThreshold(): number {
+    return Math.max(1, Math.round(5 / this.pixelsPerFrame));
+  }
+
+  private snapToNearestBoundary(frame: number, excludeCutIndex: number): number {
+    const threshold = this.getSnapThreshold();
+    let bestSnap = frame;
+    let bestDist = threshold + 1;
+
+    for (let i = 0; i < this.cuts.length; i++) {
+      if (i === excludeCutIndex) continue;
+      const cut = this.cuts[i]!;
+
+      const distStart = Math.abs(frame - cut.startFrame);
+      if (distStart < bestDist) {
+        bestDist = distStart;
+        bestSnap = cut.startFrame;
+      }
+
+      const distEnd = Math.abs(frame - (cut.endFrame + 1));
+      if (distEnd < bestDist) {
+        bestDist = distEnd;
+        bestSnap = cut.endFrame + 1;
+      }
+    }
+
+    return bestDist <= threshold ? bestSnap : frame;
+  }
+
   private handleMouseMove(e: MouseEvent): void {
     if (!this.isDragging || this.selectedCutIndex < 0) return;
 
@@ -600,13 +1016,15 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     const cut = this.cuts[this.selectedCutIndex]!;
 
     switch (this.dragType) {
-      case 'move':
-        const newPosition = Math.max(1, this.dragStartFrame + deltaFrames);
+      case 'move': {
+        let newPosition = Math.max(1, this.dragStartFrame + deltaFrames);
+        newPosition = this.snapToNearestBoundary(newPosition, this.selectedCutIndex);
         cut.startFrame = newPosition;
         cut.endFrame = newPosition + (cut.outPoint - cut.inPoint);
         break;
+      }
 
-      case 'trim-in':
+      case 'trim-in': {
         const newInPoint = Math.max(1, this.dragStartFrame + deltaFrames);
         if (newInPoint < cut.outPoint) {
           const deltaIn = newInPoint - cut.inPoint;
@@ -614,13 +1032,15 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
           cut.startFrame += deltaIn;
         }
         break;
+      }
 
-      case 'trim-out':
+      case 'trim-out': {
         const newOutPoint = Math.max(cut.inPoint + 1, this.dragStartFrame + deltaFrames);
         const deltaOut = newOutPoint - cut.outPoint;
         cut.outPoint = newOutPoint;
         cut.endFrame += deltaOut;
         break;
+      }
     }
 
     this.render();
@@ -664,15 +1084,38 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       border-radius: 4px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       z-index: 10000;
-      min-width: 120px;
+      min-width: 180px;
     `;
 
-    const deleteItem = this.createMenuItem('Delete Cut', () => {
+    // Split at Playhead
+    const splitItem = this.createMenuItem('Split at Playhead', 'S', () => {
+      this.splitCutAtFrame(cutIndex, this.currentFrame);
+      menu.remove();
+    });
+    menu.appendChild(splitItem);
+
+    // Duplicate Cut
+    const duplicateItem = this.createMenuItem('Duplicate Cut', 'D', () => {
+      const cut = this.cuts[cutIndex];
+      if (cut) {
+        this.insertCut(cut.endFrame + 1, cut.sourceIndex, cut.inPoint, cut.outPoint);
+      }
+      menu.remove();
+    });
+    menu.appendChild(duplicateItem);
+
+    // Separator
+    const separator = document.createElement('div');
+    separator.style.cssText = 'height: 1px; background: var(--border-primary); margin: 4px 0;';
+    menu.appendChild(separator);
+
+    // Delete Cut
+    const deleteItem = this.createMenuItem('Delete Cut', 'Del', () => {
       this.deleteCut(cutIndex);
       menu.remove();
     });
-
     menu.appendChild(deleteItem);
+
     document.body.appendChild(menu);
 
     // Close on click outside
@@ -688,15 +1131,28 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     setTimeout(() => document.addEventListener('click', closeHandler), 0);
   }
 
-  private createMenuItem(label: string, onClick: () => void): HTMLElement {
+  private createMenuItem(label: string, shortcut: string, onClick: () => void): HTMLElement {
     const item = document.createElement('div');
-    item.textContent = label;
     item.style.cssText = `
       padding: 8px 12px;
       cursor: pointer;
       font-size: 12px;
       color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     `;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label;
+
+    const shortcutSpan = document.createElement('span');
+    shortcutSpan.textContent = shortcut;
+    shortcutSpan.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-left: 16px;';
+
+    item.appendChild(labelSpan);
+    item.appendChild(shortcutSpan);
+
     item.addEventListener('mouseenter', () => {
       item.style.background = 'var(--bg-hover)';
     });

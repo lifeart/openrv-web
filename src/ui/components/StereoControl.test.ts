@@ -341,6 +341,51 @@ describe('StereoControl', () => {
     });
   });
 
+  describe('keyboard focus ring (M-16)', () => {
+    it('STEREO-M16a: eye swap button should have focus/blur event listeners added by applyA11yFocus', () => {
+      const el = control.render();
+      const swapBtn = el.querySelector('[data-testid="stereo-eye-swap"]') as HTMLButtonElement;
+
+      // applyA11yFocus registers a focus listener that sets outline on keyboard focus.
+      swapBtn.dispatchEvent(new Event('focus'));
+      expect(swapBtn.style.outline).toBe('2px solid var(--accent-primary)');
+    });
+
+    it('STEREO-M16b: eye swap button keyboard focus (Tab) should apply visible focus ring', () => {
+      const el = control.render();
+      const swapBtn = el.querySelector('[data-testid="stereo-eye-swap"]') as HTMLButtonElement;
+
+      // Simulate keyboard focus (no preceding mousedown)
+      swapBtn.dispatchEvent(new Event('focus'));
+      expect(swapBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(swapBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('STEREO-M16c: eye swap button mouse focus (click) should not apply focus ring', () => {
+      const el = control.render();
+      const swapBtn = el.querySelector('[data-testid="stereo-eye-swap"]') as HTMLButtonElement;
+
+      // Simulate mouse click: mousedown then focus
+      swapBtn.dispatchEvent(new Event('mousedown'));
+      swapBtn.dispatchEvent(new Event('focus'));
+      expect(swapBtn.style.outline).not.toBe('2px solid var(--accent-primary)');
+    });
+
+    it('ST-L46a: eyeSwap button should show a focus ring when focused via keyboard', () => {
+      const el = control.render();
+      const swapBtn = el.querySelector('[data-testid="stereo-eye-swap"]') as HTMLButtonElement;
+
+      // Keyboard focus: no preceding mousedown, just a focus event (Tab key)
+      swapBtn.dispatchEvent(new Event('focus'));
+      expect(swapBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(swapBtn.style.outlineOffset).toBe('2px');
+
+      // Blur should remove the focus ring
+      swapBtn.dispatchEvent(new Event('blur'));
+      expect(swapBtn.style.outline).toBe('');
+    });
+  });
+
   describe('dispose', () => {
     it('STEREO-U090: dispose cleans up without error', () => {
       expect(() => control.dispose()).not.toThrow();

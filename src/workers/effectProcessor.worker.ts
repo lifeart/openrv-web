@@ -691,17 +691,14 @@ function applyMergedPerPixelEffects(
 
     // ---- 5. CDL ----
     if (hasCDL) {
-      r = Math.max(0, Math.min(1, r * cdl.slope.r + cdl.offset.r));
-      g = Math.max(0, Math.min(1, g * cdl.slope.g + cdl.offset.g));
-      b = Math.max(0, Math.min(1, b * cdl.slope.b + cdl.offset.b));
+      // Match GPU shader behavior: max(lower=0) before power, no upper clamp.
+      r = Math.max(0, r * cdl.slope.r + cdl.offset.r);
+      g = Math.max(0, g * cdl.slope.g + cdl.offset.g);
+      b = Math.max(0, b * cdl.slope.b + cdl.offset.b);
 
       if (cdl.power.r !== 1.0 && r > 0) r = Math.pow(r, cdl.power.r);
       if (cdl.power.g !== 1.0 && g > 0) g = Math.pow(g, cdl.power.g);
       if (cdl.power.b !== 1.0 && b > 0) b = Math.pow(b, cdl.power.b);
-
-      r = Math.max(0, Math.min(1, r));
-      g = Math.max(0, Math.min(1, g));
-      b = Math.max(0, Math.min(1, b));
 
       if (cdlHasSat) {
         const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;

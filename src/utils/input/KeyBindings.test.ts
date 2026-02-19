@@ -66,6 +66,7 @@ describe('KeyBindings', () => {
       expect(DEFAULT_KEY_BINDINGS['tab.effects']!.code).toBe('Digit3');
       expect(DEFAULT_KEY_BINDINGS['tab.transform']!.code).toBe('Digit4');
       expect(DEFAULT_KEY_BINDINGS['tab.annotate']!.code).toBe('Digit5');
+      expect(DEFAULT_KEY_BINDINGS['tab.qc']!.code).toBe('Digit6');
     });
 
     it('KB-U011: defines paint tool bindings', () => {
@@ -137,6 +138,22 @@ describe('KeyBindings', () => {
       expect(display.code).toBe('KeyD');
       expect(display.shift).toBe(true);
       expect(display.alt).toBe(true);
+    });
+
+    it('KB-U022: defines next/previous mark-or-boundary shortcuts with Alt+Arrow', () => {
+      const next = DEFAULT_KEY_BINDINGS['timeline.nextMarkOrBoundary']!;
+      const prev = DEFAULT_KEY_BINDINGS['timeline.previousMarkOrBoundary']!;
+      expect(next.code).toBe('ArrowRight');
+      expect(next.alt).toBe(true);
+      expect(prev.code).toBe('ArrowLeft');
+      expect(prev.alt).toBe(true);
+    });
+
+    it('KB-U023: defines shot navigation shortcuts with PageUp/PageDown', () => {
+      const next = DEFAULT_KEY_BINDINGS['timeline.nextShot']!;
+      const prev = DEFAULT_KEY_BINDINGS['timeline.previousShot']!;
+      expect(next.code).toBe('PageDown');
+      expect(prev.code).toBe('PageUp');
     });
   });
 
@@ -299,7 +316,14 @@ describe('KeyBindings', () => {
       const tabBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
         k.startsWith('tab.')
       );
-      expect(tabBindings.length).toBe(5); // 5 tabs
+      expect(tabBindings.length).toBe(6); // 6 tabs
+    });
+
+    it('KB-U070: has layout bindings', () => {
+      const layoutBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
+        k.startsWith('layout.')
+      );
+      expect(layoutBindings.length).toBe(4); // 4 presets
     });
 
     it('KB-U058: has paint bindings', () => {
@@ -351,6 +375,35 @@ describe('KeyBindings', () => {
     it('KB-U066: annotation navigation uses comma/period', () => {
       expect(DEFAULT_KEY_BINDINGS['annotation.previous']!.code).toBe('Comma');
       expect(DEFAULT_KEY_BINDINGS['annotation.next']!.code).toBe('Period');
+    });
+
+    it('KB-U067: layout presets use Alt+1/2/3/4', () => {
+      const def = DEFAULT_KEY_BINDINGS['layout.default']!;
+      expect(def.code).toBe('Digit1');
+      expect(def.alt).toBe(true);
+
+      const review = DEFAULT_KEY_BINDINGS['layout.review']!;
+      expect(review.code).toBe('Digit2');
+      expect(review.alt).toBe(true);
+
+      const color = DEFAULT_KEY_BINDINGS['layout.color']!;
+      expect(color.code).toBe('Digit3');
+      expect(color.alt).toBe(true);
+
+      const paint = DEFAULT_KEY_BINDINGS['layout.paint']!;
+      expect(paint.code).toBe('Digit4');
+      expect(paint.alt).toBe(true);
+    });
+
+    it('KB-U068: layout bindings do not conflict with tab bindings', () => {
+      const tabView = DEFAULT_KEY_BINDINGS['tab.view']!;
+      const layoutDefault = DEFAULT_KEY_BINDINGS['layout.default']!;
+
+      // Same digit keys but layout uses Alt modifier
+      expect(tabView.code).toBe('Digit1');
+      expect(tabView.alt).toBeUndefined();
+      expect(layoutDefault.code).toBe('Digit1');
+      expect(layoutDefault.alt).toBe(true);
     });
   });
 });

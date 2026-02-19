@@ -18,6 +18,7 @@ import {
   validateOCIOConfig,
   getPresetById,
 } from '../../color/ColorProcessingFacade';
+import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../../utils/preferences/PreferencesManager';
 
 /**
  * Validation feedback message emitted by the state manager
@@ -39,25 +40,41 @@ export interface OCIOStateManagerEvents extends EventMap {
 /**
  * localStorage key for OCIO state persistence
  */
-const STORAGE_KEY = 'openrv-ocio-state';
+const STORAGE_KEY = PREFERENCE_STORAGE_KEYS.ocioState;
+
+/**
+ * localStorage key for per-source color space persistence
+ */
+const PER_SOURCE_STORAGE_KEY = PREFERENCE_STORAGE_KEYS.ocioPerSource;
+
+/** How long to debounce before writing per-source state to localStorage (ms). */
+const PER_SOURCE_SAVE_DEBOUNCE_MS = 500;
 
 /**
  * OCIOStateManager - Pure state management for OCIO color pipeline
  */
 export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
   private processor: OCIOProcessor;
+  private _perSourceSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly preferences = getPreferencesManager();
 
   constructor(processor?: OCIOProcessor) {
     super();
     this.processor = processor ?? new OCIOProcessor();
 
-    // Load persisted state
+    // Load persisted state (both global and per-source)
     this.loadState();
+    this.loadPerSourceState();
 
     // Listen to processor state changes
     this.processor.on('stateChanged', (state) => {
       this.saveState();
       this.emit('stateChanged', state);
+    });
+
+    // Listen to per-source color space changes for persistence
+    this.processor.on('perSourceColorSpaceChanged', () => {
+      this.schedulePerSourceSave();
     });
   }
 
@@ -266,29 +283,22 @@ export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
    * Load OCIO state from localStorage
    */
   private loadState(): void {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const raw = JSON.parse(stored);
-        if (typeof raw !== 'object' || raw === null) return;
+    const raw = this.preferences.getJSON<any>(STORAGE_KEY);
+    if (typeof raw !== 'object' || raw === null) return;
 
-        // Only apply known, correctly-typed properties
-        const safe: Partial<OCIOState> = {};
-        if (typeof raw.enabled === 'boolean') safe.enabled = raw.enabled;
-        if (typeof raw.configName === 'string') safe.configName = raw.configName;
-        if (typeof raw.inputColorSpace === 'string') safe.inputColorSpace = raw.inputColorSpace;
-        if (typeof raw.workingColorSpace === 'string') safe.workingColorSpace = raw.workingColorSpace;
-        if (typeof raw.display === 'string') safe.display = raw.display;
-        if (typeof raw.view === 'string') safe.view = raw.view;
-        if (typeof raw.look === 'string') safe.look = raw.look;
-        if (raw.lookDirection === 'forward' || raw.lookDirection === 'inverse') safe.lookDirection = raw.lookDirection;
+    // Only apply known, correctly-typed properties
+    const safe: Partial<OCIOState> = {};
+    if (typeof raw.enabled === 'boolean') safe.enabled = raw.enabled;
+    if (typeof raw.configName === 'string') safe.configName = raw.configName;
+    if (typeof raw.inputColorSpace === 'string') safe.inputColorSpace = raw.inputColorSpace;
+    if (typeof raw.workingColorSpace === 'string') safe.workingColorSpace = raw.workingColorSpace;
+    if (typeof raw.display === 'string') safe.display = raw.display;
+    if (typeof raw.view === 'string') safe.view = raw.view;
+    if (typeof raw.look === 'string') safe.look = raw.look;
+    if (raw.lookDirection === 'forward' || raw.lookDirection === 'inverse') safe.lookDirection = raw.lookDirection;
 
-        if (Object.keys(safe).length > 0) {
-          this.processor.setState(safe);
-        }
-      }
-    } catch {
-      // localStorage not available or invalid JSON, use defaults
+    if (Object.keys(safe).length > 0) {
+      this.processor.setState(safe);
     }
   }
 
@@ -296,11 +306,65 @@ export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
    * Save OCIO state to localStorage
    */
   private saveState(): void {
-    try {
-      const state = this.processor.getState();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // localStorage not available
+    const state = this.processor.getState();
+    this.preferences.setJSON(STORAGE_KEY, state);
+  }
+
+  // ==========================================================================
+  // Per-Source Color Space Persistence
+  // ==========================================================================
+
+  /**
+   * Load per-source color space mappings from localStorage.
+   * Validates each entry before loading into the processor.
+   */
+  private loadPerSourceState(): void {
+    const raw = this.preferences.getJSON<any>(PER_SOURCE_STORAGE_KEY);
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return;
+
+    // Validate: only accept string-to-string mappings
+    const validated: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (typeof key === 'string' && typeof value === 'string') {
+        validated[key] = value;
+      }
+    }
+
+    if (Object.keys(validated).length > 0) {
+      this.processor.loadPerSourceColorSpaces(validated);
+    }
+  }
+
+  /**
+   * Save per-source color space mappings to localStorage.
+   */
+  private savePerSourceState(): void {
+    const mappings = this.processor.getAllPerSourceColorSpaces();
+    this.preferences.setJSON(PER_SOURCE_STORAGE_KEY, mappings);
+  }
+
+  /**
+   * Schedule a debounced save of per-source color space state.
+   */
+  private schedulePerSourceSave(): void {
+    if (this._perSourceSaveTimer !== null) {
+      clearTimeout(this._perSourceSaveTimer);
+    }
+    this._perSourceSaveTimer = setTimeout(() => {
+      this._perSourceSaveTimer = null;
+      this.savePerSourceState();
+    }, PER_SOURCE_SAVE_DEBOUNCE_MS);
+  }
+
+  /**
+   * Immediately flush any pending per-source save.
+   * Useful for tests or shutdown.
+   */
+  flushPerSourceSave(): void {
+    if (this._perSourceSaveTimer !== null) {
+      clearTimeout(this._perSourceSaveTimer);
+      this._perSourceSaveTimer = null;
+      this.savePerSourceState();
     }
   }
 }

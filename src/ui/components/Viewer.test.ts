@@ -65,6 +65,18 @@ interface TestableViewer {
   physicalWidth: number;
   physicalHeight: number;
 
+  // Paint internals
+  paintRenderer: {
+    renderAnnotations: (annotations: unknown[], options: Record<string, unknown>) => void;
+    getCanvas: () => HTMLCanvasElement;
+  };
+  renderPaint(): void;
+  watermarkOverlay: {
+    render(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void;
+    isEnabled(): boolean;
+    hasImage(): boolean;
+  };
+
   // Canvas sizing
   setCanvasSize(width: number, height: number): void;
   initializeCanvas(): void;
@@ -172,15 +184,6 @@ function testable(viewer: Viewer): TestableViewer {
   return viewer as unknown as TestableViewer;
 }
 
-// Mock WebGLLUTProcessor
-vi.mock('../../color/WebGLLUT', () => ({
-  WebGLLUTProcessor: vi.fn().mockImplementation(() => ({
-    setLUT: vi.fn(),
-    hasLUT: vi.fn().mockReturnValue(false),
-    applyToCanvas: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
 
 describe('Viewer', () => {
   let session: Session;
@@ -447,6 +450,259 @@ describe('Viewer', () => {
       const labelB = container.querySelector('[data-testid="wipe-label-b"]') as HTMLElement;
       expect(labelA.style.display).toBe('none');
       expect(labelB.style.display).toBe('none');
+    });
+  });
+
+  describe('A/B compare playback regressions', () => {
+    it('ABR-001: split screen resolves source A frame from source A when current source is B', () => {
+      const frameA = document.createElement('canvas');
+      const frameB = document.createElement('canvas');
+
+      const sourceA = {
+        type: 'video',
+        element: document.createElement('video'),
+        videoSourceNode: {
+          isUsingMediabunny: vi.fn().mockReturnValue(true),
+          isHDR: vi.fn().mockReturnValue(false),
+          setTargetSize: vi.fn(),
+          setHDRTargetSize: vi.fn(),
+          getCachedFrameCanvas: vi.fn().mockReturnValue(frameA),
+        },
+      };
+      const sourceB = {
+        type: 'video',
+        element: document.createElement('video'),
+        videoSourceNode: {
+          isUsingMediabunny: vi.fn().mockReturnValue(true),
+          isHDR: vi.fn().mockReturnValue(false),
+          setTargetSize: vi.fn(),
+          setHDRTargetSize: vi.fn(),
+        },
+      };
+
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        sourceA,
+        sourceB,
+        currentSource: sourceB,
+        currentFrame: 10,
+        isUsingMediabunny: vi.fn().mockReturnValue(true),
+        isSourceBUsingMediabunny: vi.fn().mockReturnValue(true),
+        getVideoFrameCanvas: vi.fn().mockReturnValue(frameB),
+        getSourceBFrameCanvas: vi.fn().mockReturnValue(frameB),
+        fetchSourceBVideoFrame: vi.fn().mockResolvedValue(undefined),
+      } as any;
+
+      viewer.setWipeState({ mode: 'splitscreen-h', position: 0.5, showOriginal: 'left' });
+      const drawClippedSource = vi.spyOn(viewer as any, 'drawClippedSource').mockImplementation(() => {});
+
+      (viewer as any).renderSplitScreen(640, 360);
+
+      expect(drawClippedSource).toHaveBeenCalledTimes(2);
+      expect(sourceA.videoSourceNode.getCachedFrameCanvas).toHaveBeenCalledWith(10);
+      expect(drawClippedSource.mock.calls[0]?.[1]).toBe(frameA);
+    });
+
+    it('ABR-002: abSourceChanged resets frame fetch tracker to avoid stale frames', () => {
+      const t = testable(viewer);
+      t.frameFetchTracker.pendingVideoFrameNumber = 42;
+      t.frameFetchTracker.pendingSourceBFrameNumber = 99;
+      t.frameFetchTracker.hasDisplayedMediabunnyFrame = true;
+      t.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame = true;
+
+      session.emit('abSourceChanged', { current: 'B', sourceIndex: 1 });
+
+      expect(t.frameFetchTracker.pendingVideoFrameNumber).toBe(0);
+      expect(t.frameFetchTracker.pendingSourceBFrameNumber).toBe(0);
+      expect(t.frameFetchTracker.hasDisplayedMediabunnyFrame).toBe(false);
+      expect(t.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame).toBe(false);
+    });
+
+    it('ABR-003: wipe rendering supports canvas frame sources during mediabunny playback', () => {
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = 128;
+      frameCanvas.height = 72;
+
+      const source = {
+        type: 'video',
+        name: 'videoA',
+        url: 'blob:a',
+        width: 128,
+        height: 72,
+        duration: 100,
+        fps: 24,
+        element: document.createElement('video'),
+        videoSourceNode: {
+          isUsingMediabunny: vi.fn().mockReturnValue(true),
+          isHDR: vi.fn().mockReturnValue(false),
+          setTargetSize: vi.fn(),
+          setHDRTargetSize: vi.fn(),
+        },
+      };
+
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        currentSource: source,
+        currentFrame: 5,
+        isPlaying: false,
+        playDirection: 1,
+        fps: 24,
+        subFramePosition: null,
+        isUsingMediabunny: vi.fn().mockReturnValue(true),
+        getVideoFrameCanvas: vi.fn().mockReturnValue(frameCanvas),
+        fetchCurrentVideoFrame: vi.fn().mockResolvedValue(undefined),
+        sourceB: null,
+        abCompareAvailable: false,
+      } as any;
+
+      viewer.setWipeState({ mode: 'horizontal', position: 0.5, showOriginal: 'left' });
+      const renderWithWipe = vi.spyOn(viewer as any, 'renderWithWipe').mockImplementation(() => {});
+
+      viewer.render();
+
+      expect(renderWithWipe).toHaveBeenCalled();
+      expect(renderWithWipe.mock.calls[0]?.[0]).toBe(frameCanvas);
+    });
+
+    it('ABR-004: flicker blend mode renders source B when flicker frame is 1', () => {
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        sourceA: { element: document.createElement('img') },
+        sourceB: { element: document.createElement('img') },
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+      } as any;
+
+      const dataA = new ImageData(new Uint8ClampedArray([255, 0, 0, 255]), 1, 1);
+      const dataB = new ImageData(new Uint8ClampedArray([0, 255, 0, 255]), 1, 1);
+      const renderSourceToImageData = vi.spyOn(viewer as any, 'renderSourceToImageData')
+        .mockReturnValueOnce(dataA)
+        .mockReturnValueOnce(dataB);
+
+      viewer.setBlendModeState({
+        mode: 'flicker',
+        onionOpacity: 0.5,
+        flickerRate: 4,
+        blendRatio: 0.5,
+        flickerFrame: 1,
+      });
+
+      const out = (viewer as any).renderBlendMode(1, 1) as ImageData;
+
+      expect(renderSourceToImageData).toHaveBeenCalledTimes(2);
+      expect(out.data[0]).toBe(0);
+      expect(out.data[1]).toBe(255);
+      expect(out.data[2]).toBe(0);
+    });
+
+    it('ABR-005: wipe rendering applies rotation/flip transform on both sides', () => {
+      const drawWithTransform = vi.spyOn(viewer as any, 'drawWithTransform').mockImplementation(() => {});
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = 640;
+      sourceCanvas.height = 360;
+
+      (viewer as any).transformManager.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
+      viewer.setWipeState({ mode: 'horizontal', position: 0.5, showOriginal: 'left' });
+      (viewer as any).renderWithWipe(sourceCanvas, 640, 360);
+
+      expect(drawWithTransform).toHaveBeenCalledTimes(2);
+      expect(drawWithTransform.mock.calls[0]?.[1]).toBe(sourceCanvas);
+      expect(drawWithTransform.mock.calls[1]?.[1]).toBe(sourceCanvas);
+      drawWithTransform.mockRestore();
+    });
+
+    it('ABR-006: renderSourceToImageData applies transform (rotate called for 90°)', () => {
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = 1;
+      sourceCanvas.height = 2;
+      const ctx = sourceCanvas.getContext('2d')!;
+      ctx.fillStyle = 'rgb(255,0,0)';
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.fillStyle = 'rgb(0,0,255)';
+      ctx.fillRect(0, 1, 1, 1);
+
+      const source = {
+        type: 'image' as const,
+        name: 'pattern',
+        url: 'pattern',
+        width: 1,
+        height: 2,
+        duration: 1,
+        fps: 24,
+        element: sourceCanvas,
+      };
+
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        currentFrame: 1,
+        getSourceByIndex: vi.fn().mockReturnValue(source),
+        isUsingMediabunny: () => false,
+      } as any;
+
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const start = getContextMock.mock.calls.length;
+
+      (viewer as any).transformManager.setTransform({ ...DEFAULT_TRANSFORM, rotation: 0 });
+      (viewer as any).renderSourceToImageData(0, 2, 1);
+      const unrotatedCtx = getContextMock.mock.results[start]?.value as { rotate: ReturnType<typeof vi.fn> };
+      expect(unrotatedCtx.rotate).not.toHaveBeenCalled();
+
+      (viewer as any).transformManager.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
+      (viewer as any).renderSourceToImageData(0, 2, 1);
+      const rotatedCtx = getContextMock.mock.results[start + 1]?.value as { rotate: ReturnType<typeof vi.fn> };
+      expect(rotatedCtx.rotate).toHaveBeenCalled();
+    });
+
+    it('ABR-007: difference matte path uses renderSourceToImageData helper', () => {
+      const t = testable(viewer);
+      const sourceA = { element: document.createElement('canvas') };
+      const sourceB = { element: document.createElement('canvas') };
+      t.session = {
+        ...t.session,
+        sourceA,
+        sourceB,
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+        isUsingMediabunny: () => false,
+      } as any;
+
+      viewer.setDifferenceMatteState({ enabled: true, gain: 1, heatmap: false });
+      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData')
+        .mockReturnValue(new ImageData(2, 1));
+
+      const out = (viewer as any).renderDifferenceMatte(2, 1) as ImageData;
+      expect(out).not.toBeNull();
+      expect(renderSourceSpy).toHaveBeenCalledWith(0, 2, 1);
+      expect(renderSourceSpy).toHaveBeenCalledWith(1, 2, 1);
+      renderSourceSpy.mockRestore();
+    });
+
+    it('ABR-008: stack compositing path uses renderSourceToImageData helper', () => {
+      const sourceA = { element: document.createElement('canvas') };
+      const sourceB = { element: document.createElement('canvas') };
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        getSourceByIndex: vi.fn((idx: number) => (idx === 0 ? sourceA : sourceB)),
+        isUsingMediabunny: () => false,
+      } as any;
+
+      viewer.setStackLayers([
+        { id: 'A', name: 'A', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
+        { id: 'B', name: 'B', sourceIndex: 1, blendMode: 'normal', opacity: 1, visible: true },
+      ]);
+      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData')
+        .mockReturnValue(new ImageData(2, 1));
+
+      const out = (viewer as any).compositeStackLayers(2, 1) as ImageData;
+      expect(out).not.toBeNull();
+      expect(renderSourceSpy).toHaveBeenCalledWith(0, 2, 1);
+      expect(renderSourceSpy).toHaveBeenCalledWith(1, 2, 1);
+      renderSourceSpy.mockRestore();
     });
   });
 
@@ -1004,17 +1260,16 @@ describe('Viewer', () => {
   describe('paint canvas retina support', () => {
     it('VWR-060: paint canvas uses physical dimensions at DPR=1', () => {
       const t = testable(viewer);
-      // At DPR=1, physical = logical
-      expect(t.paintCanvas.width).toBe(t.physicalWidth);
-      expect(t.paintCanvas.height).toBe(t.physicalHeight);
-      expect(t.paintCanvas.width).toBe(t.displayWidth);
-      expect(t.paintCanvas.height).toBe(t.displayHeight);
+      expect(t.paintCanvas.width).toBeGreaterThan(t.physicalWidth);
+      expect(t.paintCanvas.height).toBeGreaterThan(t.physicalHeight);
+      expect(parseFloat(t.paintCanvas.style.left)).toBeLessThan(0);
+      expect(parseFloat(t.paintCanvas.style.top)).toBeLessThan(0);
     });
 
     it('VWR-061: paint canvas has CSS logical sizing set', () => {
       const t = testable(viewer);
-      expect(t.paintCanvas.style.width).toBe(`${t.displayWidth}px`);
-      expect(t.paintCanvas.style.height).toBe(`${t.displayHeight}px`);
+      expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThan(t.displayWidth);
+      expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThan(t.displayHeight);
     });
 
     it('VWR-062: paint canvas uses DPR-scaled dimensions at DPR=2', () => {
@@ -1030,12 +1285,12 @@ describe('Viewer', () => {
         // Paint canvas physical dimensions should be 2x logical
         expect(t.physicalWidth).toBe(Math.round(t.displayWidth * 2));
         expect(t.physicalHeight).toBe(Math.round(t.displayHeight * 2));
-        expect(t.paintCanvas.width).toBe(t.physicalWidth);
-        expect(t.paintCanvas.height).toBe(t.physicalHeight);
+        expect(t.paintCanvas.width).toBeGreaterThan(t.physicalWidth);
+        expect(t.paintCanvas.height).toBeGreaterThan(t.physicalHeight);
 
-        // CSS dimensions should be logical
-        expect(t.paintCanvas.style.width).toBe(`${t.displayWidth}px`);
-        expect(t.paintCanvas.style.height).toBe(`${t.displayHeight}px`);
+        // CSS dimensions should include annotation overdraw padding
+        expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThan(t.displayWidth);
+        expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThan(t.displayHeight);
 
         viewer2.dispose();
       } finally {
@@ -1060,10 +1315,10 @@ describe('Viewer', () => {
         expect(t.displayHeight).toBe(600);
         expect(t.physicalWidth).toBe(1600);
         expect(t.physicalHeight).toBe(1200);
-        expect(t.paintCanvas.width).toBe(1600);
-        expect(t.paintCanvas.height).toBe(1200);
-        expect(t.paintCanvas.style.width).toBe('800px');
-        expect(t.paintCanvas.style.height).toBe('600px');
+        expect(t.paintCanvas.width).toBeGreaterThan(1600);
+        expect(t.paintCanvas.height).toBeGreaterThan(1200);
+        expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThan(800);
+        expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThan(600);
 
         viewer2.dispose();
       } finally {
@@ -1087,8 +1342,9 @@ describe('Viewer', () => {
         const paintArea = t.paintCanvas.width * t.paintCanvas.height;
         const dprSquared = 4; // 2^2
 
-        // Paint canvas should have DPR^2 times the pixels of the logical image canvas
-        expect(paintArea).toBe(imageArea * dprSquared);
+        // Paint canvas should have at least DPR^2 times the pixels of the logical image canvas.
+        // It can be larger because we keep an annotation overdraw margin.
+        expect(paintArea).toBeGreaterThanOrEqual(imageArea * dprSquared);
 
         viewer2.dispose();
       } finally {
@@ -1100,10 +1356,52 @@ describe('Viewer', () => {
       const t = testable(viewer);
       t.setCanvasSize(1024, 768);
 
-      // Image canvas has no CSS styles (intrinsic = canvas.width/height)
-      // Paint canvas CSS should match image canvas intrinsic size
-      expect(t.paintCanvas.style.width).toBe(`${t.imageCanvas.width}px`);
-      expect(t.paintCanvas.style.height).toBe(`${t.imageCanvas.height}px`);
+      // Paint canvas includes overdraw around the image.
+      expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThanOrEqual(t.imageCanvas.width);
+      expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThanOrEqual(t.imageCanvas.height);
+    });
+
+    it('VWR-066: HDR mode still renders annotations on expanded paint surface', () => {
+      const t = testable(viewer);
+
+      // Add a simple annotation so renderPaint() has work to do
+      paintEngine.tool = 'pen';
+      paintEngine.beginStroke(1, { x: 0.5, y: 0.5 });
+      paintEngine.endStroke();
+      session.currentFrame = 1;
+
+      // Simulate active HDR render mode
+      t.glRendererManager._hdrRenderActive = true;
+
+      const renderSpy = vi.spyOn(t.paintRenderer, 'renderAnnotations');
+      t.renderPaint();
+
+      expect(renderSpy).toHaveBeenCalled();
+
+      const [, options] = renderSpy.mock.calls.at(-1)!;
+      expect(options.width).toBe(t.displayWidth);
+      expect(options.height).toBe(t.displayHeight);
+      expect(Number(options.canvasWidth)).toBeGreaterThan(t.displayWidth);
+      expect(Number(options.canvasHeight)).toBeGreaterThan(t.displayHeight);
+      expect(Number(options.offsetX)).toBeGreaterThan(0);
+      expect(Number(options.offsetY)).toBeGreaterThan(0);
+    });
+
+    it('VWR-067: SDR WebGL mode composites watermark on dedicated overlay canvas', () => {
+      const t = testable(viewer);
+
+      t.glRendererManager._sdrWebGLRenderActive = true;
+      const enabledSpy = vi.spyOn(t.watermarkOverlay, 'isEnabled').mockReturnValue(true);
+      const hasImageSpy = vi.spyOn(t.watermarkOverlay, 'hasImage').mockReturnValue(true);
+      const renderSpy = vi.spyOn(t.watermarkOverlay, 'render');
+
+      viewer.render();
+
+      expect(renderSpy).toHaveBeenCalledWith(expect.anything(), t.displayWidth, t.displayHeight);
+
+      renderSpy.mockRestore();
+      hasImageSpy.mockRestore();
+      enabledSpy.mockRestore();
     });
   });
 

@@ -12,7 +12,7 @@
  */
 
 import type { Session } from '../core/session/Session';
-import type { ViewerProvider, ColorAdjustmentProvider, CDLProvider } from './types';
+import type { ViewerProvider, ColorAdjustmentProvider, CDLProvider, CurvesProvider } from './types';
 
 import { PlaybackAPI } from './PlaybackAPI';
 import { MediaAPI } from './MediaAPI';
@@ -35,6 +35,7 @@ export interface OpenRVAPIConfig {
   viewer: ViewerProvider;
   colorControls: ColorAdjustmentProvider;
   cdlControl: CDLProvider;
+  curvesControl: CurvesProvider;
 }
 
 /**
@@ -76,7 +77,7 @@ export class OpenRVAPI {
     this.audio = new AudioAPI(config.session);
     this.loop = new LoopAPI(config.session);
     this.view = new ViewAPI(config.viewer);
-    this.color = new ColorAPI(config.colorControls, config.cdlControl);
+    this.color = new ColorAPI(config.colorControls, config.cdlControl, config.curvesControl);
     this.markers = new MarkersAPI(config.session);
     this.events = new EventsAPI(config.session, config.viewer);
 

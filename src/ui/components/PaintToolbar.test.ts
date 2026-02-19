@@ -5,6 +5,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+// PointerEvent polyfill for jsdom
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class extends MouseEvent {
+    constructor(type: string, params?: MouseEventInit) {
+      super(type, params);
+    }
+  };
+}
+
 import { PaintToolbar } from './PaintToolbar';
 import { PaintEngine } from '../../paint/PaintEngine';
 
@@ -208,26 +218,26 @@ describe('PaintToolbar', () => {
   describe('width slider', () => {
     it('PAINT-U060: has width slider', () => {
       const el = toolbar.render();
-      const slider = el.querySelector('input[type="range"]');
+      const slider = el.querySelector('[data-testid="paint-width-slider"]');
       expect(slider).not.toBeNull();
     });
 
     it('PAINT-U061: width slider has correct range', () => {
       const el = toolbar.render();
-      const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+      const slider = el.querySelector('[data-testid="paint-width-slider"]') as HTMLInputElement;
       expect(slider.min).toBe('1');
       expect(slider.max).toBe('50');
     });
 
     it('PAINT-U062: width slider has initial value from paint engine', () => {
       const el = toolbar.render();
-      const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+      const slider = el.querySelector('[data-testid="paint-width-slider"]') as HTMLInputElement;
       expect(slider.value).toBe(String(paintEngine.width));
     });
 
     it('PAINT-U063: changing width slider updates paint engine', () => {
       const el = toolbar.render();
-      const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+      const slider = el.querySelector('[data-testid="paint-width-slider"]') as HTMLInputElement;
 
       slider.value = '25';
       slider.dispatchEvent(new Event('input'));
@@ -237,7 +247,7 @@ describe('PaintToolbar', () => {
 
     it('PAINT-U064: width label updates with slider', () => {
       const el = toolbar.render();
-      const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+      const slider = el.querySelector('[data-testid="paint-width-slider"]') as HTMLInputElement;
 
       slider.value = '30';
       slider.dispatchEvent(new Event('input'));
@@ -328,21 +338,21 @@ describe('PaintToolbar', () => {
   });
 
   describe('button hover effects', () => {
-    it('PAINT-U080: inactive button changes on mouseenter', () => {
+    it('PAINT-U080: inactive button changes on pointerenter', () => {
       const el = toolbar.render();
       const btn = el.querySelector('[data-testid="paint-tool-eraser"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
 
-      expect(btn.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
+      expect(btn.style.background).toBe('var(--bg-hover)');
     });
 
-    it('PAINT-U081: inactive button restores on mouseleave', () => {
+    it('PAINT-U081: inactive button restores on pointerleave', () => {
       const el = toolbar.render();
       const btn = el.querySelector('[data-testid="paint-tool-eraser"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      btn.dispatchEvent(new MouseEvent('mouseleave'));
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      btn.dispatchEvent(new PointerEvent('pointerleave'));
 
       expect(btn.style.background).toBe('transparent');
     });
@@ -361,6 +371,71 @@ describe('PaintToolbar', () => {
       const buttons = Array.from(el.querySelectorAll('button'));
       const redoBtn = buttons.find(btn => btn.title?.includes('Redo'));
       expect(redoBtn).not.toBeUndefined();
+    });
+  });
+
+  describe('opacity slider', () => {
+    it('PT-H13a: PaintToolbar should render an opacity slider input', () => {
+      const el = toolbar.render();
+      const slider = el.querySelector('[data-testid="paint-opacity-slider"]') as HTMLInputElement;
+      expect(slider).not.toBeNull();
+      expect(slider.type).toBe('range');
+    });
+
+    it('PT-H13b: Opacity slider should default to 100%', () => {
+      const el = toolbar.render();
+      const slider = el.querySelector('[data-testid="paint-opacity-slider"]') as HTMLInputElement;
+      expect(slider.value).toBe('100');
+      expect(slider.min).toBe('0');
+      expect(slider.max).toBe('100');
+    });
+
+    it('PT-H13c: Changing opacity slider should update the alpha value used in hexToRgba()', () => {
+      const el = toolbar.render();
+      const slider = el.querySelector('[data-testid="paint-opacity-slider"]') as HTMLInputElement;
+
+      // Set opacity to 50%
+      slider.value = '50';
+      slider.dispatchEvent(new Event('input'));
+
+      // The paint engine color alpha should now be 0.5
+      const color = paintEngine.color;
+      expect(color[3]).toBeCloseTo(0.5, 2);
+    });
+
+    it('PT-H13d: New strokes should use the current opacity value', () => {
+      const el = toolbar.render();
+      const slider = el.querySelector('[data-testid="paint-opacity-slider"]') as HTMLInputElement;
+
+      // Set opacity to 75%
+      slider.value = '75';
+      slider.dispatchEvent(new Event('input'));
+
+      // Select pen tool and begin a stroke
+      paintEngine.tool = 'pen';
+      paintEngine.beginStroke(0, { x: 0, y: 0, pressure: 1 });
+
+      const stroke = paintEngine.getCurrentStroke();
+      expect(stroke).not.toBeNull();
+      expect(stroke!.color[3]).toBeCloseTo(0.75, 2);
+
+      paintEngine.endStroke();
+    });
+
+    it('PT-H13e: Opacity slider should display its current value as a label', () => {
+      const el = toolbar.render();
+      const slider = el.querySelector('[data-testid="paint-opacity-slider"]') as HTMLInputElement;
+      const label = el.querySelector('[data-testid="paint-opacity-label"]') as HTMLSpanElement;
+
+      expect(label).not.toBeNull();
+      // Default label shows 100%
+      expect(label.textContent).toBe('100%');
+
+      // Change opacity to 42%
+      slider.value = '42';
+      slider.dispatchEvent(new Event('input'));
+
+      expect(label.textContent).toBe('42%');
     });
   });
 

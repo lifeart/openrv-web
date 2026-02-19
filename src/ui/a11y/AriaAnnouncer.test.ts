@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AriaAnnouncer } from './AriaAnnouncer';
+import { EventEmitter } from '../../utils/EventEmitter';
 
 describe('AriaAnnouncer', () => {
   let announcer: AriaAnnouncer;
@@ -57,5 +58,51 @@ describe('AriaAnnouncer', () => {
   it('dispose removes element from DOM', () => {
     announcer.dispose();
     expect(document.getElementById('openrv-sr-announcer')).toBeNull();
+  });
+
+  // A11Y-L58a
+  it('toggling play/pause triggers an aria-live announcement', () => {
+    vi.useFakeTimers();
+    const session = new EventEmitter<{ playbackChanged: boolean }>();
+
+    // Wire up the same listener that App.ts uses
+    session.on('playbackChanged', (playing: boolean) => {
+      announcer.announce(playing ? 'Playback started' : 'Playback paused');
+    });
+
+    // Simulate play
+    session.emit('playbackChanged', true);
+    vi.advanceTimersByTime(16);
+    expect(announcer.getElement().textContent).toBe('Playback started');
+
+    // Simulate pause
+    session.emit('playbackChanged', false);
+    vi.advanceTimersByTime(16);
+    expect(announcer.getElement().textContent).toBe('Playback paused');
+
+    vi.useRealTimers();
+  });
+
+  // A11Y-L58b
+  it('changing playback speed triggers an aria-live announcement', () => {
+    vi.useFakeTimers();
+    const session = new EventEmitter<{ playbackSpeedChanged: number }>();
+
+    // Wire up the same listener that App.ts uses
+    session.on('playbackSpeedChanged', (speed: number) => {
+      announcer.announce(`Playback speed: ${speed}x`);
+    });
+
+    // Simulate speed change to 2x
+    session.emit('playbackSpeedChanged', 2);
+    vi.advanceTimersByTime(16);
+    expect(announcer.getElement().textContent).toBe('Playback speed: 2x');
+
+    // Simulate speed change to 0.5x
+    session.emit('playbackSpeedChanged', 0.5);
+    vi.advanceTimersByTime(16);
+    expect(announcer.getElement().textContent).toBe('Playback speed: 0.5x');
+
+    vi.useRealTimers();
   });
 });

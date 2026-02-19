@@ -20,6 +20,8 @@ import {
 export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private ws: WebSocket | null = null;
   private config: NetworkSyncConfig;
+  private serverUrls: string[] = [];
+  private serverUrlIndex = 0;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -35,6 +37,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   constructor(config?: Partial<NetworkSyncConfig>) {
     super();
     this.config = { ...DEFAULT_NETWORK_SYNC_CONFIG, ...config };
+    this.serverUrls = this.normalizeServerUrls(this.config);
   }
 
   // ---- Public API ----
@@ -69,7 +72,12 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
       return;
     }
 
-    const serverUrl = url ?? this.config.serverUrl;
+    const explicitUrl = this.normalizeServerUrl(url);
+    if (explicitUrl) {
+      const index = this.serverUrls.indexOf(explicitUrl);
+      if (index >= 0) this.serverUrlIndex = index;
+    }
+    const serverUrl = explicitUrl ?? this.getCurrentServerUrl();
     this._userId = userId ?? this._userId;
     this._roomId = roomId ?? this._roomId;
 
@@ -133,6 +141,8 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
    */
   updateConfig(config: Partial<NetworkSyncConfig>): void {
     this.config = { ...this.config, ...config };
+    this.serverUrls = this.normalizeServerUrls(this.config);
+    this.serverUrlIndex = 0;
   }
 
   /**
@@ -291,8 +301,52 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
     const jitter = delay * 0.1 * Math.random();
 
     this.reconnectTimer = setTimeout(() => {
+      this.advanceServerUrl();
       this.connect();
     }, delay + jitter);
+  }
+
+  private normalizeServerUrl(url: string | undefined): string | null {
+    if (!url) return null;
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+    if (!/^wss?:\/\//i.test(trimmed)) return null;
+    return trimmed;
+  }
+
+  private normalizeServerUrls(config: NetworkSyncConfig): string[] {
+    const candidates = [
+      config.serverUrl,
+      ...(Array.isArray(config.serverUrls) ? config.serverUrls : []),
+    ];
+
+    const seen = new Set<string>();
+    const urls: string[] = [];
+
+    for (const candidate of candidates) {
+      const normalized = this.normalizeServerUrl(candidate);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      urls.push(normalized);
+    }
+
+    // Keep at least one URL so connect() always has a deterministic target.
+    if (urls.length === 0) {
+      urls.push(DEFAULT_NETWORK_SYNC_CONFIG.serverUrl);
+    }
+
+    return urls;
+  }
+
+  private getCurrentServerUrl(): string {
+    if (this.serverUrls.length === 0) return this.config.serverUrl;
+    const index = Math.max(0, Math.min(this.serverUrlIndex, this.serverUrls.length - 1));
+    return this.serverUrls[index]!;
+  }
+
+  private advanceServerUrl(): void {
+    if (this.serverUrls.length <= 1) return;
+    this.serverUrlIndex = (this.serverUrlIndex + 1) % this.serverUrls.length;
   }
 
   private cleanup(): void {

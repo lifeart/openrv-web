@@ -360,4 +360,73 @@ describe('FocusManager', () => {
     const event = pressKey('ArrowRight');
     expect(event.defaultPrevented).toBe(true);
   });
+
+  // FM-M23a: Zones with display:none should be skipped during F6 cycling
+  it('focusZone skips zones hidden with display:none', () => {
+    const buttonsA = createButtons(2);
+    const buttonsB = createButtons(2);
+    const buttonsC = createButtons(2);
+    const zoneA = createZone('a', buttonsA);
+    const zoneB = createZone('b', buttonsB);
+    const zoneC = createZone('c', buttonsC);
+    fm.addZone(zoneA);
+    fm.addZone(zoneB);
+    fm.addZone(zoneC);
+
+    // Hide zone B with display:none
+    zoneB.container.style.display = 'none';
+
+    fm.focusZone(0);
+    expect(document.activeElement).toBe(buttonsA[0]);
+
+    // Next zone should skip B and go to C
+    fm.focusNextZone();
+    expect(document.activeElement).toBe(buttonsC[0]);
+  });
+
+  // FM-M23b: Zones with visibility:hidden should be skipped during F6 cycling
+  it('focusZone skips zones hidden with visibility:hidden', () => {
+    const buttonsA = createButtons(2);
+    const buttonsB = createButtons(2);
+    const buttonsC = createButtons(2);
+    const zoneA = createZone('a', buttonsA);
+    const zoneB = createZone('b', buttonsB);
+    const zoneC = createZone('c', buttonsC);
+    fm.addZone(zoneA);
+    fm.addZone(zoneB);
+    fm.addZone(zoneC);
+
+    // Hide zone B with visibility:hidden
+    zoneB.container.style.visibility = 'hidden';
+
+    fm.focusZone(0);
+    expect(document.activeElement).toBe(buttonsA[0]);
+
+    // Next zone should skip B and go to C
+    fm.focusNextZone();
+    expect(document.activeElement).toBe(buttonsC[0]);
+  });
+
+  // FM-M23c: Zones with offsetParent === null (detached) should be skipped during F6 cycling
+  it('focusZone skips detached zones (offsetParent === null)', () => {
+    const buttonsA = createButtons(2);
+    const buttonsB = createButtons(2);
+    const buttonsC = createButtons(2);
+    const zoneA = createZone('a', buttonsA);
+    const zoneB = createZone('b', buttonsB);
+    const zoneC = createZone('c', buttonsC);
+    fm.addZone(zoneA);
+    fm.addZone(zoneB);
+    fm.addZone(zoneC);
+
+    // Detach zone B from DOM (makes offsetParent === null)
+    zoneB.container.remove();
+
+    fm.focusZone(0);
+    expect(document.activeElement).toBe(buttonsA[0]);
+
+    // Next zone should skip B and go to C
+    fm.focusNextZone();
+    expect(document.activeElement).toBe(buttonsC[0]);
+  });
 });

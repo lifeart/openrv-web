@@ -46,6 +46,12 @@ export function wireTransformControls(ctx: AppWiringContext): TransformWiringSta
     if (previousTransform.flipV !== currentTransform.flipV) {
       changes.push(currentTransform.flipV ? 'flip vertical' : 'unflip vertical');
     }
+    if (previousTransform.scale.x !== currentTransform.scale.x || previousTransform.scale.y !== currentTransform.scale.y) {
+      changes.push(`scale to ${currentTransform.scale.x.toFixed(2)}x${currentTransform.scale.y.toFixed(2)}`);
+    }
+    if (previousTransform.translate.x !== currentTransform.translate.x || previousTransform.translate.y !== currentTransform.translate.y) {
+      changes.push(`translate to (${currentTransform.translate.x.toFixed(1)}, ${currentTransform.translate.y.toFixed(1)})`);
+    }
 
     if (changes.length > 0) {
       const description = changes.length === 1

@@ -178,4 +178,112 @@ describe('OCIOStateManager', () => {
       expect(manager.getState().configName).toBe('srgb');
     });
   });
+
+  describe('per-source color space persistence', () => {
+    it('OCIO-SM-050: persists per-source color spaces to localStorage', () => {
+      const processor = manager.getProcessor();
+      processor.setSourceInputColorSpace('test.exr', 'Linear sRGB');
+      processor.setSourceInputColorSpace('clip.dpx', 'ACEScct');
+
+      // Flush the debounced save
+      manager.flushPerSourceSave();
+
+      const stored = localStorageMock.getItem('openrv-ocio-per-source');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+      expect(parsed['test.exr']).toBe('Linear sRGB');
+      expect(parsed['clip.dpx']).toBe('ACEScct');
+    });
+
+    it('OCIO-SM-051: loads per-source color spaces from localStorage on init', () => {
+      // Pre-populate localStorage with per-source mappings
+      localStorageMock.setItem(
+        'openrv-ocio-per-source',
+        JSON.stringify({ 'video.mov': 'Rec.709', 'scan.dpx': 'ACEScct' })
+      );
+
+      const newManager = new OCIOStateManager();
+      const processor = newManager.getProcessor();
+
+      expect(processor.getSourceInputColorSpace('video.mov')).toBe('Rec.709');
+      expect(processor.getSourceInputColorSpace('scan.dpx')).toBe('ACEScct');
+    });
+
+    it('OCIO-SM-052: handles invalid per-source data in localStorage gracefully', () => {
+      localStorageMock.setItem('openrv-ocio-per-source', 'not valid json{{{');
+
+      expect(() => new OCIOStateManager()).not.toThrow();
+    });
+
+    it('OCIO-SM-053: handles non-object per-source data gracefully', () => {
+      localStorageMock.setItem('openrv-ocio-per-source', JSON.stringify([1, 2, 3]));
+
+      const newManager = new OCIOStateManager();
+      const processor = newManager.getProcessor();
+      expect(processor.getSourceInputColorSpace('anything')).toBe(null);
+    });
+
+    it('OCIO-SM-054: handles null per-source data gracefully', () => {
+      localStorageMock.setItem('openrv-ocio-per-source', JSON.stringify(null));
+
+      expect(() => new OCIOStateManager()).not.toThrow();
+    });
+
+    it('OCIO-SM-055: debounces per-source saves', () => {
+      const processor = manager.getProcessor();
+      processor.setSourceInputColorSpace('source1', 'sRGB');
+      processor.setSourceInputColorSpace('source2', 'ACEScg');
+      processor.setSourceInputColorSpace('source3', 'Rec.709');
+
+      // At this point the save should be debounced, not yet written
+      // (only the initial empty save from construction may be present)
+      // Flush to verify all three are saved together
+      manager.flushPerSourceSave();
+
+      const stored = localStorageMock.getItem('openrv-ocio-per-source');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+      expect(parsed['source1']).toBe('sRGB');
+      expect(parsed['source2']).toBe('ACEScg');
+      expect(parsed['source3']).toBe('Rec.709');
+    });
+
+    it('OCIO-SM-056: per-source mappings survive round-trip through localStorage', () => {
+      const processor = manager.getProcessor();
+      processor.setSourceInputColorSpace('my-file.exr', 'ACES2065-1');
+      processor.setSourceInputColorSpace('clip.mov', 'Rec.2020');
+      manager.flushPerSourceSave();
+
+      // Create a new manager that should load from localStorage
+      const newManager = new OCIOStateManager();
+      const newProcessor = newManager.getProcessor();
+
+      expect(newProcessor.getSourceInputColorSpace('my-file.exr')).toBe('ACES2065-1');
+      expect(newProcessor.getSourceInputColorSpace('clip.mov')).toBe('Rec.2020');
+    });
+
+    it('OCIO-SM-057: flushPerSourceSave is a no-op when no pending save', () => {
+      // Should not throw or error
+      expect(() => manager.flushPerSourceSave()).not.toThrow();
+    });
+
+    it('OCIO-SM-058: validates per-source entries (skips non-string values)', () => {
+      localStorageMock.setItem(
+        'openrv-ocio-per-source',
+        JSON.stringify({
+          valid: 'sRGB',
+          invalid: 42,
+          alsoInvalid: true,
+          nullVal: null,
+        })
+      );
+
+      const newManager = new OCIOStateManager();
+      const processor = newManager.getProcessor();
+      expect(processor.getSourceInputColorSpace('valid')).toBe('sRGB');
+      expect(processor.getSourceInputColorSpace('invalid')).toBe(null);
+      expect(processor.getSourceInputColorSpace('alsoInvalid')).toBe(null);
+      expect(processor.getSourceInputColorSpace('nullVal')).toBe(null);
+    });
+  });
 });

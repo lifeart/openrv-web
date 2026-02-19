@@ -77,6 +77,8 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.button = document.createElement('button');
     this.button.dataset.testid = 'ghost-frame-button';
     this.button.title = 'Ghost Frames / Onion Skin (Ctrl+G)';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -120,6 +122,8 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'ghost-frame-dropdown';
     this.dropdown.dataset.testid = 'ghost-frame-dropdown';
+    this.dropdown.setAttribute('role', 'dialog');
+    this.dropdown.setAttribute('aria-label', 'Ghost Frame Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -375,6 +379,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.isOpen = true;
     this.positionDropdown();
     this.dropdown.style.display = 'flex';
+    this.button.setAttribute('aria-expanded', 'true');
     this.button.style.background = 'var(--bg-hover)';
     this.button.style.borderColor = 'var(--border-primary)';
 
@@ -386,6 +391,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
   private closeDropdown(): void {
     this.isOpen = false;
     this.dropdown.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonLabel();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);

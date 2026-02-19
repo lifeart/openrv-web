@@ -12,6 +12,7 @@
 
 import { HSLQualifier, HSLQualifierState } from './HSLQualifier';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class HSLQualifierControl {
@@ -45,6 +46,8 @@ export class HSLQualifierControl {
     this.toggleButton.dataset.testid = 'hsl-qualifier-control-toggle';
     this.toggleButton.innerHTML = `${getIconSvg('eyedropper', 'sm')} <span>HSL</span> ${getIconSvg('chevron-down', 'sm')}`;
     this.toggleButton.title = 'HSL Qualifier - Secondary color correction (Shift+H)';
+    this.toggleButton.setAttribute('aria-haspopup', 'dialog');
+    this.toggleButton.setAttribute('aria-expanded', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -78,12 +81,16 @@ export class HSLQualifierControl {
       }
     });
 
+    applyA11yFocus(this.toggleButton);
+
     this.container.appendChild(this.toggleButton);
 
     // Create dropdown panel
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'hsl-qualifier-dropdown';
     this.dropdown.dataset.testid = 'hsl-qualifier-dropdown';
+    this.dropdown.setAttribute('role', 'dialog');
+    this.dropdown.setAttribute('aria-label', 'HSL Qualifier Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -99,10 +106,6 @@ export class HSLQualifierControl {
     `;
 
     this.createDropdownContent();
-    this.container.appendChild(this.dropdown);
-
-    // Close dropdown on outside click
-    document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
     this.unsubscribers.push(this.hslQualifier.on('stateChanged', () => {
@@ -189,7 +192,7 @@ export class HSLQualifierControl {
     `;
     resetBtn.addEventListener('click', () => this.hslQualifier.reset());
     resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--border-primary)'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = '#333'; });
+    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--bg-secondary)'; });
 
     header.appendChild(leftSide);
     header.appendChild(resetBtn);
@@ -238,7 +241,7 @@ export class HSLQualifierControl {
     `;
     eyedropperBtn.addEventListener('click', () => {
       this.eyedropperActive = !this.eyedropperActive;
-      eyedropperBtn.style.background = this.eyedropperActive ? 'var(--accent-primary)' : '#333';
+      eyedropperBtn.style.background = this.eyedropperActive ? 'var(--accent-primary)' : 'var(--bg-secondary)';
       eyedropperBtn.style.color = this.eyedropperActive ? 'var(--text-on-accent)' : 'var(--text-secondary)';
       if (this.onEyedropperCallback) {
         this.onEyedropperCallback(this.eyedropperActive);
@@ -666,13 +669,19 @@ export class HSLQualifierControl {
 
   private toggleDropdown(): void {
     this.isDropdownOpen = !this.isDropdownOpen;
+    this.toggleButton.setAttribute('aria-expanded', String(this.isDropdownOpen));
     if (this.isDropdownOpen) {
+      if (!document.body.contains(this.dropdown)) {
+        document.body.appendChild(this.dropdown);
+      }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
+      document.removeEventListener('click', this.handleOutsideClick);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -694,10 +703,12 @@ export class HSLQualifierControl {
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node)) {
+    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       if (this.isDropdownOpen) {
         this.isDropdownOpen = false;
+        this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
+        document.removeEventListener('click', this.handleOutsideClick);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -718,7 +729,7 @@ export class HSLQualifierControl {
     this.eyedropperActive = false;
     const eyedropperBtn = this.dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
     if (eyedropperBtn) {
-      eyedropperBtn.style.background = '#333';
+      eyedropperBtn.style.background = 'var(--bg-secondary)';
       eyedropperBtn.style.color = 'var(--text-secondary)';
     }
   }
@@ -756,6 +767,9 @@ export class HSLQualifierControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    if (document.body.contains(this.dropdown)) {
+      document.body.removeChild(this.dropdown);
+    }
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
   }

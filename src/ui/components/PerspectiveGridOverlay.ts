@@ -26,6 +26,7 @@ export class PerspectiveGridOverlay extends EventEmitter<PerspectiveGridOverlayE
   private viewerHeight = 0;
 
   private activeHandle: number = -1;
+  private activePointerId: number = -1;
   private dragStartX = 0;
   private dragStartY = 0;
   private dragStartCorner: Point2D = { x: 0, y: 0 };
@@ -203,10 +204,14 @@ export class PerspectiveGridOverlay extends EventEmitter<PerspectiveGridOverlayE
 
   private startDrag(handleIndex: number, e: PointerEvent): void {
     this.activeHandle = handleIndex;
+    this.activePointerId = e.pointerId;
     this.dragStartX = e.clientX;
     this.dragStartY = e.clientY;
     const key = CORNER_KEYS[handleIndex]!;
     this.dragStartCorner = { ...this.params[key] };
+
+    const handle = this.handles[handleIndex]!;
+    handle.setPointerCapture(e.pointerId);
 
     document.addEventListener('pointermove', this.boundOnPointerMove);
     document.addEventListener('pointerup', this.boundOnPointerUp);
@@ -231,7 +236,14 @@ export class PerspectiveGridOverlay extends EventEmitter<PerspectiveGridOverlayE
   }
 
   private onPointerUp(): void {
+    if (this.activeHandle >= 0 && this.activePointerId >= 0) {
+      const handle = this.handles[this.activeHandle];
+      if (handle) {
+        handle.releasePointerCapture(this.activePointerId);
+      }
+    }
     this.activeHandle = -1;
+    this.activePointerId = -1;
     document.removeEventListener('pointermove', this.boundOnPointerMove);
     document.removeEventListener('pointerup', this.boundOnPointerUp);
   }

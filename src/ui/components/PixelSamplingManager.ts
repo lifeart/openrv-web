@@ -57,6 +57,7 @@ export interface PixelSamplingContext {
   isAsyncRenderer(): boolean;
   isHDRRenderActive(): boolean;
   isSDRWebGLRenderActive(): boolean;
+  getLastHDRBlitFrame?(): { data: Float32Array; width: number; height: number } | null;
   getImageCanvas(): HTMLCanvasElement;
   getImageCtx(): CanvasRenderingContext2D;
   getSession(): Session;
@@ -132,6 +133,34 @@ export class PixelSamplingManager {
     // HDR/SDR WebGL path: use WebGL readPixelFloat for accurate values
     const glRenderer = this.context.getGLRenderer();
     if ((this.context.isHDRRenderActive() || this.context.isSDRWebGLRenderActive()) && glRenderer) {
+      const sampleSize = this.context.pixelProbe.getSampleSize();
+
+      // HDR blit paths render into offscreen float buffers and may keep the GL
+      // display canvas hidden. Sample from the latest blit float frame so picker
+      // values match what is actually displayed.
+      if (this.context.isHDRRenderActive()) {
+        const blitFrame = this.context.getLastHDRBlitFrame?.() ?? null;
+        if (blitFrame) {
+          const sampled = this.sampleFromHDRBlitFrame(
+            blitFrame,
+            position,
+            displayWidth,
+            displayHeight,
+            sampleSize,
+          );
+          this.handlePixelProbeData(
+            sampled.pixels,
+            position,
+            sampled.width,
+            sampled.height,
+            probeEnabled,
+            cursorColorEnabled,
+            e,
+          );
+          return;
+        }
+      }
+
       // Scale coordinates by DPR since the GL canvas is at physical resolution
       const dpr = window.devicePixelRatio || 1;
       const physicalX = Math.round(position.x * dpr);
@@ -139,7 +168,6 @@ export class PixelSamplingManager {
       const physicalDisplayW = Math.round(displayWidth * dpr);
       const physicalDisplayH = Math.round(displayHeight * dpr);
 
-      const sampleSize = this.context.pixelProbe.getSampleSize();
       const halfSize = Math.floor(sampleSize / 2);
       const rx = Math.max(0, physicalX - halfSize);
       const ry = Math.max(0, physicalY - halfSize);
@@ -200,6 +228,48 @@ export class PixelSamplingManager {
       }
     }
   };
+
+  /**
+   * Sample a pixel block from the latest HDR blit float frame.
+   * Input frame data is in WebGL row order (bottom-to-top); this converts to
+   * top-to-bottom block order so picker center/averaging match screen space.
+   */
+  private sampleFromHDRBlitFrame(
+    frame: { data: Float32Array; width: number; height: number },
+    position: { x: number; y: number },
+    displayWidth: number,
+    displayHeight: number,
+    sampleSize: number,
+  ): { pixels: Float32Array | null; width: number; height: number } {
+    const { data, width, height } = frame;
+    if (width <= 0 || height <= 0 || data.length < width * height * 4) {
+      return { pixels: null, width: 0, height: 0 };
+    }
+    if (displayWidth <= 0 || displayHeight <= 0) {
+      return { pixels: null, width: 0, height: 0 };
+    }
+
+    const fx = Math.max(0, Math.min(width - 1, Math.round((position.x / displayWidth) * width)));
+    const fyTop = Math.max(0, Math.min(height - 1, Math.round((position.y / displayHeight) * height)));
+
+    const halfSize = Math.floor(sampleSize / 2);
+    const rx = Math.max(0, fx - halfSize);
+    const ryTop = Math.max(0, fyTop - halfSize);
+    const rw = Math.min(sampleSize, width - rx);
+    const rh = Math.min(sampleSize, height - ryTop);
+
+    const out = new Float32Array(rw * rh * 4);
+    const rowStride = rw * 4;
+
+    for (let row = 0; row < rh; row++) {
+      const yTop = ryTop + row;
+      const srcY = height - 1 - yTop; // convert top-space to WebGL row order
+      const srcStart = (srcY * width + rx) * 4;
+      out.set(data.subarray(srcStart, srcStart + rowStride), row * rowStride);
+    }
+
+    return { pixels: out, width: rw, height: rh };
+  }
 
   /**
    * Handle mouse leave - clear cursor color

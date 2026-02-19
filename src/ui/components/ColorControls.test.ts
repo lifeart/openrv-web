@@ -117,6 +117,67 @@ describe('ColorControls', () => {
       expect(controls.getAdjustments().exposure).toBe(2.5);
     });
 
+    it('CC-L56a: after setAdjustments(), all value labels should reflect the new values', () => {
+      controls.setAdjustments({
+        exposure: 2.5,
+        gamma: 2.2,
+        saturation: 0.5,
+        contrast: 1.5,
+        brightness: -0.25,
+        hueRotation: 180,
+        temperature: 50,
+        tint: -30,
+        highlights: 40,
+        shadows: -20,
+        whites: 60,
+        blacks: -50,
+        clarity: 75,
+        vibrance: -40,
+      });
+
+      const valueLabels = (controls as unknown as { valueLabels: Map<string, HTMLSpanElement> }).valueLabels;
+
+      expect(valueLabels.get('exposure')!.textContent).toBe('+2.5');
+      expect(valueLabels.get('gamma')!.textContent).toBe('2.20');
+      expect(valueLabels.get('saturation')!.textContent).toBe('50%');
+      expect(valueLabels.get('contrast')!.textContent).toBe('150%');
+      expect(valueLabels.get('brightness')!.textContent).toBe('-25%');
+      expect(valueLabels.get('hueRotation')!.textContent).toBe('180\u00B0');
+      expect(valueLabels.get('temperature')!.textContent).toBe('+50');
+      expect(valueLabels.get('tint')!.textContent).toBe('-30');
+      expect(valueLabels.get('highlights')!.textContent).toBe('+40');
+      expect(valueLabels.get('shadows')!.textContent).toBe('-20');
+      expect(valueLabels.get('whites')!.textContent).toBe('+60');
+      expect(valueLabels.get('blacks')!.textContent).toBe('-50');
+      expect(valueLabels.get('clarity')!.textContent).toBe('+75');
+      expect(valueLabels.get('vibrance')!.textContent).toBe('-40');
+    });
+
+    it('CC-L56b: after setAdjustments(), slider positions and labels should be in sync', () => {
+      controls.setAdjustments({
+        exposure: 1.5,
+        gamma: 0.8,
+        saturation: 1.2,
+      });
+
+      const sliders = (controls as unknown as { sliders: Map<string, HTMLInputElement> }).sliders;
+      const valueLabels = (controls as unknown as { valueLabels: Map<string, HTMLSpanElement> }).valueLabels;
+
+      // Verify slider values match the set adjustments
+      expect(sliders.get('exposure')!.value).toBe('1.5');
+      expect(sliders.get('gamma')!.value).toBe('0.8');
+      expect(sliders.get('saturation')!.value).toBe('1.2');
+
+      // Verify labels match the formatted slider values
+      expect(valueLabels.get('exposure')!.textContent).toBe('+1.5');
+      expect(valueLabels.get('gamma')!.textContent).toBe('0.80');
+      expect(valueLabels.get('saturation')!.textContent).toBe('120%');
+
+      // Verify unchanged sliders still show defaults
+      expect(sliders.get('contrast')!.value).toBe('1');
+      expect(valueLabels.get('contrast')!.textContent).toBe('100%');
+    });
+
     it('COL-012: emits adjustmentsChanged event', () => {
       const handler = vi.fn();
       controls.on('adjustmentsChanged', handler);
@@ -447,6 +508,49 @@ describe('ColorControls', () => {
       expect(DEFAULT_COLOR_ADJUSTMENTS.temperature).toBe(0);
       expect(DEFAULT_COLOR_ADJUSTMENTS.tint).toBe(0);
       expect(DEFAULT_COLOR_ADJUSTMENTS.brightness).toBe(0);
+    });
+  });
+
+  describe('Escape key handling (M-14)', () => {
+    it('COL-M14a: pressing Escape while the panel is open should close it', () => {
+      const handler = vi.fn();
+      controls.on('visibilityChanged', handler);
+
+      controls.show();
+      expect(handler).toHaveBeenCalledWith(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(handler).toHaveBeenCalledWith(false);
+    });
+
+    it('COL-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      const handler = vi.fn();
+      controls.on('visibilityChanged', handler);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('COL-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      controls.show();
+      controls.hide();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('COL-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      controls.show();
+      controls.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
     });
   });
 

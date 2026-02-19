@@ -13,6 +13,13 @@ import {
   DIRTY_BACKGROUND,
   DIRTY_DISPLAY,
   DIRTY_GAMUT_MAPPING,
+  DIRTY_LINEARIZE,
+  DIRTY_INLINE_LUT,
+  DIRTY_CDL,
+  DIRTY_OUT_OF_RANGE,
+  DIRTY_CHANNEL_SWIZZLE,
+  DIRTY_PREMULT,
+  DIRTY_DITHER,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -320,11 +327,260 @@ describe('ShaderStateManager', () => {
 
       expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
     });
+
+    it('SSM-067: highlightOutOfGamut defaults to false when not specified', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const state = mgr.getGamutMapping();
+      expect(state.highlightOutOfGamut).toBe(false);
+    });
+
+    it('SSM-068: highlightOutOfGamut is true when enabled and gamut mapping active', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const state = mgr.getGamutMapping();
+      expect(state.highlightOutOfGamut).toBe(true);
+    });
+
+    it('SSM-069: highlightOutOfGamut is false when gamut mapping disabled (mode off)', () => {
+      mgr.setGamutMapping({ mode: 'off', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const state = mgr.getGamutMapping();
+      // When mode is off, gamut mapping is disabled, so default state is returned
+      expect(state.highlightOutOfGamut).toBeUndefined();
+    });
+
+    it('SSM-069b: highlightOutOfGamut is false when source equals target', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const state = mgr.getGamutMapping();
+      // When source == target, gamut mapping is disabled
+      expect(state.highlightOutOfGamut).toBeUndefined();
+    });
+
+    it('SSM-069c: applyRenderState marks dirty when highlightOutOfGamut changes', () => {
+      const rs = createDefaultRenderState();
+      rs.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: false };
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change only highlightOutOfGamut
+      rs.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true };
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
+    });
+
+    it('SSM-069d: applyRenderState does not mark dirty when highlightOutOfGamut is unchanged', () => {
+      const rs = createDefaultRenderState();
+      rs.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true };
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply same state again
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(false);
+    });
   });
 
   // =================================================================
   // getDisplayColorState
   // =================================================================
+
+  // =================================================================
+  // Per-channel RGB uniforms (exposure, gamma, contrast)
+  // =================================================================
+
+  describe('per-channel RGB uniforms', () => {
+    it('SSM-080: per-channel exposureRGB [0.5, 1.0, 1.5] produces correct vec3 uniform', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 0.5,
+        exposureRGB: [0.5, 1.0, 1.5],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_exposureRGB']).toEqual([0.5, 1.0, 1.5]);
+    });
+
+    it('SSM-081: scalar exposure 2.0 produces uniform vec3(2.0, 2.0, 2.0)', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 2.0,
+        // no exposureRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_exposureRGB']).toEqual([2.0, 2.0, 2.0]);
+    });
+
+    it('SSM-082: gammaRGB = [0, 0, 0] does not produce NaN (clamped to epsilon)', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 0,
+        gammaRGB: [0, 0, 0],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const gammaRGB = uniformCalls['u_gammaRGB'] as number[];
+      expect(gammaRGB).toBeDefined();
+      // All values should be clamped to a small positive epsilon, not 0 or NaN
+      for (const v of gammaRGB) {
+        expect(v).toBeGreaterThan(0);
+        expect(Number.isFinite(v)).toBe(true);
+      }
+    });
+
+    it('SSM-083: exposureRGB = [Infinity, -Infinity, NaN] is sanitized to [0, 0, 0]', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 0,
+        exposureRGB: [Infinity, -Infinity, NaN],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const expRGB = uniformCalls['u_exposureRGB'] as number[];
+      expect(expRGB).toBeDefined();
+      // All non-finite values sanitized to 0
+      expect(expRGB).toEqual([0, 0, 0]);
+    });
+
+    it('SSM-084: per-channel contrastRGB is sent as vec3', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        contrast: 1.0,
+        contrastRGB: [0.8, 1.0, 1.2],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_contrastRGB']).toEqual([0.8, 1.0, 1.2]);
+    });
+
+    it('SSM-085: scalar gamma broadcasts to vec3', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 2.2,
+        // no gammaRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_gammaRGB']).toEqual([2.2, 2.2, 2.2]);
+    });
+
+    it('SSM-086: applyRenderState detects per-channel changes', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change only exposureRGB
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        exposureRGB: [0.1, 0.2, 0.3],
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+    });
+  });
 
   describe('getDisplayColorState', () => {
     it('SSM-070: getDisplayColorState returns initial defaults', () => {
@@ -374,6 +630,1199 @@ describe('ShaderStateManager', () => {
         customGamma: 2.2,
       });
       expect(flags.has(DIRTY_DISPLAY)).toBe(true);
+    });
+  });
+
+  // =================================================================
+  // setLinearize / getLinearize
+  // =================================================================
+
+  describe('setLinearize / getLinearize', () => {
+    it('SSM-090: setLinearize marks DIRTY_LINEARIZE flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(false);
+
+      mgr.setLinearize({
+        logType: 1,
+        sRGB2linear: false,
+        rec709ToLinear: false,
+        fileGamma: 1.0,
+        alphaType: 0,
+      });
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(true);
+    });
+
+    it('SSM-091: getLinearize returns correct state after setLinearize', () => {
+      mgr.setLinearize({
+        logType: 3,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 1,
+      });
+
+      const state = mgr.getLinearize();
+      expect(state.logType).toBe(3);
+      expect(state.sRGB2linear).toBe(true);
+      expect(state.rec709ToLinear).toBe(false);
+      expect(state.fileGamma).toBe(2.2);
+      expect(state.alphaType).toBe(1);
+    });
+
+    it('SSM-092: getLinearize returns defaults before any setLinearize call', () => {
+      const state = mgr.getLinearize();
+      expect(state.logType).toBe(0);
+      expect(state.sRGB2linear).toBe(false);
+      expect(state.rec709ToLinear).toBe(false);
+      expect(state.fileGamma).toBe(1.0);
+      expect(state.alphaType).toBe(0);
+    });
+
+    it('SSM-093: DIRTY_LINEARIZE is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_LINEARIZE);
+    });
+
+    it('SSM-094: setLinearize uploads correct uniforms via applyUniforms', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setLinearize({
+        logType: 1,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 0,
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_linearizeLogType']).toBe(1);
+      expect(uniformCalls['u_linearizeFileGamma']).toBe(2.2);
+      expect(intCalls['u_linearizeSRGB2linear']).toBe(1);
+      expect(intCalls['u_linearizeRec709ToLinear']).toBe(0);
+    });
+
+    it('SSM-095: setLinearize with rec709ToLinear=true uploads 1', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: () => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: () => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setLinearize({
+        logType: 0,
+        sRGB2linear: false,
+        rec709ToLinear: true,
+        fileGamma: 1.0,
+        alphaType: 0,
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_linearizeRec709ToLinear']).toBe(1);
+    });
+
+    it('SSM-096: getLinearize round-trips all fields', () => {
+      const input = {
+        logType: 2 as const,
+        sRGB2linear: true,
+        rec709ToLinear: true,
+        fileGamma: 0.4545,
+        alphaType: 1,
+      };
+      mgr.setLinearize(input);
+      const output = mgr.getLinearize();
+      expect(output).toEqual(input);
+    });
+  });
+
+  // =================================================================
+  // applyRenderState - linearize handling
+  // =================================================================
+
+  describe('applyRenderState linearize', () => {
+    it('SSM-100: applyRenderState with linearize field marks DIRTY_LINEARIZE and sets state', () => {
+      const rs = createDefaultRenderState();
+      rs.linearize = {
+        logType: 1,
+        sRGB2linear: false,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 0,
+      };
+
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(true);
+
+      // Verify the state was actually set
+      const lz = mgr.getLinearize();
+      expect(lz.logType).toBe(1);
+      expect(lz.fileGamma).toBe(2.2);
+    });
+
+    it('SSM-101: applyRenderState with same linearize state does NOT mark dirty (steady-state)', () => {
+      const rs = createDefaultRenderState();
+      rs.linearize = {
+        logType: 3,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 1.5,
+        alphaType: 1,
+      };
+
+      // First apply to seed the state
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Second apply with identical linearize -> should NOT mark dirty
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(false);
+    });
+
+    it('SSM-102: applyRenderState resets linearize when field is absent and state is non-default', () => {
+      // First set a non-default linearize
+      mgr.setLinearize({
+        logType: 1,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 0,
+      });
+
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply render state without linearize field
+      const rs = createDefaultRenderState();
+      // rs.linearize is undefined
+      mgr.applyRenderState(rs);
+
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(true);
+      const lz = mgr.getLinearize();
+      expect(lz.logType).toBe(0);
+      expect(lz.sRGB2linear).toBe(false);
+      expect(lz.fileGamma).toBe(1.0);
+    });
+
+    it('SSM-103: applyRenderState without linearize does NOT mark dirty when already at defaults', () => {
+      const rs = createDefaultRenderState();
+      // First apply to consume initial dirty flags
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again without linearize (already at defaults) -> no dirty
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(false);
+    });
+  });
+
+  // =================================================================
+  // setInlineLUT / inline LUT state management
+  // =================================================================
+
+  describe('setInlineLUT', () => {
+    it('SSM-110: setInlineLUT marks DIRTY_INLINE_LUT flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const lutData = new Float32Array(256);
+      mgr.setInlineLUT(lutData, 1);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
+    });
+
+    it('SSM-111: setInlineLUT with 3-channel data sets correct state', () => {
+      const lutData = new Float32Array(768);
+      mgr.setInlineLUT(lutData, 3);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(true);
+      expect(state.inlineLUTChannels).toBe(3);
+      expect(state.inlineLUTSize).toBe(256); // 768 / 3
+      expect(state.inlineLUTData).toBe(lutData);
+      expect(state.inlineLUTDirty).toBe(true);
+    });
+
+    it('SSM-112: setInlineLUT with 1-channel data sets correct state', () => {
+      const lutData = new Float32Array(256);
+      mgr.setInlineLUT(lutData, 1);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(true);
+      expect(state.inlineLUTChannels).toBe(1);
+      expect(state.inlineLUTSize).toBe(256);
+      expect(state.inlineLUTData).toBe(lutData);
+    });
+
+    it('SSM-113: setInlineLUT(null) disables inline LUT', () => {
+      // First enable
+      mgr.setInlineLUT(new Float32Array(256), 1);
+      // Then disable
+      mgr.setInlineLUT(null, 1);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(false);
+      expect(state.inlineLUTData).toBeNull();
+      expect(state.inlineLUTSize).toBe(0);
+    });
+
+    it('SSM-114: setInlineLUT with empty Float32Array disables LUT', () => {
+      mgr.setInlineLUT(new Float32Array(0), 1);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(false);
+    });
+
+    it('SSM-115: DIRTY_INLINE_LUT is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_INLINE_LUT);
+    });
+  });
+
+  describe('getColorAdjustments with inlineLUT', () => {
+    it('SSM-120: getColorAdjustments returns inlineLUT data after setColorAdjustments', () => {
+      const lutData = new Float32Array(768);
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        inlineLUT: lutData,
+        lutChannels: 3,
+      });
+
+      const result = mgr.getColorAdjustments();
+      expect(result.inlineLUT).toBe(lutData);
+      expect(result.lutChannels).toBe(3);
+    });
+
+    it('SSM-121: getColorAdjustments returns undefined inlineLUT when not set', () => {
+      const result = mgr.getColorAdjustments();
+      expect(result.inlineLUT).toBeUndefined();
+      expect(result.lutChannels).toBeUndefined();
+    });
+  });
+
+  describe('applyUniforms with inline LUT', () => {
+    it('SSM-130: applyUniforms sets u_inlineLUTEnabled=1 when LUT is active', () => {
+      const intCalls: Record<string, unknown> = {};
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      let inlineLUTBound = false;
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => { inlineLUTBound = true; },
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setInlineLUT(new Float32Array(768), 3);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_inlineLUTEnabled']).toBe(1);
+      expect(intCalls['u_inlineLUTChannels']).toBe(3);
+      expect(uniformCalls['u_inlineLUTSize']).toBe(256);
+      expect(inlineLUTBound).toBe(true);
+    });
+
+    it('SSM-131: applyUniforms sets u_inlineLUTEnabled=0 when LUT is disabled', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      let inlineLUTBound = false;
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => { inlineLUTBound = true; },
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setInlineLUT(null, 1);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_inlineLUTEnabled']).toBe(0);
+      expect(inlineLUTBound).toBe(false);
+    });
+  });
+
+  describe('applyRenderState with inlineLUT', () => {
+    it('SSM-140: applyRenderState detects inlineLUT change and marks DIRTY_INLINE_LUT', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Add inlineLUT to color adjustments
+      const lutData = new Float32Array(256);
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 1,
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
+    });
+
+    it('SSM-141: applyRenderState does NOT mark DIRTY_INLINE_LUT when LUT is unchanged', () => {
+      const lutData = new Float32Array(256);
+      const rs = createDefaultRenderState();
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 1,
+      };
+
+      // First apply to seed state
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again with same reference -> should NOT mark dirty
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(false);
+    });
+
+    it('SSM-142: applyRenderState detects channel change on same LUT data', () => {
+      const lutData = new Float32Array(768);
+      const rs = createDefaultRenderState();
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 3,
+      };
+
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change only channels (same LUT data reference but different channels)
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 1,
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
+    });
+  });
+
+  // =================================================================
+  // cdlColorspace
+  // =================================================================
+
+  describe('cdlColorspace', () => {
+    it('SSM-150: setting cdlColorspace via applyRenderState marks DIRTY_CDL flag', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change cdlColorspace from default 0 to 1 (ACEScct)
+      rs.cdlColorspace = 1;
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CDL)).toBe(true);
+    });
+
+    it('SSM-151: cdlColorspace=0 sets uniform u_cdlColorspace to 0', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      // Set a non-default CDL to ensure cdlEnabled=true so uniforms are uploaded
+      mgr.setCDL({
+        slope: { r: 1.2, g: 1.0, b: 1.0 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      });
+      // cdlColorspace defaults to 0
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_cdlColorspace']).toBe(0);
+    });
+
+    it('SSM-152: cdlColorspace=1 sets uniform u_cdlColorspace to 1', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      // Set a non-default CDL to ensure cdlEnabled=true
+      mgr.setCDL({
+        slope: { r: 1.2, g: 1.0, b: 1.0 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      });
+      // Set colorspace to ACEScct via applyRenderState
+      const rs = createDefaultRenderState();
+      rs.cdl = {
+        slope: { r: 1.2, g: 1.0, b: 1.0 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      };
+      rs.cdlColorspace = 1;
+      mgr.applyRenderState(rs);
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_cdlColorspace']).toBe(1);
+    });
+  });
+
+  // =================================================================
+  // Per-channel scale and offset (Item 2.3)
+  // =================================================================
+
+  describe('per-channel scale and offset', () => {
+    function createMockShaderAndTexCb() {
+      const uniformCalls: Record<string, unknown> = {};
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      return { uniformCalls, intCalls, mockShader, mockTexCb };
+    }
+
+    it('SCOF-SM-001: Per-channel scale sets u_scaleRGB uniform', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        scale: 1.0,
+        scaleRGB: [1.0, 0.5, 1.5],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([1.0, 0.5, 1.5]);
+    });
+
+    it('SCOF-SM-002: Per-channel offset sets u_offsetRGB uniform', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        offset: 0.1,
+        offsetRGB: [0.1, 0, -0.1],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_offsetRGB']).toEqual([0.1, 0, -0.1]);
+    });
+
+    it('SCOF-SM-003: Default scale is [1,1,1], default offset is [0,0,0]', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      // Use default color adjustments (no scale/offset set)
+      mgr.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([1, 1, 1]);
+      expect(uniformCalls['u_offsetRGB']).toEqual([0, 0, 0]);
+    });
+
+    it('SCOF-SM-004: Scalar scale broadcasts to vec3', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        scale: 2.0,
+        // no scaleRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([2.0, 2.0, 2.0]);
+    });
+
+    it('SCOF-SM-005: applyRenderState with scaleRGB/offsetRGB updates uniforms', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change scaleRGB and offsetRGB
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        scale: 1.0,
+        scaleRGB: [2.0, 1.5, 0.5],
+        offset: 0.0,
+        offsetRGB: [0.1, -0.1, 0.0],
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+
+      // Verify the uniforms via applyUniforms
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([2.0, 1.5, 0.5]);
+      expect(uniformCalls['u_offsetRGB']).toEqual([0.1, -0.1, 0.0]);
+    });
+
+    it('SCOF-SM-006: Scalar offset broadcasts to vec3', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        offset: 0.5,
+        // no offsetRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_offsetRGB']).toEqual([0.5, 0.5, 0.5]);
+    });
+
+    it('SCOF-SM-007: applyRenderState detects scale change from undefined to defined', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Add scale (which was previously undefined)
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        scale: 2.0,
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+    });
+
+    it('SCOF-SM-008: applyRenderState detects offsetRGB change', () => {
+      const rs = createDefaultRenderState();
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        offsetRGB: [0.1, 0.2, 0.3],
+      };
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change offsetRGB
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        offsetRGB: [0.1, 0.2, 0.4], // changed B channel
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+    });
+  });
+
+  // =================================================================
+  // Out-of-range visualization
+  // =================================================================
+
+  describe('outOfRange', () => {
+    it('OOR-SM-001: Setting outOfRange=2 sets u_outOfRange uniform to 2', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setOutOfRange(2);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_outOfRange']).toBe(2);
+    });
+
+    it('OOR-SM-002: Setting outOfRange=0 sets u_outOfRange uniform to 0', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setOutOfRange(0);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_outOfRange']).toBe(0);
+    });
+
+    it('OOR-SM-003: Default outOfRange is 0', () => {
+      expect(mgr.getOutOfRange()).toBe(0);
+    });
+
+    it('OOR-SM-004: applyRenderState with outOfRange updates uniform', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Set outOfRange on render state
+      rs.outOfRange = 2;
+      mgr.applyRenderState(rs);
+
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
+      expect(mgr.getOutOfRange()).toBe(2);
+    });
+
+    it('OOR-SM-005: setOutOfRange marks DIRTY_OUT_OF_RANGE flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setOutOfRange(1);
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
+    });
+
+    it('OOR-SM-006: DIRTY_OUT_OF_RANGE is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_OUT_OF_RANGE);
+    });
+
+    it('OOR-SM-007: applyRenderState does not mark dirty when outOfRange is unchanged', () => {
+      const rs = createDefaultRenderState();
+      rs.outOfRange = 2;
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again with same value
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(false);
+    });
+
+    it('OOR-SM-008: applyRenderState defaults outOfRange to 0 when not specified', () => {
+      // First set to 2
+      mgr.setOutOfRange(2);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without outOfRange (undefined)
+      const rs = createDefaultRenderState();
+      // rs.outOfRange is undefined -> defaults to 0
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
+      expect(mgr.getOutOfRange()).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Channel Swizzle (RVChannelMap full remapping)
+  // -------------------------------------------------------------------------
+  describe('Channel Swizzle', () => {
+    it('CHMAP-005: setChannelSwizzle stores values and marks dirty', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Default should be identity [0, 1, 2, 3]
+      expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
+
+      // Set BGR swizzle
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([2, 1, 0, 3]);
+
+      // getChannelSwizzle should return a copy, not a reference
+      const result = mgr.getChannelSwizzle();
+      result[0] = 99;
+      expect(mgr.getChannelSwizzle()).toEqual([2, 1, 0, 3]);
+    });
+
+    it('CHMAP-005b: setChannelSwizzle with constant channels (zero/one)', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // 4=SWIZZLE_ZERO, 5=SWIZZLE_ONE
+      mgr.setChannelSwizzle([0, 0, 0, 5]);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([0, 0, 0, 5]);
+    });
+
+    it('CHMAP-006: applyRenderState with channelSwizzle updates state and marks dirty', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply BGR swizzle via RenderState
+      const rs = createDefaultRenderState();
+      rs.channelSwizzle = [2, 1, 0, 3];
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([2, 1, 0, 3]);
+    });
+
+    it('CHMAP-006b: applyRenderState skips dirty flag when swizzle is unchanged', () => {
+      // Set a non-identity swizzle first
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply same swizzle again
+      const rs = createDefaultRenderState();
+      rs.channelSwizzle = [2, 1, 0, 3];
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(false);
+    });
+
+    it('CHMAP-006c: applyRenderState resets to identity when channelSwizzle is absent', () => {
+      // Set a non-identity swizzle
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without channelSwizzle (undefined -> resets to identity)
+      const rs = createDefaultRenderState();
+      // rs.channelSwizzle is undefined
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
+    });
+
+    it('CHMAP-006d: applyRenderState does not dirty when already identity and no swizzle provided', () => {
+      // Manager starts at identity, no swizzle in RenderState
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(false);
+      expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
+    });
+  });
+
+  // =================================================================
+  // Premultiply/Unpremultiply Alpha
+  // =================================================================
+
+  describe('premultMode', () => {
+    it('PREMULT-SM-001: Setting premultMode=1 sets u_premult uniform to 1', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setPremultMode(1);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_premult']).toBe(1);
+    });
+
+    it('PREMULT-SM-002: Setting premultMode=2 sets u_premult uniform to 2', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setPremultMode(2);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_premult']).toBe(2);
+    });
+
+    it('PREMULT-SM-003: Setting premultMode=0 sets u_premult uniform to 0', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setPremultMode(0);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_premult']).toBe(0);
+    });
+
+    it('PREMULT-SM-004: Default premultMode is 0', () => {
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-005: setPremultMode marks DIRTY_PREMULT flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setPremultMode(1);
+      expect(flags.has(DIRTY_PREMULT)).toBe(true);
+    });
+
+    it('PREMULT-SM-006: DIRTY_PREMULT is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_PREMULT);
+    });
+
+    it('PREMULT-SM-007: applyRenderState with premultMode updates uniform', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      rs.premultMode = 2;
+      mgr.applyRenderState(rs);
+
+      expect(flags.has(DIRTY_PREMULT)).toBe(true);
+      expect(mgr.getPremultMode()).toBe(2);
+    });
+
+    it('PREMULT-SM-008: applyRenderState does not mark dirty when premultMode is unchanged', () => {
+      const rs = createDefaultRenderState();
+      rs.premultMode = 1;
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again with same value
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_PREMULT)).toBe(false);
+    });
+
+    it('PREMULT-SM-009: applyRenderState defaults premultMode to 0 when not specified', () => {
+      // First set to 1
+      mgr.setPremultMode(1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without premultMode (undefined)
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_PREMULT)).toBe(true);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-010: setPremultMode clamps invalid value -1 to 0', () => {
+      mgr.setPremultMode(-1);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-011: setPremultMode clamps invalid value 3 to 0', () => {
+      mgr.setPremultMode(3);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-012: setPremultMode clamps invalid value 99 to 0', () => {
+      mgr.setPremultMode(99);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-013: setPremultMode does not mark dirty when clamped value equals current', () => {
+      // Default is 0, setting invalid value clamps to 0 = no change
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setPremultMode(5);
+      expect(flags.has(DIRTY_PREMULT)).toBe(false);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-014: setPremultMode does not mark dirty when setting same valid value', () => {
+      mgr.setPremultMode(1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setPremultMode(1);
+      expect(flags.has(DIRTY_PREMULT)).toBe(false);
+    });
+  });
+
+  // =================================================================
+  // Dither + Quantize visualization
+  // =================================================================
+
+  describe('ditherMode and quantizeBits', () => {
+    it('DITHER-SM-001: setDitherMode sets u_ditherMode uniform', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setDitherMode(1);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_ditherMode']).toBe(1);
+    });
+
+    it('DITHER-SM-002: getDitherMode returns current mode', () => {
+      expect(mgr.getDitherMode()).toBe(0);
+      mgr.setDitherMode(1);
+      expect(mgr.getDitherMode()).toBe(1);
+      mgr.setDitherMode(2);
+      expect(mgr.getDitherMode()).toBe(2);
+    });
+
+    it('DITHER-SM-003: setDitherMode validates input (clamp 0-2)', () => {
+      mgr.setDitherMode(-1);
+      expect(mgr.getDitherMode()).toBe(0);
+
+      mgr.setDitherMode(3);
+      expect(mgr.getDitherMode()).toBe(2);
+
+      mgr.setDitherMode(99);
+      expect(mgr.getDitherMode()).toBe(2);
+    });
+
+    it('DITHER-SM-004: setQuantizeBits sets u_quantizeBits uniform', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setQuantizeBits(8);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_quantizeBits']).toBe(8);
+    });
+
+    it('DITHER-SM-005: getQuantizeBits returns bits', () => {
+      expect(mgr.getQuantizeBits()).toBe(0);
+      mgr.setQuantizeBits(4);
+      expect(mgr.getQuantizeBits()).toBe(4);
+      mgr.setQuantizeBits(16);
+      expect(mgr.getQuantizeBits()).toBe(16);
+    });
+
+    it('DITHER-SM-006: setQuantizeBits validates (0 or 2-16)', () => {
+      // 0 means off
+      mgr.setQuantizeBits(0);
+      expect(mgr.getQuantizeBits()).toBe(0);
+
+      // 1 should clamp to 2
+      mgr.setQuantizeBits(1);
+      expect(mgr.getQuantizeBits()).toBe(2);
+
+      // 17 should clamp to 16
+      mgr.setQuantizeBits(17);
+      expect(mgr.getQuantizeBits()).toBe(16);
+
+      // negative should clamp to 0
+      mgr.setQuantizeBits(-5);
+      expect(mgr.getQuantizeBits()).toBe(0);
+
+      // valid values pass through
+      mgr.setQuantizeBits(8);
+      expect(mgr.getQuantizeBits()).toBe(8);
+    });
+
+    it('DITHER-SM-007: dirty flag set on change', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setDitherMode(1);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+
+      flags.clear();
+
+      mgr.setQuantizeBits(8);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+    });
+
+    it('DITHER-SM-008: no dirty flag when value unchanged', () => {
+      mgr.setDitherMode(1);
+      mgr.setQuantizeBits(8);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setDitherMode(1);
+      expect(flags.has(DIRTY_DITHER)).toBe(false);
+
+      mgr.setQuantizeBits(8);
+      expect(flags.has(DIRTY_DITHER)).toBe(false);
+    });
+
+    it('DITHER-SM-009: NaN input defaults to 0 for ditherMode', () => {
+      mgr.setDitherMode(1);
+      expect(mgr.getDitherMode()).toBe(1);
+
+      mgr.setDitherMode(NaN);
+      expect(mgr.getDitherMode()).toBe(0);
+    });
+
+    it('DITHER-SM-010: NaN input defaults to 0 for quantizeBits', () => {
+      mgr.setQuantizeBits(8);
+      expect(mgr.getQuantizeBits()).toBe(8);
+
+      mgr.setQuantizeBits(NaN);
+      expect(mgr.getQuantizeBits()).toBe(0);
+    });
+
+    it('DITHER-SM-011: applyRenderState marks dirty on dither change', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      rs.ditherMode = 1;
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+    });
+
+    it('DITHER-SM-012: applyRenderState no dirty when unchanged (steady state)', () => {
+      const rs = createDefaultRenderState();
+      rs.ditherMode = 1;
+      rs.quantizeBits = 8;
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply same state again
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_DITHER)).toBe(false);
+    });
+
+    it('DITHER-SM-013: applyRenderState resets to 0 when field absent', () => {
+      // First set non-default values
+      mgr.setDitherMode(1);
+      mgr.setQuantizeBits(8);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without ditherMode/quantizeBits (undefined -> defaults to 0)
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      expect(mgr.getDitherMode()).toBe(0);
+      expect(mgr.getQuantizeBits()).toBe(0);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+    });
+
+    it('DITHER-SM-014: DIRTY_DITHER is in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_DITHER);
     });
   });
 });

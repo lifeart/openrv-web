@@ -68,16 +68,17 @@ describe('ToneMappingControl', () => {
       expect(button.title).toContain('Shift+Alt+J');
     });
 
-    it('TONE-U015: container has dropdown element', () => {
+    it('TONE-U015: dropdown is appended to document.body when opened', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]');
-      expect(dropdown).not.toBeNull();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      expect(document.querySelector('[data-testid="tone-mapping-dropdown"]')).toBeNull();
+      button.click();
+      expect(document.querySelector('[data-testid="tone-mapping-dropdown"]')).not.toBeNull();
     });
 
-    it('TONE-U016: dropdown is hidden by default', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
-      expect(dropdown.style.display).toBe('none');
+    it('TONE-U016: dropdown is not in DOM by default', () => {
+      control.render();
+      expect(document.querySelector('[data-testid="tone-mapping-dropdown"]')).toBeNull();
     });
   });
 
@@ -122,34 +123,38 @@ describe('ToneMappingControl', () => {
     it('TONE-U030: clicking button opens dropdown', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
 
       button.click();
 
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       expect(dropdown.style.display).toBe('block');
     });
 
     it('TONE-U031: clicking button twice closes dropdown', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
 
       button.click(); // open
       button.click(); // close
 
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       expect(dropdown.style.display).toBe('none');
     });
 
     it('TONE-U032: dropdown has enable checkbox', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const checkbox = dropdown.querySelector('[data-testid="tone-mapping-enable-checkbox"]');
       expect(checkbox).not.toBeNull();
     });
 
     it('TONE-U033: enable checkbox reflects tone mapping state', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const checkbox = dropdown.querySelector('[data-testid="tone-mapping-enable-checkbox"]') as HTMLInputElement;
 
       expect(checkbox.checked).toBe(false);
@@ -160,7 +165,9 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U034: clicking enable checkbox toggles tone mapping', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const checkbox = dropdown.querySelector('[data-testid="tone-mapping-enable-checkbox"]') as HTMLInputElement;
 
       checkbox.checked = true;
@@ -171,51 +178,51 @@ describe('ToneMappingControl', () => {
   });
 
   describe('operator buttons', () => {
-    it('TONE-U040: dropdown has operator buttons', () => {
+    function openDropdown(): HTMLElement {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      return document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+    }
+
+    it('TONE-U040: dropdown has operator buttons', () => {
+      const dropdown = openDropdown();
       const operatorButtons = dropdown.querySelectorAll('button[data-operator]');
       expect(operatorButtons.length).toBe(9); // off, reinhard, filmic, aces, agx, pbrNeutral, gt, acesHill, drago
     });
 
     it('TONE-U041: off operator button exists', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const offBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-off"]');
       expect(offBtn).not.toBeNull();
     });
 
     it('TONE-U042: reinhard operator button exists', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const reinhardBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-reinhard"]');
       expect(reinhardBtn).not.toBeNull();
     });
 
     it('TONE-U043: filmic operator button exists', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const filmicBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-filmic"]');
       expect(filmicBtn).not.toBeNull();
     });
 
     it('TONE-U044: aces operator button exists', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const acesBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-aces"]');
       expect(acesBtn).not.toBeNull();
     });
 
     it('TONE-U044b: drago operator button exists', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const dragoBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-drago"]');
       expect(dragoBtn).not.toBeNull();
     });
 
     it('TONE-U045: clicking operator button changes operator', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const filmicBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-filmic"]') as HTMLButtonElement;
 
       filmicBtn.click();
@@ -224,8 +231,7 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U046: selecting non-off operator auto-enables', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const reinhardBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-reinhard"]') as HTMLButtonElement;
 
       expect(control.getState().enabled).toBe(false);
@@ -240,8 +246,7 @@ describe('ToneMappingControl', () => {
       control.setOperator('aces');
       expect(control.getState().enabled).toBe(true);
 
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const offBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-off"]') as HTMLButtonElement;
 
       offBtn.click();
@@ -251,8 +256,7 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U048: active operator button has accent styling', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const offBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-off"]') as HTMLButtonElement;
 
       // Off is default operator
@@ -395,19 +399,26 @@ describe('ToneMappingControl', () => {
   });
 
   describe('parameter sections', () => {
+    function getParams(): HTMLElement {
+      // Open dropdown to append to body, then query params from it
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      return dropdown.querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+    }
+
     it('TONE-U170: reinhard shows parameter section with white point slider', () => {
-      control.render();
       control.setOperator('reinhard');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       expect(params.style.display).toBe('block');
       expect(params.textContent).toContain('Reinhard Parameters');
       expect(params.textContent).toContain('White Point');
     });
 
     it('TONE-U171: filmic shows parameter section with two sliders', () => {
-      control.render();
       control.setOperator('filmic');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       expect(params.style.display).toBe('block');
       expect(params.textContent).toContain('Filmic Parameters');
       expect(params.textContent).toContain('Exposure Bias');
@@ -415,9 +426,8 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U172: drago shows parameter section with bias and brightness sliders', () => {
-      control.render();
       control.setOperator('drago');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       expect(params.style.display).toBe('block');
       expect(params.textContent).toContain('Drago Parameters');
       expect(params.textContent).toContain('Bias');
@@ -427,9 +437,8 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U173: drago bias slider has correct range attributes', () => {
-      control.render();
       control.setOperator('drago');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const biasSlider = sliders[0] as HTMLInputElement;
       expect(biasSlider).not.toBeNull();
@@ -440,9 +449,8 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U173b: drago brightness slider has correct range attributes', () => {
-      control.render();
       control.setOperator('drago');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const brightnessSlider = sliders[1] as HTMLInputElement;
       expect(brightnessSlider).not.toBeNull();
@@ -453,13 +461,12 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U174: drago bias slider emits stateChanged on input', () => {
-      control.render();
       control.setOperator('drago');
       const listener = vi.fn();
       control.on('stateChanged', listener);
       listener.mockClear(); // clear from setOperator call
 
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const biasSlider = sliders[0] as HTMLInputElement;
       biasSlider.value = '0.9';
@@ -471,13 +478,12 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U174b: drago brightness slider emits stateChanged on input', () => {
-      control.render();
       control.setOperator('drago');
       const listener = vi.fn();
       control.on('stateChanged', listener);
       listener.mockClear();
 
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const brightnessSlider = sliders[1] as HTMLInputElement;
       brightnessSlider.value = '3.0';
@@ -489,25 +495,22 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U175: aces hides parameter section', () => {
-      control.render();
       control.setOperator('aces');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       expect(params.style.display).toBe('none');
     });
 
     it('TONE-U176: off hides parameter section', () => {
-      control.render();
       // Start from a non-off operator, then switch to off
       control.setOperator('reinhard');
       control.setOperator('off');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       expect(params.style.display).toBe('none');
     });
 
     it('TONE-U177: switching from drago to aces hides parameter section', () => {
-      control.render();
       control.setOperator('drago');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       expect(params.style.display).toBe('block');
 
       control.setOperator('aces');
@@ -515,9 +518,8 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U178: drago bias value display shows 2 decimal places', () => {
-      control.render();
       control.setOperator('drago');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       // The value display should show "0.85" (2 decimals), not "0.9" (1 decimal)
       const spans = params.querySelectorAll('span');
       const valueSpan = Array.from(spans).find(s => s.textContent === '0.85');
@@ -525,14 +527,12 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U179: setState with dragoBias updates slider when drago is active', () => {
-      control.render();
       control.setOperator('drago');
 
       // Update dragoBias externally via setState
       control.setState({ dragoBias: 0.75 });
 
-      // The bias slider (first) should be recreated with the new value
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const biasSlider = sliders[0] as HTMLInputElement;
       expect(biasSlider.value).toBe('0.75');
@@ -543,21 +543,19 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U179b: setState with dragoBrightness updates brightness slider', () => {
-      control.render();
       control.setOperator('drago');
 
       control.setState({ dragoBrightness: 3.5 });
 
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const brightnessSlider = sliders[1] as HTMLInputElement;
       expect(brightnessSlider.value).toBe('3.5');
     });
 
     it('TONE-U180: drago bias slider updates value display on input', () => {
-      control.render();
       control.setOperator('drago');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       const sliders = params.querySelectorAll('input[type="range"]');
       const biasSlider = sliders[0] as HTMLInputElement;
 
@@ -572,9 +570,8 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U181: reinhard slider shows 1 decimal place', () => {
-      control.render();
       control.setOperator('reinhard');
-      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const params = getParams();
       // Default white point is 4.0, should display "4.0" (1 decimal)
       const spans = params.querySelectorAll('span');
       const valueSpan = Array.from(spans).find(s => s.textContent === '4.0');
@@ -585,7 +582,9 @@ describe('ToneMappingControl', () => {
   describe('theme changes', () => {
     it('TONE-U190: enable row uses var(--bg-hover) not hardcoded rgba', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       // The enable row is the first child div in the dropdown
       const enableRow = dropdown.querySelector('div') as HTMLElement;
       expect(enableRow.style.cssText).toContain('var(--bg-hover)');
@@ -670,6 +669,69 @@ describe('ToneMappingControl', () => {
     });
   });
 
+  describe('outside click listener lifecycle', () => {
+    it('TONE-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      control.dispose();
+      addSpy.mockClear();
+
+      control = new ToneMappingControl();
+
+      const clickCalls = addSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(0);
+      addSpy.mockRestore();
+    });
+
+    it('TONE-M21b: outside click listener should be registered when dropdown opens', () => {
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+
+      addSpy.mockClear();
+      button.click(); // open
+
+      const clickCalls = addSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(1);
+      addSpy.mockRestore();
+    });
+
+    it('TONE-M21c: outside click listener should be removed when dropdown closes', () => {
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      removeSpy.mockClear();
+      button.click(); // close
+
+      const clickCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(1);
+      removeSpy.mockRestore();
+    });
+
+    it('TONE-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open dropdown
+      removeSpy.mockClear();
+      control.dispose();
+
+      const clickCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(1);
+      removeSpy.mockRestore();
+    });
+  });
+
   describe('dispose', () => {
     it('TONE-U120: dispose can be called without error', () => {
       expect(() => control.dispose()).not.toThrow();
@@ -690,16 +752,83 @@ describe('ToneMappingControl', () => {
     });
   });
 
+  describe('dropdown body append (H-07)', () => {
+    it('TM-H07a: dropdown should be appended to document.body when opened', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+
+      expect(document.body.contains(document.querySelector('[data-testid="tone-mapping-dropdown"]'))).toBe(false);
+
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      expect(document.body.contains(dropdown)).toBe(true);
+      expect(el.contains(dropdown)).toBe(false);
+    });
+
+    it('TM-H07f: dropdown should be removed from document.body on close', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      expect(document.body.querySelector('[data-testid="tone-mapping-dropdown"]')).not.toBeNull();
+
+      button.click(); // close
+      // Dropdown stays in body but is hidden
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('none');
+    });
+
+    it('TM-H07g: dropdown should be removed from document.body on dispose', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      expect(document.body.querySelector('[data-testid="tone-mapping-dropdown"]')).not.toBeNull();
+
+      control.dispose();
+      expect(document.body.querySelector('[data-testid="tone-mapping-dropdown"]')).toBeNull();
+    });
+
+    it('TM-H07h: dropdown should reposition on window scroll', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      const scrollSpy = vi.spyOn(window, 'addEventListener');
+
+      button.click();
+
+      const scrollCalls = scrollSpy.mock.calls.filter(([event]) => event === 'scroll');
+      expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
+      scrollSpy.mockRestore();
+    });
+
+    it('TM-H07i: dropdown should reposition on window resize', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      const resizeSpy = vi.spyOn(window, 'addEventListener');
+
+      button.click();
+
+      const resizeCalls = resizeSpy.mock.calls.filter(([event]) => event === 'resize');
+      expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
+      resizeSpy.mockRestore();
+    });
+  });
+
   describe('positioning', () => {
     it('TONE-U130: dropdown has fixed positioning', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       expect(dropdown.style.position).toBe('fixed');
     });
 
     it('TONE-U131: dropdown has high z-index', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       expect(parseInt(dropdown.style.zIndex, 10)).toBeGreaterThan(1000);
     });
 
@@ -741,19 +870,25 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U144: dropdown has role menu', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       expect(dropdown.getAttribute('role')).toBe('menu');
     });
 
     it('TONE-U145: dropdown has aria-label', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       expect(dropdown.getAttribute('aria-label')).toBe('Tone mapping operators');
     });
 
     it('TONE-U146: operator buttons have role menuitemradio', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const operatorButtons = dropdown.querySelectorAll('button[data-operator]');
 
       operatorButtons.forEach((btn) => {
@@ -763,7 +898,9 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U147: selected operator button has aria-checked true', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const offBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-off"]') as HTMLButtonElement;
 
       // Off is default
@@ -772,7 +909,9 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U148: non-selected operator buttons have aria-checked false', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const reinhardBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-reinhard"]') as HTMLButtonElement;
 
       expect(reinhardBtn.getAttribute('aria-checked')).toBe('false');
@@ -780,7 +919,9 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U149: aria-checked updates when operator changes', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const offBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-off"]') as HTMLButtonElement;
       const reinhardBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-reinhard"]') as HTMLButtonElement;
 
@@ -792,7 +933,9 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U150: operator buttons have descriptive aria-label', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const reinhardBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-reinhard"]') as HTMLButtonElement;
 
       expect(reinhardBtn.getAttribute('aria-label')).toContain('Reinhard');

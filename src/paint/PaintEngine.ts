@@ -19,6 +19,7 @@ import {
   DEFAULT_STROKE_WIDTH,
   DEFAULT_BRUSH_TYPE,
   DEFAULT_PAINT_EFFECTS,
+  type AnnotationVersion,
 } from './types';
 
 export interface PaintEngineEvents extends EventMap {
@@ -30,7 +31,7 @@ export interface PaintEngineEvents extends EventMap {
   brushChanged: BrushType;
 }
 
-export type PaintTool = 'pen' | 'text' | 'eraser' | 'select' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
+export type PaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
 
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private state: PaintState;
@@ -44,6 +45,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private _width: number = DEFAULT_STROKE_WIDTH;
   private _brush: BrushType = DEFAULT_BRUSH_TYPE;
   private _user: string = 'user';
+  private _annotationVersion: AnnotationVersion = 'all';
 
   constructor() {
     super();
@@ -100,6 +102,14 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     this._user = value;
   }
 
+  get annotationVersion(): AnnotationVersion {
+    return this._annotationVersion;
+  }
+
+  set annotationVersion(value: AnnotationVersion) {
+    this._annotationVersion = value;
+  }
+
   get effects(): PaintEffects {
     return { ...this.state.effects };
   }
@@ -137,6 +147,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       id: String(this.state.nextId++),
       frame,
       user: this._user,
+      version: this._annotationVersion,
       color: [...this._color],
       width: this._width,
       brush: this._brush,
@@ -183,6 +194,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       id: String(this.state.nextId++),
       frame,
       user: this._user,
+      version: this._annotationVersion,
       position: { x: position.x, y: position.y },
       color: [...this._color],
       text,
@@ -255,6 +267,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       id: String(this.state.nextId++),
       frame,
       user: this._user,
+      version: this._annotationVersion,
       shapeType,
       startPoint: { x: startPoint.x, y: startPoint.y },
       endPoint: { x: endPoint.x, y: endPoint.y },
@@ -357,6 +370,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       id: String(this.state.nextId++),
       frame,
       user: this._user,
+      version: this._annotationVersion,
       shapeType: ShapeType.Polygon,
       startPoint: { x: minX, y: minY },
       endPoint: { x: maxX, y: maxY },
@@ -472,13 +486,15 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   /**
    * Check if a specific frame has any annotations
    */
-  hasAnnotationsOnFrame(frame: number): boolean {
+  hasAnnotationsOnFrame(frame: number, versionFilter?: 'A' | 'B'): boolean {
     const annotations = this.state.annotations.get(frame);
-    return annotations !== undefined && annotations.length > 0;
+    if (!annotations || annotations.length === 0) return false;
+    if (!versionFilter) return true;
+    return annotations.some(a => this.matchesVersionFilter(a, versionFilter));
   }
 
   // Get annotations for display
-  getAnnotationsForFrame(frame: number): Annotation[] {
+  getAnnotationsForFrame(frame: number, versionFilter?: 'A' | 'B'): Annotation[] {
     if (!this.state.show) return [];
 
     const result: Annotation[] = [];
@@ -486,7 +502,8 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     // Get annotations visible on this frame
     for (const [_annotationFrame, annotations] of this.state.annotations) {
       for (const annotation of annotations) {
-        if (this.isAnnotationVisibleOnFrame(annotation, frame)) {
+        if (this.isAnnotationVisibleOnFrame(annotation, frame) &&
+            this.matchesVersionFilter(annotation, versionFilter)) {
           result.push(annotation);
         }
       }
@@ -496,7 +513,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   }
 
   // Get annotations with ghost effect
-  getAnnotationsWithGhost(frame: number): Array<{ annotation: Annotation; opacity: number }> {
+  getAnnotationsWithGhost(frame: number, versionFilter?: 'A' | 'B'): Array<{ annotation: Annotation; opacity: number }> {
     if (!this.state.show) return [];
 
     const result: Array<{ annotation: Annotation; opacity: number }> = [];
@@ -504,6 +521,8 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
 
     for (const [annotationFrame, annotations] of this.state.annotations) {
       for (const annotation of annotations) {
+        if (!this.matchesVersionFilter(annotation, versionFilter)) continue;
+
         // Check if annotation is visible on this frame (with hold)
         const isDirectlyVisible = this.isAnnotationVisibleOnFrame(annotation, frame);
 
@@ -526,6 +545,16 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     }
 
     return result;
+  }
+
+  /**
+   * Check if an annotation matches the current version filter.
+   * Annotations with version 'all' or no version are always visible.
+   */
+  private matchesVersionFilter(annotation: Annotation, versionFilter?: 'A' | 'B'): boolean {
+    if (!versionFilter) return true;
+    const v = annotation.version;
+    return !v || v === 'all' || v === versionFilter;
   }
 
   private isAnnotationVisibleOnFrame(annotation: Annotation, frame: number): boolean {

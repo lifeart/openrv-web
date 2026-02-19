@@ -5,12 +5,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SequenceSourceNode } from './SequenceSourceNode';
 
-// Mock the SequenceLoader module
-vi.mock('../../utils/media/SequenceLoader', () => ({
-  createSequenceInfo: vi.fn(),
-  loadFrameImage: vi.fn(),
-  disposeSequence: vi.fn(),
-}));
+// Partial mock: keep real disposeSequence (simple cleanup logic that works in jsdom),
+// only mock createSequenceInfo and loadFrameImage which need controlled return values.
+// disposeSequence is wrapped in vi.fn() to enable call tracking while preserving
+// the real implementation.
+vi.mock('../../utils/media/SequenceLoader', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../utils/media/SequenceLoader')>();
+  return {
+    ...real,
+    createSequenceInfo: vi.fn(),
+    loadFrameImage: vi.fn(),
+    disposeSequence: vi.fn(real.disposeSequence),
+  };
+});
 
 import {
   createSequenceInfo,

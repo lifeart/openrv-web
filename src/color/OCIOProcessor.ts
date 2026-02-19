@@ -26,6 +26,7 @@ import { LUT3D } from './LUTLoader';
 export interface OCIOProcessorEvents extends EventMap {
   stateChanged: OCIOState;
   transformChanged: void;
+  perSourceColorSpaceChanged: { sourceId: string; colorSpace: string };
 }
 
 /**
@@ -223,6 +224,22 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   }
 
   /**
+   * Get all display/view pairs for the current config.
+   * Returns a flat list of every valid (display, view) combination.
+   */
+  getDisplayViewPairs(): Array<{ display: string; view: string }> {
+    const displays = getDisplays(this.state.configName);
+    const pairs: Array<{ display: string; view: string }> = [];
+    for (const display of displays) {
+      const views = getViewsForDisplay(this.state.configName, display);
+      for (const view of views) {
+        pairs.push({ display, view });
+      }
+    }
+    return pairs;
+  }
+
+  /**
    * Get available looks
    */
   getAvailableLooks(): string[] {
@@ -305,6 +322,8 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     if (sourceId === this.activeSourceId) {
       this.setState({ detectedColorSpace: colorSpace });
     }
+
+    this.emit('perSourceColorSpaceChanged', { sourceId, colorSpace });
   }
 
   /**
@@ -341,6 +360,33 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
    */
   getActiveSourceId(): string | null {
     return this.activeSourceId;
+  }
+
+  /**
+   * Get all per-source color space mappings.
+   * Returns a plain object suitable for serialization.
+   */
+  getAllPerSourceColorSpaces(): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [sourceId, colorSpace] of this.perSourceInputColorSpace) {
+      result[sourceId] = colorSpace;
+    }
+    return result;
+  }
+
+  /**
+   * Load per-source color space mappings from a plain object.
+   * Merges with any existing mappings (new entries override existing ones).
+   * Does not emit events for individual entries.
+   *
+   * @param mappings - Object mapping source IDs to color space names
+   */
+  loadPerSourceColorSpaces(mappings: Record<string, string>): void {
+    for (const [sourceId, colorSpace] of Object.entries(mappings)) {
+      if (typeof sourceId === 'string' && typeof colorSpace === 'string') {
+        this.perSourceInputColorSpace.set(sourceId, colorSpace);
+      }
+    }
   }
 
   // ==========================================================================
@@ -564,7 +610,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
    * @returns 3D LUT suitable for WebGL processing
    * @throws Error if size is invalid
    */
-  bakeTo3DLUT(size: number = 33): LUT3D {
+  bakeTo3DLUT(size: number = 65): LUT3D {
     // Validate size
     if (!Number.isInteger(size) || size < 1) {
       throw new Error(`Invalid LUT size: ${size}. Must be a positive integer.`);

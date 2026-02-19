@@ -12,7 +12,11 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
-import { getSharedScopesProcessor, WaveformMode as GPUWaveformMode } from '../../scopes/WebGLScopes';
+import {
+  getSharedScopesProcessor,
+  WaveformMode as GPUWaveformMode,
+  WaveformRenderOptions,
+} from '../../scopes/WebGLScopes';
 import { clamp, floatRGBAToImageData } from '../../utils/math';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import {
@@ -55,6 +59,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   private mode: WaveformMode = 'luma';
   private modeButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
+  private lastFloatFrame: { data: Float32Array; width: number; height: number } | null = null;
   private isPlaybackMode = false;
 
   // RGB overlay controls
@@ -104,9 +109,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
     // Listen for theme changes to redraw with new colors
     this.boundOnThemeChange = () => {
-      if (this.lastImageData) {
-        this.update(this.lastImageData);
-      }
+      this.redrawLastFrame();
     };
     getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
@@ -236,6 +239,12 @@ export class Waveform extends EventEmitter<WaveformEvents> {
    */
   update(imageData: ImageData): void {
     this.lastImageData = imageData;
+    this.lastFloatFrame = null;
+
+    const waveformOptions: WaveformRenderOptions = {
+      channels: { ...this.enabledChannels },
+      intensity: this.intensity,
+    };
 
     // Try GPU rendering first for better performance during playback
     const gpuProcessor = getSharedScopesProcessor();
@@ -247,7 +256,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
       this.drawGrid();
       // Then GPU waveform overlay
-      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode);
+      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode, waveformOptions);
       return;
     }
 
@@ -265,6 +274,14 @@ export class Waveform extends EventEmitter<WaveformEvents> {
    * @param height Image height
    */
   updateFloat(floatData: Float32Array, width: number, height: number): void {
+    this.lastFloatFrame = { data: floatData, width, height };
+    this.lastImageData = null;
+
+    const waveformOptions: WaveformRenderOptions = {
+      channels: { ...this.enabledChannels },
+      intensity: this.intensity,
+    };
+
     const gpuProcessor = getSharedScopesProcessor();
     if (gpuProcessor && gpuProcessor.isReady()) {
       gpuProcessor.setPlaybackMode(this.isPlaybackMode);
@@ -274,12 +291,25 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
       this.drawGrid();
       // Then GPU waveform overlay
-      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode);
+      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode, waveformOptions);
       return;
     }
 
     // Fallback: convert float to ImageData for CPU rendering
     this.draw(floatRGBAToImageData(floatData, width, height));
+  }
+
+  /**
+   * Redraw the most recent frame, preserving HDR float data when available.
+   */
+  private redrawLastFrame(): void {
+    if (this.lastFloatFrame) {
+      this.updateFloat(this.lastFloatFrame.data, this.lastFloatFrame.width, this.lastFloatFrame.height);
+      return;
+    }
+    if (this.lastImageData) {
+      this.update(this.lastImageData);
+    }
   }
 
   /**
@@ -616,9 +646,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.updateChannelButtonAppearance(channel);
 
     // Redraw
-    if (this.lastImageData) {
-      this.draw(this.lastImageData);
-    }
+    this.redrawLastFrame();
 
     this.emit('channelToggled', { ...this.enabledChannels });
   }
@@ -632,9 +660,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.updateChannelButtonAppearance(channel);
 
     // Redraw
-    if (this.lastImageData) {
-      this.draw(this.lastImageData);
-    }
+    this.redrawLastFrame();
 
     this.emit('channelToggled', { ...this.enabledChannels });
   }
@@ -658,8 +684,8 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     }
 
     // Redraw
-    if (this.lastImageData && this.mode === 'rgb') {
-      this.draw(this.lastImageData);
+    if (this.mode === 'rgb') {
+      this.redrawLastFrame();
     }
 
     this.emit('intensityChanged', this.intensity);
@@ -703,9 +729,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.updateRGBControlsVisibility();
 
     // Redraw with new mode if we have image data
-    if (this.lastImageData) {
-      this.draw(this.lastImageData);
-    }
+    this.redrawLastFrame();
 
     this.emit('modeChanged', this.mode);
   }
@@ -731,9 +755,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.updateRGBControlsVisibility();
 
     // Redraw with new mode if we have image data
-    if (this.lastImageData) {
-      this.draw(this.lastImageData);
-    }
+    this.redrawLastFrame();
 
     this.emit('modeChanged', this.mode);
   }

@@ -70,7 +70,12 @@ export class FocusManager {
       const zone = this.zones[wrapped]!;
 
       // Skip hidden zones (e.g. timeline in image mode)
-      if (zone.container.offsetParent === null && zone.container.style.display === 'none') {
+      // Check display:none, visibility:hidden, and detached elements
+      if (
+        zone.container.style.display === 'none' ||
+        zone.container.style.visibility === 'hidden' ||
+        !zone.container.isConnected
+      ) {
         index = index >= 0 ? wrapped + 1 : wrapped - 1;
         continue;
       }

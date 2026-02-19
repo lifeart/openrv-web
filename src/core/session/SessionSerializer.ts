@@ -11,6 +11,8 @@ import type {
   ViewState,
 } from './SessionState';
 import { SESSION_STATE_VERSION, DEFAULT_VIEW_STATE, DEFAULT_PLAYBACK_STATE } from './SessionState';
+import { DEFAULT_PLAYLIST_STATE } from './PlaylistManager';
+import type { PlaylistManager } from './PlaylistManager';
 import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Viewer } from '../../ui/components/Viewer';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
@@ -21,6 +23,8 @@ import { DEFAULT_CDL } from '../../color/CDL';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import { DEFAULT_WIPE_STATE } from '../types/wipe';
 import { DEFAULT_PAR_STATE } from '../../utils/media/PixelAspectRatio';
+import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
+import { DEFAULT_WATERMARK_STATE } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
@@ -30,6 +34,7 @@ export interface SessionComponents {
   session: Session;
   paintEngine: PaintEngine;
   viewer: Viewer;
+  playlistManager?: PlaylistManager;
 }
 
 /**
@@ -89,10 +94,16 @@ export class SessionSerializer {
       lens: viewer.getLensParams(),
       wipe: viewer.getWipeState(),
       stack: viewer.getStackLayers(),
+      noiseReduction: viewer.getNoiseReductionParams(),
+      watermark: viewer.getWatermarkState(),
       lutPath: viewer.getLUT()?.title,
       lutIntensity: viewer.getLUTIntensity(),
       par: viewer.getPARState(),
       backgroundPattern: viewer.getBackgroundPatternState(),
+      ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
+      notes: session.noteManager.toSerializable(),
+      versionGroups: session.versionManager.toSerializable(),
+      statuses: session.statusManager.toSerializable(),
     };
   }
 
@@ -201,6 +212,19 @@ export class SessionSerializer {
       session.setPlaybackState(migrated.playback);
     }
 
+    // Restore playlist state when available (used by project save/load, snapshots,
+    // and auto-save recovery in AppPersistenceManager).
+    if (components.playlistManager) {
+      if (migrated.playlist) {
+        components.playlistManager.setState(migrated.playlist);
+      } else {
+        components.playlistManager.clear();
+        components.playlistManager.setEnabled(false);
+        components.playlistManager.setLoopMode('none');
+        components.playlistManager.setCurrentFrame(1);
+      }
+    }
+
     // Restore paint/annotations
     const annotations: Annotation[] = Object.values(migrated.paint.frames).flat();
     paintEngine.loadFromAnnotations(annotations, migrated.paint.effects);
@@ -214,6 +238,8 @@ export class SessionSerializer {
     viewer.setLensParams(migrated.lens);
     viewer.setWipeState(migrated.wipe);
     viewer.setStackLayers(migrated.stack);
+    viewer.setNoiseReductionParams(migrated.noiseReduction ?? DEFAULT_NOISE_REDUCTION_PARAMS);
+    viewer.setWatermarkState(migrated.watermark ?? DEFAULT_WATERMARK_STATE);
     viewer.setLUTIntensity(migrated.lutIntensity);
     if (migrated.par) {
       viewer.setPARState(migrated.par);
@@ -223,6 +249,21 @@ export class SessionSerializer {
     }
     viewer.setZoom(migrated.view.zoom);
     viewer.setPan(migrated.view.panX, migrated.view.panY);
+
+    // Restore notes
+    if (migrated.notes && migrated.notes.length > 0) {
+      session.noteManager.fromSerializable(migrated.notes);
+    }
+
+    // Restore version groups
+    if (migrated.versionGroups && migrated.versionGroups.length > 0) {
+      session.versionManager.fromSerializable(migrated.versionGroups);
+    }
+
+    // Restore statuses
+    if (migrated.statuses && migrated.statuses.length > 0) {
+      session.statusManager.fromSerializable(migrated.statuses);
+    }
 
     // LUT must be loaded separately (file reference)
     if (migrated.lutPath) {
@@ -260,11 +301,20 @@ export class SessionSerializer {
     migrated.lens = { ...DEFAULT_LENS_PARAMS, ...migrated.lens };
     migrated.wipe = { ...DEFAULT_WIPE_STATE, ...migrated.wipe };
     migrated.stack = migrated.stack ?? [];
+    migrated.noiseReduction = { ...DEFAULT_NOISE_REDUCTION_PARAMS, ...migrated.noiseReduction };
+    migrated.watermark = { ...DEFAULT_WATERMARK_STATE, ...migrated.watermark };
     migrated.lutIntensity = migrated.lutIntensity ?? 1.0;
     migrated.par = migrated.par ? { ...DEFAULT_PAR_STATE, ...migrated.par } : undefined;
     migrated.backgroundPattern = migrated.backgroundPattern
       ? { ...DEFAULT_BACKGROUND_PATTERN_STATE, ...migrated.backgroundPattern }
       : undefined;
+    if (migrated.playlist) {
+      migrated.playlist = {
+        ...DEFAULT_PLAYLIST_STATE,
+        ...migrated.playlist,
+        clips: Array.isArray(migrated.playlist.clips) ? migrated.playlist.clips : [],
+      };
+    }
     migrated.paint = migrated.paint ?? {
       nextId: 0,
       show: true,
@@ -345,6 +395,8 @@ export class SessionSerializer {
       lens: { ...DEFAULT_LENS_PARAMS },
       wipe: { ...DEFAULT_WIPE_STATE },
       stack: [],
+      noiseReduction: { ...DEFAULT_NOISE_REDUCTION_PARAMS },
+      watermark: { ...DEFAULT_WATERMARK_STATE },
       lutIntensity: 1.0,
     };
   }

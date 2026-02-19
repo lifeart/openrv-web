@@ -98,6 +98,12 @@ export interface RendererColorPipeline {
 
   /** Set HSL qualifier (secondary color correction) state. */
   setHSLQualifier(state: HSLQualifierState): void;
+
+  /** Set premultiply/unpremultiply alpha mode (0=off, 1=premultiply, 2=unpremultiply). */
+  setPremultMode(mode: number): void;
+
+  /** Get the current premult mode. */
+  getPremultMode(): number;
 }
 
 /**
@@ -134,6 +140,18 @@ export interface RendererEffects {
 
   /** Set gamut mapping state (source gamut, target gamut, mode). */
   setGamutMapping(state: GamutMappingState): void;
+
+  /** Set dither mode (0=off, 1=ordered Bayer 8x8, 2=blue noise future). */
+  setDitherMode(mode: number): void;
+
+  /** Get the current dither mode. */
+  getDitherMode(): number;
+
+  /** Set quantize bits (0=off, 2-16 = target bit depth). */
+  setQuantizeBits(bits: number): void;
+
+  /** Get the current quantize bits. */
+  getQuantizeBits(): number;
 }
 
 /**

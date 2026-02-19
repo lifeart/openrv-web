@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter, EventMap } from '../EventEmitter';
+import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
 export type ThemeMode = 'dark' | 'light' | 'auto';
 export type ResolvedTheme = 'dark' | 'light';
@@ -116,7 +117,7 @@ export interface ThemeManagerEvents extends EventMap {
   modeChanged: ThemeMode;
 }
 
-const STORAGE_KEY = 'openrv-theme-mode';
+const STORAGE_KEY = PREFERENCE_STORAGE_KEYS.themeMode;
 
 export class ThemeManager extends EventEmitter<ThemeManagerEvents> {
   private mode: ThemeMode = 'auto';
@@ -192,13 +193,9 @@ export class ThemeManager extends EventEmitter<ThemeManagerEvents> {
    * Load preference from localStorage
    */
   private loadPreference(): void {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && (saved === 'dark' || saved === 'light' || saved === 'auto')) {
-        this.mode = saved as ThemeMode;
-      }
-    } catch {
-      // localStorage not available, use default
+    const saved = getPreferencesManager().getString(STORAGE_KEY);
+    if (saved && (saved === 'dark' || saved === 'light' || saved === 'auto')) {
+      this.mode = saved as ThemeMode;
     }
   }
 
@@ -206,11 +203,7 @@ export class ThemeManager extends EventEmitter<ThemeManagerEvents> {
    * Save preference to localStorage
    */
   private savePreference(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, this.mode);
-    } catch {
-      // localStorage not available
-    }
+    getPreferencesManager().setString(STORAGE_KEY, this.mode);
   }
 
   /**

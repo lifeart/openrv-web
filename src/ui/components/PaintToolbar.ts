@@ -1,18 +1,23 @@
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
-import { BrushType } from '../../paint/types';
+import { BrushType, type AnnotationVersion } from '../../paint/types';
 import { showConfirm } from './shared/Modal';
 import { getIconSvg, IconName } from './shared/Icons';
+import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
 export class PaintToolbar {
   private container: HTMLElement;
   private paintEngine: PaintEngine;
   private buttons: Map<PaintTool, HTMLButtonElement> = new Map();
   private colorPicker!: HTMLInputElement;
+  private opacitySlider!: HTMLInputElement;
+  private opacityLabel!: HTMLSpanElement;
+  private _opacity: number = 1;
   private widthSlider!: HTMLInputElement;
   private widthLabel!: HTMLSpanElement;
   private brushButton!: HTMLButtonElement;
   private ghostButton!: HTMLButtonElement;
   private holdButton!: HTMLButtonElement;
+  private versionSelect!: HTMLSelectElement;
 
   constructor(paintEngine: PaintEngine) {
     this.paintEngine = paintEngine;
@@ -101,6 +106,34 @@ export class PaintToolbar {
       this.container.appendChild(preset);
     }
 
+    // Opacity slider
+    this.opacityLabel = document.createElement('span');
+    this.opacityLabel.dataset.testid = 'paint-opacity-label';
+    this.opacityLabel.textContent = '100%';
+    this.opacityLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 28px; text-align: right; margin-left: 8px;';
+    this.container.appendChild(this.opacityLabel);
+
+    this.opacitySlider = document.createElement('input');
+    this.opacitySlider.type = 'range';
+    this.opacitySlider.min = '0';
+    this.opacitySlider.max = '100';
+    this.opacitySlider.value = '100';
+    this.opacitySlider.title = 'Stroke opacity';
+    this.opacitySlider.dataset.testid = 'paint-opacity-slider';
+    this.opacitySlider.style.cssText = `
+      width: 60px;
+      height: 4px;
+      cursor: pointer;
+      accent-color: var(--accent-primary);
+    `;
+    this.opacitySlider.addEventListener('input', () => {
+      const percent = parseInt(this.opacitySlider.value, 10);
+      this._opacity = percent / 100;
+      this.opacityLabel.textContent = `${percent}%`;
+      this.paintEngine.color = this.hexToRgba(this.colorPicker.value);
+    });
+    this.container.appendChild(this.opacitySlider);
+
     // Width slider
     this.widthLabel = document.createElement('span');
     this.widthLabel.textContent = `${this.paintEngine.width}`;
@@ -113,6 +146,7 @@ export class PaintToolbar {
     this.widthSlider.max = '50';
     this.widthSlider.value = String(this.paintEngine.width);
     this.widthSlider.title = 'Stroke width';
+    this.widthSlider.dataset.testid = 'paint-width-slider';
     this.widthSlider.style.cssText = `
       width: 60px;
       height: 4px;
@@ -137,6 +171,31 @@ export class PaintToolbar {
       const effects = this.paintEngine.effects;
       this.paintEngine.setHoldMode(!effects.hold);
     });
+
+    // Version filter for A/B compare annotations
+    this.versionSelect = document.createElement('select');
+    this.versionSelect.dataset.testid = 'paint-version-select';
+    this.versionSelect.title = 'Annotation version (A/B compare)';
+    this.versionSelect.style.cssText = `
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      color: var(--text-primary);
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 11px;
+      cursor: pointer;
+      height: 24px;
+    `;
+    for (const [value, label] of [['all', 'All'], ['A', 'A'], ['B', 'B']] as const) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      this.versionSelect.appendChild(opt);
+    }
+    this.versionSelect.addEventListener('change', () => {
+      this.paintEngine.annotationVersion = this.versionSelect.value as AnnotationVersion;
+    });
+    this.container.appendChild(this.versionSelect);
 
     this.createIconButton('undo', 'Undo (Ctrl+Z)', () => this.paintEngine.undo());
     this.createIconButton('redo', 'Redo (Ctrl+Y)', () => this.paintEngine.redo());
@@ -166,41 +225,11 @@ export class PaintToolbar {
   }
 
   private createIconButton(icon: IconName, title: string, onClick: () => void): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.innerHTML = getIconSvg(icon, 'sm');
-    button.title = title;
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 4px;
-      border-radius: 4px;
-      cursor: pointer;
-      width: 26px;
-      height: 26px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!button.classList.contains('active')) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-primary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    const button = sharedCreateIconButton(getIconSvg(icon, 'sm'), onClick, {
+      variant: 'icon',
+      size: 'sm',
+      title,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!button.classList.contains('active')) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-muted)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
     this.container.appendChild(button);
     return button;
   }
@@ -214,17 +243,7 @@ export class PaintToolbar {
   private updateToolButtons(): void {
     const currentTool = this.paintEngine.tool;
     for (const [tool, btn] of this.buttons) {
-      if (tool === currentTool) {
-        btn.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        btn.style.borderColor = 'var(--accent-primary)';
-        btn.style.color = 'var(--accent-primary)';
-        btn.classList.add('active');
-      } else {
-        btn.style.background = 'transparent';
-        btn.style.borderColor = 'transparent';
-        btn.style.color = 'var(--text-muted)';
-        btn.classList.remove('active');
-      }
+      setButtonActive(btn, tool === currentTool, 'icon');
     }
   }
 
@@ -263,6 +282,19 @@ export class PaintToolbar {
       : 'Hold mode OFF (X)';
   }
 
+  /**
+   * Set the annotation version from external A/B switching.
+   * Updates both the select UI and the paint engine.
+   */
+  setAnnotationVersion(version: AnnotationVersion): void {
+    this.versionSelect.value = version;
+    this.paintEngine.annotationVersion = version;
+  }
+
+  getAnnotationVersion(): AnnotationVersion {
+    return this.paintEngine.annotationVersion;
+  }
+
   private rgbaToHex(rgba: [number, number, number, number]): string {
     const r = Math.round(rgba[0] * 255).toString(16).padStart(2, '0');
     const g = Math.round(rgba[1] * 255).toString(16).padStart(2, '0');
@@ -274,7 +306,7 @@ export class PaintToolbar {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;
-    return [r, g, b, 1];
+    return [r, g, b, this._opacity];
   }
 
   render(): HTMLElement {

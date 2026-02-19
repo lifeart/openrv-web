@@ -52,15 +52,16 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   private draggingPointIndex: number | null = null;
   private hoverPointIndex: number | null = null;
+  private selectedPointIndex: number | null = null;
   private boundOnThemeChange: (() => void) | null = null;
 
   // Bound event handlers for proper cleanup
-  private boundHandleMouseDown: (e: MouseEvent) => void;
-  private boundHandleMouseMove: (e: MouseEvent) => void;
-  private boundHandleMouseUp: () => void;
-  private boundHandleMouseLeave: () => void;
+  private boundHandlePointerDown: (e: PointerEvent) => void;
+  private boundHandlePointerMove: (e: PointerEvent) => void;
+  private boundHandlePointerUp: (e: PointerEvent) => void;
   private boundHandleDoubleClick: (e: MouseEvent) => void;
   private boundHandleContextMenu: (e: MouseEvent) => void;
+  private boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor(initialCurves?: ColorCurvesData) {
     super();
@@ -128,6 +129,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     // Create canvas with hi-DPI support
     this.canvas = document.createElement('canvas');
     this.canvas.dataset.testid = 'curve-canvas';
+    this.canvas.tabIndex = 0;
     this.canvas.style.cssText = `
       background: var(--bg-primary);
       border-radius: 4px;
@@ -146,20 +148,20 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     });
 
     // Create bound event handlers for proper cleanup
-    this.boundHandleMouseDown = this.handleMouseDown.bind(this);
-    this.boundHandleMouseMove = this.handleMouseMove.bind(this);
-    this.boundHandleMouseUp = this.handleMouseUp.bind(this);
-    this.boundHandleMouseLeave = this.handleMouseLeave.bind(this);
+    this.boundHandlePointerDown = this.handlePointerDown.bind(this);
+    this.boundHandlePointerMove = this.handlePointerMove.bind(this);
+    this.boundHandlePointerUp = this.handlePointerUp.bind(this);
     this.boundHandleDoubleClick = this.handleDoubleClick.bind(this);
     this.boundHandleContextMenu = this.handleContextMenu.bind(this);
+    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
 
-    // Bind events
-    this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
-    this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
-    this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
-    this.canvas.addEventListener('mouseleave', this.boundHandleMouseLeave);
+    // Bind events - use pointer events for drag with pointer capture
+    this.canvas.addEventListener('pointerdown', this.boundHandlePointerDown);
+    this.canvas.addEventListener('pointermove', this.boundHandlePointerMove);
+    this.canvas.addEventListener('pointerup', this.boundHandlePointerUp);
     this.canvas.addEventListener('dblclick', this.boundHandleDoubleClick);
     this.canvas.addEventListener('contextmenu', this.boundHandleContextMenu);
+    this.canvas.addEventListener('keydown', this.boundHandleKeyDown);
 
     // Initial render
     this.render();
@@ -224,7 +226,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     return null;
   }
 
-  private handleMouseDown(e: MouseEvent): void {
+  private handlePointerDown(e: PointerEvent): void {
     // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
     const { x, y } = clientToCanvasCoordinates(
       this.canvas,
@@ -236,12 +238,15 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
     const pointIndex = this.findPointNear(x, y);
     if (pointIndex !== null) {
+      this.selectedPointIndex = pointIndex;
       this.draggingPointIndex = pointIndex;
+      this.canvas.setPointerCapture(e.pointerId);
       this.canvas.style.cursor = 'grabbing';
+      this.render();
     }
   }
 
-  private handleMouseMove(e: MouseEvent): void {
+  private handlePointerMove(e: PointerEvent): void {
     // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
     const { x, y } = clientToCanvasCoordinates(
       this.canvas,
@@ -271,18 +276,12 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     }
   }
 
-  private handleMouseUp(): void {
+  private handlePointerUp(e: PointerEvent): void {
     if (this.draggingPointIndex !== null) {
       this.draggingPointIndex = null;
+      this.canvas.releasePointerCapture(e.pointerId);
       this.canvas.style.cursor = this.hoverPointIndex !== null ? 'grab' : 'crosshair';
     }
-  }
-
-  private handleMouseLeave(): void {
-    this.draggingPointIndex = null;
-    this.hoverPointIndex = null;
-    this.canvas.style.cursor = 'crosshair';
-    this.render();
   }
 
   private handleDoubleClick(e: MouseEvent): void {
@@ -330,6 +329,61 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
       this.hoverPointIndex = null;
       this.render();
     }
+  }
+
+  private handleKeyDown(e: KeyboardEvent): void {
+    const STEP = 1 / 256;
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (this.selectedPointIndex !== null) {
+        const curve = this.getActiveCurve();
+        // Only remove if not an endpoint
+        if (this.selectedPointIndex > 0 && this.selectedPointIndex < curve.points.length - 1) {
+          e.preventDefault();
+          const newCurve = removePointFromCurve(curve, this.selectedPointIndex);
+          this.setActiveCurve(newCurve);
+          this.selectedPointIndex = null;
+          this.render();
+        }
+      }
+      return;
+    }
+
+    if (this.selectedPointIndex === null) return;
+
+    let dx = 0;
+    let dy = 0;
+    switch (e.key) {
+      case 'ArrowUp':
+        dy = STEP;
+        break;
+      case 'ArrowDown':
+        dy = -STEP;
+        break;
+      case 'ArrowLeft':
+        dx = -STEP;
+        break;
+      case 'ArrowRight':
+        dx = STEP;
+        break;
+      default:
+        return;
+    }
+
+    e.preventDefault();
+
+    const curve = this.getActiveCurve();
+    const pt = curve.points[this.selectedPointIndex];
+    if (!pt) return;
+
+    const newCurve = updatePointInCurve(
+      curve,
+      this.selectedPointIndex,
+      pt.x + dx,
+      pt.y + dy
+    );
+    this.setActiveCurve(newCurve);
+    this.render();
   }
 
   private render(): void {
@@ -404,14 +458,15 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
         const canvasPt = this.normalizedToCanvas(pt.x, pt.y);
         const isHovered = i === this.hoverPointIndex;
         const isDragging = i === this.draggingPointIndex;
+        const isSelected = i === this.selectedPointIndex;
         const isEndpoint = i === 0 || i === curve.points.length - 1;
 
-        const radius = isHovered || isDragging ? 7 : 5;
+        const radius = isHovered || isDragging || isSelected ? 7 : 5;
 
         // Outer circle
         ctx.beginPath();
         ctx.arc(canvasPt.x, canvasPt.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = isDragging ? color : (isHovered ? '#ffffff' : getCSSColor('--bg-secondary', '#1a1a1a'));
+        ctx.fillStyle = isDragging ? color : (isHovered || isSelected ? '#ffffff' : getCSSColor('--bg-secondary', '#1a1a1a'));
         ctx.fill();
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
@@ -538,11 +593,11 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     this.boundOnThemeChange = null;
 
     // Clean up canvas event listeners using stored bound handlers
-    this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
-    this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
-    this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
-    this.canvas.removeEventListener('mouseleave', this.boundHandleMouseLeave);
+    this.canvas.removeEventListener('pointerdown', this.boundHandlePointerDown);
+    this.canvas.removeEventListener('pointermove', this.boundHandlePointerMove);
+    this.canvas.removeEventListener('pointerup', this.boundHandlePointerUp);
     this.canvas.removeEventListener('dblclick', this.boundHandleDoubleClick);
     this.canvas.removeEventListener('contextmenu', this.boundHandleContextMenu);
+    this.canvas.removeEventListener('keydown', this.boundHandleKeyDown);
   }
 }

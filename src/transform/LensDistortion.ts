@@ -22,7 +22,7 @@ export interface LensDistortionParams {
   // Scale to compensate for distortion cropping
   scale: number;  // 0.5 to 2.0
   // Distortion model type
-  model: 'brown' | 'opencv' | 'pfbarrel' | '3de4_radial_standard' | '3de4_anamorphic';
+  model: 'brown' | 'opencv' | 'pfbarrel' | '3de4_radial_standard' | '3de4_anamorphic' | '3de4_anamorphic_degree_6';
   // Pixel aspect ratio
   pixelAspectRatio: number;
   // Focal length (normalized)
@@ -31,6 +31,33 @@ export interface LensDistortionParams {
   // Crop ratios for output
   cropRatioX: number;
   cropRatioY: number;
+
+  // 3DE4 Anamorphic Degree 6 coefficients (x-direction)
+  cx02?: number;
+  cx22?: number;
+  cx04?: number;
+  cx24?: number;
+  cx44?: number;
+  cx06?: number;
+  cx26?: number;
+  cx46?: number;
+  cx66?: number;
+
+  // 3DE4 Anamorphic Degree 6 coefficients (y-direction)
+  cy02?: number;
+  cy22?: number;
+  cy04?: number;
+  cy24?: number;
+  cy44?: number;
+  cy06?: number;
+  cy26?: number;
+  cy46?: number;
+  cy66?: number;
+
+  // 3DE4 Anamorphic optional parameters
+  lensRotation?: number;
+  squeeze_x?: number;
+  squeeze_y?: number;
 }
 
 export const DEFAULT_LENS_PARAMS: LensDistortionParams = {
@@ -54,7 +81,8 @@ export const DEFAULT_LENS_PARAMS: LensDistortionParams = {
  * Check if lens parameters are at defaults (no correction)
  */
 export function isDefaultLensParams(params: Partial<LensDistortionParams>): boolean {
-  return (
+  // Check Brown-Conrady coefficients
+  const brownDefault = (
     (params.k1 ?? 0) === 0 &&
     (params.k2 ?? 0) === 0 &&
     (params.k3 ?? 0) === 0 &&
@@ -64,6 +92,93 @@ export function isDefaultLensParams(params: Partial<LensDistortionParams>): bool
     (params.centerY ?? 0) === 0 &&
     (params.scale ?? 1) === 1
   );
+
+  if (!brownDefault) return false;
+
+  // Check 3DE4 anamorphic degree 6 coefficients
+  const anamorphicDefault = (
+    (params.cx02 ?? 0) === 0 &&
+    (params.cx22 ?? 0) === 0 &&
+    (params.cx04 ?? 0) === 0 &&
+    (params.cx24 ?? 0) === 0 &&
+    (params.cx44 ?? 0) === 0 &&
+    (params.cx06 ?? 0) === 0 &&
+    (params.cx26 ?? 0) === 0 &&
+    (params.cx46 ?? 0) === 0 &&
+    (params.cx66 ?? 0) === 0 &&
+    (params.cy02 ?? 0) === 0 &&
+    (params.cy22 ?? 0) === 0 &&
+    (params.cy04 ?? 0) === 0 &&
+    (params.cy24 ?? 0) === 0 &&
+    (params.cy44 ?? 0) === 0 &&
+    (params.cy06 ?? 0) === 0 &&
+    (params.cy26 ?? 0) === 0 &&
+    (params.cy46 ?? 0) === 0 &&
+    (params.cy66 ?? 0) === 0
+  );
+
+  return anamorphicDefault;
+}
+
+/**
+ * Apply 3DE4 anamorphic degree 6 distortion to a normalized point.
+ *
+ * The 3DE4 anamorphic model uses a bivariate polynomial:
+ *   dx = x * (cx02*r² + cx22*x² + cx04*r⁴ + cx24*x²*r² + cx44*x⁴ + cx06*r⁶ + cx26*x²*r⁴ + cx46*x⁴*r² + cx66*x⁶)
+ *   dy = y * (cy02*r² + cy22*y² + cy04*r⁴ + cy24*y²*r² + cy44*y⁴ + cy06*r⁶ + cy26*y²*r⁴ + cy46*y⁴*r² + cy66*y⁶)
+ *   distorted = (x + dx, y + dy)
+ */
+export function apply3DE4AnamorphicDeg6(
+  x: number,
+  y: number,
+  params: LensDistortionParams,
+): { x: number; y: number } {
+  const cx02 = params.cx02 ?? 0;
+  const cx22 = params.cx22 ?? 0;
+  const cx04 = params.cx04 ?? 0;
+  const cx24 = params.cx24 ?? 0;
+  const cx44 = params.cx44 ?? 0;
+  const cx06 = params.cx06 ?? 0;
+  const cx26 = params.cx26 ?? 0;
+  const cx46 = params.cx46 ?? 0;
+  const cx66 = params.cx66 ?? 0;
+
+  const cy02 = params.cy02 ?? 0;
+  const cy22 = params.cy22 ?? 0;
+  const cy04 = params.cy04 ?? 0;
+  const cy24 = params.cy24 ?? 0;
+  const cy44 = params.cy44 ?? 0;
+  const cy06 = params.cy06 ?? 0;
+  const cy26 = params.cy26 ?? 0;
+  const cy46 = params.cy46 ?? 0;
+  const cy66 = params.cy66 ?? 0;
+
+  const r2 = x * x + y * y;
+  const r4 = r2 * r2;
+  const r6 = r4 * r2;
+  const x2 = x * x;
+  const x4 = x2 * x2;
+  const x6 = x4 * x2;
+  const y2 = y * y;
+  const y4 = y2 * y2;
+  const y6 = y4 * y2;
+
+  const dx = x * (
+    cx02 * r2 + cx22 * x2 +
+    cx04 * r4 + cx24 * x2 * r2 + cx44 * x4 +
+    cx06 * r6 + cx26 * x2 * r4 + cx46 * x4 * r2 + cx66 * x6
+  );
+
+  const dy = y * (
+    cy02 * r2 + cy22 * y2 +
+    cy04 * r4 + cy24 * y2 * r2 + cy44 * y4 +
+    cy06 * r6 + cy26 * y2 * r4 + cy46 * y4 * r2 + cy66 * y6
+  );
+
+  return {
+    x: x + dx,
+    y: y + dy,
+  };
 }
 
 /**
@@ -133,7 +248,12 @@ export function applyLensDistortion(
       let ny = ((dy - cy) / maxDim) * 2 * scale * pixelAspectRatio;
 
       // Apply inverse distortion to find source coordinates
-      const undistorted = undistortPoint(nx, ny, k1, k2, k3, p1, p2);
+      let undistorted: { x: number; y: number };
+      if (params.model === '3de4_anamorphic_degree_6') {
+        undistorted = apply3DE4AnamorphicDeg6(nx, ny, params);
+      } else {
+        undistorted = undistortPoint(nx, ny, k1, k2, k3, p1, p2);
+      }
 
       // Compensate for pixel aspect ratio in output
       undistorted.y /= pixelAspectRatio;
@@ -221,7 +341,12 @@ export function generateDistortionGrid(
   const transformPoint = (px: number, py: number): { x: number; y: number } => {
     let nx = ((px - cx) / maxDim) * 2 * scale;
     let ny = ((py - cy) / maxDim) * 2 * scale * pixelAspectRatio;
-    const undist = undistortPoint(nx, ny, k1, k2, k3, p1, p2);
+    let undist: { x: number; y: number };
+    if (params.model === '3de4_anamorphic_degree_6') {
+      undist = apply3DE4AnamorphicDeg6(nx, ny, params);
+    } else {
+      undist = undistortPoint(nx, ny, k1, k2, k3, p1, p2);
+    }
     return {
       x: undist.x * maxDim / 2 + cx,
       y: (undist.y / pixelAspectRatio) * maxDim / 2 + cy,

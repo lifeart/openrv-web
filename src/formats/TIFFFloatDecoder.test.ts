@@ -384,10 +384,10 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Not a float TIFF');
     });
 
-    it('should throw for compressed TIFF', async () => {
-      // Must still be float to get past the float check first
-      const buffer = createTestFloatTIFF({ compression: 5, sampleFormat: 3 }); // LZW + float
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression');
+    it('should throw for JPEG compressed TIFF', async () => {
+      // JPEG compression (7) is not supported
+      const buffer = createTestFloatTIFF({ compression: 7, sampleFormat: 3 });
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7');
     });
 
     it('should produce finite float values', async () => {
@@ -627,9 +627,9 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow(/exceed maximum/);
     });
 
-    it('should throw for deflate compression', async () => {
-      const buffer = createTestFloatTIFF({ compression: 8, sampleFormat: 3 }); // Deflate
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 8');
+    it('should throw for PackBits compression', async () => {
+      const buffer = createTestFloatTIFF({ compression: 32773, sampleFormat: 3 }); // PackBits
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 32773');
     });
 
     it('should include metadata with bigEndian and originalChannels', async () => {
@@ -763,6 +763,911 @@ describe('TIFFFloatDecoder', () => {
       expect(result.data[idx + 1]).toBeCloseTo(5 * 0.1, 4); // G = (2*2+0+1) * 0.1
       expect(result.data[idx + 2]).toBeCloseTo(6 * 0.1, 4); // B = (2*2+0+2) * 0.1
       expect(result.data[idx + 3]).toBe(1.0);                 // A = 1.0 (RGB input)
+    });
+  });
+
+  // ==================== Compression Test Helpers ====================
+
+  /**
+   * Minimal LZW compressor for TIFF (MSB-first bit packing).
+   * Only used for test data generation.
+   */
+  function lzwCompress(input: Uint8Array): Uint8Array {
+    const CLEAR_CODE = 256;
+    const EOI_CODE = 257;
+    const MAX_CODE = 4095;
+
+    const output: number[] = [];
+    let bitBuffer = 0;
+    let bitsInBuffer = 0;
+
+    let codeSize = 9;
+
+    function writeCode(code: number): void {
+      bitBuffer = (bitBuffer << codeSize) | code;
+      bitsInBuffer += codeSize;
+      while (bitsInBuffer >= 8) {
+        bitsInBuffer -= 8;
+        output.push((bitBuffer >> bitsInBuffer) & 0xff);
+      }
+    }
+
+    function flush(): void {
+      if (bitsInBuffer > 0) {
+        output.push((bitBuffer << (8 - bitsInBuffer)) & 0xff);
+        bitsInBuffer = 0;
+        bitBuffer = 0;
+      }
+    }
+
+    // Initialize table
+    const table = new Map<string, number>();
+    let nextCode = 258;
+
+    // Write clear code
+    writeCode(CLEAR_CODE);
+
+    if (input.length === 0) {
+      writeCode(EOI_CODE);
+      flush();
+      return new Uint8Array(output);
+    }
+
+    let w = String.fromCharCode(input[0]!);
+
+    for (let i = 1; i < input.length; i++) {
+      const c = String.fromCharCode(input[i]!);
+      const wc = w + c;
+
+      if (table.has(wc)) {
+        w = wc;
+      } else {
+        // Output code for w
+        if (w.length === 1) {
+          writeCode(w.charCodeAt(0));
+        } else {
+          writeCode(table.get(w)!);
+        }
+
+        // Add wc to table
+        if (nextCode <= MAX_CODE) {
+          table.set(wc, nextCode);
+          nextCode++;
+        }
+
+        // Increase code size — encoder uses (1 << codeSize) because its table
+        // is one entry ahead of decoder's (first code after CLEAR adds no decoder entry)
+        if (nextCode > (1 << codeSize) && codeSize < 12) {
+          codeSize++;
+        }
+
+        w = c;
+      }
+    }
+
+    // Output code for remaining w
+    if (w.length === 1) {
+      writeCode(w.charCodeAt(0));
+    } else {
+      writeCode(table.get(w)!);
+    }
+
+    writeCode(EOI_CODE);
+    flush();
+
+    return new Uint8Array(output);
+  }
+
+  /**
+   * Compress data using deflate via CompressionStream.
+   */
+  async function deflateCompress(input: Uint8Array): Promise<Uint8Array> {
+    const cs = new CompressionStream('deflate');
+    const writer = cs.writable.getWriter();
+    const reader = cs.readable.getReader();
+
+    writer.write(new Uint8Array(input) as unknown as BufferSource);
+    writer.close();
+
+    const chunks: Uint8Array[] = [];
+    let totalLength = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalLength += value.length;
+    }
+
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result;
+  }
+
+  /**
+   * Create a TIFF with compressed float data.
+   * @param compressedData - Pre-compressed strip data
+   * @param options - TIFF metadata
+   */
+  function createCompressedTIFF(
+    compressedData: Uint8Array,
+    options: {
+      width: number;
+      height: number;
+      channels?: number;
+      bigEndian?: boolean;
+      compression: number;
+      predictor?: number;
+      rowsPerStrip?: number;
+      uncompressedSize: number;
+      stripCompressedSizes?: number[];
+      stripCompressedData?: Uint8Array[];
+    }
+  ): ArrayBuffer {
+    const {
+      width,
+      height,
+      channels = 3,
+      bigEndian = false,
+      compression,
+      predictor = 1,
+      rowsPerStrip = height,
+      uncompressedSize: _uncompressedSize,
+      stripCompressedSizes,
+      stripCompressedData,
+    } = options;
+
+    const le = !bigEndian;
+
+    const numStrips = Math.ceil(height / rowsPerStrip);
+    const hasPredictor = predictor !== 1;
+    const numTags = 10 + (hasPredictor ? 1 : 0);
+
+    const ifdOffset = 8;
+    const ifdSize = 2 + numTags * 12 + 4;
+    const extraDataStart = ifdOffset + ifdSize;
+
+    // BitsPerSample array
+    const needsBPSArray = channels > 2;
+    const bpsArrayOffset = extraDataStart;
+    const bpsArraySize = needsBPSArray ? channels * 2 : 0;
+
+    let nextExtra = extraDataStart + bpsArraySize;
+
+    // Strip offsets and byte counts arrays (for multi-strip)
+    let stripOffsetsArrayOffset = 0;
+    let stripByteCountsArrayOffset = 0;
+    if (numStrips > 1) {
+      stripOffsetsArrayOffset = nextExtra;
+      nextExtra += numStrips * 4;
+      stripByteCountsArrayOffset = nextExtra;
+      nextExtra += numStrips * 4;
+    }
+
+    const pixelDataOffset = nextExtra;
+
+    // Calculate total compressed data size
+    let totalCompressedSize: number;
+    if (stripCompressedData && stripCompressedData.length > 0) {
+      totalCompressedSize = stripCompressedData.reduce((sum, d) => sum + d.length, 0);
+    } else {
+      totalCompressedSize = compressedData.length;
+    }
+
+    const totalSize = pixelDataOffset + totalCompressedSize;
+    const buffer = new ArrayBuffer(totalSize);
+    const view = new DataView(buffer);
+
+    // TIFF Header
+    view.setUint16(0, bigEndian ? TIFF_BE : TIFF_LE, false);
+    view.setUint16(2, TIFF_MAGIC, le);
+    view.setUint32(4, ifdOffset, le);
+
+    let pos = ifdOffset;
+    view.setUint16(pos, numTags, le);
+    pos += 2;
+
+    function writeTag(id: number, type: number, count: number, value: number): void {
+      view.setUint16(pos, id, le);
+      view.setUint16(pos + 2, type, le);
+      view.setUint32(pos + 4, count, le);
+      if (type === 3 && count <= 2) {
+        view.setUint16(pos + 8, value, le);
+      } else if (type === 4 && count === 1) {
+        view.setUint32(pos + 8, value, le);
+      } else {
+        view.setUint32(pos + 8, value, le);
+      }
+      pos += 12;
+    }
+
+    writeTag(256, 4, 1, width);         // ImageWidth
+    writeTag(257, 4, 1, height);        // ImageLength
+    if (needsBPSArray) {
+      writeTag(258, 3, channels, bpsArrayOffset);
+    } else {
+      writeTag(258, 3, 1, 32);
+    }
+    writeTag(259, 3, 1, compression);   // Compression
+    writeTag(262, 3, 1, 2);             // PhotometricInterpretation=RGB
+    if (numStrips > 1) {
+      writeTag(273, 4, numStrips, stripOffsetsArrayOffset); // StripOffsets array
+    } else {
+      writeTag(273, 4, 1, pixelDataOffset); // Single strip offset
+    }
+    writeTag(277, 3, 1, channels);      // SamplesPerPixel
+    writeTag(278, 4, 1, rowsPerStrip);  // RowsPerStrip
+    if (numStrips > 1) {
+      writeTag(279, 4, numStrips, stripByteCountsArrayOffset); // StripByteCounts array
+    } else {
+      writeTag(279, 4, 1, compressedData.length); // Single strip byte count
+    }
+    if (hasPredictor) {
+      writeTag(317, 3, 1, predictor);    // Predictor
+    }
+    writeTag(339, 3, 1, 3);             // SampleFormat=float
+
+    // Next IFD = 0
+    view.setUint32(pos, 0, le);
+
+    // BitsPerSample array
+    if (needsBPSArray) {
+      for (let i = 0; i < channels; i++) {
+        view.setUint16(bpsArrayOffset + i * 2, 32, le);
+      }
+    }
+
+    // Write strip data
+    if (numStrips > 1 && stripCompressedData && stripCompressedSizes) {
+      let dataPos = pixelDataOffset;
+      for (let s = 0; s < numStrips; s++) {
+        view.setUint32(stripOffsetsArrayOffset + s * 4, dataPos, le);
+        view.setUint32(stripByteCountsArrayOffset + s * 4, stripCompressedSizes[s]!, le);
+        const sd = stripCompressedData[s]!;
+        new Uint8Array(buffer, dataPos, sd.length).set(sd);
+        dataPos += sd.length;
+      }
+    } else {
+      new Uint8Array(buffer, pixelDataOffset, compressedData.length).set(compressedData);
+    }
+
+    return buffer;
+  }
+
+  /**
+   * Apply horizontal differencing predictor to float pixel data (for test data generation).
+   * This is the ENCODING direction -- stores differences.
+   */
+  function applyHorizontalPredictorEncode(
+    data: Uint8Array,
+    width: number,
+    samplesPerPixel: number,
+    bytesPerSample: number,
+    rowCount: number
+  ): Uint8Array {
+    const result = new Uint8Array(data.length);
+    const rowBytes = width * samplesPerPixel * bytesPerSample;
+    const stride = samplesPerPixel * bytesPerSample;
+
+    for (let row = 0; row < rowCount; row++) {
+      const rowStart = row * rowBytes;
+      for (let i = 0; i < stride; i++) {
+        result[rowStart + i] = data[rowStart + i]!;
+      }
+      for (let i = rowBytes - 1; i >= stride; i--) {
+        result[rowStart + i] = (data[rowStart + i]! - data[rowStart + i - stride]!) & 0xff;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Apply floating-point predictor encoding to float pixel data (for test data generation).
+   */
+  function applyFloatingPointPredictorEncode(
+    data: Uint8Array,
+    width: number,
+    samplesPerPixel: number,
+    bytesPerSample: number,
+    rowCount: number
+  ): Uint8Array {
+    const result = new Uint8Array(data.length);
+    const rowBytes = width * samplesPerPixel * bytesPerSample;
+    const pixelCount = width * samplesPerPixel;
+
+    for (let row = 0; row < rowCount; row++) {
+      const rowStart = row * rowBytes;
+      // Step 1: rearrange from interleaved to planar byte order
+      const temp = new Uint8Array(rowBytes);
+      for (let i = 0; i < pixelCount; i++) {
+        for (let b = 0; b < bytesPerSample; b++) {
+          temp[b * pixelCount + i] = data[rowStart + i * bytesPerSample + b]!;
+        }
+      }
+      // Step 2: apply byte-level delta (stride 1)
+      result[rowStart] = temp[0]!;
+      for (let i = 1; i < rowBytes; i++) {
+        result[rowStart + i] = (temp[i]! - temp[i - 1]!) & 0xff;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Helper to create raw float pixel data as a Uint8Array (byte representation of Float32Array).
+   */
+  function createFloatPixelBytes(
+    width: number,
+    height: number,
+    channels: number,
+    le: boolean,
+    pixelValues?: number[]
+  ): Uint8Array {
+    const totalFloats = width * height * channels;
+    const buffer = new ArrayBuffer(totalFloats * 4);
+    const view = new DataView(buffer);
+
+    if (pixelValues) {
+      for (let i = 0; i < pixelValues.length && i < totalFloats; i++) {
+        view.setFloat32(i * 4, pixelValues[i]!, le);
+      }
+    } else {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const pixelIdx = (y * width + x) * channels;
+          for (let c = 0; c < channels; c++) {
+            const value = (x + y * width + c) / (width * height * channels);
+            view.setFloat32((pixelIdx + c) * 4, value, le);
+          }
+        }
+      }
+    }
+
+    return new Uint8Array(buffer);
+  }
+
+  // ==================== LZW Compression Tests ====================
+
+  describe('LZW compression', () => {
+    it('TIFF-LZW001: should decode LZW compressed RGB float TIFF', async () => {
+      const width = 2, height = 2, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(width * height * 4);
+
+      // Verify pixel values match
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(
+            expectedView.getFloat32((i * channels + c) * 4, true), 4
+          );
+        }
+        if (channels === 3) {
+          expect(result.data[i * 4 + 3]).toBe(1.0);
+        }
+      }
+    });
+
+    it('TIFF-LZW002: should decode LZW compressed RGBA float TIFF', async () => {
+      const width = 2, height = 2, channels = 4;
+      const pixelValues = [
+        0.1, 0.2, 0.3, 0.8,
+        0.4, 0.5, 0.6, 0.9,
+        0.7, 0.8, 0.9, 1.0,
+        1.0, 0.0, 0.5, 0.5,
+      ];
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBeCloseTo(0.8, 4);
+
+      expect(result.data[12]).toBeCloseTo(1.0, 4);
+      expect(result.data[13]).toBeCloseTo(0.0, 4);
+      expect(result.data[14]).toBeCloseTo(0.5, 4);
+      expect(result.data[15]).toBeCloseTo(0.5, 4);
+    });
+
+    it('TIFF-LZW003: should decode LZW compressed big-endian float TIFF', async () => {
+      const width = 2, height = 2, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, false);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        bigEndian: true,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(
+            expectedView.getFloat32((i * channels + c) * 4, false), 4
+          );
+        }
+      }
+    });
+
+    it('TIFF-LZW004: should decode LZW compressed multi-strip TIFF', async () => {
+      const width = 2, height = 4, channels = 3, rowsPerStrip = 2;
+      const le = true;
+
+      // Create separate strips
+      const strip1Bytes = createFloatPixelBytes(width, rowsPerStrip, channels, le, [
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9, 1.0, 0.0, 0.5,
+      ]);
+      const strip2Bytes = createFloatPixelBytes(width, rowsPerStrip, channels, le, [
+        0.11, 0.22, 0.33, 0.44, 0.55, 0.66,
+        0.77, 0.88, 0.99, 0.12, 0.34, 0.56,
+      ]);
+
+      const compressed1 = lzwCompress(strip1Bytes);
+      const compressed2 = lzwCompress(strip2Bytes);
+
+      const tiffBuffer = createCompressedTIFF(new Uint8Array(0), {
+        width,
+        height,
+        channels,
+        compression: 5,
+        rowsPerStrip,
+        uncompressedSize: strip1Bytes.length + strip2Bytes.length,
+        stripCompressedData: [compressed1, compressed2],
+        stripCompressedSizes: [compressed1.length, compressed2.length],
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.data.length).toBe(width * height * 4);
+
+      // Verify first pixel of strip 1
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+
+      // Verify first pixel of strip 2 (row 2, col 0)
+      const idx = (2 * width + 0) * 4;
+      expect(result.data[idx]).toBeCloseTo(0.11, 4);
+      expect(result.data[idx + 1]).toBeCloseTo(0.22, 4);
+      expect(result.data[idx + 2]).toBeCloseTo(0.33, 4);
+    });
+
+    it('TIFF-LZW005: should decode LZW with horizontal predictor (2)', async () => {
+      const width = 2, height = 2, channels = 3;
+      const le = true;
+
+      const rawBytes = createFloatPixelBytes(width, height, channels, le, [
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9, 1.0, 0.0, 0.5,
+      ]);
+
+      // Apply predictor encoding
+      const predictedBytes = applyHorizontalPredictorEncode(rawBytes, width, channels, 4, height);
+      const compressed = lzwCompress(predictedBytes);
+
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        predictor: 2,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0);
+
+      expect(result.data[4]).toBeCloseTo(0.4, 4);
+      expect(result.data[5]).toBeCloseTo(0.5, 4);
+      expect(result.data[6]).toBeCloseTo(0.6, 4);
+    });
+
+    it('TIFF-LZW006: should decode LZW with floating-point predictor (3)', async () => {
+      const width = 2, height = 2, channels = 3;
+      const le = true;
+
+      const rawBytes = createFloatPixelBytes(width, height, channels, le, [
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9, 1.0, 0.0, 0.5,
+      ]);
+
+      // Apply FP predictor encoding
+      const predictedBytes = applyFloatingPointPredictorEncode(rawBytes, width, channels, 4, height);
+      const compressed = lzwCompress(predictedBytes);
+
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        predictor: 3,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0);
+
+      expect(result.data[4]).toBeCloseTo(0.4, 4);
+      expect(result.data[5]).toBeCloseTo(0.5, 4);
+      expect(result.data[6]).toBeCloseTo(0.6, 4);
+    });
+
+    it('TIFF-LZW007: should decode 1x1 LZW compressed TIFF', async () => {
+      const width = 1, height = 1, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, [0.5, 0.25, 0.75]);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data[0]).toBeCloseTo(0.5, 4);
+      expect(result.data[1]).toBeCloseTo(0.25, 4);
+      expect(result.data[2]).toBeCloseTo(0.75, 4);
+      expect(result.data[3]).toBe(1.0);
+    });
+
+    it('TIFF-LZW008: should decode larger LZW data exercising code size transitions', async () => {
+      // 16x16 RGB = 768 floats = 3072 bytes — enough unique bytes to push LZW table
+      // past the 9-to-10 bit threshold (512 entries)
+      const width = 16, height = 16, channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(
+            (x + y * width) / (width * height),
+            (y * 0.05 + x * 0.01),
+            1.0 - (x + y * width) / (width * height),
+          );
+        }
+      }
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      // Verify every pixel matches expected values
+      for (let i = 0; i < width * height; i++) {
+        const srcIdx = i * channels;
+        const dstIdx = i * 4;
+        expect(result.data[dstIdx]).toBeCloseTo(pixelValues[srcIdx]!, 4);
+        expect(result.data[dstIdx + 1]).toBeCloseTo(pixelValues[srcIdx + 1]!, 4);
+        expect(result.data[dstIdx + 2]).toBeCloseTo(pixelValues[srcIdx + 2]!, 4);
+      }
+
+      // Also verify same data decodes correctly with deflate (reference)
+      const deflateCompressed = await deflateCompress(rawBytes);
+      const deflateTiff = createCompressedTIFF(deflateCompressed, {
+        width,
+        height,
+        channels,
+        compression: 8,
+        uncompressedSize: rawBytes.length,
+      });
+      const deflateResult = await decodeTIFFFloat(deflateTiff);
+      // LZW and deflate should produce identical output
+      for (let i = 0; i < result.data.length; i++) {
+        expect(result.data[i]).toBe(deflateResult.data[i]);
+      }
+    });
+  });
+
+  // ==================== Deflate Compression Tests ====================
+
+  describe('Deflate compression', () => {
+    it('TIFF-DEF001: should decode Deflate (8) compressed RGB float TIFF', async () => {
+      const width = 2, height = 2, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = await deflateCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 8,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(
+            expectedView.getFloat32((i * channels + c) * 4, true), 4
+          );
+        }
+        expect(result.data[i * 4 + 3]).toBe(1.0);
+      }
+    });
+
+    it('TIFF-DEF002: should decode Adobe Deflate (32946) compressed RGBA float TIFF', async () => {
+      const width = 2, height = 2, channels = 4;
+      const pixelValues = [
+        0.1, 0.2, 0.3, 0.8,
+        0.4, 0.5, 0.6, 0.9,
+        0.7, 0.8, 0.9, 1.0,
+        1.0, 0.0, 0.5, 0.5,
+      ];
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = await deflateCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32946,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBeCloseTo(0.8, 4);
+
+      expect(result.data[12]).toBeCloseTo(1.0, 4);
+      expect(result.data[13]).toBeCloseTo(0.0, 4);
+      expect(result.data[14]).toBeCloseTo(0.5, 4);
+      expect(result.data[15]).toBeCloseTo(0.5, 4);
+    });
+
+    it('TIFF-DEF003: should decode Deflate compressed big-endian float TIFF', async () => {
+      const width = 2, height = 2, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, false);
+      const compressed = await deflateCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        bigEndian: true,
+        compression: 8,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(
+            expectedView.getFloat32((i * channels + c) * 4, false), 4
+          );
+        }
+      }
+    });
+
+    it('TIFF-DEF004: should decode Deflate compressed multi-strip TIFF', async () => {
+      const width = 2, height = 4, channels = 3, rowsPerStrip = 2;
+      const le = true;
+
+      const strip1Bytes = createFloatPixelBytes(width, rowsPerStrip, channels, le, [
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9, 1.0, 0.0, 0.5,
+      ]);
+      const strip2Bytes = createFloatPixelBytes(width, rowsPerStrip, channels, le, [
+        0.11, 0.22, 0.33, 0.44, 0.55, 0.66,
+        0.77, 0.88, 0.99, 0.12, 0.34, 0.56,
+      ]);
+
+      const compressed1 = await deflateCompress(strip1Bytes);
+      const compressed2 = await deflateCompress(strip2Bytes);
+
+      const tiffBuffer = createCompressedTIFF(new Uint8Array(0), {
+        width,
+        height,
+        channels,
+        compression: 8,
+        rowsPerStrip,
+        uncompressedSize: strip1Bytes.length + strip2Bytes.length,
+        stripCompressedData: [compressed1, compressed2],
+        stripCompressedSizes: [compressed1.length, compressed2.length],
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Verify first pixel of strip 1
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+
+      // Verify first pixel of strip 2 (row 2, col 0)
+      const idx = (2 * width + 0) * 4;
+      expect(result.data[idx]).toBeCloseTo(0.11, 4);
+      expect(result.data[idx + 1]).toBeCloseTo(0.22, 4);
+      expect(result.data[idx + 2]).toBeCloseTo(0.33, 4);
+    });
+
+    it('TIFF-DEF005: should decode Deflate with horizontal predictor (2)', async () => {
+      const width = 2, height = 2, channels = 3;
+      const le = true;
+
+      const rawBytes = createFloatPixelBytes(width, height, channels, le, [
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9, 1.0, 0.0, 0.5,
+      ]);
+
+      const predictedBytes = applyHorizontalPredictorEncode(rawBytes, width, channels, 4, height);
+      const compressed = await deflateCompress(predictedBytes);
+
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 8,
+        predictor: 2,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0);
+
+      expect(result.data[4]).toBeCloseTo(0.4, 4);
+      expect(result.data[5]).toBeCloseTo(0.5, 4);
+      expect(result.data[6]).toBeCloseTo(0.6, 4);
+    });
+
+    it('TIFF-DEF006: should decode Deflate with floating-point predictor (3)', async () => {
+      const width = 2, height = 2, channels = 3;
+      const le = true;
+
+      const rawBytes = createFloatPixelBytes(width, height, channels, le, [
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9, 1.0, 0.0, 0.5,
+      ]);
+
+      const predictedBytes = applyFloatingPointPredictorEncode(rawBytes, width, channels, 4, height);
+      const compressed = await deflateCompress(predictedBytes);
+
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 8,
+        predictor: 3,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0);
+
+      expect(result.data[4]).toBeCloseTo(0.4, 4);
+      expect(result.data[5]).toBeCloseTo(0.5, 4);
+      expect(result.data[6]).toBeCloseTo(0.6, 4);
+    });
+
+    it('TIFF-DEF007: should decode 1x1 Deflate compressed TIFF', async () => {
+      const width = 1, height = 1, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, [0.5, 0.25, 0.75]);
+      const compressed = await deflateCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 8,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data[0]).toBeCloseTo(0.5, 4);
+      expect(result.data[1]).toBeCloseTo(0.25, 4);
+      expect(result.data[2]).toBeCloseTo(0.75, 4);
+      expect(result.data[3]).toBe(1.0);
+    });
+  });
+
+  // ==================== Compression Error Handling Tests ====================
+
+  describe('Compression error handling', () => {
+    it('TIFF-ERR001: should reject JPEG compression (7)', async () => {
+      const buffer = createTestFloatTIFF({ compression: 7 });
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7');
+    });
+
+    it('TIFF-ERR002: should reject PackBits compression (32773)', async () => {
+      const buffer = createTestFloatTIFF({ compression: 32773 });
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 32773');
+    });
+
+    it('TIFF-ERR003: should reject unsupported predictor', async () => {
+      // Create a compressed TIFF with predictor=4 (unsupported)
+      const width = 2, height = 2, channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        predictor: 4,
+        uncompressedSize: rawBytes.length,
+      });
+
+      await expect(decodeTIFFFloat(tiffBuffer)).rejects.toThrow('Unsupported TIFF predictor: 4');
     });
   });
 });

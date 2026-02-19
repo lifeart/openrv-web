@@ -6,34 +6,37 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ThemeControl } from './ThemeControl';
-import type { ThemeMode, ResolvedTheme } from '../../utils/ui/ThemeManager';
+import { ThemeManager } from '../../utils/ui/ThemeManager';
+import { PREFERENCE_STORAGE_KEYS } from '../../utils/preferences/PreferencesManager';
 
-// Mock ThemeManager
-const mockThemeManager = {
-  getMode: vi.fn((): ThemeMode => 'auto'),
-  getResolvedTheme: vi.fn((): ResolvedTheme => 'dark'),
-  setMode: vi.fn(),
-  on: vi.fn(),
-  off: vi.fn(),
-};
+// Use a real ThemeManager instance per test, injected via getThemeManager mock.
+// This avoids a hand-rolled mock object and tests real on/off/setMode behavior.
+let themeManager: ThemeManager;
 
-vi.mock('../../utils/ui/ThemeManager', () => ({
-  getThemeManager: () => mockThemeManager,
-  ThemeMode: {},
-}));
+vi.mock('../../utils/ui/ThemeManager', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/ui/ThemeManager')>();
+  return {
+    ...actual,
+    getThemeManager: () => themeManager,
+  };
+});
 
 describe('ThemeControl', () => {
   let control: ThemeControl;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockThemeManager.getMode.mockReturnValue('auto');
-    mockThemeManager.getResolvedTheme.mockReturnValue('dark');
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
+    themeManager = new ThemeManager();
+    vi.spyOn(themeManager, 'on');
+    vi.spyOn(themeManager, 'off');
+    vi.spyOn(themeManager, 'setMode');
     control = new ThemeControl();
   });
 
   afterEach(() => {
     control.dispose();
+    themeManager.dispose();
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
   });
 
   describe('initialization', () => {
@@ -51,19 +54,30 @@ describe('ThemeControl', () => {
 
     it('THEME-U003: should have dropdown with testid', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="theme-dropdown"]');
+      document.body.appendChild(el);
+      // Click button to open dropdown (appends to document.body)
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="theme-dropdown"]');
       expect(dropdown).not.toBeNull();
     });
 
     it('THEME-U004: dropdown should be hidden initially', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="theme-dropdown"]') as HTMLElement;
-      expect(dropdown.style.display).toBe('none');
+      control.render();
+      // Dropdown is not yet in the DOM before first open; verify it's not visible
+      const dropdown = document.querySelector('[data-testid="theme-dropdown"]');
+      // Before opening, dropdown is either not in DOM or display:none
+      if (dropdown) {
+        expect((dropdown as HTMLElement).style.display).toBe('none');
+      } else {
+        // Not in DOM at all is valid - it hasn't been opened yet
+        expect(dropdown).toBeNull();
+      }
     });
 
     it('THEME-U005: should subscribe to theme manager events', () => {
-      expect(mockThemeManager.on).toHaveBeenCalledWith('modeChanged', expect.any(Function));
-      expect(mockThemeManager.on).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(themeManager.on).toHaveBeenCalledWith('modeChanged', expect.any(Function));
+      expect(themeManager.on).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
   });
 
@@ -83,28 +97,40 @@ describe('ThemeControl', () => {
   describe('dropdown options', () => {
     it('THEME-U020: dropdown has auto option', () => {
       const el = control.render();
-      const autoOption = el.querySelector('[data-testid="theme-option-auto"]');
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const autoOption = document.querySelector('[data-testid="theme-option-auto"]');
       expect(autoOption).not.toBeNull();
     });
 
     it('THEME-U021: dropdown has dark option', () => {
       const el = control.render();
-      const darkOption = el.querySelector('[data-testid="theme-option-dark"]');
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const darkOption = document.querySelector('[data-testid="theme-option-dark"]');
       expect(darkOption).not.toBeNull();
     });
 
     it('THEME-U022: dropdown has light option', () => {
       const el = control.render();
-      const lightOption = el.querySelector('[data-testid="theme-option-light"]');
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const lightOption = document.querySelector('[data-testid="theme-option-light"]');
       expect(lightOption).not.toBeNull();
     });
 
     it('THEME-U023: all options have correct data-theme-mode', () => {
       const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
 
-      const autoOption = el.querySelector('[data-testid="theme-option-auto"]') as HTMLElement;
-      const darkOption = el.querySelector('[data-testid="theme-option-dark"]') as HTMLElement;
-      const lightOption = el.querySelector('[data-testid="theme-option-light"]') as HTMLElement;
+      const autoOption = document.querySelector('[data-testid="theme-option-auto"]') as HTMLElement;
+      const darkOption = document.querySelector('[data-testid="theme-option-dark"]') as HTMLElement;
+      const lightOption = document.querySelector('[data-testid="theme-option-light"]') as HTMLElement;
 
       expect(autoOption.dataset.themeMode).toBe('auto');
       expect(darkOption.dataset.themeMode).toBe('dark');
@@ -115,78 +141,93 @@ describe('ThemeControl', () => {
   describe('mode selection', () => {
     it('THEME-U030: clicking dark option calls setMode with dark', () => {
       const el = control.render();
-      const darkOption = el.querySelector('[data-testid="theme-option-dark"]') as HTMLButtonElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const darkOption = document.querySelector('[data-testid="theme-option-dark"]') as HTMLButtonElement;
 
       darkOption.click();
 
-      expect(mockThemeManager.setMode).toHaveBeenCalledWith('dark');
+      expect(themeManager.setMode).toHaveBeenCalledWith('dark');
     });
 
     it('THEME-U031: clicking light option calls setMode with light', () => {
       const el = control.render();
-      const lightOption = el.querySelector('[data-testid="theme-option-light"]') as HTMLButtonElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const lightOption = document.querySelector('[data-testid="theme-option-light"]') as HTMLButtonElement;
 
       lightOption.click();
 
-      expect(mockThemeManager.setMode).toHaveBeenCalledWith('light');
+      expect(themeManager.setMode).toHaveBeenCalledWith('light');
     });
 
     it('THEME-U032: clicking auto option calls setMode with auto', () => {
       const el = control.render();
-      const autoOption = el.querySelector('[data-testid="theme-option-auto"]') as HTMLButtonElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const autoOption = document.querySelector('[data-testid="theme-option-auto"]') as HTMLButtonElement;
 
       autoOption.click();
 
-      expect(mockThemeManager.setMode).toHaveBeenCalledWith('auto');
+      expect(themeManager.setMode).toHaveBeenCalledWith('auto');
     });
   });
 
   describe('button states', () => {
     it('THEME-U040: button shows current mode label', () => {
-      mockThemeManager.getMode.mockReturnValue('dark');
+      themeManager.setMode('dark');
       const newControl = new ThemeControl();
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
 
-      expect(button.textContent).toContain('Dark');
+      expect(button.getAttribute('aria-label')).toContain('Dark');
       newControl.dispose();
     });
 
     it('THEME-U041: button shows Auto for auto mode', () => {
-      mockThemeManager.getMode.mockReturnValue('auto');
+      // Default mode is already 'auto', no need to set it
       const newControl = new ThemeControl();
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
 
-      expect(button.textContent).toContain('Auto');
+      expect(button.getAttribute('aria-label')).toContain('Auto');
       newControl.dispose();
     });
 
     it('THEME-U042: button shows Light for light mode', () => {
-      mockThemeManager.getMode.mockReturnValue('light');
+      themeManager.setMode('light');
       const newControl = new ThemeControl();
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
 
-      expect(button.textContent).toContain('Light');
+      expect(button.getAttribute('aria-label')).toContain('Light');
       newControl.dispose();
     });
   });
 
   describe('dropdown info', () => {
     it('THEME-U050: dropdown shows current resolved theme info', () => {
-      mockThemeManager.getResolvedTheme.mockReturnValue('dark');
+      // Default: mode='auto', resolved='dark' (jsdom has no matchMedia, falls back to dark)
       const el = control.render();
-      const info = el.querySelector('.theme-info') as HTMLElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const info = document.querySelector('.theme-info') as HTMLElement;
 
       expect(info.textContent).toContain('Dark');
     });
 
     it('THEME-U051: dropdown shows Light when resolved theme is light', () => {
-      mockThemeManager.getResolvedTheme.mockReturnValue('light');
+      themeManager.setMode('light');
       const newControl = new ThemeControl();
       const el = newControl.render();
-      const info = el.querySelector('.theme-info') as HTMLElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const info = document.querySelector('.theme-info') as HTMLElement;
 
       expect(info.textContent).toContain('Light');
       newControl.dispose();
@@ -196,7 +237,10 @@ describe('ThemeControl', () => {
   describe('dropdown divider', () => {
     it('THEME-U060: dropdown has divider between options and info', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="theme-dropdown"]') as HTMLElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="theme-dropdown"]') as HTMLElement;
 
       // Should have divider element (a div with specific styling)
       const dividers = dropdown.querySelectorAll('div');
@@ -232,22 +276,24 @@ describe('ThemeControl', () => {
     it('THEME-U073: dispose unsubscribes from modeChanged event', () => {
       control.dispose();
 
-      expect(mockThemeManager.off).toHaveBeenCalledWith('modeChanged', expect.any(Function));
+      expect(themeManager.off).toHaveBeenCalledWith('modeChanged', expect.any(Function));
     });
 
     it('THEME-U074: dispose unsubscribes from themeChanged event', () => {
       control.dispose();
 
-      expect(mockThemeManager.off).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(themeManager.off).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
 
     it('THEME-U075: dispose calls off with the same handler that was passed to on', () => {
       // Get the handlers that were passed to 'on'
-      const onModeChangedCall = mockThemeManager.on.mock.calls.find(
-        (call: [string, Function]) => call[0] === 'modeChanged'
+      const onSpy = vi.mocked(themeManager.on);
+      const offSpy = vi.mocked(themeManager.off);
+      const onModeChangedCall = onSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'modeChanged'
       );
-      const onThemeChangedCall = mockThemeManager.on.mock.calls.find(
-        (call: [string, Function]) => call[0] === 'themeChanged'
+      const onThemeChangedCall = onSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'themeChanged'
       );
 
       expect(onModeChangedCall).toBeDefined();
@@ -259,19 +305,25 @@ describe('ThemeControl', () => {
       control.dispose();
 
       // Verify off was called with the same handlers
-      expect(mockThemeManager.off).toHaveBeenCalledWith('modeChanged', modeChangedHandler);
-      expect(mockThemeManager.off).toHaveBeenCalledWith('themeChanged', themeChangedHandler);
+      expect(offSpy).toHaveBeenCalledWith('modeChanged', modeChangedHandler);
+      expect(offSpy).toHaveBeenCalledWith('themeChanged', themeChangedHandler);
     });
   });
 });
 
 describe('ThemeControl mode icons', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
+    themeManager = new ThemeManager();
+  });
+
+  afterEach(() => {
+    themeManager.dispose();
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
   });
 
   it('THEME-U080: auto mode shows settings icon', () => {
-    mockThemeManager.getMode.mockReturnValue('auto');
+    // Default mode is 'auto'
     const control = new ThemeControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -282,7 +334,7 @@ describe('ThemeControl mode icons', () => {
   });
 
   it('THEME-U081: dark mode shows moon icon', () => {
-    mockThemeManager.getMode.mockReturnValue('dark');
+    themeManager.setMode('dark');
     const control = new ThemeControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -292,7 +344,7 @@ describe('ThemeControl mode icons', () => {
   });
 
   it('THEME-U082: light mode shows sun icon', () => {
-    mockThemeManager.getMode.mockReturnValue('light');
+    themeManager.setMode('light');
     const control = new ThemeControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;

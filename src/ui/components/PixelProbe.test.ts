@@ -467,6 +467,30 @@ describe('PixelProbe', () => {
         expect(pixelProbe.getState().format).toBe(format);
       }
     });
+
+    it('PROBE-063: active format row is visually highlighted', () => {
+      pixelProbe.enable();
+      pixelProbe.show();
+      pixelProbe.setFormat('hex');
+
+      const hexValue = document.querySelector('[data-testid="pixel-probe-hex"]') as HTMLElement;
+      const row = hexValue.parentElement as HTMLElement;
+      expect(row.style.borderColor).toContain('var(--accent-primary-rgb)');
+    });
+
+    it('PROBE-064: precision button shows current precision and toggles label', () => {
+      pixelProbe.enable();
+      pixelProbe.show();
+
+      const precisionBtn = document.querySelector('[data-testid="pixel-probe-precision-toggle"]') as HTMLButtonElement;
+      expect(precisionBtn.textContent).toBe('P3');
+
+      precisionBtn.click();
+
+      expect(pixelProbe.getFloatPrecision()).toBe(6);
+      expect(precisionBtn.textContent).toBe('P6');
+      expect(precisionBtn.getAttribute('aria-pressed')).toBe('true');
+    });
   });
 
   describe('sample size (area averaging)', () => {
@@ -658,6 +682,63 @@ describe('PixelProbe', () => {
       expect(() => {
         pixelProbe.setOverlayPosition(100, 100);
       }).not.toThrow();
+    });
+
+    it('PROBE-072: setOverlayPosition pauses follow when cursor is near overlay', () => {
+      pixelProbe.enable();
+      pixelProbe.show();
+
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      overlay.style.left = '120px';
+      overlay.style.top = '120px';
+
+      vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+        x: 120,
+        y: 120,
+        left: 120,
+        top: 120,
+        right: 320,
+        bottom: 220,
+        width: 200,
+        height: 100,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      // Cursor is close to top-left corner: overlay should not chase it.
+      pixelProbe.setOverlayPosition(110, 110);
+      expect(overlay.style.left).toBe('120px');
+      expect(overlay.style.top).toBe('120px');
+    });
+
+    it('PROBE-073: hovering overlay pauses follow until mouse leaves', () => {
+      pixelProbe.enable();
+      pixelProbe.show();
+
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      overlay.style.left = '120px';
+      overlay.style.top = '120px';
+
+      vi.spyOn(overlay, 'getBoundingClientRect').mockReturnValue({
+        x: 120,
+        y: 120,
+        left: 120,
+        top: 120,
+        right: 320,
+        bottom: 220,
+        width: 200,
+        height: 100,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      overlay.dispatchEvent(new MouseEvent('mouseenter'));
+      pixelProbe.setOverlayPosition(500, 400);
+      expect(overlay.style.left).toBe('120px');
+      expect(overlay.style.top).toBe('120px');
+
+      overlay.dispatchEvent(new MouseEvent('mouseleave'));
+      pixelProbe.setOverlayPosition(500, 400);
+      expect(overlay.style.left).toBe('520px');
+      expect(overlay.style.top).toBe('420px');
     });
   });
 

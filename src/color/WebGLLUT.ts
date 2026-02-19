@@ -6,6 +6,7 @@
  */
 
 import { LUT3D, createLUTTexture } from './LUTLoader';
+import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from './LUTUtils';
 
 /**
  * Convert Float32Array to Uint16Array of IEEE 754 half-float values
@@ -61,6 +62,7 @@ void main() {
 `;
 
 // Fragment shader - applies 3D LUT with trilinear interpolation
+// Supports optional inMatrix/outMatrix for pre/post LUT color transformation
 const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 precision highp sampler3D;
@@ -72,15 +74,32 @@ uniform vec3 u_domainMin;
 uniform vec3 u_domainMax;
 uniform float u_lutSize;
 
+// Optional pre/post LUT matrices
+uniform mat4 u_inMatrix;
+uniform mat4 u_outMatrix;
+uniform int u_hasInMatrix;
+uniform int u_hasOutMatrix;
+
 in vec2 v_texCoord;
 out vec4 fragColor;
+
+vec3 applyMatrix(vec3 color, mat4 m) {
+  vec4 result = m * vec4(color, 1.0);
+  return result.rgb;
+}
 
 void main() {
   // Sample the source image
   vec4 color = texture(u_image, v_texCoord);
 
+  // Apply inMatrix before LUT sampling
+  vec3 lutInput = color.rgb;
+  if (u_hasInMatrix == 1) {
+    lutInput = applyMatrix(color.rgb, u_inMatrix);
+  }
+
   // Normalize to LUT domain
-  vec3 normalizedColor = (color.rgb - u_domainMin) / (u_domainMax - u_domainMin);
+  vec3 normalizedColor = (lutInput - u_domainMin) / (u_domainMax - u_domainMin);
 
   // Clamp to valid range
   normalizedColor = clamp(normalizedColor, 0.0, 1.0);
@@ -93,6 +112,11 @@ void main() {
 
   // Sample the 3D LUT with hardware trilinear interpolation
   vec3 lutColor = texture(u_lut, lutCoord).rgb;
+
+  // Apply outMatrix after LUT sampling
+  if (u_hasOutMatrix == 1) {
+    lutColor = applyMatrix(lutColor, u_outMatrix);
+  }
 
   // Blend between original and LUT-transformed based on intensity
   vec3 finalColor = mix(color.rgb, lutColor, u_intensity);
@@ -233,6 +257,10 @@ export class WebGLLUTProcessor {
   private imageTextureHeight: number = 0;
   private imageTextureFilter: number = 0; // tracks current MIN_FILTER to detect apply vs applyFloat switches
 
+  // Matrix state
+  private _inMatrix: Float32Array | null = null;
+  private _outMatrix: Float32Array | null = null;
+
   // Uniform locations
   private uImage: WebGLUniformLocation | null = null;
   private uLut: WebGLUniformLocation | null = null;
@@ -240,6 +268,10 @@ export class WebGLLUTProcessor {
   private uDomainMin: WebGLUniformLocation | null = null;
   private uDomainMax: WebGLUniformLocation | null = null;
   private uLutSize: WebGLUniformLocation | null = null;
+  private uInMatrix: WebGLUniformLocation | null = null;
+  private uOutMatrix: WebGLUniformLocation | null = null;
+  private uHasInMatrix: WebGLUniformLocation | null = null;
+  private uHasOutMatrix: WebGLUniformLocation | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -374,6 +406,10 @@ export class WebGLLUTProcessor {
     this.uDomainMin = gl.getUniformLocation(this.program, 'u_domainMin');
     this.uDomainMax = gl.getUniformLocation(this.program, 'u_domainMax');
     this.uLutSize = gl.getUniformLocation(this.program, 'u_lutSize');
+    this.uInMatrix = gl.getUniformLocation(this.program, 'u_inMatrix');
+    this.uOutMatrix = gl.getUniformLocation(this.program, 'u_outMatrix');
+    this.uHasInMatrix = gl.getUniformLocation(this.program, 'u_hasInMatrix');
+    this.uHasOutMatrix = gl.getUniformLocation(this.program, 'u_hasOutMatrix');
 
     // Create position buffer (fullscreen quad)
     this.positionBuffer = gl.createBuffer();
@@ -452,6 +488,56 @@ export class WebGLLUTProcessor {
   }
 
   /**
+   * Set the input transformation matrix (applied before LUT sampling).
+   * Accepts a row-major flat[16] array. NaN/Infinity entries sanitized to identity.
+   * Pass null to clear.
+   */
+  setInMatrix(matrix: Float32Array | number[] | null): void {
+    this._inMatrix = sanitizeLUTMatrix(matrix);
+  }
+
+  /**
+   * Set the output transformation matrix (applied after LUT sampling).
+   * Accepts a row-major flat[16] array. NaN/Infinity entries sanitized to identity.
+   * Pass null to clear.
+   */
+  setOutMatrix(matrix: Float32Array | number[] | null): void {
+    this._outMatrix = sanitizeLUTMatrix(matrix);
+  }
+
+  /** Get the current input matrix */
+  getInMatrix(): Float32Array | null {
+    return this._inMatrix;
+  }
+
+  /** Get the current output matrix */
+  getOutMatrix(): Float32Array | null {
+    return this._outMatrix;
+  }
+
+  /** Upload matrix uniforms to the GPU */
+  private uploadMatrixUniforms(): void {
+    const gl = this.gl;
+    const hasIn = this._inMatrix !== null;
+    const hasOut = this._outMatrix !== null;
+
+    gl.uniform1i(this.uHasInMatrix, hasIn ? 1 : 0);
+    gl.uniform1i(this.uHasOutMatrix, hasOut ? 1 : 0);
+
+    // Upload with transpose=true: row-major -> column-major for GLSL
+    gl.uniformMatrix4fv(
+      this.uInMatrix,
+      true,
+      hasIn ? this._inMatrix! : IDENTITY_MATRIX_4X4,
+    );
+    gl.uniformMatrix4fv(
+      this.uOutMatrix,
+      true,
+      hasOut ? this._outMatrix! : IDENTITY_MATRIX_4X4,
+    );
+  }
+
+  /**
    * Apply the LUT to an ImageData
    */
   apply(imageData: ImageData, intensity: number = 1.0): ImageData {
@@ -508,6 +594,7 @@ export class WebGLLUTProcessor {
     gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
     gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
     gl.uniform1f(this.uLutSize, this.currentLUT.size);
+    this.uploadMatrixUniforms();
 
     // Render to canvas (default framebuffer)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -597,6 +684,7 @@ export class WebGLLUTProcessor {
     gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
     gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
     gl.uniform1f(this.uLutSize, this.currentLUT.size);
+    this.uploadMatrixUniforms();
 
     // Render to float FBO
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.floatFBO);

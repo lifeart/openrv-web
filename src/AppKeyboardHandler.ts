@@ -112,15 +112,47 @@ export class AppKeyboardHandler {
       line-height: 1.6;
     `;
 
+    // Search/filter input
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search shortcuts...';
+    searchInput.setAttribute('data-testid', 'shortcuts-search');
+    searchInput.style.cssText = `
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 10px;
+      margin-bottom: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      background: var(--bg-hover);
+      border: 1px solid var(--bg-active);
+      border-radius: 4px;
+      color: var(--text-primary);
+      outline: none;
+    `;
+    content.appendChild(searchInput);
+
     // Group shortcuts by category
     const categories = {
-      'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate'],
+      'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
       'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
-      'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
+      'TIMELINE': [
+        'timeline.setInPoint',
+        'timeline.setInPointAlt',
+        'timeline.setOutPoint',
+        'timeline.setOutPointAlt',
+        'timeline.resetInOut',
+        'timeline.toggleMark',
+        'timeline.nextMarkOrBoundary',
+        'timeline.previousMarkOrBoundary',
+        'timeline.nextShot',
+        'timeline.previousShot',
+        'timeline.cycleLoopMode'
+      ],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
@@ -144,6 +176,7 @@ export class AppKeyboardHandler {
 
       const categoryDiv = document.createElement('div');
       categoryDiv.style.cssText = 'margin-bottom: 16px;';
+      categoryDiv.setAttribute('data-shortcut-category', categoryName);
 
       const categoryHeader = document.createElement('div');
       categoryHeader.style.cssText = 'font-weight: bold; color: var(--accent-primary); margin-bottom: 4px;';
@@ -155,6 +188,9 @@ export class AppKeyboardHandler {
         for (const shortcut of audioShortcuts) {
           const shortcutDiv = document.createElement('div');
           shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.setAttribute('data-shortcut-row', '');
+          shortcutDiv.setAttribute('data-shortcut-key', shortcut.key.toLowerCase());
+          shortcutDiv.setAttribute('data-shortcut-desc', shortcut.desc.toLowerCase());
 
           const keySpan = document.createElement('span');
           keySpan.textContent = shortcut.key;
@@ -180,6 +216,9 @@ export class AppKeyboardHandler {
         for (const shortcut of mouseShortcuts) {
           const shortcutDiv = document.createElement('div');
           shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.setAttribute('data-shortcut-row', '');
+          shortcutDiv.setAttribute('data-shortcut-key', shortcut.key.toLowerCase());
+          shortcutDiv.setAttribute('data-shortcut-desc', shortcut.desc.toLowerCase());
 
           const keySpan = document.createElement('span');
           keySpan.textContent = shortcut.key;
@@ -204,14 +243,19 @@ export class AppKeyboardHandler {
 
           const shortcutDiv = document.createElement('div');
           shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.setAttribute('data-shortcut-row', '');
 
+          const keyText = describeKeyCombo(effectiveCombo);
           const keySpan = document.createElement('span');
-          keySpan.textContent = describeKeyCombo(effectiveCombo);
+          keySpan.textContent = keyText;
           keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : 'color: var(--text-muted);'}`;
 
           const descSpan = document.createElement('span');
           descSpan.textContent = defaultBinding.description;
           descSpan.style.cssText = 'color: var(--text-primary); flex: 1;';
+
+          shortcutDiv.setAttribute('data-shortcut-key', keyText.toLowerCase());
+          shortcutDiv.setAttribute('data-shortcut-desc', defaultBinding.description.toLowerCase());
 
           const actionsDiv = document.createElement('div');
           actionsDiv.style.cssText = 'display: flex; gap: 4px;';
@@ -277,7 +321,29 @@ export class AppKeyboardHandler {
     resetAllContainer.appendChild(resetAllButton);
     content.appendChild(resetAllContainer);
 
+    // Wire up search filtering
+    searchInput.addEventListener('input', () => {
+      const term = searchInput.value.toLowerCase().trim();
+      const categoryDivs = content.querySelectorAll<HTMLElement>('[data-shortcut-category]');
+      for (const catDiv of categoryDivs) {
+        const rows = catDiv.querySelectorAll<HTMLElement>('[data-shortcut-row]');
+        let anyVisible = false;
+        for (const row of rows) {
+          const keyText = row.getAttribute('data-shortcut-key') || '';
+          const descText = row.getAttribute('data-shortcut-desc') || '';
+          const matches = term === '' || keyText.includes(term) || descText.includes(term);
+          row.style.display = matches ? '' : 'none';
+          if (matches) anyVisible = true;
+        }
+        // Hide entire category if no rows match (unless search is empty)
+        catDiv.style.display = (term === '' || anyVisible) ? '' : 'none';
+      }
+    });
+
     showModal(content, { title: 'Keyboard Shortcuts', width: '700px' });
+
+    // Auto-focus the search input when the dialog opens
+    searchInput.focus();
   }
 
   /**

@@ -17,8 +17,16 @@ import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 export interface SnapshotPanelEvents extends EventMap {
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
+  /** Emitted when panel visibility changes */
+  visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
   closed: void;
+}
+
+/** Interface for panels that support mutual exclusion */
+export interface ExclusivePanel {
+  isOpen(): boolean;
+  hide(): void;
 }
 
 export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
@@ -28,7 +36,9 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private filterMode: 'all' | 'manual' | 'auto' = 'all';
   private snapshots: Snapshot[] = [];
   private snapshotManager: SnapshotManager;
+  private snapshotSubscription: (() => void) | null = null;
   private isVisible = false;
+  private exclusivePanel: ExclusivePanel | null = null;
 
   constructor(snapshotManager: SnapshotManager) {
     super();
@@ -206,7 +216,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.container.appendChild(footer);
 
     // Listen for snapshot changes
-    this.snapshotManager.on('snapshotsChanged', ({ snapshots }) => {
+    this.snapshotSubscription = this.snapshotManager.on('snapshotsChanged', ({ snapshots }) => {
       this.snapshots = snapshots;
       this.renderList();
     });
@@ -445,7 +455,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
         border-radius: 3px;
         color: var(--text-secondary);
       `;
-      span.innerHTML = `<span style="color: var(--text-muted)">${label}:</span> ${value}`;
+      const labelSpan = document.createElement('span');
+      labelSpan.style.color = 'var(--text-muted)';
+      labelSpan.textContent = `${label}: `;
+      span.appendChild(labelSpan);
+      span.appendChild(document.createTextNode(value));
       container.appendChild(span);
     }
 
@@ -586,18 +600,30 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   }
 
   // Public methods
+
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  setExclusiveWith(panel: ExclusivePanel): void {
+    this.exclusivePanel = panel;
+  }
+
   show(): void {
+    // Close the exclusive panel if it is open
+    if (this.exclusivePanel?.isOpen()) {
+      this.exclusivePanel.hide();
+    }
     if (!document.body.contains(this.container)) {
       document.body.appendChild(this.container);
     }
     this.container.style.display = 'flex';
     this.isVisible = true;
+    this.emit('visibilityChanged', { open: true });
     this.loadSnapshots();
   }
 
   hide(): void {
     this.container.style.display = 'none';
     this.isVisible = false;
+    this.emit('visibilityChanged', { open: false });
     this.emit('closed', undefined);
   }
 
@@ -618,6 +644,8 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   }
 
   dispose(): void {
+    this.snapshotSubscription?.();
+    this.snapshotSubscription = null;
     this.hide();
     if (document.body.contains(this.container)) {
       document.body.removeChild(this.container);

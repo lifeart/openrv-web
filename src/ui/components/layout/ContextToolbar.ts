@@ -8,7 +8,7 @@
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { TabId } from './TabBar';
 import { getIconSvg, IconName } from '../shared/Icons';
-import { applyA11yFocus } from '../shared/Button';
+import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton } from '../shared/Button';
 
 export interface ContextToolbarEvents extends EventMap {
   // Events will be added as tabs are implemented
@@ -107,7 +107,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   }
 
   private initTabContents(): void {
-    const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
 
     for (const tabId of tabs) {
       const content = document.createElement('div');
@@ -193,6 +193,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       effects: 'Effects controls',
       transform: 'Transform controls',
       annotate: 'Annotate controls',
+      qc: 'QC controls',
     };
     this.container.setAttribute('aria-label', tabLabels[tabId]);
 
@@ -240,52 +241,15 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       icon?: IconName;
     } = {}
   ): HTMLButtonElement {
-    const button = document.createElement('button');
-    if (options.icon) {
-      button.innerHTML = `${getIconSvg(options.icon, 'sm')}<span style="margin-left: 6px;">${text}</span>`;
-    } else {
-      button.textContent = text;
-    }
-    button.title = options.title || '';
-    button.style.cssText = `
-      background: ${options.active ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
-      border: 1px solid ${options.active ? 'var(--accent-primary)' : 'transparent'};
-      color: ${options.active ? 'var(--accent-primary)' : 'var(--text-secondary)'};
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: 28px;
-      min-width: ${options.minWidth || 'auto'};
-      outline: none;
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!options.active) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-secondary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    const iconSvg = options.icon ? getIconSvg(options.icon, 'sm') : undefined;
+    return sharedCreateButton(text, onClick, {
+      variant: 'ghost',
+      size: 'md',
+      active: options.active,
+      title: options.title,
+      icon: iconSvg,
+      minWidth: options.minWidth,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!options.active) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-secondary)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
-
-    // Apply A11Y focus handling from shared utility
-    applyA11yFocus(button);
-
-    return button;
   }
 
   /**
@@ -301,58 +265,21 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       size?: 'sm' | 'md';
     } = {}
   ): HTMLButtonElement {
-    const button = document.createElement('button');
     const iconSize = options.size === 'md' ? 'md' : 'sm';
-    button.innerHTML = getIconSvg(icon, iconSize);
-    button.title = options.title || '';
-    if (options.title) {
-      button.setAttribute('aria-label', options.title);
-    }
-
-    const btnSize = options.size === 'md' ? '32px' : '28px';
-    button.style.cssText = `
-      background: ${options.active ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
-      border: 1px solid ${options.active ? 'var(--accent-primary)' : 'transparent'};
-      color: ${options.active ? 'var(--accent-primary)' : 'var(--text-secondary)'};
-      padding: 0;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: ${btnSize};
-      height: ${btnSize};
-      outline: none;
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!options.active) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-secondary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    const btnSize = options.size === 'md' ? 'lg' : 'md';
+    return sharedCreateIconButton(getIconSvg(icon, iconSize), onClick, {
+      variant: 'icon',
+      size: btnSize,
+      active: options.active,
+      title: options.title,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!options.active) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-secondary)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
-
-    // Apply A11Y focus handling from shared utility
-    applyA11yFocus(button);
-
-    return button;
   }
 
   /**
    * Helper to create a slider with label
    */
+  private static sliderId = 0;
+
   static createSlider(
     label: string,
     options: {
@@ -372,7 +299,10 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       gap: 6px;
     `;
 
+    const labelId = `ct-slider-label-${ContextToolbar.sliderId++}`;
+
     const labelEl = document.createElement('span');
+    labelEl.id = labelId;
     labelEl.textContent = label;
     labelEl.style.cssText = `
       color: var(--text-muted);
@@ -380,12 +310,24 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       min-width: 60px;
     `;
 
+    const minVal = String(options.min ?? 0);
+    const maxVal = String(options.max ?? 100);
+    const currentVal = String(options.value ?? 50);
+
     const slider = document.createElement('input');
     slider.type = 'range';
-    slider.min = String(options.min ?? 0);
-    slider.max = String(options.max ?? 100);
+    slider.min = minVal;
+    slider.max = maxVal;
     slider.step = String(options.step ?? 1);
-    slider.value = String(options.value ?? 50);
+    slider.value = currentVal;
+
+    // ARIA attributes for accessibility
+    slider.setAttribute('aria-label', label);
+    slider.setAttribute('aria-labelledby', labelId);
+    slider.setAttribute('aria-valuemin', minVal);
+    slider.setAttribute('aria-valuemax', maxVal);
+    slider.setAttribute('aria-valuenow', currentVal);
+
     slider.style.cssText = `
       width: ${options.width || '80px'};
       height: 4px;
@@ -393,11 +335,12 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       accent-color: var(--accent-primary);
     `;
 
-    if (options.onChange) {
-      slider.addEventListener('input', () => {
-        options.onChange!(parseFloat(slider.value));
-      });
-    }
+    slider.addEventListener('input', () => {
+      slider.setAttribute('aria-valuenow', slider.value);
+      if (options.onChange) {
+        options.onChange(parseFloat(slider.value));
+      }
+    });
 
     if (options.onDoubleClick) {
       slider.addEventListener('dblclick', () => {

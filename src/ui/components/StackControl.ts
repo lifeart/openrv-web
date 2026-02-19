@@ -212,7 +212,51 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       border: 1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-primary)'};
       border-radius: 4px;
       margin-bottom: 6px;
+      transition: border-top 0.1s ease;
     `;
+
+    // Drag-and-drop support
+    el.draggable = true;
+    el.setAttribute('data-layer-id', layer.id);
+
+    el.addEventListener('dragstart', (e: DragEvent) => {
+      e.dataTransfer?.setData('text/plain', String(index));
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+      }
+      el.style.opacity = '0.5';
+    });
+
+    el.addEventListener('dragover', (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+      // Show drop indicator: highlight border-top on this element
+      this.clearDropIndicators();
+      el.style.borderTop = '2px solid var(--accent-primary)';
+    });
+
+    el.addEventListener('dragleave', () => {
+      el.style.borderTop = `1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-primary)'}`;
+    });
+
+    el.addEventListener('drop', (e: DragEvent) => {
+      e.preventDefault();
+      this.clearDropIndicators();
+      const sourceIndexStr = e.dataTransfer?.getData('text/plain');
+      if (sourceIndexStr === undefined || sourceIndexStr === '') return;
+      const fromIndex = parseInt(sourceIndexStr, 10);
+      const toIndex = index;
+      if (fromIndex !== toIndex && !isNaN(fromIndex)) {
+        this.moveLayer(fromIndex, toIndex);
+      }
+    });
+
+    el.addEventListener('dragend', () => {
+      el.style.opacity = '1';
+      this.clearDropIndicators();
+    });
 
     // Top row: visibility, name, delete
     const topRow = document.createElement('div');
@@ -232,6 +276,12 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       display: flex;
       align-items: center;
     `;
+    visBtn.addEventListener('mouseenter', () => {
+      visBtn.style.color = 'var(--text-primary)';
+    });
+    visBtn.addEventListener('mouseleave', () => {
+      visBtn.style.color = layer.visible ? 'var(--text-muted)' : 'var(--border-secondary)';
+    });
     visBtn.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent panel from closing when button is clicked
       layer.visible = !layer.visible;
@@ -276,6 +326,19 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
     moveUp.disabled = index === this.layers.length - 1;
     moveUp.style.opacity = moveUp.disabled ? '0.3' : '1';
+    moveUp.style.cursor = moveUp.disabled ? 'not-allowed' : 'pointer';
+    moveUp.addEventListener('mouseenter', () => {
+      if (!moveUp.disabled) {
+        moveUp.style.background = 'var(--bg-hover)';
+        moveUp.style.borderColor = 'var(--border-primary)';
+        moveUp.style.color = 'var(--text-primary)';
+      }
+    });
+    moveUp.addEventListener('mouseleave', () => {
+      moveUp.style.background = 'transparent';
+      moveUp.style.borderColor = 'transparent';
+      moveUp.style.color = 'var(--text-muted)';
+    });
     moveUp.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent panel from closing
       if (index < this.layers.length - 1) {
@@ -299,6 +362,19 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
     moveDown.disabled = index === 0;
     moveDown.style.opacity = moveDown.disabled ? '0.3' : '1';
+    moveDown.style.cursor = moveDown.disabled ? 'not-allowed' : 'pointer';
+    moveDown.addEventListener('mouseenter', () => {
+      if (!moveDown.disabled) {
+        moveDown.style.background = 'var(--bg-hover)';
+        moveDown.style.borderColor = 'var(--border-primary)';
+        moveDown.style.color = 'var(--text-primary)';
+      }
+    });
+    moveDown.addEventListener('mouseleave', () => {
+      moveDown.style.background = 'transparent';
+      moveDown.style.borderColor = 'transparent';
+      moveDown.style.color = 'var(--text-muted)';
+    });
     moveDown.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent panel from closing
       if (index > 0) {
@@ -321,6 +397,14 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       display: flex;
       align-items: center;
     `;
+    deleteBtn.addEventListener('mouseenter', () => {
+      deleteBtn.style.background = 'rgba(var(--error-rgb, 255, 100, 100), 0.15)';
+      deleteBtn.style.borderColor = 'var(--error)';
+    });
+    deleteBtn.addEventListener('mouseleave', () => {
+      deleteBtn.style.background = 'transparent';
+      deleteBtn.style.borderColor = 'transparent';
+    });
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent panel from closing
       this.removeLayer(layer.id);
@@ -484,6 +568,33 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     this.updateLayerList();
     this.updateButtonState();
+  }
+
+  private moveLayer(fromIndex: number, toIndex: number): void {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= this.layers.length) return;
+    if (toIndex < 0 || toIndex >= this.layers.length) return;
+
+    const [layer] = this.layers.splice(fromIndex, 1);
+    this.layers.splice(toIndex, 0, layer!);
+
+    this.emit('layerReordered', {
+      layerId: layer!.id,
+      newIndex: toIndex,
+    });
+
+    this.updateLayerList();
+    this.updateButtonState();
+  }
+
+  private clearDropIndicators(): void {
+    const items = this.layerList.querySelectorAll('.layer-item');
+    items.forEach((item) => {
+      const el = item as HTMLElement;
+      // Reset border-top to default (1px solid border-primary)
+      // Check if it's active by checking its current border style
+      el.style.borderTop = '';
+    });
   }
 
   addLayerFromCurrentSource(): void {

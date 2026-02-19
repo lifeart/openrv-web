@@ -2,9 +2,22 @@
  * PerspectiveGridOverlay Unit Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PerspectiveGridOverlay } from './PerspectiveGridOverlay';
 import { DEFAULT_PERSPECTIVE_PARAMS } from '../../transform/PerspectiveCorrection';
+
+// Polyfill PointerEvent for jsdom (which does not implement it)
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, params: PointerEventInit & MouseEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? '';
+    }
+  };
+}
 
 describe('PerspectiveGridOverlay', () => {
   let overlay: PerspectiveGridOverlay;
@@ -76,6 +89,80 @@ describe('PerspectiveGridOverlay', () => {
       // After dispose, handles should be removed
       const handles = document.querySelectorAll('[data-testid^="perspective-handle-"]');
       expect(handles.length).toBe(0);
+    });
+  });
+
+  describe('pointer capture on drag', () => {
+    it('PGO-M17a: startDrag should call setPointerCapture on the handle element', () => {
+      document.body.appendChild(overlay.getElement());
+      overlay.setViewerDimensions(200, 200);
+      overlay.setParams({
+        enabled: true,
+        topLeft: { x: 0.1, y: 0.1 },
+        topRight: { x: 0.9, y: 0.1 },
+        bottomRight: { x: 0.9, y: 0.9 },
+        bottomLeft: { x: 0.1, y: 0.9 },
+        quality: 'bilinear',
+      });
+
+      const handle = overlay.getElement().querySelector(
+        '[data-testid="perspective-handle-topLeft"]',
+      ) as HTMLElement;
+
+      const setCaptureSpy = vi.fn();
+      handle.setPointerCapture = setCaptureSpy;
+
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 42,
+        clientX: 20,
+        clientY: 20,
+        bubbles: true,
+      });
+      handle.dispatchEvent(pointerDown);
+
+      expect(setCaptureSpy).toHaveBeenCalledWith(42);
+    });
+
+    it('PGO-M17b: endDrag should call releasePointerCapture', () => {
+      document.body.appendChild(overlay.getElement());
+      overlay.setViewerDimensions(200, 200);
+      overlay.setParams({
+        enabled: true,
+        topLeft: { x: 0.1, y: 0.1 },
+        topRight: { x: 0.9, y: 0.1 },
+        bottomRight: { x: 0.9, y: 0.9 },
+        bottomLeft: { x: 0.1, y: 0.9 },
+        quality: 'bilinear',
+      });
+
+      const handle = overlay.getElement().querySelector(
+        '[data-testid="perspective-handle-topLeft"]',
+      ) as HTMLElement;
+
+      const setCaptureSpy = vi.fn();
+      const releaseCaptureSpy = vi.fn();
+      handle.setPointerCapture = setCaptureSpy;
+      handle.releasePointerCapture = releaseCaptureSpy;
+
+      // Start drag
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 42,
+        clientX: 20,
+        clientY: 20,
+        bubbles: true,
+      });
+      handle.dispatchEvent(pointerDown);
+
+      // End drag
+      const pointerUp = new PointerEvent('pointerup', {
+        pointerId: 42,
+        clientX: 25,
+        clientY: 25,
+        bubbles: true,
+      });
+      document.dispatchEvent(pointerUp);
+
+      expect(releaseCaptureSpy).toHaveBeenCalledWith(42);
     });
   });
 

@@ -191,6 +191,23 @@ describe('ViewerRenderingUtils', () => {
       expect(ctx.restore).toHaveBeenCalled();
     });
 
+    it('preserves portrait video proportions when rotated 90°', () => {
+      const video = createMockVideo(1080, 1920);
+      const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
+
+      // The display box has already been computed for rotated layout.
+      // drawWithTransform should swap draw width/height before rotation.
+      drawWithTransform(ctx, video, 1000, 560, transform);
+
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls.length).toBeGreaterThan(0);
+      const drawCall = drawCalls[0]!;
+      expect(drawCall[1]).toBe(-280); // -drawWidth/2 where drawWidth=displayHeight
+      expect(drawCall[2]).toBe(-500); // -drawHeight/2 where drawHeight=displayWidth
+      expect(drawCall[3]).toBe(560);
+      expect(drawCall[4]).toBe(1000);
+    });
+
     it('should handle zero video dimensions gracefully', () => {
       const video = createMockVideo(0, 0);
       const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
@@ -555,6 +572,23 @@ describe('ViewerRenderingUtils', () => {
       expect(ctx.fillText).toHaveBeenCalled();
       const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
       expect(calls.some((call: unknown[]) => (call[0] as string).includes('Drop'))).toBe(true);
+    });
+
+    it('should left-align placeholder text with padding', () => {
+      drawPlaceholder(ctx, 800, 600, 1);
+
+      expect(ctx.textAlign).toBe('left');
+      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.every((call: unknown[]) => call[1] === 112)).toBe(true);
+    });
+
+    it('should render support info in multiple lines for readability', () => {
+      drawPlaceholder(ctx, 800, 600, 1);
+
+      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+      const rendered = calls.map((call: unknown[]) => String(call[0]));
+      expect(rendered.some((line: string) => line.includes('Images:'))).toBe(true);
+      expect(rendered.some((line: string) => line.includes('Video:'))).toBe(true);
     });
 
     it('should scale with zoom', () => {
