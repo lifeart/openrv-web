@@ -7,6 +7,9 @@ import {
   imagesAreDifferent,
   waitForCropEnabled,
   waitForCropAspectRatio,
+  waitForTabActive,
+  waitForFrame,
+  waitForRotation,
   getCanvas,
 } from './fixtures';
 
@@ -31,7 +34,7 @@ test.describe('Crop Controls', () => {
     await loadVideoFile(page);
     // Switch to Transform tab where crop control is located
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'transform');
   });
 
   test.describe('Crop Toggle', () => {
@@ -63,7 +66,6 @@ test.describe('Crop Controls', () => {
     test('CROP-003: crop button should open panel', async ({ page }) => {
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
       await expect(cropPanel).toBeVisible();
@@ -73,7 +75,6 @@ test.describe('Crop Controls', () => {
       // Open crop panel
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
       await expect(cropPanel).toBeVisible();
@@ -81,14 +82,14 @@ test.describe('Crop Controls', () => {
       // Enable crop via toggle
       const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await enableToggle.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
 
       // Disable crop via toggle
       await enableToggle.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, false);
 
       state = await getViewerState(page);
       expect(state.cropEnabled).toBe(false);
@@ -98,14 +99,12 @@ test.describe('Crop Controls', () => {
       // Open crop panel
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
       await expect(cropPanel).toBeVisible();
 
       // Press Escape to close panel
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
 
       await expect(cropPanel).not.toBeVisible();
     });
@@ -114,7 +113,6 @@ test.describe('Crop Controls', () => {
       // Open crop panel
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
       await expect(cropPanel).toBeVisible();
@@ -124,7 +122,6 @@ test.describe('Crop Controls', () => {
       const canvasBox = await canvas.boundingBox();
       expect(canvasBox).not.toBeNull();
       await page.mouse.click(canvasBox!.x + canvasBox!.width - 10, canvasBox!.y + canvasBox!.height - 10);
-      await page.waitForTimeout(200);
 
       await expect(cropPanel).toBeVisible();
     });
@@ -132,20 +129,19 @@ test.describe('Crop Controls', () => {
     test('CROP-007: crop handles should NOT intercept events when panel is closed', async ({ page }) => {
       // Enable crop and set a non-full region via panel
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Close panel by pressing Escape
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
       await expect(cropPanel).not.toBeVisible();
 
       // Get current crop state
@@ -177,16 +173,16 @@ test.describe('Crop Controls', () => {
     test('CROP-008: crop handles should work when panel is open', async ({ page }) => {
       // Enable crop and set a non-full region via panel
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Panel is still open — handles should be interactive
       let state = await getViewerState(page);
@@ -215,16 +211,16 @@ test.describe('Crop Controls', () => {
     test('CROP-009: crop state should persist after panel close', async ({ page }) => {
       // Enable crop and set 16:9
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       let state = await getViewerState(page);
       const regionWithPanel = { ...state.cropRegion };
@@ -232,7 +228,6 @@ test.describe('Crop Controls', () => {
 
       // Close panel with Escape
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
       await expect(cropPanel).not.toBeVisible();
 
       // Verify state persisted after panel close
@@ -260,7 +255,7 @@ test.describe('Crop Controls', () => {
 
     test('CROP-012: enabling crop should not change default region', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
@@ -276,7 +271,6 @@ test.describe('Crop Controls', () => {
       // Open crop panel
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
       const aspectSelect = cropPanel.locator('select').first();
@@ -300,9 +294,9 @@ test.describe('Crop Controls', () => {
       // Open crop panel and select aspect ratio
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
       await waitForCropAspectRatio(page, '16:9');
@@ -314,17 +308,17 @@ test.describe('Crop Controls', () => {
     test('CROP-022: selecting 16:9 should adjust crop region to 16:9 pixel ratio', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel and select aspect ratio
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       const state = await getViewerState(page);
       // Compute actual pixel ratio from normalized crop region and source dimensions
@@ -339,17 +333,17 @@ test.describe('Crop Controls', () => {
     test('CROP-023: selecting 1:1 should create square crop region in pixels', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel and select aspect ratio
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       const state = await getViewerState(page);
       expect(state.cropAspectRatio).toBe('1:1');
@@ -366,17 +360,17 @@ test.describe('Crop Controls', () => {
     test('CROP-024: selecting 4:3 aspect ratio should produce correct pixel ratio', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel and select aspect ratio
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('4:3');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '4:3');
 
       const state = await getViewerState(page);
       expect(state.cropAspectRatio).toBe('4:3');
@@ -391,17 +385,17 @@ test.describe('Crop Controls', () => {
     test('CROP-025: selecting 9:16 (portrait) aspect ratio should produce correct pixel ratio', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel and select aspect ratio
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       const state = await getViewerState(page);
       expect(state.cropAspectRatio).toBe('9:16');
@@ -416,22 +410,22 @@ test.describe('Crop Controls', () => {
     test('CROP-026: selecting Free should allow any aspect ratio', async ({ page }) => {
       // Enable crop and set a specific aspect ratio first
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
 
       // Set 1:1 first
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Then switch to Free
       await aspectSelect.selectOption('');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, null);
 
       const state = await getViewerState(page);
       expect(state.cropAspectRatio).toBeNull();
@@ -440,18 +434,19 @@ test.describe('Crop Controls', () => {
     test('CROP-027: aspect ratio changes should be visually reflected', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Open crop panel and select 16:9
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
+      await waitForCropAspectRatio(page, '16:9');
       await page.waitForTimeout(200);
 
       const wideScreenshot = await captureViewerScreenshot(page);
@@ -459,6 +454,7 @@ test.describe('Crop Controls', () => {
 
       // Change to 1:1
       await aspectSelect.selectOption('1:1');
+      await waitForCropAspectRatio(page, '1:1');
       await page.waitForTimeout(200);
 
       const squareScreenshot = await captureViewerScreenshot(page);
@@ -470,16 +466,16 @@ test.describe('Crop Controls', () => {
     test('CROP-030: reset button should restore default crop state', async ({ page }) => {
       // Enable crop and set aspect ratio
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Verify state changed
       let state = await getViewerState(page);
@@ -488,7 +484,7 @@ test.describe('Crop Controls', () => {
       // Click reset button
       const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       await resetButton.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, false);
 
       // Verify state reset
       state = await getViewerState(page);
@@ -503,15 +499,16 @@ test.describe('Crop Controls', () => {
     test('CROP-031: reset should update visual overlay', async ({ page }) => {
       // Enable crop and set aspect ratio
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
+      await waitForCropAspectRatio(page, '1:1');
       await page.waitForTimeout(200);
 
       const beforeResetScreenshot = await captureViewerScreenshot(page);
@@ -519,6 +516,7 @@ test.describe('Crop Controls', () => {
       // Click reset button
       const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       await resetButton.click();
+      await waitForCropEnabled(page, false);
       await page.waitForTimeout(200);
 
       const afterResetScreenshot = await captureViewerScreenshot(page);
@@ -532,16 +530,17 @@ test.describe('Crop Controls', () => {
 
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a non-full aspect ratio to create visible crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16'); // Portrait will definitely create non-full crop
+      await waitForCropAspectRatio(page, '9:16');
       await page.waitForTimeout(200);
 
       const afterCropScreenshot = await captureViewerScreenshot(page);
@@ -551,15 +550,16 @@ test.describe('Crop Controls', () => {
     test('CROP-041: disabling crop should hide overlay', async ({ page }) => {
       // Enable crop with non-full region
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
+      await waitForCropAspectRatio(page, '9:16');
       await page.waitForTimeout(200);
 
       const cropEnabledScreenshot = await captureViewerScreenshot(page);
@@ -567,6 +567,7 @@ test.describe('Crop Controls', () => {
       // Disable crop via reset
       const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       await resetButton.click();
+      await waitForCropEnabled(page, false);
       await page.waitForTimeout(200);
 
       const cropDisabledScreenshot = await captureViewerScreenshot(page);
@@ -576,7 +577,7 @@ test.describe('Crop Controls', () => {
     test('CROP-042: crop overlay should show rule of thirds guides when editing', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Capture screenshot without overlay (full-frame crop skips overlay)
       const noOverlayScreenshot = await captureViewerScreenshot(page);
@@ -584,11 +585,12 @@ test.describe('Crop Controls', () => {
       // Open panel and set non-full crop to trigger overlay with guides
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
+      await waitForCropAspectRatio(page, '9:16');
       await page.waitForTimeout(200);
 
       // With panel open and non-full region, overlay should show guides
@@ -607,14 +609,14 @@ test.describe('Crop Controls', () => {
     test('CROP-050: crop enabled state should persist across frame changes', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
 
       // Step to next frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 2);
 
       // Crop should still be enabled
       state = await getViewerState(page);
@@ -624,25 +626,25 @@ test.describe('Crop Controls', () => {
     test('CROP-051: aspect ratio should persist across frame changes', async ({ page }) => {
       // Enable crop and set aspect ratio
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       let state = await getViewerState(page);
       expect(state.cropAspectRatio).toBe('16:9');
 
       // Close panel and step to next frame
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(100);
+      await expect(cropPanel).not.toBeVisible();
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 2);
 
       // Aspect ratio should persist
       state = await getViewerState(page);
@@ -652,25 +654,25 @@ test.describe('Crop Controls', () => {
     test('CROP-052: crop region should persist across frame changes', async ({ page }) => {
       // Enable crop and set aspect ratio
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       let state = await getViewerState(page);
       const initialRegion = { ...state.cropRegion };
 
       // Close panel and step to next frame
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(100);
+      await expect(cropPanel).not.toBeVisible();
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 2);
 
       // Region should persist
       state = await getViewerState(page);
@@ -697,19 +699,19 @@ test.describe('Crop Controls', () => {
     test('CROP-061: crop region should stay within bounds after aspect ratio change', async ({ page }) => {
       // Enable crop and set aspect ratio
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
 
       // Try all aspect ratios
       for (const ratio of ['16:9', '4:3', '1:1', '9:16', '2.35:1']) {
         await aspectSelect.selectOption(ratio);
-        await page.waitForTimeout(100);
+        await waitForCropAspectRatio(page, ratio);
 
         const state = await getViewerState(page);
         // x + width should not exceed 1
@@ -722,16 +724,16 @@ test.describe('Crop Controls', () => {
     test('CROP-062: aspect ratio should be centered in available space', async ({ page }) => {
       // Enable crop and set aspect ratio
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       const state = await getViewerState(page);
       // For a centered crop, x should equal (1 - width) / 2
@@ -760,13 +762,13 @@ test.describe('Crop Controls', () => {
     test('CROP-200: all presets should produce correct pixel aspect ratios', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       const sourceDims = await getSourceDimensions(page);
 
@@ -781,10 +783,10 @@ test.describe('Crop Controls', () => {
       for (const preset of presets) {
         // Reset to free first to start fresh
         await aspectSelect.selectOption('');
-        await page.waitForTimeout(100);
+        await waitForCropAspectRatio(page, null);
 
         await aspectSelect.selectOption(preset.value);
-        await page.waitForTimeout(200);
+        await waitForCropAspectRatio(page, preset.value);
 
         const state = await getViewerState(page);
         const actualRatio = computePixelRatio(state.cropRegion, sourceDims);
@@ -795,16 +797,16 @@ test.describe('Crop Controls', () => {
     test('CROP-201: 16:9 crop on wide source should use full height', async ({ page }) => {
       // The test video is wider than 16:9, so 16:9 crop should use full height
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       const state = await getViewerState(page);
       const sourceDims = await getSourceDimensions(page);
@@ -820,16 +822,16 @@ test.describe('Crop Controls', () => {
 
     test('CROP-202: 1:1 crop should produce equal pixel dimensions', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       const state = await getViewerState(page);
       const sourceDims = await getSourceDimensions(page);
@@ -847,16 +849,16 @@ test.describe('Crop Controls', () => {
 
     test('CROP-203: 9:16 (portrait) on landscape source should use full height', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       const state = await getViewerState(page);
       const sourceDims = await getSourceDimensions(page);
@@ -873,16 +875,16 @@ test.describe('Crop Controls', () => {
 
     test('CROP-204: 2.35:1 crop should be close to source aspect on very wide video', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('2.35:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '2.35:1');
 
       const state = await getViewerState(page);
       const sourceDims = await getSourceDimensions(page);
@@ -901,13 +903,13 @@ test.describe('Crop Controls', () => {
 
     test('CROP-205: crop region should be maximized when applied from full-frame', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       const sourceDims = await getSourceDimensions(page);
@@ -924,15 +926,15 @@ test.describe('Crop Controls', () => {
       for (const preset of presets) {
         // Reset crop to full-frame before each preset to test maximization
         await resetButton.click();
-        await page.waitForTimeout(100);
+        await waitForCropEnabled(page, false);
 
         // Re-enable crop after reset (reset disables it)
         const toggleBtn = cropPanel.getByRole('switch', { name: 'Enable Crop' });
         await toggleBtn.click();
-        await page.waitForTimeout(100);
+        await waitForCropEnabled(page, true);
 
         await aspectSelect.selectOption(preset.value);
-        await page.waitForTimeout(200);
+        await waitForCropAspectRatio(page, preset.value);
 
         const state = await getViewerState(page);
 
@@ -950,20 +952,20 @@ test.describe('Crop Controls', () => {
 
     test('CROP-206: switching presets should always produce correct ratio', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       const sourceDims = await getSourceDimensions(page);
 
       // Start with 1:1, then switch to 16:9, then to 9:16
       // Each switch should produce correct ratio regardless of previous state
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       let state = await getViewerState(page);
       let ratio = computePixelRatio(state.cropRegion, sourceDims);
@@ -971,7 +973,7 @@ test.describe('Crop Controls', () => {
 
       // Switch to 16:9 (from a narrower crop)
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       state = await getViewerState(page);
       ratio = computePixelRatio(state.cropRegion, sourceDims);
@@ -979,7 +981,7 @@ test.describe('Crop Controls', () => {
 
       // Switch to 9:16 (from a wider crop)
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       state = await getViewerState(page);
       ratio = computePixelRatio(state.cropRegion, sourceDims);
@@ -987,7 +989,7 @@ test.describe('Crop Controls', () => {
 
       // Switch back to 4:3
       await aspectSelect.selectOption('4:3');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '4:3');
 
       state = await getViewerState(page);
       ratio = computePixelRatio(state.cropRegion, sourceDims);
@@ -996,22 +998,22 @@ test.describe('Crop Controls', () => {
 
     test('CROP-207: crop region should be centered for all presets', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
 
       const presets = ['16:9', '4:3', '1:1', '9:16', '2.35:1'];
 
       for (const preset of presets) {
         await aspectSelect.selectOption('');
-        await page.waitForTimeout(100);
+        await waitForCropAspectRatio(page, null);
         await aspectSelect.selectOption(preset);
-        await page.waitForTimeout(200);
+        await waitForCropAspectRatio(page, preset);
 
         const state = await getViewerState(page);
         // Verify centered: x = (1 - width) / 2, y = (1 - height) / 2
@@ -1026,19 +1028,19 @@ test.describe('Crop Controls', () => {
       // Open crop panel and enable crop via the panel toggle
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       // Enable crop via panel toggle
       const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await enableToggle.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Select 4:3 aspect ratio
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('4:3');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '4:3');
 
       const sourceDims = await getSourceDimensions(page);
       let state = await getViewerState(page);
@@ -1047,11 +1049,11 @@ test.describe('Crop Controls', () => {
 
       // Toggle crop off via the panel toggle
       await enableToggle.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, false);
 
       // Toggle crop back on
       await enableToggle.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Ratio should still be correct
       state = await getViewerState(page);
@@ -1062,16 +1064,16 @@ test.describe('Crop Controls', () => {
     test('CROP-209: normalized crop dimensions should account for source aspect', async ({ page }) => {
       // This test verifies the core conversion: normalizedRatio = pixelRatio / sourceAspect
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       const state = await getViewerState(page);
       const sourceDims = await getSourceDimensions(page);
@@ -1088,7 +1090,6 @@ test.describe('Crop Controls', () => {
     test('CROP-070: panel should be positioned correctly', async ({ page }) => {
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
       await expect(cropPanel).toBeVisible();
@@ -1103,9 +1104,9 @@ test.describe('Crop Controls', () => {
     test('CROP-071: panel should have high z-index to be visible above viewer', async ({ page }) => {
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const zIndex = await cropPanel.evaluate((el) => getComputedStyle(el).zIndex);
       expect(parseInt(zIndex)).toBeGreaterThanOrEqual(9999);
     });
@@ -1113,9 +1114,9 @@ test.describe('Crop Controls', () => {
     test('CROP-072: toggle switch should update text on state change', async ({ page }) => {
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       // Should show OFF initially
       const toggleOff = cropPanel.getByRole('switch', { name: 'Enable Crop' });
@@ -1123,7 +1124,7 @@ test.describe('Crop Controls', () => {
 
       // Click to enable
       await toggleOff.click();
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Should now show ON
       const toggleOn = cropPanel.getByRole('switch', { name: 'Enable Crop' });
@@ -1132,18 +1133,18 @@ test.describe('Crop Controls', () => {
 
     test('CROP-073: aspect ratio select should update on state change', async ({ page }) => {
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
 
       // Select 16:9
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       // Verify selection updated
       const selectedValue = await aspectSelect.inputValue();
@@ -1155,7 +1156,7 @@ test.describe('Crop Controls', () => {
     test('CROP-080: crop should work with zoom', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
@@ -1163,7 +1164,7 @@ test.describe('Crop Controls', () => {
 
       // Switch to View tab for zoom controls
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(100);
+      await waitForTabActive(page, 'view');
 
       // Open zoom dropdown first (Fit button has the dropdown)
       const zoomButton = page.locator('[data-testid="zoom-control-button"]');
@@ -1183,14 +1184,14 @@ test.describe('Crop Controls', () => {
     test('CROP-081: crop should work with rotation', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
 
       // Rotate
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(200);
+      await waitForRotation(page, 90);
 
       // Crop should still be enabled
       state = await getViewerState(page);
@@ -1200,7 +1201,7 @@ test.describe('Crop Controls', () => {
     test('CROP-082: crop should work with flip', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
@@ -1222,21 +1223,22 @@ test.describe('Crop Controls', () => {
 
       // Enable crop and set a non-full region
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel and set aspect ratio to create smaller region
       // Use 9:16 (portrait) which will definitely create a non-full crop on landscape video
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       // Close panel - now pixels should be clipped with subtle indicator
       await page.keyboard.press('Escape');
+      await expect(cropPanel).not.toBeVisible();
       await page.waitForTimeout(200);
 
       // Capture screenshot with crop active (not editing)
@@ -1254,18 +1256,18 @@ test.describe('Crop Controls', () => {
     test('CROP-101: crop should affect visible region dimensions', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set 9:16 aspect ratio to create a smaller, centered crop
       // Portrait aspect on landscape video will always create non-full crop
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       // Get the crop region dimensions
       const state = await getViewerState(page);
@@ -1276,26 +1278,27 @@ test.describe('Crop Controls', () => {
     test('CROP-102: crop should work with rotation', async ({ page }) => {
       // Enable crop first
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       // Close panel
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(100);
+      await expect(cropPanel).not.toBeVisible();
 
       const beforeRotateScreenshot = await captureViewerScreenshot(page);
 
       // Apply rotation
       await page.keyboard.press('Alt+r');
+      await waitForRotation(page, 90);
       await page.waitForTimeout(200);
 
       const afterRotateScreenshot = await captureViewerScreenshot(page);
@@ -1311,21 +1314,21 @@ test.describe('Crop Controls', () => {
     test('CROP-103: crop should work with horizontal flip', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       // Close panel
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(100);
+      await expect(cropPanel).not.toBeVisible();
 
       // Get initial crop state
       let state = await getViewerState(page);
@@ -1346,7 +1349,7 @@ test.describe('Crop Controls', () => {
     test('CROP-104: full-frame crop should skip clipping for performance', async ({ page }) => {
       // Enable crop but keep default full-frame region
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
@@ -1362,16 +1365,17 @@ test.describe('Crop Controls', () => {
     test('CROP-105: overlay should show full editing UI when panel is open', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set non-full crop region using portrait aspect (definitely non-full on landscape video)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
+      await waitForCropAspectRatio(page, '9:16');
       await page.waitForTimeout(200);
 
       // Panel is open - capture screenshot (full editing overlay)
@@ -1379,10 +1383,10 @@ test.describe('Crop Controls', () => {
 
       // Close panel with Escape
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
 
       // Verify panel is closed
       await expect(cropPanel).not.toBeVisible();
+      await page.waitForTimeout(200);
 
       // Panel is closed - capture screenshot (subtle indicator)
       const panelClosedScreenshot = await captureViewerScreenshot(page);
@@ -1394,12 +1398,14 @@ test.describe('Crop Controls', () => {
     test('CROP-106: overlay should show full editing UI during drag', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
+
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       // Get canvas bounding box
       const canvas = await getCanvas(page);
@@ -1432,17 +1438,17 @@ test.describe('Crop Controls', () => {
     test('CROP-110: export with crop should produce cropped dimensions', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set 9:16 aspect ratio (portrait) to create smaller crop
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       // Get crop region for verification
       const state = await getViewerState(page);
@@ -1470,25 +1476,25 @@ test.describe('Crop Controls', () => {
     test('CROP-111: export with rotation + crop should work correctly', async ({ page }) => {
       // Enable crop first
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Close crop panel
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
+      await expect(cropPanel).not.toBeVisible();
 
       // Apply 90 degree rotation
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(200);
+      await waitForRotation(page, 90);
 
       // Verify both crop and rotation are active
       const viewerState = await getViewerState(page);
@@ -1518,21 +1524,21 @@ test.describe('Crop Controls', () => {
     test('CROP-112: export with flip + crop should work correctly', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('16:9');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '16:9');
 
       // Close crop panel using Escape
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
+      await expect(cropPanel).not.toBeVisible();
 
       // Apply horizontal flip using the button (more reliable than keyboard)
       const flipHButton = page.locator('button[title*="Flip horizontal"]').first();
@@ -1563,27 +1569,27 @@ test.describe('Crop Controls', () => {
     test('CROP-113: export with rotation 180 + crop should work correctly', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('4:3');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '4:3');
 
       // Close crop panel
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
+      await expect(cropPanel).not.toBeVisible();
 
       // Apply 180 degree rotation (2 x 90 degree)
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(100);
+      await waitForRotation(page, 90);
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(200);
+      await waitForRotation(page, 180);
 
       // Verify both crop and rotation are active
       const viewerState = await getViewerState(page);
@@ -1609,29 +1615,29 @@ test.describe('Crop Controls', () => {
     test('CROP-114: export with rotation 270 + crop should work correctly', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region (portrait will be taller after 270 rotation)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('9:16');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '9:16');
 
       // Close crop panel
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
+      await expect(cropPanel).not.toBeVisible();
 
       // Apply 270 degree rotation (3 x 90 degree)
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(100);
+      await waitForRotation(page, 90);
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(100);
+      await waitForRotation(page, 180);
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(200);
+      await waitForRotation(page, 270);
 
       // Verify both crop and rotation are active
       const viewerState = await getViewerState(page);
@@ -1657,26 +1663,26 @@ test.describe('Crop Controls', () => {
     test('CROP-115: export with rotation + flip + crop should work correctly', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Set a crop region
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Close crop panel using Escape
       await page.keyboard.press('Escape');
-      await page.waitForTimeout(200);
+      await expect(cropPanel).not.toBeVisible();
 
       // Apply rotation using the button
       const rotateRightButton = page.locator('button[title*="Rotate right"]').first();
       await rotateRightButton.click();
-      await page.waitForTimeout(200);
+      await waitForRotation(page, 90);
 
       // Apply flip using the buttons (more reliable than keyboard)
       const flipHButton = page.locator('button[title*="Flip horizontal"]').first();
@@ -1715,12 +1721,14 @@ test.describe('Crop Controls', () => {
     test('CROP-090: dragging bottom-right corner should resize crop region', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
+
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
@@ -1755,17 +1763,17 @@ test.describe('Crop Controls', () => {
     test('CROP-091: dragging top-left corner should resize and reposition crop region', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       let state = await getViewerState(page);
       const initialRegion = { ...state.cropRegion };
@@ -1797,17 +1805,17 @@ test.describe('Crop Controls', () => {
     test('CROP-092: dragging inside crop region should move it', async ({ page }) => {
       // Enable crop and make it smaller first
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Get canvas bounding box
       const canvas = await getCanvas(page);
@@ -1843,12 +1851,14 @@ test.describe('Crop Controls', () => {
     test('CROP-093: dragging edge should resize in one dimension only', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
+
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       let state = await getViewerState(page);
       const initialRegion = { ...state.cropRegion };
@@ -1878,12 +1888,14 @@ test.describe('Crop Controls', () => {
     test('CROP-094: free crop should allow any aspect ratio when dragging', async ({ page }) => {
       // Enable crop (free mode by default)
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
+
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       let state = await getViewerState(page);
       expect(state.cropAspectRatio).toBeNull(); // Free mode
@@ -1913,16 +1925,16 @@ test.describe('Crop Controls', () => {
     test('CROP-095: crop region should stay within image bounds', async ({ page }) => {
       // Enable crop and set 1:1 to create smaller region
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
 
       const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
       const aspectSelect = cropPanel.locator('select').first();
       await aspectSelect.selectOption('1:1');
-      await page.waitForTimeout(200);
+      await waitForCropAspectRatio(page, '1:1');
 
       // Panel stays open so handles remain interactive
 
@@ -1953,12 +1965,14 @@ test.describe('Crop Controls', () => {
     test('CROP-096: dragging crop should update visual overlay', async ({ page }) => {
       // Enable crop
       await page.keyboard.press('Shift+k');
-      await page.waitForTimeout(200);
+      await waitForCropEnabled(page, true);
 
       // Open crop panel (handles only work when panel is open)
       const cropButton = page.locator('button[title*="Crop"]').first();
       await cropButton.click();
-      await page.waitForTimeout(200);
+
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
 
       const initialScreenshot = await captureViewerScreenshot(page);
 

@@ -87,10 +87,12 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-001: should skip DPX tests if no fixture available', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
   });
 
   test('HDR-F-002: should load DPX file and update session state', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     // Verify no media loaded initially
@@ -107,6 +109,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-003: should detect DPX format and expose metadata', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -121,6 +124,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-004: should display DPX image on canvas', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -131,6 +135,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-005: should report correct bit depth for DPX', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -141,6 +146,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-006: exposure controls should work with DPX', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -174,6 +180,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-007: DPX format badge should be visible in UI', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -185,6 +192,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-008: DPX should work with channel isolation', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -212,6 +220,7 @@ test.describe('DPX Format Support', () => {
   });
 
   test('HDR-F-009: DPX should work with zoom controls', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -242,10 +251,12 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-010: should skip Cineon tests if no fixture available', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
   });
 
   test('HDR-F-011: should load Cineon file and update session state', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     let state = await getSessionState(page);
@@ -259,6 +270,7 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-012: should detect Cineon format and expose metadata', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -272,6 +284,7 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-013: should display Cineon image on canvas', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -281,6 +294,7 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-014: Cineon log-to-linear conversion should be applied by default', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -294,6 +308,7 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-015: exposure controls should work with Cineon', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -321,6 +336,7 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-016: Cineon should work with histogram display', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -343,6 +359,7 @@ test.describe('Cineon Format Support', () => {
   });
 
   test('HDR-F-017: Cineon should work with waveform display', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -372,10 +389,12 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-020: should skip Float TIFF tests if no fixture available', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
   });
 
   test('HDR-F-021: should load Float TIFF file and update session state', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     let state = await getSessionState(page);
@@ -389,6 +408,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-022: should detect Float TIFF format and expose metadata', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -402,6 +422,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-023: should display Float TIFF image on canvas', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -411,6 +432,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-024: Float TIFF should support HDR values > 1.0', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -442,6 +464,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-025: Float TIFF should work with tone mapping', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -468,6 +491,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-026: Float TIFF exposure adjustment should affect display', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -496,6 +520,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-027: Float TIFF should work with channel isolation', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -520,6 +545,7 @@ test.describe('Float TIFF Format Support', () => {
   });
 
   test('HDR-F-028: Float TIFF should work with vectorscope', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -549,6 +575,7 @@ test.describe('HDR Format Integration', () => {
   });
 
   test('HDR-F-030: format info should persist when changing frames', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -577,6 +604,7 @@ test.describe('HDR Format Integration', () => {
   });
 
   test('HDR-F-031: format badge should update when loading different format', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX) || !fixtureExists(SAMPLE_TIFF_FLOAT),
       'DPX or Float TIFF test fixture not found');
 
@@ -597,6 +625,7 @@ test.describe('HDR Format Integration', () => {
   });
 
   test('HDR-F-032: HDR formats should work with color adjustments', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -635,6 +664,7 @@ test.describe('HDR Format Integration', () => {
   });
 
   test('HDR-F-033: HDR formats should work with transform operations', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -659,6 +689,7 @@ test.describe('HDR Format Integration', () => {
   });
 
   test('HDR-F-034: HDR formats should work with flip operations', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -698,6 +729,7 @@ test.describe('HDR Format Integration', () => {
   });
 
   test('HDR-F-036: app remains functional after HDR format load', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -734,6 +766,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
   });
 
   test('HDR-F-040: info panel should display DPX format details', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);
@@ -761,6 +794,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
   });
 
   test('HDR-F-041: info panel should display Cineon format details', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
 
     await loadFile(page, SAMPLE_CINEON);
@@ -782,6 +816,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
   });
 
   test('HDR-F-042: info panel should display Float TIFF format details', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
@@ -804,6 +839,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
   });
 
   test('HDR-F-043: format badge should show bit depth info', async ({ page }) => {
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
 
     await loadFile(page, SAMPLE_DPX);

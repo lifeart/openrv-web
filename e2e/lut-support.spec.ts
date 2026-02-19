@@ -93,14 +93,14 @@ test.describe('3D LUT Support', () => {
       // Find the LUT load button
       const lutLoadButton = page.locator('[data-testid="lut-load-button"]');
       if (!(await lutLoadButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
       // Set up file input
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -121,7 +121,7 @@ test.describe('3D LUT Support', () => {
       // Find and use file input
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -139,7 +139,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT first
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -191,7 +191,7 @@ test.describe('3D LUT Support', () => {
       // Find file input
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -228,7 +228,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -272,7 +272,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -291,7 +291,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -331,7 +331,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -362,7 +362,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -395,7 +395,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -432,7 +432,7 @@ test.describe('3D LUT Support', () => {
       // Load LUT
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 

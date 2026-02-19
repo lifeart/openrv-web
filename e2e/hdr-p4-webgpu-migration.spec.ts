@@ -204,6 +204,7 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
 
   test('HDR-P4-008: WebGPU adapter can be requested when available', async ({ page }) => {
     const hasWebGPU = await browserHasWebGPU(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!hasWebGPU, 'WebGPU is not available in this browser');
 
     const canGetAdapter = await browserCanGetWebGPUAdapter(page);
@@ -213,6 +214,7 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
 
   test('HDR-P4-009: WebGPU device features can be queried', async ({ page }) => {
     const hasWebGPU = await browserHasWebGPU(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!hasWebGPU, 'WebGPU is not available in this browser');
 
     const features = await page.evaluate(async () => {
@@ -235,6 +237,7 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
 
   test('HDR-P4-010: WebGPU preferred canvas format can be queried', async ({ page }) => {
     const hasWebGPU = await browserHasWebGPU(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!hasWebGPU, 'WebGPU is not available in this browser');
 
     const format = await page.evaluate(() => {

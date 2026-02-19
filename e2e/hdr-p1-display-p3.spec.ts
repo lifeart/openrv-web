@@ -263,6 +263,7 @@ test.describe('Phase 1: Display P3 Wide Color Gamut', () => {
         return false;
       }
     });
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!hasP3Gamut, 'Environment does not report P3 gamut support');
 
     await openDisplayDropdown(page);

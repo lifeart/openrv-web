@@ -328,15 +328,6 @@ test.describe('Parade Scope (RGB Parade)', () => {
     });
   });
 
-  // Note: YCbCr mode is marked as optional in features.md and not yet implemented
-  test.describe('Future: YCbCr Mode', () => {
-    test.skip('PARADE-006: YCbCr mode shows correct channels (NOT IMPLEMENTED)', async ({ page }) => {
-      // This test is skipped as YCbCr mode is marked as optional
-      // and not yet implemented in the current version.
-      // When implemented:
-      // - Should add 'ycbcr' to WaveformMode type
-      // - Should display Y (luma), Cb (blue-diff), Cr (red-diff) channels
-      // - Should use standard YCbCr conversion formulas
-    });
-  });
+  // Note: YCbCr mode is marked as optional in features.md and not yet implemented.
+  // Deleted PARADE-006 stub (empty body, no assertions).
 });

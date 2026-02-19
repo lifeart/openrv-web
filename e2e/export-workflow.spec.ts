@@ -7,6 +7,20 @@ import {
   drawStroke,
   getPaintState,
   getViewerState,
+  waitForMediaLoaded,
+  waitForFrame,
+  waitForPlaybackState,
+  waitForTabActive,
+  waitForTool,
+  waitForCondition,
+  waitForExposure,
+  waitForColorReset,
+  waitForRotation,
+  waitForCropEnabled,
+  waitForCropAspectRatio,
+  waitForWipeMode,
+  waitForZoomLevel,
+  waitForLoopMode,
 } from './fixtures';
 
 async function setRangeValue(
@@ -26,7 +40,6 @@ test.describe('Export Functionality', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
   });
 
   test.describe('Export Controls', () => {
@@ -38,7 +51,6 @@ test.describe('Export Functionality', () => {
     test('EXPORT-002: should show export options on click', async ({ page }) => {
       const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
       await exportButton.click();
-      await page.waitForTimeout(200);
 
       // Should show export format options
       const formatOptions = page.locator('button, option').filter({ hasText: /PNG|JPEG|WebP/ });
@@ -49,7 +61,6 @@ test.describe('Export Functionality', () => {
     test('EXPORT-003: should have PNG export option', async ({ page }) => {
       const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
       await exportButton.click();
-      await page.waitForTimeout(200);
 
       // PNG option is shown as "Save as PNG" text in export panel
       const pngOption = page.locator('text=Save as PNG');
@@ -59,7 +70,6 @@ test.describe('Export Functionality', () => {
     test('EXPORT-004: should have JPEG export option', async ({ page }) => {
       const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
       await exportButton.click();
-      await page.waitForTimeout(200);
 
       // JPEG option is shown as "Save as JPEG" text in export panel
       const jpegOption = page.locator('text=Save as JPEG');
@@ -69,7 +79,6 @@ test.describe('Export Functionality', () => {
     test('EXPORT-005: should have WebP export option', async ({ page }) => {
       const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
       await exportButton.click();
-      await page.waitForTimeout(200);
 
       // WebP option is shown as "Save as WebP" text in export panel
       const webpOption = page.locator('text=Save as WebP');
@@ -103,7 +112,6 @@ test.describe('Export Functionality', () => {
     test('EXPORT-020: should have option to include annotations', async ({ page }) => {
       const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
       await exportButton.click();
-      await page.waitForTimeout(200);
 
       // Look for annotations checkbox/toggle
       const annotationsOption = page.locator('input[type="checkbox"], button').filter({ hasText: /Annotation|Include/ });
@@ -115,7 +123,6 @@ test.describe('Export Functionality', () => {
     test('EXPORT-030: should have sequence export option', async ({ page }) => {
       const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
       await exportButton.click();
-      await page.waitForTimeout(200);
 
       const sequenceOption = page.locator('button, option').filter({ hasText: /Sequence|All Frames/ });
       // Sequence export may be available
@@ -132,18 +139,18 @@ test.describe('Export Functionality', () => {
       await waitForTestHelper(page);
 
       await page.click('button[data-tab-id="annotate"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'annotate');
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       await drawStroke(page, [
         { x: 120, y: 120 },
         { x: 260, y: 180 },
       ]);
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
 
       await page.keyboard.press('g');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
 
       const paintState = await getPaintState(page);
       expect(paintState.ghostMode).toBe(true);
@@ -165,7 +172,8 @@ test.describe('Export Functionality', () => {
 
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(outputPath);
-      await page.waitForTimeout(1000);
+      await waitForMediaLoaded(page);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
 
       const restoredPaint = await getPaintState(page);
       expect(restoredPaint.ghostMode).toBe(true);
@@ -175,26 +183,25 @@ test.describe('Export Functionality', () => {
     test('EXPORT-041: re-export loaded RV session with edits', async ({ page }) => {
       await waitForTestHelper(page);
       await loadRvSession(page);
-      await page.waitForTimeout(1000);
 
       await page.click('button[data-tab-id="annotate"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'annotate');
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       await drawStroke(page, [
         { x: 140, y: 140 },
         { x: 220, y: 200 },
       ]);
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
 
       await page.keyboard.press('g');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
 
       let paintState = await getPaintState(page);
       if (!paintState.ghostMode) {
         await page.keyboard.press('g');
-        await page.waitForTimeout(200);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
         paintState = await getPaintState(page);
       }
 
@@ -214,7 +221,8 @@ test.describe('Export Functionality', () => {
 
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(outputPath);
-      await page.waitForTimeout(1000);
+      await waitForMediaLoaded(page);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
 
       const restoredPaint = await getPaintState(page);
       expect(restoredPaint.ghostMode).toBe(true);
@@ -233,7 +241,6 @@ test.describe('Full Workflow Tests', () => {
 
     // Load video
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Verify media loaded
     const initialState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -242,7 +249,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to start - Home should go to inPoint (usually frame 0 or 1)
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
     const homeState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = homeState!.currentFrame;
     // Home goes to inPoint, which is at the beginning
@@ -251,50 +258,50 @@ test.describe('Full Workflow Tests', () => {
     // Navigate forward
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, startFrame + 2);
     const afterRight = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     expect(afterRight?.currentFrame).toBe(startFrame + 2);
 
     // Navigate to end - End should go to outPoint
     await page.keyboard.press('End');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.outPoint; })()`);
     const endState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     // End goes to outPoint
     expect(endState?.currentFrame).toBe(endState!.outPoint);
 
     // Go back to start for zoom test
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
 
     // Zoom using View tab - pick 200% from zoom dropdown
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
     const zoomDropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(zoomDropdown).toBeVisible();
     await zoomDropdown.locator('button', { hasText: '200%' }).click();
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 2, 0.01);
     const zoomState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     expect(zoomState?.zoom).toBeGreaterThan(1);
     await expect(zoomButton).toContainText('200%');
 
     // Fit back - F key fits to window
     await page.keyboard.press('f');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && Math.abs(s.zoom - 2) > 0.01; })()`);
     const fitState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     // Fit to window means zoom will be calculated to fit - verify it changed from 2
     expect(fitState?.zoom).not.toBe(2);
 
     // Play briefly
     await page.keyboard.press('Space');
-    await page.waitForTimeout(300);
+    await waitForPlaybackState(page, true);
     const playingState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     expect(playingState?.isPlaying).toBe(true);
 
     // Stop
     await page.keyboard.press('Space');
-    await page.waitForTimeout(100);
+    await waitForPlaybackState(page, false);
     const stoppedState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     expect(stoppedState?.isPlaying).toBe(false);
 
@@ -307,7 +314,6 @@ test.describe('Full Workflow Tests', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Verify initial color state
     const initialState = await page.evaluate(() => window.__OPENRV_TEST__?.getColorState());
@@ -315,12 +321,11 @@ test.describe('Full Workflow Tests', () => {
 
     // First click the Color tab in the sidebar
     await page.locator('button[data-tab-id="color"]').click();
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'color');
 
     // Now click the Color dropdown button in the content area (second "Color" button)
     // This button has title "Toggle color adjustments panel"
     await page.locator('button[title*="color adjustments"]').click();
-    await page.waitForTimeout(200);
 
     // Wait for color panel to appear (it's appended to body)
     const colorPanel = page.locator('.color-controls-panel');
@@ -330,7 +335,7 @@ test.describe('Full Workflow Tests', () => {
     // The slider rows have label elements with text, and input[type="range"] siblings
     const exposureSlider = colorPanel.locator('label:has-text("Exposure")').locator('..').locator('input[type="range"]');
     await setRangeValue(exposureSlider, 1.5);
-    await page.waitForTimeout(100);
+    await waitForExposure(page, 1.5, 0.01);
 
     // Verify exposure changed in app state
     const afterState = await page.evaluate(() => window.__OPENRV_TEST__?.getColorState());
@@ -341,7 +346,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Reset using the Reset button
     await colorPanel.locator('button:has-text("Reset")').click();
-    await page.waitForTimeout(100);
+    await waitForColorReset(page);
 
     // Verify reset in app state
     const resetState = await page.evaluate(() => window.__OPENRV_TEST__?.getColorState());
@@ -353,7 +358,6 @@ test.describe('Full Workflow Tests', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Verify initial paint state
     const initialPaint = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -361,11 +365,11 @@ test.describe('Full Workflow Tests', () => {
 
     // Switch to Annotate tab
     await page.click('button[data-tab-id="annotate"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'annotate');
 
     // Select pen tool
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     // Verify pen tool selected
     const penState = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -373,7 +377,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Go to start frame and draw
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
 
     const startState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = startState!.currentFrame;
@@ -386,7 +390,7 @@ test.describe('Full Workflow Tests', () => {
     await page.mouse.down();
     await page.mouse.move(box!.x + 200, box!.y + 200);
     await page.mouse.up();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
 
     // Verify start frame is annotated
     const afterDraw1 = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -397,7 +401,7 @@ test.describe('Full Workflow Tests', () => {
     for (let i = 0; i < 5; i++) {
       await page.keyboard.press('ArrowRight');
     }
-    await page.waitForTimeout(100);
+    await waitForFrame(page, startFrame + 5);
 
     const secondFrameState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const secondFrame = secondFrameState!.currentFrame;
@@ -406,7 +410,7 @@ test.describe('Full Workflow Tests', () => {
     await page.mouse.down();
     await page.mouse.move(box!.x + 150, box!.y + 150);
     await page.mouse.up();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length === 2; })()`);
 
     // Verify second frame is also annotated
     const afterDraw2 = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -415,9 +419,9 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to first annotated frame
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
     await page.keyboard.press('.');  // Next annotated frame
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return [${startFrame}, ${secondFrame}].includes(s?.currentFrame); })()`);
 
     const navState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     // Should be at one of the annotated frames
@@ -425,7 +429,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Undo last stroke
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
 
     // Verify undo worked (redo should now be available)
     const afterUndo = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -437,7 +441,6 @@ test.describe('Full Workflow Tests', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Verify initial transform state
     const initialTransform = await page.evaluate(() => window.__OPENRV_TEST__?.getTransformState());
@@ -447,11 +450,11 @@ test.describe('Full Workflow Tests', () => {
 
     // Switch to Transform tab
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'transform');
 
     // Rotate using Shift+R keyboard shortcut (rotates left/counter-clockwise = 270)
     await page.keyboard.press('Shift+r');
-    await page.waitForTimeout(100);
+    await waitForRotation(page, 270);
 
     // Verify rotation changed - Shift+R rotates counter-clockwise (left), which is 270
     const afterRotate = await page.evaluate(() => window.__OPENRV_TEST__?.getTransformState());
@@ -459,7 +462,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Flip horizontal using keyboard shortcut
     await page.keyboard.press('Alt+h');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()`);
 
     // Verify flip H changed
     const afterFlipH = await page.evaluate(() => window.__OPENRV_TEST__?.getTransformState());
@@ -472,7 +475,6 @@ test.describe('Full Workflow Tests', () => {
     // Click Crop button to open crop panel
     const cropButton = page.locator('button:has-text("Crop")').first();
     await cropButton.click();
-    await page.waitForTimeout(200);
 
     // Verify crop panel is visible and properly positioned
     const cropPanel = page.locator('.crop-panel');
@@ -481,7 +483,7 @@ test.describe('Full Workflow Tests', () => {
     // Enable crop using the toggle in the panel
     const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
     await enableToggle.click();
-    await page.waitForTimeout(200);
+    await waitForCropEnabled(page, true);
 
     // Verify crop enabled
     const afterCropEnable = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
@@ -491,11 +493,11 @@ test.describe('Full Workflow Tests', () => {
     const aspectSelect = cropPanel.locator('select').first();
     await expect(aspectSelect).toBeVisible();
     await aspectSelect.selectOption('16:9');
-    await page.waitForTimeout(100);
+    await waitForCropAspectRatio(page, '16:9');
 
     // Disable crop using the same toggle
     await enableToggle.click();
-    await page.waitForTimeout(200);
+    await waitForCropEnabled(page, false);
 
     // Verify crop disabled
     const afterCropDisable = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
@@ -510,7 +512,6 @@ test.describe('Full Workflow Tests', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Verify initial wipe mode is off
     const initialState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
@@ -518,7 +519,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Enable wipe mode (horizontal)
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(200);
+    await waitForWipeMode(page, 'horizontal');
 
     // Verify wipe mode changed to horizontal
     const wipeState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
@@ -527,11 +528,10 @@ test.describe('Full Workflow Tests', () => {
     // Make color adjustment to see difference in wipe
     // First click Color tab, then the Color dropdown button
     await page.locator('button[data-tab-id="color"]').click();
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'color');
 
     // Click the Color dropdown button in content area
     await page.locator('button[title*="color adjustments"]').click();
-    await page.waitForTimeout(200);
 
     // Wait for color panel
     const colorPanel = page.locator('.color-controls-panel');
@@ -540,7 +540,7 @@ test.describe('Full Workflow Tests', () => {
     // Adjust exposure using a valid value (-5 to +5 range)
     const exposureSlider = colorPanel.locator('label:has-text("Exposure")').locator('..').locator('input[type="range"]');
     await setRangeValue(exposureSlider, 2);  // +2 stops exposure
-    await page.waitForTimeout(100);
+    await waitForExposure(page, 2, 0.01);
 
     // Verify exposure changed
     const colorState = await page.evaluate(() => window.__OPENRV_TEST__?.getColorState());
@@ -548,21 +548,21 @@ test.describe('Full Workflow Tests', () => {
 
     // Close color panel by clicking outside
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
 
     // Viewer should be visible with wipe effect
     await expect(page.locator('.viewer-container').first()).toBeVisible();
 
     // Cycle wipe and ensure mode changes from horizontal
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.wipeMode !== 'horizontal'; })()`);
     let currentMode = (await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState()))?.wipeMode;
     expect(currentMode).not.toBe('horizontal');
 
     // Continue cycling until wipe returns to off (covers extended mode cycle lists).
     for (let i = 0; i < 6 && currentMode !== 'off'; i++) {
+      const prevMode = currentMode;
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.wipeMode !== '${prevMode}'; })()`);
       currentMode = (await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState()))?.wipeMode;
     }
     expect(currentMode).toBe('off');
@@ -573,7 +573,6 @@ test.describe('Full Workflow Tests', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Get initial state
     const initialState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -582,18 +581,18 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to start then move forward 5 frames
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
     const startState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = startState!.currentFrame;
 
     for (let i = 0; i < 5; i++) {
       await page.keyboard.press('ArrowRight');
     }
-    await page.waitForTimeout(100);
+    await waitForFrame(page, startFrame + 5);
 
     // Set in point
     await page.keyboard.press('i');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${startFrame + 5}; })()`);
 
     // Verify in point set to current frame
     const afterInPoint = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -604,11 +603,11 @@ test.describe('Full Workflow Tests', () => {
     for (let i = 0; i < 10; i++) {
       await page.keyboard.press('ArrowRight');
     }
-    await page.waitForTimeout(100);
+    await waitForFrame(page, startFrame + 15);
 
     // Set out point
     await page.keyboard.press('o');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${startFrame + 15}; })()`);
 
     // Verify out point set
     const afterOutPoint = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -616,22 +615,22 @@ test.describe('Full Workflow Tests', () => {
     expect(afterOutPoint?.outPoint).toBe(expectedOutPoint);
 
     // Toggle loop mode - L cycles through: once -> loop -> pingpong -> once
-    await page.keyboard.press('Control+l');
-    await page.waitForTimeout(100);
-
-    // Verify loop mode changed - if was 'loop', now should be 'pingpong'
-    // if was 'once', now should be 'loop'
-    const afterLoop = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const expectedNextMode: Record<string, string> = {
       'once': 'loop',
       'loop': 'pingpong',
       'pingpong': 'once'
     };
+    await page.keyboard.press('Control+l');
+    await waitForLoopMode(page, expectedNextMode[initialLoopMode] as 'once' | 'loop' | 'pingpong');
+
+    // Verify loop mode changed - if was 'loop', now should be 'pingpong'
+    // if was 'once', now should be 'loop'
+    const afterLoop = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     expect(afterLoop?.loopMode).toBe(expectedNextMode[initialLoopMode]);
 
     // Play briefly
     await page.keyboard.press('Space');
-    await page.waitForTimeout(500);
+    await waitForPlaybackState(page, true);
 
     // Verify playing
     const playingState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -639,7 +638,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Stop
     await page.keyboard.press('Space');
-    await page.waitForTimeout(100);
+    await waitForPlaybackState(page, false);
 
     // Verify stopped
     const stoppedState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -647,7 +646,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Reset in/out points with 'r' key
     await page.keyboard.press('r');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${initialInPoint}; })()`);
 
     // Verify reset returns to full-range start
     const resetState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -661,14 +660,12 @@ test.describe('RV Session Workflow', () => {
     await page.waitForSelector('#app');
 
     await loadRvSession(page);
-    await page.waitForTimeout(1000);
 
     // App should be functional
     await expect(page.locator('.viewer-container').first()).toBeVisible();
 
     // Should be able to navigate
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
   });
 
   test('RV-002: should restore annotations from RV session', async ({ page }) => {
@@ -676,12 +673,11 @@ test.describe('RV Session Workflow', () => {
     await page.waitForSelector('#app');
 
     await loadRvSession(page);
-    await page.waitForTimeout(1000);
 
     // Check if annotations were loaded
     // Switch to annotate tab
     await page.click('button[data-tab-id="annotate"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'annotate');
 
     // Canvas should show any loaded annotations
     await expect(page.locator('.viewer-container').first()).toBeVisible();
@@ -694,7 +690,6 @@ test.describe('Project Save/Load', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Look for save project button or use keyboard shortcut
     const saveButton = page.locator('button[title*="Save"], button:has-text("Save")').first();
@@ -720,12 +715,11 @@ test.describe('Error Handling', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Perform various actions
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Space');
-    await page.waitForTimeout(200);
+    await waitForPlaybackState(page, true);
     await page.keyboard.press('Space');
 
     // Check for critical errors (some warnings may be acceptable)
@@ -742,7 +736,6 @@ test.describe('Error Handling', () => {
     await page.waitForSelector('#app');
 
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
 
     // Rapid key presses
     for (let i = 0; i < 20; i++) {

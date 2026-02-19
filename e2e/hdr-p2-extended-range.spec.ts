@@ -95,6 +95,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-002: HDR section is not rendered when display has no HDR', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(caps.displayHDR && (caps.webglHLG || caps.webglPQ),
       'Display supports HDR - cannot test non-HDR path');
 
@@ -115,6 +116,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-003: SDR button is visible when HDR section is shown', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || (!caps.webglHLG && !caps.webglPQ),
       'Display does not support HDR');
 
@@ -126,6 +128,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-004: SDR is the default selected HDR mode', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || (!caps.webglHLG && !caps.webglPQ),
       'Display does not support HDR');
 
@@ -137,6 +140,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-005: HLG button is visible when webglHLG is supported', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglHLG,
       'Display does not support HLG');
 
@@ -148,6 +152,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-006: PQ button is visible when webglPQ is supported', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglPQ,
       'Display does not support PQ');
 
@@ -159,7 +164,9 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-007: HLG button is not rendered when webglHLG is unsupported', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(caps.webglHLG, 'Browser supports HLG - cannot test absence');
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR, 'No HDR display - section will be hidden entirely');
 
     await openToneMappingDropdown(page);
@@ -170,7 +177,9 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-008: PQ button is not rendered when webglPQ is unsupported', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(caps.webglPQ, 'Browser supports PQ - cannot test absence');
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR, 'No HDR display - section will be hidden entirely');
 
     await openToneMappingDropdown(page);
@@ -185,6 +194,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-009: clicking HLG selects it and deselects SDR', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglHLG,
       'Display does not support HLG');
 
@@ -202,6 +212,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-010: clicking PQ selects it and deselects SDR', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglPQ,
       'Display does not support PQ');
 
@@ -219,6 +230,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-011: switching back to SDR restores SDR selection', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglHLG,
       'Display does not support HLG');
 
@@ -240,6 +252,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-012: HDR mode switching triggers canvas state change', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglHLG,
       'Display does not support HLG');
 
@@ -286,6 +299,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
 
   test('HDR-P2-014: HDR mode selection persists across dropdown toggle', async ({ page }) => {
     const caps = await browserSupportsHDR(page);
+    // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!caps.displayHDR || !caps.webglHLG,
       'Display does not support HLG');
 

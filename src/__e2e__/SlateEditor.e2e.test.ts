@@ -19,8 +19,6 @@
  * - Dispose and cleanup
  *
  * KNOWN ISSUES DOCUMENTED IN TESTS:
- * - INCOMPLETE: Panel UI is a text placeholder, no real form
- * - MISSING: SlateEditor is NOT wired to the video export pipeline
  * - isSlateEditorPanelVisible / hideSlateEditorPanel ARE wired in ESC handler (correct)
  */
 
@@ -552,12 +550,12 @@ describe('SlateEditor E2E Integration', () => {
       expect(callback).toHaveBeenCalledWith(config);
     });
 
-    it('SLATE-E2E-082: generateConfig does NOT include logo ImageBitmap (caller must load)', () => {
+    it('SLATE-E2E-082: generateConfig does not include logo when none loaded', () => {
       editor.setLogoUrl('https://example.com/logo.png');
       const config = editor.generateConfig();
 
-      // The config should NOT have a logo property (or it should be undefined)
-      // The caller is responsible for loading the image from logoUrl
+      // setLogoUrl only updates the URL string, not the image
+      // To include a logo, loadLogoFile() or loadLogoFromUrl() must be called
       expect(config.logo).toBeUndefined();
     });
 
@@ -645,7 +643,7 @@ describe('SlateEditor E2E Integration', () => {
   });
 
   // =========================================================================
-  // 12. WIRING GAP ANALYSIS (documents missing features and issues)
+  // 12. Defaults and config event
   // =========================================================================
   describe('instantiation defaults and config event', () => {
     it('SLATE-E2E-113: SlateEditor with no initial state uses 1920x1080 defaults', () => {
@@ -670,6 +668,201 @@ describe('SlateEditor E2E Integration', () => {
       expect(config.fields.some(f => f.value === 'Test Show')).toBe(true);
 
       editor.dispose();
+    });
+  });
+
+  // =========================================================================
+  // 13. Logo file upload E2E
+  // =========================================================================
+  describe('logo file upload', () => {
+    let editor: SlateEditor;
+
+    beforeEach(() => {
+      editor = new SlateEditor();
+    });
+
+    afterEach(() => {
+      editor.dispose();
+    });
+
+    it('SLATE-E2E-120: loadLogoFile loads image and updates state', async () => {
+      const stateCallback = vi.fn();
+      const logoCallback = vi.fn();
+      editor.on('stateChanged', stateCallback);
+      editor.on('logoLoaded', logoCallback);
+
+      const origCreateObjectURL = URL.createObjectURL;
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/test-logo');
+
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 400, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 200, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        const file = new File([new Blob(['data'])], 'logo.png', { type: 'image/png' });
+        await editor.loadLogoFile(file);
+
+        expect(editor.hasLogo()).toBe(true);
+        expect(editor.getLogoDimensions()).toEqual({ width: 400, height: 200 });
+        expect(logoCallback).toHaveBeenCalledWith({ width: 400, height: 200 });
+        expect(stateCallback).toHaveBeenCalled();
+      } finally {
+        URL.createObjectURL = origCreateObjectURL;
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SLATE-E2E-121: removeLogoImage clears logo and emits events', async () => {
+      const removedCallback = vi.fn();
+      editor.on('logoRemoved', removedCallback);
+
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 100, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFromUrl('https://example.com/logo.png');
+        expect(editor.hasLogo()).toBe(true);
+
+        editor.removeLogoImage();
+        expect(editor.hasLogo()).toBe(false);
+        expect(editor.getLogoUrl()).toBe('');
+        expect(removedCallback).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SLATE-E2E-122: generateConfig includes loaded logo image', async () => {
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 200, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          Object.defineProperty(this, 'width', { value: 200, configurable: true });
+          Object.defineProperty(this, 'height', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFromUrl('https://example.com/logo.png');
+        const config = editor.generateConfig();
+        expect(config.logo).toBeDefined();
+        expect(config.logo).toBe(editor.getLogoImage());
+      } finally {
+        globalThis.Image = origImage;
+      }
+    });
+  });
+
+  // =========================================================================
+  // 14. Preview rendering E2E
+  // =========================================================================
+  describe('preview rendering', () => {
+    let editor: SlateEditor;
+
+    beforeEach(() => {
+      editor = new SlateEditor();
+    });
+
+    afterEach(() => {
+      editor.dispose();
+    });
+
+    it('SLATE-E2E-130: generatePreview returns a canvas', () => {
+      editor.setMetadata({ showName: 'Test Show', shotName: 'sh010' });
+      const canvas = editor.generatePreview();
+      expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('SLATE-E2E-131: generatePreview emits previewRendered event', () => {
+      const callback = vi.fn();
+      editor.on('previewRendered', callback);
+
+      editor.setMetadata({ showName: 'Test' });
+      editor.generatePreview();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback.mock.calls[0][0]).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('SLATE-E2E-132: generatePreview also emits configGenerated', () => {
+      const configCallback = vi.fn();
+      editor.on('configGenerated', configCallback);
+
+      editor.generatePreview();
+
+      expect(configCallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('SLATE-E2E-133: generatePreview canvas is sized within bounds', () => {
+      editor.setResolution(3840, 2160);
+      const canvas = editor.generatePreview(200, 100);
+      expect(canvas).not.toBeNull();
+      expect(canvas!.width).toBeLessThanOrEqual(200);
+      expect(canvas!.height).toBeLessThanOrEqual(100);
+    });
+
+    it('SLATE-E2E-134: full slate workflow: metadata -> logo -> preview', async () => {
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 200, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          Object.defineProperty(this, 'width', { value: 200, configurable: true });
+          Object.defineProperty(this, 'height', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        // Set up metadata
+        editor.setMetadata({
+          showName: 'My Film',
+          shotName: 'sh010',
+          version: 'v02',
+          artist: 'Jane Doe',
+          date: '2026-02-19',
+        });
+
+        // Load logo
+        await editor.loadLogoFromUrl('https://example.com/studio-logo.png');
+        expect(editor.hasLogo()).toBe(true);
+
+        // Generate preview
+        const canvas = editor.generatePreview();
+        expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+
+        // Config should include logo
+        const config = editor.generateConfig();
+        expect(config.logo).toBeDefined();
+        expect(config.fields.some(f => f.value === 'My Film')).toBe(true);
+      } finally {
+        globalThis.Image = origImage;
+      }
     });
   });
 });

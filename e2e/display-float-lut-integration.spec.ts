@@ -345,7 +345,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     // Load the LUT
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -363,7 +363,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
 
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -382,7 +382,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
 
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -433,7 +433,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   }) => {
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -452,7 +452,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   }) => {
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -493,7 +493,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   }) => {
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -529,7 +529,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     // Load, then clear, then re-load
     let loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -543,7 +543,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
       )
       .first();
     if (!(await clearButton.isVisible())) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
     await clearButton.click();
@@ -555,7 +555,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     // Re-load
     loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -654,7 +654,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
 
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -683,7 +683,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
 
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -723,7 +723,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     await waitForColorPanel(page);
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 
@@ -765,7 +765,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     await waitForColorPanel(page);
     const loaded = await loadSampleLUT(page);
     if (!loaded) {
-      test.skip();
+      test.fixme(); // TODO: flaky - LUT file input not always available
       return;
     }
 

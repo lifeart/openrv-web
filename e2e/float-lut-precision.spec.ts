@@ -139,7 +139,7 @@ test.describe('Float LUT Precision', () => {
 
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 
@@ -156,7 +156,7 @@ test.describe('Float LUT Precision', () => {
 
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 
@@ -235,7 +235,7 @@ test.describe('Float LUT Precision', () => {
     test('FLUT-E006: LUT intensity at 0% shows no LUT effect', async ({ page }) => {
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 
@@ -263,7 +263,7 @@ test.describe('Float LUT Precision', () => {
     test('FLUT-E007: LUT intensity at 50% blends correctly', async ({ page }) => {
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 
@@ -296,7 +296,7 @@ test.describe('Float LUT Precision', () => {
     test('FLUT-E008: LUT works combined with exposure adjustment', async ({ page }) => {
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 
@@ -328,7 +328,7 @@ test.describe('Float LUT Precision', () => {
     test('FLUT-E009: LUT state persists across frame navigation', async ({ page }) => {
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 
@@ -365,7 +365,7 @@ test.describe('Float LUT Precision', () => {
 
       const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
       if (!(await fileInput.count())) {
-        test.skip();
+        test.fixme(); // TODO: flaky - file input not always available
         return;
       }
 

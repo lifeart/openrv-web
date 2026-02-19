@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 import {
   loadVideoFile,
   waitForTestHelper,
+  waitForTabActive,
+  waitForZoomLevel,
+  waitForChannelMode,
+  waitForCondition,
 } from './fixtures';
 
 /**
@@ -22,7 +26,7 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     await loadVideoFile(page);
     // Ensure View tab is selected (has zoom and channel dropdowns)
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E001: clicking dropdown button opens menu', async ({ page }) => {
@@ -32,7 +36,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
 
     // Click to open dropdown
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     // Dropdown should be visible
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
@@ -43,7 +46,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -57,7 +59,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
 
     // Press ArrowDown
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Second item should now be highlighted
     const secondItem = items.nth(1);
@@ -71,7 +72,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -79,7 +79,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Navigate down twice
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Third item should be highlighted
     const thirdItem = items.nth(2);
@@ -87,7 +86,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
 
     // Press ArrowUp
     await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(50);
 
     // Second item should now be highlighted
     const secondItem = items.nth(1);
@@ -98,7 +96,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -107,11 +104,9 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     await page.keyboard.press('ArrowDown'); // 25%
     await page.keyboard.press('ArrowDown'); // 50%
     await page.keyboard.press('ArrowDown'); // 100%
-    await page.waitForTimeout(50);
 
     // Press Enter to select
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -128,7 +123,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     const initialText = await zoomButton.textContent();
 
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -136,11 +130,9 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Navigate down
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Press Escape
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -153,18 +145,15 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Open channel select dropdown
     const channelButton = page.locator('[data-testid="channel-select-button"]');
     await channelButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="channel-dropdown"]');
     await expect(dropdown).toBeVisible();
 
     // Navigate to Red channel (index 1: RGB, Red)
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Press Space to select
     await page.keyboard.press(' ');
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -177,7 +166,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -185,7 +173,6 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Click somewhere else (on the viewer container)
     const viewer = page.locator('.viewer-container');
     await viewer.click();
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -195,14 +182,12 @@ test.describe('Dropdown Menu Keyboard Navigation', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
 
     // Press Tab
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -216,14 +201,13 @@ test.describe('Dropdown Menu Z-Index Stacking', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E010: opening new dropdown closes previous dropdown', async ({ page }) => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const zoomDropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(zoomDropdown).toBeVisible();
@@ -231,7 +215,6 @@ test.describe('Dropdown Menu Z-Index Stacking', () => {
     // Open channel dropdown (should close zoom dropdown)
     const channelButton = page.locator('[data-testid="channel-select-button"]');
     await channelButton.click();
-    await page.waitForTimeout(100);
 
     const channelDropdown = page.locator('[data-testid="channel-dropdown"]');
 
@@ -251,7 +234,6 @@ test.describe('Dropdown Menu Z-Index Stacking', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const zoomDropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(zoomDropdown).toBeVisible();
@@ -265,7 +247,6 @@ test.describe('Dropdown Menu Z-Index Stacking', () => {
     // Open channel dropdown - this should close the zoom dropdown
     const channelButton = page.locator('[data-testid="channel-select-button"]');
     await channelButton.click();
-    await page.waitForTimeout(100);
 
     const channelDropdown = page.locator('[data-testid="channel-dropdown"]');
     await expect(channelDropdown).toBeVisible();
@@ -284,7 +265,6 @@ test.describe('Dropdown Menu Z-Index Stacking', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -306,7 +286,7 @@ test.describe('Dropdown Menu Item Selection', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E020: selecting zoom level updates viewer state', async ({ page }) => {
@@ -318,14 +298,13 @@ test.describe('Dropdown Menu Item Selection', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
 
     // Click on 200% option
     const option200 = dropdown.locator('button', { hasText: '200%' });
     await option200.click();
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 2.0, 0.1);
 
     // Verify zoom state changed
     const state = await page.evaluate(() => {
@@ -345,14 +324,12 @@ test.describe('Dropdown Menu Item Selection', () => {
     await expect(channelButton).toContainText('Ch');
 
     await channelButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="channel-dropdown"]');
 
     // Click on Red channel
     const redOption = dropdown.locator('button', { hasText: 'Red' });
     await redOption.click();
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -370,7 +347,6 @@ test.describe('Dropdown Menu Item Selection', () => {
     expect(initialState).not.toBeNull();
 
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -378,14 +354,13 @@ test.describe('Dropdown Menu Item Selection', () => {
     // Navigate to 50% (index 2: Fit, 25%, 50%)
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Ensure keyboard navigation actually moved selection before pressing Enter
     await expect(items.nth(2)).toHaveAttribute('aria-selected', 'true');
 
     // Select with Enter
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 0.5, 0.1);
 
     // Verify zoom state moved down from initial fit/default value.
     const state = await page.evaluate(() => {
@@ -401,12 +376,11 @@ test.describe('Dropdown Menu Item Selection', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setViewerZoom(1);
     });
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 1.0, 0.01);
 
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
 
@@ -430,7 +404,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E040: full keyboard workflow - open, navigate, select specific item', async ({ page }) => {
@@ -444,7 +418,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     // Open zoom dropdown by clicking button
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     // Verify dropdown is open
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
@@ -459,7 +432,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     await page.keyboard.press('ArrowDown'); // -> 50%
     await page.keyboard.press('ArrowDown'); // -> 100%
     await page.keyboard.press('ArrowDown'); // -> 200%
-    await page.waitForTimeout(50);
 
     // Verify the 200% item is highlighted (aria-selected)
     const items = dropdown.locator('button');
@@ -469,7 +441,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Press Enter to select
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
+    await waitForZoomLevel(page, 2.0, 0.1);
 
     // Verify dropdown closed
     await expect(dropdown).not.toBeVisible();
@@ -489,7 +461,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -498,7 +469,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     await page.keyboard.press('ArrowDown'); // -> 25%
     await page.keyboard.press('ArrowDown'); // -> 50%
     await page.keyboard.press('ArrowDown'); // -> 100%
-    await page.waitForTimeout(50);
 
     // Verify 100% is selected
     await expect(items.nth(3)).toHaveAttribute('aria-selected', 'true');
@@ -506,7 +476,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     // Navigate up twice to 25% (index 1)
     await page.keyboard.press('ArrowUp'); // -> 50%
     await page.keyboard.press('ArrowUp'); // -> 25%
-    await page.waitForTimeout(50);
 
     // Verify 25% is now selected
     await expect(items.nth(1)).toHaveAttribute('aria-selected', 'true');
@@ -514,7 +483,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Select 25%
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
+    await waitForZoomLevel(page, 0.25, 0.05);
 
     // Verify zoom is 0.25
     const state = await page.evaluate(() => {
@@ -527,7 +496,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -538,21 +506,18 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Try to go up from first item - should stay on first
     await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(50);
     await expect(items.nth(0)).toHaveAttribute('aria-selected', 'true');
 
     // Navigate to last item
     for (let i = 0; i < itemCount - 1; i++) {
       await page.keyboard.press('ArrowDown');
     }
-    await page.waitForTimeout(50);
 
     // Last item should be selected
     await expect(items.nth(itemCount - 1)).toHaveAttribute('aria-selected', 'true');
 
     // Try to go down from last item - should stay on last
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
     await expect(items.nth(itemCount - 1)).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -562,7 +527,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     await expect(channelButton).toContainText('Ch'); // Default RGB
 
     await channelButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="channel-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -573,7 +537,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     // Navigate to Green (index 2)
     await page.keyboard.press('ArrowDown'); // -> Red
     await page.keyboard.press('ArrowDown'); // -> Green
-    await page.waitForTimeout(50);
 
     // Verify Green is highlighted
     const greenItem = items.nth(2);
@@ -582,7 +545,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Select Green
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
+    await waitForChannelMode(page, 'green');
 
     // Verify dropdown closed and button shows G
     await expect(dropdown).not.toBeVisible();
@@ -599,7 +562,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -610,7 +572,6 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown'); // Should be at 400% (last item, index 5)
-    await page.waitForTimeout(50);
 
     // Verify last item is selected
     await expect(items.nth(5)).toHaveAttribute('aria-selected', 'true');
@@ -618,7 +579,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Select it
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
+    await waitForZoomLevel(page, 4.0, 0.2);
 
     // Verify selection applied and zoom moved to high zoom range.
     await expect(dropdown).not.toBeVisible();
@@ -638,30 +599,26 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // First, set zoom to 100% using the dropdown
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     // Navigate to 100% (index 3: Fit, 25%, 50%, 100%)
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(200);
+    await waitForZoomLevel(page, 1.0, 0.1);
 
     await expect(zoomButton).toContainText('100%');
 
     // Now test Escape behavior
     // Open dropdown again
     await zoomButton.click();
-    await page.waitForTimeout(100);
     await expect(dropdown).toBeVisible();
 
     // Navigate to a different item (200%)
     await page.keyboard.press('ArrowDown'); // -> 200%
-    await page.waitForTimeout(50);
 
     // Press Escape to cancel
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
 
     // Dropdown should be closed
     await expect(dropdown).not.toBeVisible();
@@ -684,7 +641,7 @@ test.describe('Dropdown Focus Management', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E050: focus returns to button after selecting item', async ({ page }) => {
@@ -692,7 +649,6 @@ test.describe('Dropdown Focus Management', () => {
 
     // Open dropdown
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
@@ -700,7 +656,7 @@ test.describe('Dropdown Focus Management', () => {
     // Select an item with Enter
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => document.activeElement?.getAttribute("data-testid") === "zoom-control-button")()');
 
     // Verify focus is back on the button
     const focusedElement = await page.evaluate(() => {
@@ -714,14 +670,13 @@ test.describe('Dropdown Focus Management', () => {
 
     // Open dropdown
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(dropdown).toBeVisible();
 
     // Press Escape to close
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => document.activeElement?.getAttribute("data-testid") === "zoom-control-button")()');
 
     // Verify focus is back on the button
     const focusedElement = await page.evaluate(() => {
@@ -736,17 +691,14 @@ test.describe('Dropdown Focus Management', () => {
 
     // Open dropdown
     await zoomButton.click();
-    await page.waitForTimeout(100);
     await expect(dropdown).toBeVisible();
 
     // Close with Escape
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
     await expect(dropdown).not.toBeVisible();
 
     // Since focus is on button, pressing Enter/Space should reopen
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
 
     // Dropdown should be open again
     await expect(dropdown).toBeVisible();
@@ -760,15 +712,15 @@ test.describe('Dropdown Selection/Deselection', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E060: only one item is selected at a time during keyboard navigation', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
+    await expect(dropdown).toBeVisible();
     const items = dropdown.locator('button');
 
     // Navigate through items and verify only one is selected
@@ -786,7 +738,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E061: keyboard ArrowDown deselects previous item', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -796,7 +747,6 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Press ArrowDown
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // First item deselected, second selected
     await expect(items.nth(0)).toHaveAttribute('aria-selected', 'false');
@@ -806,7 +756,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E062: keyboard ArrowUp deselects previous item', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -814,14 +763,12 @@ test.describe('Dropdown Selection/Deselection', () => {
     // Move down twice
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Third item (50%) should be selected
     await expect(items.nth(2)).toHaveAttribute('aria-selected', 'true');
 
     // Press ArrowUp
     await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(50);
 
     // Third item deselected, second selected
     await expect(items.nth(2)).toHaveAttribute('aria-selected', 'false');
@@ -831,7 +778,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E063: mouse hover highlights item and deselects previous', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -841,7 +787,6 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Hover over third item
     await items.nth(2).hover();
-    await page.waitForTimeout(50);
 
     // First item deselected, third selected
     await expect(items.nth(0)).toHaveAttribute('aria-selected', 'false');
@@ -851,9 +796,9 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E064: only one item selected during mouse hover navigation', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
+    await expect(dropdown).toBeVisible();
     const items = dropdown.locator('button');
     const itemCount = await items.count();
 
@@ -875,7 +820,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E065: mouse hover after keyboard navigation updates selection', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -883,13 +827,11 @@ test.describe('Dropdown Selection/Deselection', () => {
     // Navigate with keyboard to third item
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     await expect(items.nth(2)).toHaveAttribute('aria-selected', 'true');
 
     // Hover over fifth item
     await items.nth(4).hover();
-    await page.waitForTimeout(50);
 
     // Third item deselected, fifth selected
     await expect(items.nth(2)).toHaveAttribute('aria-selected', 'false');
@@ -899,20 +841,17 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E066: keyboard navigation after mouse hover updates selection', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
 
     // Hover over fourth item
     await items.nth(3).hover();
-    await page.waitForTimeout(50);
 
     await expect(items.nth(3)).toHaveAttribute('aria-selected', 'true');
 
     // Navigate with keyboard up
     await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(50);
 
     // Fourth item deselected, third selected
     await expect(items.nth(3)).toHaveAttribute('aria-selected', 'false');
@@ -922,7 +861,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E067: Enter selects mouse-hovered item', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -933,7 +871,6 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Press Enter
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
 
     // Dropdown closed and 100% selected
     await expect(dropdown).not.toBeVisible();
@@ -943,14 +880,12 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E068: clicking item selects it', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
 
     // Click 200% item (index 4)
     await items.nth(4).click();
-    await page.waitForTimeout(100);
 
     // Dropdown closed and 200% selected
     await expect(dropdown).not.toBeVisible();
@@ -960,7 +895,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E069: rapid keyboard-mouse-keyboard switching maintains correct state', async ({ page }) => {
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -972,7 +906,6 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Mouse: hover 200% (index 4)
     await items.nth(4).hover();
-    await page.waitForTimeout(50);
     await expect(items.nth(4)).toHaveAttribute('aria-selected', 'true');
 
     // Keyboard: up (to 100%)
@@ -981,7 +914,6 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Mouse: hover Fit (index 0)
     await items.nth(0).hover();
-    await page.waitForTimeout(50);
     await expect(items.nth(0)).toHaveAttribute('aria-selected', 'true');
 
     // Keyboard: down (to 25%)
@@ -998,7 +930,6 @@ test.describe('Dropdown Selection/Deselection', () => {
   test('DM-E070: channel dropdown selection works correctly', async ({ page }) => {
     const channelButton = page.locator('[data-testid="channel-select-button"]');
     await channelButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="channel-dropdown"]');
     const items = dropdown.locator('button');
@@ -1007,14 +938,12 @@ test.describe('Dropdown Selection/Deselection', () => {
     await page.keyboard.press('ArrowDown'); // Red
     await page.keyboard.press('ArrowDown'); // Green
     await page.keyboard.press('ArrowDown'); // Blue
-    await page.waitForTimeout(50);
 
     // Blue should be selected
     await expect(items.nth(3)).toHaveAttribute('aria-selected', 'true');
 
     // Hover over Luma (index 5)
     await items.nth(5).hover();
-    await page.waitForTimeout(50);
 
     // Blue deselected, Luma selected
     await expect(items.nth(3)).toHaveAttribute('aria-selected', 'false');
@@ -1022,7 +951,6 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Press Enter to select Luma
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
 
     await expect(dropdown).not.toBeVisible();
     await expect(channelButton).toContainText('L');
@@ -1036,14 +964,13 @@ test.describe('Dropdown Accessibility', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E030: dropdown has proper ARIA role', async ({ page }) => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
 
@@ -1055,7 +982,6 @@ test.describe('Dropdown Accessibility', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -1069,7 +995,6 @@ test.describe('Dropdown Accessibility', () => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     const dropdown = page.locator('[data-testid="zoom-dropdown"]');
     const items = dropdown.locator('button');
@@ -1079,7 +1004,6 @@ test.describe('Dropdown Accessibility', () => {
 
     // Navigate down
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50);
 
     // Second item should now have aria-selected=true
     await expect(items.nth(1)).toHaveAttribute('aria-selected', 'true');
@@ -1095,7 +1019,7 @@ test.describe('Dropdown Visual Deselection', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test('DM-E080: selecting new zoom resets previous zoom visual styling', async ({ page }) => {
@@ -1103,10 +1027,9 @@ test.describe('Dropdown Visual Deselection', () => {
 
     // Select 100%
     await zoomButton.click();
-    await page.waitForTimeout(100);
     let items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(3).click(); // 100%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 1.0, 0.1);
 
     // Verify zoom is 100%
     await expect(zoomButton).toContainText('100%');
@@ -1117,10 +1040,9 @@ test.describe('Dropdown Visual Deselection', () => {
 
     // Select 200%
     await zoomButton.click();
-    await page.waitForTimeout(100);
     items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(4).click(); // 200%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 2.0, 0.1);
 
     // Verify zoom is 200%
     await expect(zoomButton).toContainText('200%');
@@ -1136,20 +1058,18 @@ test.describe('Dropdown Visual Deselection', () => {
 
     // Select Red channel
     await channelButton.click();
-    await page.waitForTimeout(100);
     let items = page.locator('[data-testid="channel-dropdown"]:visible').locator('button');
     await items.nth(1).click(); // Red
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'red');
 
     // Verify channel is Red
     await expect(channelButton).toContainText('R');
 
     // Select Green channel
     await channelButton.click();
-    await page.waitForTimeout(100);
     items = page.locator('[data-testid="channel-dropdown"]:visible').locator('button');
     await items.nth(2).click(); // Green
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'green');
 
     // Verify channel is Green
     await expect(channelButton).toContainText('G');
@@ -1165,22 +1085,20 @@ test.describe('Dropdown Visual Deselection', () => {
 
     // Open dropdown
     await zoomButton.click();
-    await page.waitForTimeout(100);
 
     // Keyboard navigate to 50% (index 2) and select
     await page.keyboard.press('ArrowDown'); // 25%
     await page.keyboard.press('ArrowDown'); // 50%
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 0.5, 0.1);
 
     await expect(zoomButton).toContainText('50%');
 
     // Now mouse click 400%
     await zoomButton.click();
-    await page.waitForTimeout(100);
     let items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(5).click(); // 400%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 4.0, 0.2);
 
     await expect(zoomButton).toContainText('400%');
     const state = await page.evaluate(() => {
@@ -1195,22 +1113,20 @@ test.describe('Dropdown Visual Deselection', () => {
 
     // Mouse click Blue
     await channelButton.click();
-    await page.waitForTimeout(100);
     let items = page.locator('[data-testid="channel-dropdown"]:visible').locator('button');
     await items.nth(3).click(); // Blue
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'blue');
 
     await expect(channelButton).toContainText('B');
 
     // Now keyboard select Alpha
     await channelButton.click();
-    await page.waitForTimeout(100);
     await page.keyboard.press('ArrowDown'); // Red
     await page.keyboard.press('ArrowDown'); // Green
     await page.keyboard.press('ArrowDown'); // Blue
     await page.keyboard.press('ArrowDown'); // Alpha
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'alpha');
 
     await expect(channelButton).toContainText('A');
     const state = await page.evaluate(() => {
@@ -1225,28 +1141,24 @@ test.describe('Dropdown Visual Deselection', () => {
 
     // Make multiple selections
     await zoomButton.click();
-    await page.waitForTimeout(100);
     let items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(1).click(); // 25%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 0.25, 0.05);
 
     await zoomButton.click();
-    await page.waitForTimeout(100);
     items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(3).click(); // 100%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 1.0, 0.1);
 
     await zoomButton.click();
-    await page.waitForTimeout(100);
     items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(2).click(); // 50%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 0.5, 0.1);
 
     await zoomButton.click();
-    await page.waitForTimeout(100);
     items = page.locator('[data-testid="zoom-dropdown"]:visible').locator('button');
     await items.nth(4).click(); // 200%
-    await page.waitForTimeout(100);
+    await waitForZoomLevel(page, 2.0, 0.1);
 
     // Final selection should be 200%
     await expect(zoomButton).toContainText('200%');

@@ -1064,6 +1064,13 @@ export class AppControlRegistry {
 
     const labelStyle = 'color: var(--text-muted); font-size: 11px; margin-bottom: 2px;';
 
+    // Description
+    const desc = document.createElement('div');
+    desc.dataset.testid = 'slate-description';
+    desc.style.cssText = 'font-size: 11px; color: var(--text-muted); line-height: 1.5; padding: 4px 0 8px; border-bottom: 1px solid var(--border-primary); margin-bottom: 4px;';
+    desc.textContent = 'Configure the slate frame prepended to video exports. Fill in production metadata below \u2014 a 2-second leader will be added at the start of each exported clip. Settings are not saved to the session file.';
+    container.appendChild(desc);
+
     const createField = (label: string, type: string, testid: string): HTMLInputElement => {
       const wrapper = document.createElement('div');
       const lbl = document.createElement('div');

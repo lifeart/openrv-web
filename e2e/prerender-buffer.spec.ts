@@ -6,6 +6,14 @@ import {
   getColorState,
   captureViewerScreenshot,
   imagesAreDifferent,
+  waitForTabActive,
+  waitForPlaybackState,
+  waitForFrameChange,
+  waitForFrame,
+  waitForFrameAtLeast,
+  waitForPendingFramesBelow,
+  waitForChannelMode,
+  waitForCondition,
 } from './fixtures';
 
 /**
@@ -19,7 +27,7 @@ import {
 async function openColorPanel(page: import('@playwright/test').Page) {
   // Navigate to Color tab
   await page.locator('button[data-tab-id="color"]').click();
-  await page.waitForTimeout(200);
+  await waitForTabActive(page, 'color');
 }
 
 // Helper to apply highlights adjustment
@@ -29,14 +37,13 @@ async function applyHighlightsAdjustment(page: import('@playwright/test').Page, 
   // Open color controls
   const colorButton = page.locator('button[title*="Color"]').first();
   await colorButton.click();
-  await page.waitForTimeout(200);
 
   // Find highlights slider
   const highlightsSlider = page.locator('input[type="range"]').filter({ has: page.locator('..', { hasText: /Highlights/i }) }).first();
   if (await highlightsSlider.isVisible()) {
     await highlightsSlider.fill(String(value));
     await highlightsSlider.dispatchEvent('input');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.highlights !== 0; })()`);
   }
 }
 
@@ -57,7 +64,6 @@ test.describe('Prerender Buffer', () => {
       const colorButton = page.locator('button[title*="Color"]').first();
       if (await colorButton.isVisible()) {
         await colorButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Find and adjust saturation slider (a visible control)
@@ -65,19 +71,21 @@ test.describe('Prerender Buffer', () => {
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('150');
         await saturationSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
       }
 
       // Capture initial screenshot
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Start playback
+      const beforePlayState = await getSessionState(page);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(500);
+      await waitForPlaybackState(page, true);
+      await waitForFrameChange(page, beforePlayState.currentFrame);
 
       // Stop playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(200);
+      await waitForPlaybackState(page, false);
 
       // Capture final screenshot - should have moved frames
       const finalScreenshot = await captureViewerScreenshot(page);
@@ -89,13 +97,12 @@ test.describe('Prerender Buffer', () => {
     test('PRB-002: effects should remain applied during playback', async ({ page }) => {
       // Navigate to Effects tab
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       // Open filter panel
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Apply sharpen effect
@@ -103,21 +110,23 @@ test.describe('Prerender Buffer', () => {
       if (await sharpenSlider.isVisible()) {
         await sharpenSlider.fill('50');
         await sharpenSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       // Capture with effect
       const withEffectScreenshot = await captureViewerScreenshot(page);
 
       // Playback a few frames
+      const beforePlayState = await getSessionState(page);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(300);
+      await waitForPlaybackState(page, true);
+      await waitForFrameChange(page, beforePlayState.currentFrame);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Go back to first frame
       await page.keyboard.press('Home');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 1);
 
       // Effect should still be applied - same frame should look similar
       const afterPlaybackScreenshot = await captureViewerScreenshot(page);
@@ -129,13 +138,12 @@ test.describe('Prerender Buffer', () => {
     test('PRB-003: changing effects should invalidate cache and update display', async ({ page }) => {
       // Navigate to Effects tab
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       // Open filter panel
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Apply initial blur
@@ -143,7 +151,7 @@ test.describe('Prerender Buffer', () => {
       if (await blurSlider.isVisible()) {
         await blurSlider.fill('5');
         await blurSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const blurredScreenshot = await captureViewerScreenshot(page);
@@ -152,7 +160,7 @@ test.describe('Prerender Buffer', () => {
       if (await blurSlider.isVisible()) {
         await blurSlider.fill('15');
         await blurSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const moreBlurredScreenshot = await captureViewerScreenshot(page);
@@ -168,19 +176,18 @@ test.describe('Prerender Buffer', () => {
 
       // Navigate to Effects tab and apply sharpen
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       const sharpenSlider = page.locator('.filter-panel input[type="range"]').nth(1);
       if (await sharpenSlider.isVisible()) {
         await sharpenSlider.fill('30');
         await sharpenSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const withSharpenScreenshot = await captureViewerScreenshot(page);
@@ -188,19 +195,18 @@ test.describe('Prerender Buffer', () => {
 
       // Navigate to Color tab and apply saturation
       await page.locator('button[data-tab-id="color"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
 
       const colorButton = page.locator('button[title*="Color"]').first();
       if (await colorButton.isVisible()) {
         await colorButton.click();
-        await page.waitForTimeout(200);
       }
 
       const saturationSlider = page.locator('.color-panel input[type="range"]').first();
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('150');
         await saturationSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
       }
 
       const withBothScreenshot = await captureViewerScreenshot(page);
@@ -212,13 +218,12 @@ test.describe('Prerender Buffer', () => {
     test('PRB-020: effects should persist when scrubbing timeline', async ({ page }) => {
       // Navigate to Effects tab
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       // Open filter panel
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Apply blur
@@ -226,7 +231,7 @@ test.describe('Prerender Buffer', () => {
       if (await blurSlider.isVisible()) {
         await blurSlider.fill('8');
         await blurSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       // Capture frame 1 with blur
@@ -234,17 +239,17 @@ test.describe('Prerender Buffer', () => {
 
       // Step forward several frames
       for (let i = 0; i < 5; i++) {
+        const state = await getSessionState(page);
         await page.keyboard.press('ArrowRight');
-        await page.waitForTimeout(50);
+        await waitForFrameChange(page, state.currentFrame);
       }
-      await page.waitForTimeout(100);
 
       // Capture different frame with blur
       const frame5WithBlur = await captureViewerScreenshot(page);
 
       // Go back to first frame
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 1);
 
       // Frame 1 with blur should be consistent
       const frame1Again = await captureViewerScreenshot(page);
@@ -256,12 +261,11 @@ test.describe('Prerender Buffer', () => {
     test('PRB-021: keyboard navigation should work with effects applied', async ({ page }) => {
       // Apply an effect via CDL
       await page.locator('button[data-tab-id="color"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
 
       const cdlButton = page.locator('button[title*="CDL"]');
       if (await cdlButton.isVisible()) {
         await cdlButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Adjust slope if CDL panel is visible
@@ -269,7 +273,7 @@ test.describe('Prerender Buffer', () => {
       if (await slopeSlider.isVisible()) {
         await slopeSlider.fill('1.5');
         await slopeSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       // Navigate with arrow keys
@@ -277,12 +281,12 @@ test.describe('Prerender Buffer', () => {
       const initialFrame = initialState.currentFrame;
 
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameChange(page, initialFrame);
       const nextState = await getSessionState(page);
       expect(nextState.currentFrame).toBeGreaterThan(initialFrame);
 
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, initialFrame);
       const backState = await getSessionState(page);
       expect(backState.currentFrame).toBe(initialFrame);
     });
@@ -292,12 +296,11 @@ test.describe('Prerender Buffer', () => {
     test('PRB-030: rapid effect changes should not cause errors', async ({ page }) => {
       // Navigate to Color tab
       await page.locator('button[data-tab-id="color"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
 
       const colorButton = page.locator('button[title*="Color"]').first();
       if (await colorButton.isVisible()) {
         await colorButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Rapidly change slider values
@@ -311,7 +314,7 @@ test.describe('Prerender Buffer', () => {
         }
       }
 
-      await page.waitForTimeout(200);
+      await waitForPendingFramesBelow(page, 1);
 
       // App should still be responsive - capture screenshot
       const finalScreenshot = await captureViewerScreenshot(page);
@@ -321,31 +324,29 @@ test.describe('Prerender Buffer', () => {
     test('PRB-031: playback should remain smooth during effect changes', async ({ page }) => {
       // Start playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(200);
+      await waitForPlaybackState(page, true);
 
       // Navigate to Effects and change effect during playback
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(100);
+      await waitForTabActive(page, 'effects');
 
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(100);
       }
 
       const blurSlider = page.locator('.filter-panel input[type="range"]').first();
       if (await blurSlider.isVisible()) {
         await blurSlider.fill('5');
         await blurSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
       }
 
       // Continue playback for a bit
-      await page.waitForTimeout(500);
+      await waitForFrameAtLeast(page, 5);
 
       // Stop playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Verify app is still responsive
       const screenshot = await captureViewerScreenshot(page);
@@ -359,20 +360,19 @@ test.describe('Prerender Buffer', () => {
 
       // Navigate to View tab
       await page.locator('button[data-tab-id="view"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       // Find and click channel select
       const channelButton = page.locator('button[title*="Channel"]');
       if (await channelButton.isVisible()) {
         await channelButton.click();
-        await page.waitForTimeout(200);
       }
 
       // Select Red channel
       const redOption = page.locator('button:has-text("Red")').first();
       if (await redOption.isVisible()) {
         await redOption.click();
-        await page.waitForTimeout(200);
+        await waitForChannelMode(page, 'red');
       }
 
       const redChannelScreenshot = await captureViewerScreenshot(page);
@@ -381,10 +381,12 @@ test.describe('Prerender Buffer', () => {
       expect(imagesAreDifferent(initialScreenshot, redChannelScreenshot)).toBe(true);
 
       // Playback should work in channel mode
+      const beforePlayState = await getSessionState(page);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(300);
+      await waitForPlaybackState(page, true);
+      await waitForFrameChange(page, beforePlayState.currentFrame);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Should still be in red channel mode
       const afterPlaybackScreenshot = await captureViewerScreenshot(page);
@@ -396,25 +398,24 @@ test.describe('Prerender Buffer', () => {
     test('PRB-050: effects should work at first frame', async ({ page }) => {
       // Go to first frame
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 1);
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Apply effect
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       const sharpenSlider = page.locator('.filter-panel input[type="range"]').nth(1);
       if (await sharpenSlider.isVisible()) {
         await sharpenSlider.fill('40');
         await sharpenSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const withEffectScreenshot = await captureViewerScreenshot(page);
@@ -425,25 +426,24 @@ test.describe('Prerender Buffer', () => {
     test('PRB-051: effects should work at last frame', async ({ page }) => {
       // Go to last frame
       await page.keyboard.press('End');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s && s.currentFrame === s.frameCount; })()`);
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Apply effect
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       const blurSlider = page.locator('.filter-panel input[type="range"]').first();
       if (await blurSlider.isVisible()) {
         await blurSlider.fill('8');
         await blurSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const withEffectScreenshot = await captureViewerScreenshot(page);
@@ -454,19 +454,18 @@ test.describe('Prerender Buffer', () => {
     test('PRB-052: resetting effects should clear prerender cache', async ({ page }) => {
       // Apply effect
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       const blurSlider = page.locator('.filter-panel input[type="range"]').first();
       if (await blurSlider.isVisible()) {
         await blurSlider.fill('10');
         await blurSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const blurredScreenshot = await captureViewerScreenshot(page);
@@ -475,7 +474,7 @@ test.describe('Prerender Buffer', () => {
       const resetButton = page.locator('.filter-panel button:has-text("Reset")').first();
       if (await resetButton.isVisible()) {
         await resetButton.click();
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const resetScreenshot = await captureViewerScreenshot(page);
@@ -494,12 +493,11 @@ test.describe('Prerender Buffer', () => {
 
       // Apply an effect
       await page.locator('button[data-tab-id="color"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
 
       const colorButton = page.locator('button[title*="Color"]').first();
       if (await colorButton.isVisible()) {
         await colorButton.click();
-        await page.waitForTimeout(200);
       }
 
       const saturationSlider = page.locator('.color-panel input[type="range"]').first();
@@ -507,7 +505,7 @@ test.describe('Prerender Buffer', () => {
         const beforeState = await getColorState(page);
         await saturationSlider.fill('150');
         await saturationSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
         const afterState = await getColorState(page);
         expect(afterState).not.toEqual(beforeState);
       }
@@ -519,30 +517,31 @@ test.describe('Prerender Buffer', () => {
     test('PRB-061: playback state updates correctly during play/pause', async ({ page }) => {
       // Apply an effect before testing playback
       await page.locator('button[data-tab-id="effects"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'effects');
 
       const filterButton = page.locator('button[title*="Filter"]');
       if (await filterButton.isVisible()) {
         await filterButton.click();
-        await page.waitForTimeout(200);
       }
 
       const sharpenSlider = page.locator('.filter-panel input[type="range"]').nth(1);
       if (await sharpenSlider.isVisible()) {
         await sharpenSlider.fill('30');
         await sharpenSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForPendingFramesBelow(page, 1);
       }
 
       const beforePlayScreenshot = await captureViewerScreenshot(page);
 
       // Start playback
+      const beforePlayState = await getSessionState(page);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(500);
+      await waitForPlaybackState(page, true);
+      await waitForFrameChange(page, beforePlayState.currentFrame);
 
       // Stop playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(200);
+      await waitForPlaybackState(page, false);
 
       const afterPlayScreenshot = await captureViewerScreenshot(page);
 
@@ -551,7 +550,7 @@ test.describe('Prerender Buffer', () => {
 
       // Navigate back to first frame
       await page.keyboard.press('Home');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 1);
 
       const backToStartScreenshot = await captureViewerScreenshot(page);
       // Effect should still be applied on return to first frame
@@ -560,34 +559,35 @@ test.describe('Prerender Buffer', () => {
     test('PRB-062: effects persist across multiple playback cycles', async ({ page }) => {
       // Apply an effect
       await page.locator('button[data-tab-id="color"]').click();
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
 
       const colorButton = page.locator('button[title*="Color"]').first();
       if (await colorButton.isVisible()) {
         await colorButton.click();
-        await page.waitForTimeout(200);
       }
 
       const saturationSlider = page.locator('.color-panel input[type="range"]').first();
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('180');
         await saturationSlider.dispatchEvent('input');
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
       }
 
       const initialWithEffect = await captureViewerScreenshot(page);
 
       // Multiple playback cycles
       for (let i = 0; i < 3; i++) {
+        const state = await getSessionState(page);
         await page.keyboard.press('Space');
-        await page.waitForTimeout(300);
+        await waitForPlaybackState(page, true);
+        await waitForFrameChange(page, state.currentFrame);
         await page.keyboard.press('Space');
-        await page.waitForTimeout(100);
+        await waitForPlaybackState(page, false);
       }
 
       // Go back to start
       await page.keyboard.press('Home');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 1);
 
       const afterCycles = await captureViewerScreenshot(page);
       // The app should still be responsive and effect should be present
