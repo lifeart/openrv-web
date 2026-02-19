@@ -26,6 +26,11 @@ export class InteractionQualityManager {
     return this._activeInteractions > 0;
   }
 
+  /** Whether CPU effects should use half-resolution processing during interactions. */
+  get cpuHalfRes(): boolean {
+    return this._activeInteractions > 0;
+  }
+
   /**
    * Set callback invoked when quality factor changes and a re-render is needed.
    */

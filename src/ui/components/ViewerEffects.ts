@@ -449,8 +449,8 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
  * while preserving perceptual detail and contrast.
  */
 
-import { ToneMappingOperator } from './ToneMappingControl';
-import { applyToneMappingToRGB } from '../../utils/effects/effectProcessing.shared';
+import { ToneMappingOperator, ToneMappingState } from './ToneMappingControl';
+import { applyToneMappingToRGB, type ToneMappingParams } from '../../utils/effects/effectProcessing.shared';
 
 /**
  * Apply tone mapping to ImageData in-place.
@@ -487,6 +487,41 @@ export function applyToneMapping(imageData: ImageData, operator: ToneMappingOper
     data[i + 1] = clamp(Math.round(Number.isFinite(g) ? g * 255 : 0), 0, 255);
     data[i + 2] = clamp(Math.round(Number.isFinite(b) ? b * 255 : 0), 0, 255);
     // Alpha unchanged
+  }
+}
+
+/**
+ * Apply tone mapping to ImageData in-place with full parameter passthrough.
+ * Unlike applyToneMapping which only passes the operator, this passes all
+ * per-operator parameters (Reinhard white point, Filmic exposure bias, Drago bias, etc.)
+ */
+export function applyToneMappingWithParams(imageData: ImageData, state: ToneMappingState): void {
+  if (!state.enabled || state.operator === 'off') return;
+
+  const data = imageData.data;
+  const len = data.length;
+
+  const params: ToneMappingParams = {
+    reinhardWhitePoint: state.reinhardWhitePoint,
+    filmicExposureBias: state.filmicExposureBias,
+    filmicWhitePoint: state.filmicWhitePoint,
+    dragoBias: state.dragoBias,
+    dragoLwa: state.dragoLwa,
+    dragoLmax: state.dragoLmax,
+    dragoBrightness: state.dragoBrightness,
+  };
+
+  for (let i = 0; i < len; i += 4) {
+    let r = data[i]! / 255;
+    let g = data[i + 1]! / 255;
+    let b = data[i + 2]! / 255;
+
+    const tm = applyToneMappingToRGB(r, g, b, state.operator, params);
+    r = tm.r; g = tm.g; b = tm.b;
+
+    data[i] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);
+    data[i + 1] = clamp(Math.round(Number.isFinite(g) ? g * 255 : 0), 0, 255);
+    data[i + 2] = clamp(Math.round(Number.isFinite(b) ? b * 255 : 0), 0, 255);
   }
 }
 

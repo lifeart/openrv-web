@@ -194,6 +194,7 @@ export interface WorkerProcessMessage {
   width: number;
   height: number;
   effectsState: WorkerEffectsState;
+  halfRes?: boolean;
 }
 
 export interface WorkerResultMessage {

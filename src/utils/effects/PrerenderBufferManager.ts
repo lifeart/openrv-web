@@ -148,6 +148,9 @@ export class PrerenderBufferManager {
   private _targetWidth: number = 0;
   private _targetHeight: number = 0;
 
+  // Half-resolution flag for CPU effects during interactions
+  private _halfRes: boolean = false;
+
   constructor(
     totalFrames: number,
     frameLoader: FrameLoader,
@@ -323,6 +326,13 @@ export class PrerenderBufferManager {
     }
     this._targetWidth = width;
     this._targetHeight = height;
+  }
+
+  /**
+   * Set half-resolution flag for CPU effect processing during interactions.
+   */
+  setHalfRes(halfRes: boolean): void {
+    this._halfRes = halfRes;
   }
 
   /**
@@ -637,6 +647,7 @@ export class PrerenderBufferManager {
             width,
             height,
             effectsState: this.currentEffectsState,
+            halfRes: this._halfRes,
           },
           [imageData.data.buffer],
           request.priority
@@ -800,7 +811,7 @@ export class PrerenderBufferManager {
     // drawImage scales raw frame from source to processing resolution
     ctx.drawImage(rawFrame, 0, 0, width, height);
     const imageData = ctx.getImageData(0, 0, width, height);
-    this.effectProcessor.applyEffects(imageData, width, height, this.currentEffectsState);
+    this.effectProcessor.applyEffects(imageData, width, height, this.currentEffectsState, this._halfRes);
     ctx.putImageData(imageData, 0, 0);
 
     return {

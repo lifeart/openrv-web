@@ -12,6 +12,7 @@ import type { GamutMappingState } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import { DEFAULT_NOISE_REDUCTION_PARAMS, isNoiseReductionActive, applyNoiseReduction } from '../../filters/NoiseReduction';
+import { createNoiseReductionProcessor } from '../../filters/WebGLNoiseReduction';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
@@ -68,8 +69,8 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 
 // Extracted effect processing utilities
-import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
-import { yieldToMain } from '../../utils/effects/EffectProcessor';
+import { applyHighlightsShadows, applyVibrance, applyToneMappingWithParams } from './ViewerEffects';
+import { yieldToMain, EffectProcessor } from '../../utils/effects/EffectProcessor';
 import { WipeManager } from './WipeManager';
 import type { GhostFrameState } from './GhostFrameControl';
 import { ColorPipelineManager } from './ColorPipelineManager';
@@ -222,6 +223,10 @@ export class Viewer {
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
   private noiseReductionParams: NoiseReductionParams = { ...DEFAULT_NOISE_REDUCTION_PARAMS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
+  private noiseReductionProcessor: ReturnType<typeof createNoiseReductionProcessor> | null = null;
+
+  // CPU effect processor for half-res clarity/sharpen
+  private effectProcessor: EffectProcessor = new EffectProcessor();
 
   // Gamut mapping
   private gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
@@ -407,7 +412,13 @@ export class Viewer {
 
     // Initialize interaction quality tiering
     this.interactionQuality = new InteractionQualityManager();
-    this.interactionQuality.setOnQualityChange(() => this.scheduleRender());
+    this.interactionQuality.setOnQualityChange(() => {
+      // When quality is restored (interaction ended), invalidate half-res prerender cache
+      if (!this.interactionQuality.cpuHalfRes && this.prerenderBuffer) {
+        this.prerenderBuffer.invalidateAll();
+      }
+      this.scheduleRender();
+    });
 
     // Wire up transform manager interaction callbacks for smooth zoom animations
     this.transformManager.setInteractionCallbacks(
@@ -683,6 +694,14 @@ export class Viewer {
     } catch (e) {
       console.warn('WebGL sharpen processor not available, falling back to CPU:', e);
       this.sharpenProcessor = null;
+    }
+
+    // Initialize WebGL noise reduction processor (GPU fast-path)
+    try {
+      this.noiseReductionProcessor = createNoiseReductionProcessor();
+    } catch (e) {
+      console.warn('WebGL noise reduction processor not available, falling back to CPU:', e);
+      this.noiseReductionProcessor = null;
     }
 
     // Listen for theme changes to redraw placeholders and overlays with updated colors
@@ -1565,6 +1584,7 @@ export class Viewer {
       const prerenderTargetW = userRotation === 90 || userRotation === 270 ? prerenderDisplayH : prerenderDisplayW;
       const prerenderTargetH = userRotation === 90 || userRotation === 270 ? prerenderDisplayW : prerenderDisplayH;
       this.prerenderBuffer.setTargetSize(prerenderTargetW, prerenderTargetH);
+      this.prerenderBuffer.setHalfRes(this.interactionQuality.cpuHalfRes);
     }
 
     // Try prerendered cache first during playback for smooth performance with effects
@@ -2703,8 +2723,10 @@ export class Viewer {
     }
 
     // Apply clarity (local contrast enhancement in midtones)
+    // Uses EffectProcessor with half-res optimization during interactions
     if (hasClarity) {
-      applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
+      const halfRes = this.interactionQuality.cpuHalfRes;
+      this.effectProcessor.applyClarity(imageData, width, height, this.colorPipeline.colorAdjustments, halfRes);
     }
 
     // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
@@ -2744,7 +2766,7 @@ export class Viewer {
 
     // Apply tone mapping (after color adjustments, before channel isolation)
     if (hasToneMapping) {
-      applyToneMapping(imageData, this.colorPipeline.toneMappingState.operator);
+      applyToneMappingWithParams(imageData, this.colorPipeline.toneMappingState);
     }
 
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)
@@ -2758,13 +2780,23 @@ export class Viewer {
     }
 
     // Apply noise reduction (edge-preserving denoise before sharpen).
+    // Try GPU first, fall back to CPU.
     if (hasNoiseReduction) {
-      applyNoiseReduction(imageData, this.noiseReductionParams);
+      if (this.noiseReductionProcessor) {
+        this.noiseReductionProcessor.processInPlace(imageData, this.noiseReductionParams);
+      } else {
+        applyNoiseReduction(imageData, this.noiseReductionParams);
+      }
     }
 
-    // Apply sharpen filter
+    // Apply sharpen filter — prefer GPU (faster than even CPU half-res), fall back to CPU with half-res during interactions
     if (hasSharpen) {
-      this.applySharpenToImageData(imageData);
+      if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
+        this.sharpenProcessor.applyInPlace(imageData, this.filterSettings.sharpen);
+      } else {
+        const halfRes = this.interactionQuality.cpuHalfRes;
+        this.effectProcessor.applySharpenCPU(imageData, width, height, this.filterSettings.sharpen / 100, halfRes);
+      }
     }
 
     // Apply channel isolation (before false color so we can see individual channel exposure)
@@ -2862,8 +2894,10 @@ export class Viewer {
     }
 
     // --- Pass 2: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
+    // Uses EffectProcessor with half-res optimization and chunked async yielding
     if (hasClarity) {
-      applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
+      const halfRes = this.interactionQuality.cpuHalfRes;
+      await this.effectProcessor.applyClarityChunked(imageData, width, height, this.colorPipeline.colorAdjustments, halfRes);
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
@@ -2928,7 +2962,7 @@ export class Viewer {
 
       // Apply tone mapping
       if (hasToneMapping) {
-        applyToneMapping(imageData, this.colorPipeline.toneMappingState.operator);
+        applyToneMappingWithParams(imageData, this.colorPipeline.toneMappingState);
       }
 
       // Apply color inversion
@@ -2946,15 +2980,25 @@ export class Viewer {
     }
 
     // --- Pass 4: Noise reduction (inter-pixel bilateral filter) ---
+    // Try GPU first, fall back to CPU.
     if (hasNoiseReduction) {
-      applyNoiseReduction(imageData, this.noiseReductionParams);
+      if (this.noiseReductionProcessor) {
+        this.noiseReductionProcessor.processInPlace(imageData, this.noiseReductionParams);
+      } else {
+        applyNoiseReduction(imageData, this.noiseReductionParams);
+      }
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 5: Sharpen (inter-pixel dependency - 3x3 kernel) ---
+    // --- Pass 5: Sharpen — prefer GPU, fall back to CPU with half-res during interactions ---
     if (hasSharpen) {
-      this.applySharpenToImageData(imageData);
+      if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
+        this.sharpenProcessor.applyInPlace(imageData, this.filterSettings.sharpen);
+      } else {
+        const halfRes = this.interactionQuality.cpuHalfRes;
+        await this.effectProcessor.applySharpenCPUChunked(imageData, width, height, this.filterSettings.sharpen / 100, halfRes);
+      }
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
@@ -3049,23 +3093,6 @@ export class Viewer {
 
     // Single putImageData call
     ctx.putImageData(imageData, 0, 0);
-  }
-
-  /**
-   * Apply sharpen filter to ImageData in-place.
-   * Uses GPU acceleration when available, falls back to CPU.
-   */
-  private applySharpenToImageData(imageData: ImageData): void {
-    const amount = this.filterSettings.sharpen;
-
-    // Try GPU sharpen first (much faster for large images)
-    if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
-      this.sharpenProcessor.applyInPlace(imageData, amount);
-      return;
-    }
-
-    // CPU fallback: 3x3 unsharp mask kernel convolution
-    applySharpenCPU(imageData, amount / 100);
   }
 
   // Lens distortion methods (delegated to LensDistortionManager)
@@ -3958,6 +3985,12 @@ export class Viewer {
     if (this.sharpenProcessor) {
       this.sharpenProcessor.dispose();
       this.sharpenProcessor = null;
+    }
+
+    // Cleanup WebGL noise reduction processor
+    if (this.noiseReductionProcessor) {
+      this.noiseReductionProcessor.dispose();
+      this.noiseReductionProcessor = null;
     }
 
     // Cleanup effects debounce timer
