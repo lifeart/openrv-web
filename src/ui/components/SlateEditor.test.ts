@@ -417,6 +417,293 @@ describe('SlateEditor', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Logo image loading
+  // ---------------------------------------------------------------------------
+  describe('logo image loading', () => {
+    it('SE-110: hasLogo returns false by default', () => {
+      expect(editor.hasLogo()).toBe(false);
+    });
+
+    it('SE-111: getLogoImage returns null by default', () => {
+      expect(editor.getLogoImage()).toBeNull();
+    });
+
+    it('SE-112: getLogoDimensions returns null by default', () => {
+      expect(editor.getLogoDimensions()).toBeNull();
+    });
+
+    it('SE-113: loadLogoFile loads image from file', async () => {
+      const logoLoadedHandler = vi.fn();
+      editor.on('logoLoaded', logoLoadedHandler);
+
+      const blob = new Blob(['fake-image-data'], { type: 'image/png' });
+      const file = new File([blob], 'logo.png', { type: 'image/png' });
+
+      // Mock URL.createObjectURL
+      const mockUrl = 'blob:http://localhost/test-logo';
+      const origCreateObjectURL = URL.createObjectURL;
+      URL.createObjectURL = vi.fn(() => mockUrl);
+
+      // Need to trigger onload manually since JSDOM doesn't actually load images
+      const origImage = globalThis.Image;
+      let capturedImg: HTMLImageElement | null = null;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          capturedImg = this;
+          Object.defineProperty(this, 'naturalWidth', { value: 200, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          // Simulate async load success
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFile(file);
+        expect(editor.hasLogo()).toBe(true);
+        expect(editor.getLogoImage()).not.toBeNull();
+        expect(editor.getLogoUrl()).toBe(mockUrl);
+        expect(logoLoadedHandler).toHaveBeenCalledWith({ width: 200, height: 100 });
+      } finally {
+        URL.createObjectURL = origCreateObjectURL;
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SE-114: loadLogoFile emits logoError on failure', async () => {
+      const errorHandler = vi.fn();
+      editor.on('logoError', errorHandler);
+
+      const blob = new Blob(['bad-data'], { type: 'image/png' });
+      const file = new File([blob], 'bad.png', { type: 'image/png' });
+
+      const origCreateObjectURL = URL.createObjectURL;
+      const origRevokeObjectURL = URL.revokeObjectURL;
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/bad');
+      URL.revokeObjectURL = vi.fn();
+
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          setTimeout(() => {
+            if (this.onerror) (this.onerror as Function)(new Event('error'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await expect(editor.loadLogoFile(file)).rejects.toThrow('Failed to load logo image');
+        expect(errorHandler).toHaveBeenCalledTimes(1);
+        expect(editor.hasLogo()).toBe(false);
+      } finally {
+        URL.createObjectURL = origCreateObjectURL;
+        URL.revokeObjectURL = origRevokeObjectURL;
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SE-115: loadLogoFromUrl rejects invalid URLs', async () => {
+      const errorHandler = vi.fn();
+      editor.on('logoError', errorHandler);
+
+      await expect(editor.loadLogoFromUrl('ftp://bad')).rejects.toThrow('Invalid logo URL');
+      expect(errorHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it('SE-116: loadLogoFromUrl loads image from URL', async () => {
+      const logoLoadedHandler = vi.fn();
+      editor.on('logoLoaded', logoLoadedHandler);
+
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 300, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 150, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFromUrl('https://example.com/logo.png');
+        expect(editor.hasLogo()).toBe(true);
+        expect(editor.getLogoUrl()).toBe('https://example.com/logo.png');
+        expect(editor.getLogoDimensions()).toEqual({ width: 300, height: 150 });
+        expect(logoLoadedHandler).toHaveBeenCalledWith({ width: 300, height: 150 });
+      } finally {
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SE-117: removeLogoImage clears loaded logo', async () => {
+      const removedHandler = vi.fn();
+      editor.on('logoRemoved', removedHandler);
+
+      // Load a logo first
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 100, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFromUrl('https://example.com/logo.png');
+        expect(editor.hasLogo()).toBe(true);
+
+        editor.removeLogoImage();
+        expect(editor.hasLogo()).toBe(false);
+        expect(editor.getLogoImage()).toBeNull();
+        expect(editor.getLogoUrl()).toBe('');
+        expect(removedHandler).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SE-118: removeLogoImage is no-op when no logo', () => {
+      const removedHandler = vi.fn();
+      const stateHandler = vi.fn();
+      editor.on('logoRemoved', removedHandler);
+      editor.on('stateChanged', stateHandler);
+
+      editor.removeLogoImage();
+      expect(removedHandler).not.toHaveBeenCalled();
+      expect(stateHandler).not.toHaveBeenCalled();
+    });
+
+    it('SE-119: generateConfig includes logo when loaded', async () => {
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 200, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          Object.defineProperty(this, 'width', { value: 200, configurable: true });
+          Object.defineProperty(this, 'height', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFromUrl('https://example.com/logo.png');
+        const config = editor.generateConfig();
+        expect(config.logo).toBeDefined();
+        expect(config.logo).toBe(editor.getLogoImage());
+      } finally {
+        globalThis.Image = origImage;
+      }
+    });
+
+    it('SE-120: loadLogoFile revokes old blob URL', async () => {
+      const origCreateObjectURL = URL.createObjectURL;
+      const origRevokeObjectURL = URL.revokeObjectURL;
+      const revokeURLSpy = vi.fn();
+      URL.revokeObjectURL = revokeURLSpy;
+
+      let callCount = 0;
+      URL.createObjectURL = vi.fn(() => `blob:http://localhost/logo-${callCount++}`);
+
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 100, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        const blob1 = new Blob(['data'], { type: 'image/png' });
+        const file1 = new File([blob1], 'logo1.png', { type: 'image/png' });
+        await editor.loadLogoFile(file1);
+
+        const blob2 = new Blob(['data'], { type: 'image/png' });
+        const file2 = new File([blob2], 'logo2.png', { type: 'image/png' });
+        await editor.loadLogoFile(file2);
+
+        // Should have revoked the first blob URL
+        expect(revokeURLSpy).toHaveBeenCalledWith('blob:http://localhost/logo-0');
+      } finally {
+        URL.createObjectURL = origCreateObjectURL;
+        URL.revokeObjectURL = origRevokeObjectURL;
+        globalThis.Image = origImage;
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Preview rendering
+  // ---------------------------------------------------------------------------
+  describe('preview rendering', () => {
+    it('SE-130: generatePreview returns a canvas element', () => {
+      editor.setMetadata({ showName: 'Test Show' });
+      const canvas = editor.generatePreview();
+      expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+      expect(canvas!.width).toBeGreaterThan(0);
+      expect(canvas!.height).toBeGreaterThan(0);
+    });
+
+    it('SE-131: generatePreview respects maxWidth/maxHeight', () => {
+      editor.setResolution(1920, 1080);
+      const canvas = editor.generatePreview(200, 150);
+      expect(canvas).not.toBeNull();
+      expect(canvas!.width).toBeLessThanOrEqual(200);
+      expect(canvas!.height).toBeLessThanOrEqual(150);
+    });
+
+    it('SE-132: generatePreview maintains aspect ratio', () => {
+      editor.setResolution(1920, 1080);
+      const canvas = editor.generatePreview(360, 240);
+      expect(canvas).not.toBeNull();
+      const aspect = canvas!.width / canvas!.height;
+      expect(aspect).toBeCloseTo(1920 / 1080, 0);
+    });
+
+    it('SE-133: generatePreview emits configGenerated and previewRendered', () => {
+      const configHandler = vi.fn();
+      const previewHandler = vi.fn();
+      editor.on('configGenerated', configHandler);
+      editor.on('previewRendered', previewHandler);
+
+      editor.setMetadata({ showName: 'Test' });
+      editor.generatePreview();
+
+      expect(configHandler).toHaveBeenCalledTimes(1);
+      expect(previewHandler).toHaveBeenCalledTimes(1);
+      expect(previewHandler.mock.calls[0][0]).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('SE-134: generatePreview with empty fields still renders', () => {
+      const canvas = editor.generatePreview();
+      expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('SE-135: generatePreview uses default maxWidth/maxHeight', () => {
+      editor.setResolution(1920, 1080);
+      const canvas = editor.generatePreview();
+      expect(canvas).not.toBeNull();
+      expect(canvas!.width).toBeLessThanOrEqual(360);
+      expect(canvas!.height).toBeLessThanOrEqual(240);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Dispose
   // ---------------------------------------------------------------------------
   describe('dispose', () => {
@@ -427,6 +714,29 @@ describe('SlateEditor', () => {
     it('SE-101: dispose is idempotent', () => {
       editor.dispose();
       expect(() => editor.dispose()).not.toThrow();
+    });
+
+    it('SE-102: dispose clears loaded logo', async () => {
+      const origImage = globalThis.Image;
+      globalThis.Image = class extends origImage {
+        constructor() {
+          super();
+          Object.defineProperty(this, 'naturalWidth', { value: 100, configurable: true });
+          Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
+          setTimeout(() => {
+            if (this.onload) (this.onload as Function)(new Event('load'));
+          }, 0);
+        }
+      } as typeof Image;
+
+      try {
+        await editor.loadLogoFromUrl('https://example.com/logo.png');
+        expect(editor.hasLogo()).toBe(true);
+        editor.dispose();
+        expect(editor.getLogoImage()).toBeNull();
+      } finally {
+        globalThis.Image = origImage;
+      }
     });
   });
 });
