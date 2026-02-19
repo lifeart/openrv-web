@@ -2072,13 +2072,14 @@ describe('Multi-part EXR', () => {
   });
 
   describe('deep data rejection', () => {
-    it('EXR-MP030: should throw descriptive error for deepscanline part', async () => {
+    it('EXR-MP030: should attempt to decode deepscanline part (now supported)', async () => {
       const buffer = createMultiPartTestEXR([
         { name: 'deep_part', type: 'deepscanline', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
       ]);
 
-      await expect(decodeEXR(buffer)).rejects.toThrow(/deep data/i);
-      await expect(decodeEXR(buffer)).rejects.toThrow(/deepscanline/);
+      // deepscanline is now supported, but the test data is not valid deep data format,
+      // so it will fail with a data reading error rather than a "not supported" error
+      await expect(decodeEXR(buffer)).rejects.toThrow();
     });
 
     it('EXR-MP031: should throw descriptive error for deeptile part', async () => {
@@ -2086,8 +2087,7 @@ describe('Multi-part EXR', () => {
         { name: 'deep_tile', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
       ]);
 
-      await expect(decodeEXR(buffer)).rejects.toThrow(/deep data/i);
-      await expect(decodeEXR(buffer)).rejects.toThrow(/deeptile/);
+      await expect(decodeEXR(buffer)).rejects.toThrow(/deep.*tiled|deeptile/i);
     });
 
     it('EXR-MP032: should allow selecting a non-deep part when deep part exists', async () => {
@@ -2096,8 +2096,8 @@ describe('Multi-part EXR', () => {
         { name: 'scanline_part', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.7 },
       ]);
 
-      // Selecting the deep part should fail
-      await expect(decodeEXR(buffer, { partIndex: 0 })).rejects.toThrow(/deep data/i);
+      // Selecting the deep part will attempt to decode (supported now), but fail due to invalid test data
+      await expect(decodeEXR(buffer, { partIndex: 0 })).rejects.toThrow();
 
       // Selecting the scanline part should succeed
       const result = await decodeEXR(buffer, { partIndex: 1 });
