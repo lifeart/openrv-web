@@ -78,12 +78,18 @@ class MockNetworkSyncManager extends EventEmitter {
 
   constructor() {
     super();
+    const beginApplyRemote = vi.fn();
+    const endApplyRemote = vi.fn();
+    const shouldApplyFrameSync = vi.fn();
     const sm = {
       isApplyingRemoteState: false,
-      beginApplyRemote: vi.fn(() => { sm.isApplyingRemoteState = true; }),
-      endApplyRemote: vi.fn(() => { sm.isApplyingRemoteState = false; }),
-      shouldApplyFrameSync: vi.fn(() => true),
+      beginApplyRemote,
+      endApplyRemote,
+      shouldApplyFrameSync,
     };
+    beginApplyRemote.mockImplementation(() => { sm.isApplyingRemoteState = true; });
+    endApplyRemote.mockImplementation(() => { sm.isApplyingRemoteState = false; });
+    shouldApplyFrameSync.mockReturnValue(true);
     this._sm = sm;
   }
 

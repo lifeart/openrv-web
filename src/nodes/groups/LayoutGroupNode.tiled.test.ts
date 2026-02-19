@@ -5,11 +5,10 @@
  * tiled mode, evaluateAllInputs, and grid layout with spacing.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   LayoutGroupNode,
   computeTileViewports,
-  type TileViewport,
 } from './LayoutGroupNode';
 import type { EvalContext } from '../../core/graph/Graph';
 import { IPNode } from '../base/IPNode';
