@@ -42,6 +42,9 @@ describe('Timeline', () => {
   let timeline: TestTimeline;
 
   beforeEach(() => {
+    // Clear persisted timeline display mode so each test starts fresh
+    try { localStorage.removeItem('openrv.timeline.displayMode'); } catch { /* noop */ }
+
     session = new Session();
     // Use type cast since we are in test environment and want to access protected method
     (session as any).addSource({

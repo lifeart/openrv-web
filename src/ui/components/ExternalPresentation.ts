@@ -34,8 +34,8 @@ export interface PresentationMessage {
   type: PresentationMessageType;
   /** Sender window ID */
   senderId: string;
-  /** Session ID to prevent cross-tab interference */
-  sessionId: string;
+  /** Session ID to prevent cross-tab interference. Added automatically by broadcast(). */
+  sessionId?: string;
   /** Timestamp */
   timestamp: number;
 }

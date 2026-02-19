@@ -987,9 +987,15 @@ export class OCIOTransform {
 
     // DCI-P3 to sRGB
     if (input === 'DCI-P3' && output === 'sRGB') {
-      // DCI-P3 uses pure 2.6 power function gamma: decode to linear first
+      // Correct order: gamma 2.6 decode MUST happen BEFORE the matrix transform.
+      // DCI-P3 signal is encoded with a pure 2.6 power function. We first
+      // linearize (decode gamma 2.6), then apply the color-space matrix to
+      // convert from linear DCI-P3 primaries through XYZ to linear sRGB.
+      // Reversing this order would apply the matrix to non-linear (gamma-encoded)
+      // values, producing incorrect colors.
       this.steps.push({ type: 'gamma_decode', func: 'gamma26' });
-      // Already in same white point (D65)
+      // Both DCI-P3 (D65 variant) and sRGB share the D65 white point,
+      // so no chromatic adaptation is needed.
       this.steps.push({ type: 'matrix', matrix: DCIP3_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
       this.steps.push({ type: 'gamut_clip' });
@@ -1002,6 +1008,8 @@ export class OCIOTransform {
       this.steps.push({ type: 'gamma_decode', func: 'srgb' });
       this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_DCIP3 });
+      this.steps.push({ type: 'gamut_clip' });
+      this.steps.push({ type: 'gamma_encode', func: 'gamma26' });
       return;
     }
 
@@ -1011,6 +1019,7 @@ export class OCIOTransform {
       this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_DCIP3 });
       this.steps.push({ type: 'tonemap', func: 'aces' });
+      this.steps.push({ type: 'gamma_encode', func: 'gamma26' });
       return;
     }
 

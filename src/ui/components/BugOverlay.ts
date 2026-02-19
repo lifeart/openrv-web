@@ -140,7 +140,12 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
   }
 
   setState(partial: Partial<BugOverlayState>): void {
-    this.state = { ...this.state, ...partial };
+    // Validate numeric fields through the same clamping as the individual setters
+    const validated = { ...partial };
+    if (validated.size !== undefined) validated.size = clamp(validated.size, 0.02, 0.3);
+    if (validated.opacity !== undefined) validated.opacity = clamp(validated.opacity, 0, 1);
+    if (validated.margin !== undefined) validated.margin = clamp(validated.margin, 0, 100);
+    this.state = { ...this.state, ...validated };
     this.render();
     this.emit('stateChanged', { ...this.state });
   }

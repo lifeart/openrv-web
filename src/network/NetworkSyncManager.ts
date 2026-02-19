@@ -138,6 +138,14 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _createRoomFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private _serverlessPeer: ServerlessPeerState | null = null;
   private _pendingServerlessOffer: WebRTCURLOfferSignal | null = null;
+  private _recentMessageIds = new Set<string>();
+  private _recentMessageIdQueue: string[] = [];
+  private _pendingStateRequest: {
+    requestId: string;
+    targetUserId?: string;
+    retryCount: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -377,6 +385,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     // Once connected, send room.create (use `once` to avoid leak)
     const unsub = this.wsClient.once('connected', () => {
+      this.clearCreateRoomFallbackTimer();
       const message = createRoomCreateMessage(this._userId, {
         userName: this._userName,
       });
@@ -588,11 +597,53 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   requestStateSync(targetUserId?: string): void {
     if (!this.isConnected || !this._roomInfo) return;
 
+    this.clearPendingStateRequest();
+    const requestId = generateMessageId();
+    this.sendStateRequest(requestId, targetUserId);
+
+    this._pendingStateRequest = {
+      requestId,
+      targetUserId,
+      retryCount: 0,
+      timer: setTimeout(() => this.handleStateRequestTimeout(), 3000),
+    };
+  }
+
+  private sendStateRequest(requestId: string, targetUserId?: string): void {
+    if (!this._roomInfo) return;
     const message = createStateRequestMessage(this._roomInfo.roomId, this._userId, {
-      requestId: generateMessageId(),
+      requestId,
       targetUserId,
     });
     this.dispatchRealtimeMessage(message);
+  }
+
+  private handleStateRequestTimeout(): void {
+    if (!this._pendingStateRequest) return;
+
+    if (this._pendingStateRequest.retryCount < 2) {
+      this._pendingStateRequest.retryCount++;
+      this.sendStateRequest(
+        this._pendingStateRequest.requestId,
+        this._pendingStateRequest.targetUserId,
+      );
+      this._pendingStateRequest.timer = setTimeout(
+        () => this.handleStateRequestTimeout(),
+        3000,
+      );
+    } else {
+      this.emit('toastMessage', {
+        message: 'Failed to receive session state from host after multiple attempts.',
+        type: 'warning',
+      });
+      this._pendingStateRequest = null;
+    }
+  }
+
+  private clearPendingStateRequest(): void {
+    if (!this._pendingStateRequest) return;
+    clearTimeout(this._pendingStateRequest.timer);
+    this._pendingStateRequest = null;
   }
 
   /**
@@ -762,6 +813,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   private handleMessage(message: SyncMessage, transport: 'websocket' | 'webrtc' = 'websocket'): void {
+    // Deduplicate messages by ID
+    if (message.id && this._recentMessageIds.has(message.id)) return;
+    if (message.id) {
+      this._recentMessageIds.add(message.id);
+      this._recentMessageIdQueue.push(message.id);
+      if (this._recentMessageIdQueue.length > 200) {
+        const evicted = this._recentMessageIdQueue.shift()!;
+        this._recentMessageIds.delete(evicted);
+      }
+    }
+
     // Server-originating message types should not be filtered by userId
     const isServerMessage =
       message.type === 'room.created' ||
@@ -995,7 +1057,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     // Viewers cannot send annotation changes
     if (!this.canUserSync(senderUserId)) return;
 
-    this.emit('syncAnnotation', payload);
+    // Override user field on all strokes with authenticated sender identity
+    const sanitized = { ...payload };
+    if (Array.isArray(sanitized.strokes)) {
+      sanitized.strokes = sanitized.strokes.map((stroke: Record<string, unknown>) =>
+        typeof stroke === 'object' && stroke !== null
+          ? { ...stroke, user: senderUserId }
+          : stroke
+      );
+    }
+
+    this.emit('syncAnnotation', sanitized);
   }
 
   private handleSyncNote(payload: unknown, senderUserId: string): void {
@@ -1006,7 +1078,20 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (typeof p.timestamp !== 'number') return;
     if (!this.canUserSync(senderUserId)) return;
 
-    this.emit('syncNote', p);
+    // Override author field with authenticated sender identity
+    const sanitized = { ...p };
+    if (sanitized.note && typeof sanitized.note === 'object') {
+      sanitized.note = { ...(sanitized.note as Record<string, unknown>), author: senderUserId };
+    }
+    if (Array.isArray(sanitized.notes)) {
+      sanitized.notes = sanitized.notes.map((note: unknown) =>
+        note && typeof note === 'object'
+          ? { ...(note as Record<string, unknown>), author: senderUserId }
+          : note
+      );
+    }
+
+    this.emit('syncNote', sanitized);
   }
 
   private handleSyncCursor(payload: unknown, senderUserId: string): void {
@@ -1063,6 +1148,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       senderUserId,
       sessionState: responsePayload.sessionState,
       encryptedSessionState: responsePayload.encryptedSessionState,
+      annotations: Array.isArray(responsePayload.annotations) ? responsePayload.annotations : undefined,
+      notes: Array.isArray(responsePayload.notes) ? responsePayload.notes : undefined,
       transport,
     });
   }
@@ -1700,6 +1787,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.clearCreateRoomFallbackTimer();
     this._permissions.clear();
     this._remoteCursors.clear();
+    this._recentMessageIds.clear();
+    this._recentMessageIdQueue = [];
     this.stateManager.reset();
   }
 
@@ -1850,6 +1939,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.disposeServerlessPeer(true);
     this._permissions.clear();
     this._remoteCursors.clear();
+    this._recentMessageIds.clear();
+    this._recentMessageIdQueue = [];
     this.wsClient.dispose();
     this.stateManager.reset();
     this.removeAllListeners();

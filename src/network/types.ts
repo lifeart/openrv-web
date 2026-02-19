@@ -229,6 +229,8 @@ export interface StateResponsePayload {
   view?: ViewSyncPayload;
   sessionState?: string;
   encryptedSessionState?: EncryptedSessionStatePayload;
+  annotations?: unknown[];
+  notes?: unknown[];
 }
 
 export interface MediaRequestPayload {
@@ -334,6 +336,8 @@ export interface NetworkSyncEvents extends EventMap {
     senderUserId: string;
     sessionState?: string;
     encryptedSessionState?: EncryptedSessionStatePayload;
+    annotations?: unknown[];
+    notes?: unknown[];
     transport: 'webrtc' | 'websocket';
   };
   mediaSyncRequested: {

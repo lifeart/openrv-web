@@ -70,9 +70,10 @@ function createMockWindow(closed = false): Window {
 
 describe('generatePresentationHTML', () => {
   it('EP-HTML-001: generates valid HTML with window ID', () => {
-    const html = generatePresentationHTML('test-window', 'test-channel');
+    const html = generatePresentationHTML('test-window', 'test-channel', 'test-session-id');
     expect(html).toContain('test-window');
     expect(html).toContain('test-channel');
+    expect(html).toContain('test-session-id');
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('<canvas');
     expect(html).toContain('BroadcastChannel');

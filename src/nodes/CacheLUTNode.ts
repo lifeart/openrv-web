@@ -157,6 +157,9 @@ export function applyColorTransform(
  * @returns The generated 3D LUT
  */
 export function generateLUT3D(size: number, params: ColorTransformParams): CachedLUT3D {
+  if (size < 2) {
+    throw new RangeError(`LUT size must be >= 2, got ${size}`);
+  }
   const totalEntries = size * size * size;
   const data = new Float32Array(totalEntries * 3);
 
@@ -260,7 +263,7 @@ export class CacheLUTNode extends IPNode {
     this.properties.add({ name: 'tint', defaultValue: 0, min: -1, max: 1, step: 0.01 });
 
     // LUT configuration
-    this.properties.add({ name: 'lutSize', defaultValue: 33 });
+    this.properties.add({ name: 'lutSize', defaultValue: 33, min: 2, max: 129 });
     this.properties.add({ name: 'enabled', defaultValue: true });
   }
 
