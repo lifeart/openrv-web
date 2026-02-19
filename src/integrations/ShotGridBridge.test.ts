@@ -243,6 +243,81 @@ describe('ShotGridBridge', () => {
       const versions = await bridge.getVersionsForPlaylist(99);
       expect(versions).toEqual([]);
     });
+
+    it('SG-002e: batches version ID requests for large playlists', async () => {
+      // Create 60 connections (exceeds batch size of 50)
+      const connections = Array.from({ length: 60 }, (_, i) => ({
+        version: { id: 1000 + i },
+        sg_sort_order: i,
+      }));
+
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        // Connections response
+        .mockResolvedValueOnce(jsonResponse({ data: connections }));
+
+      // Batch 1: IDs 1000-1049 (50 versions)
+      const batch1Versions = Array.from({ length: 50 }, (_, i) => ({
+        id: 1000 + i,
+        code: `v${1000 + i}`,
+        entity: { type: 'Shot', id: 10, name: 'shot010' },
+        sg_status_list: 'rev',
+        sg_path_to_movie: '',
+        sg_path_to_frames: '',
+        sg_uploaded_movie: null,
+        image: null,
+        frame_range: null,
+        description: null,
+        sg_first_frame: null,
+        sg_last_frame: null,
+        created_at: '2024-01-15T10:30:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Artist' },
+      }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: batch1Versions }));
+
+      // Batch 2: IDs 1050-1059 (10 versions)
+      const batch2Versions = Array.from({ length: 10 }, (_, i) => ({
+        id: 1050 + i,
+        code: `v${1050 + i}`,
+        entity: { type: 'Shot', id: 10, name: 'shot010' },
+        sg_status_list: 'rev',
+        sg_path_to_movie: '',
+        sg_path_to_frames: '',
+        sg_uploaded_movie: null,
+        image: null,
+        frame_range: null,
+        description: null,
+        sg_first_frame: null,
+        sg_last_frame: null,
+        created_at: '2024-01-15T10:30:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Artist' },
+      }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: batch2Versions }));
+
+      const versions = await bridge.getVersionsForPlaylist(99);
+
+      // All 60 versions returned in playlist order
+      expect(versions).toHaveLength(60);
+      expect(versions[0]!.id).toBe(1000);
+      expect(versions[49]!.id).toBe(1049);
+      expect(versions[50]!.id).toBe(1050);
+      expect(versions[59]!.id).toBe(1059);
+
+      // auth(1) + connections(1) + batch1(1) + batch2(1) = 4
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+
+      // Verify batch 1 URL has 50 IDs
+      const batch1Url = mockFetch.mock.calls[2]![0] as string;
+      expect(batch1Url).toContain('filter[id]=1000');
+      expect(batch1Url).toContain('filter[id]=1049');
+      expect(batch1Url).not.toContain('filter[id]=1050');
+
+      // Verify batch 2 URL has remaining 10 IDs
+      const batch2Url = mockFetch.mock.calls[3]![0] as string;
+      expect(batch2Url).toContain('filter[id]=1050');
+      expect(batch2Url).toContain('filter[id]=1059');
+      expect(batch2Url).not.toContain('filter[id]=1049');
+    });
   });
 
   describe('getVersionsForShot', () => {

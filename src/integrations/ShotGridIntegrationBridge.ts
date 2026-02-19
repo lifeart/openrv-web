@@ -135,6 +135,7 @@ export class ShotGridIntegrationBridge {
     // Load version media
     this.unsubscribers.push(this.panel.on('loadVersion', async ({ version, mediaUrl }) => {
       if (!mediaUrl) return;
+      const gen = this.generation;
 
       try {
         const isVideo = /\.(mp4|mov|webm|mkv)(\?|$)/i.test(mediaUrl);
@@ -144,6 +145,8 @@ export class ShotGridIntegrationBridge {
           await this.session.loadImage(version.code, mediaUrl);
         }
 
+        if (gen !== this.generation || this.disposed) return;
+
         const sourceIndex = this.session.sourceCount - 1;
         this.panel.mapVersionToSource(version.id, sourceIndex);
 
@@ -151,6 +154,7 @@ export class ShotGridIntegrationBridge {
         const localStatus = mapStatusFromShotGrid(version.sg_status_list);
         this.session.statusManager.setStatus(sourceIndex, localStatus, 'ShotGrid');
       } catch (err) {
+        if (gen !== this.generation || this.disposed) return;
         this.handleError(err);
       }
     }));
@@ -166,6 +170,7 @@ export class ShotGridIntegrationBridge {
       let failed = 0;
 
       for (const note of notes) {
+        if (!this.bridge || this.disposed) break;
         try {
           const frameRange = note.frameStart !== note.frameEnd
             ? `${note.frameStart}-${note.frameEnd}`

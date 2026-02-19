@@ -104,6 +104,10 @@ function getSourceElementForFrame(session: Session): CanvasImageSource | null {
     if (frameCanvas) return frameCanvas;
   }
 
+  if (source.fileSourceNode) {
+    return source.fileSourceNode.getCanvas() ?? source.fileSourceNode.getElement(0) ?? null;
+  }
+
   return source.element ?? null;
 }
 
@@ -168,7 +172,10 @@ export function createExportCanvas(
   frameburnContext?: FrameburnContext | null
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
-  if (!source?.element) return null;
+  if (!source) return null;
+
+  const element = getSourceElementForFrame(session);
+  if (!element) return null;
 
   const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } =
     computeExportParams(source.width, source.height, transform, cropRegion);
@@ -184,15 +191,13 @@ export function createExportCanvas(
   ctx.filter = filterString;
 
   // Draw image with optional transforms and crop
-  if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-    drawElementWithTransformAndCrop(
-      ctx, source.element,
-      source.width, source.height,
-      effectiveWidth, effectiveHeight,
-      outputWidth, outputHeight,
-      transform, crop, filterString
-    );
-  }
+  drawElementWithTransformAndCrop(
+    ctx, element,
+    source.width, source.height,
+    effectiveWidth, effectiveHeight,
+    outputWidth, outputHeight,
+    transform, crop, filterString
+  );
 
   // Reset filter for annotations
   ctx.filter = 'none';
@@ -286,8 +291,11 @@ export async function renderFrameToCanvas(
       await session.getSequenceFrameImage(frame);
     }
 
-    // For video, seek and wait
-    if (source.type === 'video' && source.element instanceof HTMLVideoElement) {
+    // For mediabunny video, fetch the decoded frame
+    if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      await session.fetchCurrentVideoFrame(frame);
+    } else if (source.type === 'video' && source.element instanceof HTMLVideoElement) {
+      // For non-mediabunny video, seek the HTMLVideoElement and wait
       const video = source.element;
       const targetTime = (frame - 1) / session.fps;
       if (Math.abs(video.currentTime - targetTime) > 0.01) {
@@ -303,9 +311,13 @@ export async function renderFrameToCanvas(
     }
 
     // Get the element to render
-    let element: HTMLImageElement | HTMLVideoElement | undefined;
+    let element: CanvasImageSource | undefined;
     if (source.type === 'sequence') {
       element = session.getSequenceFrameSync(frame) ?? undefined;
+    } else if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      element = session.getVideoFrameCanvas(frame) ?? undefined;
+    } else if (source.fileSourceNode) {
+      element = source.fileSourceNode.getCanvas() ?? source.fileSourceNode.getElement(0) ?? undefined;
     } else {
       element = source.element;
     }

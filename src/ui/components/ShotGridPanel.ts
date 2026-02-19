@@ -9,7 +9,7 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
-import { STATUS_COLORS, type ShotStatus } from '../../core/session/StatusManager';
+import { STATUS_COLORS } from '../../core/session/StatusManager';
 import { mapStatusFromShotGrid, type ShotGridVersion } from '../../integrations/ShotGridBridge';
 import type { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
 import { getIconSvg } from './shared/Icons';
@@ -25,7 +25,7 @@ export interface ShotGridPanelEvents extends EventMap {
   loadVersion: { version: ShotGridVersion; mediaUrl: string | null };
   pushNotes: { versionId: number; sourceIndex: number };
   pullNotes: { versionId: number; sourceIndex: number };
-  pushStatus: { versionId: number; sourceIndex: number; status: ShotStatus };
+  pushStatus: { versionId: number; sourceIndex: number };
   loadPlaylist: { playlistId: number };
   loadShot: { shotId: number };
   visibilityChanged: boolean;
@@ -219,8 +219,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
   // ---- Public API ----
 
   setConfigUI(configUI: ShotGridConfigUI): void {
-    this.configSection.innerHTML = '';
-    this.configSection.appendChild(configUI.render());
+    this.configSection.replaceChildren(configUI.render());
   }
 
   setConnected(connected: boolean): void {
@@ -242,7 +241,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
   setLoading(loading: boolean): void {
     if (loading) {
       this.showState('loading');
-      this.listContainer.innerHTML = '';
+      this.listContainer.replaceChildren();
     } else {
       this.showState(null);
     }
@@ -250,7 +249,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
 
   setError(message: string): void {
     this.showState('error', message);
-    this.listContainer.innerHTML = '';
+    this.listContainer.replaceChildren();
   }
 
   mapVersionToSource(versionId: number, sourceIndex: number): void {
@@ -348,6 +347,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
 
     this.stateContainer.style.display = 'block';
     this.stateContainer.textContent = '';
+    this.stateContainer.style.color = 'var(--text-muted)';
 
     if (type === 'loading') {
       this.stateContainer.textContent = 'Loading versions...';
@@ -358,7 +358,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
   }
 
   private renderVersions(): void {
-    this.listContainer.innerHTML = '';
+    this.listContainer.replaceChildren();
 
     if (this.versions.length === 0) {
       const empty = document.createElement('div');
@@ -508,7 +508,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
     pushStatusBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (sourceIndex !== undefined) {
-        this.emit('pushStatus', { versionId: version.id, sourceIndex, status: localStatus });
+        this.emit('pushStatus', { versionId: version.id, sourceIndex });
       }
     });
     actions.appendChild(pushStatusBtn);

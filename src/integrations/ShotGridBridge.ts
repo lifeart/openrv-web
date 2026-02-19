@@ -123,6 +123,9 @@ const VERSION_FIELDS = 'code,entity,sg_status_list,sg_path_to_movie,sg_path_to_f
 /** Default maximum number of pages to follow for paginated results */
 const DEFAULT_MAX_PAGES = 10;
 
+/** Maximum number of version IDs per batch request to avoid URL length limits */
+const VERSION_ID_BATCH_SIZE = 50;
+
 export class ShotGridBridge {
   private serverUrl: string;
   private scriptName: string;
@@ -209,15 +212,9 @@ export class ShotGridBridge {
     const connections = await this.fetchAllPages<{ version: { id: number }; sg_sort_order: number }>(connectionsUrl);
     if (connections.length === 0) return [];
 
-    // Step 2: Batch-fetch versions by ID
+    // Step 2: Batch-fetch versions by ID (chunked to avoid URL length limits)
     const versionIds = connections.map(c => c.version.id);
-    const idsFilter = versionIds.map(id => `filter[id]=${id}`).join('&');
-    const versionsUrl = `${this.serverUrl}/api/v1/entity/versions` +
-      `?${idsFilter}` +
-      `&filter[project]=${this.projectId}` +
-      `&fields=${VERSION_FIELDS}`;
-
-    const versions = await this.fetchAllPages<ShotGridVersion>(versionsUrl);
+    const versions = await this.fetchVersionsByIds(versionIds);
 
     // Re-sort to match playlist order
     const versionMap = new Map(versions.map(v => [v.id, v]));
@@ -342,6 +339,27 @@ export class ShotGridBridge {
       page++;
     }
 
+    return results;
+  }
+
+  /**
+   * Fetch versions by IDs, chunking to avoid URL length limits.
+   * Each chunk produces a separate request with at most VERSION_ID_BATCH_SIZE IDs.
+   */
+  private async fetchVersionsByIds(ids: number[]): Promise<ShotGridVersion[]> {
+    if (ids.length === 0) return [];
+
+    const results: ShotGridVersion[] = [];
+    for (let i = 0; i < ids.length; i += VERSION_ID_BATCH_SIZE) {
+      const chunk = ids.slice(i, i + VERSION_ID_BATCH_SIZE);
+      const idsFilter = chunk.map(id => `filter[id]=${id}`).join('&');
+      const url = `${this.serverUrl}/api/v1/entity/versions` +
+        `?${idsFilter}` +
+        `&filter[project]=${this.projectId}` +
+        `&fields=${VERSION_FIELDS}`;
+      const batch = await this.fetchAllPages<ShotGridVersion>(url);
+      results.push(...batch);
+    }
     return results;
   }
 

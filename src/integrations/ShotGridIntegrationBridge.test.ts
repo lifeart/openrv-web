@@ -346,4 +346,80 @@ describe('ShotGridIntegrationBridge', () => {
     expect(session.loadVideo).not.toHaveBeenCalled();
     expect(session.loadImage).not.toHaveBeenCalled();
   });
+
+  it('SG-INT-011: loadVersion skips mapping if disconnected during load', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    // Make loadVideo slow so we can disconnect during it
+    session.loadVideo.mockImplementation(() => new Promise(resolve => {
+      setTimeout(resolve, 50);
+    }));
+
+    panel.emit('loadVersion', {
+      version: makeVersion(),
+      mediaUrl: 'https://s3.example.com/movie.mp4',
+    });
+
+    // Disconnect before loadVideo completes (increments generation)
+    configUI.emit('disconnect', undefined);
+
+    // Wait for loadVideo to complete
+    await new Promise(r => setTimeout(r, 100));
+
+    // mapVersionToSource should NOT have been called (generation mismatch)
+    expect(panel.mapVersionToSource).not.toHaveBeenCalled();
+  });
+
+  it('SG-INT-012: pushNotes stops if bridge is disposed mid-iteration', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    // Mock 3 notes
+    session.noteManager.getNotesForSource.mockReturnValue([
+      { id: 'n1', text: 'Note 1', frameStart: 1, frameEnd: 1 },
+      { id: 'n2', text: 'Note 2', frameStart: 2, frameEnd: 2 },
+      { id: 'n3', text: 'Note 3', frameStart: 3, frameEnd: 3 },
+    ]);
+
+    // Make pushNote disconnect after first note
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      let callCount = 0;
+      mockBridgeInstance.pushNote.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // Disconnect after first push - this nulls the bridge
+          configUI.emit('disconnect', undefined);
+        }
+        return Promise.resolve({ id: 500 + callCount, subject: 'Test' });
+      });
+    }
+
+    panel.emit('pushNotes', { versionId: 101, sourceIndex: 0 });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Only the first push should have been attempted before bridge was nulled
+    if (mockBridgeInstance) {
+      expect(mockBridgeInstance.pushNote).toHaveBeenCalledTimes(1);
+    }
+  });
 });

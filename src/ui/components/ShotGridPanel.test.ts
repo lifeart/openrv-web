@@ -246,4 +246,39 @@ describe('ShotGridPanel', () => {
     expect(noMedia).toBeTruthy();
     expect(noMedia!.textContent).toBe('No media');
   });
+
+  it('SG-PNL-018: loading state resets text color after error state', () => {
+    panel.setConnected(true);
+    panel.show();
+
+    // First show error (sets color to danger)
+    panel.setError('Something failed');
+    const state = document.body.querySelector('[data-testid="shotgrid-state"]') as HTMLElement;
+    expect(state.style.color).toContain('ef4444');
+
+    // Then show loading - color must reset to muted
+    panel.setLoading(true);
+    expect(state.textContent).toBe('Loading versions...');
+    expect(state.style.color).toBe('var(--text-muted)');
+  });
+
+  it('SG-PNL-019: pushStatus event does not include status field', () => {
+    panel.setConnected(true);
+    // Map version before rendering so the button is enabled
+    panel.mapVersionToSource(101, 0);
+    panel.setVersions([makeVersion({ id: 101, sg_status_list: 'apr' })]);
+    panel.show();
+
+    const onPushStatus = vi.fn();
+    panel.on('pushStatus', onPushStatus);
+
+    const pushStatusBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="shotgrid-push-status"]')!;
+    expect(pushStatusBtn.disabled).toBe(false);
+    pushStatusBtn.click();
+
+    expect(onPushStatus).toHaveBeenCalledWith({ versionId: 101, sourceIndex: 0 });
+    // Verify no 'status' key in the emitted object
+    const emittedArg = onPushStatus.mock.calls[0]![0];
+    expect(Object.keys(emittedArg)).toEqual(['versionId', 'sourceIndex']);
+  });
 });
