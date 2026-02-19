@@ -135,6 +135,24 @@ export interface ShapeAnnotation {
 
 export type Annotation = PenStroke | TextAnnotation | ShapeAnnotation;
 
+/**
+ * Validates that an unknown value has the minimum required fields
+ * to be treated as an Annotation. Used for network sync payloads
+ * where strokes arrive as `unknown[]`.
+ */
+export function isValidAnnotation(value: unknown): value is Annotation {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.type !== 'string') return false;
+  if (v.type !== 'pen' && v.type !== 'text' && v.type !== 'shape') return false;
+  if (typeof v.id !== 'string' || v.id.length === 0) return false;
+  if (typeof v.frame !== 'number' || !Number.isFinite(v.frame)) return false;
+  if (typeof v.user !== 'string') return false;
+  if (typeof v.startFrame !== 'number') return false;
+  if (typeof v.duration !== 'number') return false;
+  return true;
+}
+
 export interface PaintEffects {
   hold: boolean;
   ghost: boolean;

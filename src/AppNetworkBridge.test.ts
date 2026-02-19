@@ -33,6 +33,7 @@ class MockNetworkSyncManager extends EventEmitter {
   sendPlaybackSync = vi.fn();
   sendFrameSync = vi.fn();
   sendAnnotationSync = vi.fn();
+  sendColorSync = vi.fn();
   sendNoteSync = vi.fn();
   simulateRoomCreated = vi.fn();
   joinRoom = vi.fn();
@@ -95,6 +96,15 @@ function createMockHeaderBar() {
   };
 }
 
+class MockColorControls extends EventEmitter {
+  getAdjustments = vi.fn(() => ({
+    exposure: 0, gamma: 1, saturation: 1, vibrance: 0,
+    vibranceSkinProtection: false, contrast: 1, clarity: 0,
+    hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+    highlights: 0, shadows: 0, whites: 0, blacks: 0,
+  }));
+}
+
 function createContext() {
   const session = new MockSession();
   const networkSyncManager = new MockNetworkSyncManager();
@@ -102,6 +112,7 @@ function createContext() {
   const viewer = createMockViewer();
   const headerBar = createMockHeaderBar();
   const paintEngine = new PaintEngine();
+  const colorControls = new MockColorControls();
 
   return {
     session: session as any,

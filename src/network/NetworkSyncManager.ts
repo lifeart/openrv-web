@@ -17,6 +17,7 @@ import {
   createPlaybackSyncMessage,
   createFrameSyncMessage,
   createViewSyncMessage,
+  createColorSyncMessage,
   createAnnotationSyncMessage,
   createCursorSyncMessage,
   createPermissionMessage,
@@ -487,6 +488,20 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     this.stateManager.updateLocalView(payload);
     const message = createViewSyncMessage(this._roomInfo.roomId, this._userId, payload);
+    this.dispatchRealtimeMessage(message);
+  }
+
+  /**
+   * Send a color correction sync message.
+   * Called when local color adjustments change.
+   */
+  sendColorSync(payload: ColorSyncPayload): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this._syncSettings.color) return;
+    if (this.stateManager.isApplyingRemoteState) return;
+
+    this.stateManager.updateLocalColor(payload);
+    const message = createColorSyncMessage(this._roomInfo.roomId, this._userId, payload);
     this.dispatchRealtimeMessage(message);
   }
 

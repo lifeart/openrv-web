@@ -11,8 +11,9 @@ import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
 import type { NetworkSyncManager } from './network/NetworkSyncManager';
 import type { NetworkControl } from './ui/components/NetworkControl';
+import type { ColorControls } from './ui/components/ColorControls';
 import type { HeaderBar } from './ui/components/layout/HeaderBar';
-import type { Annotation } from './paint/types';
+import { type Annotation, isValidAnnotation } from './paint/types';
 import type { Note } from './core/session/NoteManager';
 import type {
   MediaTransferFileDescriptor,
@@ -70,6 +71,7 @@ export interface NetworkBridgeContext {
   session: Session;
   viewer: Viewer;
   paintEngine?: PaintEngine;
+  colorControls?: ColorControls;
   networkSyncManager: NetworkSyncManager;
   networkControl: NetworkControl;
   headerBar: HeaderBar;
@@ -455,6 +457,24 @@ export class AppNetworkBridge {
       }
     }));
 
+    // Wire outgoing color sync when local color adjustments change
+    const colorControls = this.ctx.colorControls;
+    if (colorControls) {
+      this.unsubscribers.push(colorControls.on('adjustmentsChanged', (adjustments) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          networkSyncManager.sendColorSync({
+            exposure: adjustments.exposure,
+            gamma: adjustments.gamma,
+            saturation: adjustments.saturation,
+            contrast: adjustments.contrast,
+            temperature: adjustments.temperature,
+            tint: adjustments.tint,
+            brightness: adjustments.brightness,
+          });
+        }
+      }));
+    }
+
     // Wire incoming annotation sync
     const paintEngine = this.ctx.paintEngine;
     if (paintEngine) {
@@ -465,7 +485,9 @@ export class AppNetworkBridge {
           switch (payload.action) {
             case 'add':
               for (const stroke of payload.strokes) {
-                paintEngine.addRemoteAnnotation(stroke as Annotation);
+                if (isValidAnnotation(stroke)) {
+                  paintEngine.addRemoteAnnotation(stroke);
+                }
               }
               break;
             case 'remove':
@@ -482,7 +504,9 @@ export class AppNetworkBridge {
                 paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
               }
               for (const stroke of payload.strokes) {
-                paintEngine.addRemoteAnnotation(stroke as Annotation);
+                if (isValidAnnotation(stroke)) {
+                  paintEngine.addRemoteAnnotation(stroke);
+                }
               }
               break;
           }

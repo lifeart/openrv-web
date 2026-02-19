@@ -1267,6 +1267,31 @@ describe('GTOGraphLoader', () => {
       expect(result.rootNode).toBe(sequenceNode);
     });
 
+    it('skips RVDisplayGroup gracefully when NodeFactory.create returns null', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(null);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'displayGroup',
+            protocol: 'RVDisplayGroup',
+            components: {},
+          },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.nodes.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith('Failed to create node: RVDisplayGroup');
+
+      warnSpy.mockRestore();
+    });
+
     it('handles connection failures gracefully', () => {
       vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
       vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
@@ -1927,6 +1952,62 @@ describe('GTOGraphLoader', () => {
       const result = loadGTOGraph(dto as never);
 
       expect(result.sessionInfo.bgColor).toEqual([0.1, 0.2, 0.3, 0.8]);
+    });
+
+    it('rejects bgColor containing NaN values', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'NaNBgColorSession',
+          bgColor: [NaN, 0.5, 0.5, 1.0],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toBeUndefined();
+    });
+
+    it('preserves bgColor values outside 0-1 range (HDR scene-referred)', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'HDRBgColorSession',
+          bgColor: [1.5, -0.1, 0.5, 1.0],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toEqual([1.5, -0.1, 0.5, 1.0]);
+    });
+
+    it('uses first 4 elements when bgColor array has more than 4', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'LongBgColorSession',
+          bgColor: [0.5, 0.5, 0.5, 1.0, 0.5],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toEqual([0.5, 0.5, 0.5, 1.0]);
+    });
+
+    it('returns undefined bgColor when property value is null', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'NullBgColorSession',
+          bgColor: null as unknown as number[],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toBeUndefined();
     });
   });
 });

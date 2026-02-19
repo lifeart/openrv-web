@@ -233,6 +233,7 @@ export class App {
       session: this.session,
       viewer: this.viewer,
       paintEngine: this.paintEngine,
+      colorControls: this.controls.colorControls,
       networkSyncManager: this.controls.networkSyncManager,
       networkControl: this.controls.networkControl,
       headerBar: this.headerBar,

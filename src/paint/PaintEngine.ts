@@ -449,20 +449,22 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   /**
    * Add an annotation received from a remote peer.
    * Does NOT affect the local undo/redo stack or emit strokeAdded.
+   * The input is cloned to avoid mutating the caller's object.
    */
   addRemoteAnnotation(annotation: Annotation): void {
-    if (!annotation.id) {
-      annotation.id = String(this.state.nextId++);
+    const clone = { ...annotation } as Annotation;
+    if (!clone.id) {
+      clone.id = String(this.state.nextId++);
     }
-    const id = parseInt(annotation.id, 10);
+    const id = parseInt(clone.id, 10);
     if (!isNaN(id) && id >= this.state.nextId) {
       this.state.nextId = id + 1;
     }
-    const frame = annotation.frame;
+    const frame = clone.frame;
     if (!this.state.annotations.has(frame)) {
       this.state.annotations.set(frame, []);
     }
-    this.state.annotations.get(frame)!.push(annotation);
+    this.state.annotations.get(frame)!.push(clone);
     this.emit('annotationsChanged', frame);
   }
 

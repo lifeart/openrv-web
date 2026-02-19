@@ -325,7 +325,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         const g = bgColorValue[1];
         const b = bgColorValue[2];
         const a = bgColorValue[3];
-        if (typeof r === 'number' && typeof g === 'number' && typeof b === 'number' && typeof a === 'number') {
+        if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b) && Number.isFinite(a)) {
           sessionInfo.bgColor = [r, g, b, a];
         }
       }

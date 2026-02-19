@@ -3481,6 +3481,27 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
 
             expect(realtimeProp?.value).toBe(30);
         });
+
+        it('exports non-integer realtime value without rounding (NTSC 29.97 fps)', () => {
+            session.fps = 24;
+            session.setMetadataForTest({
+                displayName: '',
+                comment: '',
+                version: 2,
+                origin: 'openrv-web',
+                creationContext: 0,
+                clipboard: 0,
+                membershipContains: [],
+                realtime: 29.97,
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const sessionComp = components['session'];
+
+            // 29.97 fps (NTSC) must not be rounded to 29 or 30
+            expect(sessionComp.properties.realtime.data).toEqual([29.97]);
+        });
     });
 
     describe('Complete round-trip simulation', () => {
@@ -3887,6 +3908,133 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
             expect(componentsB['text:0']).toBeDefined();
             expect(componentsB['text:0'].properties.text.data).toEqual(['Overlay B text']);
         });
+
+        it('preserves mixed overlay with rects, texts, and windows all at once', () => {
+            const originalGTO: GTOData = {
+                version: 4,
+                objects: [
+                    {
+                        name: 'session',
+                        protocol: 'RVSession',
+                        components: {
+                            'session': {
+                                name: 'session',
+                                properties: [
+                                    { name: 'frame', value: 1 } as any
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        name: 'mixed_overlay',
+                        protocol: 'RVOverlay',
+                        protocolVersion: 1,
+                        components: {}
+                    }
+                ]
+            } as any;
+
+            const mockNode = {
+                type: 'RVOverlay',
+                properties: {
+                    getValue: vi.fn((key: string) => {
+                        if (key === 'overlayShow') return true;
+                        if (key === 'overlayRectangles') return [
+                            { id: 0, width: 0.2, height: 0.1, color: [1, 0, 0, 1], position: [0.1, 0.2], active: true },
+                        ];
+                        if (key === 'overlayTexts') return [
+                            { id: 0, text: 'Mixed Label', size: 24, position: [0.5, 0.5], color: [1, 1, 1, 1], active: true },
+                        ];
+                        if (key === 'overlayWindows') return [
+                            { id: 0, windowActive: true, outlineActive: false, outlineWidth: 2.0, outlineColor: [0, 1, 0, 1] as [number, number, number, number], windowColor: [0, 0, 0, 0.5] as [number, number, number, number] },
+                        ];
+                        return undefined;
+                    })
+                }
+            } as any;
+
+            session.setMockGraph({
+                getNode: vi.fn((name: string) => {
+                    if (name === 'mixed_overlay') return mockNode;
+                    return undefined;
+                }),
+                nodes: new Map()
+            } as unknown as Graph);
+
+            const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, session, paintEngine);
+
+            const overlayObj = updatedGTO.objects.find(o => o.protocol === 'RVOverlay');
+            expect(overlayObj).toBeDefined();
+            expect(overlayObj!.name).toBe('mixed_overlay');
+
+            const components = overlayObj!.components as Record<string, any>;
+
+            // Overlay metadata
+            expect(components['overlay']).toBeDefined();
+            expect(components['overlay'].properties.show.data).toEqual([1]);
+
+            // Rectangle component
+            expect(components['rect:0']).toBeDefined();
+            expect(components['rect:0'].properties.width.data).toEqual([0.2]);
+            expect(components['rect:0'].properties.height.data).toEqual([0.1]);
+
+            // Text component
+            expect(components['text:0']).toBeDefined();
+            expect(components['text:0'].properties.text.data).toEqual(['Mixed Label']);
+            expect(components['text:0'].properties.size.data).toEqual([24]);
+
+            // Window component
+            expect(components['window:0']).toBeDefined();
+            expect(components['window:0'].properties.windowActive.data).toEqual([1]);
+            expect(components['window:0'].properties.outlineActive.data).toEqual([0]);
+            expect(components['window:0'].properties.outlineWidth.data).toEqual([2.0]);
+        });
+
+        it('removes overlay object when graph node is not found (stale data cleanup)', () => {
+            const originalGTO: GTOData = {
+                version: 4,
+                objects: [
+                    {
+                        name: 'session',
+                        protocol: 'RVSession',
+                        components: {
+                            'session': {
+                                name: 'session',
+                                properties: [
+                                    { name: 'frame', value: 1 } as any
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        name: 'stale_overlay',
+                        protocol: 'RVOverlay',
+                        protocolVersion: 1,
+                        components: {
+                            'overlay': {
+                                name: 'overlay',
+                                properties: [
+                                    { name: 'show', value: 1 } as any
+                                ]
+                            }
+                        }
+                    }
+                ]
+            } as any;
+
+            // Graph returns undefined for the stale overlay node
+            session.setMockGraph({
+                getNode: vi.fn(() => undefined),
+                nodes: new Map()
+            } as unknown as Graph);
+
+            const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, session, paintEngine);
+
+            // The stale overlay object should still be present (current behavior: continue skips it)
+            const overlayObj = updatedGTO.objects.find(o => o.protocol === 'RVOverlay');
+            expect(overlayObj).toBeDefined();
+            expect(overlayObj!.name).toBe('stale_overlay');
+        });
     });
 
     describe('bgColor export', () => {
@@ -3978,6 +4126,27 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
 
             // Verify the bgColor is in the exported data (float4 wraps in nested array)
             expect(sessionComp.properties.bgColor.data).toEqual([[0.25, 0.35, 0.45, 1.0]]);
+        });
+
+        it('preserves bgColor with values outside 0-1 range (HDR scene-referred)', () => {
+            session.setMetadataForTest({
+                displayName: '',
+                comment: '',
+                version: 2,
+                origin: 'openrv-web',
+                creationContext: 0,
+                clipboard: 0,
+                membershipContains: [],
+                bgColor: [1.5, -0.1, 0.5, 2.0],
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const sessionComp = components['session'];
+
+            // HDR scene-referred values should be preserved without clamping
+            // float4 stores data as nested array [[r, g, b, a]]
+            expect(sessionComp.properties.bgColor.data).toEqual([[1.5, -0.1, 0.5, 2.0]]);
         });
     });
 });

@@ -1472,7 +1472,7 @@ export class SessionGTOExporter {
       .int2('range', [[playback.inPoint, playback.outPoint]])
       .int2('region', [[playback.inPoint, playback.outPoint]])
       .float('fps', playback.fps)
-      .int('realtime', metadata.realtime || 0)
+      .float('realtime', metadata.realtime || 0)
       .int('inc', session.frameIncrement)
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
