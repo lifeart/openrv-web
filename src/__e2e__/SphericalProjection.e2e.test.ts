@@ -17,12 +17,13 @@
  * - Missing interaction wiring (no drag/wheel in ViewerInputHandler)
  * - detect360Content auto-detection not wired to source load
  * - Redundant initial texture fetch when spherical is enabled
- * - SPHERICAL_PROJECTION_GLSL was removed (stale unused export with wrong uniform names)
+ * - SPHERICAL_PROJECTION_GLSL exported constant with correct u_spherical* uniform names
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   SphericalProjection,
+  SPHERICAL_PROJECTION_GLSL,
   directionToEquirectUV,
   equirectUVToDirection,
   vec3Normalize,
@@ -128,12 +129,19 @@ describe('SphericalProjection E2E Integration', () => {
       }
     });
 
-    it('SP-E2E-002: SPHERICAL_PROJECTION_GLSL stale export has been removed', async () => {
-      // The stale GLSL constant with wrong uniform names (u_fov, u_aspect, u_yaw, u_pitch
-      // instead of u_sphericalFov, u_sphericalAspect, etc.) was removed from the module.
-      // Verify the export no longer exists.
-      const mod = await import('../render/SphericalProjection') as Record<string, unknown>;
-      expect(mod.SPHERICAL_PROJECTION_GLSL).toBeUndefined();
+    it('SP-E2E-002: SPHERICAL_PROJECTION_GLSL export exists with correct uniform names', () => {
+      // The GLSL constant is a standalone utility for external consumers.
+      // It must use the correct prefixed uniform names that match the main shader.
+      expect(typeof SPHERICAL_PROJECTION_GLSL).toBe('string');
+      expect(SPHERICAL_PROJECTION_GLSL).toContain('u_sphericalFov');
+      expect(SPHERICAL_PROJECTION_GLSL).toContain('u_sphericalAspect');
+      expect(SPHERICAL_PROJECTION_GLSL).toContain('u_sphericalYaw');
+      expect(SPHERICAL_PROJECTION_GLSL).toContain('u_sphericalPitch');
+      // Must NOT contain the old incorrect non-prefixed names as uniform declarations
+      expect(SPHERICAL_PROJECTION_GLSL).not.toMatch(/uniform\s+float\s+u_fov\b/);
+      expect(SPHERICAL_PROJECTION_GLSL).not.toMatch(/uniform\s+float\s+u_aspect\b/);
+      expect(SPHERICAL_PROJECTION_GLSL).not.toMatch(/uniform\s+float\s+u_yaw\b/);
+      expect(SPHERICAL_PROJECTION_GLSL).not.toMatch(/uniform\s+float\s+u_pitch\b/);
     });
 
     it('SP-E2E-003: SphericalProjectionUniforms interface uses u_fov/u_aspect (non-prefixed)', () => {

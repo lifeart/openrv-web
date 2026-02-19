@@ -1304,32 +1304,30 @@
           color.rgb = max(color.rgb + detail * u_sharpenAmount, 0.0);
         }
 
-        // 8. Creative gamma (always applied, regardless of display transfer mode).
-        // OpenRV compatibility: In OpenRV's DisplayIPNode.cpp, the display gamma
-        // (color.gamma property) is applied as `pow(color, 1.0 / displayGamma)` and
-        // it is applied AFTER the display transfer function (linear->sRGB or linear->Rec709)
-        // when no override colorspace is set. When an override colorspace IS set, gamma
-        // is NOT applied at all (only the override transfer is used).
-        // Our shader applies creative gamma BEFORE the display transfer to allow
-        // user gamma adjustments to operate in linear space. This ordering difference
-        // means our gamma adjustment has a slightly different visual effect than OpenRV's
-        // when a display transfer (sRGB/Rec.709) is active.
-        // When u_gammaRGB == vec3(1.0), pow() is identity so skip to avoid cost.
-        if (u_gammaRGB != vec3(1.0)) {
-          color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
-        }
+        // 8. Display output: transfer function then creative gamma.
+        // Matches OpenRV ordering (DisplayIPNode.cpp): display transfer (sRGB/Rec.709)
+        // is applied FIRST, then creative gamma is applied AFTER:
+        //   if (linear2sRGB)   shaderExpr = newColorLinearToSRGB(shaderExpr);
+        //   if (linear2Rec709) shaderExpr = newColorLinearToRec709(shaderExpr);
+        //   if (displayGamma != 1.0) shaderExpr = newColorGamma(shaderExpr, 1.0/displayGamma);
 
         // 8a. Display transfer function (linear to display-encoded, per-channel)
         if (u_displayTransfer > 0) {
           color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
         }
 
-        // 8b. Display gamma override
+        // 8b. Creative gamma (applied AFTER display transfer to match OpenRV ordering).
+        // When u_gammaRGB == vec3(1.0), pow() is identity so skip to avoid cost.
+        if (u_gammaRGB != vec3(1.0)) {
+          color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
+        }
+
+        // 8c. Display gamma override
         if (u_displayGamma != 1.0) {
           color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_displayGamma));
         }
 
-        // 8c. Display brightness
+        // 8d. Display brightness
         color.rgb *= u_displayBrightness;
 
         // 9. Color inversion (after all corrections, before channel isolation)

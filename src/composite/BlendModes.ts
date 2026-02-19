@@ -3,15 +3,21 @@
  *
  * Implements standard compositing blend modes for layering images.
  *
- * NOTE: OpenRV's compositing pipeline assumes **premultiplied alpha**.
- * Its Over2.glsl uses `i0.rgb + i1.rgb * (1 - i0.a)` (premultiplied over),
- * and ImageRenderer.cpp sets `glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)`
- * with the comment "src is assumed premultiplied".
+ * Two alpha modes are supported:
  *
- * This web implementation currently operates on straight (non-premultiplied)
- * alpha for convenience with Canvas2D/ImageData. When compositing results
- * differ from OpenRV, premultiply/unpremultiply conversion at the boundaries
- * is the likely cause.
+ * 1. **Straight alpha** (default, `premultiplied: false`):
+ *    - Used by Canvas2D ImageData where RGB values are independent of alpha.
+ *    - Porter-Duff over: outA = topA + baseA*(1-topA);
+ *      outRGB = (blendedRGB*topA + baseRGB*baseA*(1-topA)) / outA
+ *
+ * 2. **Premultiplied alpha** (`premultiplied: true`):
+ *    - Matches OpenRV's compositing pipeline. Over2.glsl uses:
+ *      `i0.rgb + i1.rgb * (1 - i0.a)` (premultiplied over), and
+ *      ImageRenderer.cpp sets `glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)`
+ *      with the comment "src is assumed premultiplied".
+ *    - Porter-Duff over (premultiplied): outA = topA + baseA*(1-topA);
+ *      outRGB = topRGB + baseRGB*(1-topA)  (no division by outA)
+ *    - Use this mode when compositing data from .rv sessions or OpenRV pipelines.
  */
 
 import type { StackCompositeType } from '../nodes/groups/StackGroupNode';
@@ -99,13 +105,17 @@ function blendChannel(a: number, b: number, mode: BlendMode): number {
  * @param top - The top layer (source)
  * @param mode - The blend mode to use
  * @param opacity - Opacity of the top layer (0-1)
+ * @param premultiplied - If true, use premultiplied alpha Porter-Duff formula
+ *   (OpenRV compatibility: outRGB = topRGB + baseRGB * (1 - topA)).
+ *   If false (default), use straight alpha formula for Canvas2D ImageData.
  * @returns New ImageData with composited result
  */
 export function compositeImageData(
   base: ImageData,
   top: ImageData,
   mode: BlendMode = 'normal',
-  opacity: number = 1
+  opacity: number = 1,
+  premultiplied: boolean = false
 ): ImageData {
   if (base.width !== top.width || base.height !== top.height) {
     throw new Error('ImageData dimensions must match for compositing');
@@ -150,25 +160,58 @@ export function compositeImageData(
       continue;
     }
 
-    // Apply blend mode to RGB channels
-    const blendedR = blendChannel(baseR, topR, mode);
-    const blendedG = blendChannel(baseG, topG, mode);
-    const blendedB = blendChannel(baseB, topB, mode);
-
     // Alpha compositing (Porter-Duff "over" operation)
     const outA = topA + baseA * (1 - topA);
 
-    if (outA > 0) {
-      // Composite with alpha
-      outData[i] = Math.round((blendedR * topA + baseR * baseA * (1 - topA)) / outA);
-      outData[i + 1] = Math.round((blendedG * topA + baseG * baseA * (1 - topA)) / outA);
-      outData[i + 2] = Math.round((blendedB * topA + baseB * baseA * (1 - topA)) / outA);
+    if (premultiplied) {
+      // Premultiplied alpha: RGB values are already multiplied by alpha.
+      // Porter-Duff over (premultiplied):
+      //   outRGB = topRGB + baseRGB * (1 - topA)
+      //   outA   = topA   + baseA   * (1 - topA)
+      // For blend modes other than normal, apply the blend to the
+      // unpremultiplied color, then re-premultiply for compositing.
+      if (mode === 'normal') {
+        outData[i] = Math.min(255, Math.round(topR + baseR * (1 - topA)));
+        outData[i + 1] = Math.min(255, Math.round(topG + baseG * (1 - topA)));
+        outData[i + 2] = Math.min(255, Math.round(topB + baseB * (1 - topA)));
+      } else {
+        // For non-normal blend modes in premultiplied space:
+        // Unpremultiply, blend, re-premultiply.
+        const baseRu = baseA > 0 ? baseR / baseA : 0;
+        const baseGu = baseA > 0 ? baseG / baseA : 0;
+        const baseBu = baseA > 0 ? baseB / baseA : 0;
+        const topRu = topA > 0 ? topR / topA : 0;
+        const topGu = topA > 0 ? topG / topA : 0;
+        const topBu = topA > 0 ? topB / topA : 0;
+        // blendChannel expects 0-255 straight values
+        const blendedR = blendChannel(Math.round(baseRu), Math.round(topRu), mode);
+        const blendedG = blendChannel(Math.round(baseGu), Math.round(topGu), mode);
+        const blendedB = blendChannel(Math.round(baseBu), Math.round(topBu), mode);
+        // Re-premultiply: blended result * topA + base * (1 - topA)
+        outData[i] = Math.min(255, Math.round(blendedR * topA + baseR * (1 - topA)));
+        outData[i + 1] = Math.min(255, Math.round(blendedG * topA + baseG * (1 - topA)));
+        outData[i + 2] = Math.min(255, Math.round(blendedB * topA + baseB * (1 - topA)));
+      }
       outData[i + 3] = Math.round(outA * 255);
     } else {
-      outData[i] = 0;
-      outData[i + 1] = 0;
-      outData[i + 2] = 0;
-      outData[i + 3] = 0;
+      // Straight alpha path (original behavior)
+      // Apply blend mode to RGB channels
+      const blendedR = blendChannel(baseR, topR, mode);
+      const blendedG = blendChannel(baseG, topG, mode);
+      const blendedB = blendChannel(baseB, topB, mode);
+
+      if (outA > 0) {
+        // Composite with alpha
+        outData[i] = Math.round((blendedR * topA + baseR * baseA * (1 - topA)) / outA);
+        outData[i + 1] = Math.round((blendedG * topA + baseG * baseA * (1 - topA)) / outA);
+        outData[i + 2] = Math.round((blendedB * topA + baseB * baseA * (1 - topA)) / outA);
+        outData[i + 3] = Math.round(outA * 255);
+      } else {
+        outData[i] = 0;
+        outData[i + 1] = 0;
+        outData[i + 2] = 0;
+        outData[i + 3] = 0;
+      }
     }
   }
 
@@ -189,7 +232,8 @@ export interface CompositeLayer {
 export function compositeMultipleLayers(
   layers: CompositeLayer[],
   width: number,
-  height: number
+  height: number,
+  premultiplied: boolean = false
 ): ImageData {
   // Start with transparent black
   const result = new ImageData(width, height);
@@ -213,7 +257,7 @@ export function compositeMultipleLayers(
     }
 
     // Composite this layer onto result
-    const composited = compositeImageData(result, layerData, layer.blendMode, layer.opacity);
+    const composited = compositeImageData(result, layerData, layer.blendMode, layer.opacity, premultiplied);
 
     // Copy back to result
     result.data.set(composited.data);

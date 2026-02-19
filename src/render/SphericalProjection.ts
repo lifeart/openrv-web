@@ -25,6 +25,46 @@ import { clamp } from '../utils/math';
 // Constants
 // ---------------------------------------------------------------------------
 
+/**
+ * Standalone GLSL snippet for equirectangular (360) spherical projection.
+ *
+ * This is a self-contained utility for external consumers who want to integrate
+ * spherical projection into their own shaders without using the full viewer pipeline.
+ * It is NOT used internally by the main viewer.frag.glsl shader (which has its own
+ * inline implementation).
+ *
+ * Uniform names match the main shader convention:
+ *   u_sphericalFov, u_sphericalAspect, u_sphericalYaw, u_sphericalPitch
+ */
+export const SPHERICAL_PROJECTION_GLSL = /* glsl */ `
+  uniform float u_sphericalFov;     // horizontal FOV in radians
+  uniform float u_sphericalAspect;  // canvas width / height
+  uniform float u_sphericalYaw;     // yaw in radians
+  uniform float u_sphericalPitch;   // pitch in radians
+
+  vec2 sphericalProject(vec2 screenUV) {
+    vec2 ndc = vec2(screenUV.x * 2.0 - 1.0, 1.0 - screenUV.y * 2.0);
+    float halfFov = u_sphericalFov * 0.5;
+    float tanHalfFov = tan(halfFov);
+    vec3 viewDir = normalize(vec3(
+      ndc.x * tanHalfFov * u_sphericalAspect,
+      ndc.y * tanHalfFov,
+      -1.0
+    ));
+    float cp = cos(u_sphericalPitch);
+    float sp = sin(u_sphericalPitch);
+    vec3 pitchDir = vec3(viewDir.x, viewDir.y * cp - viewDir.z * sp, viewDir.y * sp + viewDir.z * cp);
+    float cy = cos(u_sphericalYaw);
+    float sy = sin(u_sphericalYaw);
+    vec3 worldDir = vec3(pitchDir.x * cy + pitchDir.z * sy, pitchDir.y, -pitchDir.x * sy + pitchDir.z * cy);
+    float theta = atan(worldDir.z, worldDir.x);
+    float phi = asin(clamp(worldDir.y, -1.0, 1.0));
+    float u = 0.5 + theta / (2.0 * 3.14159265359);
+    float v = 0.5 - phi / 3.14159265359;
+    return vec2(u, v);
+  }
+`;
+
 /** Default horizontal field of view in degrees */
 const DEFAULT_FOV = 90;
 /** Minimum FOV (zoomed in) */
