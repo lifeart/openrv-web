@@ -21,7 +21,15 @@ export interface BrowserColorSpaceInfo {
 }
 
 /**
- * Detect the browser's display color space capabilities
+ * Detect the browser's display color space capabilities.
+ *
+ * Detection strategy (layered, most to least reliable):
+ * 1. matchMedia('(color-gamut: ...)') for display gamut (Chrome 58+, Safari 10+; broken in Firefox for p3/rec2020)
+ * 2. Canvas 2D getContextAttributes().colorSpace for rendering capability (Chrome 104+, Safari 15+)
+ * 3. matchMedia('(dynamic-range: high)') for HDR (Chrome 98+, Safari 13.1+)
+ *
+ * Note: screen.colorSpace does not exist in any browser — the previous check was based on
+ * a misidentification of ImageData.colorSpace / CanvasRenderingContext2DSettings.colorSpace.
  */
 export function detectBrowserColorSpace(): BrowserColorSpaceInfo {
   const info: BrowserColorSpaceInfo = {
@@ -31,12 +39,7 @@ export function detectBrowserColorSpace(): BrowserColorSpaceInfo {
     bitDepth: 8,
   };
 
-  // 1. Check screen.colorSpace (Chrome 100+, Edge 100+)
-  if (typeof screen !== 'undefined' && 'colorSpace' in screen) {
-    info.colorSpace = (screen as { colorSpace: string }).colorSpace || 'srgb';
-  }
-
-  // 2. Check color gamut via matchMedia
+  // 1. Check color gamut via matchMedia (Chrome 58+, Safari 10+; Firefox always reports srgb)
   if (typeof matchMedia !== 'undefined') {
     if (matchMedia('(color-gamut: rec2020)').matches) {
       info.gamut = 'rec2020';
@@ -46,12 +49,12 @@ export function detectBrowserColorSpace(): BrowserColorSpaceInfo {
       info.gamut = 'srgb';
     }
 
-    // 3. Check HDR support
+    // 2. Check HDR support
     if (matchMedia('(dynamic-range: high)').matches) {
       info.hdr = true;
     }
 
-    // 4. Estimate bit depth from gamut
+    // 3. Estimate bit depth from gamut
     if (info.gamut === 'rec2020') {
       info.bitDepth = 12;
     } else if (info.gamut === 'p3') {
@@ -59,11 +62,24 @@ export function detectBrowserColorSpace(): BrowserColorSpaceInfo {
     }
   }
 
+  // 4. Infer colorSpace from gamut detection and canvas capability
+  if (info.gamut === 'p3' || info.gamut === 'rec2020') {
+    // Display supports wide gamut — check if canvas can actually render P3
+    info.colorSpace = canvasSupportsDisplayP3() ? 'display-p3' : 'srgb';
+  } else if (info.gamut === 'srgb') {
+    info.colorSpace = 'srgb';
+  }
+  // If gamut is 'unknown' (e.g. matchMedia unavailable), colorSpace stays 'unknown'
+
   return info;
 }
 
 /**
- * Check if canvas supports display-p3 color space
+ * Check if canvas supports display-p3 color space.
+ *
+ * Uses getContextAttributes() for a strict check — Firefox returns a non-null
+ * context but silently ignores the colorSpace option, so ctx !== null alone
+ * gives false positives there.
  */
 export function canvasSupportsDisplayP3(): boolean {
   try {
@@ -71,7 +87,9 @@ export function canvasSupportsDisplayP3(): boolean {
     testCanvas.width = 1;
     testCanvas.height = 1;
     const ctx = testCanvas.getContext('2d', { colorSpace: 'display-p3' } as CanvasRenderingContext2DSettings);
-    return ctx !== null;
+    if (!ctx) return false;
+    const attrs = ctx.getContextAttributes();
+    return attrs?.colorSpace === 'display-p3';
   } catch {
     return false;
   }

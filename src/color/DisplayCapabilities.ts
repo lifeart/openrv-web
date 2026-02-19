@@ -144,10 +144,15 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   } catch { /* probeCanvas stays null, all canvas tests will be skipped */ }
 
   // --- 2D canvas P3 support ---
+  // Use getContextAttributes() for strict check — Firefox returns a non-null
+  // context but silently ignores the colorSpace option (always sRGB).
   if (probeCanvas) {
     try {
       const ctx = probeCanvas.getContext('2d', { colorSpace: 'display-p3' } as CanvasRenderingContext2DSettings);
-      caps.canvasP3 = ctx !== null;
+      if (ctx) {
+        const attrs = ctx.getContextAttributes();
+        caps.canvasP3 = attrs?.colorSpace === 'display-p3';
+      }
     } catch { /* stays false */ }
   }
 

@@ -890,9 +890,23 @@
         float cy = cos(u_sphericalYaw);
         float sy = sin(u_sphericalYaw);
         vec3 worldDir = vec3(pitchDir.x * cy + pitchDir.z * sy, pitchDir.y, -pitchDir.x * sy + pitchDir.z * cy);
+
         float theta = atan(worldDir.z, worldDir.x);
         float phi = asin(clamp(worldDir.y, -1.0, 1.0));
-        return vec2(0.5 + theta / (2.0 * 3.14159265359), 0.5 - phi / 3.14159265359);
+
+        float u = 0.5 + theta / (2.0 * 3.14159265359);
+        float v = 0.5 - phi / 3.14159265359;
+
+        // Stabilize u near poles: atan2(~0, ~0) is numerically unstable,
+        // causing adjacent fragments to compute wildly different u values
+        // which creates a visible spike artifact from pole to seam.
+        // Near the pole all longitudes converge, so u doesn't matter;
+        // blend it smoothly toward a stable value (0.5).
+        float horizLen = length(vec2(worldDir.x, worldDir.z));
+        float poleStability = smoothstep(0.0, 0.05, horizLen);
+        u = mix(0.5, u, poleStability);
+
+        return vec2(u, v);
       }
 
       void main() {
@@ -1104,13 +1118,17 @@
           }
           blurred /= totalWeight;
 
+          // Midtone mask: use luminance normalized to peak brightness so
+          // HDR values (>1.0) are handled correctly instead of always masking.
           float clarityLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float deviation = abs(clarityLum - 0.5) * 2.0;
+          float peakLum = max(clarityLum, 1.0);
+          float normLum = clarityLum / peakLum;
+          float deviation = abs(normLum - 0.5) * 2.0;
           float midtoneMask = 1.0 - deviation * deviation;
 
           vec3 highFreq = color.rgb - blurred;
           float effectScale = u_clarity * 0.7; // CLARITY_EFFECT_SCALE
-          color.rgb = clamp(color.rgb + highFreq * midtoneMask * effectScale, 0.0, 1.0);
+          color.rgb = max(color.rgb + highFreq * midtoneMask * effectScale, 0.0);
         }
 
         // --- Color grading effects ---
@@ -1277,7 +1295,8 @@
             - texture(u_texture, v_texCoord + vec2(1.0, 0.0) * u_texelSize).rgb
             - texture(u_texture, v_texCoord + vec2(0.0, -1.0) * u_texelSize).rgb
             - texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
-          sharpened = clamp(sharpened, 0.0, 1.0);
+          // Only clamp negative (no upper bound) to preserve HDR range
+          sharpened = max(sharpened, 0.0);
           color.rgb = sharpOriginal + (sharpened - sharpOriginal) * u_sharpenAmount;
         }
 

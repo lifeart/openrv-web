@@ -324,6 +324,11 @@ vec2 sphericalProject(vec2 screenUV) {
   float u = 0.5 + theta / (2.0 * 3.14159265359);
   float v = 0.5 - phi / 3.14159265359;
 
+  // Stabilize u near poles where atan2 is numerically unstable
+  float horizLen = length(vec2(worldDir.x, worldDir.z));
+  float poleStability = smoothstep(0.0, 0.05, horizLen);
+  u = mix(0.5, u, poleStability);
+
   return vec2(u, v);
 }
 `;
@@ -466,8 +471,9 @@ export class SphericalProjection {
     const fovRad = this._fov * DEG2RAD;
     const sensitivity = fovRad / canvasWidth;
 
-    this._yaw = this._dragStartYaw - dx * sensitivity;
-    // Negate dy: dragging mouse downward (positive dy) should look down (negative pitch)
+    // Dragging right (positive dx) should look right (increase yaw)
+    this._yaw = this._dragStartYaw + dx * sensitivity;
+    // Dragging down (positive dy) should look down (decrease pitch)
     this._pitch = clamp(
       this._dragStartPitch - dy * sensitivity,
       -Math.PI / 2,
