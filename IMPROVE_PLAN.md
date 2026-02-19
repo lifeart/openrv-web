@@ -27,7 +27,7 @@ Each section is organized by feature area with priority levels: **HIGH** (bugs/b
 ## 2. Color Management
 
 ### HIGH
-- [ ] **No dedicated color E2E tests** — Color pipeline (LUT application, CDL, OCIO transforms) has excellent unit tests (1411 tests, all passing) but zero E2E coverage verifying the full UI→render path
+- [x] **No dedicated color E2E tests** — FIXED: Added 4 test files with 77 tests: `e2e/lut-loading.spec.ts` (14 tests), `e2e/cdl-workflow.spec.ts` (14 tests), `e2e/color-pipeline.spec.ts` (16 tests), `src/color/ColorPipelineIntegration.test.ts` (33 integration tests)
 
 ### MEDIUM
 - [ ] **OCIO WASM binary not included** — OpenColorIO WASM integration exists in code but the WASM binary is not bundled; feature is effectively disabled at runtime
@@ -195,10 +195,10 @@ Each section is organized by feature area with priority levels: **HIGH** (bugs/b
 
 | Priority | Count | Description |
 |----------|-------|-------------|
-| **HIGH** | 22 | Bugs, broken features, security issues, dead code |
+| **HIGH** | 21 (1 fixed) | Bugs, broken features, security issues, dead code |
 | **MEDIUM** | 25 | Incomplete features, missing integration, gaps |
 | **LOW** | 17 | Nice-to-have improvements, polish, performance |
-| **Total** | 64 | |
+| **Total** | 63 remaining | |
 
 ### Top 5 Most Impactful Items
 1. **Paint clearFrame undo bug** — Data loss: users lose annotations when undoing a clear
