@@ -199,21 +199,19 @@ describe('CropControl', () => {
 
   describe('panel visibility', () => {
     it('CRP-018: showPanel makes panel visible', () => {
-      control.showPanel();
-      // Panel is visible (internal state changed)
-      // We can't easily check DOM without mounting, but method should not throw
+      expect(() => control.showPanel()).not.toThrow();
     });
 
     it('CRP-019: hidePanel hides panel', () => {
       control.showPanel();
-      control.hidePanel();
-      // Should not throw
+      expect(() => control.hidePanel()).not.toThrow();
     });
 
     it('CRP-020: togglePanel toggles visibility', () => {
-      control.togglePanel(); // Show
-      control.togglePanel(); // Hide
-      // Should not throw
+      expect(() => {
+        control.togglePanel(); // Show
+        control.togglePanel(); // Hide
+      }).not.toThrow();
     });
   });
 

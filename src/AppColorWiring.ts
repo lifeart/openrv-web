@@ -64,6 +64,12 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
     sessionBridge.scheduleUpdateScopes();
   });
 
+  // Premult control -> viewer
+  controls.premultControl.on('premultChanged', (mode) => {
+    viewer.setPremultMode(mode);
+    sessionBridge.scheduleUpdateScopes();
+  });
+
   // Color controls adjustments -> viewer with debounced history recording
   controls.colorControls.on('adjustmentsChanged', (adjustments) => {
     viewer.setColorAdjustments(adjustments);

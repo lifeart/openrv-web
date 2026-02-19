@@ -60,8 +60,7 @@ describe('PaintRenderer', () => {
   describe('clear', () => {
     it('RND-007: clears the canvas', () => {
       renderer.resize(100, 100);
-      renderer.clear();
-      // The clear operation should not throw
+      expect(() => renderer.clear()).not.toThrow();
     });
   });
 

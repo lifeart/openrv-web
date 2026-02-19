@@ -429,10 +429,10 @@ describe('FalseColorControl', () => {
     });
 
     it('FALSE-U072: dispose clears preset buttons map', () => {
-      control.render();
-      control.dispose();
-      // No error means cleanup was successful
-      expect(true).toBe(true);
+      expect(() => {
+        control.render();
+        control.dispose();
+      }).not.toThrow();
     });
 
     it('FALSE-U073: dispose unsubscribes from state changes', () => {

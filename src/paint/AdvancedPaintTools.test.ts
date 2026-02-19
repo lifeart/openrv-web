@@ -200,7 +200,7 @@ describe('DodgeTool', () => {
     expect(after[2]).toBeGreaterThan(before[2]);
   });
 
-  it('APT-DODGE-002: does not exceed 1.0', () => {
+  it('APT-DODGE-002: produces finite non-negative values (HDR-compatible, no upper clamp)', () => {
     const buffer = createBuffer(20, 20, 0.95);
 
     // Apply dodge many times
@@ -209,9 +209,14 @@ describe('DodgeTool', () => {
     }
 
     const pixel = getPixel(buffer, 10, 10);
-    expect(pixel[0]).toBeLessThanOrEqual(1.0);
-    expect(pixel[1]).toBeLessThanOrEqual(1.0);
-    expect(pixel[2]).toBeLessThanOrEqual(1.0);
+    // Dodge no longer clamps to 1.0 to support HDR content.
+    // Values will exceed 1.0 but should remain finite and non-negative.
+    expect(pixel[0]).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(pixel[0])).toBe(true);
+    expect(pixel[1]).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(pixel[1])).toBe(true);
+    expect(pixel[2]).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(pixel[2])).toBe(true);
   });
 
   it('APT-DODGE-003: does not modify alpha', () => {

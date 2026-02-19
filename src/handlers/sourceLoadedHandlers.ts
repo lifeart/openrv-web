@@ -101,6 +101,20 @@ export function handleSourceLoaded(
   context.getViewer().initPrerenderBuffer();
   // Update EXR layer selector if this is an EXR file with multiple layers
   updateEXRLayers();
+
+  // Wire EXR window overlay: extract dataWindow/displayWindow from IPImage attributes
+  const exrOverlay = context.getViewer().getEXRWindowOverlay();
+  const fileSource = source?.fileSourceNode;
+  const ipImage = fileSource && typeof (fileSource as any).getIPImage === 'function'
+    ? (fileSource as any).getIPImage()
+    : null;
+  const attrs = ipImage?.metadata?.attributes;
+  if (attrs && attrs.dataWindow && attrs.displayWindow) {
+    exrOverlay.setWindows(attrs.dataWindow, attrs.displayWindow);
+  } else {
+    exrOverlay.clearWindows();
+  }
+
   // Use double-RAF to update scopes after the viewer has rendered the new source.
   // This is more robust than setTimeout(100) as it's frame-aligned.
   requestAnimationFrame(() => {

@@ -51,6 +51,14 @@ export class PaintToolbar {
 
     this.addSeparator();
 
+    // Advanced paint tools (pixel-destructive)
+    this.createToolButton('dodge', 'sun', 'Dodge (lighten)');
+    this.createToolButton('burn', 'moon', 'Burn (darken)');
+    this.createToolButton('clone', 'copy', 'Clone stamp');
+    this.createToolButton('smudge', 'droplet', 'Smudge');
+
+    this.addSeparator();
+
     // Brush settings group: brush type, color, width
     this.brushButton = this.createIconButton('circle', 'Toggle soft/hard brush (B)', () => {
       this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle

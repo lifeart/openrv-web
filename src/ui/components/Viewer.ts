@@ -48,6 +48,7 @@ import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
+import { extractStereoEyes } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import type { SafeAreasOverlay } from './SafeAreasOverlay';
@@ -182,6 +183,10 @@ export class Viewer {
   private paintLogicalHeight = 0;
   private paintOffsetX = 0;
   private paintOffsetY = 0;
+
+  // Spherical (360) projection reference (wired from AppControlRegistry)
+  private _sphericalProjection: import('../../render/SphericalProjection').SphericalProjection | null = null;
+  private _sphericalUniformsCallback: (() => void) | null = null;
 
   // Drop zone
   private dropOverlay: HTMLElement;
@@ -318,6 +323,10 @@ export class Viewer {
   // Theme change listener for runtime theme updates
   private boundOnThemeChange: (() => void) | null = null;
 
+  // Reference image overlay (for A/B reference comparison)
+  private _referenceCanvas: HTMLCanvasElement | null = null;
+  private _referenceCtx: CanvasRenderingContext2D | null = null;
+
   // Display capabilities for wide color gamut / HDR support
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
@@ -381,9 +390,13 @@ export class Viewer {
       getSession: () => this.session,
       getPixelProbe: () => this.overlayManager.getPixelProbe(),
       getInteractionQuality: () => this.interactionQuality,
+      getSphericalProjection: () => this._sphericalProjection,
+      getGLRenderer: () => this.glRendererManager.glRenderer,
+      isGLRendererActive: () => this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive,
       isViewerContentElement: (el: HTMLElement) => this.isViewerContentElement(el),
       scheduleRender: () => this.scheduleRender(),
       updateCanvasPosition: () => this.updateCanvasPosition(),
+      updateSphericalUniforms: () => this._sphericalUniformsCallback?.(),
       renderPaint: () => this.renderPaint(),
     };
   }
@@ -2196,6 +2209,30 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Premult mode
+  setPremultMode(mode: number): void {
+    this.glRendererManager.setPremultMode(mode);
+    this.scheduleRender();
+  }
+
+  // Spherical (360) projection
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this.glRendererManager.setSphericalProjection(state);
+    this.scheduleRender();
+  }
+
+  /**
+   * Wire a SphericalProjection instance so that ViewerInputHandler can
+   * route mouse drag/wheel events to it for 360 navigation.
+   */
+  setSphericalProjectionRef(
+    sp: import('../../render/SphericalProjection').SphericalProjection,
+    updateUniforms: () => void,
+  ): void {
+    this._sphericalProjection = sp;
+    this._sphericalUniformsCallback = updateUniforms;
+  }
+
   // Color inversion methods
   setColorInversion(enabled: boolean): void {
     if (!this.colorPipeline.setColorInversion(enabled)) return;
@@ -3194,6 +3231,20 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  /**
+   * Get the left and right eye ImageData from the current stereo source.
+   * Returns null when stereo mode is off or no image data is available.
+   */
+  getStereoPair(): { left: ImageData; right: ImageData } | null {
+    const stereoState = this.stereoManager.getStereoState();
+    if (stereoState.mode === 'off') return null;
+
+    const imageData = this.getImageData();
+    if (!imageData) return null;
+
+    return extractStereoEyes(imageData, 'side-by-side', stereoState.eyeSwap);
+  }
+
   // Difference matte methods
   setDifferenceMatteState(state: DifferenceMatteState): void {
     this.differenceMatteState = { ...state };
@@ -4088,6 +4139,20 @@ export class Viewer {
   }
 
   /**
+   * Get the current display width in logical pixels.
+   */
+  getDisplayWidth(): number {
+    return this.displayWidth;
+  }
+
+  /**
+   * Get the current display height in logical pixels.
+   */
+  getDisplayHeight(): number {
+    return this.displayHeight;
+  }
+
+  /**
    * Get the safe areas overlay instance
    */
   getSafeAreasOverlay(): SafeAreasOverlay {
@@ -4159,6 +4224,95 @@ export class Viewer {
    */
   getSpotlightOverlay(): SpotlightOverlay {
     return this.overlayManager.getSpotlightOverlay();
+  }
+
+  getBugOverlay(): import('./BugOverlay').BugOverlay {
+    return this.overlayManager.getBugOverlay();
+  }
+
+  getEXRWindowOverlay(): import('./EXRWindowOverlay').EXRWindowOverlay {
+    return this.overlayManager.getEXRWindowOverlay();
+  }
+
+  /**
+   * Set (or clear) a reference image for overlay comparison.
+   *
+   * When imageData is non-null the reference is composited on top of the
+   * live image canvas using the given viewMode and opacity.
+   * Pass `null` to disable the reference overlay.
+   */
+  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number): void {
+    if (!imageData || viewMode === 'off') {
+      // Hide the overlay canvas if present
+      if (this._referenceCanvas) {
+        this._referenceCanvas.style.display = 'none';
+      }
+      this.scheduleRender();
+      return;
+    }
+
+    // Lazy-create the reference overlay canvas
+    if (!this._referenceCanvas) {
+      this._referenceCanvas = document.createElement('canvas');
+      this._referenceCanvas.className = 'reference-overlay';
+      this._referenceCanvas.dataset.testid = 'reference-overlay';
+      this._referenceCanvas.style.cssText =
+        'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:35;';
+      this.canvasContainer.appendChild(this._referenceCanvas);
+      this._referenceCtx = this._referenceCanvas.getContext('2d');
+    }
+
+    // Size the overlay canvas to match the image canvas
+    const cw = this.imageCanvas.width;
+    const ch = this.imageCanvas.height;
+    if (this._referenceCanvas.width !== cw) this._referenceCanvas.width = cw;
+    if (this._referenceCanvas.height !== ch) this._referenceCanvas.height = ch;
+    this._referenceCanvas.style.display = '';
+
+    const ctx = this._referenceCtx;
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, cw, ch);
+
+    // Scale the reference ImageData to the current canvas size via a temp canvas
+    const tmp = document.createElement('canvas');
+    tmp.width = imageData.width;
+    tmp.height = imageData.height;
+    const tmpCtx = tmp.getContext('2d');
+    if (!tmpCtx) return;
+    tmpCtx.putImageData(imageData, 0, 0);
+
+    if (viewMode === 'overlay') {
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+      ctx.globalAlpha = 1;
+    } else if (viewMode === 'split-h') {
+      // Left half shows reference
+      const splitX = Math.round(cw * 0.5);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, splitX, ch);
+      ctx.clip();
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+      ctx.restore();
+    } else if (viewMode === 'split-v') {
+      // Top half shows reference
+      const splitY = Math.round(ch * 0.5);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, cw, splitY);
+      ctx.clip();
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+      ctx.restore();
+    } else if (viewMode === 'side-by-side') {
+      // Draw reference in left half, live in right half (just draw ref)
+      ctx.drawImage(tmp, 0, 0, Math.round(cw / 2), ch);
+    } else if (viewMode === 'toggle') {
+      // Full replacement
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+    }
+
+    this.scheduleRender();
   }
 
   /**

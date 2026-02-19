@@ -361,9 +361,7 @@ describe('WebSocketClient', () => {
 
   describe('identity', () => {
     it('WSC-030: sets user and room identity', () => {
-      client.setIdentity('user-123', 'room-456');
-      // Identity is used internally for heartbeat messages
-      // No direct observable effect, but should not throw
+      expect(() => client.setIdentity('user-123', 'room-456')).not.toThrow();
     });
   });
 

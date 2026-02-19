@@ -25,11 +25,15 @@ function createMockContext() {
     setStereoAlignMode: vi.fn(),
     resetStereoEyeTransforms: vi.fn(),
     resetStereoAlignMode: vi.fn(),
+    getContainer: vi.fn(() => document.createElement('div')),
+    getImageData: vi.fn(() => null),
+    getStereoState: vi.fn(() => ({ mode: 'off' })),
+    getStereoPair: vi.fn(() => null),
   };
 
-  const session = {
+  const session = Object.assign(new EventEmitter(), {
     setCurrentAB: vi.fn(),
-  };
+  });
 
   const sessionBridge = {
     updateHistogram: vi.fn(),
@@ -98,6 +102,11 @@ function createMockContext() {
     stereoEyeTransformControl,
     stereoAlignControl,
     presentationMode,
+    convergenceMeasure: Object.assign(new EventEmitter(), {
+      isEnabled: vi.fn(() => false),
+      setCursorPosition: vi.fn(),
+      measureAtCursor: vi.fn(),
+    }),
     updateStereoEyeControlsVisibility: vi.fn(),
   };
 

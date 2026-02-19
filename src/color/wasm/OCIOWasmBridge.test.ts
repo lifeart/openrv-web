@@ -375,7 +375,7 @@ colorspaces:
     it('BRG-CLEAN-002: double dispose is safe', async () => {
       await bridge.init();
       bridge.dispose();
-      bridge.dispose(); // should not throw
+      expect(() => bridge.dispose()).not.toThrow();
     });
   });
 });

@@ -33,6 +33,7 @@ class StubOCIOControl extends EventEmitter {
 class StubDisplayProfileControl extends EventEmitter {}
 class StubGamutMappingControl extends EventEmitter {}
 class StubLUTPipelinePanel extends EventEmitter {}
+class StubPremultControl extends EventEmitter {}
 
 function createMockViewer() {
   return {
@@ -45,6 +46,7 @@ function createMockViewer() {
     setOCIOBakedLUT: vi.fn(),
     setDisplayColorState: vi.fn(),
     setGamutMappingState: vi.fn(),
+    setPremultMode: vi.fn(),
     syncLUTPipeline: vi.fn(),
   };
 }
@@ -70,6 +72,7 @@ function createContext() {
   const displayProfileControl = new StubDisplayProfileControl();
   const gamutMappingControl = new StubGamutMappingControl();
   const lutPipelinePanel = new StubLUTPipelinePanel();
+  const premultControl = new StubPremultControl();
   const viewer = createMockViewer();
   const sessionBridge = createMockSessionBridge();
   const persistenceManager = createMockPersistenceManager();
@@ -87,6 +90,7 @@ function createContext() {
     displayProfileControl,
     gamutMappingControl,
     lutPipelinePanel,
+    premultControl,
     gamutDiagram,
   };
 

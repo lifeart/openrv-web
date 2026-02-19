@@ -308,15 +308,14 @@ describe('NetworkSyncManager', () => {
     it('NSM-021: sends sync message on playback change', () => {
       manager.simulateRoomCreated();
 
-      // Should not throw and should be silent when no real WS
-      manager.sendPlaybackSync({
+      expect(() => manager.sendPlaybackSync({
         isPlaying: true,
         currentFrame: 10,
         playbackSpeed: 1,
         playDirection: 1,
         loopMode: 'loop',
         timestamp: Date.now(),
-      });
+      })).not.toThrow();
     });
 
     it('NSM-024: ignores local changes from sync messages', () => {
@@ -326,14 +325,14 @@ describe('NetworkSyncManager', () => {
       sm.beginApplyRemote();
 
       // This should be suppressed since we're applying remote state
-      manager.sendPlaybackSync({
+      expect(() => manager.sendPlaybackSync({
         isPlaying: true,
         currentFrame: 10,
         playbackSpeed: 1,
         playDirection: 1,
         loopMode: 'loop',
         timestamp: Date.now(),
-      });
+      })).not.toThrow();
 
       sm.endApplyRemote();
     });
@@ -342,24 +341,21 @@ describe('NetworkSyncManager', () => {
   describe('frame sync', () => {
     it('NSM-025: sends frame sync message', () => {
       manager.simulateRoomCreated();
-      manager.sendFrameSync(42);
-      // Should not throw
+      expect(() => manager.sendFrameSync(42)).not.toThrow();
     });
   });
 
   describe('view sync', () => {
     it('NSM-032: sends view sync message', () => {
       manager.simulateRoomCreated();
-      manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' });
-      // Should not throw
+      expect(() => manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' })).not.toThrow();
     });
   });
 
   describe('state sync request', () => {
     it('NSM-042: requests state sync', () => {
       manager.simulateRoomCreated();
-      manager.requestStateSync();
-      // Should not throw
+      expect(() => manager.requestStateSync()).not.toThrow();
     });
 
     it('NSM-042b: requestMediaSync returns transfer ID when connected', () => {
@@ -384,7 +380,7 @@ describe('NetworkSyncManager', () => {
 
     it('NSM-051: dispose is idempotent', () => {
       manager.dispose();
-      manager.dispose(); // Should not throw
+      expect(() => manager.dispose()).not.toThrow();
     });
   });
 
@@ -429,15 +425,14 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-083: sendPlaybackSync is suppressed when not connected', () => {
-      // Not connected, should not throw
-      manager.sendPlaybackSync({
+      expect(() => manager.sendPlaybackSync({
         isPlaying: true,
         currentFrame: 10,
         playbackSpeed: 1,
         playDirection: 1,
         loopMode: 'loop',
         timestamp: Date.now(),
-      });
+      })).not.toThrow();
     });
 
     it('NSM-084: sendFrameSync is suppressed when playback sync disabled', () => {
@@ -450,8 +445,7 @@ describe('NetworkSyncManager', () => {
         cursor: true,
       });
 
-      // Should not throw, but should be suppressed
-      manager.sendFrameSync(42);
+      expect(() => manager.sendFrameSync(42)).not.toThrow();
     });
 
     it('NSM-085: sendViewSync is suppressed when view sync disabled', () => {
@@ -464,13 +458,11 @@ describe('NetworkSyncManager', () => {
         cursor: true,
       });
 
-      // Should not throw, but should be suppressed
-      manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' });
+      expect(() => manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' })).not.toThrow();
     });
 
     it('NSM-086: requestStateSync is safe when not connected', () => {
-      // Should not throw
-      manager.requestStateSync();
+      expect(() => manager.requestStateSync()).not.toThrow();
     });
 
     it('NSM-087: createRoom from error state is allowed', () => {

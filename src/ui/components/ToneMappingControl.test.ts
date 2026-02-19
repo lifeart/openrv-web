@@ -745,10 +745,10 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U122: dispose clears operator buttons map', () => {
-      control.render();
-      control.dispose();
-      // No error means cleanup was successful
-      expect(true).toBe(true);
+      expect(() => {
+        control.render();
+        control.dispose();
+      }).not.toThrow();
     });
   });
 

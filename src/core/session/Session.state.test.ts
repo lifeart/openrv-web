@@ -283,12 +283,13 @@ describe('Session', () => {
   });
 
   describe('in/out points', () => {
-    it('SES-018: setInPoint() updates inPoint', () => {
+    it('SES-018: setInPoint() with same value does not emit', () => {
       const listener = vi.fn();
       session.on('inOutChanged', listener);
 
       session.setInPoint(1);
       // inPoint already 1, should not emit
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('SES-020: resetInOutPoints() resets to full duration', () => {

@@ -1270,6 +1270,14 @@ export class ViewerGLRenderer {
     this._glRenderer?.setColorInversion(inv);
   }
 
+  setPremultMode(mode: number): void {
+    this._glRenderer?.setPremultMode(mode);
+  }
+
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this._glRenderer?.setSphericalProjection(state);
+  }
+
   setToneMappingState(state: ToneMappingState): void {
     this._glRenderer?.setToneMappingState(state);
   }

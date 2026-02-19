@@ -624,6 +624,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
       TEXTURE_MIN_FILTER: 0x2801,
       TEXTURE_MAG_FILTER: 0x2800,
       CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
       LINEAR: 0x2601,
       RGBA8: 0x8058,
       RGBA: 0x1908,
@@ -820,6 +821,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
         TEXTURE_MIN_FILTER: 0x2801,
         TEXTURE_MAG_FILTER: 0x2800,
         CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
         LINEAR: 0x2601,
         RGBA8: 0x8058,
         RGBA: 0x1908,
@@ -1020,6 +1022,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
       TEXTURE_MIN_FILTER: 0x2801,
       TEXTURE_MAG_FILTER: 0x2800,
       CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
       LINEAR: 0x2601,
       RGBA8: 0x8058,
       RGBA: 0x1908,
@@ -1514,6 +1517,7 @@ describe('Renderer HDR Headroom Uniform', () => {
       TEXTURE_MIN_FILTER: 0x2801,
       TEXTURE_MAG_FILTER: 0x2800,
       CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
       LINEAR: 0x2601,
       RGBA8: 0x8058,
       RGBA: 0x1908,
@@ -2840,5 +2844,81 @@ describe('Renderer Dither + Quantize Visualization', () => {
 
     renderer.setQuantizeBits(-5);
     expect(renderer.getQuantizeBits()).toBe(0);
+  });
+});
+
+// ==========================================================================
+// Spherical 360 texture wrap mode
+// ==========================================================================
+
+describe('Renderer spherical 360 texture wrap', () => {
+  function createWrapTrackingGL() {
+    const texParamCalls: Array<{ target: number; pname: number; param: number }> = [];
+    const gl = createMockGL();
+
+    (gl.texParameteri as ReturnType<typeof vi.fn>).mockImplementation(
+      (target: number, pname: number, param: number) => {
+        texParamCalls.push({ target, pname, param });
+      }
+    );
+
+    return { gl, texParamCalls };
+  }
+
+  function initWithWrapTracking(renderer: Renderer) {
+    const tracking = createWrapTrackingGL();
+    const canvas = document.createElement('canvas');
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return tracking.gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+    return tracking;
+  }
+
+  it('REN-SPHERE-001: renderImage sets REPEAT wrap on WRAP_S when spherical is enabled', () => {
+    const renderer = new Renderer();
+    const { gl, texParamCalls } = initWithWrapTracking(renderer);
+    renderer.resize(100, 100);
+
+    renderer.setSphericalProjection({ enabled: true, fov: 1.57, aspect: 1, yaw: 0, pitch: 0 });
+
+    texParamCalls.length = 0; // clear init calls
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    // Should have set REPEAT on WRAP_S during render
+    const repeatCalls = texParamCalls.filter(
+      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT
+    );
+    expect(repeatCalls.length).toBeGreaterThanOrEqual(1);
+
+    // Should have restored CLAMP_TO_EDGE on WRAP_S after render
+    const restoreCalls = texParamCalls.filter(
+      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.CLAMP_TO_EDGE
+    );
+    // The restore call comes after the REPEAT call
+    const lastRepeatIdx = texParamCalls.lastIndexOf(repeatCalls[repeatCalls.length - 1]!);
+    const lastRestoreIdx = texParamCalls.lastIndexOf(restoreCalls[restoreCalls.length - 1]!);
+    expect(lastRestoreIdx).toBeGreaterThan(lastRepeatIdx);
+  });
+
+  it('REN-SPHERE-002: renderImage does NOT set REPEAT when spherical is disabled', () => {
+    const renderer = new Renderer();
+    const { gl, texParamCalls } = initWithWrapTracking(renderer);
+    renderer.resize(100, 100);
+
+    // Spherical is disabled by default
+    texParamCalls.length = 0;
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    const repeatCalls = texParamCalls.filter(
+      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT
+    );
+    expect(repeatCalls.length).toBe(0);
   });
 });

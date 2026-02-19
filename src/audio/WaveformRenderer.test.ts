@@ -55,8 +55,7 @@ describe('WaveformRenderer', () => {
         canvas.height = 40;
         const ctx = canvas.getContext('2d')!;
 
-        // Should not throw
-        renderer.render(ctx, 0, 0, 100, 40, 0, 10);
+        expect(() => renderer.render(ctx, 0, 0, 100, 40, 0, 10)).not.toThrow();
       });
     });
 
@@ -437,8 +436,7 @@ describe('WaveformRenderer', () => {
         sampleRate: 44100,
       };
 
-      // Should not throw
-      renderWaveform(ctx, emptyData);
+      expect(() => renderWaveform(ctx, emptyData)).not.toThrow();
     });
 
     it('RND-007: handles zero duration', () => {
@@ -448,8 +446,7 @@ describe('WaveformRenderer', () => {
         sampleRate: 44100,
       };
 
-      // Should not throw
-      renderWaveform(ctx, zeroData);
+      expect(() => renderWaveform(ctx, zeroData)).not.toThrow();
     });
 
     it('RND-008: respects custom color', () => {
@@ -469,10 +466,7 @@ describe('WaveformRenderer', () => {
     });
 
     it('RND-010: handles negative time range', () => {
-      // End time before start time
-      renderWaveform(ctx, mockData, {}, 5, 2);
-
-      // Should handle gracefully (return early)
+      expect(() => renderWaveform(ctx, mockData, {}, 5, 2)).not.toThrow();
     });
 
     it('RND-011: uses data.duration if endTime is not provided', () => {
@@ -523,25 +517,19 @@ describe('WaveformRenderer', () => {
         sampleRate: 44100,
       };
 
-      // Should not throw
-      renderWaveformRegion(ctx, emptyData, 0, 0, 100, 40, 0, 10);
+      expect(() => renderWaveformRegion(ctx, emptyData, 0, 0, 100, 40, 0, 10)).not.toThrow();
     });
 
     it('RGN-003: handles zero width', () => {
-      // Should return early without throwing
-      renderWaveformRegion(ctx, mockData, 0, 0, 0, 40, 0, 10);
+      expect(() => renderWaveformRegion(ctx, mockData, 0, 0, 0, 40, 0, 10)).not.toThrow();
     });
 
     it('RGN-004: handles zero height', () => {
-      // Should return early without throwing
-      renderWaveformRegion(ctx, mockData, 0, 0, 100, 0, 0, 10);
+      expect(() => renderWaveformRegion(ctx, mockData, 0, 0, 100, 0, 0, 10)).not.toThrow();
     });
 
     it('RGN-005: handles negative time range', () => {
-      // End time before start time
-      renderWaveformRegion(ctx, mockData, 0, 0, 100, 40, 10, 5);
-
-      // Should handle gracefully
+      expect(() => renderWaveformRegion(ctx, mockData, 0, 0, 100, 40, 10, 5)).not.toThrow();
     });
 
     it('RGN-006: uses custom color', () => {

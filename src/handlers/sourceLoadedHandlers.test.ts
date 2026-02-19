@@ -31,7 +31,8 @@ function createMockContext(overrides: {
   const toneMappingControl = { setState: vi.fn() };
   const colorControls = { setAdjustments: vi.fn() };
   const persistenceManager = { setGTOStore: vi.fn(), syncGTOStore: vi.fn() };
-  const viewer = { initPrerenderBuffer: vi.fn(), refresh: vi.fn(), getGLRenderer: vi.fn(() => null), isDisplayHDRCapable: vi.fn(() => false) };
+  const exrWindowOverlay = { setWindows: vi.fn(), clearWindows: vi.fn() };
+  const viewer = { initPrerenderBuffer: vi.fn(), refresh: vi.fn(), getGLRenderer: vi.fn(() => null), isDisplayHDRCapable: vi.fn(() => false), getEXRWindowOverlay: vi.fn(() => exrWindowOverlay) };
   const stackControl = { setAvailableSources: vi.fn() };
   const channelSelect = { clearEXRLayers: vi.fn(), setEXRLayers: vi.fn() };
   const infoPanel = { update: vi.fn() };

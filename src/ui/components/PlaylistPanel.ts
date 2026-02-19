@@ -13,6 +13,8 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { PlaylistManager, PlaylistClip } from '../../core/session/PlaylistManager';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { downloadEDL, type EDLClip } from '../../export/EDLWriter';
+import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
 export interface PlaylistPanelEvents extends EventMap {
   /** Emitted when user wants to add current source as clip */
@@ -40,6 +42,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private draggedClipId: string | null = null;
   private exclusivePanel: ExclusivePanel | null = null;
   private activeClipId: string | null = null;
+  private fps = 24;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -261,7 +264,25 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       exportBtn.style.background = 'transparent';
     });
     applyA11yFocus(exportBtn);
-    footer.appendChild(exportBtn);
+
+    const otioBtn = document.createElement('button');
+    otioBtn.innerHTML = `${getIconSvg('download', 'sm')} OTIO`;
+    otioBtn.title = 'Export as OTIO';
+    otioBtn.style.cssText = exportBtn.style.cssText;
+    otioBtn.addEventListener('click', () => this.exportOTIO());
+    otioBtn.addEventListener('mouseenter', () => {
+      otioBtn.style.background = 'var(--bg-hover)';
+    });
+    otioBtn.addEventListener('mouseleave', () => {
+      otioBtn.style.background = 'transparent';
+    });
+    applyA11yFocus(otioBtn);
+
+    const btnGroup = document.createElement('div');
+    btnGroup.style.cssText = 'display: flex; gap: 4px;';
+    btnGroup.appendChild(exportBtn);
+    btnGroup.appendChild(otioBtn);
+    footer.appendChild(btnGroup);
 
     this.container.appendChild(footer);
 
@@ -297,7 +318,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private updateFooterInfo(): void {
     const clips = this.playlistManager.getClips();
     const totalDuration = this.playlistManager.getTotalDuration();
-    const durationStr = this.formatDuration(totalDuration);
+    const durationStr = this.formatDuration(totalDuration, this.fps);
     this.footerInfo.textContent = `${clips.length} clip${clips.length !== 1 ? 's' : ''} \u2022 ${durationStr}`;
   }
 
@@ -573,21 +594,53 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   }
 
   private exportEDL(): void {
-    const edl = this.playlistManager.toEDL('OpenRV Playlist');
-    const blob = new Blob([edl], { type: 'text/plain' });
+    const clips = this.playlistManager.getClips();
+    const edlClips: EDLClip[] = clips.map((clip) => ({
+      sourceName: clip.sourceName,
+      sourceIn: clip.inPoint,
+      sourceOut: clip.outPoint + 1, // EDL uses exclusive out point
+      recordIn: clip.globalStartFrame,
+      recordOut: clip.globalStartFrame + clip.duration,
+    }));
+    downloadEDL(edlClips, 'playlist.edl', {
+      title: 'OpenRV Playlist',
+      fps: this.fps,
+    });
+  }
+
+  private exportOTIO(): void {
+    const clips = this.playlistManager.getClips();
+    const otioClips: OTIOExportClip[] = clips.map((clip) => ({
+      sourceName: clip.sourceName,
+      sourceUrl: '',
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+      globalStartFrame: clip.globalStartFrame,
+      duration: clip.duration,
+      fps: this.fps,
+    }));
+    const json = exportOTIO(otioClips, { name: 'OpenRV Playlist', fps: this.fps });
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'playlist.edl';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'playlist.otio';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   // Public methods
 
-  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  /** Set the frames-per-second used for EDL/OTIO export timecodes */
+  setFps(fps: number): void {
+    this.fps = fps > 0 ? fps : 24;
+  }
+
   setExclusiveWith(panel: ExclusivePanel): void {
     this.exclusivePanel = panel;
   }

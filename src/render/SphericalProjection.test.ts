@@ -468,4 +468,111 @@ describe('SphericalProjection', () => {
       expect(duWrapped).toBeCloseTo(0.25, 1);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Orientation correctness tests (upside-down bug regression)
+  // ---------------------------------------------------------------------------
+
+  describe('orientation correctness', () => {
+    it('SP-ORI-001: pitch=0 at screen center should map to the equator (v=0.5)', () => {
+      sp.enable();
+      sp.setYawPitch(0, 0);
+      sp.setFOV(90);
+      const uv = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+      // The equator of the equirectangular image is at v=0.5
+      expect(uv.v).toBeCloseTo(0.5, 2);
+    });
+
+    it('SP-ORI-002: top of screen should map to lower v (upper part of equirect image)', () => {
+      sp.enable();
+      sp.setYawPitch(0, 0);
+      sp.setFOV(90);
+      const uvTop = sp.screenToEquirectUV(0.5, 0.0, 800, 600);
+      const uvCenter = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+      // Top of screen (screenV=0) should look upward, mapping to lower v (north/top of image)
+      expect(uvTop.v).toBeLessThan(uvCenter.v);
+    });
+
+    it('SP-ORI-003: bottom of screen should map to higher v (lower part of equirect image)', () => {
+      sp.enable();
+      sp.setYawPitch(0, 0);
+      sp.setFOV(90);
+      const uvBottom = sp.screenToEquirectUV(0.5, 1.0, 800, 600);
+      const uvCenter = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+      // Bottom of screen (screenV=1) should look downward, mapping to higher v (south/bottom)
+      expect(uvBottom.v).toBeGreaterThan(uvCenter.v);
+    });
+
+    it('SP-ORI-004: positive pitch (looking up) should decrease v at screen center', () => {
+      sp.enable();
+      sp.setFOV(90);
+
+      sp.setYawPitch(0, 0);
+      const uvNeutral = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+
+      sp.setYawPitch(0, 45);
+      const uvLookingUp = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+
+      // Looking up -> sampling from the sky/north pole -> lower v
+      expect(uvLookingUp.v).toBeLessThan(uvNeutral.v);
+    });
+
+    it('SP-ORI-005: negative pitch (looking down) should increase v at screen center', () => {
+      sp.enable();
+      sp.setFOV(90);
+
+      sp.setYawPitch(0, 0);
+      const uvNeutral = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+
+      sp.setYawPitch(0, -45);
+      const uvLookingDown = sp.screenToEquirectUV(0.5, 0.5, 800, 600);
+
+      // Looking down -> sampling from the ground/south pole -> higher v
+      expect(uvLookingDown.v).toBeGreaterThan(uvNeutral.v);
+    });
+
+    it('SP-ORI-006: drag mouse downward should look down (negative pitch)', () => {
+      sp.enable();
+      sp.setYawPitch(0, 0);
+
+      // Drag mouse downward (positive dy in screen coordinates)
+      sp.beginDrag(400, 300);
+      sp.drag(400, 400, 800, 600); // moved 100px down
+      sp.endDrag();
+
+      // After dragging down, pitch should be negative (looking down)
+      expect(sp.pitch).toBeLessThan(0);
+    });
+
+    it('SP-ORI-007: drag mouse upward should look up (positive pitch)', () => {
+      sp.enable();
+      sp.setYawPitch(0, 0);
+
+      // Drag mouse upward (negative dy in screen coordinates)
+      sp.beginDrag(400, 300);
+      sp.drag(400, 200, 800, 600); // moved 100px up
+      sp.endDrag();
+
+      // After dragging up, pitch should be positive (looking up)
+      expect(sp.pitch).toBeGreaterThan(0);
+    });
+
+    it('SP-ORI-008: vertical screen gradient is monotonic (no flip)', () => {
+      sp.enable();
+      sp.setYawPitch(0, 0);
+      sp.setFOV(90);
+
+      // Sample v values from top to bottom of screen
+      const vValues: number[] = [];
+      for (let screenV = 0; screenV <= 1; screenV += 0.1) {
+        const uv = sp.screenToEquirectUV(0.5, screenV, 800, 600);
+        vValues.push(uv.v);
+      }
+
+      // v values should be monotonically increasing (top of screen -> small v, bottom -> large v)
+      for (let i = 1; i < vValues.length; i++) {
+        expect(vValues[i]!).toBeGreaterThan(vValues[i - 1]!);
+      }
+    });
+  });
 });

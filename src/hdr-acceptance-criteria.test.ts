@@ -406,17 +406,9 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
   // =====================================================================
   // Phase 1 Overall Acceptance
   // =====================================================================
-  describe('Phase 1 Overall', () => {
-    it('AC-P1-overall-a: TypeScript compiles with no new errors', () => {
-      // This test passing means TS compilation succeeded
-      expect(true).toBe(true);
-    });
-
-    it('AC-P1-overall-b: all existing tests pass (verified by test runner)', () => {
-      // This is verified by the test runner - all 7497 tests pass
-      expect(true).toBe(true);
-    });
-  });
+  // Phase 1 Overall acceptance is verified structurally:
+  // - AC-P1-overall-a: TypeScript compilation is verified by the build step (tsc --noEmit).
+  // - AC-P1-overall-b: All existing tests passing is verified by the test runner itself.
 });
 
 // ============================================================================

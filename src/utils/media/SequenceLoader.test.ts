@@ -379,8 +379,8 @@ describe('SequenceLoader', () => {
       ];
 
       // Should not throw when window extends beyond array
-      await preloadFrames(frames, 0, 10);
-      await preloadFrames(frames, 1, 10);
+      await expect(preloadFrames(frames, 0, 10)).resolves.not.toThrow();
+      await expect(preloadFrames(frames, 1, 10)).resolves.not.toThrow();
     });
   });
 

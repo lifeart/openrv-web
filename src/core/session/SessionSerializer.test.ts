@@ -231,7 +231,7 @@ describe('SessionSerializer', () => {
       const oldState = SessionSerializer.createEmpty();
       (oldState as any).version = 0; // Older than current
 
-      await SessionSerializer.fromJSON(oldState, components);
+      await expect(SessionSerializer.fromJSON(oldState, components)).resolves.not.toThrow();
     });
   });
 

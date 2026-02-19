@@ -236,9 +236,8 @@ describe('AutoSaveManager', () => {
     it('AUTOSAVE-U024: dispose can be called multiple times', async () => {
       manager = new AutoSaveManager();
 
-      // Should not throw
       await manager.dispose();
-      await manager.dispose();
+      await expect(manager.dispose()).resolves.not.toThrow();
     });
 
     it('AUTOSAVE-U025: dispose clears pending state', async () => {

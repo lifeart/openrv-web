@@ -287,8 +287,8 @@ uniform float u_pitch;
 vec2 sphericalProject(vec2 screenUV) {
   if (u_sphericalEnabled == 0) return screenUV;
 
-  // Map screen UV from [0,1] to [-1,1] NDC
-  vec2 ndc = screenUV * 2.0 - 1.0;
+  // Map screen UV to NDC; flip y because screenUV.y=0 is top but NDC y=+1 is top
+  vec2 ndc = vec2(screenUV.x * 2.0 - 1.0, 1.0 - screenUV.y * 2.0);
 
   // Compute ray direction in view space
   float halfFov = u_fov * 0.5;
@@ -467,8 +467,9 @@ export class SphericalProjection {
     const sensitivity = fovRad / canvasWidth;
 
     this._yaw = this._dragStartYaw - dx * sensitivity;
+    // Negate dy: dragging mouse downward (positive dy) should look down (negative pitch)
     this._pitch = clamp(
-      this._dragStartPitch + dy * sensitivity,
+      this._dragStartPitch - dy * sensitivity,
       -Math.PI / 2,
       Math.PI / 2,
     );
@@ -547,8 +548,10 @@ export class SphericalProjection {
     const tanHalfFov = Math.tan(fovRad / 2);
 
     // NDC from screen UV
+    // screenV=0 is at the top of the screen, but NDC y=+1 is at the top,
+    // so we must flip y to avoid an upside-down projection.
     const ndcX = screenU * 2 - 1;
-    const ndcY = screenV * 2 - 1;
+    const ndcY = 1 - screenV * 2;
 
     // View-space ray direction
     let dir: Vec3 = {

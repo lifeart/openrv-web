@@ -58,6 +58,7 @@ export const DIRTY_OUT_OF_RANGE = 'outOfRange';
 export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
 export const DIRTY_PREMULT = 'premult';
 export const DIRTY_DITHER = 'dither';
+export const DIRTY_SPHERICAL = 'spherical';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -73,6 +74,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_CHANNEL_SWIZZLE,
   DIRTY_PREMULT,
   DIRTY_DITHER,
+  DIRTY_SPHERICAL,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -340,6 +342,13 @@ export interface InternalShaderState {
   // Out-of-range visualization mode
   outOfRange: number;  // 0=off, 1=clamp-to-black, 2=highlight
 
+  // Spherical (equirectangular 360) projection
+  sphericalEnabled: boolean;
+  sphericalFov: number;     // horizontal FOV in radians
+  sphericalAspect: number;  // canvas width / height
+  sphericalYaw: number;     // yaw in radians
+  sphericalPitch: number;   // pitch in radians
+
   // Channel swizzle (RVChannelMap remapping)
   channelSwizzle: [number, number, number, number]; // default [0,1,2,3] = identity
 
@@ -449,6 +458,11 @@ function createDefaultInternalState(): InternalShaderState {
     inlineLUTData: null,
     inlineLUTDirty: false,
     outOfRange: 0,
+    sphericalEnabled: false,
+    sphericalFov: Math.PI / 2,
+    sphericalAspect: 1,
+    sphericalYaw: 0,
+    sphericalPitch: 0,
     channelSwizzle: [0, 1, 2, 3],
     premultMode: 0,
     ditherMode: 0,
@@ -900,6 +914,19 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.perspectiveInvH = pState.invH;
     this.state.perspectiveQuality = pState.quality;
     this.dirtyFlags.add(DIRTY_PERSPECTIVE);
+  }
+
+  setSphericalProjection(sState: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this.state.sphericalEnabled = sState.enabled;
+    this.state.sphericalFov = sState.fov;
+    this.state.sphericalAspect = sState.aspect;
+    this.state.sphericalYaw = sState.yaw;
+    this.state.sphericalPitch = sState.pitch;
+    this.dirtyFlags.add(DIRTY_SPHERICAL);
+  }
+
+  isSphericalEnabled(): boolean {
+    return this.state.sphericalEnabled;
   }
 
   setLinearize(lzState: LinearizeState): void {
@@ -1632,6 +1659,17 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         if (s.perspectiveQuality === 1) {
           shader.setUniform('u_texelSize', s.texelSize);
         }
+      }
+    }
+
+    // Spherical (equirectangular 360) projection
+    if (dirty.has(DIRTY_SPHERICAL)) {
+      shader.setUniformInt('u_sphericalEnabled', s.sphericalEnabled ? 1 : 0);
+      if (s.sphericalEnabled) {
+        shader.setUniform('u_sphericalFov', s.sphericalFov);
+        shader.setUniform('u_sphericalAspect', s.sphericalAspect);
+        shader.setUniform('u_sphericalYaw', s.sphericalYaw);
+        shader.setUniform('u_sphericalPitch', s.sphericalPitch);
       }
     }
 

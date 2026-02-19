@@ -91,7 +91,7 @@ describe('PaintEngine', () => {
     it('PE-L57a: PaintTool type should not include unused tool types', () => {
       // Verify that the valid paint tools are exactly the implemented set
       // 'select' was removed as it had no toolbar button, keyboard shortcut, or pointer handler
-      const validTools: string[] = ['pen', 'text', 'eraser', 'none', 'rectangle', 'ellipse', 'line', 'arrow'];
+      const validTools: string[] = ['pen', 'text', 'eraser', 'none', 'rectangle', 'ellipse', 'line', 'arrow', 'dodge', 'burn', 'clone', 'smudge'];
       for (const tool of validTools) {
         engine.tool = tool as import('./PaintEngine').PaintTool;
         expect(engine.tool).toBe(tool);
@@ -789,6 +789,71 @@ describe('PaintEngine', () => {
       const stroke = engine.endStroke();
       const numericPart = stroke!.id.includes('-') ? Number(stroke!.id.split('-').pop()) : Number(stroke!.id);
       expect(numericPart).toBeGreaterThanOrEqual(11);
+    });
+  });
+
+  describe('advanced paint tools', () => {
+    it('PAINT-040: getAdvancedTool returns tool instance for dodge', () => {
+      const tool = engine.getAdvancedTool('dodge');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('dodge');
+    });
+
+    it('PAINT-041: getAdvancedTool returns tool instance for burn', () => {
+      const tool = engine.getAdvancedTool('burn');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('burn');
+    });
+
+    it('PAINT-042: getAdvancedTool returns tool instance for clone', () => {
+      const tool = engine.getAdvancedTool('clone');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('clone');
+    });
+
+    it('PAINT-043: getAdvancedTool returns tool instance for smudge', () => {
+      const tool = engine.getAdvancedTool('smudge');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('smudge');
+    });
+
+    it('PAINT-044: getAdvancedTool returns undefined for non-advanced tools', () => {
+      expect(engine.getAdvancedTool('pen')).toBeUndefined();
+      expect(engine.getAdvancedTool('eraser')).toBeUndefined();
+      expect(engine.getAdvancedTool('text')).toBeUndefined();
+      expect(engine.getAdvancedTool('none')).toBeUndefined();
+      expect(engine.getAdvancedTool('rectangle')).toBeUndefined();
+    });
+
+    it('PAINT-045: isAdvancedTool returns true for advanced tools', () => {
+      expect(engine.isAdvancedTool('dodge')).toBe(true);
+      expect(engine.isAdvancedTool('burn')).toBe(true);
+      expect(engine.isAdvancedTool('clone')).toBe(true);
+      expect(engine.isAdvancedTool('smudge')).toBe(true);
+    });
+
+    it('PAINT-046: isAdvancedTool returns false for non-advanced tools', () => {
+      expect(engine.isAdvancedTool('pen')).toBe(false);
+      expect(engine.isAdvancedTool('eraser')).toBe(false);
+      expect(engine.isAdvancedTool('text')).toBe(false);
+      expect(engine.isAdvancedTool('none')).toBe(false);
+    });
+
+    it('PAINT-047: advanced tools are consistent instances (same instance returned each time)', () => {
+      const tool1 = engine.getAdvancedTool('dodge');
+      const tool2 = engine.getAdvancedTool('dodge');
+      expect(tool1).toBe(tool2);
+    });
+
+    it('PAINT-048: beginStroke correctly rejects advanced tool names', () => {
+      // Advanced tools use PaintToolInterface, not PaintEngine.beginStroke
+      engine.tool = 'dodge';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      expect(engine.getCurrentStroke()).toBeNull();
+
+      engine.tool = 'burn';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      expect(engine.getCurrentStroke()).toBeNull();
     });
   });
 });

@@ -257,7 +257,7 @@ describe('OCIOWasmModule', () => {
     it('WASM-CLEAN-002: double dispose is safe', async () => {
       await mod.init();
       mod.dispose();
-      mod.dispose(); // should not throw
+      expect(() => mod.dispose()).not.toThrow();
     });
   });
 

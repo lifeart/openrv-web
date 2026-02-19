@@ -22,6 +22,11 @@ import {
   type AnnotationVersion,
   type AnnotationEye,
 } from './types';
+import {
+  createAdvancedTool,
+  type PaintToolInterface,
+  type AdvancedToolName,
+} from './AdvancedPaintTools';
 
 export interface PaintEngineEvents extends EventMap {
   strokeAdded: Annotation;
@@ -32,7 +37,7 @@ export interface PaintEngineEvents extends EventMap {
   brushChanged: BrushType;
 }
 
-export type PaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
+export type PaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'dodge' | 'burn' | 'clone' | 'smudge';
 
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private state: PaintState;
@@ -50,6 +55,9 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private _annotationEye: AnnotationEye = 'both';
   private _idPrefix: string = '';
 
+  /** Advanced (pixel-destructive) tool instances keyed by tool name */
+  private advancedTools: Map<string, PaintToolInterface> = new Map();
+
   constructor() {
     super();
     this.state = {
@@ -58,6 +66,27 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       annotations: new Map(),
       effects: { ...DEFAULT_PAINT_EFFECTS },
     };
+
+    // Instantiate the four advanced paint tools
+    const advancedToolNames: AdvancedToolName[] = ['dodge', 'burn', 'clone', 'smudge'];
+    for (const name of advancedToolNames) {
+      this.advancedTools.set(name, createAdvancedTool(name));
+    }
+  }
+
+  /**
+   * Get an advanced paint tool instance by name.
+   * Returns undefined if the name does not correspond to an advanced tool.
+   */
+  getAdvancedTool(name: string): PaintToolInterface | undefined {
+    return this.advancedTools.get(name);
+  }
+
+  /**
+   * Check whether the given tool name is an advanced (pixel-destructive) tool.
+   */
+  isAdvancedTool(tool: string): tool is AdvancedToolName {
+    return this.advancedTools.has(tool);
   }
 
   // Tool settings

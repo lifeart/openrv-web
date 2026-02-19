@@ -261,9 +261,11 @@ describe('StatusManager', () => {
 
     it('works without callbacks set', () => {
       const mgr = new StatusManager();
-      mgr.setStatus(0, 'approved', 'Alice');
-      mgr.clearStatus(0);
-      mgr.dispose();
+      expect(() => {
+        mgr.setStatus(0, 'approved', 'Alice');
+        mgr.clearStatus(0);
+        mgr.dispose();
+      }).not.toThrow();
     });
 
     it('setStatus with same value still emits', () => {

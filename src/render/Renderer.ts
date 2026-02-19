@@ -467,10 +467,24 @@ export class Renderer implements RendererBackend {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, image.texture);
 
+    // For 360 spherical projection, use REPEAT wrap so the equirectangular
+    // seam (longitude ±180°) blends smoothly instead of clamping to edge pixels.
+    const sphericalActive = this.stateManager.isSphericalEnabled();
+    if (sphericalActive) {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+
     // Draw quad
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
+
+    // Restore CLAMP_TO_EDGE after 360 rendering to avoid affecting other passes
+    if (sphericalActive) {
+      gl.bindTexture(gl.TEXTURE_2D, image.texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    }
   }
 
   /**
@@ -1887,6 +1901,10 @@ export class Renderer implements RendererBackend {
 
   setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void {
     this.stateManager.setPerspective(state);
+  }
+
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this.stateManager.setSphericalProjection(state);
   }
 
   applyRenderState(state: RenderState): void {

@@ -136,6 +136,12 @@ export interface StateAccessor {
   /** Set perspective correction state for GPU shader. */
   setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void;
 
+  /** Set spherical (equirectangular 360) projection state. */
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void;
+
+  /** Whether spherical (360) projection is currently enabled. */
+  isSphericalEnabled(): boolean;
+
   /** Set linearize state (log-to-linear conversion from RVLinearize). */
   setLinearize(state: LinearizeState): void;
 

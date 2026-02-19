@@ -1049,13 +1049,11 @@ describe('MediaManager', () => {
 
   describe('fetchFrameForSource', () => {
     it('MM-078: does nothing for null source', async () => {
-      await manager.fetchFrameForSource(null, 1);
-      // No error
+      await expect(manager.fetchFrameForSource(null, 1)).resolves.not.toThrow();
     });
 
     it('MM-079: does nothing for non-video source', async () => {
-      await manager.fetchFrameForSource(createImageSource(), 1);
-      // No error
+      await expect(manager.fetchFrameForSource(createImageSource(), 1)).resolves.not.toThrow();
     });
 
     it('MM-080: delegates to videoSourceNode.getFrameAsync', async () => {
@@ -1074,8 +1072,7 @@ describe('MediaManager', () => {
 
   describe('preloadVideoFrames', () => {
     it('MM-081: does nothing when no video source', () => {
-      manager.preloadVideoFrames();
-      // No error
+      expect(() => manager.preloadVideoFrames()).not.toThrow();
     });
 
     it('MM-082: delegates to videoSourceNode.preloadFrames', () => {
@@ -1107,8 +1104,7 @@ describe('MediaManager', () => {
 
   describe('fetchCurrentVideoFrame', () => {
     it('MM-084: does nothing when no video source', async () => {
-      await manager.fetchCurrentVideoFrame();
-      // No error
+      await expect(manager.fetchCurrentVideoFrame()).resolves.not.toThrow();
     });
 
     it('MM-085: skips fetch when frame is already cached', async () => {
@@ -1212,8 +1208,7 @@ describe('MediaManager', () => {
 
   describe('clearVideoCache', () => {
     it('MM-095: does nothing when no video source', () => {
-      manager.clearVideoCache();
-      // No error
+      expect(() => manager.clearVideoCache()).not.toThrow();
     });
 
     it('MM-096: delegates to videoSourceNode.clearCache', () => {
@@ -1262,15 +1257,13 @@ describe('MediaManager', () => {
     });
 
     it('MM-101: does nothing for non-video source', () => {
-      manager.disposeVideoSource(createImageSource());
-      // No error - just doesn't do anything
+      expect(() => manager.disposeVideoSource(createImageSource())).not.toThrow();
     });
 
     it('MM-102: does nothing for video source without videoSourceNode', () => {
       const source = createVideoSource();
       delete source.videoSourceNode;
-      manager.disposeVideoSource(source);
-      // No error
+      expect(() => manager.disposeVideoSource(source)).not.toThrow();
     });
   });
 

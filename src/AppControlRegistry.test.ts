@@ -294,6 +294,11 @@ describe('AppControlRegistry', () => {
         getCanvasContainer: vi.fn(() => document.createElement('div')),
         getColorWheels: vi.fn(() => createMockOverlay()),
         refresh: vi.fn(),
+        setSphericalProjectionRef: vi.fn(),
+        getDisplayWidth: vi.fn(() => 800),
+        getDisplayHeight: vi.fn(() => 600),
+        getEXRWindowOverlay: vi.fn(() => createMockOverlay()),
+        setSphericalProjection: vi.fn(),
       } as any;
       const sessionBridge = { updateInfoPanel: vi.fn() } as any;
 

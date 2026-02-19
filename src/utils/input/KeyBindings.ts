@@ -642,6 +642,29 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Focus previous zone'
   },
 
+  // External presentation window
+  'view.openPresentationWindow': {
+    code: 'KeyP',
+    ctrl: true,
+    shift: true,
+    alt: true,
+    description: 'Open external presentation window'
+  },
+
+  // Reference capture/toggle
+  'view.captureReference': {
+    code: 'KeyR',
+    alt: true,
+    shift: true,
+    description: 'Capture current frame as reference'
+  },
+  'view.toggleReference': {
+    code: 'KeyR',
+    ctrl: true,
+    shift: true,
+    description: 'Toggle reference comparison overlay'
+  },
+
   // Help / cheat sheet
   'help.toggleCheatSheet': {
     code: 'Slash',

@@ -265,10 +265,7 @@ describe('SnapshotManager', () => {
       const openRequest = (indexedDB as any).open();
       openRequest.onsuccess?.();
 
-      manager.dispose();
-
-      // Check that isInitialized is reset (through attempting to throw on createSnapshot)
-      // We can't directly access private fields, but the dispose should work
+      expect(() => manager.dispose()).not.toThrow();
     });
   });
 

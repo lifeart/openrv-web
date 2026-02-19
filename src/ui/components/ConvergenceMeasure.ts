@@ -474,6 +474,14 @@ export class ConvergenceMeasure extends EventEmitter<ConvergenceMeasureEvents> {
     return `min: ${stats.min}px | max: ${stats.max}px | avg: ${stats.avg.toFixed(1)}px (${stats.sampleCount} samples)`;
   }
 
+  /**
+   * Dispose the convergence measure: remove all listeners and reset state.
+   */
+  dispose(): void {
+    this.removeAllListeners();
+    this.state = { ...DEFAULT_CONVERGENCE_STATE };
+  }
+
   private emitState(): void {
     this.emit('stateChanged', this.getState());
   }

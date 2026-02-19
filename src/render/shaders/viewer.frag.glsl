@@ -187,6 +187,13 @@
       // Premultiply/unpremultiply alpha: 0=off, 1=premultiply, 2=unpremultiply
       uniform int u_premult;
 
+      // Spherical (equirectangular 360) projection
+      uniform int u_sphericalEnabled;   // 0=off, 1=on
+      uniform float u_sphericalFov;     // horizontal FOV in radians
+      uniform float u_sphericalAspect;  // canvas width / height
+      uniform float u_sphericalYaw;     // yaw in radians
+      uniform float u_sphericalPitch;   // pitch in radians
+
       // Dither + Quantize visualization
       uniform int u_ditherMode;      // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
       uniform int u_quantizeBits;    // 0=off, 2-16 = target bit depth for quantize/posterize
@@ -865,6 +872,29 @@
         return (float(bayer[y * 8 + x]) + 0.5) / 64.0;
       }
 
+      // Compute equirectangular UV from screen-space UV for 360 content
+      vec2 sphericalProject(vec2 screenUV) {
+        // screenUV.y=0 is at the top of the screen (image row 0), but NDC y=+1
+        // is at the top, so we must flip the y component to avoid an upside-down image.
+        vec2 ndc = vec2(screenUV.x * 2.0 - 1.0, 1.0 - screenUV.y * 2.0);
+        float halfFov = u_sphericalFov * 0.5;
+        float tanHalfFov = tan(halfFov);
+        vec3 viewDir = normalize(vec3(
+          ndc.x * tanHalfFov * u_sphericalAspect,
+          ndc.y * tanHalfFov,
+          -1.0
+        ));
+        float cp = cos(u_sphericalPitch);
+        float sp = sin(u_sphericalPitch);
+        vec3 pitchDir = vec3(viewDir.x, viewDir.y * cp - viewDir.z * sp, viewDir.y * sp + viewDir.z * cp);
+        float cy = cos(u_sphericalYaw);
+        float sy = sin(u_sphericalYaw);
+        vec3 worldDir = vec3(pitchDir.x * cy + pitchDir.z * sy, pitchDir.y, -pitchDir.x * sy + pitchDir.z * cy);
+        float theta = atan(worldDir.z, worldDir.x);
+        float phi = asin(clamp(worldDir.y, -1.0, 1.0));
+        return vec2(0.5 + theta / (2.0 * 3.14159265359), 0.5 - phi / 3.14159265359);
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
@@ -918,6 +948,12 @@
               color = texture(u_texture, srcUV); // bilinear (hardware)
             }
           }
+        }
+
+        // 0a3. Spherical (equirectangular 360) projection
+        if (u_sphericalEnabled == 1) {
+          vec2 eqUV = sphericalProject(v_texCoord);
+          color = texture(u_texture, eqUV);
         }
 
         // 0b. Channel swizzle (RVChannelMap remapping, before any color processing)

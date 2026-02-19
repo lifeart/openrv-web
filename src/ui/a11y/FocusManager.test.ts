@@ -319,8 +319,7 @@ describe('FocusManager', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     fm.addZone({ name: 'empty', container, getItems: () => [], orientation: 'horizontal' });
-    // Should not throw
-    fm.initRovingTabindex('empty');
+    expect(() => fm.initRovingTabindex('empty')).not.toThrow();
   });
 
   // FM-020: focusZone with empty zone falls back to container

@@ -8,8 +8,6 @@
  * Each tool implements the PaintToolInterface for consistent brush handling.
  */
 
-import { clamp } from '../utils/math';
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -176,9 +174,11 @@ export class DodgeTool implements PaintToolInterface {
       // Dodge: factor > 1 increases pixel brightness (lightens the image)
       const factor = 1 + this.strength * intensity;
 
-      buffer.data[index] = clamp(buffer.data[index]! * factor, 0, 1);
-      buffer.data[index + 1] = clamp(buffer.data[index + 1]! * factor, 0, 1);
-      buffer.data[index + 2] = clamp(buffer.data[index + 2]! * factor, 0, 1);
+      // Don't clamp upper bound so HDR values > 1.0 are preserved.
+      // Only clamp lower bound to 0 to avoid negative values.
+      buffer.data[index] = Math.max(0, buffer.data[index]! * factor);
+      buffer.data[index + 1] = Math.max(0, buffer.data[index + 1]! * factor);
+      buffer.data[index + 2] = Math.max(0, buffer.data[index + 2]! * factor);
       // Alpha unchanged
     });
   }
@@ -219,9 +219,11 @@ export class BurnTool implements PaintToolInterface {
       // Burn: factor < 1 decreases pixel brightness (darkens the image)
       const factor = 1 - this.strength * intensity;
 
-      buffer.data[index] = clamp(buffer.data[index]! * factor, 0, 1);
-      buffer.data[index + 1] = clamp(buffer.data[index + 1]! * factor, 0, 1);
-      buffer.data[index + 2] = clamp(buffer.data[index + 2]! * factor, 0, 1);
+      // Don't clamp upper bound so HDR values > 1.0 are preserved.
+      // Only clamp lower bound to 0 to avoid negative values.
+      buffer.data[index] = Math.max(0, buffer.data[index]! * factor);
+      buffer.data[index + 1] = Math.max(0, buffer.data[index + 1]! * factor);
+      buffer.data[index + 2] = Math.max(0, buffer.data[index + 2]! * factor);
       // Alpha unchanged
     });
   }

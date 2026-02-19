@@ -51,6 +51,14 @@ import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
+import { ShortcutCheatSheet } from './ui/components/ShortcutCheatSheet';
+import { ClientMode } from './ui/components/ClientMode';
+import { ExternalPresentation } from './ui/components/ExternalPresentation';
+import { ActiveContextManager } from './utils/input/ActiveContextManager';
+import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
+import { AudioMixer } from './audio/AudioMixer';
+import { DCCBridge } from './integrations/DCCBridge';
+import { detect360Content } from './render/SphericalProjection';
 
 // Layout
 import { LayoutStore } from './ui/layout/LayoutStore';
@@ -83,6 +91,15 @@ export class App {
   private persistenceManager: AppPersistenceManager;
   private sessionBridge!: AppSessionBridge;
   private shotGridBridge: ShotGridIntegrationBridge;
+  private shortcutCheatSheet!: ShortcutCheatSheet;
+  private clientMode: ClientMode;
+  private externalPresentation: ExternalPresentation;
+  private activeContextManager: ActiveContextManager;
+  private audioMixer: AudioMixer;
+  private audioInitialized = false;
+  private dccBridge: DCCBridge | null = null;
+  private contextualKeyboardManager: ContextualKeyboardManager;
+  private _suppressFrameSync = false;
   private focusManager!: FocusManager;
   private ariaAnnouncer!: AriaAnnouncer;
 
@@ -106,6 +123,14 @@ export class App {
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
+
+    // Initialize client mode (restricted UI for review presentations)
+    this.clientMode = new ClientMode();
+    this.clientMode.checkURLParam();
+
+    // Active context manager (key binding context scoping)
+    this.activeContextManager = new ActiveContextManager();
+    this.contextualKeyboardManager = new ContextualKeyboardManager(this.activeContextManager);
 
     // Create core components
     this.session = new Session();
@@ -169,6 +194,52 @@ export class App {
 
     // Apply any stored custom bindings to the keyboard shortcuts
     this.keyboardHandler.refresh();
+
+    // Register conflicting key bindings with the contextual keyboard manager
+    // so that context-aware resolution can pick the right action based on
+    // which tab/context is active (e.g., paint vs timeline).
+    this.contextualKeyboardManager.register(
+      'timeline.resetInOut',
+      { code: 'KeyR' },
+      () => this.session.resetInOutPoints(),
+      'global',
+      'Reset in/out points',
+    );
+    this.contextualKeyboardManager.register(
+      'paint.rectangle',
+      { code: 'KeyR' },
+      () => this.controls.paintToolbar.handleKeyboard('r'),
+      'paint',
+      'Select rectangle tool',
+    );
+    this.contextualKeyboardManager.register(
+      'timeline.setOutPoint',
+      { code: 'KeyO' },
+      () => this.session.setOutPoint(),
+      'global',
+      'Set out point',
+    );
+    this.contextualKeyboardManager.register(
+      'paint.ellipse',
+      { code: 'KeyO' },
+      () => this.controls.paintToolbar.handleKeyboard('o'),
+      'paint',
+      'Select ellipse tool',
+    );
+    this.contextualKeyboardManager.register(
+      'playback.faster',
+      { code: 'KeyL' },
+      () => this.session.increaseSpeed(),
+      'global',
+      'Increase playback speed',
+    );
+    this.contextualKeyboardManager.register(
+      'paint.line',
+      { code: 'KeyL' },
+      () => this.controls.paintToolbar.handleKeyboard('l'),
+      'paint',
+      'Select line tool',
+    );
 
     // Wire unified preferences facade with live subsystem references
     getCorePreferencesManager().setSubsystems({
@@ -250,6 +321,149 @@ export class App {
     });
     this.shotGridBridge.setup();
 
+    // External presentation (multi-window BroadcastChannel sync)
+    this.externalPresentation = new ExternalPresentation();
+    this.externalPresentation.initialize();
+
+    // Wire HeaderBar external presentation button
+    this.headerBar.on('externalPresentation', () => this.externalPresentation.openWindow());
+
+    // Wire session events to external presentation
+    this.session.on('frameChanged', () => {
+      if (this.externalPresentation.hasOpenWindows) {
+        this.externalPresentation.syncFrame(this.session.currentFrame, this.session.frameCount);
+      }
+    });
+    this.session.on('playbackChanged', (playing: boolean) => {
+      if (this.externalPresentation.hasOpenWindows) {
+        this.externalPresentation.syncPlayback(playing, this.session.playbackSpeed, this.session.currentFrame);
+      }
+    });
+
+    // Wire color adjustment changes to external presentation windows
+    this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
+      if (this.externalPresentation.hasOpenWindows) {
+        this.externalPresentation.syncColor({
+          exposure: adjustments.exposure,
+          gamma: adjustments.gamma,
+          temperature: adjustments.temperature,
+          tint: adjustments.tint,
+        });
+      }
+    });
+
+    // Audio mixer (lazy init on first user interaction due to AudioContext policy)
+    this.audioMixer = new AudioMixer();
+    this.session.on('playbackChanged', (playing: boolean) => {
+      if (!this.audioInitialized) return;
+      if (playing) {
+        const frameTime = this.session.currentFrame / (this.session.fps || 24);
+        this.audioMixer.play(frameTime);
+      } else {
+        this.audioMixer.stop();
+      }
+    });
+
+    // Audio track loading from sources: extract audio from video sources
+    this.session.on('sourceLoaded', (source) => {
+      if (!this.audioInitialized) return;
+      if (source.type !== 'video') return;
+
+      const videoEl = source.element as HTMLVideoElement | undefined;
+      const videoSrc = videoEl?.src || videoEl?.currentSrc || source.url;
+      if (!videoSrc) return;
+
+      const trackId = `source-${source.name}`;
+
+      // Remove previous track for this source if it exists
+      if (this.audioMixer.getTrack(trackId)) {
+        this.audioMixer.removeTrack(trackId);
+      }
+
+      // Fetch and decode audio from the video source URL
+      fetch(videoSrc, { mode: 'cors', credentials: 'same-origin' })
+        .then((response) => {
+          if (!response.ok) return;
+          return response.arrayBuffer();
+        })
+        .then((arrayBuffer) => {
+          if (!arrayBuffer) return;
+          const audioCtx = new AudioContext();
+          return audioCtx.decodeAudioData(arrayBuffer).then((audioBuffer) => {
+            audioCtx.close().catch(() => { /* ignore */ });
+            return audioBuffer;
+          }).catch(() => {
+            audioCtx.close().catch(() => { /* ignore */ });
+            return undefined;
+          });
+        })
+        .then((audioBuffer) => {
+          if (!audioBuffer) return;
+          this.audioMixer.addTrack({ id: trackId, label: source.name });
+          this.audioMixer.loadTrackBuffer(trackId, audioBuffer);
+        })
+        .catch(() => { /* audio extraction failed - not all videos have audio */ });
+    });
+
+    // DCC Bridge (optional WebSocket integration with DCC tools)
+    const dccUrl = new URLSearchParams(window.location.search).get('dcc');
+    if (dccUrl) {
+      this.dccBridge = new DCCBridge({ url: dccUrl });
+
+      // Inbound: syncFrame with loop protection
+      this.dccBridge.on('syncFrame', (msg) => {
+        this._suppressFrameSync = true;
+        try {
+          this.session.goToFrame(msg.frame);
+        } finally {
+          this._suppressFrameSync = false;
+        }
+      });
+
+      // Inbound: loadMedia - load file directly via session
+      this.dccBridge.on('loadMedia', (msg) => {
+        const path = msg.path;
+        const ext = path.split('.').pop()?.toLowerCase() ?? '';
+        const name = path.split('/').pop() ?? path;
+        const videoExts = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
+        if (videoExts.includes(ext)) {
+          this.session.loadVideo(name, path).then(() => {
+            if (typeof msg.frame === 'number') {
+              this.session.goToFrame(msg.frame);
+            }
+          }).catch(() => { /* load error */ });
+        } else {
+          this.session.loadImage(name, path).then(() => {
+            if (typeof msg.frame === 'number') {
+              this.session.goToFrame(msg.frame);
+            }
+          }).catch(() => { /* load error */ });
+        }
+      });
+
+      // Inbound: syncColor - apply color settings to viewer
+      this.dccBridge.on('syncColor', (msg) => {
+        const adjustments: Record<string, number> = {};
+        if (typeof msg.exposure === 'number') adjustments.exposure = msg.exposure;
+        if (typeof msg.gamma === 'number') adjustments.gamma = msg.gamma;
+        if (typeof msg.temperature === 'number') adjustments.temperature = msg.temperature;
+        if (typeof msg.tint === 'number') adjustments.tint = msg.tint;
+        if (Object.keys(adjustments).length > 0) {
+          this.controls.colorControls.setAdjustments(adjustments);
+          this.viewer.setColorAdjustments(this.controls.colorControls.getAdjustments());
+        }
+      });
+
+      // Outbound: frameChanged (with loop protection)
+      this.session.on('frameChanged', () => {
+        if (!this._suppressFrameSync) {
+          this.dccBridge?.sendFrameChanged(this.session.currentFrame, this.session.frameCount);
+        }
+      });
+
+      this.dccBridge.connect();
+    }
+
     // Build the wiring context shared by all wiring modules
     const wiringCtx: AppWiringContext = {
       session: this.session,
@@ -270,8 +484,19 @@ export class App {
     wirePlaybackControls(wiringCtx, {
       getKeyboardHandler: () => this.keyboardHandler,
       getFullscreenManager: () => this.fullscreenManager,
+      getAudioMixer: () => this.audioMixer,
     });
     wireStackControls(wiringCtx);
+
+    // Outbound DCC: send color changes to DCC bridge
+    this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
+      this.dccBridge?.sendColorChanged({
+        exposure: adjustments.exposure,
+        gamma: adjustments.gamma,
+        temperature: adjustments.temperature,
+        tint: adjustments.tint,
+      });
+    });
 
     // Timeline editor wiring (EDL/SequenceGroup integration)
     this.controls.timelineEditor.on('cutSelected', ({ cutIndex }) => this.handleTimelineEditorCutSelected(cutIndex));
@@ -300,6 +525,17 @@ export class App {
     this.createLayout();
     this.bindEvents();
     this.start();
+
+    // Lazy-initialize AudioContext on first user interaction (browser policy)
+    const initAudio = () => {
+      if (this.audioInitialized) return;
+      this.audioInitialized = true;
+      this.audioMixer.initialize().catch(() => { /* AudioContext may be unavailable */ });
+      document.removeEventListener('click', initAudio);
+      document.removeEventListener('keydown', initAudio);
+    };
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('keydown', initAudio, { once: true });
 
     // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
     updateOCIOPipeline(
@@ -570,6 +806,9 @@ export class App {
     // Wire modal focus trap
     setModalFocusManager(this.focusManager);
 
+    // Shortcut cheat sheet (overlay toggled by ? key)
+    this.shortcutCheatSheet = new ShortcutCheatSheet(this.container!, this.customKeyBindingsManager);
+
     // Create AriaAnnouncer
     this.ariaAnnouncer = new AriaAnnouncer();
 
@@ -587,6 +826,17 @@ export class App {
       const name = this.session.metadata?.displayName;
       if (name) {
         this.ariaAnnouncer.announce(`File loaded: ${name}`);
+      }
+    });
+
+    // Auto-detect 360 equirectangular content on source load
+    this.session.on('sourceLoaded', (source) => {
+      const sp = this.controls.sphericalProjection;
+      const is360 = detect360Content({}, source.width, source.height);
+      if (is360 && !sp.enabled) {
+        sp.enable();
+      } else if (!is360 && sp.enabled) {
+        sp.disable();
       }
     });
 
@@ -752,6 +1002,16 @@ export class App {
     // Bind all session event handlers (scopes, info panel, HDR auto-config, etc.)
     this.sessionBridge.bindSessionEvents();
 
+    // Apply client mode restrictions (hide restricted UI elements)
+    if (this.clientMode.isEnabled()) {
+      this.applyClientModeRestrictions();
+    }
+    this.clientMode.on('stateChanged', (state) => {
+      if (state.enabled) {
+        this.applyClientModeRestrictions();
+      }
+    });
+
     // Handle clear frame event from paint toolbar
     const paintToolbarEl = this.controls.paintToolbar.render();
     paintToolbarEl.addEventListener('clearFrame', () => {
@@ -764,9 +1024,38 @@ export class App {
     });
   }
 
-  private onTabChanged(_tabId: TabId): void {
-    // Handle tab-specific logic
-    // For example, could show/hide certain viewer overlays based on tab
+  private updateActiveContext(tabId: TabId): void {
+    switch (tabId) {
+      case 'annotate':
+        this.activeContextManager.setContext('paint');
+        break;
+      case 'transform':
+        this.activeContextManager.setContext('transform');
+        break;
+      case 'view':
+      case 'qc':
+        this.activeContextManager.setContext('viewer');
+        break;
+      default:
+        this.activeContextManager.setContext('global');
+        break;
+    }
+  }
+
+  private applyClientModeRestrictions(): void {
+    if (!this.container) return;
+    const selectors = this.clientMode.getRestrictedElements();
+    for (const selector of selectors) {
+      const els = this.container.querySelectorAll<HTMLElement>(selector);
+      els.forEach((el) => {
+        el.style.display = 'none';
+      });
+    }
+  }
+
+  private onTabChanged(tabId: TabId): void {
+    // Update active context for key binding scoping
+    this.updateActiveContext(tabId);
   }
 
   /**
@@ -860,8 +1149,8 @@ export class App {
       'playback.slower': () => this.session.decreaseSpeed(),
       'playback.stop': () => this.session.pause(),
       'playback.faster': () => {
-        // L key - increase speed, but on Annotate tab, line tool takes precedence
-        if (this.tabBar.activeTab === 'annotate') {
+        // L key - increase speed, but in paint context, line tool takes precedence
+        if (this.activeContextManager.isContextActive('paint')) {
           this.controls.paintToolbar.handleKeyboard('l');
           return;
         }
@@ -870,8 +1159,8 @@ export class App {
       'timeline.setInPoint': () => this.session.setInPoint(),
       'timeline.setInPointAlt': () => this.session.setInPoint(),
       'timeline.setOutPoint': () => {
-        // O key - set out point, but on Annotate tab, ellipse tool takes precedence
-        if (this.tabBar.activeTab === 'annotate') {
+        // O key - set out point, but in paint context, ellipse tool takes precedence
+        if (this.activeContextManager.isContextActive('paint')) {
           this.controls.paintToolbar.handleKeyboard('o');
           return;
         }
@@ -884,8 +1173,8 @@ export class App {
       'timeline.nextShot': () => this.goToNextShot(),
       'timeline.previousShot': () => this.goToPreviousShot(),
       'timeline.resetInOut': () => {
-        // R key - reset in/out points, but on Annotate tab, rectangle tool takes precedence
-        if (this.tabBar.activeTab === 'annotate') {
+        // R key - reset in/out points, but in paint context, rectangle tool takes precedence
+        if (this.activeContextManager.isContextActive('paint')) {
           this.controls.paintToolbar.handleKeyboard('r');
           return;
         }
@@ -1007,6 +1296,11 @@ export class App {
         getThemeManager().cycleMode();
       },
       'panel.close': () => {
+        // ESC hides cheat sheet first
+        if (this.shortcutCheatSheet?.isVisible()) {
+          this.shortcutCheatSheet.hide();
+          return;
+        }
         // ESC exits presentation mode first, then fullscreen
         if (this.controls.presentationMode.getState().enabled) {
           this.controls.presentationMode.toggle();
@@ -1065,6 +1359,9 @@ export class App {
         if (this.controls.isTimelineEditorPanelVisible()) {
           this.controls.hideTimelineEditorPanel();
         }
+        if (this.controls.isSlateEditorPanelVisible()) {
+          this.controls.hideSlateEditorPanel();
+        }
       },
       'snapshot.create': () => {
         this.persistenceManager.createQuickSnapshot();
@@ -1121,6 +1418,23 @@ export class App {
       'layout.review': () => this.layoutStore.applyPreset('review'),
       'layout.color': () => this.layoutStore.applyPreset('color'),
       'layout.paint': () => this.layoutStore.applyPreset('paint'),
+      'view.captureReference': () => {
+        const imageData = this.viewer.getImageData();
+        if (imageData) {
+          this.controls.referenceManager.captureReference({
+            width: imageData.width,
+            height: imageData.height,
+            data: imageData.data,
+            channels: 4,
+          });
+          this.controls.referenceManager.enable();
+        }
+      },
+      'view.toggleReference': () => {
+        this.controls.referenceManager.toggle();
+      },
+      'help.toggleCheatSheet': () => this.shortcutCheatSheet.toggle(),
+      'view.openPresentationWindow': () => this.externalPresentation.openWindow(),
     };
   }
 
@@ -1527,6 +1841,11 @@ export class App {
     this.fullscreenManager?.dispose();
     this.networkBridge.dispose();
     this.shotGridBridge.dispose();
+    this.shortcutCheatSheet?.dispose();
+    this.clientMode.dispose();
+    this.externalPresentation.dispose();
+    this.audioMixer.dispose();
+    this.dccBridge?.dispose();
     this.persistenceManager.dispose();
     this.sessionBridge.dispose();
     this.keyboardHandler.dispose();

@@ -170,7 +170,7 @@ export function applyStereoModeWithEyeTransforms(
 /**
  * Extract left and right eye images from stereo source
  */
-function extractStereoEyes(
+export function extractStereoEyes(
   sourceData: ImageData,
   inputFormat: StereoInputFormat,
   eyeSwap: boolean

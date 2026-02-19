@@ -49,6 +49,11 @@ import { BackgroundPatternControl } from './ui/components/BackgroundPatternContr
 import { OCIOControl } from './ui/components/OCIOControl';
 import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
 import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
+import { PremultControl } from './ui/components/PremultControl';
+import { ReferenceManager } from './ui/components/ReferenceManager';
+import { SlateEditor } from './ui/components/SlateEditor';
+import { ConvergenceMeasure } from './ui/components/ConvergenceMeasure';
+import { SphericalProjection } from './render/SphericalProjection';
 import { LUTPipelinePanel } from './ui/components/LUTPipelinePanel';
 import { HistoryPanel } from './ui/components/HistoryPanel';
 import { InfoPanel } from './ui/components/InfoPanel';
@@ -128,6 +133,7 @@ export class AppControlRegistry {
   // Color tab
   readonly colorControls: ColorControls;
   readonly colorInversionToggle: ColorInversionToggle;
+  readonly premultControl: PremultControl;
   readonly cdlControl: CDLControl;
   readonly curvesControl: CurvesControl;
   readonly ocioControl: OCIOControl;
@@ -139,10 +145,15 @@ export class AppControlRegistry {
 
   // View tab - Comparison
   readonly compareControl: CompareControl;
+  readonly referenceManager: ReferenceManager;
   readonly stereoControl: StereoControl;
   readonly stereoEyeTransformControl: StereoEyeTransformControl;
   readonly stereoAlignControl: StereoAlignControl;
   readonly ghostFrameControl: GhostFrameControl;
+  readonly convergenceMeasure: ConvergenceMeasure;
+
+  // View tab - 360 projection
+  readonly sphericalProjection: SphericalProjection;
 
   // View tab - Monitoring
   readonly scopesControl: ScopesControl;
@@ -162,6 +173,7 @@ export class AppControlRegistry {
 
   // Effects tab
   readonly filterControl: FilterControl;
+  readonly slateEditor: SlateEditor;
   readonly lensControl: LensControl;
   readonly deinterlaceControl: DeinterlaceControl;
   readonly filmEmulationControl: FilmEmulationControl;
@@ -216,6 +228,8 @@ export class AppControlRegistry {
   private readonly noiseReductionPanel: Panel;
   private readonly watermarkPanel: Panel;
   private readonly timelineEditorPanel: Panel;
+  private readonly slateEditorPanel: Panel;
+  private convergenceButton: HTMLButtonElement | null = null;
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
@@ -230,6 +244,7 @@ export class AppControlRegistry {
     // --- Color tab ---
     this.colorControls = new ColorControls();
     this.colorInversionToggle = new ColorInversionToggle();
+    this.premultControl = new PremultControl();
     this.cdlControl = new CDLControl();
     this.curvesControl = new CurvesControl();
     this.ocioControl = new OCIOControl();
@@ -241,10 +256,13 @@ export class AppControlRegistry {
 
     // --- View tab - Comparison ---
     this.compareControl = new CompareControl();
+    this.referenceManager = new ReferenceManager();
     this.stereoControl = new StereoControl();
     this.stereoEyeTransformControl = new StereoEyeTransformControl();
     this.stereoAlignControl = new StereoAlignControl();
     this.ghostFrameControl = new GhostFrameControl();
+    this.convergenceMeasure = new ConvergenceMeasure();
+    this.sphericalProjection = new SphericalProjection();
 
     // --- View tab - Monitoring ---
     this.scopesControl = new ScopesControl();
@@ -264,6 +282,7 @@ export class AppControlRegistry {
 
     // --- Effects tab ---
     this.filterControl = new FilterControl();
+    this.slateEditor = new SlateEditor();
     this.lensControl = new LensControl();
     this.deinterlaceControl = new DeinterlaceControl();
     this.filmEmulationControl = new FilmEmulationControl();
@@ -279,6 +298,13 @@ export class AppControlRegistry {
     this.watermarkPanel = createPanel({ width: '360px', maxHeight: '70vh', align: 'right' });
     this.watermarkPanel.element.appendChild(createPanelHeader('Watermark'));
     this.watermarkPanel.element.appendChild(this.watermarkControl.render());
+
+    this.slateEditorPanel = createPanel({ width: '400px', maxHeight: '70vh', align: 'right' });
+    this.slateEditorPanel.element.appendChild(createPanelHeader('Slate / Leader'));
+    const slateEditorHost = document.createElement('div');
+    slateEditorHost.style.cssText = 'padding: 12px; font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;';
+    this.slateEditorPanel.element.appendChild(slateEditorHost);
+    this.buildSlateEditorForm(slateEditorHost);
 
     this.timelineEditorPanel = createPanel({ width: 'clamp(400px, 60vw, 900px)', maxHeight: '70vh', align: 'right' });
     this.timelineEditorPanel.element.appendChild(createPanelHeader('Timeline Editor'));
@@ -364,13 +390,103 @@ export class AppControlRegistry {
     viewContent.appendChild(this.stereoControl.render());
     viewContent.appendChild(this.stereoEyeTransformControl.render());
     viewContent.appendChild(this.stereoAlignControl.render());
+
+    // Convergence measurement button (stereo QC)
+    this.convergenceButton = ContextToolbar.createIconButton('crosshair', () => {
+      this.convergenceMeasure.setEnabled(!this.convergenceMeasure.isEnabled());
+    }, { title: 'Toggle convergence measurement' });
+    this.convergenceButton.dataset.testid = 'convergence-measure-btn';
+    viewContent.appendChild(this.convergenceButton);
+
+    this.registryUnsubscribers.push(this.convergenceMeasure.on('stateChanged', (state) => {
+      setButtonActive(this.convergenceButton!, state.enabled, 'icon');
+    }));
+
     viewContent.appendChild(this.ghostFrameControl.render());
+
+    // Reference capture/toggle buttons
+    const captureRefButton = ContextToolbar.createIconButton('camera', () => {
+      const imageData = viewer.getImageData();
+      if (imageData) {
+        this.referenceManager.captureReference({
+          width: imageData.width,
+          height: imageData.height,
+          data: imageData.data,
+          channels: 4,
+        });
+        // Auto-enable reference mode after capture for better UX
+        this.referenceManager.enable();
+      }
+    }, { title: 'Capture reference frame (Alt+Shift+R)' });
+    captureRefButton.dataset.testid = 'capture-reference-btn';
+    viewContent.appendChild(captureRefButton);
+
+    const toggleRefButton = ContextToolbar.createIconButton('layers', () => {
+      this.referenceManager.toggle();
+    }, { title: 'Toggle reference comparison (Ctrl+Shift+R)' });
+    toggleRefButton.dataset.testid = 'toggle-reference-btn';
+    viewContent.appendChild(toggleRefButton);
+
+    this.registryUnsubscribers.push(this.referenceManager.on('stateChanged', (state) => {
+      setButtonActive(toggleRefButton, state.enabled, 'icon');
+
+      // Wire reference display to the viewer overlay
+      if (state.enabled && state.referenceImage) {
+        const ref = state.referenceImage;
+        // Build an ImageData from the stored reference pixel data
+        let refImageData: ImageData;
+        if (ref.data instanceof Uint8ClampedArray) {
+          refImageData = new ImageData(new Uint8ClampedArray(ref.data), ref.width, ref.height);
+        } else {
+          // Convert Float32Array to Uint8ClampedArray for ImageData
+          const u8 = new Uint8ClampedArray(ref.width * ref.height * 4);
+          for (let i = 0; i < ref.data.length; i++) {
+            u8[i] = Math.round(Math.max(0, Math.min(1, ref.data[i]!)) * 255);
+          }
+          refImageData = new ImageData(u8, ref.width, ref.height);
+        }
+        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity);
+      } else {
+        viewer.setReferenceImage(null, 'off', 0);
+      }
+    }));
+
     viewContent.appendChild(ContextToolbar.createDivider());
 
     // --- GROUP 3: Display (Stack, PAR, Background Pattern, Spotlight) ---
     viewContent.appendChild(this.stackControl.render());
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
+
+    // 360 spherical projection toggle
+    const updateSphericalUniforms = () => {
+      const w = viewer.getDisplayWidth() || 1920;
+      const h = viewer.getDisplayHeight() || 1080;
+      const uniforms = this.sphericalProjection.getProjectionUniforms(w, h);
+      viewer.setSphericalProjection({
+        enabled: uniforms.u_sphericalEnabled === 1,
+        fov: uniforms.u_fov,
+        aspect: uniforms.u_aspect,
+        yaw: uniforms.u_yaw,
+        pitch: uniforms.u_pitch,
+      });
+    };
+
+    // Wire spherical projection to ViewerInputHandler so mouse drag
+    // controls yaw/pitch and mouse wheel controls FOV in 360 mode.
+    viewer.setSphericalProjectionRef(this.sphericalProjection, updateSphericalUniforms);
+
+    const sphericalButton = ContextToolbar.createIconButton('aperture', () => {
+      if (this.sphericalProjection.enabled) {
+        this.sphericalProjection.disable();
+      } else {
+        this.sphericalProjection.enable();
+      }
+      updateSphericalUniforms();
+      setButtonActive(sphericalButton, this.sphericalProjection.enabled, 'icon');
+    }, { title: '360 View' });
+    sphericalButton.dataset.testid = 'spherical-projection-btn';
+    viewContent.appendChild(sphericalButton);
 
     // Missing-frame mode dropdown (matches stereo dropdown pattern)
     const missingFrameContainer = document.createElement('div');
@@ -567,6 +683,17 @@ export class AppControlRegistry {
       setButtonActive(spotlightButton, state.enabled, 'icon');
     }));
 
+    // EXR Window Overlay toggle button
+    const exrWindowButton = ContextToolbar.createIconButton('grid', () => {
+      viewer.getEXRWindowOverlay().toggle();
+    }, { title: 'Toggle EXR window overlay' });
+    exrWindowButton.dataset.testid = 'exr-window-overlay-toggle-btn';
+    viewContent.appendChild(exrWindowButton);
+
+    this.registryUnsubscribers.push(viewer.getEXRWindowOverlay().on('stateChanged', (state) => {
+      setButtonActive(exrWindowButton, state.enabled, 'icon');
+    }));
+
     contextToolbar.setTabContent('view', viewContent);
 
     // Initially hide per-eye controls (shown when stereo mode is activated)
@@ -696,6 +823,8 @@ export class AppControlRegistry {
     colorContent.appendChild(this.cdlControl.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.colorInversionToggle.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
+    colorContent.appendChild(this.premultControl.render());
     colorContent.appendChild(ContextToolbar.createDivider());
 
     // Curves toggle button
@@ -830,6 +959,14 @@ export class AppControlRegistry {
     }, { title: 'Toggle watermark panel', icon: 'image' });
     watermarkButton.dataset.testid = 'watermark-toggle-button';
     effectsContent.appendChild(watermarkButton);
+
+    const slateButton = ContextToolbar.createButton('Slate', () => {
+      this.slateEditorPanel.toggle(slateButton);
+      setButtonActive(slateButton, this.slateEditorPanel.isVisible(), 'ghost');
+    }, { title: 'Toggle slate/leader editor', icon: 'film' });
+    slateButton.dataset.testid = 'slate-editor-toggle-button';
+    effectsContent.appendChild(slateButton);
+
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -900,6 +1037,140 @@ export class AppControlRegistry {
     const alignEl = this.stereoAlignControl.render();
     eyeTransformEl.style.display = isStereoActive ? 'inline-flex' : 'none';
     alignEl.style.display = isStereoActive ? 'inline-flex' : 'none';
+    if (this.convergenceButton) {
+      this.convergenceButton.style.display = isStereoActive ? 'inline-flex' : 'none';
+    }
+    // When stereo is turned off, disable convergence measurement
+    if (!isStereoActive && this.convergenceMeasure.isEnabled()) {
+      this.convergenceMeasure.setEnabled(false);
+    }
+  }
+
+  /**
+   * Build the slate editor form UI with real form fields.
+   */
+  private buildSlateEditorForm(container: HTMLElement): void {
+    const inputStyle = `
+      width: 100%;
+      padding: 4px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 3px;
+      color: var(--text-primary);
+      font-size: 12px;
+      outline: none;
+      box-sizing: border-box;
+    `;
+
+    const labelStyle = 'color: var(--text-muted); font-size: 11px; margin-bottom: 2px;';
+
+    const createField = (label: string, type: string, testid: string): HTMLInputElement => {
+      const wrapper = document.createElement('div');
+      const lbl = document.createElement('div');
+      lbl.style.cssText = labelStyle;
+      lbl.textContent = label;
+      wrapper.appendChild(lbl);
+      const input = document.createElement('input');
+      input.type = type;
+      input.style.cssText = inputStyle;
+      input.dataset.testid = testid;
+      input.placeholder = label;
+      wrapper.appendChild(input);
+      container.appendChild(wrapper);
+      return input;
+    };
+
+    // Text inputs for metadata
+    const showNameInput = createField('Show Name', 'text', 'slate-show-name');
+    const shotNameInput = createField('Shot Name', 'text', 'slate-shot-name');
+    const versionInput = createField('Version', 'text', 'slate-version');
+    const artistInput = createField('Artist', 'text', 'slate-artist');
+    const dateInput = createField('Date', 'text', 'slate-date');
+
+    // Wire metadata inputs
+    const updateMetadata = () => {
+      this.slateEditor.setMetadata({
+        showName: showNameInput.value || undefined,
+        shotName: shotNameInput.value || undefined,
+        version: versionInput.value || undefined,
+        artist: artistInput.value || undefined,
+        date: dateInput.value || undefined,
+      });
+    };
+
+    showNameInput.addEventListener('input', updateMetadata);
+    shotNameInput.addEventListener('input', updateMetadata);
+    versionInput.addEventListener('input', updateMetadata);
+    artistInput.addEventListener('input', updateMetadata);
+    dateInput.addEventListener('input', updateMetadata);
+
+    // Color picker for background color
+    const bgColorWrapper = document.createElement('div');
+    const bgColorLabel = document.createElement('div');
+    bgColorLabel.style.cssText = labelStyle;
+    bgColorLabel.textContent = 'Background Color';
+    bgColorWrapper.appendChild(bgColorLabel);
+    const bgColorInput = document.createElement('input');
+    bgColorInput.type = 'color';
+    bgColorInput.value = '#000000';
+    bgColorInput.dataset.testid = 'slate-bg-color';
+    bgColorInput.style.cssText = 'width: 100%; height: 28px; border: none; cursor: pointer; background: transparent;';
+    bgColorWrapper.appendChild(bgColorInput);
+    container.appendChild(bgColorWrapper);
+
+    bgColorInput.addEventListener('input', () => {
+      this.slateEditor.setColors({ background: bgColorInput.value });
+    });
+
+    // Font size slider
+    const fontSizeWrapper = document.createElement('div');
+    const fontSizeLabel = document.createElement('div');
+    fontSizeLabel.style.cssText = labelStyle;
+    fontSizeLabel.textContent = 'Font Size: 1.0x';
+    fontSizeWrapper.appendChild(fontSizeLabel);
+    const fontSizeSlider = document.createElement('input');
+    fontSizeSlider.type = 'range';
+    fontSizeSlider.min = '0.5';
+    fontSizeSlider.max = '2.0';
+    fontSizeSlider.step = '0.1';
+    fontSizeSlider.value = '1.0';
+    fontSizeSlider.dataset.testid = 'slate-font-size';
+    fontSizeSlider.style.cssText = 'width: 100%;';
+    fontSizeWrapper.appendChild(fontSizeSlider);
+    container.appendChild(fontSizeWrapper);
+
+    fontSizeSlider.addEventListener('input', () => {
+      const val = parseFloat(fontSizeSlider.value);
+      fontSizeLabel.textContent = `Font Size: ${val.toFixed(1)}x`;
+      this.slateEditor.setFontSizeMultiplier(val);
+    });
+
+    // Logo URL input
+    const logoUrlInput = createField('Logo URL', 'text', 'slate-logo-url');
+    logoUrlInput.addEventListener('input', () => {
+      this.slateEditor.setLogoUrl(logoUrlInput.value);
+    });
+
+    // Generate Preview button
+    const previewButton = document.createElement('button');
+    previewButton.type = 'button';
+    previewButton.textContent = 'Generate Preview';
+    previewButton.dataset.testid = 'slate-generate-preview';
+    previewButton.style.cssText = `
+      width: 100%;
+      padding: 8px 16px;
+      background: var(--accent-primary);
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 4px;
+    `;
+    previewButton.addEventListener('click', () => {
+      this.slateEditor.generateConfig();
+    });
+    container.appendChild(previewButton);
   }
 
   isNoiseReductionPanelVisible(): boolean {
@@ -926,6 +1197,14 @@ export class AppControlRegistry {
     this.timelineEditorPanel.hide();
   }
 
+  isSlateEditorPanelVisible(): boolean {
+    return this.slateEditorPanel.isVisible();
+  }
+
+  hideSlateEditorPanel(): void {
+    this.slateEditorPanel.hide();
+  }
+
   /**
    * Dispose all controls and managers.
    */
@@ -944,6 +1223,8 @@ export class AppControlRegistry {
     this.noiseReductionPanel.dispose();
     this.watermarkControl.dispose();
     this.watermarkPanel.dispose();
+    this.slateEditor.dispose();
+    this.slateEditorPanel.dispose();
     this.ghostFrameControl.dispose();
     this.safeAreasControl.dispose();
     this.falseColorControl.dispose();
@@ -963,11 +1244,13 @@ export class AppControlRegistry {
     this.zoomControl.dispose();
     this.scopesControl.dispose();
     this.compareControl.dispose();
+    this.referenceManager.dispose();
     this.transformControl.dispose();
     this.filterControl.dispose();
     this.cropControl.dispose();
     this.cdlControl.dispose();
     this.colorInversionToggle.dispose();
+    this.premultControl.dispose();
     this.displayProfileControl.dispose();
     this.gamutMappingControl.dispose();
     this.curvesControl.dispose();
@@ -980,6 +1263,7 @@ export class AppControlRegistry {
     this.channelSelect.dispose();
     this.parControl.dispose();
     this.backgroundPatternControl.dispose();
+    this.convergenceMeasure.dispose();
     this.stereoControl.dispose();
     this.stereoEyeTransformControl.dispose();
     this.stereoAlignControl.dispose();
