@@ -1105,6 +1105,10 @@
         // GPU and CPU paths, accepted as a design trade-off for single-pass rendering
         // performance. The visual difference is minimal for most grading scenarios.
         if (u_clarityEnabled && u_clarity != 0.0) {
+          // Compute blur and detail entirely in original texture space
+          // to avoid cross-space artifacts between processed color and raw texture.
+          vec3 origCenter = texture(u_texture, v_texCoord).rgb;
+
           // 5x5 Gaussian blur (separable weights: 1,4,6,4,1, total per axis = 16)
           vec3 blurred = vec3(0.0);
           float weights[5] = float[](1.0, 4.0, 6.0, 4.0, 1.0);
@@ -1118,17 +1122,17 @@
           }
           blurred /= totalWeight;
 
-          // Midtone mask: use luminance normalized to peak brightness so
-          // HDR values (>1.0) are handled correctly instead of always masking.
+          // Midtone mask based on processed luminance, normalized for HDR
           float clarityLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
           float peakLum = max(clarityLum, 1.0);
           float normLum = clarityLum / peakLum;
           float deviation = abs(normLum - 0.5) * 2.0;
           float midtoneMask = 1.0 - deviation * deviation;
 
-          vec3 highFreq = color.rgb - blurred;
+          // High-frequency detail from original texture (both terms in same space)
+          vec3 highFreq = origCenter - blurred;
           float effectScale = u_clarity * 0.7; // CLARITY_EFFECT_SCALE
-          color.rgb = max(color.rgb + highFreq * midtoneMask * effectScale, 0.0);
+          color.rgb = clamp(color.rgb + highFreq * midtoneMask * effectScale, 0.0, max(max(color.r, max(color.g, color.b)), 1.0));
         }
 
         // --- Color grading effects ---
@@ -1288,16 +1292,16 @@
         // CPU paths, accepted as a design trade-off for single-pass rendering performance.
         // The visual difference is minimal for most grading scenarios.
         if (u_sharpenEnabled && u_sharpenAmount > 0.0) {
-          vec3 sharpOriginal = color.rgb;
-          // 3x3 unsharp mask: center=5, cross=-1, diagonal=0
-          vec3 sharpened = color.rgb * 5.0
-            - texture(u_texture, v_texCoord + vec2(-1.0, 0.0) * u_texelSize).rgb
-            - texture(u_texture, v_texCoord + vec2(1.0, 0.0) * u_texelSize).rgb
-            - texture(u_texture, v_texCoord + vec2(0.0, -1.0) * u_texelSize).rgb
-            - texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
-          // Only clamp negative (no upper bound) to preserve HDR range
-          sharpened = max(sharpened, 0.0);
-          color.rgb = sharpOriginal + (sharpened - sharpOriginal) * u_sharpenAmount;
+          // Compute Laplacian detail entirely in original texture space
+          // to avoid cross-space artifacts between processed color and raw texture.
+          vec3 origCenter = texture(u_texture, v_texCoord).rgb;
+          vec3 neighbors = texture(u_texture, v_texCoord + vec2(-1.0, 0.0) * u_texelSize).rgb
+            + texture(u_texture, v_texCoord + vec2(1.0, 0.0) * u_texelSize).rgb
+            + texture(u_texture, v_texCoord + vec2(0.0, -1.0) * u_texelSize).rgb
+            + texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
+          // Laplacian: high-frequency edge detail (both terms in same space)
+          vec3 detail = origCenter * 4.0 - neighbors;
+          color.rgb = max(color.rgb + detail * u_sharpenAmount, 0.0);
         }
 
         // 8. Display transfer function (replaces simple gamma, per-channel)

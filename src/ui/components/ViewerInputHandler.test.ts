@@ -161,6 +161,8 @@ function createMockContext(overrides: Partial<ViewerInputContext> = {}): ViewerI
     getSphericalProjection: () => null,
     getGLRenderer: () => null,
     isGLRendererActive: () => false,
+    getImageCtx: () => imageCanvas.getContext('2d')!,
+    invalidateGLRenderCache: vi.fn(),
     ...overrides,
   };
 }
@@ -608,24 +610,28 @@ describe('ViewerInputHandler – HDR Pixel Extraction', () => {
       hdrPixels[i + 3] = 1.0; // A
     }
 
+    const mockGLContext = {
+      drawingBufferWidth: w,
+      drawingBufferHeight: h,
+      TEXTURE_2D: 0x0DE1,
+      RGBA32F: 0x8814,
+      RGBA: 0x1908,
+      FLOAT: 0x1406,
+      texImage2D: vi.fn(),
+    };
+
     const mockGLRenderer = {
       readPixelFloat: vi.fn((_x: number, _y: number, rw: number, rh: number) => {
         // Return a copy matching the requested dimensions
         if (rw === w && rh === h) return new Float32Array(hdrPixels);
         return null;
       }),
-      getContext: vi.fn(() => null),
+      getContext: vi.fn(() => mockGLContext),
     };
 
     ctx = createMockContext({
       getGLRenderer: () => mockGLRenderer as any,
       isGLRendererActive: () => true,
-      getPaintCanvas: () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        return canvas;
-      },
     });
     dropOverlay = document.createElement('div');
     handler = new ViewerInputHandler(ctx, dropOverlay);
@@ -675,19 +681,24 @@ describe('ViewerInputHandler – HDR Pixel Extraction', () => {
       glPixels[i + 3] = 1.0;  // A
     }
 
-    const mockGLRenderer = {
-      readPixelFloat: vi.fn(() => new Float32Array(glPixels)),
-      getContext: vi.fn(() => null),
+    const mockGLContext = {
+      drawingBufferWidth: w,
+      drawingBufferHeight: h,
+      TEXTURE_2D: 0x0DE1,
+      RGBA32F: 0x8814,
+      RGBA: 0x1908,
+      FLOAT: 0x1406,
+      texImage2D: vi.fn(),
     };
 
-    const paintCanvas = document.createElement('canvas');
-    paintCanvas.width = w;
-    paintCanvas.height = h;
+    const mockGLRenderer = {
+      readPixelFloat: vi.fn(() => new Float32Array(glPixels)),
+      getContext: vi.fn(() => mockGLContext),
+    };
 
     ctx = createMockContext({
       getGLRenderer: () => mockGLRenderer as any,
       isGLRendererActive: () => true,
-      getPaintCanvas: () => paintCanvas,
     });
     dropOverlay = document.createElement('div');
     handler = new ViewerInputHandler(ctx, dropOverlay);

@@ -375,6 +375,7 @@ export class Viewer {
       getImageCanvas: () => this.imageCanvas,
       getPaintCanvas: () => this.paintCanvas,
       getPaintCtx: () => this.paintCtx,
+      getImageCtx: () => this.imageCtx,
       getDisplayWidth: () => this.displayWidth,
       getDisplayHeight: () => this.displayHeight,
       getSourceWidth: () => this.sourceWidth,
@@ -398,6 +399,7 @@ export class Viewer {
       updateCanvasPosition: () => this.updateCanvasPosition(),
       updateSphericalUniforms: () => this._sphericalUniformsCallback?.(),
       renderPaint: () => this.renderPaint(),
+      invalidateGLRenderCache: () => this.glRendererManager.invalidateRenderCache(),
     };
   }
 
@@ -1179,7 +1181,14 @@ export class Viewer {
     this.invalidateLayoutCache();
 
     PerfTrace.count('render.calls');
-    this.renderImage();
+
+    // During an advanced (pixel-destructive) tool stroke, skip renderImage()
+    // for the SDR path so the in-place image canvas modifications are preserved.
+    // For the HDR/GL path, renderImage is still called but the GL render cache
+    // was invalidated so it redraws from the modified texture without re-uploading.
+    if (!this.inputHandler.advancedDrawing || this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive) {
+      this.renderImage();
+    }
     this.renderWatermarkOverlayCanvas();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
@@ -1188,7 +1197,9 @@ export class Viewer {
       this.inputHandler.renderLiveStroke();
     } else if (this.inputHandler.drawingShape && this.inputHandler.currentShapeStart && this.inputHandler.currentShapeCurrent) {
       this.inputHandler.renderLiveShape();
-    } else {
+    } else if (!this.inputHandler.advancedDrawing) {
+      // Skip renderPaint during advanced tool strokes so annotations overlay
+      // is preserved and doesn't clear the visible state.
       this.renderPaint();
     }
 

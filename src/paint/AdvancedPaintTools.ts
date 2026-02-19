@@ -46,8 +46,18 @@ export interface PixelPoint {
 export interface PaintToolInterface {
   /** Tool name */
   readonly name: string;
-  /** Apply the tool at a given position on the pixel buffer */
-  apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams): void;
+  /**
+   * Apply the tool at a given position on the pixel buffer.
+   *
+   * @param buffer - The live pixel buffer to write modifications to
+   * @param position - Brush center in pixel coordinates
+   * @param brush - Brush parameters (size, opacity, pressure, hardness)
+   * @param sourceBuffer - Read-only snapshot of the original pixels (pre-stroke).
+   *   Tools that sample pixels (clone, smudge) should read from this buffer
+   *   instead of `buffer` to avoid feedback from their own writes.
+   *   If not provided, the tool reads from `buffer`.
+   */
+  apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams, sourceBuffer?: PixelBuffer): void;
   /** Called when a stroke begins */
   beginStroke(position: PixelPoint): void;
   /** Called when a stroke ends */
@@ -285,14 +295,18 @@ export class CloneTool implements PaintToolInterface {
     this._sourceOffset = null; // Will be calculated on first stroke point
   }
 
-  apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams): void {
+  apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams, sourceBuffer?: PixelBuffer): void {
     if (!this._sourceSet || !this._sourceOffset) return;
+
+    // Read source pixels from the original snapshot to avoid feedback when
+    // source and destination regions overlap.
+    const readFrom = sourceBuffer ?? buffer;
 
     forEachBrushPixel(buffer, position, brush, (index, intensity, px, py) => {
       const srcX = px + this._sourceOffset!.x;
       const srcY = py + this._sourceOffset!.y;
 
-      const [sr, sg, sb, sa] = samplePixel(buffer, srcX, srcY);
+      const [sr, sg, sb, sa] = samplePixel(readFrom, srcX, srcY);
 
       // Blend source pixel with destination based on intensity
       buffer.data[index] = buffer.data[index]! * (1 - intensity) + sr * intensity;
@@ -349,13 +363,16 @@ export class SmudgeTool implements PaintToolInterface {
     return this._carriedColor ? [...this._carriedColor] : null;
   }
 
-  apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams): void {
-    // Sample center pixel to initialize or update carried color
-    const centerColor = samplePixel(buffer, Math.round(position.x), Math.round(position.y));
+  apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams, sourceBuffer?: PixelBuffer): void {
+    // Sample center pixel from the original snapshot so we pick up colors
+    // from the unmodified image rather than our own previous writes.
+    // This prevents the carried color from converging to a single value
+    // and stamping it everywhere ("copy mode" artifact).
+    const readFrom = sourceBuffer ?? buffer;
+    const centerColor = samplePixel(readFrom, Math.round(position.x), Math.round(position.y));
 
     if (!this._carriedColor) {
       this._carriedColor = centerColor;
-      // Position tracked for potential future directional blending
       return; // First point just picks up color
     }
 
@@ -378,8 +395,6 @@ export class SmudgeTool implements PaintToolInterface {
       buffer.data[index + 2] = buffer.data[index + 2]! * (1 - blendAmt) + carried[2] * blendAmt;
       buffer.data[index + 3] = buffer.data[index + 3]! * (1 - blendAmt) + carried[3] * blendAmt;
     });
-
-    // Position tracked for potential future directional blending
   }
 
   beginStroke(_position: PixelPoint): void {

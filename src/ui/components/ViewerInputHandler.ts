@@ -29,6 +29,7 @@ import type { CropManager } from './CropManager';
 import type { PixelProbe } from './PixelProbe';
 import type { InteractionQualityManager } from './InteractionQualityManager';
 import type { PixelBuffer, PaintToolInterface, BrushParams } from '../../paint/AdvancedPaintTools';
+import { CloneTool } from '../../paint/AdvancedPaintTools';
 import type { SphericalProjection } from '../../render/SphericalProjection';
 import type { Renderer } from '../../render/Renderer';
 
@@ -46,6 +47,7 @@ export interface ViewerInputContext {
 
   // Canvas contexts
   getPaintCtx(): CanvasRenderingContext2D;
+  getImageCtx(): CanvasRenderingContext2D;
 
   // Dimensions
   getDisplayWidth(): number;
@@ -85,6 +87,12 @@ export interface ViewerInputContext {
   updateCanvasPosition(): void;
   updateSphericalUniforms(): void;
   renderPaint(): void;
+
+  /**
+   * Invalidate the GL render cache so the next scheduleRender() forces a
+   * full redraw instead of skipping due to same-image optimization.
+   */
+  invalidateGLRenderCache(): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +117,9 @@ export class ViewerInputHandler {
   // Advanced (pixel-destructive) tool drawing state
   private isAdvancedDrawing = false;
   private activePixelBuffer: PixelBuffer | null = null;
+  /** Read-only snapshot of the original pixels before the stroke began.
+   *  Tools like clone and smudge sample from this to avoid feedback artifacts. */
+  private activeSourceBuffer: PixelBuffer | null = null;
   private activeAdvancedTool: PaintToolInterface | null = null;
   /** Whether the active pixel buffer was extracted from the GL renderer (HDR path) */
   private _isHDRBuffer = false;
@@ -197,6 +208,10 @@ export class ViewerInputHandler {
 
   get currentShapeCurrent(): Point | null {
     return this.shapeCurrentPoint;
+  }
+
+  get advancedDrawing(): boolean {
+    return this.isAdvancedDrawing;
   }
 
   // ======================================================================
@@ -309,7 +324,17 @@ export class ViewerInputHandler {
       } else if (this.isAdvancedTool(tool)) {
         const point = this.getCanvasPoint(e.clientX, e.clientY, e.pressure || 0.5);
         if (point) {
-          this.beginAdvancedStroke(point, e.pressure || 0.5);
+          // Alt-click sets the clone tool source point
+          if (e.altKey && tool === 'clone') {
+            const paintEngine = this.ctx.getPaintEngine();
+            const cloneTool = paintEngine.getAdvancedTool('clone');
+            if (cloneTool instanceof CloneTool) {
+              const pixelPos = this.toPixelCoords(point);
+              cloneTool.setSource(pixelPos);
+            }
+          } else {
+            this.beginAdvancedStroke(point, e.pressure || 0.5);
+          }
         }
       } else if (e.button === 0 || e.pointerType === 'touch') {
         // Spherical (360) drag mode: route to SphericalProjection when enabled
@@ -938,14 +963,15 @@ export class ViewerInputHandler {
    * which converts Uint8ClampedArray to Float32Array with values in [0, 1].
    */
   private extractPixelBuffer(): PixelBuffer | null {
-    const paintCanvas = this.ctx.getPaintCanvas();
-    const w = paintCanvas.width;
-    const h = paintCanvas.height;
-    if (w === 0 || h === 0) return null;
-
     // HDR-aware GL path: use readPixelFloat for full-range float data
     const glRenderer = this.ctx.getGLRenderer();
     if (glRenderer && this.ctx.isGLRendererActive()) {
+      // Use GL drawing buffer dimensions (may be DPR-scaled)
+      const gl = glRenderer.getContext();
+      if (!gl) return null;
+      const w = gl.drawingBufferWidth;
+      const h = gl.drawingBufferHeight;
+      if (w === 0 || h === 0) return null;
       const floatPixels = glRenderer.readPixelFloat(0, 0, w, h);
       if (floatPixels) {
         // readPixelFloat returns rows bottom-to-top (WebGL convention).
@@ -965,6 +991,9 @@ export class ViewerInputHandler {
     // SDR fallback: read via temporary 2D canvas
     this._isHDRBuffer = false;
     const imageCanvas = this.ctx.getImageCanvas();
+    const w = imageCanvas.width;
+    const h = imageCanvas.height;
+    if (w === 0 || h === 0) return null;
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = w;
     tempCanvas.height = h;
@@ -992,8 +1021,6 @@ export class ViewerInputHandler {
    * Float32Array [0, 1] back to Uint8ClampedArray.
    */
   private writePixelBuffer(buffer: PixelBuffer): void {
-    const paintCanvas = this.ctx.getPaintCanvas();
-    const ctx = this.ctx.getPaintCtx();
     const { data, width, height } = buffer;
 
     // For HDR buffers extracted from the GL renderer, upload as a floating-point
@@ -1011,7 +1038,8 @@ export class ViewerInputHandler {
           flipped.set(data.subarray(srcOffset, srcOffset + stride), dstOffset);
         }
 
-        // Upload float pixels to the current GL texture, overwriting the
+        // Upload float pixels to the currently bound GL texture (which is
+        // the image texture from the last renderImage call), overwriting the
         // rendered image. This preserves HDR values in the rendering pipeline.
         gl.texImage2D(
           gl.TEXTURE_2D,
@@ -1025,33 +1053,45 @@ export class ViewerInputHandler {
           flipped,
         );
 
-        // Trigger a re-render so the GL canvas displays the updated pixels
+        // Invalidate the GL render cache so the next scheduleRender() forces
+        // a full redraw instead of skipping (same-image optimization).
+        // The texture data was modified in-place so renderImage() will bind
+        // the updated texture without re-uploading from source.
+        this.ctx.invalidateGLRenderCache();
         this.ctx.scheduleRender();
         return;
       }
     }
 
-    // SDR fallback: write via 2D canvas putImageData
-    const imageData = ctx.createImageData(width, height);
+    // SDR path: write directly to the image canvas (not the paint overlay,
+    // which gets cleared on every renderPaint() call).
+    const imageCanvas = this.ctx.getImageCanvas();
+    const imageCtx = this.ctx.getImageCtx();
+    const imageData = imageCtx.createImageData(width, height);
     const dst = imageData.data;
     for (let i = 0; i < data.length; i++) {
       dst[i] = Math.round(Math.min(1, Math.max(0, data[i]!)) * 255);
     }
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-    ctx.putImageData(imageData, 0, 0);
+    imageCtx.putImageData(imageData, 0, 0, 0, 0, imageCanvas.width, imageCanvas.height);
   }
 
   /**
    * Convert a normalized canvas point (0-1 range) to pixel coordinates
-   * matching the paint canvas physical size.
+   * matching the active pixel buffer dimensions.
+   *
+   * The Y axis is flipped because getCanvasPoint() uses OpenRV convention
+   * where Y=0 is bottom and Y=1 is top, but pixel buffers have row 0 at
+   * the top.
    */
-  private toPixelCoords(point: StrokePoint): { x: number; y: number } {
-    const paintCanvas = this.ctx.getPaintCanvas();
+  private toPixelCoords(point: StrokePoint | { x: number; y: number }): { x: number; y: number } {
+    // Use active buffer dimensions when available for consistency with
+    // extractPixelBuffer/writePixelBuffer. Fall back to image canvas.
+    const w = this.activePixelBuffer?.width ?? this.ctx.getImageCanvas().width;
+    const h = this.activePixelBuffer?.height ?? this.ctx.getImageCanvas().height;
     return {
-      x: point.x * paintCanvas.width,
-      y: point.y * paintCanvas.height,
+      x: point.x * w,
+      y: (1 - point.y) * h,
     };
   }
 
@@ -1080,15 +1120,25 @@ export class ViewerInputHandler {
     const buffer = this.extractPixelBuffer();
     if (!buffer) return;
 
+    // Create a read-only snapshot of the original pixels. Tools like clone
+    // and smudge sample from this to avoid reading their own writes.
+    const sourceBuffer: PixelBuffer = {
+      data: new Float32Array(buffer.data),
+      width: buffer.width,
+      height: buffer.height,
+      channels: buffer.channels,
+    };
+
     this.isAdvancedDrawing = true;
     this.activePixelBuffer = buffer;
+    this.activeSourceBuffer = sourceBuffer;
     this.activeAdvancedTool = tool;
 
     const pixelPos = this.toPixelCoords(point);
     const brush = this.buildBrushParams(pressure);
 
     tool.beginStroke(pixelPos);
-    tool.apply(buffer, pixelPos, brush);
+    tool.apply(buffer, pixelPos, brush, sourceBuffer);
     this.writePixelBuffer(buffer);
   }
 
@@ -1102,7 +1152,7 @@ export class ViewerInputHandler {
     const pixelPos = this.toPixelCoords(point);
     const brush = this.buildBrushParams(pressure);
 
-    this.activeAdvancedTool.apply(this.activePixelBuffer, pixelPos, brush);
+    this.activeAdvancedTool.apply(this.activePixelBuffer, pixelPos, brush, this.activeSourceBuffer ?? undefined);
     this.writePixelBuffer(this.activePixelBuffer);
   }
 
@@ -1121,6 +1171,7 @@ export class ViewerInputHandler {
 
     this.isAdvancedDrawing = false;
     this.activePixelBuffer = null;
+    this.activeSourceBuffer = null;
     this.activeAdvancedTool = null;
   }
 }

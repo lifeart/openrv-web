@@ -74,7 +74,8 @@ import { VersionManager } from './VersionManager';
 import { StatusManager } from './StatusManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
-import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
+import { AudioCoordinator } from '../../audio/AudioCoordinator';
+import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { Logger } from '../../utils/Logger';
 import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 
@@ -240,7 +241,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
-  private _audioPlaybackManager = new AudioPlaybackManager();
+  private _audioCoordinator = new AudioCoordinator();
 
   // Pre-detected HDR canvas resize tier from DisplayCapabilities.
   // Set via setHDRResizeTier() so VideoSourceNode can use it instead of re-probing.
@@ -363,17 +364,33 @@ export class Session extends EventEmitter<SessionEvents> {
       setAudioSyncEnabled: (enabled) => { this._volumeManager.audioSyncEnabled = enabled; },
     });
 
-    // Forward PlaybackEngine events to Session events
+    // Wire AudioCoordinator callback
+    this._audioCoordinator.setCallbacks({
+      onAudioPathChanged: () => this.applyVolumeToVideo(),
+    });
+
+    // Forward PlaybackEngine events to Session events + AudioCoordinator
     this._playbackEngine.on('frameChanged', (frame) => {
       this.emit('frameChanged', frame);
-      // Audio scrub: play a short audio snippet when scrubbing (not during playback)
-      if (!this._playbackEngine.isPlaying) {
-        this._audioPlaybackManager.scrubToFrame(frame, this._playbackEngine.fps);
-      }
+      this._audioCoordinator.onFrameChanged(frame, this._playbackEngine.fps, this._playbackEngine.isPlaying);
     });
-    this._playbackEngine.on('playbackChanged', (playing) => this.emit('playbackChanged', playing));
-    this._playbackEngine.on('playDirectionChanged', (dir) => this.emit('playDirectionChanged', dir));
-    this._playbackEngine.on('playbackSpeedChanged', (speed) => this.emit('playbackSpeedChanged', speed));
+    this._playbackEngine.on('playbackChanged', (playing) => {
+      const pe = this._playbackEngine;
+      if (playing) {
+        this._audioCoordinator.onPlaybackStarted(pe.currentFrame, pe.fps, pe.playbackSpeed, pe.playDirection);
+      } else {
+        this._audioCoordinator.onPlaybackStopped();
+      }
+      this.emit('playbackChanged', playing);
+    });
+    this._playbackEngine.on('playDirectionChanged', (dir) => {
+      this._audioCoordinator.onDirectionChanged(dir);
+      this.emit('playDirectionChanged', dir);
+    });
+    this._playbackEngine.on('playbackSpeedChanged', (speed) => {
+      this._audioCoordinator.onSpeedChanged(speed);
+      this.emit('playbackSpeedChanged', speed);
+    });
     this._playbackEngine.on('loopModeChanged', (mode) => this.emit('loopModeChanged', mode));
     this._playbackEngine.on('fpsChanged', (fps) => this.emit('fpsChanged', fps));
     this._playbackEngine.on('frameIncrementChanged', (inc) => this.emit('frameIncrementChanged', inc));
@@ -401,15 +418,18 @@ export class Session extends EventEmitter<SessionEvents> {
     });
     this._volumeManager.setCallbacks({
       onVolumeChanged: (v) => {
+        this._audioCoordinator.onVolumeChanged(v);
         this.applyVolumeToVideo();
         this.emit('volumeChanged', v);
       },
       onMutedChanged: (m) => {
+        this._audioCoordinator.onMutedChanged(m);
         this.applyVolumeToVideo();
         this.emit('mutedChanged', m);
       },
       onPreservesPitchChanged: (p) => {
         this.applyPreservesPitchToVideo();
+        this._audioCoordinator.onPreservesPitchChanged(p);
         this.emit('preservesPitchChanged', p);
       },
     });
@@ -503,9 +523,9 @@ export class Session extends EventEmitter<SessionEvents> {
     return null;
   }
 
-  /** Audio playback manager for scrub audio and independent audio playback */
+  /** Audio playback manager (via coordinator) for scrub audio and independent audio playback */
   get audioPlaybackManager(): AudioPlaybackManager {
-    return this._audioPlaybackManager;
+    return this._audioCoordinator.manager;
   }
 
   get currentFrame(): number {
@@ -801,7 +821,14 @@ export class Session extends EventEmitter<SessionEvents> {
   private applyVolumeToVideo(): void {
     const source = this.currentSource;
     if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      this._volumeManager.applyVolumeToVideo(source.element, this._playDirection);
+      const video = source.element;
+      this._audioCoordinator.applyToVideoElement(
+        video,
+        this._volumeManager.getEffectiveVolume(),
+        this._volumeManager.muted,
+        this._playDirection,
+      );
+      video.playbackRate = this._playbackEngine.playbackSpeed;
     }
   }
 
@@ -1268,6 +1295,9 @@ export class Session extends EventEmitter<SessionEvents> {
             });
           }
 
+          // Load audio via Web Audio API (async, falls back to video element audio)
+          this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
+
           this.addSource(source);
 
           // Update session duration to match the first video source
@@ -1323,6 +1353,9 @@ export class Session extends EventEmitter<SessionEvents> {
             element: video,
             videoSourceNode: node,
           };
+
+          // Load audio via Web Audio API (async, falls back to video element audio)
+          this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
 
           this.addSource(source);
 
@@ -1724,6 +1757,9 @@ export class Session extends EventEmitter<SessionEvents> {
           element: video,
         };
 
+        // Load audio via Web Audio API (async, falls back to video element audio)
+        this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
+
         this.addSource(source);
         this._inPoint = 1;
         this._outPoint = duration;
@@ -1808,6 +1844,9 @@ export class Session extends EventEmitter<SessionEvents> {
         log.warn('Initial frame preload error:', err);
       });
     }
+
+    // Load audio via Web Audio API (async, falls back to video element audio)
+    this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
 
     this.addSource(source);
     this._inPoint = 1;
@@ -2397,6 +2436,7 @@ export class Session extends EventEmitter<SessionEvents> {
       this.disposeVideoSource(source);
     }
     this.sources = [];
+    this._audioCoordinator.dispose();
     this._noteManager.dispose();
     this._versionManager.dispose();
     this._statusManager.dispose();

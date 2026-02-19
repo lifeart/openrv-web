@@ -177,6 +177,15 @@ export class ViewerGLRenderer {
   /** Last HDR blit float frame in WebGL row order (bottom-to-top). */
   get lastHDRBlitFrame(): { data: Float32Array; width: number; height: number } | null { return this._lastHDRBlitFrame; }
 
+  /**
+   * Invalidate the render cache so the next renderHDRWithWebGL/renderSDRWithWebGL
+   * call performs a full redraw instead of skipping via the same-image optimization.
+   * Used by advanced paint tools after modifying the GL texture in place.
+   */
+  invalidateRenderCache(): void {
+    this._lastRenderedImage = null;
+  }
+
   constructor(ctx: GLRendererContext, capabilities?: DisplayCapabilities) {
     this._capabilities = capabilities;
     this.ctx = ctx;

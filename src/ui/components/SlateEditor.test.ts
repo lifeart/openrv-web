@@ -414,6 +414,17 @@ describe('SlateEditor', () => {
       const config = editor.generateConfig();
       expect(config.fields.some(f => f.label === 'Notes' && f.value === 'Final')).toBe(true);
     });
+
+    it('SE-095: config includes fontSizeMultiplier', () => {
+      editor.setFontSizeMultiplier(1.5);
+      const config = editor.generateConfig();
+      expect(config.fontSizeMultiplier).toBe(1.5);
+    });
+
+    it('SE-096: config fontSizeMultiplier defaults to 1.0', () => {
+      const config = editor.generateConfig();
+      expect(config.fontSizeMultiplier).toBe(1.0);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -446,11 +457,9 @@ describe('SlateEditor', () => {
 
       // Need to trigger onload manually since JSDOM doesn't actually load images
       const origImage = globalThis.Image;
-      let capturedImg: HTMLImageElement | null = null;
       globalThis.Image = class extends origImage {
         constructor() {
           super();
-          capturedImg = this;
           Object.defineProperty(this, 'naturalWidth', { value: 200, configurable: true });
           Object.defineProperty(this, 'naturalHeight', { value: 100, configurable: true });
           // Simulate async load success

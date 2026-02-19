@@ -82,6 +82,16 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   /**
+   * Returns true when audio playback is handled via Web Audio API
+   * (AudioBufferSourceNode), meaning the HTMLVideoElement should be muted
+   * to prevent echo. Returns false when using video element fallback
+   * or when no audio has been loaded yet.
+   */
+  get isUsingWebAudio(): boolean {
+    return !this.useVideoFallback && this.audioBuffer !== null;
+  }
+
+  /**
    * Initialize audio context (must be called after user interaction)
    */
   async initContext(): Promise<void> {
@@ -380,12 +390,21 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
    * Set playback rate (0.1-8)
    */
   setPlaybackRate(rate: number): void {
-    this._playbackRate = clamp(rate, 0.1, 8);
+    const newRate = clamp(rate, 0.1, 8);
+    if (newRate === this._playbackRate) return;
+
+    // Save current position BEFORE updating rate (timing calculation depends on old rate)
+    const wasPlayingWebAudio = this._isPlaying && !this.useVideoFallback;
+    const currentPos = wasPlayingWebAudio ? this.currentTime : this._currentTime;
+
+    this._playbackRate = newRate;
 
     if (this.useVideoFallback && this.videoElement) {
       this.videoElement.playbackRate = this._playbackRate;
-    } else if (this.sourceNode) {
-      this.sourceNode.playbackRate.value = this._playbackRate;
+    } else if (wasPlayingWebAudio) {
+      // Restart from saved position so timing tracking resets cleanly
+      // (avoids artifacts from old rate being applied to full elapsed time)
+      this.seek(currentPos);
     }
   }
 

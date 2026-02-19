@@ -139,6 +139,23 @@ describe('SlateRenderer', () => {
       const tiny = getFontSize('small', 100);
       expect(tiny).toBeGreaterThanOrEqual(10);
     });
+
+    it('applies font size multiplier', () => {
+      const base = getFontSize('medium', 1080, 1.0);
+      const doubled = getFontSize('medium', 1080, 2.0);
+      const halved = getFontSize('medium', 1080, 0.5);
+
+      expect(doubled).toBe(Math.max(10, Math.round(1080 * 0.035 * 2.0)));
+      expect(halved).toBe(Math.max(10, Math.round(1080 * 0.035 * 0.5)));
+      expect(doubled).toBeGreaterThan(base);
+      expect(halved).toBeLessThan(base);
+    });
+
+    it('defaults multiplier to 1.0 when omitted', () => {
+      const withDefault = getFontSize('large', 1080);
+      const withExplicit = getFontSize('large', 1080, 1.0);
+      expect(withDefault).toBe(withExplicit);
+    });
   });
 
   describe('computeLogoRect', () => {
@@ -247,6 +264,27 @@ describe('SlateRenderer', () => {
       for (let i = 1; i < lines.length; i++) {
         expect(lines[i]!.y).toBeGreaterThan(lines[i - 1]!.y);
       }
+    });
+
+    it('applies fontSizeMultiplier to font sizes', () => {
+      const fields: SlateField[] = [
+        { label: '', value: 'Title', size: 'large' },
+      ];
+
+      const normal = layoutText(fields, 1080, 1.0);
+      const bigger = layoutText(fields, 1080, 2.0);
+
+      expect(bigger[0]!.fontSize).toBeGreaterThan(normal[0]!.fontSize);
+    });
+
+    it('defaults fontSizeMultiplier to 1.0', () => {
+      const fields: SlateField[] = [
+        { label: '', value: 'Title', size: 'large' },
+      ];
+
+      const defaultLines = layoutText(fields, 1080);
+      const explicitLines = layoutText(fields, 1080, 1.0);
+      expect(defaultLines[0]!.fontSize).toBe(explicitLines[0]!.fontSize);
     });
   });
 

@@ -52,10 +52,10 @@ export class PaintToolbar {
     this.addSeparator();
 
     // Advanced paint tools (pixel-destructive)
-    this.createToolButton('dodge', 'sun', 'Dodge (lighten)');
-    this.createToolButton('burn', 'moon', 'Burn (darken)');
-    this.createToolButton('clone', 'copy', 'Clone stamp');
-    this.createToolButton('smudge', 'droplet', 'Smudge');
+    this.createToolButton('dodge', 'sun', 'Dodge tool (D) \u2013 Lighten pixels under the brush');
+    this.createToolButton('burn', 'moon', 'Burn tool (U) \u2013 Darken pixels under the brush');
+    this.createToolButton('clone', 'copy', 'Clone stamp (C) \u2013 Alt-click to set source, then paint to copy pixels');
+    this.createToolButton('smudge', 'droplet', 'Smudge tool (M) \u2013 Drag to blend and smear pixels');
 
     this.addSeparator();
 
@@ -349,6 +349,18 @@ export class PaintToolbar {
         return true;
       case 'a':
         this.paintEngine.tool = 'arrow';
+        return true;
+      case 'd':
+        this.paintEngine.tool = 'dodge';
+        return true;
+      case 'u':
+        this.paintEngine.tool = 'burn';
+        return true;
+      case 'c':
+        this.paintEngine.tool = 'clone';
+        return true;
+      case 'm':
+        this.paintEngine.tool = 'smudge';
         return true;
       case 'b':
         this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle

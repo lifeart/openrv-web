@@ -38,6 +38,8 @@ export interface SlateConfig {
   textColor?: string;
   /** Font family. Default: monospace */
   fontFamily?: string;
+  /** Font size multiplier (0.5 - 2.0). Default: 1.0 */
+  fontSizeMultiplier?: number;
   /** Fields to render on the slate, in display order */
   fields: SlateField[];
   /** Optional logo image (already loaded) */
@@ -151,9 +153,10 @@ const FONT_SIZE_RATIOS = {
 
 /**
  * Calculate font size in pixels for a given tier and canvas height.
+ * @param multiplier Optional font size multiplier (default: 1.0)
  */
-export function getFontSize(size: 'large' | 'medium' | 'small', canvasHeight: number): number {
-  return Math.max(10, Math.round(canvasHeight * FONT_SIZE_RATIOS[size]));
+export function getFontSize(size: 'large' | 'medium' | 'small', canvasHeight: number, multiplier = 1.0): number {
+  return Math.max(10, Math.round(canvasHeight * FONT_SIZE_RATIOS[size] * multiplier));
 }
 
 // ---------------------------------------------------------------------------
@@ -237,10 +240,12 @@ export interface TextLine {
 
 /**
  * Lay out slate fields as centered text lines, returning positions.
+ * @param fontSizeMultiplier Optional multiplier for font sizes (default: 1.0)
  */
 export function layoutText(
   fields: SlateField[],
   canvasHeight: number,
+  fontSizeMultiplier = 1.0,
 ): TextLine[] {
   if (fields.length === 0) return [];
 
@@ -251,7 +256,7 @@ export function layoutText(
   let totalHeight = 0;
   const sizes: number[] = [];
   for (const field of fields) {
-    const fontSize = getFontSize(field.size ?? 'medium', canvasHeight);
+    const fontSize = getFontSize(field.size ?? 'medium', canvasHeight, fontSizeMultiplier);
     sizes.push(fontSize);
     totalHeight += fontSize * lineSpacing;
   }
@@ -296,7 +301,7 @@ export function renderSlate(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const lines = layoutText(config.fields, height);
+  const lines = layoutText(config.fields, height, config.fontSizeMultiplier ?? 1.0);
   for (const line of lines) {
     ctx.font = `${line.fontSize}px ${fontFamily}`;
     ctx.fillText(line.text, width / 2, line.y, width * 0.9);

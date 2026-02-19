@@ -478,6 +478,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
       height: this.state.height,
       backgroundColor: this.state.colors.background,
       textColor: this.state.colors.text,
+      fontSizeMultiplier: this.state.fontSizeMultiplier,
       fields: this.buildFields(),
       logoPosition: this.state.logoPosition,
       logoScale: this.state.logoScale,
