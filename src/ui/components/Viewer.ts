@@ -1233,8 +1233,8 @@ export class Viewer {
         } else {
           // Keep hold mode responsive on cache misses: fetch the hold frame in background,
           // then redraw. In the meantime prefer current frame cache over frame-1 fallback.
-          this.session.getSequenceFrameImage(holdFrameIndex)
-            .then((image) => {
+          this.session.getSequenceFrameImage?.(holdFrameIndex)
+            ?.then((image) => {
               if (image) {
                 this.refresh();
               }
