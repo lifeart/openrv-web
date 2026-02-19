@@ -4,21 +4,11 @@
  * Central registry for image format decoders.
  * Provides format detection by magic number and decoder dispatch.
  *
- * Detection functions (magic byte checks) are eagerly imported since they
- * are lightweight. Full decoder modules are lazy-loaded via dynamic import()
- * on first use, so they don't contribute to initial bundle cost.
+ * Detection functions (magic byte checks) are inlined here to avoid
+ * statically importing heavy decoder modules. Full decoder modules are
+ * lazy-loaded via dynamic import() on first use, so they don't contribute
+ * to initial bundle cost.
  */
-
-import { isEXRFile } from './EXRDecoder';
-import { isDPXFile } from './DPXDecoder';
-import { isCineonFile } from './CineonDecoder';
-import { isTIFFFile, isFloatTIFF } from './TIFFFloatDecoder';
-import { isGainmapJPEG } from './JPEGGainmapDecoder';
-import { isHDRFile } from './HDRDecoder';
-import { isJXLFile } from './JXLDecoder';
-import { isGainmapHEIC } from './HEICGainmapDecoder';
-import { isJP2File } from './JP2Decoder';
-import { isMXFFile } from './MXFDemuxer';
 
 export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
 
@@ -41,9 +31,280 @@ export interface FormatDecoder {
   ): Promise<DecodeResult>;
 }
 
+// =============================================================================
+// Inline detection helpers
+//
+// These are inlined to avoid static imports of heavy decoder modules,
+// enabling Vite/Rollup to code-split them into lazy chunks.
+// =============================================================================
+
+// --- ISOBMFF box helpers (shared by HEIC, JXL, JP2 detection) ---
+
+function readBoxTypeAt(view: DataView, offset: number): string {
+  return String.fromCharCode(
+    view.getUint8(offset),
+    view.getUint8(offset + 1),
+    view.getUint8(offset + 2),
+    view.getUint8(offset + 3)
+  );
+}
+
+function findBoxInRange(
+  view: DataView,
+  type: string,
+  start: number,
+  end: number,
+  isFullBox = false
+): { dataStart: number; dataEnd: number } | null {
+  let offset = start;
+  while (offset + 8 <= end) {
+    const boxSize = view.getUint32(offset);
+    if (boxSize < 8 || offset + boxSize > end) break;
+    if (readBoxTypeAt(view, offset + 4) === type) {
+      const headerSize = isFullBox ? 12 : 8;
+      return { dataStart: offset + headerSize, dataEnd: offset + boxSize };
+    }
+    offset += boxSize;
+  }
+  return null;
+}
+
+// --- EXR detection ---
+
+const EXR_MAGIC = 0x01312f76;
+
+function isEXRFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) return false;
+  return new DataView(buffer).getUint32(0, true) === EXR_MAGIC;
+}
+
+// --- DPX detection ---
+
+const DPX_MAGIC_BE = 0x53445058; // "SDPX"
+const DPX_MAGIC_LE = 0x58504453; // "XPDS"
+
+function isDPXFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) return false;
+  const magic = new DataView(buffer).getUint32(0, false);
+  return magic === DPX_MAGIC_BE || magic === DPX_MAGIC_LE;
+}
+
+// --- Cineon detection ---
+
+const CINEON_MAGIC = 0x802a5fd7;
+
+function isCineonFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) return false;
+  return new DataView(buffer).getUint32(0, false) === CINEON_MAGIC;
+}
+
+// --- TIFF / Float TIFF detection ---
+
+const TIFF_LE_MARK = 0x4949; // "II"
+const TIFF_BE_MARK = 0x4d4d; // "MM"
+const TIFF_MAGIC_42 = 42;
+const TAG_ID_BITS_PER_SAMPLE = 258;
+const TAG_ID_SAMPLE_FORMAT = 339;
+const SAMPLE_FMT_FLOAT = 3;
+
+function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 8) return false;
+  const view = new DataView(buffer);
+  const byteOrder = view.getUint16(0, false);
+  if (byteOrder !== TIFF_LE_MARK && byteOrder !== TIFF_BE_MARK) return false;
+  const le = byteOrder === TIFF_LE_MARK;
+  if (view.getUint16(2, le) !== TIFF_MAGIC_42) return false;
+
+  // Parse first IFD to check SampleFormat and BitsPerSample
+  const ifdOffset = view.getUint32(4, le);
+  if (ifdOffset + 2 > buffer.byteLength) return false;
+  const numEntries = view.getUint16(ifdOffset, le);
+
+  let bitsPerSample = 8;
+  let sampleFormat = 1; // uint default
+
+  for (let i = 0; i < numEntries; i++) {
+    const pos = ifdOffset + 2 + i * 12;
+    if (pos + 12 > buffer.byteLength) break;
+    const tagId = view.getUint16(pos, le);
+    const tagType = view.getUint16(pos + 2, le);
+
+    if (tagId === TAG_ID_BITS_PER_SAMPLE || tagId === TAG_ID_SAMPLE_FORMAT) {
+      let val: number;
+      if (tagType === 3) { // SHORT
+        val = view.getUint16(pos + 8, le);
+      } else if (tagType === 4) { // LONG
+        val = view.getUint32(pos + 8, le);
+      } else {
+        continue;
+      }
+      if (tagId === TAG_ID_BITS_PER_SAMPLE) bitsPerSample = val;
+      if (tagId === TAG_ID_SAMPLE_FORMAT) sampleFormat = val;
+    }
+  }
+
+  return sampleFormat === SAMPLE_FMT_FLOAT && bitsPerSample === 32;
+}
+
+// --- JPEG Gainmap detection ---
+
+function isGainmapJPEG(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) return false;
+  const view = new DataView(buffer);
+  if (view.getUint16(0) !== 0xFFD8) return false;
+  // Scan for MPF APP2 marker
+  return findMPFMarker(view) !== -1;
+}
+
+function findMPFMarker(view: DataView): number {
+  let offset = 2; // Skip SOI
+  const length = view.byteLength;
+
+  while (offset < length - 4) {
+    if (view.getUint8(offset) !== 0xFF) { offset++; continue; }
+    const marker = view.getUint8(offset + 1);
+    if (marker === 0xDA || marker === 0xD9) break; // SOS or EOI
+    if (marker === 0xFF) { offset++; continue; } // padding
+    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+      offset += 2; continue; // standalone markers
+    }
+    if (offset + 3 >= length) break;
+    const segLen = view.getUint16(offset + 2);
+    if (segLen < 2) break;
+    // APP2 (0xE2) with 'MPF\0'
+    if (marker === 0xE2 && offset + 7 < length &&
+        view.getUint8(offset + 4) === 0x4D &&
+        view.getUint8(offset + 5) === 0x50 &&
+        view.getUint8(offset + 6) === 0x46 &&
+        view.getUint8(offset + 7) === 0x00) {
+      return offset;
+    }
+    offset += 2 + segLen;
+  }
+  return -1;
+}
+
+// --- Radiance HDR detection ---
+
+function isHDRFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 6) return false;
+  const len = Math.min(buffer.byteLength, 10);
+  const bytes = new Uint8Array(buffer, 0, len);
+  const header = String.fromCharCode(...bytes);
+  return header.startsWith('#?RADIANCE') || header.startsWith('#?RGBE');
+}
+
+// --- JPEG XL detection ---
+
+function isJXLFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 2) return false;
+  const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 12));
+  // Bare codestream magic
+  if (bytes[0] === 0xFF && bytes[1] === 0x0A) return true;
+  // ISOBMFF container: ftyp box with 'jxl ' brand
+  if (buffer.byteLength >= 12) {
+    const view = new DataView(buffer);
+    if (readBoxTypeAt(view, 4) === 'ftyp' && readBoxTypeAt(view, 8) === 'jxl ') return true;
+  }
+  return false;
+}
+
+// --- HEIC Gainmap detection ---
+
+const HEIC_BRANDS = new Set(['heic', 'heix', 'hevc', 'heim', 'heis', 'hevm', 'hevx']);
+const AVIF_BRANDS = new Set(['avif', 'avis']);
+const APPLE_GAINMAP_URN = 'urn:com:apple:photo:2020:aux:hdrgainmap';
+const ISO_GAINMAP_URN = 'urn:com:photo:aux:hdrgainmap';
+
+function isGainmapHEIC(buffer: ArrayBuffer): boolean {
+  // Check HEIC file (ftyp with HEIC brands, excluding AVIF)
+  if (buffer.byteLength < 16) return false;
+  const view = new DataView(buffer);
+  if (readBoxTypeAt(view, 4) !== 'ftyp') return false;
+  const ftypSize = view.getUint32(0);
+  if (ftypSize < 16 || ftypSize > buffer.byteLength) return false;
+
+  const majorBrand = readBoxTypeAt(view, 8);
+  if (AVIF_BRANDS.has(majorBrand)) return false;
+
+  let isHEIC = HEIC_BRANDS.has(majorBrand);
+  if (!isHEIC && majorBrand === 'mif1') {
+    for (let offset = 16; offset + 4 <= ftypSize; offset += 4) {
+      const compat = readBoxTypeAt(view, offset);
+      if (AVIF_BRANDS.has(compat)) return false;
+      if (HEIC_BRANDS.has(compat)) { isHEIC = true; break; }
+    }
+  }
+  if (!isHEIC) return false;
+
+  // Look for gainmap auxC in meta → iprp → ipco
+  const meta = findBoxInRange(view, 'meta', ftypSize, buffer.byteLength, true);
+  if (!meta) return false;
+  const iprp = findBoxInRange(view, 'iprp', meta.dataStart, meta.dataEnd);
+  if (!iprp) return false;
+  const ipco = findBoxInRange(view, 'ipco', iprp.dataStart, iprp.dataEnd);
+  if (!ipco) return false;
+
+  // Scan ipco for auxC box with gainmap URN
+  let offset = ipco.dataStart;
+  while (offset + 8 <= ipco.dataEnd) {
+    const boxSize = view.getUint32(offset);
+    if (boxSize < 8 || offset + boxSize > ipco.dataEnd) break;
+    if (readBoxTypeAt(view, offset + 4) === 'auxC') {
+      // auxC is FullBox: header(8) + version+flags(4) then null-terminated URN
+      const urnStart = offset + 12;
+      const urnEnd = offset + boxSize;
+      if (urnStart < urnEnd) {
+        const chars: string[] = [];
+        for (let i = urnStart; i < urnEnd; i++) {
+          const c = view.getUint8(i);
+          if (c === 0) break;
+          chars.push(String.fromCharCode(c));
+        }
+        const urn = chars.join('');
+        if (urn === APPLE_GAINMAP_URN || urn === ISO_GAINMAP_URN) return true;
+      }
+    }
+    offset += boxSize;
+  }
+  return false;
+}
+
+// --- JPEG 2000 / HTJ2K detection ---
+
+function isJP2File(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 2) return false;
+  const bytes = new Uint8Array(buffer);
+  // Raw J2K codestream SOC marker
+  if (bytes[0] === 0xFF && bytes[1] === 0x4F) return true;
+  // JP2 box format signature
+  if (buffer.byteLength >= 12) {
+    const view = new DataView(buffer);
+    if (view.getUint32(0, false) === 0x0000000C &&
+        bytes[4] === 0x6A && bytes[5] === 0x50 && bytes[6] === 0x20 && bytes[7] === 0x20 &&
+        view.getUint32(8, false) === 0x0D0A870A) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// --- MXF detection ---
+
+function isMXFFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 8) return false;
+  const bytes = new Uint8Array(buffer, 0, 8);
+  // SMPTE UL prefix for partition pack
+  return bytes[0] === 0x06 && bytes[1] === 0x0E && bytes[2] === 0x2B && bytes[3] === 0x34 &&
+         bytes[4] === 0x02 && bytes[5] === 0x05 && bytes[6] === 0x01 && bytes[7] === 0x01;
+}
+
+// =============================================================================
+// Decoder adapters (lazy-load full modules via dynamic import)
+// =============================================================================
+
 /**
  * EXR format decoder adapter
- * Detection is sync (magic byte check); decoding lazy-loads the full module.
  */
 const exrDecoder: FormatDecoder = {
   formatName: 'exr',
@@ -67,7 +328,6 @@ const exrDecoder: FormatDecoder = {
 
 /**
  * DPX format decoder adapter
- * Detection is sync (magic byte check); decoding lazy-loads the full module.
  */
 const dpxDecoder: FormatDecoder = {
   formatName: 'dpx',
@@ -90,7 +350,6 @@ const dpxDecoder: FormatDecoder = {
 
 /**
  * Cineon format decoder adapter
- * Detection is sync (magic byte check); decoding lazy-loads the full module.
  */
 const cineonDecoder: FormatDecoder = {
   formatName: 'cineon',
@@ -113,13 +372,10 @@ const cineonDecoder: FormatDecoder = {
 
 /**
  * TIFF float format decoder adapter
- * Detection is sync (magic byte + header parse); decoding lazy-loads the full module.
  */
 const tiffDecoder: FormatDecoder = {
   formatName: 'tiff',
-  canDecode(buffer: ArrayBuffer): boolean {
-    return isTIFFFile(buffer) && isFloatTIFF(buffer);
-  },
+  canDecode: isTIFFAndFloat,
   async decode(buffer: ArrayBuffer) {
     const { decodeTIFFFloat } = await import('./TIFFFloatDecoder');
     const result = await decodeTIFFFloat(buffer);
@@ -136,7 +392,6 @@ const tiffDecoder: FormatDecoder = {
 
 /**
  * JPEG Gainmap format decoder adapter
- * Detection is sync (JPEG SOI + MPF APP2 marker check); decoding lazy-loads the full module.
  */
 const jpegGainmapDecoder: FormatDecoder = {
   formatName: 'jpeg-gainmap',
@@ -164,7 +419,6 @@ const jpegGainmapDecoder: FormatDecoder = {
 
 /**
  * HEIC Gainmap format decoder adapter
- * Detection is sync (ftyp brand + auxC check); decoding lazy-loads the full module.
  */
 const heicGainmapDecoder: FormatDecoder = {
   formatName: 'heic-gainmap',
@@ -192,7 +446,6 @@ const heicGainmapDecoder: FormatDecoder = {
 
 /**
  * Radiance HDR format decoder adapter
- * Detection is sync (magic byte check); decoding lazy-loads the full module.
  */
 const hdrDecoder: FormatDecoder = {
   formatName: 'hdr',
@@ -213,7 +466,6 @@ const hdrDecoder: FormatDecoder = {
 
 /**
  * JPEG XL format decoder adapter
- * Detection is sync (magic byte check); decoding lazy-loads the full module.
  */
 const jxlDecoder: FormatDecoder = {
   formatName: 'jxl',
@@ -234,10 +486,6 @@ const jxlDecoder: FormatDecoder = {
 
 /**
  * JPEG 2000 / HTJ2K format decoder adapter
- * Detection is sync (magic byte check); decoding lazy-loads the full module.
- * Uses the module-level WASM decoder set via setJP2WasmDecoder().
- * Note: actual decoding requires a WASM module (openjph). Without it,
- * decode() throws a descriptive error for graceful fallback.
  */
 const jp2Decoder: FormatDecoder = {
   formatName: 'jp2',
@@ -263,10 +511,6 @@ const jp2Decoder: FormatDecoder = {
 
 /**
  * MXF container format adapter
- * Detection is sync (SMPTE UL prefix check). MXF is a container, not a single
- * image format, so "decoding" extracts the first video essence descriptor's
- * metadata and returns a 1x1 diagnostic pixel. This allows the registry to
- * identify MXF files and report their contents.
  */
 const mxfDecoder: FormatDecoder = {
   formatName: 'mxf',

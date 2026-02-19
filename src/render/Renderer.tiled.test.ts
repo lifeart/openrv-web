@@ -5,46 +5,50 @@
  * images in a tiled layout using viewport/scissor clipping.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { Renderer } from './Renderer';
 import { IPImage } from '../core/image/Image';
-import { createMockRendererGL, initRendererWithMockGL } from '../../test/mocks';
+import { initRendererWithMockGL } from '../../test/mocks';
 import type { TileViewport } from '../nodes/groups/LayoutGroupNode';
 
+/**
+ * Extended mock GL context with the additional methods needed for tiled rendering.
+ */
+interface TiledMockGL {
+  enable: Mock;
+  disable: Mock;
+  scissor: Mock;
+  viewport: Mock;
+  drawArrays: Mock;
+  texImage2D: Mock;
+  getParameter: Mock;
+}
+
 // Extend the mock GL to add the methods needed for tiled rendering
-function initRendererForTiled(renderer: Renderer): ReturnType<typeof createMockRendererGL> & {
-  enable: ReturnType<typeof vi.fn>;
-  disable: ReturnType<typeof vi.fn>;
-  scissor: ReturnType<typeof vi.fn>;
-  getParameter: ReturnType<typeof vi.fn>;
-} {
+function initRendererForTiled(renderer: Renderer): TiledMockGL {
   const baseGL = initRendererWithMockGL(renderer);
 
   // Add missing methods for tiled rendering
-  const gl = baseGL as unknown as Record<string, unknown>;
-  gl['enable'] = gl['enable'] ?? vi.fn();
-  gl['disable'] = gl['disable'] ?? vi.fn();
-  gl['scissor'] = gl['scissor'] ?? vi.fn();
-  gl['getParameter'] = gl['getParameter'] ?? vi.fn(() => new Int32Array([0, 0, 1920, 1080]));
-  gl['SCISSOR_TEST'] = gl['SCISSOR_TEST'] ?? 0x0C11;
-  gl['VIEWPORT'] = gl['VIEWPORT'] ?? 0x0BA2;
-  gl['HALF_FLOAT'] = gl['HALF_FLOAT'] ?? 0x140B;
-  gl['NEAREST'] = gl['NEAREST'] ?? 0x2600;
-  gl['NO_ERROR'] = gl['NO_ERROR'] ?? 0;
-  gl['FRAMEBUFFER'] = gl['FRAMEBUFFER'] ?? 0x8D40;
-  gl['R32F'] = gl['R32F'] ?? 0x822E;
-  gl['RED'] = gl['RED'] ?? 0x1903;
-  gl['TEXTURE1'] = gl['TEXTURE1'] ?? 0x84C1;
-  gl['TEXTURE2'] = gl['TEXTURE2'] ?? 0x84C2;
-  gl['TEXTURE4'] = gl['TEXTURE4'] ?? 0x84C4;
-  gl['TEXTURE5'] = gl['TEXTURE5'] ?? 0x84C5;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const gl = baseGL as any;
+  gl.enable = gl.enable ?? vi.fn();
+  gl.disable = gl.disable ?? vi.fn();
+  gl.scissor = gl.scissor ?? vi.fn();
+  gl.getParameter = gl.getParameter ?? vi.fn(() => new Int32Array([0, 0, 1920, 1080]));
+  gl.SCISSOR_TEST = gl.SCISSOR_TEST ?? 0x0C11;
+  gl.VIEWPORT = gl.VIEWPORT ?? 0x0BA2;
+  gl.HALF_FLOAT = gl.HALF_FLOAT ?? 0x140B;
+  gl.NEAREST = gl.NEAREST ?? 0x2600;
+  gl.NO_ERROR = gl.NO_ERROR ?? 0;
+  gl.FRAMEBUFFER = gl.FRAMEBUFFER ?? 0x8D40;
+  gl.R32F = gl.R32F ?? 0x822E;
+  gl.RED = gl.RED ?? 0x1903;
+  gl.TEXTURE1 = gl.TEXTURE1 ?? 0x84C1;
+  gl.TEXTURE2 = gl.TEXTURE2 ?? 0x84C2;
+  gl.TEXTURE4 = gl.TEXTURE4 ?? 0x84C4;
+  gl.TEXTURE5 = gl.TEXTURE5 ?? 0x84C5;
 
-  return gl as unknown as ReturnType<typeof createMockRendererGL> & {
-    enable: ReturnType<typeof vi.fn>;
-    disable: ReturnType<typeof vi.fn>;
-    scissor: ReturnType<typeof vi.fn>;
-    getParameter: ReturnType<typeof vi.fn>;
-  };
+  return gl as TiledMockGL;
 }
 
 function createTestImage(width = 100, height = 100): IPImage {
@@ -108,9 +112,7 @@ describe('Renderer renderTiledImages', () => {
     renderer.renderTiledImages(tiles);
 
     // viewport should be called for each tile + restore
-    // Each tile calls viewport once, plus one restore at the end
     const viewportCalls = gl.viewport.mock.calls;
-    // Filter for our tile viewports (not the restore call)
     expect(viewportCalls.length).toBeGreaterThanOrEqual(4);
     expect(viewportCalls).toContainEqual([0, 300, 400, 300]);
     expect(viewportCalls).toContainEqual([400, 300, 400, 300]);

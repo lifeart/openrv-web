@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppNetworkBridge } from './AppNetworkBridge';
 import { EventEmitter } from './utils/EventEmitter';
+import { PaintEngine } from './paint/PaintEngine';
+import { NoteManager } from './core/session/NoteManager';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -15,34 +17,46 @@ class MockSession extends EventEmitter {
   play = vi.fn();
   pause = vi.fn();
   goToFrame = vi.fn();
+  noteManager = new NoteManager();
 }
 
 // Helper to track unsubscribers
 const networkUnsubscribers: Set<() => void> = new Set();
 const managerUnsubscribers: Set<() => void> = new Set();
 
-function createMockNetworkSyncManager() {
-  return {
-    isConnected: true,
-    on: vi.fn(() => {
-      const unsub = vi.fn();
-      managerUnsubscribers.add(unsub);
-      return unsub;
-    }),
-    sendPlaybackSync: vi.fn(),
-    sendFrameSync: vi.fn(),
-    getSyncStateManager: vi.fn(() => ({
-      isApplyingRemoteState: false,
-      beginApplyRemote: vi.fn(),
-      endApplyRemote: vi.fn(),
-      shouldApplyFrameSync: vi.fn(() => true),
-    })),
-    simulateRoomCreated: vi.fn(),
-    joinRoom: vi.fn(),
-    leaveRoom: vi.fn(),
-    setSyncSettings: vi.fn(),
-    roomInfo: null,
+/**
+ * EventEmitter-based mock for NetworkSyncManager that supports
+ * both `on` tracking and simulating incoming events.
+ */
+class MockNetworkSyncManager extends EventEmitter {
+  isConnected = true;
+  sendPlaybackSync = vi.fn();
+  sendFrameSync = vi.fn();
+  sendAnnotationSync = vi.fn();
+  sendNoteSync = vi.fn();
+  simulateRoomCreated = vi.fn();
+  joinRoom = vi.fn();
+  leaveRoom = vi.fn();
+  setSyncSettings = vi.fn();
+  roomInfo = null;
+  isHost = false;
+
+  private _sm = {
+    isApplyingRemoteState: false,
+    beginApplyRemote: vi.fn(),
+    endApplyRemote: vi.fn(),
+    shouldApplyFrameSync: vi.fn(() => true),
   };
+
+  getSyncStateManager = vi.fn(() => this._sm);
+
+  // Override `on` to track unsubscribers while still wiring real events
+  on(event: string, handler: (...args: any[]) => void): () => void {
+    const unsub = super.on(event as any, handler as any);
+    const wrappedUnsub = vi.fn(() => unsub());
+    managerUnsubscribers.add(wrappedUnsub);
+    return wrappedUnsub;
+  }
 }
 
 function createMockNetworkControl() {
@@ -64,6 +78,13 @@ function createMockNetworkControl() {
 function createMockViewer() {
   return {
     setZoom: vi.fn(),
+    getColorAdjustments: vi.fn(() => ({
+      exposure: 0, gamma: 1, saturation: 1, vibrance: 0,
+      vibranceSkinProtection: false, contrast: 1, clarity: 0,
+      hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+      highlights: 0, shadows: 0, whites: 0, blacks: 0,
+    })),
+    setColorAdjustments: vi.fn(),
   };
 }
 
@@ -75,14 +96,16 @@ function createMockHeaderBar() {
 
 function createContext() {
   const session = new MockSession();
-  const networkSyncManager = createMockNetworkSyncManager();
+  const networkSyncManager = new MockNetworkSyncManager();
   const networkControl = createMockNetworkControl();
   const viewer = createMockViewer();
   const headerBar = createMockHeaderBar();
+  const paintEngine = new PaintEngine();
 
   return {
     session: session as any,
     viewer: viewer as any,
+    paintEngine,
     networkSyncManager: networkSyncManager as any,
     networkControl: networkControl as any,
     headerBar: headerBar as any,
@@ -92,6 +115,7 @@ function createContext() {
     _networkControl: networkControl,
     _viewer: viewer,
     _headerBar: headerBar,
+    _paintEngine: paintEngine,
   };
 }
 
@@ -110,6 +134,7 @@ describe('AppNetworkBridge', () => {
     bridge = new AppNetworkBridge({
       session: ctx.session,
       viewer: ctx.viewer,
+      paintEngine: ctx.paintEngine,
       networkSyncManager: ctx.networkSyncManager,
       networkControl: ctx.networkControl,
       headerBar: ctx.headerBar,
@@ -244,15 +269,276 @@ describe('AppNetworkBridge', () => {
 
     it('ANB-031: dispose() calls unsubscribe for NetworkSyncManager listeners', () => {
       bridge.setup();
-      
+
       // We expect at least one listener (e.g. connectionStateChanged)
       expect(managerUnsubscribers.size).toBeGreaterThan(0);
-      
+
       bridge.dispose();
 
       for (const unsub of managerUnsubscribers) {
         expect(unsub).toHaveBeenCalled();
       }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Annotation sync
+  // -----------------------------------------------------------------------
+  describe('annotation sync', () => {
+    it('ANB-040: incoming syncAnnotation add applies to PaintEngine', () => {
+      bridge.setup();
+
+      const annotation = {
+        type: 'pen' as const,
+        id: 'remote-1',
+        frame: 5,
+        user: 'alice',
+        color: [1, 0, 0, 1] as [number, number, number, number],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0.1, y: 0.2 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 5,
+        duration: 0,
+      };
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 5,
+        strokes: [annotation],
+        action: 'add',
+        annotationId: 'remote-1',
+        timestamp: Date.now(),
+      });
+
+      const annotations = ctx._paintEngine.getAnnotationsForFrame(5);
+      expect(annotations).toHaveLength(1);
+      expect(annotations[0].id).toBe('remote-1');
+    });
+
+    it('ANB-041: incoming syncAnnotation remove deletes annotation from PaintEngine', () => {
+      bridge.setup();
+
+      // First add an annotation
+      const annotation = {
+        type: 'pen' as const,
+        id: 'remote-2',
+        frame: 3,
+        user: 'alice',
+        color: [1, 0, 0, 1] as [number, number, number, number],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0.1, y: 0.2 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 3,
+        duration: 0,
+      };
+      ctx._paintEngine.addRemoteAnnotation(annotation);
+      expect(ctx._paintEngine.getAnnotationsForFrame(3)).toHaveLength(1);
+
+      // Now remove via sync
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 3,
+        strokes: [],
+        action: 'remove',
+        annotationId: 'remote-2',
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._paintEngine.getAnnotationsForFrame(3)).toHaveLength(0);
+    });
+
+    it('ANB-042: incoming syncAnnotation clear removes all annotations on frame', () => {
+      bridge.setup();
+
+      // Add multiple annotations
+      ctx._paintEngine.addRemoteAnnotation({
+        type: 'pen', id: 'a1', frame: 7, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
+        join: 3, cap: 2, splat: false, mode: 0, startFrame: 7, duration: 0,
+      } as any);
+      ctx._paintEngine.addRemoteAnnotation({
+        type: 'pen', id: 'a2', frame: 7, user: 'bob',
+        color: [0, 1, 0, 1], width: 3, brush: 0, points: [{ x: 0.5, y: 0.5 }],
+        join: 3, cap: 2, splat: false, mode: 0, startFrame: 7, duration: 0,
+      } as any);
+      expect(ctx._paintEngine.getAnnotationsForFrame(7)).toHaveLength(2);
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 7,
+        strokes: [],
+        action: 'clear',
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._paintEngine.getAnnotationsForFrame(7)).toHaveLength(0);
+    });
+
+    it('ANB-043: local strokeAdded triggers sendAnnotationSync', () => {
+      bridge.setup();
+
+      ctx._paintEngine.tool = 'pen';
+      ctx._paintEngine.beginStroke(10, { x: 0.1, y: 0.2 });
+      ctx._paintEngine.continueStroke({ x: 0.3, y: 0.4 });
+      ctx._paintEngine.endStroke();
+
+      expect(ctx._networkSyncManager.sendAnnotationSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendAnnotationSync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          frame: 10,
+          action: 'add',
+          strokes: expect.arrayContaining([
+            expect.objectContaining({ frame: 10, type: 'pen' }),
+          ]),
+        }),
+      );
+    });
+
+    it('ANB-044: remote annotations do not affect local undo stack', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 1,
+        strokes: [{
+          type: 'pen', id: 'remote-3', frame: 1, user: 'alice',
+          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
+          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+        }],
+        action: 'add',
+        timestamp: Date.now(),
+      });
+
+      // Undo should not remove the remote annotation (nothing in undo stack)
+      const undone = ctx._paintEngine.undo();
+      expect(undone).toBe(false);
+      expect(ctx._paintEngine.getAnnotationsForFrame(1)).toHaveLength(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Color sync
+  // -----------------------------------------------------------------------
+  describe('color sync', () => {
+    it('ANB-050: incoming syncColor applies to viewer', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncColor', {
+        exposure: 1.5,
+        gamma: 2.2,
+        saturation: 0.8,
+        contrast: 1.1,
+        temperature: 500,
+        tint: -10,
+        brightness: 0.1,
+      });
+
+      expect(ctx._viewer.setColorAdjustments).toHaveBeenCalledTimes(1);
+      expect(ctx._viewer.setColorAdjustments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exposure: 1.5,
+          gamma: 2.2,
+          saturation: 0.8,
+          contrast: 1.1,
+          temperature: 500,
+          tint: -10,
+          brightness: 0.1,
+        }),
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Note sync
+  // -----------------------------------------------------------------------
+  describe('note sync', () => {
+    it('ANB-060: incoming syncNote add creates note in NoteManager', () => {
+      bridge.setup();
+
+      const note = {
+        id: 'note-remote-1',
+        sourceIndex: 0,
+        frameStart: 1,
+        frameEnd: 5,
+        text: 'Fix this frame',
+        author: 'alice',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        status: 'open' as const,
+        parentId: null,
+        color: '#ff0000',
+      };
+
+      ctx._networkSyncManager.emit('syncNote', {
+        action: 'add',
+        note,
+        timestamp: Date.now(),
+      });
+
+      const notes = ctx._session.noteManager.getNotes();
+      expect(notes).toHaveLength(1);
+      expect(notes[0].text).toBe('Fix this frame');
+    });
+
+    it('ANB-061: incoming syncNote remove deletes note from NoteManager', () => {
+      bridge.setup();
+
+      // Add a note first
+      const created = ctx._session.noteManager.addNote(0, 1, 5, 'Test note', 'bob');
+
+      ctx._networkSyncManager.emit('syncNote', {
+        action: 'remove',
+        noteId: created.id,
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._session.noteManager.getNotes()).toHaveLength(0);
+    });
+
+    it('ANB-062: incoming syncNote update modifies note', () => {
+      bridge.setup();
+
+      const created = ctx._session.noteManager.addNote(0, 1, 5, 'Original', 'bob');
+
+      ctx._networkSyncManager.emit('syncNote', {
+        action: 'update',
+        noteId: created.id,
+        note: { text: 'Updated text', status: 'resolved' },
+        timestamp: Date.now(),
+      });
+
+      const note = ctx._session.noteManager.getNote(created.id);
+      expect(note?.text).toBe('Updated text');
+      expect(note?.status).toBe('resolved');
+    });
+
+    it('ANB-063: incoming syncNote clear removes all notes', () => {
+      bridge.setup();
+
+      ctx._session.noteManager.addNote(0, 1, 5, 'Note 1', 'alice');
+      ctx._session.noteManager.addNote(0, 6, 10, 'Note 2', 'bob');
+      expect(ctx._session.noteManager.getNotes()).toHaveLength(2);
+
+      ctx._networkSyncManager.emit('syncNote', {
+        action: 'clear',
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._session.noteManager.getNotes()).toHaveLength(0);
+    });
+
+    it('ANB-064: local notesChanged triggers sendNoteSync', () => {
+      bridge.setup();
+
+      // Trigger session notesChanged event (simulates NoteManager callback)
+      ctx._session.emit('notesChanged', undefined);
+
+      // Should have been called (at minimum a clear message)
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalled();
     });
   });
 });

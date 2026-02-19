@@ -9,28 +9,14 @@ import { BaseSourceNode } from './BaseSourceNode';
 import { IPImage, ImageMetadata, TransferFunction, ColorPrimaries } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
-import {
-  decodeEXR,
-  exrToIPImage,
-  isEXRFile,
+import type {
   EXRLayerInfo,
   EXRDecodeOptions,
   EXRChannelRemapping,
 } from '../../formats/EXRDecoder';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
-import { isGainmapJPEG, parseGainmapJPEG, decodeGainmapToFloat32 } from '../../formats/JPEGGainmapDecoder';
-import { isGainmapAVIF, parseGainmapAVIF, decodeAVIFGainmapToFloat32 } from '../../formats/AVIFGainmapDecoder';
-import { isJXLFile, isJXLContainer } from '../../formats/JXLDecoder';
-import {
-  isHEICFile,
-  isGainmapHEIC,
-  parseHEICGainmapInfo,
-  parseHEICColorInfo,
-  decodeHEICGainmapToFloat32,
-  type HEICGainmapInfo,
-  type HEICColorInfo,
-} from '../../formats/HEICGainmapDecoder';
-import { isRAWExtension, extractRAWPreview, type RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
+import type { HEICGainmapInfo, HEICColorInfo } from '../../formats/HEICGainmapDecoder';
+import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -104,6 +90,15 @@ function isJXLExtension(filename: string): boolean {
 function isHEICExtension(filename: string): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext === 'heic' || ext === 'heif';
+}
+
+/**
+ * Check if a filename has a camera RAW extension
+ */
+const RAW_EXTENSIONS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw']);
+function isRAWExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  return RAW_EXTENSIONS.has(ext);
 }
 
 /**
@@ -626,6 +621,7 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
+          const { isGainmapJPEG, parseGainmapJPEG } = await import('../../formats/JPEGGainmapDecoder');
           if (isGainmapJPEG(buffer)) {
             const info = parseGainmapJPEG(buffer);
             if (info) {
@@ -687,6 +683,7 @@ export class FileSourceNode extends BaseSourceNode {
           const avifValid = isAVIFFile(buffer);
           if (avifValid) {
             // Check for gainmap FIRST (gainmap AVIF may also have nclx HDR markers)
+            const { isGainmapAVIF, parseGainmapAVIF } = await import('../../formats/AVIFGainmapDecoder');
             const hasGainmap = isGainmapAVIF(buffer);
             if (hasGainmap) {
               const gmInfo = parseGainmapAVIF(buffer);
@@ -752,6 +749,7 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
+          const { isJXLFile, isJXLContainer } = await import('../../formats/JXLDecoder');
           if (isJXLFile(buffer)) {
             // Check ISOBMFF container for HDR color info (same nclx parsing as AVIF)
             if (isJXLContainer(buffer)) {
@@ -784,6 +782,7 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
+          const { isHEICFile, isGainmapHEIC, parseHEICGainmapInfo, parseHEICColorInfo } = await import('../../formats/HEICGainmapDecoder');
           if (isHEICFile(buffer)) {
             // Check for gainmap FIRST (gainmap HEIC may also have nclx HDR markers)
             if (isGainmapHEIC(buffer)) {
@@ -822,7 +821,8 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          const loaded = await this.loadRAWPreview(buffer, filename, url, originalUrl);
+          const { extractRAWPreview } = await import('../../formats/RAWPreviewDecoder');
+          const loaded = await this.loadRAWPreview(extractRAWPreview, buffer, filename, url, originalUrl);
           if (loaded) return;
         }
       } catch (err) {
@@ -932,6 +932,8 @@ export class FileSourceNode extends BaseSourceNode {
     originalUrl?: string,
     options?: EXRDecodeOptions
   ): Promise<void> {
+    const { isEXRFile, decodeEXR, exrToIPImage } = await import('../../formats/EXRDecoder');
+
     // Verify it's actually an EXR file
     if (!isEXRFile(buffer)) {
       throw new Error('Invalid EXR file: wrong magic number');
@@ -1053,6 +1055,7 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    const { decodeGainmapToFloat32 } = await import('../../formats/JPEGGainmapDecoder');
     const result = await decodeGainmapToFloat32(buffer, info);
     // Compute peak pixel value for metadata
     let peakValue = 0;
@@ -1118,6 +1121,7 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    const { decodeAVIFGainmapToFloat32 } = await import('../../formats/AVIFGainmapDecoder');
     const result = await decodeAVIFGainmapToFloat32(buffer, info);
 
     // Compute peak pixel value for metadata
@@ -1311,6 +1315,7 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    const { decodeHEICGainmapToFloat32 } = await import('../../formats/HEICGainmapDecoder');
     const result = await decodeHEICGainmapToFloat32(buffer, info);
 
     // Compute peak pixel value for metadata
@@ -1588,12 +1593,13 @@ export class FileSourceNode extends BaseSourceNode {
    * Returns true if preview was loaded, false otherwise.
    */
   private loadRAWPreview(
+    extractRAWPreviewFn: (buffer: ArrayBuffer) => import('../../formats/RAWPreviewDecoder').RAWPreviewResult | null,
     buffer: ArrayBuffer,
     name: string,
     url: string,
     originalUrl?: string
   ): Promise<boolean> {
-    const preview = extractRAWPreview(buffer);
+    const preview = extractRAWPreviewFn(buffer);
     if (!preview) return Promise.resolve(false);
 
     return new Promise<boolean>((resolve) => {
@@ -1781,6 +1787,7 @@ export class FileSourceNode extends BaseSourceNode {
     if (isJPEGExtension(file.name)) {
       try {
         const buffer = await file.arrayBuffer();
+        const { isGainmapJPEG, parseGainmapJPEG } = await import('../../formats/JPEGGainmapDecoder');
         if (isGainmapJPEG(buffer)) {
           const info = parseGainmapJPEG(buffer);
           if (info) {
@@ -1802,6 +1809,7 @@ export class FileSourceNode extends BaseSourceNode {
         const avifValid = isAVIFFile(buffer);
         if (avifValid) {
           // Check for gainmap FIRST (gainmap AVIF may also have nclx HDR markers)
+          const { isGainmapAVIF, parseGainmapAVIF } = await import('../../formats/AVIFGainmapDecoder');
           const hasGainmap = isGainmapAVIF(buffer);
           if (hasGainmap) {
             const gmInfo = parseGainmapAVIF(buffer);
@@ -1830,6 +1838,7 @@ export class FileSourceNode extends BaseSourceNode {
       let jxlBlobUrl: string | null = null;
       try {
         const buffer = await file.arrayBuffer();
+        const { isJXLFile, isJXLContainer } = await import('../../formats/JXLDecoder');
         if (isJXLFile(buffer)) {
           // Check ISOBMFF container for HDR color info
           if (isJXLContainer(buffer)) {
@@ -1862,6 +1871,7 @@ export class FileSourceNode extends BaseSourceNode {
     if (isHEICExtension(file.name)) {
       try {
         const buffer = await file.arrayBuffer();
+        const { isHEICFile, isGainmapHEIC, parseHEICGainmapInfo, parseHEICColorInfo } = await import('../../formats/HEICGainmapDecoder');
         if (isHEICFile(buffer)) {
           // Check for gainmap FIRST
           if (isGainmapHEIC(buffer)) {
@@ -1906,8 +1916,9 @@ export class FileSourceNode extends BaseSourceNode {
       let rawBlobUrl: string | null = null;
       try {
         const buffer = await file.arrayBuffer();
+        const { extractRAWPreview } = await import('../../formats/RAWPreviewDecoder');
         rawBlobUrl = URL.createObjectURL(file);
-        const loaded = await this.loadRAWPreview(buffer, file.name, rawBlobUrl);
+        const loaded = await this.loadRAWPreview(extractRAWPreview, buffer, file.name, rawBlobUrl);
         if (loaded) return;
         URL.revokeObjectURL(rawBlobUrl);
       } catch (err) {

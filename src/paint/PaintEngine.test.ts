@@ -595,4 +595,98 @@ describe('PaintEngine', () => {
       expect(listener).toHaveBeenCalledWith(0);
     });
   });
+
+  describe('remote annotation methods', () => {
+    it('addRemoteAnnotation adds annotation without affecting undo stack', () => {
+      const annotation = {
+        type: 'pen' as const,
+        id: 'remote-1',
+        frame: 5,
+        user: 'alice',
+        color: [1, 0, 0, 1] as [number, number, number, number],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0.1, y: 0.2 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 5,
+        duration: 0,
+      };
+
+      engine.addRemoteAnnotation(annotation as any);
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+
+      // Undo should not remove it
+      const undone = engine.undo();
+      expect(undone).toBe(false);
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+    });
+
+    it('addRemoteAnnotation emits annotationsChanged but not strokeAdded', () => {
+      const changedListener = vi.fn();
+      const addedListener = vi.fn();
+      engine.on('annotationsChanged', changedListener);
+      engine.on('strokeAdded', addedListener);
+
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'r1', frame: 3, user: 'bob',
+        color: [0, 1, 0, 1], width: 2, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 3, duration: 0,
+      } as any);
+
+      expect(changedListener).toHaveBeenCalledWith(3);
+      expect(addedListener).not.toHaveBeenCalled();
+    });
+
+    it('removeRemoteAnnotation removes without affecting undo stack', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'r2', frame: 1, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 1, duration: 0,
+      } as any);
+
+      const removed = engine.removeRemoteAnnotation('r2', 1);
+      expect(removed).not.toBeNull();
+      expect(engine.getAnnotationsForFrame(1)).toHaveLength(0);
+    });
+
+    it('clearRemoteFrame clears all annotations on frame', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'c1', frame: 2, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 2, duration: 0,
+      } as any);
+      engine.addRemoteAnnotation({
+        type: 'text', id: 'c2', frame: 2, user: 'bob',
+        position: { x: 0.5, y: 0.5 }, color: [0, 0, 1, 1],
+        text: 'Hello', size: 24, scale: 1, rotation: 0,
+        spacing: 0, font: 'sans-serif', origin: 4,
+        startFrame: 2, duration: 0,
+      } as any);
+
+      expect(engine.getAnnotationsForFrame(2)).toHaveLength(2);
+      engine.clearRemoteFrame(2);
+      expect(engine.getAnnotationsForFrame(2)).toHaveLength(0);
+    });
+
+    it('addRemoteAnnotation updates nextId to avoid collisions', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: '100', frame: 0, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 0, duration: 0,
+      } as any);
+
+      // Next local annotation should get id > 100
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      const stroke = engine.endStroke();
+      expect(Number(stroke!.id)).toBeGreaterThan(100);
+    });
+  });
 });
