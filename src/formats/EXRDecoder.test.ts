@@ -4089,7 +4089,7 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('EXR-DEEP005: should composite three semi-transparent layers', async () => {
-      const width = 1, height = 1;
+      const width = 1;
       const sampleCounts = [[3]];
       // Channel order: A, B, G, R
       // Layer 1 (front): R=1, G=0, B=0, A=0.25
@@ -4269,7 +4269,7 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('EXR-DEEP009: should composite deep pixel with many samples', async () => {
-      const width = 1, height = 1;
+      const width = 1;
       // 5 samples, each with A=0.25
       const numSamples = 5;
       const sampleCounts = [[numSamples]];

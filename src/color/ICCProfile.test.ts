@@ -52,7 +52,6 @@ function buildTestProfile(options?: {
 
   // Calculate offsets - align to 4 bytes
   const headerSize = 128;
-  const _tagTableOffset = headerSize;
   const dataStart = headerSize + tagTableSize;
 
   // Pad each data block to 4-byte boundary
@@ -332,11 +331,17 @@ describe('applyMatrix3x3', () => {
 describe('invertMatrix3x3', () => {
   it('ICC-MAT-004: inverse of identity is identity', () => {
     const identity: Matrix3x3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
-    const inv = invertMatrix3x3(identity);
+    const inv = invertMatrix3x3(identity)!;
     expect(inv).not.toBeNull();
-    for (let i = 0; i < 9; i++) {
-      expect(inv![i as keyof Matrix3x3]).toBeCloseTo(identity[i as keyof Matrix3x3], 10);
-    }
+    expect(inv[0]).toBeCloseTo(identity[0], 10);
+    expect(inv[1]).toBeCloseTo(identity[1], 10);
+    expect(inv[2]).toBeCloseTo(identity[2], 10);
+    expect(inv[3]).toBeCloseTo(identity[3], 10);
+    expect(inv[4]).toBeCloseTo(identity[4], 10);
+    expect(inv[5]).toBeCloseTo(identity[5], 10);
+    expect(inv[6]).toBeCloseTo(identity[6], 10);
+    expect(inv[7]).toBeCloseTo(identity[7], 10);
+    expect(inv[8]).toBeCloseTo(identity[8], 10);
   });
 
   it('ICC-MAT-005: M * M^-1 = I', () => {

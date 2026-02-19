@@ -1707,7 +1707,6 @@ describe('TIFFFloatDecoder', () => {
     // Calculate tile grid
     const tilesAcross = Math.ceil(width / tileWidth);
     const tilesDown = Math.ceil(height / tileHeight);
-    const numTiles = tilesAcross * tilesDown;
 
     // Generate pixel data for the full image
     const fullPixelValues: number[] = pixelValues ?? [];

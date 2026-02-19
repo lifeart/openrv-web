@@ -106,8 +106,8 @@ async function createConnectedBridge(config?: Partial<DCCBridgeConfig>): Promise
   bridge.connect();
 
   // Wait for mock connection to establish
-  await new Promise(resolve => queueMicrotask(resolve));
-  await new Promise(resolve => queueMicrotask(resolve));
+  await new Promise<void>(resolve => queueMicrotask(resolve));
+  await new Promise<void>(resolve => queueMicrotask(resolve));
 
   return { bridge, ws: capturedWs! };
 }

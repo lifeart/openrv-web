@@ -337,8 +337,6 @@ export class SmudgeTool implements PaintToolInterface {
 
   /** Running color being dragged along the stroke */
   private _carriedColor: [number, number, number, number] | null = null;
-  /** Previous stroke position */
-  private _lastPosition: PixelPoint | null = null;
 
   /** The currently carried color (for testing/inspection) */
   get carriedColor(): [number, number, number, number] | null {
@@ -351,7 +349,7 @@ export class SmudgeTool implements PaintToolInterface {
 
     if (!this._carriedColor) {
       this._carriedColor = centerColor;
-      this._lastPosition = { ...position };
+      // Position tracked for potential future directional blending
       return; // First point just picks up color
     }
 
@@ -375,23 +373,20 @@ export class SmudgeTool implements PaintToolInterface {
       buffer.data[index + 3] = buffer.data[index + 3]! * (1 - blendAmt) + carried[3] * blendAmt;
     });
 
-    this._lastPosition = { ...position };
+    // Position tracked for potential future directional blending
   }
 
-  beginStroke(position: PixelPoint): void {
+  beginStroke(_position: PixelPoint): void {
     this._carriedColor = null;
-    this._lastPosition = { ...position };
   }
 
   endStroke(): void {
     this._carriedColor = null;
-    this._lastPosition = null;
   }
 
   reset(): void {
     this.strength = 0.5;
     this._carriedColor = null;
-    this._lastPosition = null;
   }
 }
 

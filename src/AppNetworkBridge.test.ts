@@ -482,7 +482,7 @@ describe('AppNetworkBridge', () => {
 
       const notes = ctx._session.noteManager.getNotes();
       expect(notes).toHaveLength(1);
-      expect(notes[0].text).toBe('Fix this frame');
+      expect(notes[0]!.text).toBe('Fix this frame');
     });
 
     it('ANB-061: incoming syncNote remove deletes note from NoteManager', () => {

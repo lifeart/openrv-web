@@ -456,7 +456,7 @@ export class SphericalProjection {
    * @param canvasWidth - Canvas width for sensitivity scaling
    * @param canvasHeight - Canvas height for sensitivity scaling
    */
-  drag(clientX: number, clientY: number, canvasWidth: number, canvasHeight: number): void {
+  drag(clientX: number, clientY: number, canvasWidth: number, _canvasHeight: number): void {
     if (!this._isDragging) return;
 
     const dx = clientX - this._dragStartX;
