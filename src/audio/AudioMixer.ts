@@ -64,7 +64,11 @@ export interface DownmixCoefficients {
   center: number;
   /** Surround channel attenuation (default: 1/sqrt(2) ~ 0.707) */
   surround: number;
-  /** LFE channel attenuation (default: 0 - typically omitted) */
+  /**
+   * LFE channel attenuation (default: 0 - intentionally discarded per
+   * ITU-R BS.775). LFE content is designed for a dedicated subwoofer
+   * output which stereo systems lack.
+   */
   lfe: number;
   /** Back surround attenuation for 7.1 (default: 1/sqrt(2) ~ 0.707) */
   back: number;
@@ -120,6 +124,15 @@ export function detectChannelLayout(channelCount: number): ChannelLayout {
  *
  * Channel order (SMPTE): L, R, C, LFE, Ls, Rs
  *
+ * Note: The LFE (Low Frequency Effects) channel is intentionally discarded
+ * in the stereo downmix (coefficient defaults to 0) per ITU-R BS.775.
+ * The LFE channel carries content (typically below 120 Hz) designed for a
+ * dedicated subwoofer output. Standard stereo speaker systems cannot
+ * reproduce this content adequately, and mixing it into the L/R channels
+ * would cause clipping and distortion. If LFE output is needed, it must be
+ * routed to a separate subwoofer channel, which is outside the scope of a
+ * stereo downmix.
+ *
  * @returns Tuple of [leftChannel, rightChannel] as Float32Arrays
  */
 export function downmix51ToStereo(
@@ -167,6 +180,11 @@ export function downmix51ToStereo(
  * Downmix a 7.1 surround AudioBuffer to stereo Float32Arrays.
  *
  * Channel order (SMPTE): L, R, C, LFE, Ls, Rs, Lb, Rb
+ *
+ * Note: The LFE channel is intentionally discarded in stereo downmix
+ * (coefficient defaults to 0) per ITU-R BS.775. The LFE channel requires
+ * a dedicated subwoofer output which stereo systems do not have. See the
+ * downmix51ToStereo documentation for full rationale.
  */
 export function downmix71ToStereo(
   buffer: AudioBuffer,

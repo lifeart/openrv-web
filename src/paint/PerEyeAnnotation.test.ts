@@ -286,6 +286,27 @@ describe('Per-Eye Annotations', () => {
       expect(annotations![0]!.eye).toBe('left');
     });
 
+    it('EYEANN-052: JSON round-trip preserves eye field', () => {
+      engine.annotationEye = 'left';
+      engine.beginStroke(1, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      // Serialize to JSON string and back
+      const snapshot = engine.toJSON();
+      const jsonString = JSON.stringify(snapshot);
+      const parsed = JSON.parse(jsonString);
+
+      // Reload into a fresh engine
+      const engine2 = new PaintEngine();
+      const annotations = Object.values(parsed.frames).flat() as any[];
+      engine2.loadFromAnnotations(annotations);
+
+      const result = engine2.getAnnotationsForFrame(1);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.eye).toBe('left');
+    });
+
     it('EYEANN-051: loadFromAnnotations preserves eye field', () => {
       const annotations = [
         {

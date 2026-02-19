@@ -281,6 +281,12 @@ export class Timeline {
   set timecodeDisplayMode(mode: TimecodeDisplayMode) {
     if (this._timecodeDisplayMode !== mode) {
       this._timecodeDisplayMode = mode;
+      // Persist choice to localStorage so it survives page reloads
+      try {
+        localStorage.setItem(Timeline.DISPLAY_MODE_STORAGE_KEY, mode);
+      } catch {
+        // localStorage may be unavailable
+      }
       this.draw();
     }
   }
