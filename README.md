@@ -5,328 +5,342 @@
 
 **[Live Demo](https://lifeart.github.io/openrv-web)**
 
-A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV). View images, videos, and image sequences with professional color tools, annotations, and RV session file compatibility.
+A professional web-based image and video review tool inspired by [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV). Built for VFX, animation, and post-production workflows, OpenRV Web provides frame-accurate playback, comprehensive color management, annotation tools, collaborative review sessions, and RV session file compatibility -- all running entirely in the browser with no server-side processing.
+
+---
 
 ## Features
 
-### Media Support
-- Single images (PNG, JPEG, WebP, GIF, BMP, TIFF, AVIF, JPEG XL, HEIC/HEIF, EXR/SXR, DPX/Cineon, Radiance HDR, RAW preview formats)
-- **EXR Format Support** - full HDR image loading via WebAssembly decoder
-  - Float32 texture support for HDR precision
-  - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
-  - Channel remapping (custom channel-to-RGBA mapping)
-  - Layer selection UI for multi-layer files (diffuse, specular, normals, depth, etc.)
-  - **PIZ wavelet compression** support (most common VFX compression)
-- **Radiance HDR (.hdr/.pic)** - environment maps and light probes
-  - RGBE shared-exponent encoding with adaptive RLE decompression
-  - Header metadata (exposure, gamma, primaries)
-  - Automatic format detection via `#?RADIANCE` / `#?RGBE` magic bytes
-- **JPEG XL (.jxl)** - modern HDR-capable image format
-  - SDR decode via `@jsquash/jxl` WebAssembly decoder
-  - HDR path via browser-native `createImageBitmap` → `VideoFrame` (same pattern as AVIF HDR)
-  - ISOBMFF container parsing for `colr(nclx)` HDR transfer detection (HLG/PQ)
-  - Bare codestream (`0xFF 0x0A`) and container format support
-- **HEIC/HEIF (.heic/.heif)** - Apple iPhone photos with HDR gainmap support
-  - Native decoding via `createImageBitmap` on Safari
-  - Cross-browser WASM fallback via `libheif-js` for Chrome/Firefox/Edge
-  - **HDR Gainmap** decoding (Apple `urn:com:apple:photo:2020:aux:hdrgainmap` and ISO 21496-1 standard)
-  - ISOBMFF container parsing for gainmap extraction and `colr(nclx)` HDR transfer detection (HLG/PQ)
-  - HDR reconstruction: sRGB-to-linear base + gain map with configurable headroom
-  - Standalone HEIC builder for gainmap item decoding (wraps raw HEVC data with hvcC config)
-- Video files (Mediabunny containers: MP4/M4V/3GP/3G2, MOV/QuickTime, MKV/WebM, OGG/OGV/OGX; plus AVI browser fallback)
-  - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
-- Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
-  - **Missing frame detection** - automatically detect and indicate gaps in sequences
-  - Visual overlay for missing frames during playback
-  - **Pattern notation support** - `%04d` (printf), `####` (hash), and `@` notation parsing
-  - **Single-file sequence inference** - drop one frame, automatically detect full sequence from directory
-  - **Directory scanning** - discover all sequences in a folder, select best match
-- RV/GTO session files with full graph reconstruction
-- **Enhanced marker support** - notes and colors preserved through GTO round-trip
+### Format Support
 
-### Color Tools
+**Images**
+- PNG, JPEG, WebP, GIF, BMP, AVIF, HEIC/HEIF -- via browser-native decoding
+- **EXR** (.exr/.sxr) -- WebAssembly decoder with Float32 HDR precision
+  - Multi-layer EXR with AOV selection and channel remapping
+  - PIZ wavelet compression (Huffman + Haar + LUT)
+  - DWA compression support
+  - Multi-view EXR for stereo workflows
+  - Data window / display window visualization overlay
+- **DPX** -- Digital Picture Exchange format with log-to-linear conversion
+- **Cineon** -- Kodak Cineon format with configurable film gamma
+- **Radiance HDR** (.hdr/.pic) -- RGBE encoding with adaptive RLE decompression
+- **Float TIFF** -- 32-bit floating-point TIFF images
+- **JPEG XL** (.jxl) -- modern HDR-capable format via WASM decoder and browser-native HDR path
+- **JPEG 2000 / HTJ2K** (.jp2/.j2k/.j2c/.jph/.jhc) -- via openjph-based WASM module
+- **JPEG Gainmap HDR** -- MPF parsing, XMP headroom extraction, sRGB-to-linear + gain reconstruction
+- **HEIC Gainmap HDR** -- Apple gainmap format and ISO 21496-1 standard; ISOBMFF parsing with WASM fallback for non-Safari browsers
+- **AVIF Gainmap HDR** -- auxiliary gain map items per ISO 21496-1
+- **RAW Preview** -- embedded preview extraction from camera RAW files
+
+**Video**
+- Mediabunny WebCodecs containers: MP4/M4V/3GP/3G2, MOV/QuickTime, MKV/WebM, OGG/OGV/OGX
+- AVI browser fallback
+- **MXF Demuxer** -- Material eXchange Format container parsing (identifies codec, resolution, frame rate)
+- ProRes/DNxHD codec detection with FFmpeg transcoding guidance
+- HDR video support with VideoFrame texturing (HLG, PQ transfer functions)
+
+**Sequences and Sessions**
+- Image sequences with numbered files (e.g., `frame_001.png`, `file.0001.exr`)
+  - Pattern notation: `%04d` (printf), `####` (hash), `@` notation
+  - Single-file sequence inference and directory scanning
+  - Missing frame detection with visual overlay
+- RV/GTO session files with full graph reconstruction
+- **RV EDL** -- OpenRV edit decision list format parsing
+- **OTIO (OpenTimelineIO)** -- import editorial timelines with clips, gaps, and transitions
+
+### Color Management
+
+**Primary Color Controls**
 - Exposure, gamma, saturation, contrast, brightness
 - Color temperature and tint
-- **Hue Rotation** - global hue shift control
-- **Vibrance** with skin tone protection (hue 20-50° protected)
-- **Clarity/Local Contrast** - enhance midtone detail without affecting highlights/shadows
-- **Highlight/Shadow recovery** - recover detail in blown highlights and crushed shadows
-- Whites/Blacks controls for clipping adjustment
-- **Lift/Gamma/Gain Color Wheels** - three-way color correction for shadows, midtones, and highlights
-  - 120px wheels with color preview ring
-  - Master wheel for overall adjustments
-  - Undo/redo support
-  - Link option for gang adjustments
-- **HSL Qualifier** - secondary color correction with hue/saturation/luminance selection
-  - Isolate specific colors by HSL range
-  - Apply corrections only to selected regions
-  - Matte preview and invert selection
-  - Eyedropper for color picking
-- ASC CDL (slope, offset, power, saturation) with .cdl file support
-- **LUT support** (.cube files) with GPU-accelerated processing
-  - 3D LUTs for complex color transforms
-  - 1D LUTs for simple curve-based corrections
-  - **Single-pass float LUT pipeline** - 3D LUT sampling in main fragment shader (no 8-bit bottleneck)
-  - **Film emulation presets** - 10 built-in looks (Warm Film, Cool Chrome, Bleach Bypass, Cross Process, Monochrome, Cinematic Teal & Orange, Vintage Fade, High/Low Contrast)
-- Color curves (Master/R/G/B channels) with presets and import/export
-- **Log Curve Presets** - camera-specific log-to-linear conversion
-  - Cineon Film Log (10-bit)
-  - ARRI LogC3 (EI 800) and LogC4
-  - Sony S-Log3
-  - RED Log3G10
-  - GLSL shader generation for GPU processing
-- **OCIO Color Management** - OpenColorIO-style color pipeline
-  - Built-in config presets (ACES 1.2, sRGB)
-  - **Custom .ocio config file loading** - upload studio configs with drag-and-drop and validation feedback
-  - Input color space selection with auto-detection from metadata
-  - Working color space (ACEScg, Rec.709, Linear sRGB)
-  - Display and view transforms (sRGB, Rec.709, DCI-P3)
-  - Look transforms with forward/inverse direction
-  - **Reverse transforms** - bidirectional camera space conversions (sRGB ↔ ARRI LogC3/LogC4, Sony S-Log3, RED Log3G10, ACEScg)
-  - Integration with existing LUT and log curve infrastructure
-  - Toggle via Shift+O keyboard shortcut
-- **Tone Mapping for HDR** - operators for mapping HDR content to SDR displays
-  - Reinhard operator with adjustable white point (0.5–10.0)
-  - Filmic operator with configurable exposure bias (0.5–8.0) and white point (2.0–20.0)
-  - ACES filmic tone mapping
-  - Per-operator parameter sliders with real-time preview
-  - Toggle via Shift+Alt+J keyboard shortcut
-- **Display Color Management** - monitor-accurate output transforms
-  - Transfer functions: Linear, sRGB, Rec.709, Gamma 2.2, Gamma 2.4, Custom Gamma
-  - Display gamma and brightness adjustments
-  - GPU-accelerated via fragment shader (no CPU round-trip)
-  - LocalStorage persistence for display profile settings
-  - Cycle profiles via Shift+D keyboard shortcut
-- **HDR & Wide Color Gamut Output** - progressive enhancement for HDR-capable displays
-  - **Display P3 gamut** - automatic Wide Color Gamut output on supported displays (Chrome 104+, Safari 15.1+)
-  - **HDR extended range** - HLG and PQ output modes for HDR displays (experimental, Chrome)
-  - **Display capabilities detection** - centralized runtime detection of P3, HDR, and WebGPU support
-  - **User gamut preference** - force sRGB or Display P3 output via Display Profile settings
-  - **HDR-aware scopes** - waveform, histogram, and vectorscope extend beyond 1.0 for HDR content
-  - **WebGPU backend** - renderer abstraction with WebGPU migration path (rgba16float, extended tone mapping)
-  - **Canvas2D HDR fallback** - last-resort HDR display path when WebGL2 native HDR and WebGPU are unavailable
-    - Uses Canvas 2D API with `srgb-linear` or `rec2100-hlg` color spaces and float16 pixel storage
-    - Automatic fallback chain: srgb-linear + colorType → pixelFormat → rec2100-hlg + colorType → pixelFormat
-    - Float32 ImageData with browser-handled float32→float16 conversion
-    - Row-flipped readback from WebGL2 FBO for correct display
-  - Full backward compatibility - all features are opt-in, fallback to sRGB on unsupported browsers
+- Hue rotation
+- Vibrance with skin tone protection (hue 20-50 degrees protected)
+- Clarity / local contrast enhancement
+- Highlight and shadow recovery
+- Whites and blacks clipping adjustment
+- Color inversion
 
-### Transform & Effects
-- Rotation (90°/180°/270°) and flip (H/V)
-- Crop tool with aspect ratio presets and rule-of-thirds guides
-- **Uncrop / Canvas Extension** - add padding around image for composition reference
-  - Uniform padding mode (equal on all sides)
-  - Per-side padding controls (top, right, bottom, left)
-  - Customizable fill color
-- **Pixel Aspect Ratio (PAR) Support** - correct anamorphic squeeze for proper display
-  - Auto-detection from image/video metadata
-  - Presets for common PARs (DV NTSC, DV PAL, HD Anamorphic, 2:1 Anamorphic, etc.)
-  - Manual PAR value entry
-  - Toggle via Shift+P keyboard shortcut
-- Lens distortion correction (barrel/pincushion)
-- Blur and sharpen filters
-- **Noise Reduction** - edge-preserving bilateral filter
-  - GPU-accelerated with WebGL2
-  - Automatic CPU fallback
-  - Adjustable strength and radius (1-5)
+**Three-Way Color Correction**
+- Lift / Gamma / Gain color wheels with master wheel
+- 120px wheels with color preview ring, undo/redo, and linked gang adjustments
 
-### Comparison & Composition
-- Wipe comparison (horizontal/vertical split view)
-- **Split Screen Compare** - side-by-side A/B source comparison
-  - Horizontal and vertical split modes
-  - Draggable divider for adjustable split position
-  - A/B labels for source identification
-- **Difference Matte** - show pixel differences between A/B with gain and heatmap modes
-- **Blend Modes** for A/B comparison
-  - Onion skin - overlay B over A with adjustable opacity
-  - Flicker - rapidly alternate between A/B at configurable rate (1-30 Hz)
-  - Blend - mix A and B with adjustable ratio
-- Multi-layer stack with blend modes
+**HSL Qualifier**
+- Secondary color correction via hue/saturation/luminance selection
+- Matte preview, invert selection, and eyedropper color picking
+
+**CDL (Color Decision List)**
+- ASC CDL support (slope, offset, power, saturation) with .cdl file import
+
+**LUT Support**
+- 3D LUT and 1D LUT loading (.cube, .csp, .3dl, and other formats)
+- Single-pass float LUT pipeline in the fragment shader (no 8-bit bottleneck)
+- Tetrahedral interpolation for 3D LUTs
+- LUT pipeline with pre-cache stage and GPU chain
+- Film emulation presets (10 built-in looks: Warm Film, Cool Chrome, Bleach Bypass, Cross Process, Monochrome, Cinematic Teal & Orange, Vintage Fade, High Contrast, Low Contrast)
+
+**Color Curves**
+- Master / R / G / B channel curves with presets and import/export
+
+**Log Curve Presets**
+- Camera-specific log-to-linear conversion: Cineon Film Log, ARRI LogC3/LogC4, Sony S-Log3, RED Log3G10
+- GLSL shader generation for GPU processing
+
+**OCIO Color Management**
+- OpenColorIO-style color pipeline with built-in presets (ACES 1.2, sRGB)
+- Custom .ocio config file loading with drag-and-drop and validation
+- Input color space auto-detection from metadata
+- Working, display, and view transform selection
+- Look transforms with forward/inverse direction
+- Reverse transforms for bidirectional camera space conversions
+- WASM-based OCIO processing with shader translation
+
+**Tone Mapping**
+- Reinhard operator with adjustable white point
+- Filmic operator with configurable exposure bias and white point
+- ACES filmic tone mapping
+- Per-operator parameter sliders with real-time preview
+
+**Display Color Management**
+- Transfer functions: Linear, sRGB, Rec.709, Gamma 2.2, Gamma 2.4, Custom Gamma
+- Display gamma and brightness adjustments
+- GPU-accelerated via fragment shader
+- LocalStorage persistence for profile settings
+
+**HDR and Wide Color Gamut**
+- Display P3 automatic wide gamut output on supported displays
+- HLG and PQ output modes for HDR displays (experimental)
+- Display capabilities detection (P3, HDR, WebGPU)
+- User gamut preference (force sRGB or Display P3)
+- Gamut mapping control (clip, soft compress) with source/target gamut selection
+- HDR-aware scopes extending beyond 1.0
+- Canvas2D HDR fallback path (srgb-linear, rec2100-hlg, float16)
+
+**Additional Color Tools**
+- ICC profile support
+- Auto exposure controller
+- Scene analysis
+- Temporal smoother for color adjustments
+- Color space conversion utilities
+
+### Rendering
+
+- **WebGL2** GPU-accelerated renderer with full fragment shader pipeline
+  - Input EOTF, exposure, temperature/tint, brightness, contrast, saturation, hue, tone mapping, gamma, inversion, output mode
+  - Shader state management and texture cache (LRU)
+  - Tiled rendering for large images
+  - Mipmap generation for static textures
+- **WebGPU Backend** (experimental) -- rgba16float, extended tone mapping
+- **WebGPU HDR Blit** -- direct HDR output via WebGPU
+- **Canvas2D HDR Blit** -- fallback HDR display when WebGL2 native HDR and WebGPU are unavailable
+- **Spherical / 360-degree Projection** -- equirectangular panorama viewing with interactive yaw/pitch and FOV zoom
+- **Render Worker** -- off-main-thread rendering via OffscreenCanvas
+- **Luminance Analyzer** -- scene luminance analysis
+- **Adaptive Proxy Rendering** -- DPI-aware canvas, interaction quality tiering, GL mipmaps, cache-level resize
+- **Premultiply / Unpremultiply** alpha control
+
+### Scopes and Analysis
+
+- **Histogram** -- RGB, luminance, and separate channel modes with log scale
+  - Clipping indicators showing percentage of clipped highlights/shadows
+  - Clipping overlay (red for highlights, blue for shadows)
+- **Waveform Monitor** -- luma, RGB, parade, and YCbCr modes (BT.709 coefficients)
+- **Vectorscope** -- with zoom levels
+- **Pixel Probe / Color Sampler** -- click to sample RGB/HSL/IRE values
+  - Area averaging (1x1, 3x3, 5x5, 9x9), source vs rendered toggle
+  - Alpha channel display, HDR out-of-range indicators, nits readout, color space info
+  - Float precision toggle (3 or 6 decimal places)
+- **False Color** -- exposure visualization with ARRI, RED, and custom presets
+- **Zebra Stripes** -- animated diagonal stripes for high (>95% IRE) and low (<5% IRE) exposure warnings
+- **Luminance Visualization** -- luminance heatmap display
+- **Gamut Diagram** -- CIE 1931 chromaticity diagram
+- All scopes are WebGL-accelerated
+
+### Playback and Audio
+
+- Frame-accurate timeline with scrubbing
+- **Timeline Thumbnails** -- LRU-cached preview thumbnails with progressive loading
+- In/out points and markers with notes (color-coded, with text annotations)
+  - Duration markers spanning frame ranges
+- Loop modes: once, loop, ping-pong
+- Playback speed control (0.1x to 8x) with J/K/L shuttle shortcuts
+  - Audio pitch correction at non-1x speeds
+- Sub-frame interpolation (alpha blending between frames for smooth slow motion)
+- Smooth zoom animation with ease-out cubic easing
+- Cache indicator showing cached frames and memory usage
+- **Prerender Buffer** -- double-buffered cache for glitch-free effect parameter changes
+  - SIMD-like TypedArray optimizations, half-resolution convolution, async chunked processing
+- **Multi-Clip Playlist** -- manage and play multiple clips in sequence
+  - Drag-and-drop reordering, loop modes, in/out points
+  - EDL (CMX3600) export and OTIO import
+  - Web Worker parallel effect processing with smart LRU cache
+- **Audio Playback** -- Web Audio API with HTMLVideoElement and Mediabunny fallbacks
+  - Audio sync with drift correction, graceful autoplay handling
+  - Automatic muting during reverse playback
+- Audio waveform display with multi-channel support
+- Volume control with mute (volume preserved across mute/unmute cycles)
+- Page visibility handling (auto-pause when tab is hidden)
+
+### Comparison and Composition
+
+- **Wipe Comparison** -- horizontal/vertical split view with interactive drag
+- **Split Screen** -- side-by-side A/B comparison with draggable divider
+- **Difference Matte** -- pixel differences between A/B with gain and heatmap modes
+- **Blend Modes** for A/B comparison: onion skin, flicker (1-30 Hz), blend ratio
+- **Quad View** -- A/B/C/D four-up comparison mode
+- Multi-layer stack with blend modes and per-layer opacity/visibility
 - A/B source switching with auto-assignment when loading multiple files
 - Quick toggle between sources with backtick key
+- **Reference Image Manager** -- capture and compare against a stored snapshot
+  - View modes: split-h, split-v, overlay, side-by-side, toggle
+- **Matte Overlay** -- letterbox/pillarbox with configurable aspect ratio and opacity
 
 ### Stereo 3D Viewing
+
 - Side-by-side and over/under stereo modes
 - Mirror mode (side-by-side with flipped right eye)
-- Anaglyph mode (red/cyan 3D glasses)
-- Luminance anaglyph for reduced color fringing
+- Anaglyph mode (red/cyan) and luminance anaglyph (reduced color fringing)
 - Checkerboard mode (for DLP projectors with shutter glasses)
 - Scanline interleaved mode (for line-blanking displays)
-- Eye swap control (swap left/right eyes)
-- Convergence offset adjustment
-
-### Scopes & Analysis
-- Histogram (RGB/Luminance/Separate channels, log scale option)
-  - **Clipping Indicators** - show percentage of clipped highlights/shadows
-  - **Clipping Overlay** - visual overlay showing clipped areas (red for highlights, blue for shadows)
-- Waveform monitor (Luma/RGB/Parade/YCbCr modes)
-  - **YCbCr Parade** - visualize Y (luma), Cb (blue difference), Cr (red difference) using BT.709 coefficients
-- Vectorscope with zoom levels
-- **Pixel Probe / Color Sampler** - click to sample RGB/HSL/IRE values at any pixel
-  - **Area averaging** - configurable sample size (1x1, 3x3, 5x5, 9x9)
-  - **Source vs Rendered toggle** - view pre- or post-color-pipeline values
-  - **Alpha channel display** - shows alpha in both 0-255 and 0.0-1.0 formats
-  - **HDR out-of-range indicators** - color-coded values for >1.0 (red) and <0.0 (blue)
-  - **Nits readout** - HDR luminance in cd/m² (luminance × 203)
-  - **Color space info** - displays active color space from image metadata
-  - **Float precision toggle** - switch between 3 and 6 decimal places
-- **False Color Display** - exposure visualization with ARRI, RED, and custom presets
-- **Zebra Stripes** - animated diagonal stripes for exposure warnings
-  - High zebras (>95% IRE) - right-leaning red stripes
-  - Low zebras (<5% IRE) - left-leaning blue stripes
-  - Adjustable thresholds
-- **Safe Areas / Guides Overlay** - broadcast safe zones and composition guides
-  - Title Safe and Action Safe zones
-  - Rule of Thirds grid
-  - Center crosshair
-  - Aspect ratio overlays (16:9, 2.39:1, etc.)
-- **Timecode Overlay** - on-screen SMPTE timecode display (HH:MM:SS:FF format)
+- Eye swap control and convergence offset adjustment
+- **Stereo Eye Transform** -- per-eye geometric transforms
+- **Stereo Alignment Overlay** -- alignment aids for stereo setup
+- **Convergence Measurement** -- measure convergence between eyes
+- **Floating Window Detection** -- detect floating window violations
+- **Per-Eye Annotations** -- separate annotations for left and right eyes
 
 ### Annotations
-- Pen tool with pressure sensitivity
-- Text annotations with formatting (bold, italic, underline, background color, callouts)
-- **Shape Tools** - Rectangle, ellipse, line, arrow, and polygon with fill/stroke options
-- **Spotlight Tool** - Dim everything except highlighted region (circle or rectangle)
-- Eraser and brush types
+
+- **Pen Tool** with pressure sensitivity and brush types (soft/hard)
+- **Text Annotations** with formatting (bold, italic, underline, background color, callouts)
+- **Shape Tools** -- rectangle, ellipse, line, arrow, and polygon with fill/stroke options
+- **Spotlight Tool** -- dim everything except highlighted region (circle or rectangle)
+- Eraser tool
 - Ghost mode (show nearby frame annotations)
 - Hold mode (persist annotations across frames)
 - Per-frame annotation storage
-- **Ghost Frames / Onion Skin** - semi-transparent previous/next frames for animation review
-  - Configurable frames before and after (0-5 each)
-  - Adjustable base opacity and falloff
-  - Optional color tinting (red for before, green for after)
+- **Ghost Frames / Onion Skin** -- semi-transparent previous/next frames for animation review
+  - Configurable range (0-5 frames before/after), opacity falloff, optional color tinting
+- **Comparison Annotations** -- annotate during A/B compare
+- **WebGL Paint Renderer** -- GPU-accelerated annotation rendering
 
-### Playback
-- Frame-accurate timeline with scrubbing
-- **Timeline Thumbnails** - frame preview thumbnails along the timeline track
-  - LRU cache for efficient memory usage (max 150 thumbnails)
-  - Progressive loading without blocking UI
-  - Automatic recalculation on resize
-- In/out points and **markers with notes** (color-coded, with text annotations)
-  - **Duration Markers** - markers spanning frame ranges for segment annotation
-- Loop modes (once, loop, ping-pong)
-- **Playback speed control** (0.1x to 8x) with J/K/L shortcuts
-  - **Audio pitch correction** - preserves pitch at non-1x playback speeds
-- **Sub-frame Interpolation** - alpha blending between frames for smooth slow motion
-- **Smooth Zoom Animation** - requestAnimationFrame-based zoom with ease-out cubic easing
-- **Cache indicator** showing cached frames and memory usage
-- **Prerender Buffer** - background processing of effects for smooth playback
-  - Double-buffered cache for glitch-free effects parameter changes
-  - SIMD-like TypedArray optimizations for color inversion and channel isolation
-  - Half-resolution convolution for clarity and sharpen (4x fewer pixels)
-  - Async chunked processing with main-thread yielding (<16ms blocking)
-- **Multi-Clip Playlist** - manage and play multiple clips in sequence
-  - Add clips from any loaded source with in/out points
-  - Drag-and-drop reordering
-  - Loop modes: none, single clip, or all clips
-  - EDL (Edit Decision List) export
-  - **OTIO (OpenTimelineIO) import** - parse editorial timelines with clips, gaps, and transitions
-  - Total duration display
-  - Web Worker-based parallel effect processing
-  - Smart cache management with LRU eviction
-  - Direction-aware preloading (forward/backward)
-- **Audio Playback System** - robust audio handling with multiple fallbacks
-  - Web Audio API for independent audio control and waveform generation
-  - HTMLVideoElement fallback for cross-origin or codec issues
-  - Mediabunny-based audio extraction for CORS-blocked content
-  - Graceful autoplay policy handling with user-friendly error messages
-  - Audio sync during frame-accurate playback with drift correction
-  - Automatic muting during reverse playback (audio cannot be reversed)
-- Audio waveform display with multi-channel support
-- Volume control with mute (volume preserved across mute/unmute cycles)
-- **Page Visibility Handling** - smart resource management
-  - Automatically pauses playback when tab is hidden
-  - Resumes playback when tab becomes visible
-  - Reduces scope processing while hidden
+### Filters and Effects
 
-### UI/UX
-- **Dark/Light Theme** with auto (system) mode and Shift+T shortcut
-- **Fullscreen Mode** - native browser fullscreen via F11 or toolbar button
-- **Presentation Mode** - clean display with all UI hidden and cursor auto-hide on inactivity (Ctrl+Shift+P)
-- **Background Pattern Selector** - configurable viewer background for alpha transparency visualization
-  - Checkerboard (classic alpha pattern)
-  - Grey 18%, Grey 50%, White, Black
-  - Crosshatch pattern
-  - Custom color picker
-  - Toggle via Shift+B (cycle) or Shift+Alt+B (quick checkerboard toggle)
-- **History Panel** - visual undo/redo with jump to any state
-- **Floating Info Panel** - filename, resolution, frame, FPS, and cursor color readout
-- **Hi-DPI/Retina Display Support** - crisp rendering on high-density displays (2x, 3x DPR)
-- **Session Snapshots** - named version history with preview and restore
-  - Manual snapshots with custom names and descriptions
-  - Auto-checkpoints before major operations (project load, restore)
-  - IndexedDB persistence across browser sessions
-  - Preview showing frame count, annotations, and color grade status
-  - Export/import snapshots as JSON
-  - LRU eviction (max 50 manual snapshots, 10 auto-checkpoints)
-- **Auto-Save** - automatic session persistence to IndexedDB with crash recovery
-  - Configurable save interval (1-30 minutes, default 5)
-  - Debounced saves to prevent excessive writes during rapid changes
-  - Crash recovery detection with prompt to restore previous session
-  - Visual indicator showing save status (saving, saved, unsaved, error)
-  - Click-to-retry on save failures
-  - Storage quota monitoring with low-space warnings
-  - Theme-consistent styling with CSS variables
-- **Session Recovery** - intelligent handling of temporary file references
-  - Detects blob URLs that become invalid after browser restart
-  - Prompts user to re-select files with original filename validation
-  - Skip option to load session without unavailable media
+- **Noise Reduction** -- edge-preserving bilateral filter (GPU-accelerated with CPU fallback)
+- **Sharpen** -- WebGL-accelerated unsharp mask
+- **Deinterlace** -- bob, weave, and blend methods with field order selection
+- **Film Emulation** -- classic film stock emulation with grain overlay
+  - Kodak Portra 400, Kodak Ektar 100, Fuji Pro 400H, Fuji Velvia 50, Kodak Tri-X 400, Ilford HP5+
+  - Luminance-dependent grain with per-frame animation
+- **Motion Stabilization** -- preview 2D stabilization with block-matching, EMA smoothing, and border cropping
+- **Effect Registry** -- extensible effect system with category-based lookup and registration-order pipeline
 
-### Overlays & Watermarks
-- **Watermark Overlay** - add logos and watermarks to exports
-  - 9 preset positions (3x3 grid) plus custom positioning
-  - Adjustable scale (10-200%), opacity, and margin
-  - Supports PNG, JPEG, WebP, and SVG images
+### Transform
+
+- Rotation (90/180/270 degrees) and flip (horizontal/vertical)
+- Crop with aspect ratio presets and rule-of-thirds guides
+- **Uncrop / Canvas Extension** -- add padding with uniform or per-side controls and custom fill color
+- **Pixel Aspect Ratio (PAR)** -- auto-detection from metadata with presets for DV NTSC, DV PAL, HD Anamorphic, 2:1 Anamorphic
+- **Lens Distortion Correction** -- barrel/pincushion
+- **Perspective Correction** -- four-point perspective transform with grid overlay
 
 ### Export
-- Frame export (PNG/JPEG/WebP)
-- Sequence export with progress
-- Copy to clipboard
-- Session save/load (.orvproject format)
-- **Annotation JSON Export/Import** - standalone annotation metadata exchange
-  - Frame range filtering and statistics (pen strokes, text, shapes)
-  - Full round-trip: export → parse → import with validation
-  - Import modes: replace (clear existing) or merge (add to existing)
-  - Frame offset support for timeline alignment
-  - Automatic ID collision avoidance in merge mode
-  - Paint effects preservation (hold, ghost settings)
-- **Annotation PDF Export** - printable annotation reports
-  - Frame thumbnails with timecodes
-  - Annotation summary tables
-  - Uses browser native print (no external libraries)
 
-### Timeline Editor
-- **Visual EDL/Cut Editing** for sequence nodes
-  - Colored cut blocks representing source clips
-  - Drag handles for trimming in/out points
-  - Drag cuts to reorder
-  - Zoom control for timeline detail
-  - Context menu for delete operations
-  - Real-time event emission for cut changes
+- **Frame Export** -- PNG, JPEG, WebP with single-frame or sequence export with progress
+- **Copy to Clipboard** -- copy current frame to system clipboard
+- **Video Export** -- WebCodecs-based encoding to H.264 (Baseline/Main/High), VP9, and AV1
+  - Configurable bitrate, GOP size, hardware acceleration preference
+  - MP4 muxer (ISO BMFF) for single-track video output
+- **Slate / Leader Frames** -- production metadata overlay (show, shot, version, artist, date, timecode, resolution)
+  - Studio logo placement, custom fields, configurable typography and colors
+  - Slate editor UI with live preview
+- **Frameburn Compositor** -- burn-in timecode, frame number, shot name, date, resolution, FPS, color space, codec, and custom text
+- **EDL Writer** -- CMX3600-format edit decision lists with drop-frame timecode support
+- **OTIO Support** -- OpenTimelineIO import with conform/re-link panel
+- **Dailies Report Exporter** -- CSV and HTML reports with shot status, notes, version info, frame ranges, and timecodes
+- **Annotation Export** -- JSON round-trip (export/import with merge and frame offset) and PDF printable reports
+- Session save/load (.orvproject format)
+
+### Overlays and Guides
+
+- **Timecode Overlay** -- on-screen SMPTE timecode display (HH:MM:SS:FF)
+- **Safe Areas** -- title safe, action safe zones, rule of thirds, center crosshair, aspect ratio overlays
+- **Clipping Overlay** -- visual overlay showing blown-out highlights and crushed shadows
+- **False Color Overlay** -- exposure heatmap
+- **Zebra Stripes** -- animated exposure warning stripes
+- **Spotlight Overlay** -- focus attention on a region by dimming the rest
+- **Missing Frame Overlay** -- visual indicator for gaps in image sequences
+- **EXR Window Overlay** -- data window and display window boundary visualization
+- **Matte Overlay** -- letterbox/pillarbox with configurable aspect ratio
+- **Bug Overlay** -- small corner logo/branding image (configurable position, size, opacity)
+- **Watermark Overlay** -- logos/watermarks with 9 preset positions, adjustable scale, opacity, and margin
+- **Perspective Grid Overlay** -- vanishing point grid for perspective reference
+- **Note Overlay** -- color-coded timeline bars for review notes (open, resolved, wontfix)
+
+### Review Workflow
+
+- **Shot Status Tracking** -- per-source status (pending, approved, needs-work, CBB, omit) with color-coded badges
+- **Version Management** -- group multiple versions of the same shot with version navigation and annotation carry-forward
+- **Note System** -- per-source, per-frame-range threaded notes with status filtering (all/open/resolved), inline editing, and replies
+- **Dailies Reports** -- CSV/HTML export of review session with status, notes, timecodes, and version info
+- **Client Mode** -- locked UI for review presentations (playback and navigation only, editing blocked)
+  - URL parameter locking for secure viewer-only links
+- **Conform / Re-link Panel** -- re-link unresolved media from OTIO/EDL imports with fuzzy filename matching
+
+### Network and Collaboration
+
+- **WebSocket-based Sync** -- real-time collaboration between multiple viewers
+  - Room creation and joining with unique room codes
+  - User presence indicators
+  - Configurable sync: playback, view (pan/zoom), color adjustments, annotations, cursor position
+  - Host/participant role distinction
+  - Reconnection with exponential backoff
+- **WebRTC Peer Connections** -- NAT traversal via public STUN/TURN servers (Google, Cloudflare, OpenRelay)
+  - URL-based signaling for serverless P2P connections
+- **PIN-based Encryption** -- encrypted message payloads for secure review sessions
+- **Media Transfer** -- request/offer/chunk-based media sharing between peers
+- Configurable signaling servers via `VITE_NETWORK_SIGNALING_SERVERS`
+
+### Integrations
+
+- **DCC Bridge** -- WebSocket-based integration with Nuke, Maya, Houdini, and other DCC tools
+  - JSON message protocol with auto-reconnect and heartbeat
+  - Inbound commands: loadMedia, syncFrame, syncColor
+  - Outbound events: frameChanged, colorChanged, annotationAdded
+- **ShotGrid (ShotGun) Integration** -- REST API bridge
+  - Authentication, version loading, note push, and status sync
+  - Bidirectional status mapping between OpenRV Web and ShotGrid
 
 ### Scripting API
-- **Public JavaScript API** (`window.openrv`) for programmatic control from browser console or external scripts
-  - **Playback control**: `play()`, `pause()`, `toggle()`, `stop()`, `seek(frame)`, `step(direction)`, `setSpeed()`, `getSpeed()`, `isPlaying()`, `getCurrentFrame()`
-  - **Media info**: `getCurrentSource()`, `getDuration()`, `getFPS()`, `getResolution()`
-  - **Audio control**: `setVolume()`, `getVolume()`, `mute()`, `unmute()`, `isMuted()`
-  - **Loop control**: `setMode()`, `getMode()`, `setInPoint()`, `setOutPoint()`, `clearInOut()`
-  - **View control**: `setZoom()`, `getZoom()`, `fitToWindow()`, `setPan()`, `setChannel()`
-  - **Color control**: `setAdjustments()`, `getAdjustments()`, `reset()`, `setCDL()`, `loadLUT()`
-  - **Markers**: `add()`, `remove()`, `getAll()`, `clear()`, `goToNext()`, `goToPrevious()`
-  - **Events**: `on()`, `off()`, `once()` for frameChange, play, pause, sourceLoaded, error, etc.
-  - Version and readiness: `openrv.version`, `openrv.isReady()`
-  - Input validation and error handling on all methods
 
-### Network Sync (Infrastructure)
-- **WebSocket-based sync client** for real-time collaboration between viewers
-  - Room creation and joining with unique room codes
-  - User presence indicators (connected users list)
-  - Configurable sync elements: playback, view (pan/zoom), color adjustments, annotations
-  - Host/participant role distinction
-  - Reconnection handling with exponential backoff
-  - Supports signaling server failover via `VITE_NETWORK_SIGNALING_SERVERS` (comma-separated `wss://` / `ws://` URLs)
-  - WebRTC peer connections include public STUN/TURN defaults (Google, Cloudflare, OpenRelay) for cross-network/NAT traversal
-  - Keyboard shortcut: Shift+N to toggle network panel
+- **Public JavaScript API** (`window.openrv`) for programmatic control
+  - Playback: `play()`, `pause()`, `toggle()`, `stop()`, `seek(frame)`, `step()`, `setSpeed()`, `isPlaying()`, `getCurrentFrame()`
+  - Media: `getCurrentSource()`, `getDuration()`, `getFPS()`, `getResolution()`
+  - Audio: `setVolume()`, `getVolume()`, `mute()`, `unmute()`, `isMuted()`
+  - Loop: `setMode()`, `getMode()`, `setInPoint()`, `setOutPoint()`, `clearInOut()`
+  - View: `setZoom()`, `getZoom()`, `fitToWindow()`, `setPan()`, `setChannel()`
+  - Color: `setAdjustments()`, `getAdjustments()`, `reset()`, `setCDL()`, `loadLUT()`
+  - Markers: `add()`, `remove()`, `getAll()`, `clear()`, `goToNext()`, `goToPrevious()`
+  - Events: `on()`, `off()`, `once()` for frameChange, play, pause, sourceLoaded, error, etc.
+  - Version and readiness: `openrv.version`, `openrv.isReady()`
+
+### UI and UX
+
+- **Dark/Light Theme** with auto (system) mode
+- **Fullscreen Mode** via F11 or toolbar button
+- **Presentation Mode** -- clean display with all UI hidden and cursor auto-hide on inactivity
+- **External Presentation** -- secondary browser window via BroadcastChannel with synced frame/playback/color
+- **Background Pattern Selector** -- checkerboard, grey 18%/50%, white, black, crosshatch, custom color
+- **History Panel** -- visual undo/redo with jump to any state
+- **Floating Info Panel** -- filename, resolution, frame, FPS, cursor color readout
+- **Hi-DPI / Retina Support** -- crisp rendering on 2x, 3x, and fractional DPR displays
+- **Session Snapshots** -- named version history with preview and restore (IndexedDB persistence)
+- **Auto-Save** -- configurable interval with crash recovery, storage quota monitoring, and visual indicator
+- **Session Recovery** -- detects invalid blob URLs after browser restart with file re-selection prompts
+- **Shortcut Editor** -- view and customize keyboard shortcuts with conflict detection and export/import
+- **Shortcut Cheat Sheet** -- quick-reference keyboard shortcut overlay
+- **Accessibility** -- ARIA announcer for screen reader support
+
+---
 
 ## Installation
 
@@ -368,7 +382,7 @@ pnpm dev
 | `K` | Pause playback |
 | `L` | Increase playback speed |
 
-#### View & Navigation
+#### View and Navigation
 | Key | Action |
 |-----|--------|
 | `F` | Fit to window |
@@ -390,7 +404,7 @@ pnpm dev
 | `Shift+D` | Toggle difference matte |
 | `Shift+Alt+S` | Toggle split screen A/B comparison |
 
-#### Scopes & Wipe
+#### Scopes and Wipe
 | Key | Action |
 |-----|--------|
 | `Shift+W` | Cycle wipe modes (off/horizontal/vertical) |
@@ -398,7 +412,7 @@ pnpm dev
 | `h` | Toggle histogram |
 | `y` | Toggle vectorscope |
 
-#### Exposure & Analysis
+#### Exposure and Analysis
 | Key | Action |
 |-----|--------|
 | `Shift+I` | Toggle pixel probe |
@@ -424,7 +438,7 @@ pnpm dev
 | `Shift+Y` | Grayscale (alias for Shift+L) |
 | `Shift+N` | Normal (RGB) |
 
-#### Color & Effects
+#### Color and Effects
 | Key | Action |
 |-----|--------|
 | `C` | Toggle color panel |
@@ -439,8 +453,8 @@ pnpm dev
 #### Transform
 | Key | Action |
 |-----|--------|
-| `Shift+R` | Rotate left 90° |
-| `Alt+R` | Rotate right 90° |
+| `Shift+R` | Rotate left 90 degrees |
+| `Alt+R` | Rotate right 90 degrees |
 | `Alt+H` | Flip horizontal |
 | `Shift+V` | Flip vertical |
 
@@ -488,119 +502,128 @@ pnpm dev
 - **Click timeline**: Seek to frame
 - **Drag timeline**: Scrub
 
+---
+
 ## Architecture
 
 ```
 src/
 ├── api/                # Public scripting API (window.openrv)
-│   ├── OpenRVAPI.ts    # Main API class and initialization
-│   ├── PlaybackAPI.ts  # Playback control methods
-│   ├── MediaAPI.ts     # Media/source information
-│   ├── AudioAPI.ts     # Volume and audio control
-│   ├── LoopAPI.ts      # Loop mode and in/out points
-│   ├── ViewAPI.ts      # Zoom, pan, channel control
-│   ├── ColorAPI.ts     # Color adjustment methods
-│   ├── MarkersAPI.ts   # Marker management
-│   ├── EventsAPI.ts    # Event subscription system
-│   └── index.ts        # API export and registration
 ├── core/
 │   ├── graph/          # Node graph system (Graph, Property, Signal)
 │   ├── image/          # IPImage data structure (with PAR metadata)
 │   └── session/        # Session management, GTO loading, serialization, auto-save
-│       ├── SnapshotManager.ts  # IndexedDB-based session snapshots
-│       └── PlaylistManager.ts  # Multi-clip playlist with EDL export & OTIO import
+│       ├── SnapshotManager.ts   # IndexedDB-based session snapshots
+│       ├── PlaylistManager.ts   # Multi-clip playlist with EDL export & OTIO import
+│       ├── StatusManager.ts     # Per-source shot status tracking
+│       ├── VersionManager.ts    # Shot versioning and navigation
+│       └── NoteManager.ts       # Threaded review notes
 ├── formats/
-│   ├── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
-│   ├── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
-│   ├── HDRDecoder.ts   # Radiance HDR (.hdr/.pic) decoder with RLE support
-│   ├── JXLDecoder.ts   # JPEG XL decoder (WASM SDR + browser-native HDR)
-│   ├── HEICGainmapDecoder.ts  # HEIC HDR gainmap decoder (ISOBMFF parsing, HDR reconstruction)
-│   └── HEICWasmDecoder.ts     # HEIC WASM fallback via libheif-js (Chrome/Firefox/Edge)
+│   ├── EXRDecoder.ts            # WebAssembly EXR decoder with multi-layer support
+│   ├── EXRPIZCodec.ts           # PIZ wavelet compression codec
+│   ├── EXRDWACodec.ts           # DWA compression codec
+│   ├── DPXDecoder.ts            # DPX format decoder
+│   ├── CineonDecoder.ts         # Cineon format decoder
+│   ├── HDRDecoder.ts            # Radiance HDR decoder with RLE support
+│   ├── TIFFFloatDecoder.ts      # Float TIFF decoder
+│   ├── JXLDecoder.ts            # JPEG XL decoder (WASM + browser-native HDR)
+│   ├── JP2Decoder.ts            # JPEG 2000 / HTJ2K decoder
+│   ├── JPEGGainmapDecoder.ts    # JPEG HDR gainmap decoder
+│   ├── HEICGainmapDecoder.ts    # HEIC HDR gainmap decoder
+│   ├── AVIFGainmapDecoder.ts    # AVIF HDR gainmap decoder
+│   ├── RAWPreviewDecoder.ts     # RAW preview extraction
+│   ├── MXFDemuxer.ts            # MXF container demuxer
+│   ├── RVEDLParser.ts           # RV EDL format parser
+│   └── MultiViewEXR.ts          # Multi-view EXR support
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
-│   └── groups/         # SequenceGroup, StackGroup, SwitchGroup, etc.
-├── render/             # WebGL2 renderer and shaders (incl. tone mapping)
-│   ├── RendererBackend.ts      # Renderer abstraction (WebGL2/WebGPU backends)
-│   ├── WebGPUBackend.ts        # WebGPU HDR renderer (rgba16float, extended tone mapping)
-│   ├── Canvas2DHDRBlit.ts      # Canvas 2D API HDR fallback (float16, srgb-linear/rec2100-hlg)
-│   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
+│   └── groups/         # SequenceGroup, StackGroup, SwitchGroup, LayoutGroup, FolderGroup
+├── render/
+│   ├── Renderer.ts              # WebGL2 renderer and shader pipeline
+│   ├── RendererBackend.ts       # Renderer abstraction (WebGL2/WebGPU)
+│   ├── WebGPUBackend.ts         # WebGPU HDR renderer
+│   ├── WebGPUHDRBlit.ts         # WebGPU HDR output
+│   ├── Canvas2DHDRBlit.ts       # Canvas 2D API HDR fallback
+│   ├── SphericalProjection.ts   # 360-degree panorama projection
+│   ├── TextureCacheManager.ts   # LRU texture cache
+│   ├── RenderWorkerProxy.ts     # Off-main-thread rendering
+│   └── LuminanceAnalyzer.ts     # Scene luminance analysis
+├── color/
+│   ├── CDL.ts                   # ASC CDL processing
+│   ├── ColorCurves.ts           # Color curves
+│   ├── HueRotation.ts           # Hue rotation
+│   ├── LogCurves.ts             # Camera log curve presets
+│   ├── LUTLoader.ts             # 3D/1D LUT loading
+│   ├── LUTPresets.ts            # Film emulation preset library
+│   ├── LUTFormats.ts            # Multi-format LUT parsing
+│   ├── TetrahedralInterp.ts     # Tetrahedral interpolation for 3D LUTs
+│   ├── WebGLLUT.ts              # GPU LUT application
+│   ├── DisplayCapabilities.ts   # HDR/P3/WebGPU detection
+│   ├── DisplayTransfer.ts       # Display transfer functions
+│   ├── TransferFunctions.ts     # PQ, HLG, sRGB transfer functions
+│   ├── HDRPixelData.ts          # HDR-aware pixel value access
+│   ├── ICCProfile.ts            # ICC profile support
+│   ├── AutoExposureController.ts # Auto exposure
+│   ├── SceneAnalysis.ts         # Scene analysis
+│   ├── TemporalSmoother.ts      # Temporal smoothing
+│   ├── Inversion.ts             # Color inversion
+│   ├── OCIO*.ts                 # OCIO config, transforms, processor, presets
+│   ├── pipeline/                # LUT pipeline, stages, GPU chain
+│   └── wasm/                    # OCIO WASM bridge, shader translator, virtual FS
+├── scopes/
+│   └── WebGLScopes.ts           # GPU-accelerated waveform, vectorscope, histogram, parade
+├── stereo/
+│   ├── StereoRenderer.ts        # Stereo display modes
+│   ├── StereoEyeTransform.ts    # Per-eye transforms
+│   ├── StereoAlignOverlay.ts    # Stereo alignment aids
+│   ├── ConvergenceMeasure.ts    # Convergence measurement
+│   └── FloatingWindowDetector.ts # Floating window detection
+├── paint/
+│   ├── PaintEngine.ts           # Freehand drawing engine
+│   ├── PaintRenderer.ts         # WebGL annotation rendering
+│   └── AdvancedPaintTools.ts    # Shapes, text, arrows, spotlight
+├── filters/
+│   ├── NoiseReduction.ts        # Bilateral filter (CPU)
+│   ├── WebGLNoiseReduction.ts   # Bilateral filter (GPU)
+│   ├── WebGLSharpen.ts          # GPU sharpen
+│   ├── Deinterlace.ts           # Deinterlacing
+│   ├── FilmEmulation.ts         # Film stock emulation with grain
+│   └── StabilizeMotion.ts       # 2D motion stabilization
+├── effects/
+│   ├── EffectRegistry.ts        # Central effect registry
+│   ├── ImageEffect.ts           # Effect interface
+│   └── adapters/                # Effect adapters (CDL, inversion, hue, tone mapping, etc.)
+├── export/
+│   ├── VideoExporter.ts         # WebCodecs video encoder
+│   ├── MP4Muxer.ts              # ISO BMFF MP4 muxer
+│   ├── EDLWriter.ts             # CMX3600 EDL writer
+│   ├── SlateRenderer.ts         # Slate/leader frame generator
+│   └── ReportExporter.ts        # Dailies report exporter (CSV/HTML)
+├── network/
+│   ├── WebSocketClient.ts       # WebSocket sync client
+│   ├── WebRTCURLSignaling.ts    # URL-based WebRTC signaling
+│   ├── NetworkSyncManager.ts    # Sync orchestrator
+│   ├── SyncStateManager.ts      # Sync state tracking
+│   ├── PinEncryption.ts         # PIN-based message encryption
+│   └── MessageProtocol.ts       # Typed message protocol
+├── integrations/
+│   ├── DCCBridge.ts             # Maya/Nuke/Houdini WebSocket bridge
+│   └── ShotGridBridge.ts        # ShotGrid REST API integration
+├── transform/
+│   ├── LensDistortion.ts        # Barrel/pincushion correction
+│   └── PerspectiveCorrection.ts # Four-point perspective transform
+├── composite/                   # Blend modes
+├── audio/
+│   ├── AudioPlaybackManager.ts  # Web Audio API with fallbacks
+│   └── WaveformRenderer.ts      # Waveform extraction and rendering
 ├── ui/
-│   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
-│   │   ├── ViewerSplitScreen.ts        # Split screen A/B comparison
-│   │   ├── ThumbnailManager.ts         # Timeline thumbnail generation and caching
-│   │   ├── GhostFrameControl.ts        # Ghost frames / onion skin control
-│   │   ├── SnapshotPanel.ts            # Session snapshot management UI
-│   │   ├── PlaylistPanel.ts            # Multi-clip playlist UI
-│   │   ├── ChannelSelect.ts            # Channel isolation with EXR layer selection
-│   │   ├── BackgroundPatternControl.ts # Viewer background patterns (checker, grey, etc.)
-│   │   ├── DisplayProfileControl.ts   # Display color management profile selector
-│   │   ├── PARControl.ts              # Pixel aspect ratio controls
-│   │   ├── CropControl.ts             # Crop and uncrop/canvas extension
-│   │   └── OCIOControl.ts             # OCIO color management UI (incl. custom config upload)
-│   └── shared/         # Button, Modal, Panel utilities
-├── paint/              # Annotation engine
-├── audio/              # Audio playback and waveform rendering
-│   ├── AudioPlaybackManager.ts # Web Audio API playback with fallbacks
-│   └── WaveformRenderer.ts     # Waveform extraction and rendering
-├── color/              # CDL, LUT loader (1D & 3D), WebGL LUT processor
-│   ├── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
-│   ├── DisplayCapabilities.ts # HDR/P3/WebGPU display capability detection
-│   ├── DisplayTransfer.ts     # Display transfer functions (sRGB, Rec.709, gamma)
-│   ├── HDRPixelData.ts        # HDR-aware pixel value access wrapper
-│   ├── LUTPresets.ts          # Film emulation preset library (10 built-in looks)
-│   ├── SafeCanvasContext.ts   # Safe canvas context creation with P3/HDR fallback
-│   └── ocio/           # OCIO color management (config, transforms, processor)
-├── filters/            # Image processing filters
-│   ├── NoiseReduction.ts       # Bilateral filter (CPU implementation)
-│   └── WebGLNoiseReduction.ts  # GPU-accelerated bilateral filter
-├── network/            # Network sync infrastructure (WebSocket client, rooms)
-├── stereo/             # Stereoscopic 3D viewing modes
-├── transform/          # Lens distortion
-├── composite/          # Blend modes
-├── scopes/             # GPU-accelerated scopes (Histogram, Waveform, Vectorscope)
-├── utils/              # EventEmitter, FrameExporter, SequenceLoader, HiDPICanvas
-│   ├── CodecUtils.ts             # Codec detection (ProRes, DNxHD, etc.)
-│   ├── PixelAspectRatio.ts       # PAR detection and correction
-│   ├── FullscreenManager.ts      # Fullscreen API wrapper
-│   ├── PresentationMode.ts       # Presentation mode (UI hide, cursor auto-hide)
-│   ├── FrameInterpolator.ts      # Sub-frame interpolation for slow motion
-│   ├── EffectProcessor.ts        # CPU effect processing (highlights, vibrance, clarity, etc.)
-│   ├── PrerenderBufferManager.ts # Prerender cache for smooth playback with effects
-│   ├── WorkerPool.ts             # Generic worker pool for parallel processing
-│   ├── AnnotationJSONExporter.ts # Export/import annotations as JSON (round-trip)
-│   ├── AnnotationPDFExporter.ts  # Export annotations as PDF via browser print
-│   └── OTIOParser.ts             # OpenTimelineIO import parser
-└── workers/            # Web Workers for background processing
-    └── effectProcessor.worker.ts # Background effect processing
-```
-
-### Keyboard Management
-
-The application uses a centralized `KeyboardManager` for all keyboard shortcuts, providing:
-
-- **Flexible Registration**: Register shortcuts with key combinations, handlers, and descriptions
-- **Cross-Platform Support**: Automatically treats Meta (Cmd) as Ctrl for compatibility
-- **Input Field Awareness**: Skips shortcuts when typing in text inputs (except global keys like Escape)
-- **Configurable Bindings**: All shortcuts defined in `KeyBindings.ts` for easy customization
-
-**Modal Exceptions**: Modal dialogs (`showAlert`, `showConfirm`, `showPrompt`) have their own local keyboard handling for Escape/Enter keys. This is intentional as modals are focused, temporary UI elements that require immediate keyboard response and proper cleanup.
-
-```typescript
-// Register a shortcut
-keyboardManager.register('Ctrl+S', () => exportFrame(), 'Export frame');
-
-// Register with object notation (uses KeyboardEvent.code)
-keyboardManager.register({
-  code: 'KeyS',
-  ctrl: true
-}, () => exportFrame(), 'Export frame');
-
-// Check if a shortcut is registered
-if (keyboardManager.isRegistered('Ctrl+S')) { ... }
-
-// Get all bindings for UI display
-const bindings = keyboardManager.getBindings();
+│   ├── components/              # All UI panels, controls, overlays, and editors
+│   └── shared/                  # Button, Modal, Panel utilities
+├── utils/                       # EventEmitter, FrameExporter, SequenceLoader, HiDPICanvas, etc.
+├── workers/
+│   └── effectProcessor.worker.ts # Background effect processing
+└── config/                      # Image size limits, playback, render, timing, UI config
 ```
 
 ### Node Graph
@@ -608,12 +631,13 @@ const bindings = keyboardManager.getBindings();
 The application uses a directed acyclic graph (DAG) for media processing:
 
 ```
-[Source Nodes] → [Group Nodes] → [Effect Nodes] → [Output]
-     ↓                ↓               ↓
-FileSource      SequenceGroup     RVColor (future)
-VideoSource     StackGroup        RVTransform2D (future)
+[Source Nodes] -> [Group Nodes] -> [Effect Nodes] -> [Output]
+     |                |               |
+FileSource      SequenceGroup     CDL, Tone Mapping
+VideoSource     StackGroup        Hue Rotation, etc.
 SequenceSource  SwitchGroup
                 LayoutGroup
+                FolderGroup
 ```
 
 Nodes are registered via decorators:
@@ -634,6 +658,8 @@ await session.loadFromGTO(fileData);
 const graph = session.graph;
 const rootNode = session.graphParseResult?.rootNode;
 ```
+
+---
 
 ## Development
 
@@ -657,153 +683,29 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **12200+ unit tests** across 294 test files and **103 e2e test suites**:
+The codebase includes comprehensive test coverage with **12200+ unit tests** across 294 test files and **103 e2e test suites**.
 
-- **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
-- **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)
-- **Tone Mapping**: Reinhard (white point), Filmic (exposure bias, white point), ACES operator tests
-- **LUT Presets**: Preset generation, identity verification, value ranges, category grouping (16 tests)
-- **EXR PIZ Codec**: Huffman decode, wavelet reconstruction, LUT inverse (39 tests)
-- **Analysis**: ZebraStripes (49 tests), PixelProbe (45+ tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
-- **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
-- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
-- **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
-- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), JXLDecoder, HEICGainmapDecoder, HEICWasmDecoder, DecoderRegistry, ChannelSelect (EXR layer UI)
-- **Render**: TextureCacheManager (22 tests), Canvas2DHDRBlit (23 tests)
-- **Export/Import**: AnnotationJSONExporter (33 tests incl. import), AnnotationPDFExporter (21 tests), OTIOParser (42 tests)
-- **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
-- **Filters**: NoiseReduction (18 tests), WebGLNoiseReduction
-- **Overlays**: MissingFrameOverlay (16 tests), WatermarkOverlay, WatermarkControl
-- **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests), PixelAspectRatio (28 tests), FullscreenManager (13 tests), PresentationMode (20 tests), FrameInterpolator, CodecUtils, ViewerInteraction
-- **API**: OpenRVAPI (80+ tests covering all sub-modules: Playback, Media, Audio, Loop, View, Color, Markers, Events)
-
-**E2E Tests** (103 test suites):
-- **Core**: App initialization, tab navigation, media loading, playback controls, session recovery, page visibility handling
-- **Audio**: Volume control, mute/unmute, audio sync, error recovery, keyboard shortcuts (21 tests)
-- **View**: Grayscale toggle (Shift+L/Y), channel isolation, EXR layers, background patterns (14 tests), fullscreen/presentation
-- **GTO**: Round-trip verification (markers, frame ranges, matte, paint effects, metadata, custom nodes)
-- **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
-- **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves, OCIO
-- **View**: Pixel probe (incl. HDR nits/precision), False color, Zebra stripes, Safe areas, Spotlight, Info panel, Pixel aspect ratio (11 tests)
-- **Comparison**: A/B compare, Wipe modes, Difference matte
-- **Compositing**: Stack Control - layer management, blend modes, opacity, visibility, reordering (44 tests)
-- **Transform**: Rotation, Flip, Crop, Uncrop (9 tests)
-- **Annotations**: Paint tools, Paint coordinates, Text formatting, JSON/PDF export, annotation import (18 tests)
-- **Export**: Frame export, Sequence export, Annotation export
-- **Timeline**: EDL editing, cut manipulation
-- **Auto-Save**: Indicator display, status changes, styling, animations (14 tests)
-- **Sequences**: Image sequence loading, pattern detection (11 tests)
-- **Codecs**: Unsupported codec detection and transcoding guidance
-- **Scripting API**: window.openrv API testing
-- **Tone Mapping**: Per-operator parameter controls, persistence, visual impact (30 tests)
-- **OTIO Import**: Parser validation, playlist integration, UI workflow (20 tests)
-- **LUT Presets & OCIO Config**: Preset browser, custom config loading (12 tests)
-- **HDR Pixel Probe**: Float precision, nits display, out-of-range detection (24 tests)
-- **Display & Float LUT**: GPU display profiles, float LUT shader, compound effects (21 tests)
-
-### Hi-DPI Canvas Support
-
-All canvas-based components support hi-DPI/Retina displays using the `HiDPICanvas` utility:
-
-```typescript
-import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
-
-// Setup canvas for hi-DPI rendering
-const canvas = document.createElement('canvas');
-const ctx = canvas.getContext('2d')!;
-
-const result = setupHiDPICanvas({
-  canvas,
-  ctx,
-  width: 256,   // Logical width (CSS pixels)
-  height: 100,  // Logical height (CSS pixels)
-});
-
-// Result contains: { dpr, physicalWidth, physicalHeight, logicalWidth, logicalHeight }
-// At 2x DPR: canvas.width = 512, canvas.style.width = '256px'
-
-// Draw using logical coordinates - context is automatically scaled
-ctx.fillRect(0, 0, 256, 100);  // Fills the entire canvas
-
-// For mouse events, convert client coords to logical canvas coords
-canvas.addEventListener('click', (e) => {
-  const { x, y } = clientToCanvasCoordinates(canvas, e.clientX, e.clientY, 256, 100);
-  // x, y are in logical coordinates (0-256, 0-100 range)
-});
-```
-
-**Key functions:**
-- `setupHiDPICanvas()` - Configure canvas for hi-DPI with physical/CSS dimensions and scaled context
-- `resizeHiDPICanvas()` - Resize an existing hi-DPI canvas (alias for setup)
-- `createHiDPICanvas()` - Create a new canvas with hi-DPI support
-- `clientToCanvasCoordinates()` - Convert mouse event coords to logical canvas coords
-- `logicalToPhysical()` / `physicalToLogical()` - Coordinate conversion helpers
-
-**Important notes for pixel buffer operations:**
-When using `getImageData`/`putImageData`, work in physical pixel coordinates (these bypass the context transform):
-
-```typescript
-// For direct pixel manipulation, use physical dimensions
-const physicalWidth = canvas.width;   // Not logical width
-const physicalHeight = canvas.height;
-const imageData = ctx.getImageData(0, 0, physicalWidth, physicalHeight);
-```
-
-### Adaptive Proxy Rendering
-
-The rendering pipeline adapts resolution across four layers to balance quality and performance:
-
-**Phase 1 — DPI-Aware Canvas**: The WebGL canvas renders at physical resolution (`logical × devicePixelRatio`) while the 2D canvas stays at logical resolution to avoid CPU effect regressions. CSS `width`/`height` on the GL canvas maps physical pixels back to logical layout. A `matchMedia('(resolution:…)')` listener detects DPR changes when windows move between displays. Physical dimensions are capped at `MAX_TEXTURE_SIZE` proportionally to prevent GL failures.
-
-**Phase 2 — Interaction Quality Tiering**: During zoom/scrub, `InteractionQualityManager` drops the GL viewport to 50% of physical resolution via `gl.viewport()` subrect, restoring full quality 200ms after the last interaction ends. Reference-counted `beginInteraction()`/`endInteraction()` handles overlapping interactions (e.g. simultaneous wheel zoom + timeline scrub).
-
-**Phase 3 — GL Mipmaps**: `generateMipmap()` is called for RGBA float textures (including 3-channel EXR padded to RGBA) and static SDR images. Guards skip mipmaps for `RGB32F` (not color-renderable), VideoFrame sources (too expensive per frame), and when `OES_texture_float_linear`/`EXT_color_buffer_float` are unavailable.
-
-**Phase 4 — Cache-Level Resize**: `createImageBitmap()` resize options downscale frames at extraction time to match display resolution. The frame cache stores a single entry per frame with lazy upgrade: proxy-resolution frames display immediately, then re-extract at full resolution in the background when interaction ends.
-
-Key files: `Viewer.ts` (dimension state), `ViewerGLRenderer.ts` (GL canvas sizing), `Renderer.ts` (mipmaps, viewport), `InteractionQualityManager.ts` (quality tiering), `MediabunnyFrameExtractor.ts` (cache-level resize).
-
-### Adding a New Node Type
-
-1. Create node class extending `IPNode` or `BaseGroupNode`
-2. Add `@RegisterNode('NodeType')` decorator
-3. Implement `process()` method
-4. Import in `src/nodes/<category>/index.ts`
-
-Example:
-```typescript
-import { RegisterNode } from '../base/NodeFactory';
-import { BaseGroupNode } from './BaseGroupNode';
-
-@RegisterNode('RVMyGroup')
-export class MyGroupNode extends BaseGroupNode {
-  constructor(name?: string) {
-    super('RVMyGroup', name ?? 'My Group');
-    this.properties.add({ name: 'myProp', defaultValue: 0 });
-  }
-
-  getActiveInputIndex(context: EvalContext): number {
-    return 0;
-  }
-}
-```
+---
 
 ## Tech Stack
 
-- **TypeScript** - Type-safe development
-- **Vite** - Fast bundler with HMR
-- **Vitest** - Unit testing framework
-- **Playwright** - End-to-end testing
-- **WebGL2** - GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
-- **WebAssembly** - High-performance EXR and JPEG XL decoding
-- **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny)
-- **Web Audio API** - Audio playback, waveform generation, volume control, and pitch correction
-- **Fullscreen API** - Native fullscreen and presentation modes
-- **Mediabunny** - Also used for audio extraction fallback when native fetch is blocked by CORS
-- **@jsquash/jxl** - JPEG XL WebAssembly decoder (libjxl)
-- **libheif-js** - HEIC/HEIF WebAssembly decoder (libheif) for cross-browser support
-- **gto-js** - RV/GTO file parsing
-- **gl-matrix** - Matrix/vector math
+- **TypeScript** -- type-safe development
+- **Vite** -- fast bundler with HMR
+- **Vitest** -- unit testing framework
+- **Playwright** -- end-to-end testing
+- **WebGL2** -- GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
+- **WebGPU** -- experimental HDR rendering backend
+- **WebAssembly** -- high-performance EXR, JPEG XL, JPEG 2000, HEIC, and OCIO decoding
+- **WebCodecs API** -- frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny) and video encoding for export
+- **Web Audio API** -- audio playback, waveform generation, volume control, and pitch correction
+- **WebRTC** -- peer-to-peer connections for collaborative review
+- **BroadcastChannel API** -- same-origin cross-window communication for external presentation
+- **Fullscreen API** -- native fullscreen and presentation modes
+- **IndexedDB** -- persistent storage for snapshots, auto-save, and session recovery
+- **gto-js** -- RV/GTO file parsing
+- **@jsquash/jxl** -- JPEG XL WebAssembly decoder (libjxl)
+- **libheif-js** -- HEIC/HEIF WebAssembly decoder (libheif)
+- **gl-matrix** -- matrix/vector math
 
 ## Browser Support
 
@@ -813,7 +715,7 @@ Requires WebGL2 support:
 - Safari 15+
 - Edge 79+
 
-**Hi-DPI/Retina displays** are fully supported with automatic detection of `devicePixelRatio`. All canvas-based UI components (scopes, color wheels, curve editor, overlays) render at native resolution for crisp display on 2x, 3x, and fractional DPR screens.
+Hi-DPI/Retina displays are fully supported with automatic detection of `devicePixelRatio`. All canvas-based UI components (scopes, color wheels, curve editor, overlays) render at native resolution for crisp display on 2x, 3x, and fractional DPR screens.
 
 ## License
 
@@ -821,5 +723,5 @@ MIT
 
 ## Related Projects
 
-- [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV) - Original C++ application
-- [gto-js](https://github.com/lifeart/gto-js) - GTO file format parser for JavaScript
+- [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV) -- Original C++ application
+- [gto-js](https://github.com/lifeart/gto-js) -- GTO file format parser for JavaScript
