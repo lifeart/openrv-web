@@ -4,13 +4,13 @@
  * Supports:
  * - Half-float (16-bit) and float (32-bit) pixel data
  * - RGBA, RGB, and Y (grayscale) channels
- * - Scanline images (tiled images not yet supported)
+ * - Scanline and ONE_LEVEL tiled images
  * - Uncompressed (NONE), RLE, ZIP, ZIPS, PIZ, DWAA, and DWAB compression
  * - Data window / display window handling
- * - Multi-part EXR files (scanline parts; part selection via partIndex)
+ * - Multi-part EXR files (scanline and tiled parts; part selection via partIndex)
  *
  * Not yet supported:
- * - Tiled images
+ * - MIPMAP and RIPMAP tiled images
  * - Deep data (deepscanline / deeptile)
  * - PXR24, B44, B44A compression
  *
@@ -54,6 +54,27 @@ export enum EXRLineOrder {
   RANDOM_Y = 2,
 }
 
+// Tile level mode
+export enum EXRLevelMode {
+  ONE_LEVEL = 0,
+  MIPMAP_LEVELS = 1,
+  RIPMAP_LEVELS = 2,
+}
+
+// Tile rounding mode
+export enum EXRRoundingMode {
+  ROUND_DOWN = 0,
+  ROUND_UP = 1,
+}
+
+// Tile description
+export interface EXRTileDesc {
+  xSize: number;
+  ySize: number;
+  levelMode: EXRLevelMode;
+  roundingMode: EXRRoundingMode;
+}
+
 export interface EXRChannel {
   name: string;
   pixelType: EXRPixelType;
@@ -95,6 +116,8 @@ export interface EXRHeader {
   name?: string;
   // Multi-part: view attribute (for stereo: "left" / "right")
   view?: string;
+  // Tile description (present for tiled images)
+  tileDesc?: EXRTileDesc;
   // Multi-view: list of view names (e.g., ["left", "right"])
   multiView?: string[];
 
@@ -504,6 +527,29 @@ function parseHeaderAttributes(reader: EXRDataReader): {
       case 'multiView':
         header.multiView = parseStringVector(reader, attrSize);
         break;
+      case 'tiles': {
+        const xSize = reader.readInt32();
+        const ySize = reader.readInt32();
+        const modeByte = reader.readUint8();
+        const levelMode = modeByte & 0xf;
+        const roundingMode = (modeByte >> 4) & 0xf;
+        if (levelMode < 0 || levelMode > 2) {
+          throw new DecoderError('EXR', `Invalid tile level mode: ${levelMode}`);
+        }
+        if (roundingMode < 0 || roundingMode > 1) {
+          throw new DecoderError('EXR', `Invalid tile rounding mode: ${roundingMode}`);
+        }
+        if (xSize <= 0 || ySize <= 0) {
+          throw new DecoderError('EXR', `Invalid tile size: ${xSize}x${ySize}`);
+        }
+        header.tileDesc = {
+          xSize,
+          ySize,
+          levelMode: levelMode as EXRLevelMode,
+          roundingMode: roundingMode as EXRRoundingMode,
+        };
+        break;
+      }
       default:
         header.attributes.set(attrName, {
           type: attrType,
@@ -1035,6 +1081,351 @@ async function decodeScanlineImage(
 }
 
 /**
+ * Decode tiled image data (ONE_LEVEL only)
+ */
+async function decodeTiledImage(
+  reader: EXRDataReader,
+  header: EXRHeader,
+  channelMapping?: Map<string, string>
+): Promise<Float32Array> {
+  const dataWindow = header.dataWindow;
+  const width = dataWindow.xMax - dataWindow.xMin + 1;
+  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  const tileDesc = header.tileDesc!;
+  const tileXSize = tileDesc.xSize;
+  const tileYSize = tileDesc.ySize;
+
+  // Build channel lookup (same pattern as decodeScanlineImage)
+  const channelLookup = new Map<string, EXRChannel>();
+  for (const ch of header.channels) {
+    channelLookup.set(ch.name, ch);
+  }
+
+  // Determine output channel mapping (same logic as scanline)
+  let outputMapping: Map<string, string>;
+  if (channelMapping && channelMapping.size > 0) {
+    outputMapping = channelMapping;
+  } else {
+    outputMapping = new Map();
+    if (channelLookup.has('R')) outputMapping.set('R', 'R');
+    if (channelLookup.has('G')) outputMapping.set('G', 'G');
+    if (channelLookup.has('B')) outputMapping.set('B', 'B');
+    if (channelLookup.has('A')) outputMapping.set('A', 'A');
+    if (channelLookup.has('Y') && !channelLookup.has('R')) {
+      outputMapping.set('R', 'Y');
+      outputMapping.set('G', 'Y');
+      outputMapping.set('B', 'Y');
+    }
+  }
+
+  if (outputMapping.size === 0) {
+    throw new DecoderError('EXR', 'No supported channels found in EXR file');
+  }
+
+  const numOutputChannels = 4;
+  const output = new Float32Array(width * height * numOutputChannels);
+
+  if (!outputMapping.has('A')) {
+    for (let i = 3; i < output.length; i += 4) {
+      output[i] = 1.0;
+    }
+  }
+
+  const sourceToOutputIndices = new Map<string, number[]>();
+  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
+
+  for (const [outputCh, sourceCh] of outputMapping.entries()) {
+    const outputIdx = outputChannelIndices[outputCh];
+    if (outputIdx !== undefined) {
+      const existing = sourceToOutputIndices.get(sourceCh) || [];
+      existing.push(outputIdx);
+      sourceToOutputIndices.set(sourceCh, existing);
+    }
+  }
+
+  // Compute tile grid
+  const numXTiles = Math.ceil(width / tileXSize);
+  const numYTiles = Math.ceil(height / tileYSize);
+  const totalTiles = numXTiles * numYTiles;
+
+  // Read offset table
+  const offsets: bigint[] = [];
+  for (let i = 0; i < totalTiles; i++) {
+    offsets.push(reader.readUint64());
+  }
+
+  // Read and decode each tile
+  for (let tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
+    const tileX = reader.readInt32();
+    const tileY = reader.readInt32();
+    reader.readInt32(); // levelX (unused for ONE_LEVEL)
+    reader.readInt32(); // levelY (unused for ONE_LEVEL)
+    const packedSize = reader.readInt32();
+
+    // Compute actual tile pixel position and dimensions
+    const tilePixelX = tileX * tileXSize;
+    const tilePixelY = tileY * tileYSize;
+    const actualTileWidth = Math.min(tileXSize, width - tilePixelX);
+    const actualTileHeight = Math.min(tileYSize, height - tilePixelY);
+
+    if (actualTileWidth <= 0 || actualTileHeight <= 0) {
+      reader.skip(packedSize);
+      continue;
+    }
+
+    // Calculate tile scanline size for decompression
+    const tileScanlineBytes = header.channels.reduce((sum, ch) => {
+      const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
+      return sum + bytes * actualTileWidth;
+    }, 0);
+    const uncompressedSize = actualTileHeight * tileScanlineBytes;
+
+    const packedData = reader.readBytes(packedSize);
+
+    let unpackedData: Uint8Array;
+    if (header.compression === EXRCompression.NONE) {
+      unpackedData = packedData;
+    } else {
+      const needsChannelCtx =
+        header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.DWAA ||
+        header.compression === EXRCompression.DWAB;
+      const channelCtx = needsChannelCtx
+        ? {
+            width: actualTileWidth,
+            numChannels: header.channels.length,
+            numLines: actualTileHeight,
+            channelSizes: header.channels.map(ch =>
+              ch.pixelType === EXRPixelType.HALF ? 2 : 4
+            ),
+          }
+        : undefined;
+      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
+    }
+
+    // Parse channel data from unpacked tile data
+    const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
+
+    for (let line = 0; line < actualTileHeight; line++) {
+      const outputY = tilePixelY + line;
+      if (outputY < 0 || outputY >= height) continue;
+
+      let channelOffset = 0;
+
+      for (const ch of header.channels) {
+        const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
+        const lineDataOffset = line * tileScanlineBytes + channelOffset;
+
+        const outputIndices = sourceToOutputIndices.get(ch.name);
+
+        if (outputIndices && outputIndices.length > 0) {
+          for (let x = 0; x < actualTileWidth; x++) {
+            const outputX = tilePixelX + x;
+            if (outputX >= width) continue;
+
+            const srcOffset = lineDataOffset + x * channelBytes;
+
+            let value: number;
+            if (ch.pixelType === EXRPixelType.HALF) {
+              const half = dataView.getUint16(srcOffset, true);
+              value = halfToFloat(half);
+            } else {
+              value = dataView.getFloat32(srcOffset, true);
+            }
+
+            for (const outputIdx of outputIndices) {
+              const dstIdx = (outputY * width + outputX) * numOutputChannels + outputIdx;
+              output[dstIdx] = value;
+            }
+          }
+        }
+
+        channelOffset += actualTileWidth * channelBytes;
+      }
+    }
+  }
+
+  return output;
+}
+
+/**
+ * Decode tiled image data from a multi-part EXR file.
+ * Multi-part chunks have an extra part number field before each tile block.
+ */
+async function decodeMultiPartTiledImage(
+  reader: EXRDataReader,
+  header: EXRHeader,
+  targetPartIndex: number,
+  channelMapping?: Map<string, string>
+): Promise<Float32Array> {
+  const dataWindow = header.dataWindow;
+  const width = dataWindow.xMax - dataWindow.xMin + 1;
+  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  const tileDesc = header.tileDesc!;
+  const tileXSize = tileDesc.xSize;
+  const tileYSize = tileDesc.ySize;
+
+  const channelLookup = new Map<string, EXRChannel>();
+  for (const ch of header.channels) {
+    channelLookup.set(ch.name, ch);
+  }
+
+  let outputMapping: Map<string, string>;
+  if (channelMapping && channelMapping.size > 0) {
+    outputMapping = channelMapping;
+  } else {
+    outputMapping = new Map();
+    if (channelLookup.has('R')) outputMapping.set('R', 'R');
+    if (channelLookup.has('G')) outputMapping.set('G', 'G');
+    if (channelLookup.has('B')) outputMapping.set('B', 'B');
+    if (channelLookup.has('A')) outputMapping.set('A', 'A');
+    if (channelLookup.has('Y') && !channelLookup.has('R')) {
+      outputMapping.set('R', 'Y');
+      outputMapping.set('G', 'Y');
+      outputMapping.set('B', 'Y');
+    }
+  }
+
+  if (outputMapping.size === 0) {
+    throw new DecoderError('EXR', 'No supported channels found in EXR file');
+  }
+
+  const numOutputChannels = 4;
+  const output = new Float32Array(width * height * numOutputChannels);
+
+  if (!outputMapping.has('A')) {
+    for (let i = 3; i < output.length; i += 4) {
+      output[i] = 1.0;
+    }
+  }
+
+  const sourceToOutputIndices = new Map<string, number[]>();
+  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
+
+  for (const [outputCh, sourceCh] of outputMapping.entries()) {
+    const outputIdx = outputChannelIndices[outputCh];
+    if (outputIdx !== undefined) {
+      const existing = sourceToOutputIndices.get(sourceCh) || [];
+      existing.push(outputIdx);
+      sourceToOutputIndices.set(sourceCh, existing);
+    }
+  }
+
+  const numXTiles = Math.ceil(width / tileXSize);
+  const numYTiles = Math.ceil(height / tileYSize);
+  const totalTiles = numXTiles * numYTiles;
+
+  const MAX_CHUNKS = totalTiles * 1024 * 2;
+  let totalChunksRead = 0;
+
+  for (let tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
+    if (++totalChunksRead > MAX_CHUNKS) {
+      throw new DecoderError('EXR', 'Too many chunks read while seeking target part, file may be corrupt');
+    }
+
+    const partNumber = reader.readInt32();
+    if (partNumber !== targetPartIndex) {
+      // Skip this tile - belongs to different part
+      reader.readInt32(); // tileX
+      reader.readInt32(); // tileY
+      reader.readInt32(); // levelX
+      reader.readInt32(); // levelY
+      const packedSize = reader.readInt32();
+      reader.skip(packedSize);
+      tileIdx--;
+      continue;
+    }
+
+    const tileX = reader.readInt32();
+    const tileY = reader.readInt32();
+    reader.readInt32(); // levelX (unused for ONE_LEVEL)
+    reader.readInt32(); // levelY (unused for ONE_LEVEL)
+    const packedSize = reader.readInt32();
+
+    const tilePixelX = tileX * tileXSize;
+    const tilePixelY = tileY * tileYSize;
+    const actualTileWidth = Math.min(tileXSize, width - tilePixelX);
+    const actualTileHeight = Math.min(tileYSize, height - tilePixelY);
+
+    if (actualTileWidth <= 0 || actualTileHeight <= 0) {
+      reader.skip(packedSize);
+      continue;
+    }
+
+    const tileScanlineBytes = header.channels.reduce((sum, ch) => {
+      const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
+      return sum + bytes * actualTileWidth;
+    }, 0);
+    const uncompressedSize = actualTileHeight * tileScanlineBytes;
+
+    const packedData = reader.readBytes(packedSize);
+
+    let unpackedData: Uint8Array;
+    if (header.compression === EXRCompression.NONE) {
+      unpackedData = packedData;
+    } else {
+      const needsChannelCtx =
+        header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.DWAA ||
+        header.compression === EXRCompression.DWAB;
+      const channelCtx = needsChannelCtx
+        ? {
+            width: actualTileWidth,
+            numChannels: header.channels.length,
+            numLines: actualTileHeight,
+            channelSizes: header.channels.map(ch =>
+              ch.pixelType === EXRPixelType.HALF ? 2 : 4
+            ),
+          }
+        : undefined;
+      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
+    }
+
+    const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
+
+    for (let line = 0; line < actualTileHeight; line++) {
+      const outputY = tilePixelY + line;
+      if (outputY < 0 || outputY >= height) continue;
+
+      let channelOffset = 0;
+
+      for (const ch of header.channels) {
+        const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
+        const lineDataOffset = line * tileScanlineBytes + channelOffset;
+
+        const outputIndices = sourceToOutputIndices.get(ch.name);
+
+        if (outputIndices && outputIndices.length > 0) {
+          for (let x = 0; x < actualTileWidth; x++) {
+            const outputX = tilePixelX + x;
+            if (outputX >= width) continue;
+
+            const srcOffset = lineDataOffset + x * channelBytes;
+
+            let value: number;
+            if (ch.pixelType === EXRPixelType.HALF) {
+              const half = dataView.getUint16(srcOffset, true);
+              value = halfToFloat(half);
+            } else {
+              value = dataView.getFloat32(srcOffset, true);
+            }
+
+            for (const outputIdx of outputIndices) {
+              const dstIdx = (outputY * width + outputX) * numOutputChannels + outputIdx;
+              output[dstIdx] = value;
+            }
+          }
+        }
+
+        channelOffset += actualTileWidth * channelBytes;
+      }
+    }
+  }
+
+  return output;
+}
+
+/**
  * Decode scanline image data from a multi-part EXR file.
  * Multi-part chunks have an extra part number field before each scanline block.
  */
@@ -1305,7 +1696,32 @@ async function decodeSinglePart(
   options?: EXRDecodeOptions
 ): Promise<EXRDecodeResult> {
   if (header.tiled) {
-    throw new DecoderError('EXR', 'Tiled EXR images are not yet supported');
+    if (!header.tileDesc) {
+      throw new DecoderError('EXR', 'Tiled EXR file missing tiles attribute');
+    }
+    if (header.tileDesc.levelMode !== EXRLevelMode.ONE_LEVEL) {
+      const modeName = EXRLevelMode[header.tileDesc.levelMode] || `unknown(${header.tileDesc.levelMode})`;
+      throw new DecoderError('EXR', `Unsupported EXR tile level mode: ${modeName}. Only ONE_LEVEL tiled images are supported.`);
+    }
+
+    validateCompression(header.compression);
+
+    const channelMapping = resolveChannelMapping(header, options);
+    const rawData = await decodeTiledImage(reader, header, channelMapping);
+
+    const uncropped = applyUncrop(rawData, header.dataWindow, header.displayWindow);
+
+    const layers = extractLayerInfo(header.channels);
+
+    return {
+      width: uncropped.width,
+      height: uncropped.height,
+      data: uncropped.data,
+      channels: 4,
+      header,
+      layers,
+      decodedLayer: options?.layer,
+    };
   }
 
   validateCompression(header.compression);
@@ -1357,15 +1773,22 @@ async function decodeMultiPart(
     throw new DecoderError('EXR',
       `Part '${partLabel}' has type '${selectedHeader.type}' which is deep data. ` +
       `Deep data (deepscanline/deeptile) is not yet supported. ` +
-      `Only scanline image parts can be decoded.`
+      `Only scanlineimage and tiledimage parts can be decoded.`
     );
   }
 
   // Check for tiled parts
-  if (selectedHeader.type === 'tiledimage' || selectedHeader.tiled) {
-    throw new DecoderError('EXR',
-      `Part '${partLabel}' is a tiled image. Tiled EXR images are not yet supported.`
-    );
+  const isTiledPart = selectedHeader.type === 'tiledimage' || selectedHeader.tiled;
+  if (isTiledPart) {
+    if (!selectedHeader.tileDesc) {
+      throw new DecoderError('EXR', `Part '${partLabel}': Tiled EXR part missing tiles attribute`);
+    }
+    if (selectedHeader.tileDesc.levelMode !== EXRLevelMode.ONE_LEVEL) {
+      const modeName = EXRLevelMode[selectedHeader.tileDesc.levelMode] || `unknown(${selectedHeader.tileDesc.levelMode})`;
+      throw new DecoderError('EXR',
+        `Part '${partLabel}': Unsupported EXR tile level mode: ${modeName}. Only ONE_LEVEL tiled images are supported.`
+      );
+    }
   }
 
   validateCompression(selectedHeader.compression, partLabel);
@@ -1392,8 +1815,17 @@ async function decodeMultiPart(
     const dw = ph.dataWindow;
     const partHeight = dw.yMax - dw.yMin + 1;
 
-    const linesPerBlock = getLinesPerBlock(ph.compression);
-    const numBlocks = Math.ceil(partHeight / linesPerBlock);
+    let numBlocks: number;
+    const isTiledPartEntry = ph.type === 'tiledimage' || ph.tiled;
+    if (isTiledPartEntry && ph.tileDesc) {
+      const partWidth = dw.xMax - dw.xMin + 1;
+      const numXTiles = Math.ceil(partWidth / ph.tileDesc.xSize);
+      const numYTiles = Math.ceil(partHeight / ph.tileDesc.ySize);
+      numBlocks = numXTiles * numYTiles;
+    } else {
+      const linesPerBlock = getLinesPerBlock(ph.compression);
+      numBlocks = Math.ceil(partHeight / linesPerBlock);
+    }
 
     const offsets: bigint[] = [];
     for (let i = 0; i < numBlocks; i++) {
@@ -1409,9 +1841,15 @@ async function decodeMultiPart(
     reader.position = Number(partOffsetTables[partIndex]![0]!);
   }
 
-  // Decode scanlines for the selected part
+  // Decode data for the selected part
   const channelMapping = resolveChannelMapping(selectedHeader, options);
-  const rawData = await decodeMultiPartScanlineImage(reader, selectedHeader, partIndex, channelMapping);
+
+  let rawData: Float32Array;
+  if (isTiledPart) {
+    rawData = await decodeMultiPartTiledImage(reader, selectedHeader, partIndex, channelMapping);
+  } else {
+    rawData = await decodeMultiPartScanlineImage(reader, selectedHeader, partIndex, channelMapping);
+  }
 
   // Apply uncrop: expand data window to display window if they differ
   const uncropped = applyUncrop(rawData, selectedHeader.dataWindow, selectedHeader.displayWindow);
