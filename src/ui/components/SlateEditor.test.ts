@@ -387,7 +387,7 @@ describe('SlateEditor', () => {
       expect(config.logoScale).toBe(0.15);
     });
 
-    it('SE-091: config does not include logo image (caller must load)', () => {
+    it('SE-091: config does not include logo when none loaded', () => {
       const config = editor.generateConfig();
       expect(config.logo).toBeUndefined();
     });

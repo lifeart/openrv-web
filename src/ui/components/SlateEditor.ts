@@ -9,13 +9,14 @@
  * - Add custom fields with label/value pairs
  * - Configure colors (background, text, accent)
  * - Font size control
- * - Logo URL configuration
+ * - Logo file upload with preview
+ * - Live slate preview rendering
  * - Generates a SlateConfig object compatible with SlateRenderer
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import type { SlateConfig, SlateField, SlateMetadata, LogoPosition } from '../../export/SlateRenderer';
-import { buildSlateFields } from '../../export/SlateRenderer';
+import { buildSlateFields, renderSlate } from '../../export/SlateRenderer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,6 +58,10 @@ export interface SlateEditorState {
 export interface SlateEditorEvents extends EventMap {
   stateChanged: SlateEditorState;
   configGenerated: SlateConfig;
+  logoLoaded: { width: number; height: number };
+  logoRemoved: void;
+  logoError: Error;
+  previewRendered: HTMLCanvasElement;
 }
 
 export const DEFAULT_SLATE_EDITOR_STATE: SlateEditorState = {
@@ -81,6 +86,8 @@ export const DEFAULT_SLATE_EDITOR_STATE: SlateEditorState = {
 
 export class SlateEditor extends EventEmitter<SlateEditorEvents> {
   private state: SlateEditorState = deepCopy(DEFAULT_SLATE_EDITOR_STATE);
+  private logoImage: HTMLImageElement | null = null;
+  private pendingLogoAbort: (() => void) | null = null;
 
   constructor(initialState?: Partial<SlateEditorState>) {
     super();
@@ -234,7 +241,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
   // -------------------------------------------------------------------------
 
   /**
-   * Get logo URL
+   * Get logo URL (for serialization)
    */
   getLogoUrl(): string {
     return this.state.logoUrl;
@@ -249,6 +256,124 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
     if (url === '' || isValidLogoUrl(url)) {
       this.setState({ logoUrl: url });
     }
+  }
+
+  /**
+   * Load a logo image from a File (user upload).
+   * Aborts any pending load before starting a new one.
+   */
+  async loadLogoFile(file: File): Promise<void> {
+    this.abortPendingLogoLoad();
+
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      let aborted = false;
+
+      this.pendingLogoAbort = () => {
+        aborted = true;
+        URL.revokeObjectURL(url);
+        img.src = '';
+      };
+
+      img.onload = () => {
+        if (aborted) return;
+        this.pendingLogoAbort = null;
+        this.setLoadedLogo(img, url);
+        resolve();
+      };
+
+      img.onerror = () => {
+        if (aborted) return;
+        this.pendingLogoAbort = null;
+        URL.revokeObjectURL(url);
+        const error = new Error('Failed to load logo image');
+        this.emit('logoError', error);
+        reject(error);
+      };
+
+      img.src = url;
+    });
+  }
+
+  /**
+   * Load a logo image from a URL.
+   * Aborts any pending load before starting a new one.
+   */
+  async loadLogoFromUrl(url: string): Promise<void> {
+    if (!isValidLogoUrl(url)) {
+      const error = new Error('Invalid logo URL');
+      this.emit('logoError', error);
+      throw error;
+    }
+
+    this.abortPendingLogoLoad();
+
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      let aborted = false;
+
+      this.pendingLogoAbort = () => {
+        aborted = true;
+        img.src = '';
+      };
+
+      img.onload = () => {
+        if (aborted) return;
+        this.pendingLogoAbort = null;
+        this.setLoadedLogo(img, url);
+        resolve();
+      };
+
+      img.onerror = () => {
+        if (aborted) return;
+        this.pendingLogoAbort = null;
+        const error = new Error('Failed to load logo image from URL');
+        this.emit('logoError', error);
+        reject(error);
+      };
+
+      img.crossOrigin = 'anonymous';
+      img.src = url;
+    });
+  }
+
+  /**
+   * Remove the loaded logo image.
+   */
+  removeLogoImage(): void {
+    if (!this.logoImage && !this.state.logoUrl) return;
+
+    if (this.state.logoUrl && this.state.logoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(this.state.logoUrl);
+    }
+
+    this.logoImage = null;
+    this.state.logoUrl = '';
+    this.emit('logoRemoved', undefined);
+    this.emit('stateChanged', deepCopy(this.state));
+  }
+
+  /**
+   * Get the loaded logo image element (or null if not loaded).
+   */
+  getLogoImage(): HTMLImageElement | null {
+    return this.logoImage;
+  }
+
+  /**
+   * Check whether a logo image is loaded.
+   */
+  hasLogo(): boolean {
+    return this.logoImage !== null;
+  }
+
+  /**
+   * Get logo image dimensions (or null if not loaded).
+   */
+  getLogoDimensions(): { width: number; height: number } | null {
+    if (!this.logoImage) return null;
+    return { width: this.logoImage.naturalWidth, height: this.logoImage.naturalHeight };
   }
 
   /**
@@ -279,6 +404,25 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
     this.setState({
       logoScale: Math.max(0.05, Math.min(0.5, scale)),
     });
+  }
+
+  private abortPendingLogoLoad(): void {
+    if (this.pendingLogoAbort) {
+      this.pendingLogoAbort();
+      this.pendingLogoAbort = null;
+    }
+  }
+
+  private setLoadedLogo(img: HTMLImageElement, url: string): void {
+    // Revoke old blob URL if exists
+    if (this.state.logoUrl && this.state.logoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(this.state.logoUrl);
+    }
+
+    this.logoImage = img;
+    this.state.logoUrl = url;
+    this.emit('logoLoaded', { width: img.naturalWidth, height: img.naturalHeight });
+    this.emit('stateChanged', deepCopy(this.state));
   }
 
   // -------------------------------------------------------------------------
@@ -326,8 +470,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
 
   /**
    * Generate a SlateConfig object from the current editor state.
-   * The returned config does NOT include a logo ImageBitmap/HTMLImageElement;
-   * the caller must load the image from logoUrl and set config.logo manually.
+   * Includes the loaded logo image if available.
    */
   generateConfig(): SlateConfig {
     const config: SlateConfig = {
@@ -340,8 +483,51 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
       logoScale: this.state.logoScale,
     };
 
+    if (this.logoImage) {
+      config.logo = this.logoImage;
+    }
+
     this.emit('configGenerated', config);
     return config;
+  }
+
+  // -------------------------------------------------------------------------
+  // Preview rendering
+  // -------------------------------------------------------------------------
+
+  /**
+   * Render a slate preview onto a canvas and return it.
+   * The canvas is sized to a scaled-down preview while maintaining aspect ratio.
+   */
+  generatePreview(maxWidth = 360, maxHeight = 240): HTMLCanvasElement | null {
+    const config = this.generateConfig();
+    if (config.width <= 0 || config.height <= 0) return null;
+
+    // Scale down for preview, maintaining aspect ratio
+    const aspect = config.width / config.height;
+    let previewW = maxWidth;
+    let previewH = previewW / aspect;
+    if (previewH > maxHeight) {
+      previewH = maxHeight;
+      previewW = previewH * aspect;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(previewW);
+    canvas.height = Math.round(previewH);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Render slate at preview size
+    const previewConfig: SlateConfig = {
+      ...config,
+      width: canvas.width,
+      height: canvas.height,
+    };
+
+    renderSlate(ctx, previewConfig);
+    this.emit('previewRendered', canvas);
+    return canvas;
   }
 
   // -------------------------------------------------------------------------
@@ -349,7 +535,11 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
   // -------------------------------------------------------------------------
 
   dispose(): void {
-    // No external resources to clean up
+    this.abortPendingLogoLoad();
+    if (this.state.logoUrl && this.state.logoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(this.state.logoUrl);
+    }
+    this.logoImage = null;
   }
 }
 
