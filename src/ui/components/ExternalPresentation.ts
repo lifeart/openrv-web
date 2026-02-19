@@ -34,6 +34,8 @@ export interface PresentationMessage {
   type: PresentationMessageType;
   /** Sender window ID */
   senderId: string;
+  /** Session ID to prevent cross-tab interference */
+  sessionId: string;
   /** Timestamp */
   timestamp: number;
 }
@@ -129,7 +131,7 @@ const DEFAULT_WINDOW_FEATURES = 'width=1280,height=720,resizable=yes,scrollbars=
  * Generate the HTML content for a presentation window.
  * This creates a minimal page with just a canvas element for rendering.
  */
-export function generatePresentationHTML(windowId: string, channelName: string): string {
+export function generatePresentationHTML(windowId: string, channelName: string, sessionId: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -147,12 +149,14 @@ export function generatePresentationHTML(windowId: string, channelName: string):
   <div class="info" id="info">Presentation: ${windowId}</div>
   <script>
     const WINDOW_ID = '${windowId}';
+    const SESSION_ID = '${sessionId}';
     const channel = new BroadcastChannel('${channelName}');
 
     // Notify main window that we're ready
     channel.postMessage({
       type: 'windowReady',
       senderId: WINDOW_ID,
+      sessionId: SESSION_ID,
       timestamp: Date.now(),
     });
 
@@ -161,11 +165,15 @@ export function generatePresentationHTML(windowId: string, channelName: string):
       const msg = event.data;
       if (!msg || !msg.type) return;
 
+      // Filter by session ID to prevent cross-tab interference
+      if (msg.sessionId && msg.sessionId !== SESSION_ID) return;
+
       switch (msg.type) {
         case 'ping':
           channel.postMessage({
             type: 'pong',
             senderId: WINDOW_ID,
+            sessionId: SESSION_ID,
             timestamp: Date.now(),
           });
           break;
@@ -181,6 +189,7 @@ export function generatePresentationHTML(windowId: string, channelName: string):
       channel.postMessage({
         type: 'windowClosed',
         senderId: WINDOW_ID,
+        sessionId: SESSION_ID,
         timestamp: Date.now(),
       });
     });
@@ -214,6 +223,7 @@ export function generatePresentationHTML(windowId: string, channelName: string):
  */
 export class ExternalPresentation extends EventEmitter<ExternalPresentationEvents> implements ManagerBase {
   private instanceId: string;
+  private sessionId: string;
   private channel: BroadcastChannel | null = null;
   private windows = new Map<string, PresentationWindowState>();
   private windowCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -223,6 +233,11 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
   constructor() {
     super();
     this.instanceId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Unique session ID prevents cross-tab interference when multiple
+    // OpenRV instances share the same BroadcastChannel name
+    this.sessionId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -314,8 +329,8 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
 
     const windowId = `pres-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // Generate presentation page content
-    const html = generatePresentationHTML(windowId, CHANNEL_NAME);
+    // Generate presentation page content with session ID for isolation
+    const html = generatePresentationHTML(windowId, CHANNEL_NAME, this.sessionId);
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
 
@@ -448,7 +463,8 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
   private broadcast(message: AnyPresentationMessage): void {
     if (!this.channel) return;
     try {
-      this.channel.postMessage(message);
+      // Attach session ID to all outbound messages
+      this.channel.postMessage({ ...message, sessionId: this.sessionId });
     } catch {
       // Channel may have been closed
     }
@@ -459,6 +475,9 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
 
     // Ignore our own messages
     if (message.senderId === this.instanceId) return;
+
+    // Filter by session ID to prevent cross-tab interference
+    if (message.sessionId && message.sessionId !== this.sessionId) return;
 
     // Update window activity timestamp
     const window = this.windows.get(message.senderId);

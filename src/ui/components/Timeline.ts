@@ -21,6 +21,9 @@ export class Timeline {
   private waveformLoaded = false;
   private thumbnailManager: ThumbnailManager;
   private thumbnailsEnabled = true;
+  private static readonly DISPLAY_MODE_STORAGE_KEY = 'openrv.timeline.displayMode';
+  private static readonly VALID_DISPLAY_MODES: readonly TimecodeDisplayMode[] = ['frames', 'timecode', 'seconds', 'footage'];
+
   private _timecodeDisplayMode: TimecodeDisplayMode = 'frames';
 
   protected isDragging = false;
@@ -80,6 +83,16 @@ export class Timeline {
     };
 
     this.boundOnThemeChange = () => this.draw();
+
+    // Restore persisted timecode display mode from localStorage
+    try {
+      const stored = localStorage.getItem(Timeline.DISPLAY_MODE_STORAGE_KEY);
+      if (stored && (Timeline.VALID_DISPLAY_MODES as readonly string[]).includes(stored)) {
+        this._timecodeDisplayMode = stored as TimecodeDisplayMode;
+      }
+    } catch {
+      // localStorage may be unavailable (e.g. in tests or restricted contexts)
+    }
 
     // Create container
     this.container = document.createElement('div');

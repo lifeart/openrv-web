@@ -188,11 +188,24 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
   }
 
   /**
-   * Set colors (partial update)
+   * Set colors (partial update).
+   * Validates each color value before applying. Accepts #RGB, #RRGGBB hex
+   * formats and named CSS colors. Invalid values are silently ignored
+   * (the previous value is kept).
    */
   setColors(colors: Partial<SlateEditorColors>): void {
+    const validated: Partial<SlateEditorColors> = {};
+    for (const key of ['background', 'text', 'accent'] as const) {
+      if (colors[key] !== undefined) {
+        if (isValidCSSColor(colors[key])) {
+          validated[key] = colors[key];
+        }
+        // else: silently keep previous value
+      }
+    }
+    if (Object.keys(validated).length === 0) return;
     this.setState({
-      colors: { ...this.state.colors, ...colors },
+      colors: { ...this.state.colors, ...validated },
     });
   }
 
@@ -228,10 +241,14 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
   }
 
   /**
-   * Set logo URL
+   * Set logo URL.
+   * Accepts http://, https://, data:, and blob: URLs, or an empty string
+   * to clear. Invalid URLs are rejected (state is not changed).
    */
   setLogoUrl(url: string): void {
-    this.setState({ logoUrl: url });
+    if (url === '' || isValidLogoUrl(url)) {
+      this.setState({ logoUrl: url });
+    }
   }
 
   /**
@@ -342,6 +359,79 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
 
 function deepCopy<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj)) as T;
+}
+
+/**
+ * Named CSS colors (CSS Level 4).
+ * A canonical lower-case set used for validation.
+ */
+const CSS_NAMED_COLORS = new Set([
+  'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige',
+  'bisque', 'black', 'blanchedalmond', 'blue', 'blueviolet', 'brown',
+  'burlywood', 'cadetblue', 'chartreuse', 'chocolate', 'coral',
+  'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan',
+  'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey', 'darkkhaki',
+  'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid', 'darkred',
+  'darksalmon', 'darkseagreen', 'darkslateblue', 'darkslategray',
+  'darkslategrey', 'darkturquoise', 'darkviolet', 'deeppink', 'deepskyblue',
+  'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite',
+  'forestgreen', 'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod',
+  'gray', 'green', 'greenyellow', 'grey', 'honeydew', 'hotpink',
+  'indianred', 'indigo', 'ivory', 'khaki', 'lavender', 'lavenderblush',
+  'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan',
+  'lightgoldenrodyellow', 'lightgray', 'lightgreen', 'lightgrey',
+  'lightpink', 'lightsalmon', 'lightseagreen', 'lightskyblue',
+  'lightslategray', 'lightslategrey', 'lightsteelblue', 'lightyellow',
+  'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine',
+  'mediumblue', 'mediumorchid', 'mediumpurple', 'mediumseagreen',
+  'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
+  'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose', 'moccasin',
+  'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab', 'orange',
+  'orangered', 'orchid', 'palegoldenrod', 'palegreen', 'paleturquoise',
+  'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink', 'plum',
+  'powderblue', 'purple', 'rebeccapurple', 'red', 'rosybrown', 'royalblue',
+  'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'seashell', 'sienna',
+  'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow',
+  'springgreen', 'steelblue', 'tan', 'teal', 'thistle', 'tomato',
+  'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow',
+  'yellowgreen', 'transparent',
+]);
+
+/**
+ * Validate a CSS color string.
+ * Accepts #RGB, #RRGGBB hex formats and named CSS colors.
+ */
+function isValidCSSColor(value: string): boolean {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+
+  // #RGB or #RRGGBB
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed) || /^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+    return true;
+  }
+
+  // Named CSS color
+  if (CSS_NAMED_COLORS.has(trimmed.toLowerCase())) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Validate a URL for use as a logo source.
+ * Accepts http://, https://, data:, and blob: schemes.
+ */
+function isValidLogoUrl(url: string): boolean {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:')
+  );
 }
 
 function mergeState(

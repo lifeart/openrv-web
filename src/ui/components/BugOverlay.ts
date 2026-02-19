@@ -248,17 +248,26 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
     const { position, size, opacity, margin } = this.state;
 
     // Calculate rendered size maintaining aspect ratio
+    // Guard against division by zero if image dimensions are 0
+    const safeImageWidth = Math.max(1, this.imageWidth);
+    const safeImageHeight = Math.max(1, this.imageHeight);
     const maxWidth = this.displayWidth * size;
-    const aspect = this.imageWidth / (this.imageHeight || 1);
+    const aspect = safeImageWidth / safeImageHeight;
     const renderWidth = maxWidth;
     const renderHeight = renderWidth / aspect;
+
+    // Clamp margin so it doesn't exceed half the display dimension,
+    // preventing the overlay from being pushed entirely off-screen
+    const maxMarginX = this.displayWidth / 2;
+    const maxMarginY = this.displayHeight / 2;
+    const clampedMargin = Math.min(margin, maxMarginX, maxMarginY);
 
     // Calculate position
     const { x, y } = this.calculatePosition(
       position,
       renderWidth,
       renderHeight,
-      margin,
+      clampedMargin,
     );
 
     ctx.save();

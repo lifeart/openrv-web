@@ -374,6 +374,7 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
     try {
       message = JSON.parse(raw) as DCCMessage;
     } catch {
+      this.emit('error', new Error(`Failed to parse incoming message: ${raw.slice(0, 200)}`));
       this.send({
         type: 'error',
         code: 'PARSE_ERROR',

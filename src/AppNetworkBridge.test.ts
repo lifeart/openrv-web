@@ -118,6 +118,7 @@ function createContext() {
     session: session as any,
     viewer: viewer as any,
     paintEngine,
+    colorControls: colorControls as any,
     networkSyncManager: networkSyncManager as any,
     networkControl: networkControl as any,
     headerBar: headerBar as any,
@@ -128,6 +129,7 @@ function createContext() {
     _viewer: viewer,
     _headerBar: headerBar,
     _paintEngine: paintEngine,
+    _colorControls: colorControls,
   };
 }
 
@@ -147,6 +149,7 @@ describe('AppNetworkBridge', () => {
       session: ctx.session,
       viewer: ctx.viewer,
       paintEngine: ctx.paintEngine,
+      colorControls: ctx.colorControls,
       networkSyncManager: ctx.networkSyncManager,
       networkControl: ctx.networkControl,
       headerBar: ctx.headerBar,
@@ -436,7 +439,7 @@ describe('AppNetworkBridge', () => {
   // Color sync
   // -----------------------------------------------------------------------
   describe('color sync', () => {
-    it('ANB-050: incoming syncColor applies to viewer', () => {
+    it('ANB-050: incoming syncColor applies to viewer and colorControls', () => {
       bridge.setup();
 
       ctx._networkSyncManager.emit('syncColor', {
@@ -461,6 +464,176 @@ describe('AppNetworkBridge', () => {
           brightness: 0.1,
         }),
       );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Color sync - outgoing
+  // -----------------------------------------------------------------------
+  describe('color sync - outgoing', () => {
+    it('ANB-051: local adjustmentsChanged triggers sendColorSync', () => {
+      bridge.setup();
+
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 2.0, gamma: 1.8, saturation: 0.5, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.2, clarity: 0,
+        hueRotation: 0, temperature: 300, tint: 5, brightness: 0.2,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exposure: 2.0,
+          gamma: 1.8,
+          saturation: 0.5,
+          contrast: 1.2,
+          temperature: 300,
+          tint: 5,
+          brightness: 0.2,
+        }),
+      );
+    });
+
+    it('ANB-052: outgoing color sync skipped during remote apply', () => {
+      bridge.setup();
+
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+      sm.isApplyingRemoteState = true;
+
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+
+      expect(ctx._networkSyncManager.sendColorSync).not.toHaveBeenCalled();
+
+      sm.isApplyingRemoteState = false;
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Annotation validation
+  // -----------------------------------------------------------------------
+  describe('annotation validation', () => {
+    it('ANB-070: incoming annotation with missing type is rejected', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 1,
+        strokes: [{
+          // Missing 'type'
+          id: 'bad-1', frame: 1, user: 'alice',
+          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
+          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+        }],
+        action: 'add',
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._paintEngine.getAnnotationsForFrame(1)).toHaveLength(0);
+    });
+
+    it('ANB-071: incoming annotation with missing id is rejected', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 1,
+        strokes: [{
+          type: 'pen',
+          // Missing 'id'
+          frame: 1, user: 'alice',
+          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
+          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+        }],
+        action: 'add',
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._paintEngine.getAnnotationsForFrame(1)).toHaveLength(0);
+    });
+
+    it('ANB-072: incoming annotation with invalid type value is rejected', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 1,
+        strokes: [{
+          type: 'invalid_type', id: 'bad-3', frame: 1, user: 'alice',
+          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
+          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+        }],
+        action: 'add',
+        timestamp: Date.now(),
+      });
+
+      expect(ctx._paintEngine.getAnnotationsForFrame(1)).toHaveLength(0);
+    });
+
+    it('ANB-073: valid annotations pass through alongside invalid ones', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncAnnotation', {
+        frame: 1,
+        strokes: [
+          {
+            // Invalid: no id
+            type: 'pen', frame: 1, user: 'alice',
+            color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
+            join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+          },
+          {
+            // Valid
+            type: 'pen', id: 'good-1', frame: 1, user: 'bob',
+            color: [0, 1, 0, 1], width: 2, brush: 0, points: [{ x: 0.5, y: 0.5 }],
+            join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+          },
+        ],
+        action: 'add',
+        timestamp: Date.now(),
+      });
+
+      const annotations = ctx._paintEngine.getAnnotationsForFrame(1);
+      expect(annotations).toHaveLength(1);
+      expect(annotations[0]!.id).toBe('good-1');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Clone behavior
+  // -----------------------------------------------------------------------
+  describe('clone behavior', () => {
+    it('ANB-080: addRemoteAnnotation does not mutate original object', () => {
+      const original = {
+        type: 'pen' as const,
+        id: 'orig-1',
+        frame: 1,
+        user: 'alice',
+        color: [1, 0, 0, 1] as [number, number, number, number],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0.1, y: 0.2 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 1,
+        duration: 0,
+      };
+
+      const originalJson = JSON.stringify(original);
+      ctx._paintEngine.addRemoteAnnotation(original);
+
+      // Original should not be mutated
+      expect(JSON.stringify(original)).toBe(originalJson);
+
+      // Stored annotation is a separate object
+      const stored = ctx._paintEngine.getAnnotationsForFrame(1);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).not.toBe(original);
+      expect(stored[0]!.id).toBe('orig-1');
     });
   });
 
@@ -561,6 +734,20 @@ describe('AppNetworkBridge', () => {
           ]),
         }),
       );
+    });
+
+    it('ANB-064b: local notesChanged does NOT send when noteManager emits inside remote apply', () => {
+      bridge.setup();
+
+      // Simulate remote apply context
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+      sm.isApplyingRemoteState = true;
+
+      ctx._session.emit('notesChanged', undefined);
+
+      expect(ctx._networkSyncManager.sendNoteSync).not.toHaveBeenCalled();
+
+      sm.isApplyingRemoteState = false;
     });
 
     it('ANB-065: incoming syncNote snapshot replaces all notes', () => {

@@ -158,11 +158,12 @@ export function samplePixel(
 // ---------------------------------------------------------------------------
 
 /**
- * DodgeTool - Lightens pixels under the brush.
+ * DodgeTool - Lightens (increases brightness of) pixels under the brush.
  *
- * Multiplies pixel values by a factor > 1 based on pressure and opacity.
- * The strength is proportional to brush intensity, giving a natural
- * progressive lightening effect.
+ * Multiplies pixel values by a factor > 1 based on pressure and opacity,
+ * which INCREASES pixel brightness. This matches the traditional darkroom
+ * technique where "dodging" blocks light during exposure, resulting in
+ * a lighter print area.
  */
 export class DodgeTool implements PaintToolInterface {
   readonly name = 'dodge';
@@ -172,7 +173,7 @@ export class DodgeTool implements PaintToolInterface {
 
   apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams): void {
     forEachBrushPixel(buffer, position, brush, (index, intensity) => {
-      // Dodge factor: 1 + (strength * intensity) means brighter
+      // Dodge: factor > 1 increases pixel brightness (lightens the image)
       const factor = 1 + this.strength * intensity;
 
       buffer.data[index] = clamp(buffer.data[index]! * factor, 0, 1);
@@ -200,9 +201,12 @@ export class DodgeTool implements PaintToolInterface {
 // ---------------------------------------------------------------------------
 
 /**
- * BurnTool - Darkens pixels under the brush.
+ * BurnTool - Darkens (decreases brightness of) pixels under the brush.
  *
- * Multiplies pixel values by a factor < 1 based on pressure and opacity.
+ * Multiplies pixel values by a factor < 1 based on pressure and opacity,
+ * which DECREASES pixel brightness. This matches the traditional darkroom
+ * technique where "burning" adds extra light exposure, resulting in a
+ * darker print area.
  */
 export class BurnTool implements PaintToolInterface {
   readonly name = 'burn';
@@ -212,7 +216,7 @@ export class BurnTool implements PaintToolInterface {
 
   apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams): void {
     forEachBrushPixel(buffer, position, brush, (index, intensity) => {
-      // Burn factor: 1 - (strength * intensity) means darker
+      // Burn: factor < 1 decreases pixel brightness (darkens the image)
       const factor = 1 - this.strength * intensity;
 
       buffer.data[index] = clamp(buffer.data[index]! * factor, 0, 1);
