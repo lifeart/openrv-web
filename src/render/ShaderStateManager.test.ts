@@ -1765,5 +1765,64 @@ describe('ShaderStateManager', () => {
       mgr.setQuantizeBits(8);
       expect(flags.has(DIRTY_DITHER)).toBe(false);
     });
+
+    it('DITHER-SM-009: NaN input defaults to 0 for ditherMode', () => {
+      mgr.setDitherMode(1);
+      expect(mgr.getDitherMode()).toBe(1);
+
+      mgr.setDitherMode(NaN);
+      expect(mgr.getDitherMode()).toBe(0);
+    });
+
+    it('DITHER-SM-010: NaN input defaults to 0 for quantizeBits', () => {
+      mgr.setQuantizeBits(8);
+      expect(mgr.getQuantizeBits()).toBe(8);
+
+      mgr.setQuantizeBits(NaN);
+      expect(mgr.getQuantizeBits()).toBe(0);
+    });
+
+    it('DITHER-SM-011: applyRenderState marks dirty on dither change', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      rs.ditherMode = 1;
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+    });
+
+    it('DITHER-SM-012: applyRenderState no dirty when unchanged (steady state)', () => {
+      const rs = createDefaultRenderState();
+      rs.ditherMode = 1;
+      rs.quantizeBits = 8;
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply same state again
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_DITHER)).toBe(false);
+    });
+
+    it('DITHER-SM-013: applyRenderState resets to 0 when field absent', () => {
+      // First set non-default values
+      mgr.setDitherMode(1);
+      mgr.setQuantizeBits(8);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without ditherMode/quantizeBits (undefined -> defaults to 0)
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      expect(mgr.getDitherMode()).toBe(0);
+      expect(mgr.getQuantizeBits()).toBe(0);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+    });
+
+    it('DITHER-SM-014: DIRTY_DITHER is in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_DITHER);
+    });
   });
 });

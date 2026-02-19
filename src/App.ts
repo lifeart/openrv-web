@@ -50,6 +50,7 @@ import { wireTransformControls } from './AppTransformWiring';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
+import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 
 // Layout
 import { LayoutStore } from './ui/layout/LayoutStore';
@@ -81,6 +82,7 @@ export class App {
   private networkBridge: AppNetworkBridge;
   private persistenceManager: AppPersistenceManager;
   private sessionBridge!: AppSessionBridge;
+  private shotGridBridge: ShotGridIntegrationBridge;
   private focusManager!: FocusManager;
   private ariaAnnouncer!: AriaAnnouncer;
 
@@ -237,6 +239,14 @@ export class App {
       applySessionURLState: (state) => this.applySessionURLState(state),
     });
     this.networkBridge.setup();
+
+    // ShotGrid integration bridge
+    this.shotGridBridge = new ShotGridIntegrationBridge({
+      session: this.session,
+      configUI: this.controls.shotGridConfig,
+      panel: this.controls.shotGridPanel,
+    });
+    this.shotGridBridge.setup();
 
     // Build the wiring context shared by all wiring modules
     const wiringCtx: AppWiringContext = {
@@ -1041,6 +1051,9 @@ export class App {
         if (this.controls.notePanel.isVisible()) {
           this.controls.notePanel.hide();
         }
+        if (this.controls.shotGridPanel.isOpen()) {
+          this.controls.shotGridPanel.hide();
+        }
         if (this.controls.isNoiseReductionPanelVisible()) {
           this.controls.hideNoiseReductionPanel();
         }
@@ -1511,6 +1524,7 @@ export class App {
     this.contextToolbar.dispose();
     this.fullscreenManager?.dispose();
     this.networkBridge.dispose();
+    this.shotGridBridge.dispose();
     this.persistenceManager.dispose();
     this.sessionBridge.dispose();
     this.keyboardHandler.dispose();

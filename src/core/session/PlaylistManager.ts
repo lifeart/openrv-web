@@ -573,7 +573,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Parse timecode string to frame number
    */
   private timecodeToFrames(timecode: string, fps = 24): number {
-    const parts = timecode.split(':').map(Number);
+    // Normalize drop-frame semicolon separator to colon for parsing
+    const parts = timecode.replace(/;/g, ':').split(':').map(Number);
     if (parts.length !== 4) return 0;
     const hours = parts[0] ?? 0;
     const minutes = parts[1] ?? 0;
@@ -589,8 +590,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const lines = edl.split('\n');
     let importedCount = 0;
 
-    // Simple regex to match EDL edit lines
-    const editRegex = /^\d{3}\s+(\S+)\s+V\s+C\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})/;
+    // Simple regex to match EDL edit lines (supports both : and ; timecode separators)
+    const editRegex = /^\d{3}\s+(\S+)\s+V\s+C\s+(\d{2}:\d{2}:\d{2}[;:]\d{2})\s+(\d{2}:\d{2}:\d{2}[;:]\d{2})/;
 
     for (const line of lines) {
       const match = line.match(editRegex);

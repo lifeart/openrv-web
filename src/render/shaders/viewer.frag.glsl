@@ -843,7 +843,7 @@
           15, 47,  7, 39, 13, 45,  5, 37,
           63, 31, 55, 23, 61, 29, 53, 21
         );
-        return float(bayer[y * 8 + x]) / 64.0;
+        return (float(bayer[y * 8 + x]) + 0.5) / 64.0;
       }
 
       void main() {
@@ -1239,22 +1239,6 @@
         // 8c. Display brightness
         color.rgb *= u_displayBrightness;
 
-        // 8d. Quantize visualization (after tone mapping + display transfer, before output mode)
-        if (u_quantizeBits > 0) {
-          float levels = pow(2.0, float(u_quantizeBits)) - 1.0;
-
-          if (u_ditherMode == 1) {
-            // Ordered dither: add Bayer pattern before quantization
-            ivec2 pixelPos = ivec2(gl_FragCoord.xy);
-            float threshold = bayerDither8x8(pixelPos) - 0.5; // Center around 0
-            float ditherAmount = 1.0 / levels;
-            color.rgb += vec3(threshold * ditherAmount);
-          }
-
-          // Quantize (posterize)
-          color.rgb = floor(color.rgb * levels + 0.5) / levels;
-        }
-
         // 9. Color inversion (after all corrections, before channel isolation)
         if (u_invert) {
           color.rgb = 1.0 - color.rgb;
@@ -1286,6 +1270,25 @@
             float stripe = mod(pixelPos.x - pixelPos.y + u_zebraTime, 12.0);
             if (stripe < 6.0) { color.rgb = mix(color.rgb, vec3(0.3, 0.3, 1.0), 0.5); }
           }
+        }
+
+        // 12c. Dither + Quantize visualization (after false color/zebra, before SDR clamp)
+        if (u_quantizeBits > 0) {
+          float levels = pow(2.0, float(u_quantizeBits)) - 1.0;
+
+          if (u_ditherMode == 1) {
+            // Ordered dither: add Bayer pattern before quantization
+            ivec2 pixelPos = ivec2(gl_FragCoord.xy);
+            float threshold = bayerDither8x8(pixelPos) - 0.5; // Center around 0
+            float ditherAmount = 1.0 / levels;
+            color.rgb += vec3(threshold * ditherAmount);
+          }
+
+          // Clamp before quantization to prevent overflow from dither noise
+          color.rgb = clamp(color.rgb, 0.0, 1.0);
+
+          // Quantize (posterize)
+          color.rgb = floor(color.rgb * levels + 0.5) / levels;
         }
 
         // Final output

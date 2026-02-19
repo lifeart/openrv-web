@@ -626,6 +626,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Focus previous zone'
   },
+
+  // Help / cheat sheet
+  'help.toggleCheatSheet': {
+    code: 'Slash',
+    shift: true,
+    description: 'Toggle keyboard shortcuts cheat sheet'
+  },
 };
 /**
  * Get a human-readable description of a key combination

@@ -331,4 +331,21 @@ describe('muxToMP4', () => {
     expect(blob.type).toBe('video/mp4');
     expect(blob.size).toBeGreaterThan(0);
   });
+
+  it('MUX-019: muxToMP4Blob works when SharedArrayBuffer is undefined', () => {
+    const original = globalThis.SharedArrayBuffer;
+    try {
+      // @ts-expect-error simulate environments without SharedArrayBuffer
+      delete globalThis.SharedArrayBuffer;
+      const chunks = [fakeH264KeyFrame(0), fakeDeltaFrame(41667)];
+      const blob = muxToMP4Blob(chunks, defaultMuxerConfig());
+      expect(blob).toBeInstanceOf(Blob);
+      expect(blob.type).toBe('video/mp4');
+      expect(blob.size).toBeGreaterThan(0);
+    } finally {
+      if (original !== undefined) {
+        globalThis.SharedArrayBuffer = original;
+      }
+    }
+  });
 });

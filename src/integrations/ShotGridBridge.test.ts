@@ -80,6 +80,14 @@ describe('Status mapping', () => {
     expect(mapStatusFromShotGrid('xyz')).toBe('pending');
     expect(mapStatusFromShotGrid('')).toBe('pending');
   });
+
+  it('SG-MAP-004: expanded status mappings from ShotGrid', () => {
+    expect(mapStatusFromShotGrid('ip')).toBe('pending');
+    expect(mapStatusFromShotGrid('hld')).toBe('pending');
+    expect(mapStatusFromShotGrid('wtg')).toBe('pending');
+    expect(mapStatusFromShotGrid('na')).toBe('omit');
+    expect(mapStatusFromShotGrid('vwd')).toBe('approved');
+  });
 });
 
 describe('ShotGridBridge', () => {
@@ -147,42 +155,74 @@ describe('ShotGridBridge', () => {
   });
 
   describe('getVersionsForPlaylist', () => {
-    it('SG-002: parses version list from playlist', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({
-          data: [
-            {
-              id: 101,
-              code: 'shot010_comp_v003',
-              entity: { type: 'Shot', id: 10, name: 'shot010' },
-              sg_status_list: 'rev',
-              sg_path_to_movie: '/path/to/movie.mov',
-              sg_path_to_frames: '/path/to/frames/',
-              created_at: '2024-01-15T10:30:00Z',
-              user: { type: 'HumanUser', id: 5, name: 'Artist' },
-            },
-          ],
-        }));
+    it('SG-002: two-step query fetches connections then versions', async () => {
+      // Auth
+      mockFetch.mockResolvedValueOnce(authResponse());
+      // Step 1: connections
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        data: [
+          { version: { id: 101 }, sg_sort_order: 1 },
+          { version: { id: 102 }, sg_sort_order: 2 },
+        ],
+      }));
+      // Step 2: versions
+      mockFetch.mockResolvedValueOnce(jsonResponse({
+        data: [
+          {
+            id: 102,
+            code: 'shot010_comp_v004',
+            entity: { type: 'Shot', id: 10, name: 'shot010' },
+            sg_status_list: 'apr',
+            sg_path_to_movie: '/movie2.mov',
+            sg_path_to_frames: '',
+            sg_uploaded_movie: null,
+            image: null,
+            frame_range: null,
+            description: null,
+            sg_first_frame: null,
+            sg_last_frame: null,
+            created_at: '2024-01-16T10:30:00Z',
+            user: { type: 'HumanUser', id: 5, name: 'Artist' },
+          },
+          {
+            id: 101,
+            code: 'shot010_comp_v003',
+            entity: { type: 'Shot', id: 10, name: 'shot010' },
+            sg_status_list: 'rev',
+            sg_path_to_movie: '/path/to/movie.mov',
+            sg_path_to_frames: '/path/to/frames/',
+            sg_uploaded_movie: null,
+            image: null,
+            frame_range: null,
+            description: null,
+            sg_first_frame: null,
+            sg_last_frame: null,
+            created_at: '2024-01-15T10:30:00Z',
+            user: { type: 'HumanUser', id: 5, name: 'Artist' },
+          },
+        ],
+      }));
 
       const versions = await bridge.getVersionsForPlaylist(99);
 
-      expect(versions).toHaveLength(1);
+      expect(versions).toHaveLength(2);
+      // Verify playlist ordering (101 first per connection sort order)
       expect(versions[0]!.id).toBe(101);
-      expect(versions[0]!.code).toBe('shot010_comp_v003');
-      expect(versions[0]!.entity.name).toBe('shot010');
+      expect(versions[1]!.id).toBe(102);
     });
 
-    it('SG-002b: returns empty array if no versions', async () => {
+    it('SG-002b: returns empty array if no connections', async () => {
       mockFetch
         .mockResolvedValueOnce(authResponse())
         .mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       const versions = await bridge.getVersionsForPlaylist(99);
       expect(versions).toEqual([]);
+      // Only auth + connections query (no versions query needed)
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    it('SG-002c: queries versions endpoint with playlist filter and project scope', async () => {
+    it('SG-002c: queries connections endpoint with playlist filter', async () => {
       mockFetch
         .mockResolvedValueOnce(authResponse())
         .mockResolvedValueOnce(jsonResponse({ data: [] }));
@@ -190,13 +230,12 @@ describe('ShotGridBridge', () => {
       await bridge.getVersionsForPlaylist(42);
 
       const url = mockFetch.mock.calls[1]![0] as string;
-      expect(url).toContain('/api/v1/entity/versions');
-      expect(url).toContain('filter[playlists]=42');
-      expect(url).toContain('filter[project]=42');
-      expect(url).toContain('fields=');
+      expect(url).toContain('/api/v1/entity/playlist_version_connections');
+      expect(url).toContain('filter[playlist]=42');
+      expect(url).toContain('sort=sg_sort_order');
     });
 
-    it('SG-002d: returns empty array for non-array data', async () => {
+    it('SG-002d: returns empty array for null connection data', async () => {
       mockFetch
         .mockResolvedValueOnce(authResponse())
         .mockResolvedValueOnce(jsonResponse({ data: null }));
@@ -219,6 +258,12 @@ describe('ShotGridBridge', () => {
               sg_status_list: 'apr',
               sg_path_to_movie: '/movie.mov',
               sg_path_to_frames: '/frames/',
+              sg_uploaded_movie: null,
+              image: null,
+              frame_range: null,
+              description: null,
+              sg_first_frame: null,
+              sg_last_frame: null,
               created_at: '2024-02-01T08:00:00Z',
               user: { type: 'HumanUser', id: 3, name: 'FXArtist' },
             },
@@ -230,7 +275,7 @@ describe('ShotGridBridge', () => {
       expect(versions[0]!.code).toBe('shot020_fx_v001');
     });
 
-    it('SG-010b: includes project filter in shot query', async () => {
+    it('SG-010b: uses filter[entity] on versions endpoint', async () => {
       mockFetch
         .mockResolvedValueOnce(authResponse())
         .mockResolvedValueOnce(jsonResponse({ data: [] }));
@@ -238,6 +283,8 @@ describe('ShotGridBridge', () => {
       await bridge.getVersionsForShot(20);
 
       const url = mockFetch.mock.calls[1]![0] as string;
+      expect(url).toContain('/api/v1/entity/versions');
+      expect(url).toContain('filter[entity]=20');
       expect(url).toContain('filter[project]=42');
     });
 
@@ -248,6 +295,91 @@ describe('ShotGridBridge', () => {
 
       const versions = await bridge.getVersionsForShot(10);
       expect(versions).toEqual([]);
+    });
+  });
+
+  describe('getNotesForVersion', () => {
+    it('SG-NOTE-001: fetches notes for a version', async () => {
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({
+          data: [
+            {
+              id: 700,
+              subject: 'Edge blending',
+              content: 'Fix the left edge',
+              note_links: [{ type: 'Version', id: 101 }],
+              created_at: '2024-03-01T12:00:00Z',
+              user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+            },
+          ],
+        }));
+
+      const notes = await bridge.getNotesForVersion(101);
+      expect(notes).toHaveLength(1);
+      expect(notes[0]!.subject).toBe('Edge blending');
+      expect(notes[0]!.id).toBe(700);
+    });
+
+    it('SG-NOTE-002: queries notes endpoint with note_links filter', async () => {
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+
+      await bridge.getNotesForVersion(101);
+
+      const url = mockFetch.mock.calls[1]![0] as string;
+      expect(url).toContain('/api/v1/entity/notes');
+      expect(url).toContain('filter[note_links]');
+      expect(url).toContain('"type":"Version"');
+      expect(url).toContain('"id":101');
+      expect(url).toContain('filter[project]=42');
+    });
+
+    it('SG-NOTE-003: returns empty array when no notes', async () => {
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+
+      const notes = await bridge.getNotesForVersion(999);
+      expect(notes).toEqual([]);
+    });
+  });
+
+  describe('pagination', () => {
+    it('SG-PAGE-001: follows links.next for paginated results', async () => {
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        // Page 1
+        .mockResolvedValueOnce(jsonResponse({
+          data: [{ id: 1, code: 'v1' }],
+          links: { next: 'https://studio.shotgrid.autodesk.com/api/v1/entity/versions?page=2' },
+        }))
+        // Page 2 (no next = last page)
+        .mockResolvedValueOnce(jsonResponse({
+          data: [{ id: 2, code: 'v2' }],
+        }));
+
+      const versions = await bridge.getVersionsForShot(10);
+      expect(versions).toHaveLength(2);
+      expect(versions[0]!.id).toBe(1);
+      expect(versions[1]!.id).toBe(2);
+    });
+
+    it('SG-PAGE-002: stops at maxPages to prevent infinite loops', async () => {
+      mockFetch.mockResolvedValueOnce(authResponse());
+
+      // Return infinite pagination (always has next)
+      for (let i = 0; i < 12; i++) {
+        mockFetch.mockResolvedValueOnce(jsonResponse({
+          data: [{ id: i }],
+          links: { next: `https://studio.shotgrid.autodesk.com/api/v1/entity/versions?page=${i + 2}` },
+        }));
+      }
+
+      const versions = await bridge.getVersionsForShot(10);
+      // Default maxPages = 10, so we should get at most 10 items
+      expect(versions).toHaveLength(10);
     });
   });
 

@@ -36,6 +36,18 @@ export interface ShotGridVersion {
   sg_path_to_movie: string;
   /** Path to frame sequence */
   sg_path_to_frames: string;
+  /** Uploaded movie link (S3 URL) */
+  sg_uploaded_movie: { url: string } | null;
+  /** Thumbnail image URL */
+  image: string | null;
+  /** Frame range string, e.g. '1001-1100' */
+  frame_range: string | null;
+  /** Version description */
+  description: string | null;
+  /** First frame number */
+  sg_first_frame: number | null;
+  /** Last frame number */
+  sg_last_frame: number | null;
   /** ISO 8601 creation time */
   created_at: string;
   /** Creator */
@@ -78,6 +90,11 @@ const SG_TO_LOCAL: Record<string, ShotStatus> = {
   pnd: 'pending',
   omt: 'omit',
   fin: 'approved', // 'final' maps to approved
+  ip: 'pending',   // 'in progress' maps to pending
+  hld: 'pending',  // 'on hold' maps to pending
+  wtg: 'pending',  // 'waiting to start' maps to pending
+  na: 'omit',      // 'not applicable' maps to omit
+  vwd: 'approved', // 'viewed' maps to approved
 };
 
 /**
@@ -101,7 +118,10 @@ export function mapStatusFromShotGrid(sgStatus: string): ShotStatus {
 /** Maximum number of retries after the initial request for 429 rate limiting */
 const MAX_RATE_LIMIT_RETRIES = 3;
 
-const VERSION_FIELDS = 'code,entity,sg_status_list,sg_path_to_movie,sg_path_to_frames,created_at,user';
+const VERSION_FIELDS = 'code,entity,sg_status_list,sg_path_to_movie,sg_path_to_frames,sg_uploaded_movie,image,frame_range,description,sg_first_frame,sg_last_frame,created_at,user';
+
+/** Default maximum number of pages to follow for paginated results */
+const DEFAULT_MAX_PAGES = 10;
 
 export class ShotGridBridge {
   private serverUrl: string;
@@ -175,30 +195,62 @@ export class ShotGridBridge {
   }
 
   /**
-   * Get versions for a ShotGrid playlist by querying versions filtered by playlist.
+   * Get versions for a ShotGrid playlist.
+   * Two-step: query PlaylistVersionConnection for ordered version IDs,
+   * then batch-fetch versions. This preserves playlist ordering.
    */
   async getVersionsForPlaylist(playlistId: number): Promise<ShotGridVersion[]> {
-    const url = `${this.serverUrl}/api/v1/entity/versions` +
-      `?filter[playlists]=${playlistId}` +
+    // Step 1: Get PlaylistVersionConnection entries (ordered by sg_sort_order)
+    const connectionsUrl = `${this.serverUrl}/api/v1/entity/playlist_version_connections` +
+      `?filter[playlist]=${playlistId}` +
+      `&fields=version,sg_sort_order` +
+      `&sort=sg_sort_order`;
+
+    const connections = await this.fetchAllPages<{ version: { id: number }; sg_sort_order: number }>(connectionsUrl);
+    if (connections.length === 0) return [];
+
+    // Step 2: Batch-fetch versions by ID
+    const versionIds = connections.map(c => c.version.id);
+    const idsFilter = versionIds.map(id => `filter[id]=${id}`).join('&');
+    const versionsUrl = `${this.serverUrl}/api/v1/entity/versions` +
+      `?${idsFilter}` +
       `&filter[project]=${this.projectId}` +
       `&fields=${VERSION_FIELDS}`;
 
-    const response = await this.request(url);
-    const data = await response.json();
-    return Array.isArray(data.data) ? data.data : [];
+    const versions = await this.fetchAllPages<ShotGridVersion>(versionsUrl);
+
+    // Re-sort to match playlist order
+    const versionMap = new Map(versions.map(v => [v.id, v]));
+    const ordered: ShotGridVersion[] = [];
+    for (const id of versionIds) {
+      const v = versionMap.get(id);
+      if (v) ordered.push(v);
+    }
+    return ordered;
   }
 
   /**
    * Get versions linked to a specific Shot, scoped by project.
    */
   async getVersionsForShot(shotId: number): Promise<ShotGridVersion[]> {
-    const url = `${this.serverUrl}/api/v1/entity/shots/${shotId}/versions` +
-      `?fields=${VERSION_FIELDS}` +
-      `&filter[project]=${this.projectId}`;
+    const url = `${this.serverUrl}/api/v1/entity/versions` +
+      `?filter[entity]=${shotId}` +
+      `&filter[project]=${this.projectId}` +
+      `&fields=${VERSION_FIELDS}`;
 
-    const response = await this.request(url);
-    const data = await response.json();
-    return Array.isArray(data.data) ? data.data : [];
+    return this.fetchAllPages<ShotGridVersion>(url);
+  }
+
+  /**
+   * Get notes linked to a specific Version.
+   */
+  async getNotesForVersion(versionId: number): Promise<ShotGridNote[]> {
+    const url = `${this.serverUrl}/api/v1/entity/notes` +
+      `?filter[note_links]=[{"type":"Version","id":${versionId}}]` +
+      `&filter[project]=${this.projectId}` +
+      `&fields=subject,content,note_links,created_at,user`;
+
+    return this.fetchAllPages<ShotGridNote>(url);
   }
 
   /**
@@ -269,6 +321,29 @@ export class ShotGridBridge {
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Follow paginated results, collecting all items up to maxPages.
+   */
+  private async fetchAllPages<T>(url: string, maxPages = DEFAULT_MAX_PAGES): Promise<T[]> {
+    const results: T[] = [];
+    let currentUrl: string | null = url;
+    let page = 0;
+
+    while (currentUrl && page < maxPages) {
+      const response = await this.request(currentUrl);
+      const data = await response.json();
+
+      if (Array.isArray(data.data)) {
+        results.push(...data.data);
+      }
+
+      currentUrl = data.links?.next ?? null;
+      page++;
+    }
+
+    return results;
+  }
 
   /**
    * Ensure we have a valid token, deduplicating concurrent auth calls.

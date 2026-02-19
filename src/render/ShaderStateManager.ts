@@ -958,7 +958,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   }
 
   setDitherMode(mode: number): void {
-    const clamped = Math.max(0, Math.min(2, Math.floor(mode)));
+    const n = Number(mode);
+    const clamped = !Number.isFinite(n) ? 0 : Math.max(0, Math.min(2, Math.floor(n)));
     if (clamped === this.state.ditherMode) return;
     this.state.ditherMode = clamped;
     this.dirtyFlags.add(DIRTY_DITHER);
@@ -969,9 +970,15 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   }
 
   setQuantizeBits(bits: number): void {
-    const b = Math.floor(bits);
-    // Valid values: 0 (off), or 2-16
-    const clamped = b <= 0 ? 0 : b < 2 ? 2 : b > 16 ? 16 : b;
+    const n = Number(bits);
+    if (!Number.isFinite(n) || n <= 0) {
+      if (this.state.quantizeBits === 0) return;
+      this.state.quantizeBits = 0;
+      this.dirtyFlags.add(DIRTY_DITHER);
+      return;
+    }
+    const b = Math.floor(n);
+    const clamped = b < 2 ? 2 : b > 16 ? 16 : b;
     if (clamped === this.state.quantizeBits) return;
     this.state.quantizeBits = clamped;
     this.dirtyFlags.add(DIRTY_DITHER);

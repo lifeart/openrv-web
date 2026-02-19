@@ -33,3 +33,14 @@ export {
   buildAVCDecoderConfig,
   type MuxerConfig,
 } from './MP4Muxer';
+
+export {
+  framesToTimecode,
+  timecodeToFrames,
+  formatReelName,
+  generateEDL,
+  createEDLBlob,
+  downloadEDL,
+  type EDLClip,
+  type EDLExportConfig,
+} from './EDLWriter';

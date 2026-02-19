@@ -1,8 +1,70 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
 import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiring';
 import type { AppWiringContext } from './AppWiringContext';
 import * as Modal from './ui/components/shared/Modal';
+
+// ---------------------------------------------------------------------------
+// Module-level mocks for video export pipeline
+// ---------------------------------------------------------------------------
+
+// vi.hoisted creates variables available inside vi.mock factory functions
+// (which are hoisted to the top of the file before all other code).
+const {
+  mockEncodeFn,
+  mockCancelFn,
+  mockExporterOnFn,
+  mockDialogShow,
+  mockDialogHide,
+  mockDialogDispose,
+  mockDialogUpdateProgress,
+  mockDialogOnFn,
+} = vi.hoisted(() => ({
+  mockEncodeFn: vi.fn(),
+  mockCancelFn: vi.fn(),
+  mockExporterOnFn: vi.fn().mockReturnValue(() => {}),
+  mockDialogShow: vi.fn(),
+  mockDialogHide: vi.fn(),
+  mockDialogDispose: vi.fn(),
+  mockDialogUpdateProgress: vi.fn(),
+  mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
+}));
+
+vi.mock('./export/VideoExporter', () => {
+  class MockVideoExporter {
+    encode = mockEncodeFn;
+    cancel = mockCancelFn;
+    on = mockExporterOnFn;
+  }
+
+  return {
+    VideoExporter: MockVideoExporter,
+    ExportCancelledError: class ExportCancelledError extends Error {
+      framesEncoded: number;
+      constructor(n: number) {
+        super(`cancelled after ${n}`);
+        this.name = 'ExportCancelledError';
+        this.framesEncoded = n;
+      }
+    },
+    isVideoEncoderSupported: vi.fn().mockReturnValue(true),
+    isCodecSupported: vi.fn().mockResolvedValue(true),
+  };
+});
+
+vi.mock('./export/MP4Muxer', () => ({
+  muxToMP4Blob: vi.fn().mockReturnValue(new Blob(['fake-mp4'], { type: 'video/mp4' })),
+}));
+
+vi.mock('./ui/components/ExportProgress', () => ({
+  ExportProgressDialog: vi.fn().mockImplementation(() => ({
+    show: mockDialogShow,
+    hide: mockDialogHide,
+    dispose: mockDialogDispose,
+    updateProgress: mockDialogUpdateProgress,
+    on: mockDialogOnFn,
+  })),
+}));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
@@ -34,10 +96,11 @@ function createMockSession() {
   const session = Object.assign(emitter, {
     volume: 1,
     muted: false,
-    currentSource: null,
+    currentSource: null as { name: string } | null,
     currentSourceIndex: 0,
     currentFrame: 1,
     frameCount: 100,
+    fps: 24,
     inPoint: 1,
     outPoint: 100,
     loopMode: 'loop',
@@ -350,5 +413,298 @@ describe('wirePlaybackControls', () => {
 
     expect(session.pause).toHaveBeenCalled();
     expect(session.goToFrame).toHaveBeenCalledWith(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Video export e2e tests
+// ---------------------------------------------------------------------------
+
+describe('wirePlaybackControls — video export', () => {
+  let session: ReturnType<typeof createMockSession>;
+  let viewer: ReturnType<typeof createMockViewer>;
+  let headerBar: ReturnType<typeof createMockHeaderBar>;
+  let controls: ReturnType<typeof createMockControls>;
+  let deps: PlaybackWiringDeps;
+  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
+  let mockCanvas: HTMLCanvasElement;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    session = createMockSession();
+    session.currentSource = { name: 'test-clip.mov' };
+    session.frameCount = 100;
+    session.inPoint = 10;
+    session.outPoint = 40;
+    session.fps = 24;
+
+    viewer = createMockViewer();
+    mockCanvas = document.createElement('canvas');
+    mockCanvas.width = 320;
+    mockCanvas.height = 240;
+    viewer.renderFrameToCanvas.mockResolvedValue(mockCanvas);
+
+    headerBar = createMockHeaderBar();
+    controls = createMockControls();
+    deps = createMockDeps();
+    persistenceManager = createMockPersistenceManager();
+
+    // Re-configure mocked module exports after clearAllMocks
+    const VideoExporterMod = await import('./export/VideoExporter');
+    (VideoExporterMod.isVideoEncoderSupported as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (VideoExporterMod.isCodecSupported as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    mockExporterOnFn.mockReturnValue(() => {});
+    mockDialogOnFn.mockReturnValue(() => {});
+
+    // Reset mock encode to default success
+    mockEncodeFn.mockResolvedValue({
+      chunks: [
+        { data: new Uint8Array([0, 0, 0, 1, 0x65, 0x88]), type: 'key', timestamp: 0 },
+        { data: new Uint8Array([0, 0, 0, 1, 0x41, 0x9a]), type: 'delta', timestamp: 41667 },
+        { data: new Uint8Array([0, 0, 0, 1, 0x41, 0x9a]), type: 'delta', timestamp: 83333 },
+      ],
+      codec: 'avc1.42001f',
+      width: 320,
+      height: 240,
+      fps: 24,
+      totalFrames: 3,
+      encodingTimeMs: 100,
+    });
+
+    const ctx = {
+      session,
+      viewer,
+      headerBar,
+      controls,
+      persistenceManager,
+      paintEngine: {},
+      tabBar: {},
+      sessionBridge: {},
+    } as unknown as AppWiringContext;
+
+    wirePlaybackControls(ctx, deps);
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('a[download]').forEach((el) => el.remove());
+  });
+
+  function emitVideoExport(useInOutRange: boolean): void {
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('videoExportRequested', {
+      includeAnnotations: true,
+      useInOutRange,
+    });
+  }
+
+  it('PW-VE01: videoExportRequested shows progress dialog and calls encode', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogShow).toHaveBeenCalled();
+    });
+    await vi.waitFor(() => {
+      expect(mockEncodeFn).toHaveBeenCalled();
+    });
+  });
+
+  it('PW-VE02: encode receives correct frame range from in/out points', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockEncodeFn).toHaveBeenCalled();
+    });
+
+    const [config] = mockEncodeFn.mock.calls[0]!;
+    expect(config.frameRange).toEqual({ start: 10, end: 40 });
+    expect(config.width).toBe(320);
+    expect(config.height).toBe(240);
+  });
+
+  it('PW-VE03: encode receives full frame range when useInOutRange is false', async () => {
+    emitVideoExport(false);
+
+    await vi.waitFor(() => {
+      expect(mockEncodeFn).toHaveBeenCalled();
+    });
+
+    const [config] = mockEncodeFn.mock.calls[0]!;
+    expect(config.frameRange).toEqual({ start: 1, end: 100 });
+  });
+
+  it('PW-VE04: pre-renders first frame via viewer.renderFrameToCanvas', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(10, true);
+    });
+  });
+
+  it('PW-VE05: progress dialog is hidden and disposed after encode completes', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogHide).toHaveBeenCalled();
+    });
+    expect(mockDialogDispose).toHaveBeenCalled();
+  });
+
+  it('PW-VE06: shows success alert after export completes', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Exported'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+  });
+
+  it('PW-VE07: shows warning when no source is loaded', async () => {
+    session.currentSource = null;
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('No media loaded'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+  });
+
+  it('PW-VE08: shows error when VideoEncoder is unsupported', async () => {
+    const { isVideoEncoderSupported } = await import('./export/VideoExporter');
+    (isVideoEncoderSupported as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('not available'),
+        expect.objectContaining({ type: 'error' }),
+      );
+    });
+  });
+
+  it('PW-VE09: shows error when no H.264 codec is supported', async () => {
+    const { isVideoEncoderSupported, isCodecSupported } = await import('./export/VideoExporter');
+    (isVideoEncoderSupported as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (isCodecSupported as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('No supported H.264'),
+        expect.objectContaining({ type: 'error' }),
+      );
+    });
+  });
+
+  it('PW-VE10: concurrent videoExportRequested shows busy warning', async () => {
+    mockEncodeFn.mockReturnValue(new Promise(() => {})); // never resolves
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogShow).toHaveBeenCalled();
+    });
+
+    showAlertSpy.mockClear();
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('already in progress'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+  });
+
+  it('PW-VE11: shows cancel message when ExportCancelledError is thrown', async () => {
+    const { ExportCancelledError } = await import('./export/VideoExporter');
+    mockEncodeFn.mockRejectedValue(new ExportCancelledError(5));
+
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('cancelled'),
+        expect.objectContaining({ type: 'info' }),
+      );
+    });
+  });
+
+  it('PW-VE12: shows error message when encode throws unexpected error', async () => {
+    mockEncodeFn.mockRejectedValue(new Error('GPU exploded'));
+
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('GPU exploded'),
+        expect.objectContaining({ type: 'error' }),
+      );
+    });
+  });
+
+  it('PW-VE13: frame provider returns non-null canvas for each frame', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockEncodeFn).toHaveBeenCalled();
+    });
+
+    const [, frameProvider] = mockEncodeFn.mock.calls[0]!;
+    const canvas = await frameProvider(10);
+    expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+    expect(canvas!.width).toBe(320);
+    expect(canvas!.height).toBe(240);
+  });
+
+  it('PW-VE14: frame provider renders via viewer for non-first frames', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockEncodeFn).toHaveBeenCalled();
+    });
+
+    viewer.renderFrameToCanvas.mockClear();
+    const [, frameProvider] = mockEncodeFn.mock.calls[0]!;
+
+    await frameProvider(11);
+    expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(11, true);
+  });
+
+  it('PW-VE15: registers cancel listener on progress dialog', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogOnFn).toHaveBeenCalledWith('cancel', expect.any(Function));
+    });
+  });
+
+  it('PW-VE16: registers progress listener on exporter', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockExporterOnFn).toHaveBeenCalledWith('progress', expect.any(Function));
+    });
+  });
+
+  it('PW-VE17: frame provider returns cached first frame on startFrame', async () => {
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockEncodeFn).toHaveBeenCalled();
+    });
+
+    // Reset to track only the frame provider's calls
+    viewer.renderFrameToCanvas.mockClear();
+    const [, frameProvider] = mockEncodeFn.mock.calls[0]!;
+
+    // First frame should use cached canvas, not re-render
+    const canvas = await frameProvider(10);
+    expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+    expect(viewer.renderFrameToCanvas).not.toHaveBeenCalled();
   });
 });

@@ -65,6 +65,8 @@ import { PlaylistPanel } from './ui/components/PlaylistPanel';
 import { PresentationMode } from './utils/ui/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
+import { ShotGridConfigUI } from './integrations/ShotGridConfig';
+import { ShotGridPanel } from './ui/components/ShotGridPanel';
 import type { NetworkSyncConfig } from './network/types';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { setButtonActive, applyA11yFocus } from './ui/components/shared/Button';
@@ -205,6 +207,10 @@ export class AppControlRegistry {
   readonly networkSyncManager: NetworkSyncManager;
   readonly networkControl: NetworkControl;
 
+  // ShotGrid integration
+  readonly shotGridConfig: ShotGridConfigUI;
+  readonly shotGridPanel: ShotGridPanel;
+
   /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
   private registryUnsubscribers: (() => void)[] = [];
   private readonly noiseReductionPanel: Panel;
@@ -326,6 +332,11 @@ export class AppControlRegistry {
     this.presentationMode.loadPreference();
     this.networkSyncManager = new NetworkSyncManager(resolveNetworkSyncConfigFromEnv());
     this.networkControl = new NetworkControl();
+
+    // --- ShotGrid integration ---
+    this.shotGridConfig = new ShotGridConfigUI();
+    this.shotGridPanel = new ShotGridPanel();
+    this.shotGridPanel.setConfigUI(this.shotGridConfig);
   }
 
   /**
@@ -773,6 +784,21 @@ export class AppControlRegistry {
       updatePlaylistButtonStyle();
     }));
 
+    // ShotGrid Panel toggle button
+    const shotGridButton = ContextToolbar.createIconButton('cloud', () => {
+      this.shotGridPanel.toggle();
+      updateShotGridButtonStyle();
+    }, { title: 'ShotGrid' });
+    shotGridButton.dataset.testid = 'shotgrid-panel-toggle';
+    panelToggles.appendChild(shotGridButton);
+
+    const updateShotGridButtonStyle = () => {
+      setButtonActive(shotGridButton, this.shotGridPanel.isOpen(), 'icon');
+    };
+    this.registryUnsubscribers.push(this.shotGridPanel.on('visibilityChanged', () => {
+      updateShotGridButtonStyle();
+    }));
+
     headerBar.setPanelToggles(panelToggles);
 
     // === EFFECTS TAB ===
@@ -970,6 +996,8 @@ export class AppControlRegistry {
     this.presentationMode.dispose();
     this.networkSyncManager.dispose();
     this.networkControl.dispose();
+    this.shotGridConfig.dispose();
+    this.shotGridPanel.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

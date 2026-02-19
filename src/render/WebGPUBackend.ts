@@ -358,6 +358,8 @@ export class WebGPUBackend implements RendererBackend {
       this.setGamutMapping(state.gamutMapping);
     }
     this.setPremultMode(state.premultMode ?? 0);
+    this.setDitherMode(state.ditherMode ?? 0);
+    this.setQuantizeBits(state.quantizeBits ?? 0);
   }
 
   hasPendingStateChanges(): boolean {
