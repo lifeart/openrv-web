@@ -57,6 +57,9 @@ export class ActiveContextManager {
    * If the stack is empty, reverts to 'global'.
    */
   popContext(): BindingContext {
+    if (this._contextStack.length === 0) {
+      console.warn('ActiveContextManager: popContext() called on an empty stack, reverting to global');
+    }
     const old = this._activeContext;
     this._activeContext = this._contextStack.pop() ?? 'global';
     this.contextChanged.emit(this._activeContext, old);
