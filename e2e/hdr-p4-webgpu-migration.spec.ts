@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   waitForTestHelper,
   loadVideoFile,
+  loadExrFile,
   captureCanvasState,
   getColorState,
   getToneMappingState,
@@ -69,6 +70,177 @@ async function browserCanGetWebGPUAdapter(page: import('@playwright/test').Page)
     } catch {
       return false;
     }
+  });
+}
+
+async function installDeterministicWebGPUMock(page: import('@playwright/test').Page): Promise<void> {
+  await page.addInitScript(() => {
+    const globalAny = window as any;
+    if (globalAny.__OPENRV_WEBGPU_MOCK_INSTALLED__) return;
+    globalAny.__OPENRV_WEBGPU_MOCK_INSTALLED__ = true;
+
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+    const toByte = (value: number): number => {
+      const clamped = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+      return Math.max(0, Math.min(255, Math.round(clamped * 255)));
+    };
+
+    const hasInvertedV = (shaderCode: string): boolean => {
+      const code = shaderCode.replace(/\s+/g, ' ');
+      return /1\.0\s*-\s*\(?\s*\(y\s*\+\s*1\.0\)\s*\/\s*2\.0\s*\)?/.test(code)
+        || /1\.0\s*-\s*in\.uv\.y/.test(code)
+        || /1\.0\s*-\s*\(in\.uv\.y\)/.test(code);
+    };
+
+    const renderTextureToCanvas = (sourceTexture: any, targetCanvas: HTMLCanvasElement, shaderCode: string): void => {
+      const width = Number(sourceTexture?.__width ?? 0);
+      const height = Number(sourceTexture?.__height ?? 0);
+      const source = sourceTexture?.__data as Float32Array | undefined;
+      if (!source || width < 1 || height < 1) return;
+
+      targetCanvas.width = width;
+      targetCanvas.height = height;
+      const ctx = originalGetContext.call(targetCanvas, '2d') as CanvasRenderingContext2D | null;
+      if (!ctx) return;
+
+      const imageData = ctx.createImageData(width, height);
+      const invertV = hasInvertedV(shaderCode);
+
+      for (let y = 0; y < height; y++) {
+        const srcY = invertV ? y : (height - 1 - y);
+        for (let x = 0; x < width; x++) {
+          const srcIndex = (srcY * width + x) * 4;
+          const dstIndex = (y * width + x) * 4;
+          imageData.data[dstIndex] = toByte(source[srcIndex] ?? 0);
+          imageData.data[dstIndex + 1] = toByte(source[srcIndex + 1] ?? 0);
+          imageData.data[dstIndex + 2] = toByte(source[srcIndex + 2] ?? 0);
+          imageData.data[dstIndex + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    };
+
+    const createMockDevice = (): any => {
+      const state = { shaderCode: '' };
+
+      const queue = {
+        writeTexture: (
+          dest: { texture: any },
+          data: Float32Array,
+          _layout: { bytesPerRow: number; rowsPerImage: number },
+          size: { width: number; height: number },
+        ) => {
+          const texture = dest.texture;
+          texture.__width = size.width;
+          texture.__height = size.height;
+          texture.__data = new Float32Array(data);
+        },
+        submit: (commands: any[]) => {
+          for (const command of commands) {
+            const passes: any[] = command?.__passes ?? [];
+            for (const pass of passes) {
+              if (!pass?.__drawn || !pass?.__bindGroup) continue;
+              const textureEntry = pass.__bindGroup.entries?.find((entry: any) => entry.binding === 1);
+              const sourceTexture = textureEntry?.resource?.__texture;
+              const targetCanvas = pass.__targetCanvas as HTMLCanvasElement | undefined;
+              if (sourceTexture && targetCanvas) {
+                renderTextureToCanvas(sourceTexture, targetCanvas, state.shaderCode);
+              }
+            }
+          }
+        },
+      };
+
+      return {
+        createShaderModule: (desc: { code: string }) => {
+          state.shaderCode = String(desc?.code ?? '');
+          return { __code: state.shaderCode };
+        },
+        createRenderPipeline: (desc: any) => {
+          const maybeCode = desc?.vertex?.module?.__code;
+          if (typeof maybeCode === 'string') {
+            state.shaderCode = maybeCode;
+          }
+          return {
+            getBindGroupLayout: () => ({}),
+          };
+        },
+        createSampler: () => ({}),
+        createTexture: (desc: any) => {
+          const texture: any = {
+            __width: Number(desc?.size?.width ?? 0),
+            __height: Number(desc?.size?.height ?? 0),
+            __data: null,
+            createView: () => ({ __texture: texture }),
+            destroy: () => {},
+          };
+          return texture;
+        },
+        createBindGroup: (desc: any) => ({ entries: desc.entries }),
+        createCommandEncoder: () => {
+          const passes: any[] = [];
+          return {
+            beginRenderPass: (desc: any) => {
+              const pass: any = {
+                __bindGroup: null,
+                __drawn: false,
+                __targetCanvas: desc?.colorAttachments?.[0]?.view?.__canvas ?? null,
+                setPipeline: () => {},
+                setBindGroup: (_index: number, group: any) => { pass.__bindGroup = group; },
+                draw: () => { pass.__drawn = true; },
+                end: () => {},
+              };
+              passes.push(pass);
+              return pass;
+            },
+            finish: () => ({ __passes: passes }),
+          };
+        },
+        queue,
+        destroy: () => {},
+      };
+    };
+
+    const webgpuContexts = new WeakMap<HTMLCanvasElement, any>();
+
+    const createMockWebGPUContext = (canvas: HTMLCanvasElement): any => {
+      return {
+        configure: () => {},
+        getCurrentTexture: () => ({
+          createView: () => ({ __canvas: canvas }),
+          destroy: () => {},
+        }),
+        unconfigure: () => {},
+      };
+    };
+
+    HTMLCanvasElement.prototype.getContext = function(this: HTMLCanvasElement, contextId: string, options?: any): any {
+      if (contextId === 'webgpu') {
+        let context = webgpuContexts.get(this);
+        if (!context) {
+          context = createMockWebGPUContext(this);
+          webgpuContexts.set(this, context);
+        }
+        return context;
+      }
+      return originalGetContext.call(this, contextId as any, options as any);
+    };
+
+    const mockGPU = {
+      requestAdapter: async () => ({
+        features: new Set<string>(),
+        limits: { maxBufferSize: 1024 * 1024 * 1024 },
+        requestDevice: async () => createMockDevice(),
+      }),
+      getPreferredCanvasFormat: () => 'rgba8unorm',
+    };
+
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      get: () => mockGPU,
+    });
   });
 }
 
@@ -330,5 +502,127 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
     const state = await captureCanvasState(page);
     expect(state).toBeTruthy();
     expect(state.startsWith('data:image/png;base64,')).toBe(true);
+  });
+});
+
+test.describe('Phase 4: WebGPU Blit Orientation Regression', () => {
+  test.beforeEach(async ({ page }) => {
+    await installDeterministicWebGPUMock(page);
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+  });
+
+  test('HDR-P4-016: WebGPU HDR blit preserves vertical orientation (no V double-flip)', async ({ page }) => {
+    await page.evaluate(async () => {
+      const manager = (window as any).__OPENRV_TEST__?.app?.viewer?.glRendererManager;
+      if (manager?.initWebGPUHDRBlit) {
+        await manager.initWebGPUHDRBlit();
+      }
+    });
+
+    await loadExrFile(page);
+
+    await page.waitForFunction(() => {
+      const manager = (window as any).__OPENRV_TEST__?.app?.viewer?.glRendererManager;
+      const blitCanvas = document.querySelector('canvas[data-testid="viewer-webgpu-blit-canvas"]') as HTMLCanvasElement | null;
+      if (!manager || !blitCanvas) return false;
+      const frame = manager.lastHDRBlitFrame;
+      const visible = getComputedStyle(blitCanvas).display !== 'none';
+      return manager.isWebGPUBlitReady === true && visible && !!frame?.data?.length && blitCanvas.width > 0 && blitCanvas.height > 0;
+    }, { timeout: 10000 });
+
+    const orientation = await page.evaluate(() => {
+      const manager = (window as any).__OPENRV_TEST__?.app?.viewer?.glRendererManager;
+      const frame = manager?.lastHDRBlitFrame as { data: Float32Array; width: number; height: number } | null;
+      const canvas = document.querySelector('canvas[data-testid="viewer-webgpu-blit-canvas"]') as HTMLCanvasElement | null;
+
+      if (!frame || !canvas) {
+        return { ok: false, reason: 'missing-frame-or-canvas' };
+      }
+
+      const toByte = (value: number): number => {
+        const clamped = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+        return Math.max(0, Math.min(255, Math.round(clamped * 255)));
+      };
+
+      const distance = (a: number[], b: number[]): number => {
+        return Math.abs(a[0]! - b[0]!) + Math.abs(a[1]! - b[1]!) + Math.abs(a[2]! - b[2]!);
+      };
+
+      const getFrameRGB = (x: number, y: number): number[] => {
+        const index = (y * frame.width + x) * 4;
+        return [
+          toByte(frame.data[index] ?? 0),
+          toByte(frame.data[index + 1] ?? 0),
+          toByte(frame.data[index + 2] ?? 0),
+        ];
+      };
+
+      const yStep = Math.max(1, Math.floor(frame.height / 24));
+      const xStep = Math.max(1, Math.floor(frame.width / 24));
+      let bestY = Math.floor(frame.height / 4);
+      let bestX = Math.floor(frame.width / 2);
+      let bestScore = -1;
+
+      for (let y = 1; y < frame.height - 1; y += yStep) {
+        const mirroredY = frame.height - 1 - y;
+        for (let x = 0; x < frame.width; x += xStep) {
+          const a = getFrameRGB(x, y);
+          const b = getFrameRGB(x, mirroredY);
+          const score = distance(a, b);
+          if (score > bestScore) {
+            bestScore = score;
+            bestX = x;
+            bestY = y;
+          }
+        }
+      }
+
+      if (bestScore < 24) {
+        return { ok: false, reason: 'insufficient-vertical-contrast', bestScore };
+      }
+
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = canvas.width;
+      sampleCanvas.height = canvas.height;
+      const sampleCtx = sampleCanvas.getContext('2d');
+      if (!sampleCtx) {
+        return { ok: false, reason: 'no-2d-read-context' };
+      }
+      sampleCtx.drawImage(canvas, 0, 0);
+
+      const canvasX = Math.max(0, Math.min(sampleCanvas.width - 1, Math.round((bestX / Math.max(1, frame.width - 1)) * Math.max(1, sampleCanvas.width - 1))));
+      const topY = Math.max(0, Math.min(sampleCanvas.height - 1, Math.round((bestY / Math.max(1, frame.height - 1)) * Math.max(1, sampleCanvas.height - 1))));
+      const bottomY = Math.max(0, Math.min(sampleCanvas.height - 1, sampleCanvas.height - 1 - topY));
+
+      const topPixelData = sampleCtx.getImageData(canvasX, topY, 1, 1).data;
+      const bottomPixelData = sampleCtx.getImageData(canvasX, bottomY, 1, 1).data;
+      const actualTop = [topPixelData[0] ?? 0, topPixelData[1] ?? 0, topPixelData[2] ?? 0];
+      const actualBottom = [bottomPixelData[0] ?? 0, bottomPixelData[1] ?? 0, bottomPixelData[2] ?? 0];
+
+      const correctTop = getFrameRGB(bestX, frame.height - 1 - bestY);
+      const correctBottom = getFrameRGB(bestX, bestY);
+      const invertedTop = getFrameRGB(bestX, bestY);
+      const invertedBottom = getFrameRGB(bestX, frame.height - 1 - bestY);
+
+      const errorCorrect = distance(actualTop, correctTop) + distance(actualBottom, correctBottom);
+      const errorInverted = distance(actualTop, invertedTop) + distance(actualBottom, invertedBottom);
+
+      return {
+        ok: true,
+        bestScore,
+        errorCorrect,
+        errorInverted,
+      };
+    });
+
+    expect(orientation.ok).toBe(true);
+    if (!orientation.ok) {
+      return;
+    }
+
+    expect(orientation.errorCorrect).toBeLessThan(orientation.errorInverted);
+    expect(orientation.errorInverted - orientation.errorCorrect).toBeGreaterThanOrEqual(16);
   });
 });
