@@ -909,9 +909,16 @@ export async function loadRvSession(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for media state to confirm load, then first frame decoded
-  await waitForMediaLoaded(page);
-  await waitForFrame(page, 1);
+  // RV sessions don't embed media, so hasMedia stays false.
+  // Wait for session state to be restored (outPoint > 0 indicates loaded).
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.outPoint > 0;
+    },
+    undefined,
+    { timeout: TIMEOUT_LONG }
+  );
 }
 
 /**

@@ -77,9 +77,9 @@ test.describe('Histogram Display', () => {
     await expect(canvas).toBeVisible();
   });
 
-  test('HG-E005: clicking Histogram button in View tab toggles histogram', async ({ page }) => {
-    // The View tab now exposes scopes through the Scopes dropdown.
-    await page.click('button[data-tab-id="view"]');
+  test('HG-E005: clicking Histogram button in QC tab toggles histogram', async ({ page }) => {
+    // Scopes are exposed through the Scopes dropdown in the QC tab.
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     let state = await getViewerState(page);

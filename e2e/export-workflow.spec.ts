@@ -172,7 +172,7 @@ test.describe('Export Functionality', () => {
 
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(outputPath);
-      await waitForMediaLoaded(page);
+      // RV sessions don't embed media, so wait for paint state restoration instead
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
 
       const restoredPaint = await getPaintState(page);
@@ -195,9 +195,7 @@ test.describe('Export Functionality', () => {
       ]);
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
 
-      await page.keyboard.press('g');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
-
+      // RV session may already have ghost mode enabled; only toggle if needed
       let paintState = await getPaintState(page);
       if (!paintState.ghostMode) {
         await page.keyboard.press('g');
@@ -221,7 +219,7 @@ test.describe('Export Functionality', () => {
 
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(outputPath);
-      await waitForMediaLoaded(page);
+      // RV sessions don't embed media, so wait for paint state restoration instead
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
 
       const restoredPaint = await getPaintState(page);

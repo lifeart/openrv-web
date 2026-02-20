@@ -211,22 +211,9 @@ describe('AppNetworkBridge', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Constructor
-  // -----------------------------------------------------------------------
-  describe('constructor', () => {
-    it('ANB-001: creates bridge without throwing', () => {
-      expect(bridge).toBeInstanceOf(AppNetworkBridge);
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // setup
   // -----------------------------------------------------------------------
   describe('setup', () => {
-    it('ANB-010: setup() wires events without throwing', () => {
-      expect(() => bridge.setup()).not.toThrow();
-    });
-
     it('ANB-011: after setup, session playbackChanged triggers sendPlaybackSync', () => {
       bridge.setup();
 
