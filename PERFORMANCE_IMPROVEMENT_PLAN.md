@@ -12,6 +12,8 @@ Addressing these issues will improve playback frame rates, reduce main-thread ja
 
 ## 1. Timeline Repaint Thrashing
 
+> **Detailed implementation plan:** [`TIMELINE_REPAINT_PLAN.md`](TIMELINE_REPAINT_PLAN.md) — rAF coalescing, CSS color caching, shadow blur removal, test specs
+
 **File(s) Affected:** `src/ui/components/Timeline.ts`, `src/ui/components/ThumbnailManager.ts`, `src/audio/WaveformRenderer.ts`
 
 ### Current State
@@ -61,6 +63,8 @@ The Timeline is a single `<canvas>` element (80px tall, DPR-scaled). The monolit
 
 ## 2. Viewer Compositing Overhead & Layer Stacking
 
+> **Detailed implementation plan:** [`VIEWER_COMPOSITING_PLAN.md`](VIEWER_COMPOSITING_PLAN.md) — dirty-flag watermark, display:none for inactive layers, lazy overlay creation
+
 **File(s) Affected:** `src/ui/components/Viewer.ts`, `src/ui/components/ViewerGLRenderer.ts`, `src/ui/components/WatermarkOverlay.ts`, `src/paint/PaintRenderer.ts`, `src/ui/components/CanvasOverlay.ts`
 
 ### Current State
@@ -107,6 +111,8 @@ The Viewer's `canvasContainer` (positioned via CSS `transform: translate(...)`) 
 
 ## 3. Scope FBO Format Negotiation
 
+> **Detailed implementation plan:** [`SCOPE_FBO_FORMAT_PLAN.md`](SCOPE_FBO_FORMAT_PLAN.md) — conditional RGBA8/RGBA16F, Uint8 readback, sync path treatment
+
 **File(s) Affected:** `src/render/Renderer.ts` (FBO management)
 
 ### Current State
@@ -146,6 +152,8 @@ Note: The `renderForScopes()` method currently forces `hdrOutputMode = 'hlg'` (l
 
 ## 4. Shader Compilation Blocking
 
+> **Detailed implementation plan:** [`SHADER_COMPILATION_PLAN.md`](SHADER_COMPILATION_PLAN.md) — ShaderProgram migration for 5 modules, deferred scopes creation, transpose workaround
+
 **File(s) Affected:** `src/scopes/WebGLScopes.ts`, `src/color/WebGLLUT.ts`, `src/color/pipeline/GPULUTChain.ts`, `src/filters/WebGLNoiseReduction.ts`, `src/filters/WebGLSharpen.ts`
 
 ### Current State
@@ -178,6 +186,8 @@ None of these sites cache compiled programs — each new WebGL context gets fres
 ---
 
 ## 5. GC Pressure in Hot Render Paths
+
+> **Detailed implementation plan:** [`GC_PRESSURE_IMPLEMENTATION_PLAN.md`](GC_PRESSURE_IMPLEMENTATION_PLAN.md) — RGB→RGBA buffer pooling, per-pixel tuple elimination, pre-allocated uniform buffers
 
 **File(s) Affected:** `src/render/Renderer.ts`, `src/render/ShaderProgram.ts`, `src/render/ShaderStateManager.ts`, `src/color/HueRotation.ts`, `src/ui/components/Viewer.ts`
 
@@ -229,6 +239,8 @@ When `DIRTY_COLOR` is set, temporary tuples are created for `safeGammaRGB`, `saf
 
 ## 6. Thumbnail Rendering Efficiency
 
+> **Detailed implementation plan:** [`THUMBNAIL_RENDERING_PLAN.md`](THUMBNAIL_RENDERING_PLAN.md) — eliminate double draw, OffscreenCanvas direct storage, canvas pooling, peek() optimization
+
 **File(s) Affected:** `src/ui/components/ThumbnailManager.ts`
 
 ### Current State
@@ -257,6 +269,8 @@ Each `loadThumbnail()` call (lines 245–246) creates a new `HTMLCanvasElement` 
 
 ## 7. Audio Waveform Extraction
 
+> **Detailed implementation plan:** [`AUDIO_WAVEFORM_PLAN.md`](AUDIO_WAVEFORM_PLAN.md) — force-cache fetch, File passthrough via getFile() accessor, blob URL detection
+
 **File(s) Affected:** `src/audio/WaveformRenderer.ts`
 
 ### Current State
@@ -276,6 +290,8 @@ For a large video file, this re-downloads the entire file just for waveform extr
 
 ## 8. TextureCacheManager LRU Eviction
 
+> **Detailed implementation plan:** [`TEXTURE_CACHE_LRU_PLAN.md`](TEXTURE_CACHE_LRU_PLAN.md) — Map insertion-order LRU, remove accessCounter, O(1) eviction
+
 **File(s) Affected:** `src/render/TextureCacheManager.ts`
 
 ### Current State
@@ -289,6 +305,8 @@ Replace the `accessCounter` linear scan with Map insertion-order tracking (move-
 ---
 
 ## 9. Verification & Testing Strategy
+
+> **Detailed improvement plan:** [`TEST_IMPROVEMENTS.md`](TEST_IMPROVEMENTS.md) — test suite quality audit, 156 noop tests identified across 20 files
 
 ### Existing Test Infrastructure
 
