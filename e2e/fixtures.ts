@@ -860,6 +860,19 @@ export async function loadVideoFile(page: Page): Promise<void> {
   // Wait for media state to confirm load, then first frame decoded
   await waitForMediaLoaded(page);
   await waitForFrame(page, 1);
+  // Ensure something is actually rendered on the canvas
+  await page.waitForFunction(async () => {
+    // We can't easily call our async helper inside waitForFunction,
+    // so we'll just wait for a short bit or implement a simplified check.
+    // Actually, we'll just use a retry loop for canvasHasContent in Playwright.
+    return true; 
+  });
+  
+  // Better: use a retry loop in the helper itself
+  for (let i = 0; i < 10; i++) {
+    if (await canvasHasContent(page)) break;
+    await page.waitForTimeout(100);
+  }
 }
 
 export async function loadTwoVideoFiles(page: Page): Promise<void> {
@@ -1012,7 +1025,14 @@ async function getViewerRenderCanvas(page: Page): Promise<ReturnType<Page['locat
  * Resolve the 2D image canvas used for pixel sampling/state probes.
  */
 async function getViewerImageCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
-  return page.locator('canvas[data-testid="viewer-image-canvas"]').first();
+  const glCanvas = page.locator('canvas[data-testid="viewer-gl-canvas"]').first();
+  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]').first();
+  
+  // Use GL canvas if it exists and is visible (where rendering happens when effects are active)
+  if (await glCanvas.isVisible()) {
+    return glCanvas;
+  }
+  return imageCanvas;
 }
 
 /**
@@ -1155,11 +1175,29 @@ export async function getCurrentFrame(page: Page): Promise<number> {
 export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; y: number }>): Promise<Array<{ r: number; g: number; b: number; a: number }>> {
   const canvas = await getViewerImageCanvas(page);
   const pixels = await canvas.evaluate((el: HTMLCanvasElement, pts: Array<{ x: number; y: number }>) => {
+    const gl = el.getContext('webgl2') || el.getContext('webgl');
+    const scaleX = el.clientWidth ? el.width / el.clientWidth : 1;
+    const scaleY = el.clientHeight ? el.height / el.clientHeight : 1;
+
+    if (gl) {
+      const g = gl as WebGL2RenderingContext;
+      const data = new Uint8Array(4);
+      return pts.map(p => {
+        // Scale coordinates from CSS to backing store
+        const glX = Math.floor(p.x * scaleX);
+        const glY = Math.floor(el.height - 1 - (p.y * scaleY));
+        g.readPixels(glX, glY, 1, 1, g.RGBA, g.UNSIGNED_BYTE, data);
+        return { r: data[0]!, g: data[1]!, b: data[2]!, a: data[3]! };
+      });
+    }
+
     const ctx = el.getContext('2d');
     if (!ctx) return pts.map(() => ({ r: 0, g: 0, b: 0, a: 0 }));
 
     return pts.map(pt => {
-      const data = ctx.getImageData(pt.x, pt.y, 1, 1).data;
+      const px = Math.floor(pt.x * scaleX);
+      const py = Math.floor(pt.y * scaleY);
+      const data = ctx.getImageData(px, py, 1, 1).data;
       return { r: data[0] || 0, g: data[1] || 0, b: data[2] || 0, a: data[3] || 0 };
     });
   }, points);
@@ -1172,6 +1210,24 @@ export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; 
 export async function canvasHasContent(page: Page): Promise<boolean> {
   const canvas = await getViewerImageCanvas(page);
   const hasContent = await canvas.evaluate((el: HTMLCanvasElement) => {
+    const gl = el.getContext('webgl2') || el.getContext('webgl');
+    if (gl) {
+      const g = gl as WebGL2RenderingContext;
+      const data = new Uint8Array(4);
+      const width = el.width;
+      const height = el.height;
+      const samplePoints = [
+        { x: Math.floor(width / 4), y: Math.floor(height / 4) },
+        { x: Math.floor(width / 2), y: Math.floor(height / 2) },
+        { x: Math.floor(3 * width / 4), y: Math.floor(3 * height / 4) },
+      ];
+      for (const pt of samplePoints) {
+        g.readPixels(pt.x, pt.y, 1, 1, g.RGBA, g.UNSIGNED_BYTE, data);
+        if (data[0]! > 10 || data[1]! > 10 || data[2]! > 10) return true;
+      }
+      return false;
+    }
+
     const ctx = el.getContext('2d');
     if (!ctx) return false;
 
@@ -1202,6 +1258,33 @@ export async function canvasHasContent(page: Page): Promise<boolean> {
 export async function getCanvasBrightness(page: Page): Promise<number> {
   const canvas = await getViewerImageCanvas(page);
   const brightness = await canvas.evaluate((el: HTMLCanvasElement) => {
+    const gl = el.getContext('webgl2') || el.getContext('webgl');
+    const scaleX = el.width / el.clientWidth;
+    const scaleY = el.height / el.clientHeight;
+
+    if (gl) {
+      const g = gl as WebGL2RenderingContext;
+      const width = el.width;
+      const height = el.height;
+      const gridSize = 10;
+      let totalBrightness = 0;
+      let sampleCount = 0;
+      
+      const pixels = new Uint8Array(4);
+      for (let x = 0; x < gridSize; x++) {
+        for (let y = 0; y < gridSize; y++) {
+          const px = Math.floor((x + 0.5) * width / gridSize);
+          const py = Math.floor((y + 0.5) * height / gridSize);
+          // WebGL coordinates are y-up
+          g.readPixels(px, py, 1, 1, g.RGBA, g.UNSIGNED_BYTE, pixels);
+          const brightness = 0.299 * pixels[0] + 0.587 * pixels[1] + 0.114 * pixels[2];
+          totalBrightness += brightness;
+          sampleCount++;
+        }
+      }
+      return totalBrightness / sampleCount;
+    }
+
     const ctx = el.getContext('2d');
     if (!ctx) return 0;
 

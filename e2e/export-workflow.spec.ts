@@ -270,6 +270,7 @@ test.describe('Full Workflow Tests', () => {
     expect(fitState?.zoom).not.toBe(2);
 
     // Play briefly
+    await page.locator('.viewer-container').first().click();
     await page.keyboard.press('Space');
     await waitForPlaybackState(page, true);
     const playingState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());

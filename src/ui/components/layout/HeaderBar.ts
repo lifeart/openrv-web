@@ -88,6 +88,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Create wrapper (position: relative to anchor fade overlays)
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'header-bar';
+    this.wrapper.setAttribute('role', 'banner');
     this.wrapper.style.cssText = `
       position: relative;
       flex-shrink: 0;
@@ -96,7 +97,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Create scrollable container
     this.container = document.createElement('div');
     this.container.className = 'header-bar-scroll';
-    this.container.setAttribute('role', 'banner');
     this.container.style.cssText = `
       height: 40px;
       background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
@@ -812,6 +812,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeSpeedMenuCleanup = null;
+      anchor.focus();
     };
 
     // Close menu when clicking outside
@@ -885,7 +886,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
       item.addEventListener('focus', () => { item.style.background = 'var(--bg-hover)'; });
       item.addEventListener('blur', () => { item.style.background = 'transparent'; });
-      item.addEventListener('click', () => { action(); removeMenu(); });
+      item.addEventListener('click', () => {
+        removeMenu();
+        action();
+      });
 
       menu.appendChild(item);
     }
@@ -937,6 +941,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeHelpMenuCleanup = null;
+      anchor.focus();
     };
 
     const closeMenu = (e: MouseEvent) => {
@@ -1027,8 +1032,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       });
 
       item.addEventListener('click', () => {
-        this._layoutPresetApply?.(preset.id);
         removeMenu();
+        this._layoutPresetApply?.(preset.id);
       });
 
       menu.appendChild(item);
@@ -1078,6 +1083,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       document.removeEventListener('click', closeMenu);
       this.layoutButton.setAttribute('aria-expanded', 'false');
       this._activeLayoutMenuCleanup = null;
+      anchor.focus();
     };
 
     const closeMenu = (e: MouseEvent) => {

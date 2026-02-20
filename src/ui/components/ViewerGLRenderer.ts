@@ -266,8 +266,10 @@ export class ViewerGLRenderer {
 
     // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
     // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
-    // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer).
-    const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true;
+    // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer)
+    // or when in E2E test mode (tests need main-thread access to sample pixels).
+    const isTest = typeof window !== 'undefined' && (window as any).__OPENRV_TEST__;
+    const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true || !!isTest;
     if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
       try {
         if (typeof OffscreenCanvas !== 'undefined' &&

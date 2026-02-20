@@ -189,6 +189,14 @@ export class KeyboardManager {
       return true;
     }
 
+    // Allow Space and Enter to trigger focused buttons
+    if (target instanceof HTMLButtonElement || target.getAttribute('role') === 'button') {
+      const isBareKey = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+      if (isBareKey && (e.key === ' ' || e.key === 'Enter')) {
+        return true;
+      }
+    }
+
     return false;
   }
 

@@ -165,7 +165,9 @@ export class Renderer implements RendererBackend {
     this.canvas = canvas;
 
     // For HDR displays, request preserveDrawingBuffer so readPixels works after compositing.
-    const wantHDR = capabilities?.displayHDR === true;
+    // Also enable for E2E tests to allow canvas state sampling (getCanvasBrightness).
+    const isTest = typeof window !== 'undefined' && (window as any).__OPENRV_TEST__;
+    const wantHDR = capabilities?.displayHDR === true || !!isTest;
     const gl = canvas.getContext('webgl2', {
       alpha: false,
       antialias: false,

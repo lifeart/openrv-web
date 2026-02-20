@@ -361,6 +361,7 @@ export class AppKeyboardHandler {
       overflow-y: auto;
       padding: 8px;
     `;
+    content.setAttribute('data-testid', 'custom-keybindings-dialog');
 
     const actions = this.customKeyBindingsManager.getAvailableActions();
 
@@ -394,6 +395,7 @@ export class AppKeyboardHandler {
         border-bottom: 1px solid var(--border-secondary);
         align-items: center;
       `;
+      row.setAttribute('data-testid', 'binding-row');
 
       // Action description
       const descCell = document.createElement('div');
@@ -416,6 +418,7 @@ export class AppKeyboardHandler {
         font-size: 12px;
         text-align: center;
       `;
+      keyCell.setAttribute('data-testid', 'binding-key');
       keyCell.textContent = this.formatKeyCombo(action.currentCombo);
       row.appendChild(keyCell);
 
@@ -428,7 +431,8 @@ export class AppKeyboardHandler {
 
       // Set custom binding button
       const setButton = document.createElement('button');
-      setButton.textContent = 'Set';
+      setButton.textContent = 'Rebind';
+      setButton.dataset.testid = 'rebind-button';
       setButton.style.cssText = `
         background: var(--accent-primary);
         border: none;
@@ -445,6 +449,7 @@ export class AppKeyboardHandler {
       if (this.customKeyBindingsManager.hasCustomBinding(action.action)) {
         const resetButton = document.createElement('button');
         resetButton.textContent = 'Reset';
+        resetButton.dataset.testid = 'binding-reset-button';
         resetButton.style.cssText = `
           background: var(--text-muted);
           border: none;
@@ -478,6 +483,7 @@ export class AppKeyboardHandler {
 
     const resetAllButton = document.createElement('button');
     resetAllButton.textContent = 'Reset All to Defaults';
+    resetAllButton.dataset.testid = 'binding-reset-all-button';
     resetAllButton.style.cssText = `
       background: var(--error);
       border: none;
@@ -511,6 +517,7 @@ export class AppKeyboardHandler {
       text-align: center;
       padding: 20px;
     `;
+    promptContent.setAttribute('data-testid', 'key-capture-prompt');
 
     const instruction = document.createElement('div');
     instruction.style.cssText = `
@@ -534,6 +541,7 @@ export class AppKeyboardHandler {
       margin: 16px 0;
       min-height: 24px;
     `;
+    keyDisplay.setAttribute('data-testid', 'key-display');
     keyDisplay.textContent = 'Waiting for key press...';
     promptContent.appendChild(keyDisplay);
 
@@ -612,6 +620,7 @@ export class AppKeyboardHandler {
           margin-top: 8px;
           font-size: 12px;
         `;
+        warning.setAttribute('data-testid', 'binding-conflict-warning');
         warning.textContent = `This combo is already used by "${conflictAction}". Confirming will override it.`;
         keyDisplay.insertAdjacentElement('afterend', warning);
         forceOverride = true;
