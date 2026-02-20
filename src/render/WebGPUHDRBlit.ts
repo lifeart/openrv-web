@@ -149,9 +149,10 @@ struct VSOut {
   let y = f32(i32(i) % 2) * 4.0 - 1.0;
   out.pos = vec4f(x, y, 0.0, 1.0);
   // WebGL readPixels returns rows bottom-to-top; WebGPU textures are top-to-bottom.
-  // Flip V so the bottom-to-top GL data is displayed correctly in the top-to-bottom
-  // WebGPU texture coordinate space.
-  out.uv = vec2f((x + 1.0) / 2.0, 1.0 - (y + 1.0) / 2.0);
+  // Map NDC y directly to V so that screen top (y=+1 → v=1) samples texture bottom
+  // (image top from the flipped readback) and screen bottom (y=-1 → v=0) samples
+  // texture top (image bottom).
+  out.uv = vec2f((x + 1.0) / 2.0, (y + 1.0) / 2.0);
   return out;
 }
 
