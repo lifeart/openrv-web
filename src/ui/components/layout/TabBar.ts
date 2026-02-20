@@ -220,6 +220,6 @@ export class TabBar extends EventEmitter<TabBarEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    this.removeAllListeners();
   }
 }

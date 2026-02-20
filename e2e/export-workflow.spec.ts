@@ -21,6 +21,9 @@ import {
   waitForWipeMode,
   waitForZoomLevel,
   waitForLoopMode,
+  enableGhostMode,
+  exportRvSession,
+  loadRvSessionFile,
 } from './fixtures';
 
 async function setRangeValue(
@@ -149,30 +152,20 @@ test.describe('Export Functionality', () => {
       ]);
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
 
-      await page.keyboard.press('g');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
+      await enableGhostMode(page);
 
       const paintState = await getPaintState(page);
       expect(paintState.ghostMode).toBe(true);
       expect(paintState.annotatedFrames.length).toBeGreaterThan(0);
 
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
-      const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-      await exportButton.click();
-      await page.waitForTimeout(200);
-      await page.click('text=Save RV Session (.rv)');
-
-      const download = await downloadPromise;
       const outputPath = test.info().outputPath('session-export.rv');
-      await download.saveAs(outputPath);
+      await exportRvSession(page, outputPath);
 
       await page.reload();
       await page.waitForSelector('#app');
       await waitForTestHelper(page);
 
-      const fileInput = page.locator('input[type="file"]').first();
-      await fileInput.setInputFiles(outputPath);
-      // RV sessions don't embed media, so wait for paint state restoration instead
+      await loadRvSessionFile(page, outputPath);
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
 
       const restoredPaint = await getPaintState(page);
@@ -195,31 +188,16 @@ test.describe('Export Functionality', () => {
       ]);
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
 
-      // RV session may already have ghost mode enabled; only toggle if needed
-      let paintState = await getPaintState(page);
-      if (!paintState.ghostMode) {
-        await page.keyboard.press('g');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
-        paintState = await getPaintState(page);
-      }
+      await enableGhostMode(page);
 
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
-      const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-      await exportButton.click();
-      await page.waitForTimeout(200);
-      await page.click('text=Save RV Session (.rv)');
-
-      const download = await downloadPromise;
       const outputPath = test.info().outputPath('session-export-updated.rv');
-      await download.saveAs(outputPath);
+      await exportRvSession(page, outputPath);
 
       await page.reload();
       await page.waitForSelector('#app');
       await waitForTestHelper(page);
 
-      const fileInput = page.locator('input[type="file"]').first();
-      await fileInput.setInputFiles(outputPath);
-      // RV sessions don't embed media, so wait for paint state restoration instead
+      await loadRvSessionFile(page, outputPath);
       await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
 
       const restoredPaint = await getPaintState(page);

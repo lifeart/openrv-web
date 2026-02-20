@@ -27,7 +27,7 @@ function createMockSession(options?: Partial<MockSession>): MockSession {
     currentFrame: options?.currentFrame ?? 1,
     fps: options?.fps ?? 24,
     frameCount: options?.frameCount ?? 100,
-    on: vi.fn(),
+    on: vi.fn().mockReturnValue(() => {}),
     off: vi.fn(),
     ...options,
   };

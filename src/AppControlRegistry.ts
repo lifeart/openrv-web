@@ -73,6 +73,7 @@ import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
 import { ShotGridConfigUI } from './integrations/ShotGridConfig';
 import { ShotGridPanel } from './ui/components/ShotGridPanel';
+import { ConformPanel, type ConformPanelManager, type ConformSource, type UnresolvedClip, type ConformStatus } from './ui/components/ConformPanel';
 import type { NetworkSyncConfig } from './network/types';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { setButtonActive, applyA11yFocus } from './ui/components/shared/Button';
@@ -225,12 +226,17 @@ export class AppControlRegistry {
   readonly shotGridConfig: ShotGridConfigUI;
   readonly shotGridPanel: ShotGridPanel;
 
+  // Conform / Re-link
+  readonly conformPanel: ConformPanel;
+
   /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
   private registryUnsubscribers: (() => void)[] = [];
   private readonly noiseReductionPanel: Panel;
   private readonly watermarkPanel: Panel;
   private readonly timelineEditorPanel: Panel;
   private readonly slateEditorPanel: Panel;
+  private readonly conformPanelContainer: HTMLElement;
+  private readonly conformPanelElement: Panel;
   private convergenceButton: HTMLButtonElement | null = null;
   private floatingWindowButton: HTMLButtonElement | null = null;
 
@@ -367,6 +373,44 @@ export class AppControlRegistry {
     this.shotGridConfig = new ShotGridConfigUI();
     this.shotGridPanel = new ShotGridPanel();
     this.shotGridPanel.setConfigUI(this.shotGridConfig);
+
+    // --- Conform / Re-link panel ---
+    this.conformPanelElement = createPanel({ width: '500px', maxHeight: '70vh', align: 'right' });
+    this.conformPanelElement.element.appendChild(createPanelHeader('Conform / Re-link'));
+    this.conformPanelContainer = document.createElement('div');
+    this.conformPanelContainer.style.cssText = 'padding: 8px; overflow-y: auto; max-height: 60vh;';
+    this.conformPanelElement.element.appendChild(this.conformPanelContainer);
+
+    const conformManager: ConformPanelManager = {
+      getUnresolvedClips: (): UnresolvedClip[] =>
+        this.playlistManager.unresolvedClips.map(c => ({
+          id: c.id,
+          name: c.name,
+          originalUrl: c.sourceUrl,
+          inFrame: c.inFrame,
+          outFrame: c.outFrame,
+          timelineIn: c.timelineIn,
+          reason: 'not_found' as const,
+        })),
+      getAvailableSources: (): ConformSource[] =>
+        (session.allSources ?? []).map((s, i) => ({
+          index: i,
+          name: s.name,
+          url: s.url,
+          frameCount: s.duration,
+        })),
+      relinkClip: (clipId: string, sourceIndex: number): boolean => {
+        const source = session.getSourceByIndex(sourceIndex);
+        if (!source) return false;
+        return this.playlistManager.relinkUnresolvedClip(clipId, sourceIndex, source.name, source.duration);
+      },
+      getResolutionStatus: (): ConformStatus => {
+        const unresolved = this.playlistManager.unresolvedClips.length;
+        const total = this.playlistManager.getClips().length + unresolved;
+        return { resolved: total - unresolved, total };
+      },
+    };
+    this.conformPanel = new ConformPanel(this.conformPanelContainer, conformManager);
   }
 
   /**
@@ -937,6 +981,18 @@ export class AppControlRegistry {
       updatePlaylistButtonStyle();
     }));
 
+    // Conform / Re-link panel toggle button
+    const conformButton = ContextToolbar.createIconButton('link', () => {
+      this.conformPanelElement.toggle(conformButton);
+      setButtonActive(conformButton, this.conformPanelElement.isVisible(), 'icon');
+      // Re-render panel when opened to reflect latest unresolved clips
+      if (this.conformPanelElement.isVisible()) {
+        this.conformPanel.render();
+      }
+    }, { title: 'Conform / Re-link' });
+    conformButton.dataset.testid = 'conform-panel-toggle';
+    panelToggles.appendChild(conformButton);
+
     // ShotGrid Panel toggle button
     const shotGridButton = ContextToolbar.createIconButton('cloud', () => {
       this.shotGridPanel.toggle();
@@ -1429,6 +1485,8 @@ export class AppControlRegistry {
     this.networkControl.dispose();
     this.shotGridConfig.dispose();
     this.shotGridPanel.dispose();
+    this.conformPanel.dispose();
+    this.conformPanelElement.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

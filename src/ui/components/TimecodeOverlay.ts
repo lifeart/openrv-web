@@ -48,6 +48,7 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
   private session: Session;
   private state: TimecodeOverlayState = { ...DEFAULT_TIMECODE_OVERLAY_STATE };
   private startFrame = 0;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(session: Session) {
     super();
@@ -105,9 +106,11 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
     this.updateStyles();
 
     // Bind events
-    this.session.on('frameChanged', () => this.update());
-    this.session.on('sourceLoaded', () => this.update());
-    this.session.on('durationChanged', () => this.update());
+    this.unsubscribers.push(
+      this.session.on('frameChanged', () => this.update()),
+      this.session.on('sourceLoaded', () => this.update()),
+      this.session.on('durationChanged', () => this.update()),
+    );
 
     // Initial update
     this.update();
@@ -276,6 +279,10 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
    * Dispose
    */
   dispose(): void {
-    // Event listeners are automatically cleaned up when session is disposed
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
+    this.removeAllListeners();
   }
 }

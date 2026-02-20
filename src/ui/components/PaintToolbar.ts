@@ -18,6 +18,7 @@ export class PaintToolbar {
   private ghostButton!: HTMLButtonElement;
   private holdButton!: HTMLButtonElement;
   private versionSelect!: HTMLSelectElement;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(paintEngine: PaintEngine) {
     this.paintEngine = paintEngine;
@@ -256,12 +257,14 @@ export class PaintToolbar {
   }
 
   private bindEvents(): void {
-    this.paintEngine.on('toolChanged', () => this.updateToolButtons());
-    this.paintEngine.on('brushChanged', () => this.updateBrushButton());
-    this.paintEngine.on('effectsChanged', () => {
-      this.updateGhostButton();
-      this.updateHoldButton();
-    });
+    this.unsubscribers.push(
+      this.paintEngine.on('toolChanged', () => this.updateToolButtons()),
+      this.paintEngine.on('brushChanged', () => this.updateBrushButton()),
+      this.paintEngine.on('effectsChanged', () => {
+        this.updateGhostButton();
+        this.updateHoldButton();
+      }),
+    );
   }
 
   private updateBrushButton(): void {
@@ -383,6 +386,9 @@ export class PaintToolbar {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
   }
 }

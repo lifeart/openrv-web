@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForTestHelper } from './fixtures';
+import { waitForTestHelper, openKeyboardShortcutsDialog } from './fixtures';
 
 /**
  * Accessibility & Keyboard Navigation E2E Tests
@@ -500,9 +500,7 @@ test.describe('Modal Focus Trapping', () => {
 
   test('A11Y-060: Modal has role="dialog" and aria-modal="true"', async ({ page }) => {
     // Open keyboard shortcuts modal via help button
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     const modal = page.locator('[role="dialog"]');
     await expect(modal).toBeVisible();
@@ -510,9 +508,7 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-061: Modal has aria-labelledby pointing to title', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     const modal = page.locator('[role="dialog"]');
     const labelledBy = await modal.getAttribute('aria-labelledby');
@@ -525,9 +521,7 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-062: Escape closes modal', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     const modal = page.locator('[role="dialog"]');
     await expect(modal).toBeVisible();
@@ -541,24 +535,20 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-063: Focus returns to trigger button after modal close', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
 
-    // Focus should return to the help button
-    const focusedTitle = await page.evaluate(() => {
-      return document.activeElement?.getAttribute('title');
+    // Focus should return to the help menu button
+    const focusedTestId = await page.evaluate(() => {
+      return document.activeElement?.getAttribute('data-testid');
     });
-    expect(focusedTitle).toBe('Keyboard shortcuts');
+    expect(focusedTestId).toBe('help-menu-button');
   });
 
   test('A11Y-064: Tab key is trapped inside modal', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     // Get all focusable elements inside modal
     const modal = page.locator('[role="dialog"]');
@@ -579,9 +569,7 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-065: Shift+Tab wraps backward inside modal', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     // Shift+Tab multiple times
     for (let i = 0; i < 10; i++) {

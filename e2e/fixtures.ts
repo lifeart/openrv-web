@@ -1512,6 +1512,7 @@ export const TABS = {
   effects: 'button[data-tab-id="effects"]',
   transform: 'button[data-tab-id="transform"]',
   annotate: 'button[data-tab-id="annotate"]',
+  qc: 'button[data-tab-id="qc"]',
 };
 
 // Common selectors
@@ -1521,16 +1522,17 @@ export const SELECTORS = {
   headerBar: '.header-bar',
   tabBar: '.tab-bar',
   contextToolbar: '.context-toolbar',
-  playButton: 'button[title*="Play"], button:has-text("Play"), .play-button',
-  pauseButton: 'button[title*="Pause"], button:has-text("Pause")',
+  playButton: 'button[title*="Play"], button[title*="Pause"]',
   volumeControl: '.volume-control',
-  exportButton: 'button[title*="Export"], .export-button',
-  helpButton: 'button[title*="Help"], button:has-text("?")',
+  exportButton: 'button[title*="Export"], button:has-text("Export")',
+  helpButton: '[data-testid="help-menu-button"]',
   fileInput: 'input[type="file"]',
 };
 
+export type TabName = 'view' | 'color' | 'effects' | 'transform' | 'annotate' | 'qc';
+
 // Helper to click a tab and wait for it to become active
-export async function clickTab(page: Page, tabName: 'view' | 'color' | 'effects' | 'transform' | 'annotate'): Promise<void> {
+export async function clickTab(page: Page, tabName: TabName): Promise<void> {
   await page.click(`button[data-tab-id="${tabName}"]`);
   await waitForTabActive(page, tabName);
 }
@@ -2120,4 +2122,240 @@ export async function waitForCondition(
   timeout = TIMEOUT_MEDIUM,
 ): Promise<void> {
   await page.waitForFunction(evalFn, undefined, { timeout });
+}
+
+// ── Frame Navigation Helpers ─────────────────────────────────────────
+
+/**
+ * Navigate to a specific frame by going to frame 1 (Home) then stepping forward.
+ * Waits for each step to register, avoiding flaky rapid key presses.
+ */
+export async function navigateToFrame(page: Page, frame: number): Promise<void> {
+  await page.keyboard.press('Home');
+  const state = await getSessionState(page);
+  const startFrame = state.inPoint || 1;
+  await waitForFrame(page, startFrame);
+  for (let i = startFrame; i < frame; i++) {
+    await page.keyboard.press('ArrowRight');
+    await waitForFrame(page, i + 1);
+  }
+}
+
+/**
+ * Step forward N frames from the current position, waiting for each step.
+ */
+export async function stepForward(page: Page, count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    const state = await getSessionState(page);
+    const current = state.currentFrame;
+    await page.keyboard.press('ArrowRight');
+    await waitForFrame(page, current + 1);
+  }
+}
+
+/**
+ * Step backward N frames from the current position, waiting for each step.
+ */
+export async function stepBackward(page: Page, count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    const state = await getSessionState(page);
+    const current = state.currentFrame;
+    await page.keyboard.press('ArrowLeft');
+    await waitForFrame(page, current - 1);
+  }
+}
+
+// ── In/Out Point Helpers ─────────────────────────────────────────────
+
+/**
+ * Wait for inPoint to reach the expected value.
+ */
+export async function waitForInPoint(page: Page, frame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.inPoint === expected;
+    },
+    frame,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for outPoint to reach the expected value.
+ */
+export async function waitForOutPoint(page: Page, frame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.outPoint === expected;
+    },
+    frame,
+    { timeout }
+  );
+}
+
+/**
+ * Set the in point at the given frame.
+ * Navigates to the frame, presses 'i', and waits for confirmation.
+ */
+export async function setInPoint(page: Page, frame: number): Promise<void> {
+  await navigateToFrame(page, frame);
+  await page.keyboard.press('i');
+  await waitForInPoint(page, frame);
+}
+
+/**
+ * Set the out point at the given frame.
+ * Navigates to the frame, presses 'o', and waits for confirmation.
+ */
+export async function setOutPoint(page: Page, frame: number): Promise<void> {
+  await navigateToFrame(page, frame);
+  await page.keyboard.press('o');
+  await waitForOutPoint(page, frame);
+}
+
+/**
+ * Set both in and out points.
+ * Navigates to each frame, sets the point, and waits for confirmation.
+ */
+export async function setInOutRange(page: Page, inFrame: number, outFrame: number): Promise<void> {
+  await setInPoint(page, inFrame);
+  await setOutPoint(page, outFrame);
+}
+
+/**
+ * Reset in/out points to full range by pressing 'r'.
+ */
+export async function resetInOutPoints(page: Page): Promise<void> {
+  await page.keyboard.press('r');
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.inPoint === 1;
+    },
+    undefined,
+    { timeout: TIMEOUT_MEDIUM }
+  );
+}
+
+// ── Loop Mode Helper ─────────────────────────────────────────────────
+
+const LOOP_CYCLE: Array<'loop' | 'pingpong' | 'once'> = ['loop', 'pingpong', 'once'];
+
+/**
+ * Set the loop mode by cycling Ctrl+L until the target mode is reached.
+ * Reads the current mode and presses the minimum number of times.
+ */
+export async function setLoopMode(page: Page, target: 'once' | 'loop' | 'pingpong'): Promise<void> {
+  const state = await getSessionState(page);
+  const current = state.loopMode as typeof target;
+  if (current === target) return;
+
+  const currentIdx = LOOP_CYCLE.indexOf(current);
+  const targetIdx = LOOP_CYCLE.indexOf(target);
+  const steps = (targetIdx - currentIdx + LOOP_CYCLE.length) % LOOP_CYCLE.length;
+
+  for (let i = 0; i < steps; i++) {
+    await page.keyboard.press('Control+l');
+    const nextMode = LOOP_CYCLE[(currentIdx + i + 1) % LOOP_CYCLE.length];
+    await waitForLoopMode(page, nextMode);
+  }
+}
+
+// ── Ghost Mode Helpers ───────────────────────────────────────────────
+
+/**
+ * Wait for ghost mode to reach the expected state.
+ */
+export async function waitForGhostMode(page: Page, enabled: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getPaintState();
+      return state?.ghostMode === expected;
+    },
+    enabled,
+    { timeout }
+  );
+}
+
+/**
+ * Enable ghost mode. No-op if already enabled.
+ * Must be on the Annotate tab with a paint tool active.
+ */
+export async function enableGhostMode(page: Page): Promise<void> {
+  const state = await getPaintState(page);
+  if (state.ghostMode) return;
+  await page.keyboard.press('g');
+  await waitForGhostMode(page, true);
+}
+
+/**
+ * Disable ghost mode. No-op if already disabled.
+ * Must be on the Annotate tab with a paint tool active.
+ */
+export async function disableGhostMode(page: Page): Promise<void> {
+  const state = await getPaintState(page);
+  if (!state.ghostMode) return;
+  await page.keyboard.press('g');
+  await waitForGhostMode(page, false);
+}
+
+// ── Help Menu / Shortcuts Dialog ─────────────────────────────────────
+
+/**
+ * Open the keyboard shortcuts dialog via the help dropdown menu.
+ */
+export async function openKeyboardShortcutsDialog(page: Page): Promise<void> {
+  const helpButton = page.locator('[data-testid="help-menu-button"]');
+  await helpButton.click();
+  await page.waitForTimeout(200);
+  const shortcutsItem = page.locator('[data-testid="help-menu-help"]');
+  await shortcutsItem.click();
+  await page.waitForTimeout(200);
+}
+
+/**
+ * Open the custom key bindings dialog via the help dropdown menu.
+ */
+export async function openCustomKeyBindingsDialog(page: Page): Promise<void> {
+  const helpButton = page.locator('[data-testid="help-menu-button"]');
+  await helpButton.click();
+  await page.waitForTimeout(200);
+  const bindingsItem = page.locator('[data-testid="help-menu-keyboard"]');
+  await bindingsItem.click();
+  await page.waitForTimeout(200);
+}
+
+// ── RV Session Export Helper ─────────────────────────────────────────
+
+/**
+ * Export an RV session (.rv) file via the Export button dropdown.
+ * Returns the downloaded file path.
+ */
+export async function exportRvSession(page: Page, outputPath: string): Promise<void> {
+  const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+  const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+  await exportButton.click();
+  await page.waitForTimeout(200);
+  await page.click('text=Save RV Session (.rv)');
+  const download = await downloadPromise;
+  await download.saveAs(outputPath);
+}
+
+/**
+ * Load an RV session file from a path (for re-importing exported sessions).
+ * Waits for session state to be restored (outPoint > 0).
+ */
+export async function loadRvSessionFile(page: Page, filePath: string): Promise<void> {
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.outPoint > 0;
+    },
+    undefined,
+    { timeout: TIMEOUT_LONG }
+  );
 }
