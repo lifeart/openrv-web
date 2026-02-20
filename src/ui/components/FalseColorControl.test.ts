@@ -106,33 +106,33 @@ describe('FalseColorControl', () => {
     it('FALSE-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
-    it('FALSE-U024: button mouseleave restores background when disabled', () => {
+    it('FALSE-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new PointerEvent('pointerleave'));
       expect(button.style.background).toBe('transparent');
     });
 
-    it('FALSE-M20a: borderColor resets to transparent on mouseleave when inactive', () => {
+    it('FALSE-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
       expect(button.style.borderColor).toBe('var(--border-primary)');
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new PointerEvent('pointerleave'));
       expect(button.style.borderColor).toBe('transparent');
     });
 
-    it('FALSE-M20b: borderColor remains accent color on mouseleave when active', () => {
+    it('FALSE-M20b: borderColor remains accent color on pointerleave when active', () => {
       const el = control.render();
       falseColor.enable();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new PointerEvent('pointerleave'));
       expect(button.style.borderColor).toBe('var(--accent-primary)');
     });
   });
@@ -269,7 +269,7 @@ describe('FalseColorControl', () => {
       const dropdown = openDropdown();
       const arriBtn = dropdown.querySelector('button[data-preset="arri"]') as HTMLButtonElement;
 
-      arriBtn.dispatchEvent(new MouseEvent('mouseenter'));
+      arriBtn.dispatchEvent(new PointerEvent('pointerenter'));
 
       expect(arriBtn.style.cssText).toContain('var(--border-primary)'); // #444
     });

@@ -541,15 +541,15 @@ describe('LayoutManager', () => {
       const root = manager.getElement();
       const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
 
-      // Simulate mouseenter
-      leftHandle.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      // Simulate pointerenter
+      leftHandle.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
 
       // Should show accent color with higher opacity on hover
       expect(leftHandle.style.background).toBe('var(--accent-primary)');
       expect(leftHandle.style.opacity).toBe('0.5');
 
-      // Simulate mouseleave
-      leftHandle.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      // Simulate pointerleave
+      leftHandle.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
 
       // Should restore to subtle rest state
       expect(leftHandle.style.background).toBe('var(--border-primary)');

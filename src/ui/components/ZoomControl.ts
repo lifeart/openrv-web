@@ -52,6 +52,8 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     this.button = document.createElement('button');
     this.button.dataset.testid = 'zoom-control-button';
     this.button.title = 'Zoom level (F to fit, 0-4 for presets)';
+    this.button.setAttribute('aria-haspopup', 'menu');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -73,6 +75,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     this.button.addEventListener('click', (e) => {
       e.stopPropagation();
       this.dropdown.toggle(this.button);
+      this.button.setAttribute('aria-expanded', String(this.dropdown.isVisible()));
       this.updateButtonStyle();
     });
     this.button.addEventListener('mouseenter', () => {
@@ -103,6 +106,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
         }
       },
       onClose: () => {
+        this.button.setAttribute('aria-expanded', 'false');
         this.updateButtonStyle();
       },
     });

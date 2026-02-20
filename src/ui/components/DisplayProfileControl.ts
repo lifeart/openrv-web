@@ -15,6 +15,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { detectBrowserColorSpace, colorSpaceLabel, gamutLabel } from '../../color/BrowserColorSpace';
 import { getIconSvg } from './shared/Icons';
+import { TRANSITIONS } from './shared/theme';
 
 export interface DisplayProfileControlEvents extends EventMap {
   stateChanged: DisplayColorState;
@@ -131,7 +132,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
         display: flex; flex-direction: column; align-items: flex-start;
         padding: 6px 8px; border: 1px solid var(--border-secondary); border-radius: 3px;
         background: var(--bg-secondary); color: var(--text-secondary);
-        font-size: 11px; cursor: pointer; transition: all 0.1s ease; text-align: left;
+        font-size: 11px; cursor: pointer; transition: all ${TRANSITIONS.fast}; text-align: left;
       `;
 
       const labelSpan = document.createElement('span');

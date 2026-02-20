@@ -523,12 +523,12 @@ describe('Viewer', () => {
       viewer.onCursorColorChange(cursorCallback);
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      container.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
 
       expect(cursorCallback).toHaveBeenCalledWith(null, null);
     });
 
-    it('VWR-208: dispose removes mousemove and mouseleave listeners and clears callback', () => {
+    it('VWR-208: dispose removes mousemove and pointerleave listeners and clears callback', () => {
       const cursorCallback = vi.fn();
       viewer.onCursorColorChange(cursorCallback);
 
@@ -542,10 +542,10 @@ describe('Viewer', () => {
       );
       expect(mousemoveRemoves.length).toBe(1);
 
-      const mouseleaveRemoves = removeSpy.mock.calls.filter(
-        (call) => call[0] === 'mouseleave'
+      const pointerleaveRemoves = removeSpy.mock.calls.filter(
+        (call) => call[0] === 'pointerleave'
       );
-      expect(mouseleaveRemoves.length).toBe(1);
+      expect(pointerleaveRemoves.length).toBe(1);
 
       // cursorColorCallback should be cleared
       expect(testable(viewer).pixelSamplingManager.cursorColorCallback).toBeNull();

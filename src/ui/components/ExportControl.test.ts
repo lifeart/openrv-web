@@ -239,23 +239,23 @@ describe('ExportControl', () => {
   });
 
   describe('button interactions', () => {
-    it('EXPORT-U060: button changes background on mouseenter', () => {
+    it('EXPORT-U060: button changes background on pointerenter', () => {
       const el = control.render();
       const button = el.querySelector('button') as HTMLButtonElement;
       const originalBg = button.style.background;
 
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
 
       expect(button.style.background).not.toBe(originalBg);
       expect(button.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a hover
     });
 
-    it('EXPORT-U061: button restores transparent background on mouseleave', () => {
+    it('EXPORT-U061: button restores transparent background on pointerleave', () => {
       const el = control.render();
       const button = el.querySelector('button') as HTMLButtonElement;
 
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new PointerEvent('pointerleave'));
 
       expect(button.style.background).toBe('transparent');
     });

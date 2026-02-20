@@ -169,7 +169,7 @@ describe('VolumeControl', () => {
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
-    it('VOL-H06b: when expanded via click, slider remains visible on mouseleave', () => {
+    it('VOL-H06b: when expanded via click, slider remains visible on pointerleave', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
@@ -181,8 +181,8 @@ describe('VolumeControl', () => {
       expect(volumeControl.isSliderExpanded()).toBe(true);
       expect(sliderContainer.style.width).toBe('96px');
 
-      // Simulate mouseleave on the container
-      element.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      // Simulate pointerleave on the container
+      element.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
 
       // Should still be expanded because it was pinned via click
       expect(volumeControl.isSliderExpanded()).toBe(true);
@@ -236,18 +236,18 @@ describe('VolumeControl', () => {
       expect(muteButton.getAttribute('aria-label')).toBe('Toggle mute');
     });
 
-    it('VOL-H06f: hover-only expand still collapses on mouseleave when not pinned', () => {
+    it('VOL-H06f: hover-only expand still collapses on pointerleave when not pinned', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const sliderContainer = element.querySelector('div')!;
 
       // Hover to expand (without clicking)
-      element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      element.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('96px');
 
-      // Mouse leave should collapse since not pinned
-      element.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      // Pointer leave should collapse since not pinned
+      element.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('0px');
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });

@@ -99,21 +99,21 @@ describe('LuminanceVisualizationControl', () => {
   });
 
   describe('button styling', () => {
-    it('LUM-M20a: borderColor resets to transparent on mouseleave when inactive', () => {
+    it('LUM-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
       expect(button.style.borderColor).toBe('var(--border-primary)');
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new PointerEvent('pointerleave'));
       expect(button.style.borderColor).toBe('transparent');
     });
 
-    it('LUM-M20b: borderColor remains accent color on mouseleave when active', () => {
+    it('LUM-M20b: borderColor remains accent color on pointerleave when active', () => {
       const el = control.render();
       lumVis.setMode('hsv');
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new PointerEvent('pointerleave'));
       expect(button.style.borderColor).toBe('var(--accent-primary)');
     });
   });
