@@ -121,7 +121,7 @@ describe('OCIOProcessor WASM Integration', () => {
   });
 
   // -----------------------------------------------------------------------
-  // buildWasmPipeline — guard / null / event logic (no mock-value assertions)
+  // buildWasmPipeline — guard / null / argument transformation logic
   // -----------------------------------------------------------------------
 
   describe('WASM pipeline building', () => {
@@ -148,7 +148,7 @@ describe('OCIOProcessor WASM Integration', () => {
       expect(processor.getWasmResult()).not.toBeNull();
     });
 
-    it('PROC-WASM-014: buildWasmPipeline uses Auto input color space', () => {
+    it('PROC-WASM-014: buildWasmPipeline resolves Auto to detected color space', () => {
       processor.setState({
         inputColorSpace: 'Auto',
         detectedColorSpace: 'Linear sRGB',
@@ -158,7 +158,6 @@ describe('OCIOProcessor WASM Integration', () => {
 
       processor.buildWasmPipeline();
 
-      // Should have called with 'Linear sRGB' (the detected space)
       expect(mockExports.ocioGetDisplayProcessor).toHaveBeenCalledWith(
         expect.any(Number),
         'Linear sRGB',
@@ -187,7 +186,7 @@ describe('OCIOProcessor WASM Integration', () => {
       );
     });
 
-    it('PROC-WASM-016: buildWasmPipeline strips "None" look', () => {
+    it('PROC-WASM-016: buildWasmPipeline strips "None" look to empty string', () => {
       processor.setState({
         inputColorSpace: 'ACEScg',
         display: 'sRGB',
@@ -202,7 +201,7 @@ describe('OCIOProcessor WASM Integration', () => {
         'ACEScg',
         'sRGB',
         'ACES 1.0 SDR-video',
-        '', // "None" converted to empty string
+        '',
       );
     });
 
@@ -234,17 +233,14 @@ describe('OCIOProcessor WASM Integration', () => {
     it('PROC-WASM-021: bakeTo3DLUTAuto falls back to JS when WASM not available', () => {
       // No WASM pipeline attached
       const lut = processor.bakeTo3DLUTAuto(17);
-      // Should use JS baking path
       expect(lut.size).toBe(17);
       expect(lut.data.length).toBe(17 * 17 * 17 * 3);
-      // Verify WASM was NOT called
       expect(mockExports.ocioGetProcessorLUT3D).not.toHaveBeenCalled();
     });
 
     it('PROC-WASM-023: transformColorAuto falls back to JS when WASM not available', () => {
       // No WASM pipeline
       const result = processor.transformColorAuto(0.5, 0.5, 0.5);
-      // JS transform result (identity-ish for default config)
       expect(result).toBeDefined();
       expect(result.length).toBe(3);
       expect(mockExports.ocioApplyRGB).not.toHaveBeenCalled();

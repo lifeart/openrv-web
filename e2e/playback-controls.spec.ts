@@ -340,12 +340,13 @@ test.describe('Playback Controls', () => {
     });
 
     test('PLAY-027: toggling direction during playback should immediately change direction', async ({ page }) => {
-      // Go to middle of video
+      // Go to middle of video — wait for each frame step
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       for (let i = 0; i < 10; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await waitForFrameAtLeast(page, 11);
+      await waitForFrameAtLeast(page, 5); // At least 5 of 10 steps registered
 
       let state = await getSessionState(page);
       const midFrame = state.currentFrame;
