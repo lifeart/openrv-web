@@ -1928,12 +1928,14 @@ export class FileSourceNode extends BaseSourceNode {
 
     // Check if this is a JP2/J2K/JHC file - decode via WASM
     if (isJP2Extension(file.name)) {
+      let jp2BlobUrl: string | null = null;
       try {
         const buffer = await file.arrayBuffer();
-        const url = URL.createObjectURL(file);
-        await this.loadHDRFromBuffer(buffer, file.name, url);
+        jp2BlobUrl = URL.createObjectURL(file);
+        await this.loadHDRFromBuffer(buffer, file.name, jp2BlobUrl);
         return;
       } catch (err) {
+        if (jp2BlobUrl) URL.revokeObjectURL(jp2BlobUrl);
         console.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }

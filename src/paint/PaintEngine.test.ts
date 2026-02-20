@@ -518,6 +518,77 @@ describe('PaintEngine', () => {
       // Redo should fail since stack was cleared
       expect(engine.redo()).toBe(false);
     });
+
+    it('PAINT-012b: clearFrame undo correctly restores annotations', () => {
+      // 1. Draw strokes
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+      engine.beginStroke(0, { x: 0.2, y: 0.2 });
+      engine.endStroke();
+      
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+
+      // 2. Clear frame
+      const cleared = engine.clearFrame(0);
+      expect(cleared).toHaveLength(2);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+
+      // 3. Undo clearFrame -> should restore annotations
+      const result = engine.undo();
+      expect(result).toBe(true);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+      
+      // 4. Redo -> should clear frame again
+      const redoResult = engine.redo();
+      expect(redoResult).toBe(true);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+    });
+
+    it('PAINT-012c: redo clear preserves remote annotations added after undo', () => {
+      // 1. Draw a stroke on frame 0
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(1);
+
+      // 2. Clear frame 0
+      engine.clearFrame(0);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+
+      // 3. Undo the clear → restores the original stroke
+      engine.undo();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(1);
+
+      // 4. A remote peer adds an annotation (doesn't clear redo stack)
+      engine.addRemoteAnnotation({
+        type: 'text',
+        id: 'remote-1',
+        frame: 0,
+        user: 'peer',
+        version: 'all',
+        eye: 'both',
+        position: { x: 0.5, y: 0.5 },
+        color: [255, 0, 0, 255],
+        text: 'Remote note',
+        size: 24,
+        scale: 1,
+        rotation: 0,
+        spacing: 0,
+        font: 'sans-serif',
+        origin: 0,
+        startFrame: 0,
+        duration: 0,
+      } as any);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+
+      // 5. Redo the clear → should only remove the original stroke,
+      //    NOT the remote annotation added after undo
+      engine.redo();
+      const remaining = engine.getAnnotationsForFrame(0);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]!.type).toBe('text');
+    });
   });
 
   describe('serialization', () => {

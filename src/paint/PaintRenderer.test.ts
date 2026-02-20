@@ -2,7 +2,7 @@
  * PaintRenderer Unit Tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PaintRenderer, RenderOptions } from './PaintRenderer';
 import { PenStroke, TextAnnotation, BrushType, StrokeMode, TextOrigin, LineCap, LineJoin } from './types';
 
@@ -459,6 +459,38 @@ describe('PaintRenderer', () => {
       expect(() => {
         renderer.renderText(text, defaultOptions);
       }).not.toThrow();
+    });
+
+    it('RND-022b: applies letterSpacing safely when rendering text', () => {
+      const text: TextAnnotation = {
+        type: 'text',
+        id: 'spaced-text',
+        frame: 1,
+        user: 'test',
+        text: 'Spaced',
+        position: { x: 0.5, y: 0.5 },
+        color: [1, 1, 1, 1],
+        size: 24,
+        font: 'sans-serif',
+        scale: 1,
+        origin: TextOrigin.Center,
+        rotation: 0,
+        spacing: 5, // Custom spacing
+        startFrame: 1,
+        duration: 1,
+      };
+
+      renderer.resize(800, 600);
+      const ctx = renderer.getCanvas().getContext('2d') as any;
+      
+      // Need to spy on context methods since it's hard to read back letterSpacing in jsdom
+      const fillTextSpy = vi.spyOn(ctx, 'fillText');
+      
+      renderer.renderText(text, defaultOptions);
+
+      // Verify the letterSpacing was set on the context
+      expect(ctx.letterSpacing).toBe('5px');
+      expect(fillTextSpy).toHaveBeenCalled();
     });
 
     it('RND-023: handles different text origins', () => {

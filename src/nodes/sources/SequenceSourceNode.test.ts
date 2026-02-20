@@ -85,9 +85,9 @@ describe('SequenceSourceNode', () => {
 
   describe('loadFiles', () => {
     it('SSN-001: loads sequence from files', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 1920 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 1080 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 1920 });
+      Object.defineProperty(mockImage, 'height', { value: 1080 });
 
       const mockInfo = {
         name: 'test_sequence',
@@ -120,9 +120,9 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-002: updates properties after load', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 1920 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 1080 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 1920 });
+      Object.defineProperty(mockImage, 'height', { value: 1080 });
 
       const mockInfo = {
         name: 'test',
@@ -158,7 +158,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('accepts custom fps', async () => {
-      const mockImage = new Image();
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
       const mockInfo = {
         name: 'test',
         pattern: 'frame_####.png',
@@ -181,9 +181,9 @@ describe('SequenceSourceNode', () => {
 
   describe('getFrameImage', () => {
     it('SSN-004: loads frame on demand via FramePreloadManager', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const frame1 = { index: 0, frameNumber: 1, file: new File([''], 'frame_0001.png'), image: mockImage };
       const frame2 = { index: 1, frameNumber: 2, file: new File([''], 'frame_0002.png') };
@@ -212,9 +212,9 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-005: triggers preloading of adjacent frames', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const frames = [];
       for (let i = 1; i <= 20; i++) {
@@ -252,9 +252,9 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-006: distant frames are not all cached (LRU eviction via FramePreloadManager)', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       // Create a sequence larger than default cache (100 frames)
       const frameCount = 150;
@@ -300,9 +300,9 @@ describe('SequenceSourceNode', () => {
     });
 
     it('returns null for out of range frame', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const mockInfo = {
         name: 'test',
@@ -328,9 +328,9 @@ describe('SequenceSourceNode', () => {
 
   describe('dispose', () => {
     it('SSN-007: disposes sequence and preload manager on cleanup', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const mockInfo = {
         name: 'test',
@@ -362,9 +362,9 @@ describe('SequenceSourceNode', () => {
 
   describe('toJSON', () => {
     it('serializes node state', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 1920 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 1080 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 1920 });
+      Object.defineProperty(mockImage, 'height', { value: 1080 });
 
       const mockInfo = {
         name: 'test',
@@ -412,9 +412,9 @@ describe('SequenceSourceNode', () => {
 
   describe('getElement', () => {
     it('returns cached frame from preload manager', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const mockInfo = {
         name: 'test',
@@ -460,9 +460,9 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-LAZY-002: setPlaybackDirection and setPlaybackActive work after loadFiles', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const mockInfo = {
         name: 'test',
@@ -490,9 +490,9 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-LAZY-003: updatePlaybackBuffer triggers loading after loadFiles', async () => {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const frames = [];
       for (let i = 1; i <= 10; i++) {
@@ -533,9 +533,9 @@ describe('SequenceSourceNode', () => {
   describe('playback state regressions', () => {
     /** Helper: create and load a sequence of N frames */
     async function loadSequence(seqNode: SequenceSourceNode, frameCount: number) {
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       const frames = [];
       for (let i = 1; i <= frameCount; i++) {
@@ -655,9 +655,9 @@ describe('SequenceSourceNode', () => {
       // Regression: getElement must only return frames from the preloadManager cache,
       // not from SequenceFrame.image set directly (e.g., by createSequenceInfo).
       // This ensures lazy loading: frames are only available after explicit load.
-      const mockImage = new Image();
-      Object.defineProperty(mockImage, 'naturalWidth', { value: 100 });
-      Object.defineProperty(mockImage, 'naturalHeight', { value: 100 });
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      Object.defineProperty(mockImage, 'width', { value: 100 });
+      Object.defineProperty(mockImage, 'height', { value: 100 });
 
       vi.mocked(createSequenceInfo).mockResolvedValue({
         name: 'test',

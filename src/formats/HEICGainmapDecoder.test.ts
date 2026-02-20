@@ -35,7 +35,16 @@ function createTestHEICGainmapBuffer(options: {
   includeNclx?: boolean;
   nclxTransfer?: number;
   nclxPrimaries?: number;
-  /** If true, include a tmap box in ipco with the given float values */
+  /** If provided, include a tmap box in ipco with ISO 21496-1 structure.
+   *  Specify alternateHdrHeadroomN/D for headroom, or gainMapMaxN/D for fallback. */
+  tmapData?: {
+    channelCount?: 1 | 3;
+    gainMapMaxN?: number[];
+    gainMapMaxD?: number[];
+    alternateHdrHeadroomN?: number;
+    alternateHdrHeadroomD?: number;
+  };
+  /** @deprecated Use tmapData instead. Raw float values for legacy tmap format. */
   tmapFloatValues?: number[];
   /** If true, include a fake hvcC box in ipco associated with gainmap item */
   includeHvcC?: boolean;
@@ -61,6 +70,7 @@ function createTestHEICGainmapBuffer(options: {
     includeNclx = false,
     nclxTransfer = 16,
     nclxPrimaries = 9,
+    tmapData,
     tmapFloatValues,
     includeHvcC = false,
     hvcCData = [0x01, 0x01, 0x60, 0x00, 0x00, 0x00, 0x00], // minimal hvcC content
@@ -202,8 +212,55 @@ function createTestHEICGainmapBuffer(options: {
     propertyCount++;
   }
 
-  // Property: tmap box
-  if (tmapFloatValues && tmapFloatValues.length > 0) {
+  // Property: tmap box (ISO 21496-1 format)
+  if (tmapData) {
+    const cc = tmapData.channelCount ?? 1;
+    const tmapBytes: number[] = [];
+    // version=0, flags (bit 0 = channelCount flag: 0=1ch, 1=3ch)
+    tmapBytes.push(0); // version
+    tmapBytes.push(0, 0, cc === 3 ? 1 : 0); // flags
+
+    // Helper: push uint32 big-endian
+    const pushU32 = (v: number) => {
+      tmapBytes.push((v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff);
+    };
+
+    // gainMapMin N/D (all zeros for simplicity)
+    for (let i = 0; i < cc; i++) pushU32(0); // numerators
+    for (let i = 0; i < cc; i++) pushU32(1); // denominators
+
+    // gainMapMax N/D
+    const gmMaxN = tmapData.gainMapMaxN ?? Array(cc).fill(0);
+    const gmMaxD = tmapData.gainMapMaxD ?? Array(cc).fill(1);
+    for (let i = 0; i < cc; i++) pushU32(gmMaxN[i] ?? 0);
+    for (let i = 0; i < cc; i++) pushU32(gmMaxD[i] ?? 1);
+
+    // gainMapGamma N/D (1/1 = gamma 1.0)
+    for (let i = 0; i < cc; i++) pushU32(1);
+    for (let i = 0; i < cc; i++) pushU32(1);
+
+    // baseOffset N/D (0/1)
+    for (let i = 0; i < cc; i++) pushU32(0);
+    for (let i = 0; i < cc; i++) pushU32(1);
+
+    // alternateOffset N/D (0/1)
+    for (let i = 0; i < cc; i++) pushU32(0);
+    for (let i = 0; i < cc; i++) pushU32(1);
+
+    // baseHdrHeadroom N/D
+    pushU32(0); pushU32(1);
+
+    // alternateHdrHeadroom N/D
+    pushU32(tmapData.alternateHdrHeadroomN ?? 0);
+    pushU32(tmapData.alternateHdrHeadroomD ?? 1);
+
+    const tmapSize = 8 + tmapBytes.length;
+    ipcoContent.push(...uint32BE(tmapSize));
+    ipcoContent.push(...strBytes('tmap'));
+    ipcoContent.push(...tmapBytes);
+    propertyCount++;
+  } else if (tmapFloatValues && tmapFloatValues.length > 0) {
+    // Legacy: raw float values (kept for backwards compatibility but won't parse with ISO 21496-1 parser)
     const tmapDataSize = tmapFloatValues.length * 4;
     const tmapSize = 8 + tmapDataSize;
     ipcoContent.push(...uint32BE(tmapSize));
@@ -673,7 +730,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-HDR-003: tmap box when no XMP', () => {
       const buf = createTestHEICGainmapBuffer({
         includeXMP: false,
-        tmapFloatValues: [4.0],
+        tmapData: { alternateHdrHeadroomN: 4, alternateHdrHeadroomD: 1 },
       });
       const info = parseHEICGainmapInfo(buf);
       expect(info).not.toBeNull();
@@ -684,7 +741,7 @@ describe('HEICGainmapDecoder', () => {
       const buf = createTestHEICGainmapBuffer({
         includeXMP: true,
         xmpHeadroom: 6.0,
-        tmapFloatValues: [3.0],
+        tmapData: { alternateHdrHeadroomN: 3, alternateHdrHeadroomD: 1 },
       });
       const info = parseHEICGainmapInfo(buf);
       expect(info).not.toBeNull();
@@ -763,11 +820,12 @@ describe('HEICGainmapDecoder', () => {
   });
 
   // =========================================================================
-  // G. tmap heuristic Tests
+  // G. tmap ISO 21496-1 parsing Tests
   // =========================================================================
 
-  describe('tmap headroom heuristic', () => {
-    it('HEIC-TMAP-001: non-headroom float values do not produce false positive', () => {
+  describe('tmap ISO 21496-1 parsing', () => {
+    it('HEIC-TMAP-001: invalid tmap data falls back to default headroom', () => {
+      // Legacy float format won't parse as ISO 21496-1 — should fall back
       const buf = createTestHEICGainmapBuffer({
         includeXMP: false,
         tmapFloatValues: [0.0, 100.0, -5.0],
@@ -777,7 +835,8 @@ describe('HEICGainmapDecoder', () => {
       expect(info!.headroom).toBe(2.0); // fallback
     });
 
-    it('HEIC-TMAP-002: very small value (0.05) is not matched', () => {
+    it('HEIC-TMAP-002: truncated tmap falls back to default', () => {
+      // A single float value is too small for ISO 21496-1 structure
       const buf = createTestHEICGainmapBuffer({
         includeXMP: false,
         tmapFloatValues: [0.05],
@@ -787,30 +846,35 @@ describe('HEICGainmapDecoder', () => {
       expect(info!.headroom).toBe(2.0);
     });
 
-    it('HEIC-TMAP-003: value at upper boundary (20.0) is not matched', () => {
+    it('HEIC-TMAP-003: tmap with zero headroom falls back to default', () => {
       const buf = createTestHEICGainmapBuffer({
         includeXMP: false,
-        tmapFloatValues: [20.0],
+        tmapData: { alternateHdrHeadroomN: 0, alternateHdrHeadroomD: 1 },
       });
       const info = parseHEICGainmapInfo(buf);
       expect(info).not.toBeNull();
-      expect(info!.headroom).toBe(2.0);
+      expect(info!.headroom).toBe(2.0); // fallback (zero headroom)
     });
 
-    it('HEIC-TMAP-004: value just inside range matches', () => {
+    it('HEIC-TMAP-004: tmap with fractional headroom parses correctly', () => {
       const buf = createTestHEICGainmapBuffer({
         includeXMP: false,
-        tmapFloatValues: [0.2],
+        tmapData: { alternateHdrHeadroomN: 7, alternateHdrHeadroomD: 2 },
       });
       const info = parseHEICGainmapInfo(buf);
       expect(info).not.toBeNull();
-      expect(info!.headroom).toBeCloseTo(0.2, 2);
+      expect(info!.headroom).toBeCloseTo(3.5, 2);
     });
 
-    it('HEIC-TMAP-005: scans in 4-byte increments, takes first match', () => {
+    it('HEIC-TMAP-005: tmap with gainMapMax fallback when headroom is zero', () => {
       const buf = createTestHEICGainmapBuffer({
         includeXMP: false,
-        tmapFloatValues: [0.0, 5.5, 10.0],
+        tmapData: {
+          alternateHdrHeadroomN: 0,
+          alternateHdrHeadroomD: 1,
+          gainMapMaxN: [11],
+          gainMapMaxD: [2],
+        },
       });
       const info = parseHEICGainmapInfo(buf);
       expect(info).not.toBeNull();

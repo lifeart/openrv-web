@@ -792,6 +792,35 @@ export class Renderer implements RendererBackend {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+    // Fast path: ImageBitmap straight to GPU
+    if (image.imageBitmap) {
+      try {
+        if (this._currentUnpackColorSpace !== 'srgb') {
+          try {
+            gl.unpackColorSpace = 'srgb';
+            this._currentUnpackColorSpace = 'srgb';
+          } catch (e) {}
+        }
+
+        PerfTrace.begin('texImage2D(ImageBitmap)');
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA8,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          image.imageBitmap
+        );
+        PerfTrace.end('texImage2D(ImageBitmap)');
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        image.textureNeedsUpdate = false;
+        return;
+      } catch (e) {
+        log.warn('ImageBitmap texImage2D failed, falling back:', e);
+      }
+    }
+
     // Standard TypedArray upload path
     // For 3-channel float images (e.g. RGB EXR), pad to RGBA so mipmaps can be generated.
     // RGB32F is not color-renderable in WebGL2, so generateMipmap would fail on it.

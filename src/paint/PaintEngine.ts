@@ -750,7 +750,11 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
         this.emit('annotationsChanged', annotation.frame);
       }
     } else if (lastAction.type === 'clear') {
-      this.state.annotations.set(lastAction.frame, []);
+      // Only remove the annotations that were part of the original clear,
+      // preserving any annotations added after the undo point
+      const current = this.state.annotations.get(lastAction.frame) || [];
+      const idsToRemove = new Set(lastAction.annotations.map(a => a.id));
+      this.state.annotations.set(lastAction.frame, current.filter(a => !idsToRemove.has(a.id)));
       this.emit('annotationsChanged', lastAction.frame);
     }
 

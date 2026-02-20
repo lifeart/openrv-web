@@ -403,8 +403,6 @@ describe('SphericalProjection', () => {
     it('SP-CLS-019: returns valid uniforms when disabled', () => {
       const u = sp.getProjectionUniforms(800, 600);
       expect(u.u_sphericalEnabled).toBe(0);
-      expect(u.u_invViewProj).toBeInstanceOf(Float32Array);
-      expect(u.u_invViewProj.length).toBe(16);
     });
 
     it('SP-CLS-020: returns enabled=1 when enabled', () => {

@@ -8,7 +8,7 @@ export interface SequenceFrame {
   frameNumber: number; // Original frame number from filename
   file: File;
   url?: string;       // Object URL when loaded
-  image?: HTMLImageElement;
+  image?: ImageBitmap;
 }
 
 export interface SequenceInfo {
@@ -122,47 +122,40 @@ export function sortByFrameNumber(files: File[]): SequenceFrame[] {
 }
 
 /**
- * Load a single frame image
+ * Load a single frame image using background decoders
  * @param frame - The frame to load
  * @param signal - Optional AbortSignal to cancel the load operation
  */
-export function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+export async function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal): Promise<ImageBitmap> {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+  }
+
+  if (frame.image) {
+    return frame.image;
+  }
+
+  try {
+    // createImageBitmap runs on a background thread and doesn't block the main thread.
+    // We explicitly disable colorspace conversion and premultiplied alpha so we get raw pixels.
+    const bitmap = await createImageBitmap(frame.file, {
+      premultiplyAlpha: 'none',
+      colorSpaceConversion: 'none'
+    });
+    
     if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
-      return;
+      bitmap.close();
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
     }
 
-    if (frame.image) {
-      resolve(frame.image);
-      return;
+    frame.image = bitmap;
+    return bitmap;
+  } catch (err: any) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
     }
-
-    // Create object URL if not exists
-    if (!frame.url) {
-      frame.url = URL.createObjectURL(frame.file);
-    }
-
-    const img = new Image();
-
-    const onAbort = () => {
-      img.src = '';
-      reject(signal!.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    img.onload = () => {
-      signal?.removeEventListener('abort', onAbort);
-      frame.image = img;
-      resolve(img);
-    };
-    img.onerror = () => {
-      signal?.removeEventListener('abort', onAbort);
-      reject(new Error(`Failed to load frame: ${frame.file.name}`));
-    };
-    img.src = frame.url;
-  });
+    throw new Error(`Failed to load frame: ${frame.file.name} - ${err.message}`);
+  }
 }
 
 /**
@@ -185,7 +178,7 @@ export async function preloadFrames(
   const start = Math.max(0, currentIndex - windowSize);
   const end = Math.min(frames.length - 1, currentIndex + windowSize);
 
-  const loadPromises: Promise<HTMLImageElement>[] = [];
+  const loadPromises: Promise<ImageBitmap>[] = [];
 
   for (let i = start; i <= end; i++) {
     const frame = frames[i];
@@ -210,11 +203,14 @@ export function releaseDistantFrames(
     if (distance > keepWindow) {
       const frame = frames[i];
       if (frame) {
+        if (frame.image) {
+          frame.image.close();
+          frame.image = undefined;
+        }
         if (frame.url) {
           URL.revokeObjectURL(frame.url);
           frame.url = undefined;
         }
-        frame.image = undefined;
       }
     }
   }
@@ -257,8 +253,8 @@ export async function createSequenceInfo(
     frames,
     startFrame: frames[0]!.frameNumber,
     endFrame: frames[frames.length - 1]!.frameNumber,
-    width: firstImage.naturalWidth,
-    height: firstImage.naturalHeight,
+    width: firstImage.width,
+    height: firstImage.height,
     fps,
     missingFrames,
   };
@@ -307,11 +303,14 @@ export function getFrameIndexByNumber(sequenceInfo: SequenceInfo, frameNumber: n
  */
 export function disposeSequence(frames: SequenceFrame[]): void {
   for (const frame of frames) {
+    if (frame.image) {
+      frame.image.close();
+      frame.image = undefined;
+    }
     if (frame.url) {
       URL.revokeObjectURL(frame.url);
       frame.url = undefined;
     }
-    frame.image = undefined;
   }
 }
 

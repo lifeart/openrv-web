@@ -21,6 +21,7 @@ export interface IPImageOptions {
   data?: ArrayBuffer;
   metadata?: ImageMetadata;
   videoFrame?: VideoFrame;
+  imageBitmap?: ImageBitmap | null;
 }
 
 export class IPImage {
@@ -33,6 +34,9 @@ export class IPImage {
 
   /** Browser VideoFrame for direct GPU upload (HDR video path) */
   videoFrame: VideoFrame | null;
+
+  /** Decoded ImageBitmap for zero-copy GPU upload (image sequences) */
+  imageBitmap: ImageBitmap | null;
 
   // WebGL texture handle (set by renderer)
   texture: WebGLTexture | null = null;
@@ -48,6 +52,7 @@ export class IPImage {
     this.dataType = options.dataType;
     this.metadata = options.metadata ?? {};
     this.videoFrame = options.videoFrame ?? null;
+    this.imageBitmap = options.imageBitmap ?? null;
 
     if (options.data) {
       this.data = options.data;
@@ -139,6 +144,7 @@ export class IPImage {
    *   channels: 4,
    *   dataType: 'uint8',
    *   videoFrame: someVideoFrame,
+   *   // or imageBitmap: someBitmap
    * });
    *
    * try {
@@ -156,6 +162,14 @@ export class IPImage {
         // Already closed
       }
       this.videoFrame = null;
+    }
+    if (this.imageBitmap) {
+      try {
+        this.imageBitmap.close();
+      } catch {
+        // Already closed
+      }
+      this.imageBitmap = null;
     }
   }
 

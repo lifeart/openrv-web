@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deflateSync } from 'node:zlib';
 import {
   decodeEXR,
   exrToIPImage,
@@ -615,18 +614,13 @@ describe('EXRDecoder', () => {
       }
     });
 
-    it('EXR-U091: should accept PXR24 compression', async () => {
-      // PXR24 compression is now supported. The test EXR has uncompressed data layout
-      // but PXR24 header, so decompression may fail on the data content rather than
-      // rejecting the compression type. The key is it does NOT throw "Unsupported EXR compression".
+    it('EXR-U091: should accept PXR24 compression', () => {
+      // PXR24 is fully supported — verify getEXRInfo accepts the compression type
+      // (actual decode tested in PXR24 compression suite: U200-U204)
       const buffer = createTestEXR({ compression: EXRCompression.PXR24 });
-      try {
-        await decodeEXR(buffer);
-      } catch (e: unknown) {
-        const msg = (e as Error).message;
-        // It should NOT reject PXR24 as unsupported compression
-        expect(msg).not.toMatch(/Unsupported EXR compression.*PXR24/);
-      }
+      const info = getEXRInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.compression).toBe('PXR24');
     });
 
     it('EXR-U092: should reject B44 compression', async () => {
@@ -748,6 +742,14 @@ describe('EXRDecoder', () => {
 
   describe('PXR24 compression', () => {
     /**
+     * Compress data using deflate via CompressionStream.
+     */
+    async function deflateCompress(input: Uint8Array): Promise<Uint8Array> {
+      const { deflateSync } = await import('node:zlib');
+      return new Uint8Array(deflateSync(Buffer.from(input)));
+    }
+
+    /**
      * Create a valid PXR24-compressed EXR file for testing.
      * PXR24 encoding:
      * 1. For FLOAT: truncate to 24 bits, separate into 3 byte planes (MSB, mid, low)
@@ -755,7 +757,7 @@ describe('EXRDecoder', () => {
      * 2. Delta-encode the byte stream
      * 3. zlib deflate
      */
-    function createPXR24EXR(options: {
+    async function createPXR24EXR(options: {
       width?: number;
       height?: number;
       channels?: string[];
@@ -771,12 +773,11 @@ describe('EXRDecoder', () => {
       } = options;
 
       const sortedChannels = [...channels].sort();
-      const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
 
       // Generate default pixel values if not provided
-      const pixelValues = options.pixelValues ?? Array.from({ length: height }, (_, y) =>
+      const pixelValues = options.pixelValues ?? Array.from({ length: height }, () =>
         sortedChannels.map((ch, ci) =>
-          Array.from({ length: width }, (_, x) => {
+          Array.from({ length: width }, () => {
             if (ch === 'R') return 0.5;
             if (ch === 'G') return 0.25;
             if (ch === 'B') return 0.75;
@@ -955,8 +956,8 @@ describe('EXRDecoder', () => {
         }
 
         // zlib deflate
-        const compressed = deflateSync(Buffer.from(deltaEncoded));
-        compressedBlocks.push(new Uint8Array(compressed));
+        const compressed = await deflateCompress(deltaEncoded);
+        compressedBlocks.push(compressed);
       }
 
       // Calculate offset table
@@ -1013,7 +1014,7 @@ describe('EXRDecoder', () => {
         pixelValues.push(row);
       }
 
-      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
+      const buffer = await createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
       const result = await decodeEXR(buffer);
 
       expect(result.width).toBe(width);
@@ -1054,7 +1055,7 @@ describe('EXRDecoder', () => {
         pixelValues.push(row);
       }
 
-      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
+      const buffer = await createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
       const result = await decodeEXR(buffer);
 
       expect(result.width).toBe(width);
@@ -1078,7 +1079,7 @@ describe('EXRDecoder', () => {
       const width = 4;
       const height = 1;
       const channels = ['R', 'G', 'B'];
-      const sortedChannels = [...channels].sort(); // B, G, R
+      // Channels in sorted order: B, G, R
 
       // Gradient values
       const pixelValues: number[][][] = [[
@@ -1090,7 +1091,7 @@ describe('EXRDecoder', () => {
         [0.0, 0.25, 0.5, 1.0],
       ]];
 
-      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
+      const buffer = await createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
       const result = await decodeEXR(buffer);
 
       expect(result.width).toBe(width);
@@ -1118,8 +1119,8 @@ describe('EXRDecoder', () => {
       expect(result.data[idx1 + 2]).toBeCloseTo(0.2, 1);
     });
 
-    it('EXR-U203: should report PXR24 compression in getEXRInfo', () => {
-      const buffer = createPXR24EXR();
+    it('EXR-U203: should report PXR24 compression in getEXRInfo', async () => {
+      const buffer = await createPXR24EXR();
       const info = getEXRInfo(buffer);
       expect(info).not.toBeNull();
       expect(info!.compression).toBe('PXR24');
@@ -1140,7 +1141,7 @@ describe('EXRDecoder', () => {
         sortedChannels.map(() => [piVal, piVal])[3]!,
       ]];
 
-      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
+      const buffer = await createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
       const result = await decodeEXR(buffer);
 
       // PXR24 truncates 8 bits of mantissa for FLOAT

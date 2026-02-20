@@ -816,52 +816,68 @@ async function decompressData(
 }
 
 /**
- * Decompress zlib/deflate data using DecompressionStream
+ * Inflate zlib/deflate compressed data.
+ * Shared by ZIP and PXR24 decompression.
+ *
+ * Uses Node.js zlib.inflateSync when available (avoids stray Z_BUF_ERROR
+ * from DecompressionStream in some Node.js versions), falls back to
+ * DecompressionStream for browser environments.
+ */
+async function inflateRaw(compressedData: Uint8Array): Promise<Uint8Array> {
+  // Prefer Node.js synchronous inflate to avoid DecompressionStream Z_BUF_ERROR
+  if (typeof globalThis.process !== 'undefined' && globalThis.process.versions?.node) {
+    try {
+      // Dynamic import to keep browser bundle clean
+      const { inflateSync } = await import('node:zlib');
+      return new Uint8Array(inflateSync(Buffer.from(compressedData)));
+    } catch {
+      // Fall through to DecompressionStream
+    }
+  }
+
+  if (typeof DecompressionStream === 'undefined') {
+    throw new DecoderError('EXR', 'Decompression requires DecompressionStream support');
+  }
+
+  const ds = new DecompressionStream('deflate');
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+
+  // Write compressed data - need to create a new Uint8Array to ensure ArrayBuffer type
+  writer.write(new Uint8Array(compressedData));
+  writer.close();
+
+  // Read decompressed data
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalLength += value.length;
+  }
+
+  // Combine chunks
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return result;
+}
+
+/**
+ * Decompress zlib/deflate data using DecompressionStream + EXR predictor
  */
 async function decompressZlib(
   compressedData: Uint8Array,
   _uncompressedSize: number
 ): Promise<Uint8Array> {
-  // Try using DecompressionStream if available
-  if (typeof DecompressionStream !== 'undefined') {
-    try {
-      const ds = new DecompressionStream('deflate');
-      const writer = ds.writable.getWriter();
-      const reader = ds.readable.getReader();
-
-      // Write compressed data - need to create a new Uint8Array to ensure ArrayBuffer type
-      writer.write(new Uint8Array(compressedData));
-      writer.close();
-
-      // Read decompressed data
-      const chunks: Uint8Array[] = [];
-      let totalLength = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        totalLength += value.length;
-      }
-
-      // Combine chunks
-      const result = new Uint8Array(totalLength);
-      let offset = 0;
-      for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.length;
-      }
-
-      // Apply EXR's predictor reconstruction
-      return reconstructPredictor(result);
-    } catch {
-      // Fall through to manual decompression
-    }
-  }
-
-  // Fallback: simple deflate implementation for small files
-  // For production, you'd want a proper zlib library
-  throw new DecoderError('EXR', 'ZIP decompression requires DecompressionStream support');
+  const result = await inflateRaw(compressedData);
+  return reconstructPredictor(result);
 }
 
 /**
@@ -913,35 +929,9 @@ async function decompressPXR24(
   numLines: number,
   channelSizes: number[],
 ): Promise<Uint8Array> {
-  // Step 1: Inflate compressed data
-  let inflated: Uint8Array;
-  if (typeof DecompressionStream !== 'undefined') {
-    const ds = new DecompressionStream('deflate');
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
-
-    writer.write(new Uint8Array(compressedData));
-    writer.close();
-
-    const chunks: Uint8Array[] = [];
-    let totalLength = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      totalLength += value.length;
-    }
-
-    inflated = new Uint8Array(totalLength);
-    let off = 0;
-    for (const chunk of chunks) {
-      inflated.set(chunk, off);
-      off += chunk.length;
-    }
-  } else {
-    throw new DecoderError('EXR', 'PXR24 decompression requires DecompressionStream support');
-  }
+  // Step 1: Inflate compressed data — reuse the shared decompressZlib helper
+  // (skip the EXR predictor reconstruction since PXR24 has its own byte rearrangement)
+  const inflated = await inflateRaw(compressedData);
 
   // Step 2: Undo delta encoding (cumulative sum)
   // PXR24 applies delta encoding across the entire inflated buffer

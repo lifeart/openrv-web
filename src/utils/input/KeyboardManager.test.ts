@@ -297,6 +297,42 @@ describe('KeyboardManager', () => {
 
       expect(mockHandler).toHaveBeenCalled();
     });
+
+    it('KBM-024b: respects contextual keyboard manager', () => {
+      const globalHandler = vi.fn();
+      const contextualHandler = vi.fn();
+      keyboardManager.register({ code: 'KeyR' }, globalHandler, 'Global R');
+
+      const mockContextualManager = {
+        resolve: vi.fn().mockReturnValue({ handler: contextualHandler, description: 'Context R' })
+      };
+      
+      keyboardManager.setContextualManager(mockContextualManager as any);
+
+      const mockEvent = {
+        code: 'KeyR',
+        key: 'r',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockContextualManager.resolve).toHaveBeenCalledWith({
+        code: 'KeyR',
+        ctrl: false,
+        shift: false,
+        alt: false,
+        meta: false
+      });
+      expect(contextualHandler).toHaveBeenCalled();
+      expect(globalHandler).not.toHaveBeenCalled();
+      expect(mockEvent.preventDefault).toHaveBeenCalled();
+    });
   });
 
   describe('enable/disable', () => {

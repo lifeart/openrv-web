@@ -129,7 +129,7 @@ export class LuminanceAnalyzer {
     // Read previous frame's result from previous PBO using its own fence
     if (!this.firstFrame && prevPBO && this.pboFences[prevPBOIndex]) {
       // Check if previous PBO's fence is signaled
-      const status = gl.clientWaitSync(this.pboFences[prevPBOIndex]!, 0, 0);
+      const status = gl.clientWaitSync(this.pboFences[prevPBOIndex]!, gl.SYNC_FLUSH_COMMANDS_BIT, 0);
       if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, prevPBO);
         const pixels = new Float32Array(4);

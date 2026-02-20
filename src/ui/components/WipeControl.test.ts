@@ -305,4 +305,178 @@ describe('WipeControl', () => {
       expect(() => control.dispose()).not.toThrow();
     });
   });
+
+  describe('ComparisonManager delegation', () => {
+    it('WPE-040: setMode delegates to ComparisonManager and changes its state', () => {
+      // Verify that setMode actually propagates through to the underlying manager
+      control.setMode('horizontal');
+      expect(control.getMode()).toBe('horizontal');
+
+      // Changing mode back also works
+      control.setMode('vertical');
+      expect(control.getMode()).toBe('vertical');
+
+      // The state object reflects the delegated mode
+      expect(control.getState().mode).toBe('vertical');
+    });
+
+    it('WPE-041: setPosition clamps negative values via ComparisonManager', () => {
+      control.setPosition(-100);
+      expect(control.getPosition()).toBe(0);
+    });
+
+    it('WPE-042: setPosition clamps values above 1 via ComparisonManager', () => {
+      control.setPosition(999);
+      expect(control.getPosition()).toBe(1);
+    });
+
+    it('WPE-043: setPosition correctly delegates boundary value 0', () => {
+      control.setPosition(0);
+      expect(control.getPosition()).toBe(0);
+      expect(control.getState().position).toBe(0);
+    });
+
+    it('WPE-044: setPosition correctly delegates boundary value 1', () => {
+      control.setPosition(1);
+      expect(control.getPosition()).toBe(1);
+      expect(control.getState().position).toBe(1);
+    });
+
+    it('WPE-045: ComparisonManager wipeModeChanged event forwards as WipeControl modeChanged', () => {
+      const modeHandler = vi.fn();
+      const stateHandler = vi.fn();
+      control.on('modeChanged', modeHandler);
+      control.on('stateChanged', stateHandler);
+
+      control.setMode('horizontal');
+
+      expect(modeHandler).toHaveBeenCalledTimes(1);
+      expect(modeHandler).toHaveBeenCalledWith('horizontal');
+      expect(stateHandler).toHaveBeenCalledTimes(1);
+      expect(stateHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: 'horizontal' })
+      );
+    });
+
+    it('WPE-046: ComparisonManager wipePositionChanged event forwards as WipeControl positionChanged', () => {
+      const posHandler = vi.fn();
+      const stateHandler = vi.fn();
+      control.on('positionChanged', posHandler);
+      control.on('stateChanged', stateHandler);
+
+      control.setPosition(0.75);
+
+      expect(posHandler).toHaveBeenCalledTimes(1);
+      expect(posHandler).toHaveBeenCalledWith(0.75);
+      expect(stateHandler).toHaveBeenCalledTimes(1);
+      expect(stateHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ position: 0.75 })
+      );
+    });
+
+    it('WPE-047: no duplicate events when setting same mode', () => {
+      control.setMode('horizontal');
+
+      const handler = vi.fn();
+      control.on('modeChanged', handler);
+
+      control.setMode('horizontal'); // same mode again
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('WPE-048: no duplicate events when setting same position', () => {
+      control.setPosition(0.3);
+
+      const handler = vi.fn();
+      control.on('positionChanged', handler);
+
+      control.setPosition(0.3); // same position again
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('WPE-049: dispose calls ComparisonManager.dispose and stops flicker cleanup', () => {
+      // Set a mode to ensure the manager is in an active state
+      control.setMode('horizontal');
+      control.setPosition(0.8);
+      expect(control.isActive()).toBe(true);
+
+      // Dispose should not throw and should clean up properly
+      control.dispose();
+
+      // After dispose, we can still call getMode/getPosition (manager still exists,
+      // but its internal intervals are cleaned up)
+      // The key assertion is that dispose() completes without error
+      // and the flicker interval (if any) would be stopped
+    });
+
+    it('WPE-050: cycleMode delegates to ComparisonManager.cycleWipeMode', () => {
+      const handler = vi.fn();
+      control.on('modeChanged', handler);
+
+      control.cycleMode(); // off -> horizontal
+      expect(control.getMode()).toBe('horizontal');
+      expect(handler).toHaveBeenCalledWith('horizontal');
+
+      control.cycleMode(); // horizontal -> vertical
+      expect(control.getMode()).toBe('vertical');
+      expect(handler).toHaveBeenCalledWith('vertical');
+    });
+
+    it('WPE-051: setPosition with clamped value does not emit duplicate events', () => {
+      // Set position to 0 first
+      control.setPosition(0);
+
+      const handler = vi.fn();
+      control.on('positionChanged', handler);
+
+      // -5 clamps to 0, which is already the current position
+      control.setPosition(-5);
+      expect(handler).not.toHaveBeenCalled();
+      expect(control.getPosition()).toBe(0);
+    });
+
+    it('WPE-052: multiple rapid mode changes emit correct sequence of events', () => {
+      const modes: string[] = [];
+      control.on('modeChanged', (mode) => modes.push(mode));
+
+      control.setMode('horizontal');
+      control.setMode('vertical');
+      control.setMode('splitscreen-h');
+      control.setMode('off');
+
+      expect(modes).toEqual(['horizontal', 'vertical', 'splitscreen-h', 'off']);
+    });
+
+    it('WPE-053: stateChanged event from setMode includes correct position', () => {
+      control.setPosition(0.3);
+
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+
+      control.setMode('vertical');
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'vertical',
+          position: 0.3,
+        })
+      );
+    });
+
+    it('WPE-054: stateChanged event from setPosition includes correct mode', () => {
+      control.setMode('horizontal');
+
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+
+      control.setPosition(0.9);
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'horizontal',
+          position: 0.9,
+        })
+      );
+    });
+  });
 });

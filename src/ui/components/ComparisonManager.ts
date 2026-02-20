@@ -18,7 +18,7 @@ import {
 
 export type { WipeMode };
 export type ABSource = 'A' | 'B' | 'C' | 'D';
-export type BlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
+export type ComparisonBlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
 
 export interface QuadViewState {
   enabled: boolean;
@@ -32,7 +32,7 @@ export const DEFAULT_QUAD_VIEW_STATE: QuadViewState = {
 };
 
 export interface BlendModeState {
-  mode: BlendMode;
+  mode: ComparisonBlendMode;
   onionOpacity: number;    // 0-1 for onion skin mode
   flickerRate: number;     // Hz for flicker mode (1-30)
   blendRatio: number;      // 0-1 for blend mode (0.5 = 50/50)
@@ -223,7 +223,7 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
    * If the specified mode is already active, turns it off.
    * Otherwise, activates the specified mode.
    */
-  toggleBlendMode(mode: BlendMode): void {
+  toggleBlendMode(mode: ComparisonBlendMode): void {
     if (this.state.blendMode.mode === mode) {
       this.setBlendMode('off');
     } else {
@@ -235,7 +235,7 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
    * Set the active blend mode.
    * Automatically disables wipe mode and difference matte when enabling a blend mode.
    */
-  setBlendMode(mode: BlendMode): void {
+  setBlendMode(mode: ComparisonBlendMode): void {
     if (this.state.blendMode.mode !== mode) {
       const previousMode = this.state.blendMode.mode;
       this.state.blendMode.mode = mode;
@@ -271,7 +271,7 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
     }
   }
 
-  getBlendMode(): BlendMode {
+  getBlendMode(): ComparisonBlendMode {
     return this.state.blendMode.mode;
   }
 

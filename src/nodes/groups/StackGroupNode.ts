@@ -226,8 +226,8 @@ export class StackGroupNode extends BaseGroupNode {
       Math.max(0, Math.min(1, box[3])),
     ];
     // Enforce min < max
-    if (clamped[0] > clamped[1]) clamped[1] = clamped[0] + 0.001;
-    if (clamped[2] > clamped[3]) clamped[3] = clamped[2] + 0.001;
+    if (clamped[0] > clamped[1]) clamped[1] = Math.min(1, clamped[0] + 0.001);
+    if (clamped[2] > clamped[3]) clamped[3] = Math.min(1, clamped[2] + 0.001);
     boxes[layerIndex] = clamped;
     this.properties.setValue('layerStencilBoxes', boxes);
     this.markDirty();

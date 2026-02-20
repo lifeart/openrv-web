@@ -259,8 +259,6 @@ describe('SphericalProjection E2E Integration', () => {
       expect(u.u_aspect).toBeCloseTo(1920 / 1080, 5);
       expect(u.u_yaw).toBeCloseTo(30 * DEG2RAD, 5);
       expect(u.u_pitch).toBeCloseTo(15 * DEG2RAD, 5);
-      expect(u.u_invViewProj).toBeInstanceOf(Float32Array);
-      expect(u.u_invViewProj.length).toBe(16);
     });
 
     it('SP-E2E-021: disabled state returns enabled=0', () => {
@@ -297,21 +295,15 @@ describe('SphericalProjection E2E Integration', () => {
       });
     });
 
-    it('SP-E2E-023: u_invViewProj is computed but NOT uploaded to shader', () => {
-      // BUG DETECTION: The SphericalProjection.getProjectionUniforms() computes
-      // an invViewProj matrix, but there is no corresponding u_invViewProj uniform
-      // in the shader. The shader computes the projection inline with direct
-      // fov/yaw/pitch uniforms. The invViewProj computation is wasted work.
+    it('SP-E2E-023: u_invViewProj is no longer computed (dead code removed)', () => {
+      // The invViewProj matrix was dead code: no shader uniform referenced it.
+      // It has been removed from SphericalProjectionUniforms and getProjectionUniforms().
       const sp = new SphericalProjection();
       sp.enable();
       const u = sp.getProjectionUniforms(800, 600);
 
-      // The field exists on the return value...
-      expect(u.u_invViewProj).toBeInstanceOf(Float32Array);
-      // ...but it is never sent to any uniform. The ShaderStateManager
-      // only uploads: u_sphericalEnabled, u_sphericalFov, u_sphericalAspect,
-      // u_sphericalYaw, u_sphericalPitch.
-      // u_invViewProj is dead code.
+      // The field should no longer exist on the return value
+      expect('u_invViewProj' in u).toBe(false);
     });
   });
 

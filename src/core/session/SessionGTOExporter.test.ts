@@ -2948,6 +2948,43 @@ describe('SessionGTOExporter.buildTransform2DObject', () => {
         expect(components['stencil'].properties.active.data).toEqual([1]);
         expect(components['stencil'].properties.visibleBox).toBeUndefined();
     });
+
+    it('preserves exact float values in stencil.visibleBox', () => {
+        const exactValues: [number, number, number, number] = [0.123456789, 0.987654321, 0.111111111, 0.999999999];
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            stencil: {
+                active: true,
+                visibleBox: exactValues,
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['stencil'].properties.visibleBox.data).toEqual(exactValues);
+    });
+
+    it('exports stencil.visibleBox with all zeros [0, 0, 0, 0]', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            stencil: {
+                active: false,
+                visibleBox: [0, 0, 0, 0],
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['stencil'].properties.visibleBox.data).toEqual([0, 0, 0, 0]);
+    });
+
+    it('exports stencil.visibleBox with default [0, 1, 0, 1]', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            stencil: {
+                active: true,
+                visibleBox: [0, 1, 0, 1],
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['stencil'].properties.visibleBox.data).toEqual([0, 1, 0, 1]);
+    });
 });
 
 describe('SessionGTOExporter.buildLensWarpObject', () => {

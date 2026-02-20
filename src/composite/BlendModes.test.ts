@@ -623,6 +623,148 @@ describe('BlendModes', () => {
     });
   });
 
+  describe('straight alpha Porter-Duff formula verification', () => {
+    it('semi-transparent overlay on opaque base matches Porter-Duff straight formula', () => {
+      // Base: opaque blue (R=0, G=0, B=200, A=255)
+      const base = createTestImageData(1, 1, { r: 0, g: 0, b: 200, a: 255 });
+      // Top: semi-transparent red (R=180, G=0, B=0, A=153) -> topA = 153/255 = 0.6
+      const top = createTestImageData(1, 1, { r: 180, g: 0, b: 0, a: 153 });
+
+      const result = compositeImageData(base, top, 'normal', 1, false);
+
+      // Porter-Duff straight alpha over:
+      // topA = 153/255 = 0.6, baseA = 1.0
+      // outA = topA + baseA * (1 - topA) = 0.6 + 1.0 * 0.4 = 1.0
+      // For normal mode, blendedR = topR = 180
+      // outR = (blendedR * topA + baseR * baseA * (1 - topA)) / outA
+      //      = (180 * 0.6 + 0 * 1.0 * 0.4) / 1.0 = 108
+      // outG = (0 * 0.6 + 0 * 1.0 * 0.4) / 1.0 = 0
+      // outB = (0 * 0.6 + 200 * 1.0 * 0.4) / 1.0 = 80
+      expect(result.data[0]).toBe(108); // R
+      expect(result.data[1]).toBe(0);   // G
+      expect(result.data[2]).toBe(80);  // B
+      expect(result.data[3]).toBe(255); // A = outA * 255
+    });
+
+    it('two semi-transparent layers produce correct alpha', () => {
+      // Base: semi-transparent green (A=128)
+      const base = createTestImageData(1, 1, { r: 0, g: 200, b: 0, a: 128 });
+      // Top: semi-transparent red (A=128)
+      const top = createTestImageData(1, 1, { r: 200, g: 0, b: 0, a: 128 });
+
+      const result = compositeImageData(base, top, 'normal', 1, false);
+
+      // topA = 128/255 ~= 0.50196, baseA = 128/255 ~= 0.50196
+      const topA = 128 / 255;
+      const baseA = 128 / 255;
+      const outA = topA + baseA * (1 - topA);
+      // outR = (200 * topA + 0 * baseA * (1 - topA)) / outA
+      const expectedR = Math.round((200 * topA + 0 * baseA * (1 - topA)) / outA);
+      // outG = (0 * topA + 200 * baseA * (1 - topA)) / outA
+      const expectedG = Math.round((0 * topA + 200 * baseA * (1 - topA)) / outA);
+      const expectedA = Math.round(outA * 255);
+
+      expect(result.data[0]).toBe(expectedR);
+      expect(result.data[1]).toBe(expectedG);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(expectedA);
+    });
+  });
+
+  describe('premultiplied alpha Porter-Duff formula verification', () => {
+    it('semi-transparent overlay on opaque base matches premultiplied formula', () => {
+      // Base: opaque blue, premultiplied (R=0, G=0, B=200, A=255)
+      const base = createTestImageData(1, 1, { r: 0, g: 0, b: 200, a: 255 });
+      // Top: semi-transparent red, premultiplied: straight (R=255,A=0.6) -> premult R=153, A=153
+      const top = createTestImageData(1, 1, { r: 153, g: 0, b: 0, a: 153 });
+
+      const result = compositeImageData(base, top, 'normal', 1, true);
+
+      // Premultiplied over: outRGB = topRGB + baseRGB * (1 - topA)
+      // topA = 153/255 = 0.6
+      // outR = 153 + 0 * (1 - 0.6) = 153
+      // outG = 0 + 0 * (1 - 0.6) = 0
+      // outB = 0 + 200 * (1 - 0.6) = 0 + 80 = 80
+      // outA = topA + baseA * (1 - topA) = 0.6 + 1.0 * 0.4 = 1.0
+      expect(result.data[0]).toBe(153); // R
+      expect(result.data[1]).toBe(0);   // G
+      expect(result.data[2]).toBe(80);  // B
+      expect(result.data[3]).toBe(255); // A
+    });
+
+    it('two semi-transparent premultiplied layers compose correctly', () => {
+      // Base: premultiplied green at 50% alpha: straight (0, 200, 0, 0.5) -> premult (0, 100, 0, 128)
+      const base = createTestImageData(1, 1, { r: 0, g: 100, b: 0, a: 128 });
+      // Top: premultiplied red at 50% alpha: straight (200, 0, 0, 0.5) -> premult (100, 0, 0, 128)
+      const top = createTestImageData(1, 1, { r: 100, g: 0, b: 0, a: 128 });
+
+      const result = compositeImageData(base, top, 'normal', 1, true);
+
+      // Premultiplied over:
+      // topA = 128/255 ~= 0.50196
+      const topA = 128 / 255;
+      const baseA = 128 / 255;
+      // outR = topR + baseR * (1 - topA) = 100 + 0 * (1 - 0.502) = 100
+      // outG = topG + baseG * (1 - topA) = 0 + 100 * (1 - 0.502) = 50
+      // outA = topA + baseA * (1 - topA)
+      const expectedR = Math.min(255, Math.round(100 + 0 * (1 - topA)));
+      const expectedG = Math.min(255, Math.round(0 + 100 * (1 - topA)));
+      const expectedA = Math.round((topA + baseA * (1 - topA)) * 255);
+
+      expect(result.data[0]).toBe(expectedR);
+      expect(result.data[1]).toBe(expectedG);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(expectedA);
+    });
+
+    it('premultiplied and straight produce different results for same raw pixel values', () => {
+      // Use semi-transparent layers where the difference between modes is visible
+      const base = createTestImageData(1, 1, { r: 100, g: 50, b: 200, a: 200 });
+      const top = createTestImageData(1, 1, { r: 150, g: 100, b: 50, a: 180 });
+
+      const straight = compositeImageData(base, top, 'normal', 1, false);
+      const premult = compositeImageData(base, top, 'normal', 1, true);
+
+      // In straight alpha, blendedR = topR = 150, then:
+      //   outR = (150 * topA + 100 * baseA * (1 - topA)) / outA
+      // In premultiplied, topR is already premultiplied, so:
+      //   outR = topR + baseR * (1 - topA) = 150 + 100 * (1 - topA)
+      // These formulas give different results for the same raw values
+      const topA = 180 / 255;
+      const baseA = 200 / 255;
+      const outA = topA + baseA * (1 - topA);
+
+      const straightR = Math.round((150 * topA + 100 * baseA * (1 - topA)) / outA);
+      const premultR = Math.min(255, Math.round(150 + 100 * (1 - topA)));
+
+      expect(straight.data[0]).toBe(straightR);
+      expect(premult.data[0]).toBe(premultR);
+      // Verify they are actually different
+      expect(straightR).not.toBe(premultR);
+    });
+
+    it('premultiplied multiply blend mode unpremultiplies, blends, re-premultiplies', () => {
+      // Base: premultiplied gray at full opacity: (128, 128, 128, 255)
+      const base = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
+      // Top: premultiplied white at 50% opacity: straight (255, 255, 255, 0.5)
+      // premult: (128, 128, 128, 128)
+      const top = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 128 });
+
+      const result = compositeImageData(base, top, 'multiply', 1, true);
+
+      // For premultiplied non-normal blend:
+      // 1. Unpremultiply: baseRu = 128/1.0 = 128, topRu = 128/0.502 ~= 255
+      // 2. blendChannel('multiply', 128, 255) => (128/255)*(255/255) = 0.502 => 128
+      // 3. Re-premultiply and composite:
+      //    outR = blendedR * topA + baseR * (1 - topA)
+      //         = 128 * 0.502 + 128 * 0.498 = ~128
+      // Result should be close to 128 (multiply of gray with white = gray)
+      expect(result.data[0]).toBeGreaterThanOrEqual(125);
+      expect(result.data[0]).toBeLessThanOrEqual(131);
+      expect(result.data[3]).toBe(255); // fully opaque composite
+    });
+  });
+
   describe('stackCompositeToBlendMode', () => {
     it('maps replace to normal', () => {
       expect(stackCompositeToBlendMode('replace')).toBe('normal');

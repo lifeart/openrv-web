@@ -300,4 +300,140 @@ describe('FloatingWindowControl', () => {
       expect(handler).not.toHaveBeenCalled();
     });
   });
+
+  describe('edge cases', () => {
+    it('FWC-U060: detect with very small image (1x1) returns without crashing', () => {
+      const tiny = new ImageData(new Uint8ClampedArray([128, 128, 128, 255]), 1, 1);
+      const result = control.detect(tiny, tiny);
+
+      // Should complete without error and produce a valid result
+      expect(result).toHaveProperty('hasViolation');
+      expect(result).toHaveProperty('violations');
+      expect(result).toHaveProperty('worstDisparity');
+      expect(result).toHaveProperty('affectedEdges');
+      expect(Array.isArray(result.violations)).toBe(true);
+      expect(Array.isArray(result.affectedEdges)).toBe(true);
+    });
+
+    it('FWC-U061: detect with 2x2 image returns valid result', () => {
+      const small = new ImageData(
+        new Uint8ClampedArray([
+          255, 0, 0, 255,   0, 255, 0, 255,
+          0, 0, 255, 255,   255, 255, 0, 255,
+        ]),
+        2, 2,
+      );
+      const result = control.detect(small, small);
+
+      expect(result).toHaveProperty('hasViolation');
+      expect(typeof result.hasViolation).toBe('boolean');
+      // Identical images should yield no violations
+      expect(result.hasViolation).toBe(false);
+    });
+
+    it('FWC-U062: detect called multiple times updates result, does not accumulate', () => {
+      const img = createGradientImage(64, 64);
+
+      // First detection
+      control.detect(img, img);
+      const firstResult = control.getLastResult();
+      expect(firstResult).not.toBeNull();
+      expect(firstResult!.hasViolation).toBe(false);
+
+      // Second detection with violation-inducing images
+      const left = createStripeImage(128, 64, 5, 5);
+      const right = createStripeImage(128, 64, 0, 5);
+      control.detect(left, right);
+      const secondResult = control.getLastResult();
+      expect(secondResult).not.toBeNull();
+      expect(secondResult!.hasViolation).toBe(true);
+
+      // Third detection back to identical images
+      control.detect(img, img);
+      const thirdResult = control.getLastResult();
+      expect(thirdResult).not.toBeNull();
+      expect(thirdResult!.hasViolation).toBe(false);
+      // violations array should be empty, not accumulated from earlier runs
+      expect(thirdResult!.violations).toHaveLength(0);
+    });
+
+    it('FWC-U063: detect after dispose produces valid result and updates state', () => {
+      // dispose resets state but doesn't break the object
+      control.dispose();
+
+      expect(control.hasResult()).toBe(false);
+      expect(control.getLastResult()).toBeNull();
+
+      // Detection after dispose should still work
+      const img = createGradientImage(64, 64);
+      const result = control.detect(img, img);
+
+      expect(result.hasViolation).toBe(false);
+      expect(control.hasResult()).toBe(true);
+      expect(control.getLastResult()).not.toBeNull();
+    });
+
+    it('FWC-U064: detect after dispose does not fire events on old listeners', () => {
+      const handler = vi.fn();
+      control.on('detectionComplete', handler);
+
+      control.dispose();
+
+      const img = createGradientImage(64, 64);
+      control.detect(img, img);
+
+      // Old listener was removed by dispose
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('FWC-U065: detect after dispose fires events on newly attached listeners', () => {
+      control.dispose();
+
+      const handler = vi.fn();
+      control.on('detectionComplete', handler);
+
+      const img = createGradientImage(64, 64);
+      control.detect(img, img);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ hasViolation: false }));
+    });
+
+    it('FWC-U066: multiple detections emit correct number of events', () => {
+      const completeHandler = vi.fn();
+      const stateHandler = vi.fn();
+      control.on('detectionComplete', completeHandler);
+      control.on('stateChanged', stateHandler);
+
+      const img = createGradientImage(64, 64);
+      control.detect(img, img);
+      control.detect(img, img);
+      control.detect(img, img);
+
+      // Each detect call emits one detectionComplete
+      expect(completeHandler).toHaveBeenCalledTimes(3);
+      // Each detect call emits two stateChanged (detecting=true, then detecting=false)
+      expect(stateHandler).toHaveBeenCalledTimes(6);
+    });
+
+    it('FWC-U067: hasViolation is false after clearResult even if last detect had violations', () => {
+      const left = createStripeImage(128, 64, 5, 5);
+      const right = createStripeImage(128, 64, 0, 5);
+      control.detect(left, right);
+      expect(control.hasViolation()).toBe(true);
+
+      control.clearResult();
+      expect(control.hasViolation()).toBe(false);
+      expect(control.hasResult()).toBe(false);
+    });
+
+    it('FWC-U068: isDetecting is false after detection completes, even with violations', () => {
+      const left = createStripeImage(128, 64, 5, 5);
+      const right = createStripeImage(128, 64, 0, 5);
+      control.detect(left, right);
+
+      expect(control.isDetecting()).toBe(false);
+      expect(control.hasViolation()).toBe(true);
+    });
+  });
 });

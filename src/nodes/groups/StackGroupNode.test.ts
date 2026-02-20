@@ -318,4 +318,54 @@ describe('StackGroupNode', () => {
       expect(stackNode.properties.getValue('strictFrameRanges')).toBe(false);
     });
   });
+
+  describe('layer stencil boxes', () => {
+    it('getLayerStencilBox returns DEFAULT_STENCIL_BOX when no boxes set', () => {
+      const box = stackNode.getLayerStencilBox(0);
+      expect(box).toEqual([0, 1, 0, 1]);
+    });
+
+    it('setLayerStencilBox stores and retrieves correctly', () => {
+      stackNode.setLayerStencilBox(0, [0.2, 0.8, 0.1, 0.9]);
+      const box = stackNode.getLayerStencilBox(0);
+      expect(box).toEqual([0.2, 0.8, 0.1, 0.9]);
+    });
+
+    it('setLayerStencilBox corrects min > max', () => {
+      // xMin > xMax: should be corrected so xMax >= xMin
+      stackNode.setLayerStencilBox(0, [0.8, 0.2, 0.7, 0.3]);
+      const box = stackNode.getLayerStencilBox(0);
+      expect(box[0]).toBe(0.8);
+      expect(box[1]).toBeGreaterThanOrEqual(box[0]);
+      expect(box[2]).toBe(0.7);
+      expect(box[3]).toBeGreaterThanOrEqual(box[2]);
+    });
+
+    it('setLayerStencilBox clamps values > 1 or < 0', () => {
+      stackNode.setLayerStencilBox(0, [-0.5, 1.5, -0.3, 1.2]);
+      const box = stackNode.getLayerStencilBox(0);
+      expect(box[0]).toBe(0);
+      expect(box[1]).toBe(1);
+      expect(box[2]).toBe(0);
+      expect(box[3]).toBe(1);
+    });
+
+    it('resetLayerStencilBoxes clears all boxes', () => {
+      stackNode.setLayerStencilBox(0, [0.2, 0.8, 0.1, 0.9]);
+      stackNode.setLayerStencilBox(1, [0.3, 0.7, 0.2, 0.8]);
+      stackNode.resetLayerStencilBoxes();
+      // After reset, should return default for any index
+      expect(stackNode.getLayerStencilBox(0)).toEqual([0, 1, 0, 1]);
+      expect(stackNode.getLayerStencilBox(1)).toEqual([0, 1, 0, 1]);
+    });
+
+    it('clamped xMin=1.0 edge case produces xMax of 1.0 not 1.001', () => {
+      // Both xMin and xMax clamp to 1.0; then min<max correction kicks in
+      // but should be capped at 1.0
+      stackNode.setLayerStencilBox(0, [1.0, 0.5, 1.0, 0.5]);
+      const box = stackNode.getLayerStencilBox(0);
+      expect(box[1]).toBeLessThanOrEqual(1);
+      expect(box[3]).toBeLessThanOrEqual(1);
+    });
+  });
 });

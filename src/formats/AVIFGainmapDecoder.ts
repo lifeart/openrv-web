@@ -732,6 +732,8 @@ export function parseTmapBox(view: DataView, start: number, end: number): TmapMe
     }
     const result: number[] = [];
     for (let i = 0; i < count; i++) {
+      // Zero denominator yields 0; consumers should check for gamma=0 before
+      // using the value in pow() operations (0 gamma is degenerate).
       result.push(denominators[i]! === 0 ? 0 : numerators[i]! / denominators[i]!);
     }
     return result;

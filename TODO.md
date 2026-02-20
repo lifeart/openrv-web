@@ -19,36 +19,40 @@ Dodge, burn, clone, and smudge operations are pixel-destructive and not tracked 
 
 ## Rendering Pipeline
 
-### LOW: WebGPUHDRBlit UV mapping may be vertically flipped
+### DONE: WebGPUHDRBlit UV mapping may be vertically flipped
 The fullscreen triangle WGSL vertex shader generates UVs that are NOT flipped despite the WebGL-to-WebGPU row-order difference. The comment claims it handles flipping but the V coordinate goes 0-to-2 same as position. Image may appear vertically flipped on actual HDR displays.
 - **File**: `src/render/WebGPUHDRBlit.ts`
 - **Action**: Verify with a real HDR test image. If flipped, change UV to `1.0 - (y + 1.0) / 2.0`.
+- **Status**: Fixed in Batch 1.
 
 ### LOW: Creative gamma skipped when display transfer is active
 When `u_displayTransfer > 0` (sRGB/Rec.709), the per-channel creative gamma (`u_gammaRGB`) is not applied. Users lose per-channel gamma control when a display transfer function is selected. Should be restructured so creative gamma is always applied independently of display transfer.
 - **File**: `src/render/shaders/viewer.frag.glsl`
 
-### LOW: SPHERICAL_PROJECTION_GLSL export is stale and unused
+### DONE: SPHERICAL_PROJECTION_GLSL export is stale and unused
 The exported constant `SPHERICAL_PROJECTION_GLSL` contains GLSL code with wrong uniform names (`u_fov`, `u_aspect`, `u_yaw`, `u_pitch`) that differ from actual shader uniforms (`u_sphericalFov`, `u_sphericalAspect`, `u_sphericalYaw`, `u_sphericalPitch`). Never imported anywhere.
 - **File**: `src/transform/SphericalProjection.ts`
 - **Action**: Update exported GLSL to match current uniform names, or remove the export entirely.
+- **Status**: Fixed in Batch 1.
 
 ### LOW: Clarity and sharpen sample ungraded pixels on GPU
 Both clarity and sharpen compute their blur/detail kernels from `texture(u_texture, ...)` -- the original ungraded source pixels -- while the CPU path operates on already-graded data. Documented architectural difference accepted for single-pass performance. GPU and CPU paths may produce subtly different results.
 - **File**: `src/render/shaders/viewer.frag.glsl`
 
-### LOW: LuminanceAnalyzer PBO double-buffer has race condition potential
+### DONE: LuminanceAnalyzer PBO double-buffer has race condition potential
 The double-buffered PBO readback uses a single `pboFence` for both PBOs. When PBO A starts readback and fence is created, then PBO B starts, the old fence is deleted. The fence check ends up checking the wrong PBO. Works in practice because GPU execution is sequential, but the fence check is technically incorrect.
 - **File**: `src/render/LuminanceAnalyzer.ts`
 - **Action**: Use two separate fences, one per PBO.
+- **Status**: Fixed in Batch 1.
 
 ### LOW: TextureCacheManager LRU eviction is O(n)
 `evictLRU()` iterates all cache entries to find the one with lowest `lastAccessed`. Acceptable for current configured limits (~100 entries) but could be improved with a linked-list for O(1) eviction.
 - **File**: `src/render/TextureCacheManager.ts`
 
-### LOW: ShaderStateManager sets texture unit bindings every frame
+### DONE: ShaderStateManager sets texture unit bindings every frame
 `applyUniforms()` unconditionally sets `u_curvesLUT=1`, `u_falseColorLUT=2`, `u_lut3D=3`, `u_filmLUT=4`, `u_inlineLUT=5` every frame. These never change after first frame. Saves ~5 GL calls per frame if set once.
 - **File**: `src/render/ShaderStateManager.ts`
+- **Status**: Fixed in Batch 1.
 
 ### MEDIUM: effectProcessor.worker.test.ts tests are superficial
 Only verifies that the worker file exists and message objects have correct shape. Does not test any actual effect processing logic. Should extract effect processing functions into testable pure functions.
@@ -62,18 +66,20 @@ Only verifies that the worker file exists and message objects have correct shape
 
 ## Stereo 3D
 
-### MEDIUM: Floating window detector not wired to frame events
+### DONE: Floating window detector not wired to frame events
 The floating window detection algorithm is complete and tested, but it is not triggered by any application event. No UI button runs detection and no frame-change handler automatically checks for violations.
 - **File**: `src/stereo/FloatingWindowDetector.ts`
 - **Action**: Add a "Detect Floating Window" button to QC/View tab. Wire to frame-change events for automatic detection.
+- **Status**: Wired in Batch 2.
 
 ### LOW: Checkerboard/scanline missing parity offset support
 OpenRV's checkerboard and scanline shaders accept `parityOffsetX`/`parityOffsetY` parameters for viewport origin alignment. The web version hardcodes parity from `(0,0)`, which may invert left/right eye assignment at odd pixel origins.
 - **File**: `src/stereo/StereoRenderer.ts`
 
-### LOW: Anaglyph alpha hardcoded to 255
+### DONE: Anaglyph alpha hardcoded to 255
 The web anaglyph renderer hardcodes alpha to 255, while OpenRV uses `max(P0.a, P1.a)`. Inconsequential for opaque content but matters for premultiplied alpha compositing workflows.
 - **File**: `src/stereo/StereoRenderer.ts`
+- **Status**: Fixed in Batch 1.
 
 ### LOW: StereoEyeTransform applies to both eyes (differs from OpenRV convention)
 OpenRV only applies geometric transforms to the right eye. The web version supports independent transforms on both eyes, which is more flexible but deviates from the established workflow.
@@ -108,10 +114,11 @@ Film emulation uses hand-tuned parametric S-curves rather than real film LUT dat
 
 ## Playback & Audio
 
-### MEDIUM: Sequence export uses 0-based start frame
+### DONE: Sequence export uses 0-based start frame
 `handleSequenceExport` in `AppPlaybackWiring.ts` uses `startFrame = 0` when `useInOutRange` is false, but frames are 1-based in the codebase. Sequence export would attempt to render invalid frame 0.
 - **File**: `src/AppPlaybackWiring.ts` (line ~166)
 - **Action**: Change to `startFrame = 1`.
+- **Status**: Fixed in Batch 1.
 
 ### LOW: Pingpong loop mode direction flip not tested end-to-end
 `computeNextFrame` returns the bounced frame but does NOT flip `playDirection`. The direction flip must happen in Session. No integration test verifies this, so a regression could cause pingpong to stall.
@@ -121,31 +128,35 @@ Film emulation uses hand-tuned parametric S-curves rather than real film LUT dat
 `setPlaybackRate` during Web Audio playback calls `seek()` which internally pauses and restarts the AudioBufferSourceNode, creating an audible click/gap. HTMLVideoElement fallback handles this seamlessly.
 - **File**: `src/audio/AudioPlaybackManager.ts`
 
-### LOW: Drop-frame timecode not validated for frame 0 input
+### DONE: Drop-frame timecode not validated for frame 0 input
 `frameToTimecode(0, fps)` computes `totalFrame = -1`, producing garbage output. Should guard with `Math.max(0, ...)`.
 - **File**: `src/ui/components/TimecodeDisplay.ts`
+- **Status**: Fixed in Batch 1.
 
 ---
 
 ## UI Components & Overlays
 
-### LOW: DisplayProfileControl registers permanent global click listener
+### DONE: DisplayProfileControl registers permanent global click listener
 Registers `document.addEventListener('click', ...)` in constructor, even before dropdown is opened. Other dropdown controls correctly only register when the dropdown opens.
 - **File**: `src/ui/components/DisplayProfileControl.ts`
+- **Status**: Fixed in Batch 1.
 
-### LOW: Duplicate histogram calculation code
+### DONE: Duplicate histogram calculation code
 Standalone `calculateHistogram()` function at line ~836 of `Histogram.ts` is a near-exact duplicate of the `Histogram.calculate()` instance method at line ~283.
 - **File**: `src/ui/components/Histogram.ts`
 - **Action**: Have `calculateHistogram()` delegate to a shared function, or remove if unused.
+- **Status**: Fixed in Batch 1.
 
 ### LOW: HistoryPanel rebuilds entire DOM on every render
 `render()` clears `innerHTML` and rebuilds all DOM nodes from scratch on every history change. For large histories this causes unnecessary GC pressure and layout thrashing.
 - **File**: `src/ui/components/HistoryPanel.ts`
 
-### LOW: LUTPipelineControl.test.ts is an orphaned test name
+### DONE: LUTPipelineControl.test.ts is an orphaned test name
 Test file exists but there is no `LUTPipelineControl.ts` implementation. Actually tests `LUTPipelinePanel` and `LUTStageControl`.
 - **File**: `src/ui/components/LUTPipelineControl.test.ts`
 - **Action**: Rename to match what it actually tests.
+- **Status**: Deleted in Batch 1.
 
 ### LOW: CanvasOverlay base class has no dedicated tests
 Tested indirectly through SafeAreasOverlay and SpotlightOverlay subclass tests, but base class edge cases not explicitly covered.
@@ -215,33 +226,39 @@ Writes minimal sample entries without proper codec configuration boxes (`vpcC`/`
 
 ## Format Decoders
 
-### HIGH: EXR PXR24 compression not implemented
+### DONE: EXR PXR24 compression not implemented
 PXR24 is common in production EXR files. Currently throws DecoderError.
 - **File**: `src/formats/EXRDecoder.ts`
+- **Status**: Implemented in Batch 2.
 
-### MEDIUM: JP2 not wired by extension in FileSourceNode
+### DONE: JP2 not wired by extension in FileSourceNode
 JP2/J2K/JHC files are not detected by extension, only through DecoderRegistry fallback. No extension-based fast path exists.
 - **File**: `src/nodes/sources/FileSourceNode.ts`
+- **Status**: Wired in Batch 1.
 
 ### MEDIUM: JP2 WASM module throws by default
 `_loadWasmModule()` throws "WASM module not available". Need bundled openjph WASM or clear injection documentation.
 - **File**: `src/formats/JP2Decoder.ts`
 
-### MEDIUM: RAW duplicate isRAWExtension()
+### DONE: RAW duplicate isRAWExtension()
 FileSourceNode has its own copy of `isRAWExtension()` that should use the one from RAWPreviewDecoder.
 - **Files**: `src/nodes/sources/FileSourceNode.ts`, `src/formats/RAWPreviewDecoder.ts`
+- **Status**: Deduplicated in Batch 1.
 
-### MEDIUM: HDR orientation only works for -Y +X
+### DONE: HDR orientation only works for -Y +X
 Only `-Y +X` renders correctly. 7 other orientations parse dimensions but don't rearrange pixel data.
 - **File**: `src/formats/HDRDecoder.ts`
+- **Status**: Fixed in Batch 2.
 
-### MEDIUM: AVIF tmap box uses heuristic float scanning
+### DONE: AVIF tmap box uses heuristic float scanning
 Replace heuristic float scanning with ISO 21496-1 spec-compliant parsing for headroom extraction.
 - **File**: `src/formats/AVIFGainmapDecoder.ts`
+- **Status**: Spec-compliant in Batch 2.
 
-### MEDIUM: MXF returns dummy 1x1 pixel image
+### DONE: MXF returns dummy 1x1 pixel image
 DecoderRegistry adapter returns a dummy 1x1 pixel image. Should indicate metadata-only mode clearly in the API.
 - **File**: `src/formats/MXFDemuxer.ts`, `src/formats/DecoderRegistry.ts`
+- **Status**: Added in Batch 1.
 
 ### LOW: EXR B44/B44A compression not implemented
 Less common but used in some VFX pipelines.
@@ -287,13 +304,15 @@ Only RGB/RGBA descriptors supported.
 `getActiveInputIndex()` returns binary 0 or 1 based on `wipeX < 0.5` threshold. Does not do multi-layer compositing. Per-layer blend modes and opacities are stored but never applied. OpenRV's `StackIPNode.collapseInputs()` composites ALL inputs.
 - **File**: `src/nodes/groups/StackGroupNode.ts`
 
-### HIGH: Premultiplied alpha comment mismatch in BlendModes
+### DONE: Premultiplied alpha comment mismatch in BlendModes
 Code comment says "assumes premultiplied alpha" but the Porter-Duff formula used is the straight-alpha formulation.
 - **File**: `src/composite/BlendModes.ts`
+- **Status**: Fixed in Batch 1.
 
-### HIGH: WipeMode type mismatch between modules
+### DONE: WipeMode type mismatch between modules
 `WipeMode` in `src/core/types/wipe.ts` includes `'quad'` but `ComparisonManager.ts` defines its own `WipeMode` without it. Type inconsistency.
 - **Files**: `src/core/types/wipe.ts`, `src/ui/components/ComparisonManager.ts`
+- **Status**: Fixed in Batch 1.
 
 ### MEDIUM: Difference matte is CPU-only 8-bit
 `applyDifferenceMatte()` operates on `ImageData` (8-bit unsigned). For HDR/EXR content this loses precision and is slow. OpenRV does this in the GPU shader.
@@ -303,25 +322,29 @@ Code comment says "assumes premultiplied alpha" but the Porter-Duff formula used
 All blend operations in `BlendModes.ts` operate on `ImageData`. Too slow for large images or real-time playback.
 - **File**: `src/composite/BlendModes.ts`
 
-### MEDIUM: Nearest-neighbor resize in BlendModes
+### DONE: Nearest-neighbor resize in BlendModes
 `resizeImageData()` uses nearest-neighbor scaling, producing aliased results when compositing layers of different sizes.
 - **File**: `src/composite/BlendModes.ts`
+- **Status**: Bilinear in Batch 2.
 
-### MEDIUM: StackCompositeType not wired to BlendMode
+### DONE: StackCompositeType not wired to BlendMode
 `StackCompositeType` includes `'dissolve'`, `'minus'`, `'topmost'` but no mapping to `BlendMode` exists. These modes have no implementation.
 - **Files**: `src/nodes/groups/StackGroupNode.ts`, `src/composite/BlendModes.ts`
+- **Status**: Wired in Batch 1.
 
-### MEDIUM: Legacy WipeControl duplicates ComparisonManager functionality
+### DONE: Legacy WipeControl duplicates ComparisonManager functionality
 `WipeControl.ts` partially duplicates ComparisonManager's wipe functionality. `cycleMode()` only cycles 3 modes vs ComparisonManager's 5.
 - **File**: `src/ui/components/WipeControl.ts`
+- **Status**: Delegated in Batch 2.
 
 ### LOW: MatteOverlay tests are shallow
 Tests mostly verify "does not throw" rather than checking actual render coordinates.
 - **File**: `src/ui/components/MatteOverlay.test.ts`
 
-### LOW: Unused wipeAngle property in StackGroupNode
+### DONE: Unused wipeAngle property in StackGroupNode
 Property exists but is never read anywhere. OpenRV supports angled wipes.
 - **File**: `src/nodes/groups/StackGroupNode.ts`
+- **Status**: Removed in Batch 1.
 
 ### LOW: No keyboard shortcut for quad view toggle
 Only accessible from CompareControl dropdown.
@@ -342,9 +365,10 @@ Tests DIFF-E006/DIFF-E008 use `if (await gainSlider.isVisible())` which silently
 Regression tests for DCCBridge, ContextualKeyboardManager, and AudioMixer replicate handler logic inline rather than importing from App.ts. Could drift from actual implementation.
 - **File**: `src/AppWiringFixes.test.ts`
 
-### LOW: Shortcut cheat sheet shows dead shortcuts as functional
+### DONE: Shortcut cheat sheet shows dead shortcuts as functional
 `showShortcutsDialog()` lists the 6 `conflictingDefaults` shortcuts with key combos as if they work, but pressing them does nothing.
 - **File**: `src/AppKeyboardHandler.ts`
+- **Status**: Annotated in Batch 1.
 
 ### LOW: OCIO bake size heuristic is string-pattern-based
 `resolveOCIOBakeSize()` uses regex `/\baces\b/i` to decide between 33^3 and 65^3 LUT resolution. Could false-match or miss non-standard naming.

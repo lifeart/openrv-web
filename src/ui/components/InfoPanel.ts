@@ -296,11 +296,11 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     }
 
     if (this.fields.timecode && this.currentData.timecode) {
-      lines.push(`TC: ${this.currentData.timecode}`);
+      lines.push(`TC: ${this.escapeHtml(this.currentData.timecode)}`);
     }
 
     if (this.fields.duration && this.currentData.duration) {
-      lines.push(`Duration: ${this.currentData.duration}`);
+      lines.push(`Duration: ${this.escapeHtml(this.currentData.duration)}`);
     }
 
     if (this.fields.fps && this.currentData.fps) {

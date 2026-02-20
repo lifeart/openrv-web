@@ -61,6 +61,16 @@ export const SPHERICAL_PROJECTION_GLSL = /* glsl */ `
     float phi = asin(clamp(worldDir.y, -1.0, 1.0));
     float u = 0.5 + theta / (2.0 * 3.14159265359);
     float v = 0.5 - phi / 3.14159265359;
+
+    // Stabilize u near poles: atan2(~0, ~0) is numerically unstable,
+    // causing adjacent fragments to compute wildly different u values
+    // which creates a visible spike artifact from pole to seam.
+    // Near the pole all longitudes converge, so u doesn't matter;
+    // blend it smoothly toward a stable value (0.5).
+    float horizLen = length(vec2(worldDir.x, worldDir.z));
+    float poleStability = smoothstep(0.0, 0.05, horizLen);
+    u = mix(0.5, u, poleStability);
+
     return vec2(u, v);
   }
 `;
@@ -94,8 +104,6 @@ export interface Vec3 {
 export interface SphericalProjectionUniforms {
   /** Whether spherical projection is enabled (0 or 1) */
   u_sphericalEnabled: number;
-  /** Inverse view-projection matrix (4x4, column-major) */
-  u_invViewProj: Float32Array;
   /** Horizontal field of view in radians */
   u_fov: number;
   /** Canvas aspect ratio (width / height) */
@@ -498,17 +506,8 @@ export class SphericalProjection {
     const aspect = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
     const fovRad = this._fov * DEG2RAD;
 
-    // Build the view-projection matrix and invert it
-    const proj = mat4Perspective(fovRad, aspect, 0.1, 100);
-    const rotX = mat4RotateX(-this._pitch);
-    const rotY = mat4RotateY(-this._yaw);
-    const view = mat4Multiply(rotX, rotY);
-    const viewProj = mat4Multiply(proj, view);
-    const invViewProj = mat4Invert(viewProj) ?? mat4Identity();
-
     return {
       u_sphericalEnabled: this._enabled ? 1 : 0,
-      u_invViewProj: invViewProj,
       u_fov: fovRad,
       u_aspect: aspect,
       u_yaw: this._yaw,
