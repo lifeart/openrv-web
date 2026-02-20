@@ -1,0 +1,60 @@
+name: Coverage Report
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'vitest.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: coverage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install
+
+      - name: Run tests with coverage
+        id: tests
+        run: pnpm test:coverage
+        continue-on-error: true
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+      - name: Coverage Report
+        uses: davelosert/vitest-coverage-report-action@v2
+        if: always() && steps.tests.outcome != 'cancelled'
+        with:
+          file-coverage-mode: changes
+
+      - name: Fail if tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
