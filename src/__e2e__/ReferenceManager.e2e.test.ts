@@ -660,8 +660,8 @@ describe('ReferenceManager E2E Integration', () => {
       manager.toggle(); // disable
 
       expect(stateChanges.length).toBe(2);
-      expect(stateChanges[0].enabled).toBe(true);
-      expect(stateChanges[1].enabled).toBe(false);
+      expect(stateChanges[0]!.enabled).toBe(true);
+      expect(stateChanges[1]!.enabled).toBe(false);
 
       manager.dispose();
     });

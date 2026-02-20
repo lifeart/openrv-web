@@ -127,11 +127,15 @@ function createVideoSource(overrides: Partial<MediaSource> = {}): MediaSource {
   };
 }
 
+function createMockImageBitmap(): ImageBitmap {
+  return { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
+}
+
 function createSequenceSource(overrides: Partial<MediaSource> = {}): MediaSource {
   const frames = [
-    { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: document.createElement('img') },
-    { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: document.createElement('img') },
-    { index: 2, frameNumber: 3, file: new File([], 'frame_003.png'), image: document.createElement('img') },
+    { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: createMockImageBitmap() },
+    { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: createMockImageBitmap() },
+    { index: 2, frameNumber: 3, file: new File([], 'frame_003.png'), image: createMockImageBitmap() },
   ];
   return {
     type: 'sequence',
@@ -748,8 +752,8 @@ describe('MediaManager', () => {
         name: 'frame_###.png',
         pattern: 'frame_###.png',
         frames: [
-          { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: document.createElement('img') },
-          { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: document.createElement('img') },
+          { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: createMockImageBitmap() },
+          { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: createMockImageBitmap() },
         ],
         startFrame: 1,
         endFrame: 2,
@@ -820,7 +824,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-051: loads frame image for sequence source', async () => {
-      const mockImage = document.createElement('img');
+      const mockImage = createMockImageBitmap();
       vi.mocked(loadFrameImage).mockResolvedValue(mockImage);
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);
@@ -841,7 +845,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-053: uses explicit frameIndex parameter', async () => {
-      const mockImage = document.createElement('img');
+      const mockImage = createMockImageBitmap();
       vi.mocked(loadFrameImage).mockResolvedValue(mockImage);
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);

@@ -27,8 +27,6 @@ import {
   SlateEditor,
   DEFAULT_SLATE_EDITOR_STATE,
   type SlateEditorState,
-  type CustomField,
-  type SlateEditorColors,
 } from '../ui/components/SlateEditor';
 
 // ---------------------------------------------------------------------------
@@ -174,9 +172,9 @@ describe('SlateEditor E2E Integration', () => {
 
       const fields = editor.getCustomFields();
       expect(fields.length).toBe(1);
-      expect(fields[0].label).toBe('Codec');
-      expect(fields[0].value).toBe('H.264');
-      expect(fields[0].size).toBe('medium');
+      expect(fields[0]!.label).toBe('Codec');
+      expect(fields[0]!.value).toBe('H.264');
+      expect(fields[0]!.size).toBe('medium');
     });
 
     it('SLATE-E2E-021: addCustomField emits stateChanged', () => {
@@ -195,7 +193,7 @@ describe('SlateEditor E2E Integration', () => {
 
       const fields = editor.getCustomFields();
       expect(fields.length).toBe(3);
-      expect(fields[2].label).toBe('Colorspace');
+      expect(fields[2]!.label).toBe('Colorspace');
     });
 
     it('SLATE-E2E-023: removeCustomField removes by index', () => {
@@ -207,8 +205,8 @@ describe('SlateEditor E2E Integration', () => {
 
       const fields = editor.getCustomFields();
       expect(fields.length).toBe(2);
-      expect(fields[0].label).toBe('A');
-      expect(fields[1].label).toBe('C');
+      expect(fields[0]!.label).toBe('A');
+      expect(fields[1]!.label).toBe('C');
     });
 
     it('SLATE-E2E-024: removeCustomField with out-of-range index is no-op', () => {
@@ -226,8 +224,8 @@ describe('SlateEditor E2E Integration', () => {
       editor.updateCustomField(0, { value: 'H.265' });
 
       const fields = editor.getCustomFields();
-      expect(fields[0].value).toBe('H.265');
-      expect(fields[0].label).toBe('Codec'); // unchanged
+      expect(fields[0]!.value).toBe('H.265');
+      expect(fields[0]!.label).toBe('Codec'); // unchanged
     });
 
     it('SLATE-E2E-026: updateCustomField with out-of-range index is no-op', () => {
@@ -235,7 +233,7 @@ describe('SlateEditor E2E Integration', () => {
 
       editor.updateCustomField(5, { value: 'changed' });
 
-      expect(editor.getCustomFields()[0].value).toBe('1'); // unchanged
+      expect(editor.getCustomFields()[0]!.value).toBe('1'); // unchanged
     });
 
     it('SLATE-E2E-027: clearCustomFields removes all fields', () => {
@@ -251,9 +249,9 @@ describe('SlateEditor E2E Integration', () => {
       editor.addCustomField({ label: 'A', value: '1', size: 'small' });
 
       const fields = editor.getCustomFields();
-      fields[0].label = 'Mutated';
+      fields[0]!.label = 'Mutated';
 
-      expect(editor.getCustomFields()[0].label).toBe('A');
+      expect(editor.getCustomFields()[0]!.label).toBe('A');
     });
   });
 
@@ -497,7 +495,7 @@ describe('SlateEditor E2E Integration', () => {
       editor.addCustomField({ label: 'Codec', value: 'H.264', size: 'medium' });
 
       const fields = editor.buildFields();
-      const lastField = fields[fields.length - 1];
+      const lastField = fields[fields.length - 1]!;
       expect(lastField.label).toBe('Codec');
       expect(lastField.value).toBe('H.264');
     });

@@ -189,7 +189,7 @@ describe('BugOverlay E2E Integration', () => {
     it('BUG-E2E-014: dimension update does not render when overlay is disabled', () => {
       const bugOverlay = viewer.getBugOverlay();
       // No image set, so isVisible() returns false
-      const renderSpy = vi.spyOn(bugOverlay, 'render');
+      vi.spyOn(bugOverlay, 'render');
       viewer.updateOverlayDimensions();
 
       // setViewerDimensions checks isVisible() before calling render()

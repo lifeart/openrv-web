@@ -531,7 +531,6 @@ describe('BlendModes', () => {
 
       // The results should be different because the formulas differ
       // (straight divides by outA, premultiplied does not)
-      const straightR = straight.data[0]!;
       const premultR = premult.data[0]!;
       // They may or may not be exactly equal depending on values,
       // but the codepaths are distinct. Verify both produce valid output.

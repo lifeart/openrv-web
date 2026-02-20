@@ -745,8 +745,26 @@ describe('EXRDecoder', () => {
      * Compress data using deflate via CompressionStream.
      */
     async function deflateCompress(input: Uint8Array): Promise<Uint8Array> {
-      const { deflateSync } = await import('node:zlib');
-      return new Uint8Array(deflateSync(Buffer.from(input)));
+      // Use CompressionStream (available in Node 18+ and vitest)
+      const cs = new CompressionStream('deflate');
+      const writer = cs.writable.getWriter();
+      writer.write(input as unknown as BufferSource);
+      writer.close();
+      const chunks: Uint8Array[] = [];
+      const reader = cs.readable.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const totalLen = chunks.reduce((sum, c) => sum + c.length, 0);
+      const result = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const c of chunks) {
+        result.set(c, offset);
+        offset += c.length;
+      }
+      return result;
     }
 
     /**
@@ -764,7 +782,7 @@ describe('EXRDecoder', () => {
       pixelType?: EXRPixelType;
       /** Raw pixel values per channel per scanline, indexed [y][channelIndex][x] as float values */
       pixelValues?: number[][][];
-    } = {}): ArrayBuffer {
+    } = {}): Promise<ArrayBuffer> {
       const {
         width = 2,
         height = 2,

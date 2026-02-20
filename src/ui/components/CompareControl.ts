@@ -710,6 +710,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         'off': '',
         'horizontal': 'H-Wipe',
         'vertical': 'V-Wipe',
+        'quad': 'Quad',
         'splitscreen-h': 'Split-H',
         'splitscreen-v': 'Split-V',
       };

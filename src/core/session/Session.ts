@@ -214,7 +214,7 @@ export interface MediaSource {
   height: number;
   duration: number; // in frames
   fps: number;
-  element?: HTMLImageElement | HTMLVideoElement;
+  element?: HTMLImageElement | HTMLVideoElement | ImageBitmap;
   // Sequence-specific data
   sequenceInfo?: SequenceInfo;
   sequenceFrames?: SequenceFrame[];
@@ -1958,7 +1958,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Get the current frame image for a sequence
    * Returns null if current source is not a sequence
    */
-  async getSequenceFrameImage(frameIndex?: number): Promise<HTMLImageElement | null> {
+  async getSequenceFrameImage(frameIndex?: number): Promise<ImageBitmap | null> {
     const source = this.currentSource;
     if (source?.type !== 'sequence' || !source.sequenceFrames) {
       return null;
@@ -1983,7 +1983,7 @@ export class Session extends EventEmitter<SessionEvents> {
   /**
    * Get sequence frame synchronously (returns cached image or null)
    */
-  getSequenceFrameSync(frameIndex?: number): HTMLImageElement | null {
+  getSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
     const source = this.currentSource;
     if (source?.type !== 'sequence' || !source.sequenceFrames) {
       return null;

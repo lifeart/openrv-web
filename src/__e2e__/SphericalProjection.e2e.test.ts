@@ -25,10 +25,8 @@ import {
   SphericalProjection,
   SPHERICAL_PROJECTION_GLSL,
   directionToEquirectUV,
-  equirectUVToDirection,
   vec3Normalize,
   detect360Content,
-  type SphericalProjectionUniforms,
   type SphericalMetadata,
 } from '../render/SphericalProjection';
 

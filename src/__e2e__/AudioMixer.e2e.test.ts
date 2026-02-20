@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AudioMixer, type WaveformTextureData } from '../audio/AudioMixer';
+import { AudioMixer } from '../audio/AudioMixer';
 import { EventEmitter } from '../utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ interface StubSessionEvents {
   playbackChanged: boolean;
   frameChanged: void;
   sourceLoaded: void;
+  [key: string]: unknown;
 }
 
 class StubSession extends EventEmitter<StubSessionEvents> {

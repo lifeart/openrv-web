@@ -13,7 +13,6 @@ import {
   DEFAULT_STENCIL_BOX,
   DEFAULT_WIPE_STATE,
 } from './wipe';
-import type { StencilBox } from './wipe';
 
 describe('computeHorizontalWipeBoxes', () => {
   it('position=0 gives empty left box and full right box', () => {

@@ -825,11 +825,11 @@ async function decompressData(
  */
 async function inflateRaw(compressedData: Uint8Array): Promise<Uint8Array> {
   // Prefer Node.js synchronous inflate to avoid DecompressionStream Z_BUF_ERROR
-  if (typeof globalThis.process !== 'undefined' && globalThis.process.versions?.node) {
+  if (typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.versions?.node) {
     try {
       // Dynamic import to keep browser bundle clean
-      const { inflateSync } = await import('node:zlib');
-      return new Uint8Array(inflateSync(Buffer.from(compressedData)));
+      const zlib = await (Function('return import("node:zlib")')() as Promise<{ inflateSync: (buf: Uint8Array) => Uint8Array }>);
+      return new Uint8Array(zlib.inflateSync(compressedData));
     } catch {
       // Fall through to DecompressionStream
     }

@@ -36,16 +36,10 @@ import {
   REC2020_TO_XYZ,
   XYZ_TO_REC2020,
   acesToneMapRGB,
-  gamutClip,
   type RGB,
-  type Matrix3x3,
   composeMatrices,
-  chromaticAdaptationMatrix,
-  D65_WHITE,
-  D60_WHITE,
   D60_TO_D65,
   D65_TO_D60,
-  multiplyMatrices,
 } from './OCIOTransform';
 import {
   pqEncode,
@@ -58,7 +52,6 @@ import {
   slog3Decode,
 } from './TransferFunctions';
 import {
-  applyDisplayTransfer,
   linearToSRGB,
   linearToRec709,
   applyDisplayColorManagement,
@@ -643,8 +636,6 @@ describe('Display Output Pipeline', () => {
 
   it('INT-042: Display color management on ImageData with default state processes correctly', () => {
     const imageData = createTestImageData(4, 4, { r: 128, g: 128, b: 128 });
-    const originalData = new Uint8ClampedArray(imageData.data);
-
     applyDisplayColorManagementToImageData(imageData, DEFAULT_DISPLAY_COLOR_STATE);
 
     // Default state applies sRGB transfer, gamma=1.0, brightness=1.0
@@ -737,7 +728,7 @@ describe('Full Pipeline Stress Test', () => {
     const pqValues = [0.3, 0.25, 0.2]; // Moderate HDR signal
 
     // Step 1: PQ decode to linear
-    const linear: RGB = [pqDecode(pqValues[0]), pqDecode(pqValues[1]), pqDecode(pqValues[2])];
+    const linear: RGB = [pqDecode(pqValues[0]!), pqDecode(pqValues[1]!), pqDecode(pqValues[2]!)];
     for (const ch of linear) expect(Number.isFinite(ch)).toBe(true);
 
     // Step 2: Convert to ACEScg via XYZ (treating input as Rec.2020 primaries)

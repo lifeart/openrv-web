@@ -17,8 +17,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DCCBridge, type DCCBridgeConfig, type SyncFrameMessage, type LoadMediaMessage, type SyncColorMessage } from '../integrations/DCCBridge';
-import { EventEmitter } from '../utils/EventEmitter';
+import { DCCBridge } from '../integrations/DCCBridge';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
 // Mock WebSocket
@@ -74,6 +74,7 @@ class MockWebSocket {
 interface StubSessionEvents {
   frameChanged: void;
   playbackChanged: boolean;
+  [key: string]: unknown;
 }
 
 class StubSession extends EventEmitter<StubSessionEvents> {
@@ -87,8 +88,8 @@ class StubHeaderBar extends EventEmitter {
   // Track all emissions for verification
   emittedEvents: Array<{ event: string; data: unknown }> = [];
 
-  emit(event: string, data: unknown): void {
-    this.emittedEvents.push({ event, data });
+  override emit<K extends keyof EventMap>(event: K, data: EventMap[K]): void {
+    this.emittedEvents.push({ event: event as string, data });
     super.emit(event, data);
   }
 }

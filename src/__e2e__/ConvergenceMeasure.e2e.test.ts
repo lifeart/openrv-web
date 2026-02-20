@@ -38,16 +38,12 @@
  * are NOT wired end-to-end.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // UI component (state manager with events)
 import {
   ConvergenceMeasure,
   measureDisparity,
-  computeFrameDisparityStats,
-  renderConvergenceGuide as renderConvergenceGuideUI,
-  computeBlockSAD,
-  DEFAULT_CONVERGENCE_STATE,
 } from '../ui/components/ConvergenceMeasure';
 import type {
   DisparityResult,
@@ -65,8 +61,6 @@ import {
   DEFAULT_CONVERGENCE_GUIDE_OPTIONS,
 } from '../stereo/ConvergenceMeasure';
 import type {
-  DisparityAtPoint,
-  DisparityStats as StereoDisparityStats,
   DisparityMeasureParams,
 } from '../stereo/ConvergenceMeasure';
 

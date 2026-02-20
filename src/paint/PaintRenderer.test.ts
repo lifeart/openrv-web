@@ -481,15 +481,24 @@ describe('PaintRenderer', () => {
       };
 
       renderer.resize(800, 600);
-      const ctx = renderer.getCanvas().getContext('2d') as any;
-      
-      // Need to spy on context methods since it's hard to read back letterSpacing in jsdom
-      const fillTextSpy = vi.spyOn(ctx, 'fillText');
-      
+
+      // Access renderer's internal ctx directly (same as canvas.getContext('2d'))
+      const internalCtx = (renderer as any).ctx as CanvasRenderingContext2D;
+
+      // Ensure the letterSpacing property is observable (jsdom may not support it natively)
+      let capturedSpacing: string | undefined;
+      Object.defineProperty(internalCtx, 'letterSpacing', {
+        get() { return capturedSpacing; },
+        set(v: string) { capturedSpacing = v; },
+        configurable: true,
+      });
+
+      const fillTextSpy = vi.spyOn(internalCtx, 'fillText');
+
       renderer.renderText(text, defaultOptions);
 
       // Verify the letterSpacing was set on the context
-      expect(ctx.letterSpacing).toBe('5px');
+      expect(capturedSpacing).toBe('5px');
       expect(fillTextSpy).toHaveBeenCalled();
     });
 

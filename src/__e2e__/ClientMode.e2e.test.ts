@@ -9,7 +9,7 @@
  * - Edge cases: no container, already restricted, disposed state
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ClientMode, type ClientModeStateChange } from '../ui/components/ClientMode';
 
 describe('ClientMode E2E', () => {

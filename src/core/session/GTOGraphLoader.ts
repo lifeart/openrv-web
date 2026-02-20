@@ -1260,8 +1260,6 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (wipeComp?.exists()) {
         const x = wipeComp.property('x').value() as number;
         const y = wipeComp.property('y').value() as number;
-        const angle = wipeComp.property('angle').value() as number;
-
         if (typeof x === 'number') nodeInfo.properties.wipeX = x;
         if (typeof y === 'number') nodeInfo.properties.wipeY = y;
         // wipeAngle is parsed from GTO but no longer stored as a node property

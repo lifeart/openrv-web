@@ -229,13 +229,18 @@ describe('SequenceLoader', () => {
         file,
       };
 
-      // Mock Image to trigger load quickly
-      await vi.waitFor(async () => {
+      // Mock createImageBitmap since jsdom doesn't provide it
+      const mockBitmap = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
+      const origCreateImageBitmap = globalThis.createImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      try {
         const result = await loadFrameImage(frame);
-        expect(frame.url).toBeDefined();
-        expect(frame.url).toMatch(/^blob:/);
-        return result;
-      }, { timeout: 200 });
+        expect(result).toBe(mockBitmap);
+        expect(frame.image).toBe(mockBitmap);
+      } finally {
+        globalThis.createImageBitmap = origCreateImageBitmap;
+      }
     });
   });
 

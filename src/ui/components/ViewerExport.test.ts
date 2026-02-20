@@ -935,7 +935,7 @@ describe('ViewerExport', () => {
       source.element = undefined as any;
       source.sequenceFrames = [
         { index: 0, frameNumber: 1, file: new File([''], 'f0001.png') },
-        { index: 1, frameNumber: 2, file: new File([''], 'f0002.png'), image: seqFrame },
+        { index: 1, frameNumber: 2, file: new File([''], 'f0002.png'), image: seqFrame as unknown as ImageBitmap },
       ];
       mockSession.currentFrame = 2;
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
