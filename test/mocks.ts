@@ -72,7 +72,7 @@ export function createMockRendererGL(
     bufferData: vi.fn(),
     enableVertexAttribArray: vi.fn(),
     vertexAttribPointer: vi.fn(),
-    getUniformLocation: vi.fn(() => ({})),
+    getUniformLocation: vi.fn((_program: unknown, name: string) => ({ __uniformName: name })),
     getAttribLocation: vi.fn(() => 0),
     useProgram: vi.fn(),
     uniform1f: vi.fn(),
@@ -170,6 +170,51 @@ export function initRendererWithMockGL(
 
   renderer.initialize(canvas, extraOpts?.capabilities);
   return mockGL;
+}
+
+/**
+ * Extract the last value set for a specific uniform via `gl.uniform1i`.
+ *
+ * Works with mock GL contexts created by `createMockRendererGL`, which tags
+ * each uniform location object with `__uniformName`. Scans the recorded
+ * `uniform1i` calls in reverse to find the most recent call for the given
+ * uniform name.
+ *
+ * Returns `undefined` if the uniform was never set.
+ */
+export function getLastUniform1i(
+  mockGL: WebGL2RenderingContext,
+  uniformName: string,
+): number | undefined {
+  const mock = mockGL.uniform1i as unknown as ReturnType<typeof vi.fn>;
+  const calls = mock.mock.calls as Array<[{ __uniformName?: string }, number]>;
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const call = calls[i]!;
+    if (call[0]?.__uniformName === uniformName) {
+      return call[1];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extract the last value set for a specific uniform via `gl.uniform1f`.
+ *
+ * Same approach as `getLastUniform1i` but for float uniforms.
+ */
+export function getLastUniform1f(
+  mockGL: WebGL2RenderingContext,
+  uniformName: string,
+): number | undefined {
+  const mock = mockGL.uniform1f as unknown as ReturnType<typeof vi.fn>;
+  const calls = mock.mock.calls as Array<[{ __uniformName?: string }, number]>;
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const call = calls[i]!;
+    if (call[0]?.__uniformName === uniformName) {
+      return call[1];
+    }
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

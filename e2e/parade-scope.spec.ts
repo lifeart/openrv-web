@@ -60,12 +60,14 @@ test.describe('Parade Scope (RGB Parade)', () => {
       state = await getViewerState(page);
       expect(state.waveformMode).toBe('parade');
 
-      // Take screenshot of parade display
-      const paradeScreenshot = await page.locator('[data-testid="waveform-container"]').screenshot();
-      expect(paradeScreenshot).toBeDefined();
-
       // Parade mode should show three sections for R, G, B channels
-      // Verified by visual inspection - screenshot should have three distinct regions
+      // Verify by checking the waveform container is visible and contains canvas content
+      const waveformContainer = page.locator('[data-testid="waveform-container"]');
+      await expect(waveformContainer).toBeVisible();
+
+      const paradeScreenshot = await waveformContainer.screenshot();
+      // Parade screenshot should have meaningful content (not just a tiny empty buffer)
+      expect(paradeScreenshot.length).toBeGreaterThan(100);
     });
 
     test('PARADE-002: horizontal position corresponds to image', async ({ page }) => {
@@ -108,15 +110,12 @@ test.describe('Parade Scope (RGB Parade)', () => {
         await page.waitForTimeout(100);
       }
 
-      // The parade should display R (red), G (green), B (blue) in that order
-      // This is verified by visual inspection of the screenshot
-      // Each section should have its characteristic color tint
-      const paradeScreenshot = await page.locator('[data-testid="waveform-container"] canvas').screenshot();
-      expect(paradeScreenshot).toBeDefined();
-
-      // Verify mode is parade
+      // Verify mode is parade and the waveform canvas has rendered content
       const state = await getViewerState(page);
       expect(state.waveformMode).toBe('parade');
+
+      const paradeScreenshot = await page.locator('[data-testid="waveform-container"] canvas').screenshot();
+      expect(paradeScreenshot.length).toBeGreaterThan(100);
     });
 
     test('PARADE-004: scale matches 0-255 range', async ({ page }) => {
@@ -163,10 +162,14 @@ test.describe('Parade Scope (RGB Parade)', () => {
       // Take parade screenshot after frame change
       const frame2Parade = await page.locator('[data-testid="waveform-container"] canvas').screenshot();
 
-      // Parade should update when frame changes
-      // Note: If consecutive frames are very similar, the parade might look similar too
-      // The key is that the parade updates - any difference indicates it's working
-      // For most video content, consecutive frames will have slightly different content
+      // Verify the waveform is still in parade mode and visible after frame change
+      const state = await getViewerState(page);
+      expect(state.waveformMode).toBe('parade');
+      expect(state.waveformVisible).toBe(true);
+
+      // Parade screenshots should have meaningful content (non-empty buffers)
+      expect(frame1Parade.length).toBeGreaterThan(100);
+      expect(frame2Parade.length).toBeGreaterThan(100);
     });
 
     test('PARADE-005b: parade updates with color adjustments', async ({ page }) => {
@@ -309,6 +312,9 @@ test.describe('Parade Scope (RGB Parade)', () => {
         await page.waitForTimeout(100);
       }
 
+      // Capture initial parade before desaturation
+      const initialParade = await page.locator('[data-testid="waveform-container"] canvas').screenshot();
+
       // Open color panel and reduce saturation to 0 (grayscale)
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
@@ -318,13 +324,14 @@ test.describe('Parade Scope (RGB Parade)', () => {
       await saturationSlider.dispatchEvent('input');
       await page.waitForTimeout(300);
 
-      // With 0 saturation, all three channels should look similar (grayscale)
-      const grayscaleParade = await page.locator('[data-testid="waveform-container"] canvas').screenshot();
-      expect(grayscaleParade).toBeDefined();
-
-      // Verify mode is still parade
+      // Verify mode is still parade and the display updated
       const state = await getViewerState(page);
       expect(state.waveformMode).toBe('parade');
+
+      // With 0 saturation, all three channels should converge (grayscale)
+      // The parade should look different from the initial color parade
+      const grayscaleParade = await page.locator('[data-testid="waveform-container"] canvas').screenshot();
+      expect(imagesAreDifferent(initialParade, grayscaleParade)).toBe(true);
     });
   });
 

@@ -40,9 +40,6 @@ test.describe('State Verification - Frame Navigation', () => {
     await page.keyboard.press('Home');
     await page.waitForTimeout(300);
 
-    // Capture frame 0
-    const frame0Screenshot = await captureViewerScreenshot(page);
-
     // Step forward many times to ensure visible change (video may have short duration)
     for (let i = 0; i < 10; i++) {
       await page.keyboard.press('ArrowRight');
@@ -50,15 +47,9 @@ test.describe('State Verification - Frame Navigation', () => {
     }
     await page.waitForTimeout(300);
 
-    // Capture new frame
-    const frameNScreenshot = await captureViewerScreenshot(page);
-
-    // Frames should be different (video has motion)
-    // If video is very short or static, this may be the same - that's OK
-    // The test verifies the navigation didn't crash
-    const changed = imagesAreDifferent(frame0Screenshot, frameNScreenshot);
-    // Accept either outcome - main goal is no crash during navigation
-    expect(typeof changed).toBe('boolean');
+    // After stepping forward 10 times, frame number should have advanced
+    const stateAfter = await getSessionState(page);
+    expect(stateAfter.currentFrame).toBeGreaterThan(1);
   });
 
   test('STATE-011: stepping backward should return to previous frame', async ({ page }) => {
@@ -73,20 +64,16 @@ test.describe('State Verification - Frame Navigation', () => {
     }
     await page.waitForTimeout(300);
 
-    // Capture current state
-    const forwardScreenshot = await captureViewerScreenshot(page);
+    const forwardState = await getSessionState(page);
+    expect(forwardState.currentFrame).toBeGreaterThan(1);
 
     // Step back to start
     await page.keyboard.press('Home');
     await page.waitForTimeout(300);
 
-    // Capture start frame
-    const startScreenshot = await captureViewerScreenshot(page);
-
-    // Main goal is verifying backward navigation works without crashing
-    // Frames may or may not be different depending on video content
-    const changed = imagesAreDifferent(forwardScreenshot, startScreenshot);
-    expect(typeof changed).toBe('boolean');
+    // Should be back at frame 1
+    const startState = await getSessionState(page);
+    expect(startState.currentFrame).toBe(1);
   });
 
   test('STATE-012: Home key should jump to first frame', async ({ page }) => {
@@ -248,8 +235,9 @@ test.describe('State Verification - Transform', () => {
 
     const doubleFlipScreenshot = await captureViewerScreenshot(page);
 
-    // Should be back to original (or very close)
-    // Note: May have minor rendering differences
+    // Double flip should restore the original image
+    // Use imagesAreDifferent=false to verify they match (or are very close)
+    expect(imagesAreDifferent(originalScreenshot, doubleFlipScreenshot)).toBe(false);
   });
 });
 
@@ -359,8 +347,8 @@ test.describe('State Verification - Paint/Annotations', () => {
 
     const afterRedo = await captureViewerScreenshot(page);
 
-    // Should match annotated state (or very close)
-    // At minimum, redo brought something back different from undone state
+    // afterRedo should look like the original annotation (redo restored it)
+    expect(imagesAreDifferent(withAnnotation, afterRedo)).toBe(false);
   });
 });
 
@@ -497,9 +485,11 @@ test.describe('State Verification - Export Validation', () => {
     await page.keyboard.press('Control+s');
     await page.waitForTimeout(1000);
 
-    // The export shortcut should have been processed
-    // In some environments download may not complete, but the action should not error
-    expect(true).toBe(true); // Test passes if no errors occurred
+    // The export shortcut should have been processed without errors
+    // Verify app is still responsive after the export action
+    const stateAfterExport = await getSessionState(page);
+    expect(stateAfterExport.hasMedia).toBe(true);
+    expect(stateAfterExport.currentFrame).toBeGreaterThanOrEqual(1);
   });
 
   test('STATE-071: export should include annotations', async ({ page }) => {
@@ -518,13 +508,9 @@ test.describe('State Verification - Export Validation', () => {
     await page.mouse.up();
     await page.waitForTimeout(300);
 
-    // Export
-    try {
-      const { data } = await exportFrame(page);
-      expect(data.length).toBeGreaterThan(0);
-    } catch {
-      // Export may not work in all environments
-    }
+    // Export the frame and verify it contains data
+    const { data } = await exportFrame(page);
+    expect(data.length).toBeGreaterThan(0);
   });
 });
 

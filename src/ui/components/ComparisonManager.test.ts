@@ -13,15 +13,10 @@ import {
   DEFAULT_QUAD_VIEW_STATE,
 } from './ComparisonManager';
 import type {
-  WipeMode,
-  ABSource,
-  ComparisonBlendMode,
-  BlendModeState,
   QuadViewState,
   CompareState,
 } from './ComparisonManager';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
-import type { DifferenceMatteState } from './DifferenceMatteControl';
 import { DEFAULT_STENCIL_BOX } from '../../core/types/wipe';
 
 describe('ComparisonManager', () => {

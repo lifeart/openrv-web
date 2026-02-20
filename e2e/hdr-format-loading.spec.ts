@@ -86,11 +86,6 @@ test.describe('DPX Format Support', () => {
     await waitForTestHelper(page);
   });
 
-  test('HDR-F-001: should skip DPX tests if no fixture available', async ({ page }) => {
-    // @hdr - requires hardware HDR support, skipped in CI
-    test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
-  });
-
   test('HDR-F-002: should load DPX file and update session state', async ({ page }) => {
     // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_DPX), 'DPX test fixture not found');
@@ -250,11 +245,6 @@ test.describe('Cineon Format Support', () => {
     await waitForTestHelper(page);
   });
 
-  test('HDR-F-010: should skip Cineon tests if no fixture available', async ({ page }) => {
-    // @hdr - requires hardware HDR support, skipped in CI
-    test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
-  });
-
   test('HDR-F-011: should load Cineon file and update session state', async ({ page }) => {
     // @hdr - requires hardware HDR support, skipped in CI
     test.skip(!fixtureExists(SAMPLE_CINEON), 'Cineon test fixture not found');
@@ -386,11 +376,6 @@ test.describe('Float TIFF Format Support', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
-  });
-
-  test('HDR-F-020: should skip Float TIFF tests if no fixture available', async ({ page }) => {
-    // @hdr - requires hardware HDR support, skipped in CI
-    test.skip(!fixtureExists(SAMPLE_TIFF_FLOAT), 'Float TIFF test fixture not found');
   });
 
   test('HDR-F-021: should load Float TIFF file and update session state', async ({ page }) => {
@@ -713,18 +698,19 @@ test.describe('HDR Format Integration', () => {
     expect(imagesAreDifferent(before, after)).toBe(true);
   });
 
-  test('HDR-F-035: HDR formats should handle missing files gracefully', async ({ page }) => {
+  test('HDR-F-035: app remains functional when no file is loaded', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
 
-    // Try to load a non-existent file
-    const fileInput = page.locator('input[type="file"]').first();
-
-    // App should remain functional even if file doesn't exist
+    // Verify app is functional without loading any file
     const canvas = page.locator('canvas').first();
     await expect(canvas).toBeVisible();
 
-    // No errors should be thrown to the console
+    // Session should report no media loaded
+    const state = await getSessionState(page);
+    expect(state.hasMedia).toBe(false);
+
+    // No uncaught errors should have occurred
     expect(errors.length).toBe(0);
   });
 

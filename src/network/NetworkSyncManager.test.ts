@@ -308,31 +308,43 @@ describe('NetworkSyncManager', () => {
     it('NSM-021: sends sync message on playback change', () => {
       manager._applyLocalRoomCreation();
 
-      expect(() => manager.sendPlaybackSync({
+      const dispatchSpy = vi.spyOn(manager as any, 'dispatchRealtimeMessage');
+
+      manager.sendPlaybackSync({
         isPlaying: true,
         currentFrame: 10,
         playbackSpeed: 1,
         playDirection: 1,
         loopMode: 'loop',
         timestamp: Date.now(),
-      })).not.toThrow();
+      });
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      const message = dispatchSpy.mock.calls[0]![0] as { type: string; payload: Record<string, unknown> };
+      expect(message.type).toBe('sync.playback');
+      expect(message.payload.isPlaying).toBe(true);
+      expect(message.payload.currentFrame).toBe(10);
     });
 
     it('NSM-024: ignores local changes from sync messages', () => {
       manager._applyLocalRoomCreation();
       const sm = manager.getSyncStateManager();
 
+      const dispatchSpy = vi.spyOn(manager as any, 'dispatchRealtimeMessage');
+
       sm.beginApplyRemote();
 
       // This should be suppressed since we're applying remote state
-      expect(() => manager.sendPlaybackSync({
+      manager.sendPlaybackSync({
         isPlaying: true,
         currentFrame: 10,
         playbackSpeed: 1,
         playDirection: 1,
         loopMode: 'loop',
         timestamp: Date.now(),
-      })).not.toThrow();
+      });
+
+      expect(dispatchSpy).not.toHaveBeenCalled();
 
       sm.endApplyRemote();
     });
@@ -341,21 +353,45 @@ describe('NetworkSyncManager', () => {
   describe('frame sync', () => {
     it('NSM-025: sends frame sync message', () => {
       manager._applyLocalRoomCreation();
-      expect(() => manager.sendFrameSync(42)).not.toThrow();
+
+      const dispatchSpy = vi.spyOn(manager as any, 'dispatchRealtimeMessage');
+
+      manager.sendFrameSync(42);
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      const message = dispatchSpy.mock.calls[0]![0] as { type: string; payload: Record<string, unknown> };
+      expect(message.type).toBe('sync.frame');
+      expect(message.payload.currentFrame).toBe(42);
     });
   });
 
   describe('view sync', () => {
     it('NSM-032: sends view sync message', () => {
       manager._applyLocalRoomCreation();
-      expect(() => manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' })).not.toThrow();
+
+      const dispatchSpy = vi.spyOn(manager as any, 'dispatchRealtimeMessage');
+
+      manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' });
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      const message = dispatchSpy.mock.calls[0]![0] as { type: string; payload: Record<string, unknown> };
+      expect(message.type).toBe('sync.view');
+      expect(message.payload.zoom).toBe(2);
+      expect(message.payload.channelMode).toBe('rgb');
     });
   });
 
   describe('state sync request', () => {
     it('NSM-042: requests state sync', () => {
       manager._applyLocalRoomCreation();
-      expect(() => manager.requestStateSync()).not.toThrow();
+
+      const dispatchSpy = vi.spyOn(manager as any, 'dispatchRealtimeMessage');
+
+      manager.requestStateSync();
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      const message = dispatchSpy.mock.calls[0]![0] as { type: string };
+      expect(message.type).toBe('sync.state-request');
     });
 
     it('NSM-042b: requestMediaSync returns transfer ID when connected', () => {

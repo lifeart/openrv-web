@@ -389,21 +389,16 @@ describe('VideoSourceNode', () => {
       expect(DEFAULT_PRELOAD_CONFIG.preloadAhead).toBeGreaterThanOrEqual(20);
     });
 
-    it('VSN-008: VideoSourceNode source code should not hardcode preload config values', async () => {
-      // This is a code-level regression test
-      // We read the actual source to verify no hardcoded config overrides exist
-      // If this test fails, it means someone added hardcoded values back
-
-      // Import the source as text would require fs, so we test behavior instead:
-      // VideoSourceNode should delegate entirely to DEFAULT_PRELOAD_CONFIG
-      // The getCacheStats method should return maxCacheSize matching the default
-      // (This can only be fully tested when mediabunny is initialized)
-
-      // For now, verify the node can be created without errors
-      const testNode = new VideoSourceNode('ConfigTest');
-      expect(testNode).toBeDefined();
-      expect(testNode.getCacheStats()).toBeNull(); // No preload manager until video loads
-      testNode.dispose();
+    it('VSN-008: getCacheStats reports capacity matching DEFAULT_PRELOAD_CONFIG', () => {
+      // After loading, cache capacity should match DEFAULT_PRELOAD_CONFIG.
+      // This guards against hardcoded overrides (the old bug used maxCacheSize: 60).
+      const stats = node.getCacheStats();
+      // Before loading, stats may be null; verify default config is large enough
+      if (stats !== null) {
+        expect(stats.maxCacheSize).toBe(DEFAULT_PRELOAD_CONFIG.maxCacheSize);
+      }
+      // Either way, the constant itself must be >= 100 (covered by VSN-007)
+      expect(DEFAULT_PRELOAD_CONFIG.maxCacheSize).toBeGreaterThanOrEqual(100);
     });
   });
 

@@ -1,5 +1,11 @@
 /**
  * OCIOWasmPipeline Unit Tests
+ *
+ * Tests lifecycle, mode transitions, caching logic, event dispatch, fallback
+ * behavior, LUT size validation, shader translation, and disposal.
+ * Tests that merely verify mock WASM return values pass through unchanged
+ * (config queries, LUT data structure, color transform results, argument
+ * delegation) have been removed.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -32,21 +38,7 @@ function createMockExports(): OCIOWasmExports {
     ocioGetProcessor: vi.fn(() => nextHandle++),
     ocioGetDisplayProcessor: vi.fn(() => nextHandle++),
     ocioGenerateShaderCode: vi.fn(() => SAMPLE_GLSL),
-    ocioGetProcessorLUT3D: vi.fn((_, size: number) => {
-      const data = new Float32Array(size * size * size * 3);
-      // Fill with identity LUT pattern for testing
-      for (let b = 0; b < size; b++) {
-        for (let g = 0; g < size; g++) {
-          for (let r = 0; r < size; r++) {
-            const idx = (b * size * size + g * size + r) * 3;
-            data[idx] = r / (size - 1);
-            data[idx + 1] = g / (size - 1);
-            data[idx + 2] = b / (size - 1);
-          }
-        }
-      }
-      return data;
-    }),
+    ocioGetProcessorLUT3D: vi.fn((_, size: number) => new Float32Array(size * size * size * 3)),
     ocioDestroyProcessor: vi.fn(),
     ocioApplyRGB: vi.fn(() => new Float32Array([0.5, 0.6, 0.7])),
     ocioGetVersion: vi.fn(() => '2.3.1'),
@@ -131,35 +123,12 @@ describe('OCIOWasmPipeline', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Config Management
+  // Config Management — state / guard logic only
   // -----------------------------------------------------------------------
 
   describe('config management', () => {
     beforeEach(async () => {
       await pipeline.init();
-    });
-
-    it('PIPE-CFG-001: loadConfig delegates to bridge', () => {
-      pipeline.loadConfig('ocio_profile_version: 2\n', 'ACES');
-      expect(mockExports.ocioLoadConfig).toHaveBeenCalledWith('ocio_profile_version: 2\n');
-    });
-
-    it('PIPE-CFG-002: getDisplays returns available displays', () => {
-      pipeline.loadConfig('yaml', 'test');
-      const displays = pipeline.getDisplays();
-      expect(displays).toEqual(['sRGB', 'Rec.709']);
-    });
-
-    it('PIPE-CFG-003: getViews returns views for display', () => {
-      pipeline.loadConfig('yaml', 'test');
-      const views = pipeline.getViews('sRGB');
-      expect(views).toEqual(['ACES 1.0 SDR-video', 'Raw']);
-    });
-
-    it('PIPE-CFG-004: getColorSpaces returns available color spaces', () => {
-      pipeline.loadConfig('yaml', 'test');
-      const spaces = pipeline.getColorSpaces();
-      expect(spaces).toEqual(['ACEScg', 'sRGB', 'Linear sRGB']);
     });
 
     it('PIPE-CFG-005: loadConfig clears current result', () => {
@@ -185,28 +154,13 @@ describe('OCIOWasmPipeline', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Pipeline Building
+  // Pipeline Building — caching, rebuild, mode guards
   // -----------------------------------------------------------------------
 
   describe('pipeline building', () => {
     beforeEach(async () => {
       await pipeline.init();
       pipeline.loadConfig('yaml', 'test');
-    });
-
-    it('PIPE-BUILD-001: buildDisplayPipeline returns full result with shader + LUT', () => {
-      const result = pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-
-      expect(result).not.toBeNull();
-      expect(result!.shader).toBeDefined();
-      expect(result!.shader.code).toContain('texture(');
-      expect(result!.shader.functionName).toBe('OCIODisplay');
-      expect(result!.lut3D).toBeDefined();
-      expect(result!.lut3D.size).toBe(65);
-      expect(result!.lut3D.data).toBeInstanceOf(Float32Array);
-      expect(result!.lut3D.data.length).toBe(65 * 65 * 65 * 3);
-      expect(result!.uniforms).toBeDefined();
-      expect(result!.fromWasm).toBe(true);
     });
 
     it('PIPE-BUILD-002: emits pipelineReady event', () => {
@@ -253,24 +207,10 @@ describe('OCIOWasmPipeline', () => {
       expect(result).toBeNull();
       offPipeline.dispose();
     });
-
-    it('PIPE-BUILD-008: look parameter is passed through', () => {
-      pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic');
-      expect(mockExports.ocioGetDisplayProcessor).toHaveBeenCalledWith(
-        expect.any(Number), 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic',
-      );
-    });
-
-    it('PIPE-BUILD-009: empty look defaults to empty string', () => {
-      pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      expect(mockExports.ocioGetDisplayProcessor).toHaveBeenCalledWith(
-        expect.any(Number), 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', '',
-      );
-    });
   });
 
   // -----------------------------------------------------------------------
-  // LUT Configuration
+  // LUT Configuration — validation and default logic
   // -----------------------------------------------------------------------
 
   describe('LUT configuration', () => {
@@ -304,38 +244,13 @@ describe('OCIOWasmPipeline', () => {
       pipeline.setLutSize(33);
       expect(pipeline.getLutSize()).toBe(33);
     });
-
-    it('PIPE-LUT-004: LUT data has correct structure', () => {
-      const result = pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      const lut = result!.lut3D;
-
-      expect(lut.title).toBe('OCIO WASM LUT');
-      expect(lut.domainMin).toEqual([0, 0, 0]);
-      expect(lut.domainMax).toEqual([1, 1, 1]);
-      expect(lut.data.length).toBe(lut.size * lut.size * lut.size * 3);
-    });
   });
 
   // -----------------------------------------------------------------------
-  // Color Transform
+  // Color Transform — guard logic only
   // -----------------------------------------------------------------------
 
   describe('color transform', () => {
-    beforeEach(async () => {
-      await pipeline.init();
-      pipeline.loadConfig('yaml', 'test');
-      pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-    });
-
-    it('PIPE-COLOR-001: transformColor returns transformed values', () => {
-      const result = pipeline.transformColor(0.5, 0.5, 0.5);
-      expect(result).not.toBeNull();
-      // Float32Array values have limited precision
-      expect(result![0]).toBeCloseTo(0.5, 4);
-      expect(result![1]).toBeCloseTo(0.6, 4);
-      expect(result![2]).toBeCloseTo(0.7, 4);
-    });
-
     it('PIPE-COLOR-002: transformColor returns null without processor', () => {
       const freshPipeline = new OCIOWasmPipeline({ factory });
       const result = freshPipeline.transformColor(0.5, 0.5, 0.5);
@@ -345,7 +260,7 @@ describe('OCIOWasmPipeline', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Shader Translation
+  // Shader Translation — real OCIOShaderTranslator logic
   // -----------------------------------------------------------------------
 
   describe('shader translation', () => {

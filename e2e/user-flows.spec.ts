@@ -715,22 +715,31 @@ test.describe('Scope Analysis Workflow', () => {
 
     await loadVideoFile(page);
 
-    // Enable pixel probe
+    // Enable pixel probe (info panel toggle)
     await page.keyboard.press('Shift+i');
     await page.waitForTimeout(200);
+
+    // Verify the info panel is enabled via waitForCondition
+    await waitForCondition(page, `(() => {
+      const state = window.__OPENRV_TEST__?.getInfoPanelState();
+      return state?.enabled === true;
+    })()`);
 
     // Click on canvas to probe a pixel
     const canvas = await getCanvas(page);
     const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+
     if (box) {
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
       await page.waitForTimeout(100);
     }
 
-    // Verify pixel probe is showing information
-    // The pixel probe panel should display RGB/IRE values
-    const probePanel = page.locator('[class*="pixel-probe"], [class*="color-info"]');
-    // Probe panel may or may not be visible depending on implementation
+    // Verify info panel is still enabled after interaction
+    const infoPanelEnabled = await page.evaluate(() => {
+      return window.__OPENRV_TEST__?.getInfoPanelState()?.enabled ?? false;
+    });
+    expect(infoPanelEnabled).toBe(true);
   });
 });
 
@@ -791,12 +800,13 @@ test.describe('Session Management Workflow', () => {
 
     await loadVideoFile(page);
 
-    // Open history panel
+    // Open history panel via keyboard shortcut
     await page.keyboard.press('Shift+Alt+h');
+    await page.waitForTimeout(200);
 
-    // Verify history panel is visible
+    // Verify the history panel is visible in the DOM
     const historyPanel = page.locator('[class*="history-panel"]');
-    // Panel visibility depends on implementation
+    await expect(historyPanel).toBeVisible();
   });
 });
 

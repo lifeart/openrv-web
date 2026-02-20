@@ -1199,10 +1199,7 @@ describe('FileSourceNode', () => {
       expect(info!.gainmapItemId).toBe(2);
     });
 
-    it('FSN-AVIF-GM-002: parseGainmapAVIF produces info with correct structure for loadGainmapAVIF metadata', async () => {
-      // Verify that parseGainmapAVIF returns an info object whose fields map to
-      // the metadata that loadGainmapAVIF constructs:
-      //   transferFunction='srgb', colorPrimaries='bt709', formatName='avif-gainmap'
+    it('FSN-AVIF-GM-002: parseGainmapAVIF produces info with all required fields', async () => {
       const { isGainmapAVIF, parseGainmapAVIF } = await import('../../formats/AVIFGainmapDecoder');
       const buf = createTestAVIFGainmapBuffer({ includeGainmapAuxC: true });
 
@@ -1210,10 +1207,7 @@ describe('FileSourceNode', () => {
       const info = parseGainmapAVIF(buf);
       expect(info).not.toBeNull();
 
-      // loadGainmapAVIF constructs metadata as:
-      //   colorSpace: 'linear', transferFunction: 'srgb', colorPrimaries: 'bt709'
-      //   attributes: { formatName: 'avif-gainmap', headroom: info.headroom }
-      // Verify the info has the fields needed for this construction:
+      // Verify the info has all the fields needed for gainmap decoding
       expect(info!.headroom).toBeGreaterThan(0);
       expect(info!.primaryItemId).toBe(1);
       expect(info!.gainmapItemId).toBe(2);
@@ -1221,18 +1215,6 @@ describe('FileSourceNode', () => {
       expect(info!.primaryLength).toBeGreaterThan(0);
       expect(info!.gainmapOffset).toBeGreaterThan(0);
       expect(info!.gainmapLength).toBeGreaterThan(0);
-
-      // Confirm the metadata values that loadGainmapAVIF would set:
-      // These are hardcoded in loadGainmapAVIF (not derived from info)
-      const expectedMetadata = {
-        colorSpace: 'linear',
-        transferFunction: 'srgb',
-        colorPrimaries: 'bt709',
-        formatName: 'avif-gainmap',
-      };
-      expect(expectedMetadata.transferFunction).toBe('srgb');
-      expect(expectedMetadata.colorPrimaries).toBe('bt709');
-      expect(expectedMetadata.formatName).toBe('avif-gainmap');
     });
 
     it('FSN-AVIF-GM-003: parseGainmapAVIF extracts correct headroom for metadata', async () => {
@@ -1251,44 +1233,6 @@ describe('FileSourceNode', () => {
       expect(infoDefault!.headroom).toBe(2.0);
     });
 
-    it('FSN-AVIF-GM-004: parseGainmapAVIF info maps to correct IPImage construction', async () => {
-      // Verify the info structure returned by parseGainmapAVIF can be used to
-      // construct an IPImage with the expected fields (testing the contract)
-      const { parseGainmapAVIF } = await import('../../formats/AVIFGainmapDecoder');
-      const { IPImage } = await import('../../core/image/Image');
-
-      const buf = createTestAVIFGainmapBuffer({ includeGainmapAuxC: true });
-      const info = parseGainmapAVIF(buf);
-      expect(info).not.toBeNull();
-
-      // Construct metadata exactly as loadGainmapAVIF does
-      const metadata = {
-        colorSpace: 'linear' as const,
-        sourcePath: 'test.avif',
-        transferFunction: 'srgb' as const,
-        colorPrimaries: 'bt709' as const,
-        attributes: {
-          formatName: 'avif-gainmap',
-          headroom: info!.headroom,
-        },
-      };
-
-      const image = new IPImage({
-        width: 10,
-        height: 10,
-        channels: 4,
-        dataType: 'float32',
-        metadata,
-      });
-
-      expect(image.metadata.transferFunction).toBe('srgb');
-      expect(image.metadata.colorPrimaries).toBe('bt709');
-      expect(image.metadata.colorSpace).toBe('linear');
-      expect(image.metadata.attributes?.formatName).toBe('avif-gainmap');
-      expect(image.metadata.attributes?.headroom).toBe(info!.headroom);
-      expect(image.dataType).toBe('float32');
-      expect(image.channels).toBe(4);
-    });
 
     it('FSN-AVIF-GM-005: AVIF gainmap takes priority over nclx HDR path', async () => {
       // When both gainmap auxC and nclx PQ are present, gainmap should be detected
@@ -1564,56 +1508,6 @@ describe('FileSourceNode', () => {
     });
   });
 
-  // =================================================================
-  // JPEG gainmap metadata
-  // =================================================================
-  describe('JPEG gainmap metadata', () => {
-    it('FSN-GM-001: JPEG gainmap IPImage has transferFunction srgb', async () => {
-      // Test the metadata construction by importing IPImage and ImageMetadata types
-      const { IPImage } = await import('../../core/image/Image');
-
-      // Simulate the metadata that loadGainmapJPEG creates
-      const metadata = {
-        colorSpace: 'linear' as const,
-        sourcePath: 'test.jpg',
-        transferFunction: 'srgb' as const,
-        colorPrimaries: 'bt709' as const,
-        attributes: { formatName: 'jpeg-gainmap', headroom: 3.0 },
-      };
-
-      const image = new IPImage({
-        width: 10,
-        height: 10,
-        channels: 4,
-        dataType: 'float32',
-        metadata,
-      });
-
-      expect(image.metadata.transferFunction).toBe('srgb');
-    });
-
-    it('FSN-GM-002: JPEG gainmap IPImage has colorPrimaries bt709', async () => {
-      const { IPImage } = await import('../../core/image/Image');
-
-      const metadata = {
-        colorSpace: 'linear' as const,
-        sourcePath: 'test.jpg',
-        transferFunction: 'srgb' as const,
-        colorPrimaries: 'bt709' as const,
-        attributes: { formatName: 'jpeg-gainmap', headroom: 3.0 },
-      };
-
-      const image = new IPImage({
-        width: 10,
-        height: 10,
-        channels: 4,
-        dataType: 'float32',
-        metadata,
-      });
-
-      expect(image.metadata.colorPrimaries).toBe('bt709');
-    });
-  });
 
   describe('JXL support', () => {
     /**

@@ -59,10 +59,7 @@ test.describe('Ghost Frames / Onion Skin', () => {
       const screenshotAfter = await captureViewerScreenshot(page);
 
       // Ghost frames should cause visual change (overlay previous/next frames)
-      expect(screenshotBefore).toBeDefined();
-      expect(screenshotAfter).toBeDefined();
-      // Note: Visual difference depends on having distinct adjacent frames
-      expect(await imagesAreDifferent(screenshotBefore, screenshotAfter)).toBe(true);
+      expect(imagesAreDifferent(screenshotBefore, screenshotAfter)).toBe(true);
     });
 
     test('GHOST-E002: ghost frame button should be present in View tab', async ({ page }) => {
@@ -183,21 +180,22 @@ test.describe('Ghost Frames / Onion Skin', () => {
       await page.keyboard.press('Control+g');
       await page.waitForTimeout(100);
 
-      const screenshotPaused = await captureViewerScreenshot(page);
+      // Verify ghost frames are enabled via button text
+      const ghostButton = page.locator('[data-testid="ghost-frame-button"]');
+      const enabledText = await ghostButton.textContent();
+      expect(enabledText).toContain('On');
 
       // Start playback
       await page.keyboard.press('l');
       await page.waitForTimeout(300);
 
-      const screenshotPlaying = await captureViewerScreenshot(page);
-
       // Stop playback
       await page.keyboard.press('k');
       await page.waitForTimeout(100);
 
-      // Ghost frames should be visible during both paused and playing states
-      expect(screenshotPaused).toBeDefined();
-      expect(screenshotPlaying).toBeDefined();
+      // Ghost frames should still be enabled after playback cycle
+      const textAfterPlayback = await ghostButton.textContent();
+      expect(textAfterPlayback).toContain('On');
     });
 
     test('GHOST-E011: reset button restores default settings', async ({ page }) => {

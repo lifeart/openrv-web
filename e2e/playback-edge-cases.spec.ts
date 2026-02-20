@@ -4,7 +4,6 @@ import {
   waitForTestHelper,
   getSessionState,
   isUsingMediabunny,
-  captureViewerScreenshot,
   waitForPlaybackState,
   waitForFrameAtLeast,
   waitForFrameChange,
@@ -592,28 +591,18 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
 
-      const screenshot1 = await captureViewerScreenshot(page);
+      expect((await getSessionState(page)).currentFrame).toBe(1);
 
       // Go to frame 2
       await page.keyboard.press('ArrowRight');
       await waitForFrame(page, 2);
 
-      const screenshot2 = await captureViewerScreenshot(page);
-
-      // Adjacent frames can be visually identical depending on content/codec.
-      // Frame-number transition is the deterministic assertion.
-      void screenshot1;
-      void screenshot2;
       expect((await getSessionState(page)).currentFrame).toBe(2);
 
       // Go back to frame 1
       await page.keyboard.press('ArrowLeft');
       await waitForFrame(page, 1);
 
-      const screenshot1Again = await captureViewerScreenshot(page);
-
-      // Validate frame navigation returned exactly to frame 1.
-      void screenshot1Again;
       expect((await getSessionState(page)).currentFrame).toBe(1);
     });
 
@@ -625,20 +614,15 @@ test.describe('Playback Edge Cases', () => {
       }
       await waitForFrame(page, 11);
 
-      const screenshots: Buffer[] = [];
       const frames: number[] = [];
 
-      // Capture a few frames going backward
+      // Record frame numbers going backward
       for (let i = 0; i < 3; i++) {
         const currentFrame = (await getSessionState(page)).currentFrame;
         frames.push(currentFrame);
-        screenshots.push(await captureViewerScreenshot(page));
         await page.keyboard.press('ArrowLeft');
         await waitForFrame(page, currentFrame - 1);
       }
-
-      // Visual deltas are media-dependent; assert deterministic frame ordering.
-      void screenshots;
 
       // Frames should be decreasing
       expect(frames[0]!).toBeGreaterThan(frames[1]!);
@@ -728,14 +712,6 @@ test.describe('Playback Edge Cases', () => {
   });
 
   test.describe('Speed Preset Validation', () => {
-    test('EDGE-080: PLAYBACK_SPEED_PRESETS has expected values', async ({ page }) => {
-      // Verify the imported presets match expected values
-      expect(PLAYBACK_SPEED_PRESETS).toEqual([0.1, 0.25, 0.5, 1, 2, 4, 8]);
-      expect(PLAYBACK_SPEED_PRESETS.length).toBe(7);
-      expect(PLAYBACK_SPEED_PRESETS[0]).toBe(0.1); // Minimum
-      expect(PLAYBACK_SPEED_PRESETS[PLAYBACK_SPEED_PRESETS.length - 1]).toBe(8); // Maximum
-    });
-
     test('EDGE-081: all presets can be selected via menu', async ({ page }) => {
       const speedButton = page.locator('[data-testid="playback-speed-button"]');
 
