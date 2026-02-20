@@ -200,6 +200,7 @@ export class IPImage {
       dataType: this.dataType,
       data: this.data,
       metadata: { ...this.metadata },
+      imageBitmap: this.imageBitmap,
     });
   }
 

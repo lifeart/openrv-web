@@ -14,8 +14,8 @@ export class LRUCache<K, V> {
   }
 
   get(key: K): V | undefined {
-    const value = this.map.get(key);
-    if (value === undefined) return undefined;
+    if (!this.map.has(key)) return undefined;
+    const value = this.map.get(key) as V;
     // Refresh position: delete and re-insert to move to end (most recent)
     this.map.delete(key);
     this.map.set(key, value);
@@ -54,8 +54,8 @@ export class LRUCache<K, V> {
   }
 
   delete(key: K): boolean {
-    const value = this.map.get(key);
-    if (value === undefined) return false;
+    if (!this.map.has(key)) return false;
+    const value = this.map.get(key) as V;
     this.map.delete(key);
     this.onEvict?.(key, value);
     return true;

@@ -187,7 +187,7 @@ export async function preloadFrames(
     }
   }
 
-  await Promise.all(loadPromises);
+  await Promise.allSettled(loadPromises);
 }
 
 /**

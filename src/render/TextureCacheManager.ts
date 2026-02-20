@@ -348,7 +348,8 @@ export class TextureCacheManager implements ManagerBase {
    * Clear all cached textures
    */
   clear(): void {
-    for (const [key] of this.cache) {
+    const keys = [...this.cache.keys()];
+    for (const key of keys) {
       this.deleteEntry(key);
     }
   }

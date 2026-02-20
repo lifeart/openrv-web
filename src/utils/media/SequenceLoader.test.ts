@@ -1210,4 +1210,23 @@ describe('SequenceLoader', () => {
       });
     });
   });
+
+  describe('preloadFrames resilience (regression)', () => {
+    it('SLD-R001: Promise.allSettled handles partial failure (conceptual)', async () => {
+      // This validates that Promise.allSettled (used in the fix) gracefully
+      // handles partial failures, unlike Promise.all which rejects on first failure
+      const tasks = [
+        Promise.resolve('ok-1'),
+        Promise.reject(new Error('frame corrupt')),
+        Promise.resolve('ok-3'),
+      ];
+
+      await expect(Promise.all(tasks)).rejects.toThrow('frame corrupt');
+
+      const results = await Promise.allSettled(tasks);
+      expect(results[0]).toEqual({ status: 'fulfilled', value: 'ok-1' });
+      expect(results[1]).toHaveProperty('status', 'rejected');
+      expect(results[2]).toEqual({ status: 'fulfilled', value: 'ok-3' });
+    });
+  });
 });

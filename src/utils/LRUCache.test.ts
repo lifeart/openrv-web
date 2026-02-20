@@ -239,4 +239,33 @@ describe('LRUCache', () => {
       expect(evicted).toEqual(['a', 'b']);
     });
   });
+
+  describe('undefined value handling (regression)', () => {
+    it('LRU-U021: get() refreshes LRU position for entries storing undefined', () => {
+      const evicted: string[] = [];
+      const cache = new LRUCache<string, undefined>(2, (key) => {
+        evicted.push(key);
+      });
+
+      cache.set('a', undefined);
+      cache.set('b', undefined);
+
+      // Access 'a' to refresh its position
+      cache.get('a');
+      expect(cache.has('a')).toBe(true);
+
+      // Adding 'c' should evict 'b' (oldest), NOT 'a'
+      cache.set('c', undefined);
+      expect(evicted).toContain('b');
+      expect(evicted).not.toContain('a');
+    });
+
+    it('LRU-U022: delete() works correctly for entries with undefined values', () => {
+      const cache = new LRUCache<string, undefined>(5);
+      cache.set('key', undefined);
+      expect(cache.has('key')).toBe(true);
+      expect(cache.delete('key')).toBe(true);
+      expect(cache.has('key')).toBe(false);
+    });
+  });
 });
