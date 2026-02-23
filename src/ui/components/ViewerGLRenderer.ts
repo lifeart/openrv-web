@@ -177,6 +177,15 @@ export class ViewerGLRenderer {
   /** Last HDR blit float frame in WebGL row order (bottom-to-top). */
   get lastHDRBlitFrame(): { data: Float32Array; width: number; height: number } | null { return this._lastHDRBlitFrame; }
 
+  /**
+   * Invalidate the render cache so the next renderHDRWithWebGL/renderSDRWithWebGL
+   * call performs a full redraw instead of skipping via the same-image optimization.
+   * Used by advanced paint tools after modifying the GL texture in place.
+   */
+  invalidateRenderCache(): void {
+    this._lastRenderedImage = null;
+  }
+
   constructor(ctx: GLRendererContext, capabilities?: DisplayCapabilities) {
     this._capabilities = capabilities;
     this.ctx = ctx;
@@ -257,8 +266,10 @@ export class ViewerGLRenderer {
 
     // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
     // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
-    // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer).
-    const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true;
+    // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer)
+    // or when in E2E test mode (tests need main-thread access to sample pixels).
+    const isTest = typeof window !== 'undefined' && (window as any).__OPENRV_TEST__;
+    const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true || !!isTest;
     if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
       try {
         if (typeof OffscreenCanvas !== 'undefined' &&
@@ -528,6 +539,15 @@ export class ViewerGLRenderer {
     PerfTrace.begin('buildRenderState');
     const state = this.buildRenderState();
     if (isHDROutput) {
+      // NOTE: Native WebGL2 HDR output (drawingBufferColorSpace = rec2100-hlg/pq).
+      // The browser compositor applies the HLG/PQ OETF after the shader, so we
+      // must output linear light. Applying the user's display transfer (sRGB,
+      // Rec.709, gamma, etc.) would double-encode the signal.
+      // displayGamma and displayBrightness are also forced to 1 because the HDR
+      // compositor manages display-referred luminance scaling.
+      // TODO: For 'extended' mode (SDR-range P3 drawing buffer), the user's
+      // display transfer, displayGamma, and displayBrightness should be preserved
+      // since that path does not go through HLG/PQ compositing.
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
       state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
       // Only disable tone mapping for HLG/PQ content — the transfer function
@@ -629,6 +649,72 @@ export class ViewerGLRenderer {
   }
 
   /**
+   * Render multiple images in a tiled layout through the WebGL shader pipeline.
+   *
+   * Each tile is rendered into its own viewport region using gl.viewport()
+   * and gl.scissor(). This is used for quad view and other multi-source
+   * layout modes.
+   *
+   * @param tiles - Array of { image, viewport } entries to render
+   * @param displayWidth - Total canvas width in pixels
+   * @param displayHeight - Total canvas height in pixels
+   * @returns true if rendering succeeded
+   */
+  renderTiledHDR(
+    tiles: { image: import('../../core/image/Image').IPImage; viewport: import('../../nodes/groups/LayoutGroupNode').TileViewport }[],
+    displayWidth: number,
+    displayHeight: number,
+  ): boolean {
+    const renderer = this.ensureGLRenderer();
+    if (!renderer || !this._glCanvas || tiles.length === 0) return false;
+
+    // Activate WebGL canvas
+    if (!this._hdrRenderActive) {
+      this._glCanvas.style.display = 'block';
+      this.hideWebGPUBlitCanvas();
+      this.hideCanvas2DBlitCanvas();
+      this.ctx.getImageCanvas().style.visibility = 'hidden';
+      this._hdrRenderActive = true;
+    }
+
+    // Resize canvas buffer if needed
+    if (this._glCanvas.width !== displayWidth || this._glCanvas.height !== displayHeight) {
+      renderer.resize(displayWidth, displayHeight);
+      if (this._glCanvas instanceof HTMLCanvasElement) {
+        const dpr = window.devicePixelRatio || 1;
+        const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
+        const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
+        this._glCanvas.style.width = `${cssW}px`;
+        this._glCanvas.style.height = `${cssH}px`;
+      }
+    }
+
+    // Build render state
+    PerfTrace.begin('buildRenderState');
+    const state = this.buildRenderState();
+    PerfTrace.end('buildRenderState');
+
+    PerfTrace.begin('applyRenderState');
+    renderer.applyRenderState(state);
+    PerfTrace.end('applyRenderState');
+
+    // Apply user rotation/flip
+    this.applyUserTransformToRenderer();
+
+    // Render tiled
+    PerfTrace.begin('renderer.clear+renderTiled');
+    renderer.clear(0, 0, 0, 1);
+    renderer.renderTiledImages(tiles);
+    PerfTrace.end('renderer.clear+renderTiled');
+
+    this._lastRenderedImage = null; // Invalidate single-image cache
+    this._lastRenderedWidth = displayWidth;
+    this._lastRenderedHeight = displayHeight;
+    this._lastHDRBlitFrame = null;
+    return true;
+  }
+
+  /**
    * Hybrid WebGL2 → WebGPU HDR blit render path.
    * Renders via WebGL2 FBO, reads float pixels, uploads to WebGPU HDR canvas.
    */
@@ -644,6 +730,14 @@ export class ViewerGLRenderer {
     }
 
     // Build render state with minimal HDR overrides for linear-light output.
+    // The WebGPU HDR canvas receives linear-light float pixels and performs its
+    // own display-referred encoding (tone mapping, OETF). Applying the user's
+    // display transfer (sRGB, Rec.709, gamma) in the shader would double-encode.
+    // displayGamma and displayBrightness are also forced to 1 for the same reason —
+    // the WebGPU compositor handles luminance scaling.
+    // TODO: displayGamma and displayBrightness are calibration knobs that users
+    // expect to work for all content. Consider preserving them here and
+    // compensating in the WebGPU upload step.
     PerfTrace.begin('blit.buildRenderState');
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
@@ -750,6 +844,12 @@ export class ViewerGLRenderer {
     }
 
     // Build render state with minimal HDR overrides for linear-light output.
+    // The Canvas2D HDR canvas receives linear-light float pixels and handles
+    // display-referred encoding itself. Same rationale as the WebGPU blit path:
+    // applying display transfer in the shader would double-encode the signal.
+    // TODO: displayGamma and displayBrightness are calibration knobs that users
+    // expect to work for all content. Consider preserving them here and
+    // compensating in the Canvas2D upload step.
     PerfTrace.begin('canvas2dBlit.buildRenderState');
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
@@ -1202,6 +1302,14 @@ export class ViewerGLRenderer {
 
   setColorInversion(inv: boolean): void {
     this._glRenderer?.setColorInversion(inv);
+  }
+
+  setPremultMode(mode: number): void {
+    this._glRenderer?.setPremultMode(mode);
+  }
+
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this._glRenderer?.setSphericalProjection(state);
   }
 
   setToneMappingState(state: ToneMappingState): void {

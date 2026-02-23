@@ -91,7 +91,7 @@ describe('PaintEngine', () => {
     it('PE-L57a: PaintTool type should not include unused tool types', () => {
       // Verify that the valid paint tools are exactly the implemented set
       // 'select' was removed as it had no toolbar button, keyboard shortcut, or pointer handler
-      const validTools: string[] = ['pen', 'text', 'eraser', 'none', 'rectangle', 'ellipse', 'line', 'arrow'];
+      const validTools: string[] = ['pen', 'text', 'eraser', 'none', 'rectangle', 'ellipse', 'line', 'arrow', 'dodge', 'burn', 'clone', 'smudge'];
       for (const tool of validTools) {
         engine.tool = tool as import('./PaintEngine').PaintTool;
         expect(engine.tool).toBe(tool);
@@ -518,6 +518,77 @@ describe('PaintEngine', () => {
       // Redo should fail since stack was cleared
       expect(engine.redo()).toBe(false);
     });
+
+    it('PAINT-012b: clearFrame undo correctly restores annotations', () => {
+      // 1. Draw strokes
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+      engine.beginStroke(0, { x: 0.2, y: 0.2 });
+      engine.endStroke();
+      
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+
+      // 2. Clear frame
+      const cleared = engine.clearFrame(0);
+      expect(cleared).toHaveLength(2);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+
+      // 3. Undo clearFrame -> should restore annotations
+      const result = engine.undo();
+      expect(result).toBe(true);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+      
+      // 4. Redo -> should clear frame again
+      const redoResult = engine.redo();
+      expect(redoResult).toBe(true);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+    });
+
+    it('PAINT-012c: redo clear preserves remote annotations added after undo', () => {
+      // 1. Draw a stroke on frame 0
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(1);
+
+      // 2. Clear frame 0
+      engine.clearFrame(0);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+
+      // 3. Undo the clear → restores the original stroke
+      engine.undo();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(1);
+
+      // 4. A remote peer adds an annotation (doesn't clear redo stack)
+      engine.addRemoteAnnotation({
+        type: 'text',
+        id: 'remote-1',
+        frame: 0,
+        user: 'peer',
+        version: 'all',
+        eye: 'both',
+        position: { x: 0.5, y: 0.5 },
+        color: [255, 0, 0, 255],
+        text: 'Remote note',
+        size: 24,
+        scale: 1,
+        rotation: 0,
+        spacing: 0,
+        font: 'sans-serif',
+        origin: 0,
+        startFrame: 0,
+        duration: 0,
+      } as any);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+
+      // 5. Redo the clear → should only remove the original stroke,
+      //    NOT the remote annotation added after undo
+      engine.redo();
+      const remaining = engine.getAnnotationsForFrame(0);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]!.type).toBe('text');
+    });
   });
 
   describe('serialization', () => {
@@ -593,6 +664,267 @@ describe('PaintEngine', () => {
 
       engine.undo();
       expect(listener).toHaveBeenCalledWith(0);
+    });
+  });
+
+  describe('remote annotation methods', () => {
+    it('addRemoteAnnotation adds annotation without affecting undo stack', () => {
+      const annotation = {
+        type: 'pen' as const,
+        id: 'remote-1',
+        frame: 5,
+        user: 'alice',
+        color: [1, 0, 0, 1] as [number, number, number, number],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0.1, y: 0.2 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 5,
+        duration: 0,
+      };
+
+      engine.addRemoteAnnotation(annotation as any);
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+
+      // Undo should not remove it
+      const undone = engine.undo();
+      expect(undone).toBe(false);
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+    });
+
+    it('addRemoteAnnotation emits annotationsChanged but not strokeAdded', () => {
+      const changedListener = vi.fn();
+      const addedListener = vi.fn();
+      engine.on('annotationsChanged', changedListener);
+      engine.on('strokeAdded', addedListener);
+
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'r1', frame: 3, user: 'bob',
+        color: [0, 1, 0, 1], width: 2, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 3, duration: 0,
+      } as any);
+
+      expect(changedListener).toHaveBeenCalledWith(3);
+      expect(addedListener).not.toHaveBeenCalled();
+    });
+
+    it('removeRemoteAnnotation removes without affecting undo stack', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'r2', frame: 1, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 1, duration: 0,
+      } as any);
+
+      const removed = engine.removeRemoteAnnotation('r2', 1);
+      expect(removed).not.toBeNull();
+      expect(engine.getAnnotationsForFrame(1)).toHaveLength(0);
+    });
+
+    it('clearRemoteFrame clears all annotations on frame', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'c1', frame: 2, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 2, duration: 0,
+      } as any);
+      engine.addRemoteAnnotation({
+        type: 'text', id: 'c2', frame: 2, user: 'bob',
+        position: { x: 0.5, y: 0.5 }, color: [0, 0, 1, 1],
+        text: 'Hello', size: 24, scale: 1, rotation: 0,
+        spacing: 0, font: 'sans-serif', origin: 4,
+        startFrame: 2, duration: 0,
+      } as any);
+
+      expect(engine.getAnnotationsForFrame(2)).toHaveLength(2);
+      engine.clearRemoteFrame(2);
+      expect(engine.getAnnotationsForFrame(2)).toHaveLength(0);
+    });
+
+    it('addRemoteAnnotation updates nextId to avoid collisions', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: '100', frame: 0, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 0, duration: 0,
+      } as any);
+
+      // Next local annotation should get id > 100
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      const stroke = engine.endStroke();
+      expect(Number(stroke!.id)).toBeGreaterThan(100);
+    });
+
+    it('addRemoteAnnotation handles prefixed IDs for nextId', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'user1-50', frame: 0, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 0, duration: 0,
+      } as any);
+
+      // nextId should be updated based on the numeric suffix
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      const stroke = engine.endStroke();
+      const numericPart = stroke!.id.includes('-') ? Number(stroke!.id.split('-').pop()) : Number(stroke!.id);
+      expect(numericPart).toBeGreaterThanOrEqual(51);
+    });
+  });
+
+  describe('id prefix', () => {
+    it('PAINT-030: setIdPrefix sets prefix for generated IDs', () => {
+      engine.setIdPrefix('user1');
+      expect(engine.idPrefix).toBe('user1');
+
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      const stroke = engine.endStroke();
+
+      expect(stroke!.id).toMatch(/^user1-\d+$/);
+    });
+
+    it('PAINT-031: empty prefix generates plain numeric IDs', () => {
+      engine.setIdPrefix('');
+      expect(engine.idPrefix).toBe('');
+
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      const stroke = engine.endStroke();
+
+      expect(stroke!.id).toMatch(/^\d+$/);
+    });
+
+    it('PAINT-032: prefix applies to text annotations', () => {
+      engine.setIdPrefix('peer2');
+      const text = engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello');
+      expect(text.id).toMatch(/^peer2-\d+$/);
+    });
+
+    it('PAINT-033: prefix applies to shape annotations', () => {
+      engine.setIdPrefix('peer3');
+      const shape = engine.addRectangle(0, { x: 0, y: 0 }, { x: 1, y: 1 });
+      expect(shape.id).toMatch(/^peer3-\d+$/);
+    });
+
+    it('PAINT-034: prefix applies to polygon annotations', () => {
+      engine.setIdPrefix('peer4');
+      const shape = engine.addPolygon(0, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0.5, y: 1 }]);
+      expect(shape.id).toMatch(/^peer4-\d+$/);
+    });
+
+    it('PAINT-035: clearing prefix reverts to numeric IDs', () => {
+      engine.setIdPrefix('user1');
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      const stroke1 = engine.endStroke();
+      expect(stroke1!.id).toContain('user1-');
+
+      engine.setIdPrefix('');
+      engine.beginStroke(1, { x: 0.1, y: 0.1 });
+      const stroke2 = engine.endStroke();
+      expect(stroke2!.id).not.toContain('-');
+    });
+
+    it('PAINT-036: loadFromAnnotations handles prefixed IDs', () => {
+      const annotations = [
+        {
+          type: 'pen' as const,
+          id: 'user1-10',
+          frame: 0,
+          user: 'test',
+          color: [1, 0, 0, 1] as [number, number, number, number],
+          width: 5,
+          brush: BrushType.Circle,
+          points: [{ x: 0.1, y: 0.1 }],
+          join: 3,
+          cap: 2,
+          splat: false,
+          mode: StrokeMode.Draw,
+          startFrame: 0,
+          duration: 0,
+        },
+      ];
+
+      engine.loadFromAnnotations(annotations);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(1);
+
+      // nextId should be >= 11 to avoid collisions
+      engine.tool = 'pen';
+      engine.beginStroke(1, { x: 0.5, y: 0.5 });
+      const stroke = engine.endStroke();
+      const numericPart = stroke!.id.includes('-') ? Number(stroke!.id.split('-').pop()) : Number(stroke!.id);
+      expect(numericPart).toBeGreaterThanOrEqual(11);
+    });
+  });
+
+  describe('advanced paint tools', () => {
+    it('PAINT-040: getAdvancedTool returns tool instance for dodge', () => {
+      const tool = engine.getAdvancedTool('dodge');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('dodge');
+    });
+
+    it('PAINT-041: getAdvancedTool returns tool instance for burn', () => {
+      const tool = engine.getAdvancedTool('burn');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('burn');
+    });
+
+    it('PAINT-042: getAdvancedTool returns tool instance for clone', () => {
+      const tool = engine.getAdvancedTool('clone');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('clone');
+    });
+
+    it('PAINT-043: getAdvancedTool returns tool instance for smudge', () => {
+      const tool = engine.getAdvancedTool('smudge');
+      expect(tool).toBeDefined();
+      expect(tool!.name).toBe('smudge');
+    });
+
+    it('PAINT-044: getAdvancedTool returns undefined for non-advanced tools', () => {
+      expect(engine.getAdvancedTool('pen')).toBeUndefined();
+      expect(engine.getAdvancedTool('eraser')).toBeUndefined();
+      expect(engine.getAdvancedTool('text')).toBeUndefined();
+      expect(engine.getAdvancedTool('none')).toBeUndefined();
+      expect(engine.getAdvancedTool('rectangle')).toBeUndefined();
+    });
+
+    it('PAINT-045: isAdvancedTool returns true for advanced tools', () => {
+      expect(engine.isAdvancedTool('dodge')).toBe(true);
+      expect(engine.isAdvancedTool('burn')).toBe(true);
+      expect(engine.isAdvancedTool('clone')).toBe(true);
+      expect(engine.isAdvancedTool('smudge')).toBe(true);
+    });
+
+    it('PAINT-046: isAdvancedTool returns false for non-advanced tools', () => {
+      expect(engine.isAdvancedTool('pen')).toBe(false);
+      expect(engine.isAdvancedTool('eraser')).toBe(false);
+      expect(engine.isAdvancedTool('text')).toBe(false);
+      expect(engine.isAdvancedTool('none')).toBe(false);
+    });
+
+    it('PAINT-047: advanced tools are consistent instances (same instance returned each time)', () => {
+      const tool1 = engine.getAdvancedTool('dodge');
+      const tool2 = engine.getAdvancedTool('dodge');
+      expect(tool1).toBe(tool2);
+    });
+
+    it('PAINT-048: beginStroke correctly rejects advanced tool names', () => {
+      // Advanced tools use PaintToolInterface, not PaintEngine.beginStroke
+      engine.tool = 'dodge';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      expect(engine.getCurrentStroke()).toBeNull();
+
+      engine.tool = 'burn';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      expect(engine.getCurrentStroke()).toBeNull();
     });
   });
 });

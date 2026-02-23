@@ -17,6 +17,7 @@ import {
   createPlaybackSyncMessage,
   createFrameSyncMessage,
   createViewSyncMessage,
+  createColorSyncMessage,
   createAnnotationSyncMessage,
   createCursorSyncMessage,
   createPermissionMessage,
@@ -65,6 +66,7 @@ import type {
   ViewSyncPayload,
   ColorSyncPayload,
   AnnotationSyncPayload,
+  NoteSyncPayload,
   CursorSyncPayload,
   ParticipantRole,
   ParticipantPermission,
@@ -136,6 +138,14 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _createRoomFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private _serverlessPeer: ServerlessPeerState | null = null;
   private _pendingServerlessOffer: WebRTCURLOfferSignal | null = null;
+  private _recentMessageIds = new Set<string>();
+  private _recentMessageIdQueue: string[] = [];
+  private _pendingStateRequest: {
+    requestId: string;
+    targetUserId?: string;
+    retryCount: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -375,6 +385,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     // Once connected, send room.create (use `once` to avoid leak)
     const unsub = this.wsClient.once('connected', () => {
+      this.clearCreateRoomFallbackTimer();
       const message = createRoomCreateMessage(this._userId, {
         userName: this._userName,
       });
@@ -490,6 +501,20 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   /**
+   * Send a color correction sync message.
+   * Called when local color adjustments change.
+   */
+  sendColorSync(payload: ColorSyncPayload): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this._syncSettings.color) return;
+    if (this.stateManager.isApplyingRemoteState) return;
+
+    this.stateManager.updateLocalColor(payload);
+    const message = createColorSyncMessage(this._roomInfo.roomId, this._userId, payload);
+    this.dispatchRealtimeMessage(message);
+  }
+
+  /**
    * Send a cursor position sync message.
    * Called by the app when the local cursor moves over the viewport.
    *
@@ -531,6 +556,23 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   /**
+   * Send a note sync message.
+   * Called when a local note is added, removed, or updated.
+   */
+  sendNoteSync(payload: NoteSyncPayload): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this._syncSettings.annotations) return;
+    if (this.stateManager.isApplyingRemoteState) return;
+    if (this.getParticipantPermission(this._userId) === 'viewer') return;
+
+    const message = createMessage('sync.note', this._roomInfo.roomId, this._userId, {
+      ...payload,
+      timestamp: Date.now(),
+    });
+    this.dispatchRealtimeMessage(message);
+  }
+
+  /**
    * Set the permission role for a participant.
    * Only the host can change permissions.
    */
@@ -555,11 +597,53 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   requestStateSync(targetUserId?: string): void {
     if (!this.isConnected || !this._roomInfo) return;
 
+    this.clearPendingStateRequest();
+    const requestId = generateMessageId();
+    this.sendStateRequest(requestId, targetUserId);
+
+    this._pendingStateRequest = {
+      requestId,
+      targetUserId,
+      retryCount: 0,
+      timer: setTimeout(() => this.handleStateRequestTimeout(), 3000),
+    };
+  }
+
+  private sendStateRequest(requestId: string, targetUserId?: string): void {
+    if (!this._roomInfo) return;
     const message = createStateRequestMessage(this._roomInfo.roomId, this._userId, {
-      requestId: generateMessageId(),
+      requestId,
       targetUserId,
     });
     this.dispatchRealtimeMessage(message);
+  }
+
+  private handleStateRequestTimeout(): void {
+    if (!this._pendingStateRequest) return;
+
+    if (this._pendingStateRequest.retryCount < 2) {
+      this._pendingStateRequest.retryCount++;
+      this.sendStateRequest(
+        this._pendingStateRequest.requestId,
+        this._pendingStateRequest.targetUserId,
+      );
+      this._pendingStateRequest.timer = setTimeout(
+        () => this.handleStateRequestTimeout(),
+        3000,
+      );
+    } else {
+      this.emit('toastMessage', {
+        message: 'Failed to receive session state from host after multiple attempts.',
+        type: 'warning',
+      });
+      this._pendingStateRequest = null;
+    }
+  }
+
+  private clearPendingStateRequest(): void {
+    if (!this._pendingStateRequest) return;
+    clearTimeout(this._pendingStateRequest.timer);
+    this._pendingStateRequest = null;
   }
 
   /**
@@ -729,6 +813,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   private handleMessage(message: SyncMessage, transport: 'websocket' | 'webrtc' = 'websocket'): void {
+    // Deduplicate messages by ID
+    if (message.id && this._recentMessageIds.has(message.id)) return;
+    if (message.id) {
+      this._recentMessageIds.add(message.id);
+      this._recentMessageIdQueue.push(message.id);
+      if (this._recentMessageIdQueue.length > 200) {
+        const evicted = this._recentMessageIdQueue.shift()!;
+        this._recentMessageIds.delete(evicted);
+      }
+    }
+
     // Server-originating message types should not be filtered by userId
     const isServerMessage =
       message.type === 'room.created' ||
@@ -771,6 +866,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         break;
       case 'sync.annotation':
         this.handleSyncAnnotation(message.payload, message.userId);
+        break;
+      case 'sync.note':
+        this.handleSyncNote(message.payload, message.userId);
         break;
       case 'sync.cursor':
         this.handleSyncCursor(message.payload, message.userId);
@@ -959,7 +1057,41 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     // Viewers cannot send annotation changes
     if (!this.canUserSync(senderUserId)) return;
 
-    this.emit('syncAnnotation', payload);
+    // Override user field on all strokes with authenticated sender identity
+    const sanitized = { ...payload };
+    if (Array.isArray(sanitized.strokes)) {
+      sanitized.strokes = sanitized.strokes.map((stroke: unknown) =>
+        typeof stroke === 'object' && stroke !== null
+          ? { ...(stroke as Record<string, unknown>), user: senderUserId }
+          : stroke
+      );
+    }
+
+    this.emit('syncAnnotation', sanitized);
+  }
+
+  private handleSyncNote(payload: unknown, senderUserId: string): void {
+    if (!this.stateManager.shouldSyncAnnotations()) return;
+    if (!payload || typeof payload !== 'object') return;
+    const p = payload as NoteSyncPayload;
+    if (!['add', 'remove', 'update', 'clear', 'snapshot'].includes(p.action)) return;
+    if (typeof p.timestamp !== 'number') return;
+    if (!this.canUserSync(senderUserId)) return;
+
+    // Override author field with authenticated sender identity
+    const sanitized = { ...p };
+    if (sanitized.note && typeof sanitized.note === 'object') {
+      sanitized.note = { ...(sanitized.note as Record<string, unknown>), author: senderUserId };
+    }
+    if (Array.isArray(sanitized.notes)) {
+      sanitized.notes = sanitized.notes.map((note: unknown) =>
+        note && typeof note === 'object'
+          ? { ...(note as Record<string, unknown>), author: senderUserId }
+          : note
+      );
+    }
+
+    this.emit('syncNote', sanitized);
   }
 
   private handleSyncCursor(payload: unknown, senderUserId: string): void {
@@ -1011,11 +1143,15 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       responsePayload.encryptedSessionState !== undefined;
     if (!hasState) return;
 
+    this.clearPendingStateRequest();
+
     this.emit('sessionStateReceived', {
       requestId: responsePayload.requestId,
       senderUserId,
       sessionState: responsePayload.sessionState,
       encryptedSessionState: responsePayload.encryptedSessionState,
+      annotations: Array.isArray(responsePayload.annotations) ? responsePayload.annotations : undefined,
+      notes: Array.isArray(responsePayload.notes) ? responsePayload.notes : undefined,
       transport,
     });
   }
@@ -1653,6 +1789,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.clearCreateRoomFallbackTimer();
     this._permissions.clear();
     this._remoteCursors.clear();
+    this._recentMessageIds.clear();
+    this._recentMessageIdQueue = [];
+    this.clearPendingStateRequest();
     this.stateManager.reset();
   }
 
@@ -1675,7 +1814,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       message: 'Signaling unavailable. Created local host room.',
       type: 'warning',
     });
-    this.simulateRoomCreated(undefined, 2);
+    this._applyLocalRoomCreation(undefined, 2);
     return true;
   }
 
@@ -1702,13 +1841,13 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     return candidates.some((url) => /^wss:\/\//i.test(url));
   }
 
-  // ---- Simulate Server Responses (for testing without a real server) ----
+  // ---- Local Room Lifecycle (used by WSS fallback and testing) ----
 
   /**
-   * Simulate a successful room creation response.
-   * Used for testing and mock scenarios.
+   * Apply a local room creation without a server round-trip.
+   * Used by the WSS fallback path and in tests.
    */
-  simulateRoomCreated(roomCode?: string, maxUsers = 10): void {
+  _applyLocalRoomCreation(roomCode?: string, maxUsers = 10): void {
     this._pendingRoomAction = null;
     this.clearCreateRoomFallbackTimer();
     const code = roomCode ?? generateRoomCode();
@@ -1737,9 +1876,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   /**
-   * Simulate a user joining the room.
+   * Apply a local user join without a server round-trip.
+   * Used by the WSS fallback path and in tests.
    */
-  simulateUserJoined(userName: string): SyncUser {
+  _applyLocalUserJoin(userName: string): SyncUser {
     if (!this._roomInfo) {
       throw new Error('No room to join');
     }
@@ -1803,6 +1943,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.disposeServerlessPeer(true);
     this._permissions.clear();
     this._remoteCursors.clear();
+    this._recentMessageIds.clear();
+    this._recentMessageIdQueue = [];
+    this.clearPendingStateRequest();
     this.wsClient.dispose();
     this.stateManager.reset();
     this.removeAllListeners();

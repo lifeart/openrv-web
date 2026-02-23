@@ -64,6 +64,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   layout: 'Layout',
   focus: 'Focus',
   theme: 'Theme',
+  help: 'Help',
 };
 
 /**

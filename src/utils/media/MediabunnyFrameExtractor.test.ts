@@ -958,37 +958,18 @@ describe('MediabunnyFrameExtractor', () => {
       expect(result.frameNumber).toBe(1);
     });
 
-    it('MFE-FPS-002: getFrameImageData handles ImageBitmap canvas', () => {
+    it('MFE-FPS-002: getFrameImageData rejects before load', async () => {
       // getFrameImageData must support ImageBitmap input (from snapshotCanvas).
-      // It creates a temp OffscreenCanvas, draws the bitmap, and extracts pixels.
-
-      // Verify the method exists on the prototype
-      expect(typeof MediabunnyFrameExtractor.prototype.getFrameImageData).toBe('function');
-    });
-
-    it('MFE-FPS-003: getFrameBlob handles ImageBitmap canvas', () => {
-      // getFrameBlob must support ImageBitmap input (from snapshotCanvas).
-      // It creates a temp OffscreenCanvas for blob conversion.
-
-      // Verify the method exists on the prototype
-      expect(typeof MediabunnyFrameExtractor.prototype.getFrameBlob).toBe('function');
-    });
-
-    it('MFE-FPS-004: snapshotCanvas uses createImageBitmap (not synchronous copy)', () => {
-      // This test verifies that the module uses createImageBitmap
-      // (async, GPU-accelerated) rather than synchronous copyCanvas.
-      // We check by reading the module source as text would be fragile,
-      // so instead we verify the async path is wired correctly:
-      // The CanvasSink mock yields a canvas, and the extractor should
-      // call createImageBitmap on it (returning an ImageBitmap).
-
-      // In test environments without real createImageBitmap, we verify
-      // the function signature and async nature.
-
-      // Verify the extractor is defined and has the expected methods
+      // Verify it throws when extractor is not initialized.
       const extractor = new MediabunnyFrameExtractor();
-      expect(typeof extractor.getFrame).toBe('function');
-      expect(typeof extractor.dispose).toBe('function');
+      await expect(extractor.getFrameImageData(1)).rejects.toThrow('Extractor not initialized');
+    });
+
+    it('MFE-FPS-003: getFrameBlob rejects before load', async () => {
+      // getFrameBlob must support ImageBitmap input (from snapshotCanvas).
+      // Verify it throws when extractor is not initialized.
+      const extractor = new MediabunnyFrameExtractor();
+      await expect(extractor.getFrameBlob(1)).rejects.toThrow('Extractor not initialized');
     });
   });
 });

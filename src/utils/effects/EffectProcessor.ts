@@ -303,6 +303,12 @@ export class EffectProcessor {
   private clarityBlurResultBuffer: Uint8ClampedArray | null = null;
   private clarityBufferSize: number = 0;
 
+  // Reusable buffers for sharpen half-res to avoid GC pressure during interactions
+  private sharpenHalfOrigBuffer: Uint8ClampedArray | null = null;
+  private sharpenHalfSharpBuffer: Uint8ClampedArray | null = null;
+  private sharpenDeltaBuffer: Float32Array | null = null;
+  private sharpenHalfBufferLen: number = 0;
+
   /**
    * Get cached highlight/shadow LUTs (lazily initialized)
    */
@@ -711,6 +717,10 @@ export class EffectProcessor {
       reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
       filmicExposureBias: state.toneMappingState.filmicExposureBias,
       filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+      dragoBias: state.toneMappingState.dragoBias,
+      dragoLwa: state.toneMappingState.dragoLwa,
+      dragoLmax: state.toneMappingState.dragoLmax,
+      dragoBrightness: state.toneMappingState.dragoBrightness,
     } : undefined;
 
     // ---- Pre-compute channel mode ----
@@ -853,18 +863,16 @@ export class EffectProcessor {
 
       // ---- 5. CDL (Slope/Offset/Power/Saturation) ----
       if (hasCDL) {
-        // CDL formula: out = clamp(max(0, in * slope + offset) ^ power)
-        r = Math.max(0, Math.min(1, r * cdl.slope.r + cdl.offset.r));
-        g = Math.max(0, Math.min(1, g * cdl.slope.g + cdl.offset.g));
-        b = Math.max(0, Math.min(1, b * cdl.slope.b + cdl.offset.b));
+        // CDL formula per ASC spec: out = max(0, in * slope + offset) ^ power
+        // No upper clamp before or after power — matches worker and GPU shader behavior.
+        // Final 0-255 clamp at store step catches any out-of-range values.
+        r = Math.max(0, r * cdl.slope.r + cdl.offset.r);
+        g = Math.max(0, g * cdl.slope.g + cdl.offset.g);
+        b = Math.max(0, b * cdl.slope.b + cdl.offset.b);
 
         if (cdl.power.r !== 1.0 && r > 0) r = Math.pow(r, cdl.power.r);
         if (cdl.power.g !== 1.0 && g > 0) g = Math.pow(g, cdl.power.g);
         if (cdl.power.b !== 1.0 && b > 0) b = Math.pow(b, cdl.power.b);
-
-        r = Math.max(0, Math.min(1, r));
-        g = Math.max(0, Math.min(1, g));
-        b = Math.max(0, Math.min(1, b));
 
         // Saturation adjustment
         if (cdlHasSat) {
@@ -1004,13 +1012,27 @@ export class EffectProcessor {
   }
 
   /**
+   * Ensure sharpen half-res buffers are allocated for the given half-res pixel count.
+   * Reuses existing buffers if size matches, otherwise reallocates.
+   */
+  private ensureSharpenHalfResBuffers(halfLen: number): void {
+    if (this.sharpenHalfBufferLen !== halfLen) {
+      this.sharpenHalfOrigBuffer = new Uint8ClampedArray(halfLen);
+      this.sharpenHalfSharpBuffer = new Uint8ClampedArray(halfLen);
+      // 3 channels only (RGB), no alpha needed for deltas
+      this.sharpenDeltaBuffer = new Float32Array((halfLen / 4) * 3);
+      this.sharpenHalfBufferLen = halfLen;
+    }
+  }
+
+  /**
    * Apply clarity (local contrast) effect to ImageData.
    * Uses reusable buffers to minimize memory allocations.
    *
    * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
    * processes at half resolution for ~4x speedup with minimal quality loss.
    */
-  private applyClarity(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments, halfRes = false): void {
+  applyClarity(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments, halfRes = false): void {
     // Half-resolution path: downsample, apply clarity at half-res, blend result
     if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
       this.applyClarityHalfRes(imageData, width, height, colorAdjustments);
@@ -1179,7 +1201,7 @@ export class EffectProcessor {
    * processes at half resolution for ~4x speedup. The sharpened detail is upsampled
    * and blended with the original at full resolution.
    */
-  private applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number, halfRes = false): void {
+  applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number, halfRes = false): void {
     // Half-resolution path
     if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
       this.applySharpenHalfRes(imageData, width, height, amount);
@@ -1220,23 +1242,35 @@ export class EffectProcessor {
   }
 
   /**
-   * Half-resolution sharpen: downsample, apply sharpen at half-res,
-   * upsample the result, then blend with original at full-res.
-   * This gives ~4x speedup for the expensive convolution pass.
+   * Half-resolution sharpen using delta-blend approach:
+   * 1. Downsample original to half-res
+   * 2. Apply sharpen kernel at half-res
+   * 3. Compute detail delta: halfSharpened - halfOriginal
+   * 4. Upsample the delta to full-res
+   * 5. Blend: fullResOriginal + upsampledDelta * amount
+   *
+   * This preserves full-res pixel data while adding sharpening detail
+   * computed at half-res, avoiding the softening that naive upsampling causes.
    */
   private applySharpenHalfRes(imageData: ImageData, width: number, height: number, amount: number): void {
     const data = imageData.data;
-    const len = data.length;
 
     // Downsample to half resolution
     const half = downsample2x(data, width, height);
     const halfW = half.width;
     const halfH = half.height;
+    const halfLen = half.data.length;
+
+    // Ensure reusable buffers are allocated
+    this.ensureSharpenHalfResBuffers(halfLen);
+    const halfOriginal = this.sharpenHalfOrigBuffer!;
+    const halfSharpened = this.sharpenHalfSharpBuffer!;
+    const halfDelta = this.sharpenDeltaBuffer!;
+
+    halfOriginal.set(half.data);
+    halfSharpened.set(half.data);
 
     // Apply sharpen kernel at half-res
-    const halfOriginal = new Uint8ClampedArray(half.data);
-    const halfData = half.data;
-
     const kernel = [
       0, -1, 0,
       -1, 5, -1,
@@ -1259,22 +1293,58 @@ export class EffectProcessor {
             }
           }
 
-          const originalValue = halfOriginal[idx + c]!;
-          const sharpenedValue = Math.max(0, Math.min(255, sum));
-          halfData[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
+          halfSharpened[idx + c] = Math.max(0, Math.min(255, sum));
         }
       }
     }
 
-    // Upsample the sharpened half-res back to full resolution
-    const upsampled = upsample2x(halfData, halfW, halfH, width, height);
+    // Compute delta as Float32 at half-res (no quantization loss)
+    for (let y = 0; y < halfH; y++) {
+      for (let x = 0; x < halfW; x++) {
+        const pixIdx = (y * halfW + x) * 4;
+        const dIdx = (y * halfW + x) * 3;
+        halfDelta[dIdx] = halfSharpened[pixIdx]! - halfOriginal[pixIdx]!;
+        halfDelta[dIdx + 1] = halfSharpened[pixIdx + 1]! - halfOriginal[pixIdx + 1]!;
+        halfDelta[dIdx + 2] = halfSharpened[pixIdx + 2]! - halfOriginal[pixIdx + 2]!;
+      }
+    }
 
-    // Copy upsampled result to output, preserving alpha
-    for (let i = 0; i < len; i += 4) {
-      data[i] = upsampled[i]!;
-      data[i + 1] = upsampled[i + 1]!;
-      data[i + 2] = upsampled[i + 2]!;
-      // Alpha unchanged
+    // Blend with bilinear-interpolated float delta (no intermediate full-res allocation)
+    const scaleX = halfW / width;
+    const scaleY = halfH / height;
+
+    for (let y = 0; y < height; y++) {
+      const srcY = y * scaleY;
+      const y0 = Math.floor(srcY);
+      const y1 = Math.min(y0 + 1, halfH - 1);
+      const fy = srcY - y0;
+
+      for (let x = 0; x < width; x++) {
+        const srcX = x * scaleX;
+        const x0 = Math.floor(srcX);
+        const x1 = Math.min(x0 + 1, halfW - 1);
+        const fx = srcX - x0;
+
+        const dstIdx = (y * width + x) * 4;
+
+        // Bilinear weights
+        const w00 = (1 - fx) * (1 - fy);
+        const w10 = fx * (1 - fy);
+        const w01 = (1 - fx) * fy;
+        const w11 = fx * fy;
+
+        // Indices into 3-channel delta buffer
+        const d00 = (y0 * halfW + x0) * 3;
+        const d10 = (y0 * halfW + x1) * 3;
+        const d01 = (y1 * halfW + x0) * 3;
+        const d11 = (y1 * halfW + x1) * 3;
+
+        for (let c = 0; c < 3; c++) {
+          const delta = halfDelta[d00 + c]! * w00 + halfDelta[d10 + c]! * w10 +
+                        halfDelta[d01 + c]! * w01 + halfDelta[d11 + c]! * w11;
+          data[dstIdx + c] = Math.max(0, Math.min(255, Math.round(data[dstIdx + c]! + delta * amount)));
+        }
+      }
     }
   }
 
@@ -1292,7 +1362,7 @@ export class EffectProcessor {
    *
    * Produces identical pixel output to the sync applyClarity().
    */
-  private async applyClarityChunked(
+  async applyClarityChunked(
     imageData: ImageData,
     width: number,
     height: number,
@@ -1366,7 +1436,7 @@ export class EffectProcessor {
    *
    * Produces identical pixel output to the sync applySharpenCPU().
    */
-  private async applySharpenCPUChunked(
+  async applySharpenCPUChunked(
     imageData: ImageData,
     width: number,
     height: number,

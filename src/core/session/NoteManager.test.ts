@@ -274,8 +274,10 @@ describe('NoteManager', () => {
   describe('callbacks', () => {
     it('works without callbacks set', () => {
       const mgr = new NoteManager();
-      mgr.addNote(0, 1, 1, 'Test', 'Alice');
-      mgr.dispose();
+      expect(() => {
+        mgr.addNote(0, 1, 1, 'Test', 'Alice');
+        mgr.dispose();
+      }).not.toThrow();
     });
 
     it('updateNote triggers onNotesChanged', () => {

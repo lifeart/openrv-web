@@ -168,9 +168,21 @@ function createMockControls() {
     }),
     snapshotPanel: new EventEmitter(),
     notePanel: new EventEmitter(),
-    playlistPanel: new EventEmitter(),
+    playlistPanel: Object.assign(new EventEmitter(), {
+      setFps: vi.fn(),
+    }),
     autoSaveManager: {},
     playlistManager,
+    slateEditor: {
+      generateConfig: vi.fn(() => ({
+        width: 1920,
+        height: 1080,
+        fields: [],
+        logoPosition: 'bottom-right',
+        logoScale: 0.15,
+      })),
+      dispose: vi.fn(),
+    },
   };
 }
 

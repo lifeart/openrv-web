@@ -15,6 +15,7 @@
  */
 
 import type { AppWiringContext } from './AppWiringContext';
+import { detectFloatingWindowViolations } from './stereo/FloatingWindowDetector';
 
 /**
  * Wire all view-related controls to the viewer and bridges.
@@ -166,6 +167,45 @@ export function wireViewControls(ctx: AppWiringContext): void {
   controls.stereoAlignControl.on('alignModeChanged', (mode) => {
     viewer.setStereoAlignMode(mode);
     sessionBridge.scheduleUpdateScopes();
+  });
+
+  // Convergence measurement: wire viewer mousemove -> convergence cursor + disparity
+  const viewerContainer = viewer.getContainer();
+  viewerContainer.addEventListener('mousemove', (e: MouseEvent) => {
+    if (!controls.convergenceMeasure.isEnabled()) return;
+    const stereoState = viewer.getStereoState();
+    if (stereoState.mode === 'off') return;
+
+    const rect = viewerContainer.getBoundingClientRect();
+    const canvas = viewerContainer.querySelector('canvas');
+    if (!canvas) return;
+
+    const imageData = viewer.getImageData();
+    if (!imageData) return;
+
+    const scaleX = imageData.width / canvas.clientWidth;
+    const scaleY = imageData.height / canvas.clientHeight;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    controls.convergenceMeasure.setCursorPosition(x, y);
+
+    const pair = viewer.getStereoPair();
+    if (pair) {
+      controls.convergenceMeasure.measureAtCursor(pair.left, pair.right);
+    }
+  });
+
+  // Floating window detection: run on frame change when stereo is active
+  session.on('frameChanged', () => {
+    const stereoState = viewer.getStereoState();
+    if (stereoState.mode === 'off') return;
+
+    const pair = viewer.getStereoPair();
+    if (!pair) return;
+
+    const result = detectFloatingWindowViolations(pair.left, pair.right);
+    controls.convergenceMeasure.emit('floatingWindowViolation' as never, result as never);
   });
 
   // Presentation mode -> headerBar

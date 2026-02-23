@@ -6,7 +6,7 @@
  * - New-style adaptive run-length encoding (RLE)
  * - Uncompressed RGBE data
  * - Standard header fields (FORMAT, EXPOSURE, GAMMA, PRIMARIES)
- * - Resolution line parsing (all orientations parsed; only -Y +X rendered correctly)
+ * - Resolution line parsing with full orientation support (all 8 modes rearranged to -Y +X)
  *
  * Radiance HDR stores high dynamic range images using a shared-exponent
  * RGBE encoding: 3 mantissa bytes (R, G, B) + 1 shared exponent byte (E).
@@ -81,8 +81,18 @@ interface ParsedHeader {
     gamma: number;
     primaries?: string;
   };
+  /** Width of the image in its final display orientation (after rearrangement). */
   width: number;
+  /** Height of the image in its final display orientation (after rearrangement). */
   height: number;
+  /** Width as read from the resolution line (scan-order width, i.e. number of pixels per scanline). */
+  scanWidth: number;
+  /** Height as read from the resolution line (scan-order height, i.e. number of scanlines). */
+  scanHeight: number;
+  /** First axis from the resolution line, e.g. '-Y' or '+X'. */
+  firstAxis: string;
+  /** Second axis from the resolution line, e.g. '+X' or '-Y'. */
+  secondAxis: string;
   dataOffset: number;
 }
 
@@ -158,30 +168,45 @@ function parseHeader(data: Uint8Array): ParsedHeader {
   offset++; // skip past the newline
 
   // Parse resolution: "-Y <H> +X <W>" is most common.
-  // All 8 orientation variants are parsed for dimensions, but pixel data
-  // is stored in file scan order — only the standard -Y +X orientation
-  // will display with correct orientation.
+  // All 8 orientation variants are parsed. Pixel data rearrangement to
+  // standard -Y +X orientation is handled by rearrangeOrientation().
   const resMatch = resLine.match(/^([+-][XY])\s+(\d+)\s+([+-][XY])\s+(\d+)$/);
   if (!resMatch) {
     throw new DecoderError('HDR', `Invalid HDR resolution line: "${resLine}"`);
   }
 
+  const firstAxis = resMatch[1]!;
+  const firstDim = parseInt(resMatch[2]!, 10);
+  const secondAxis = resMatch[3]!;
+  const secondDim = parseInt(resMatch[4]!, 10);
+
+  // Scan-order dimensions: first dimension is number of scanlines (rows),
+  // second dimension is number of pixels per scanline (columns).
+  const scanWidth = secondDim;
+  const scanHeight = firstDim;
+
+  // Final display dimensions: for Y-first orientations, first dim is height,
+  // second is width. For X-first (transposed) orientations, first dim is width,
+  // second is height — so we swap to get the final output size.
   let width: number;
   let height: number;
 
-  // The first axis is rows (height), second is columns (width)
-  if (resMatch[1]!.charAt(1) === 'Y') {
-    height = parseInt(resMatch[2]!, 10);
-    width = parseInt(resMatch[4]!, 10);
+  if (firstAxis.charAt(1) === 'Y') {
+    height = firstDim;
+    width = secondDim;
   } else {
-    width = parseInt(resMatch[2]!, 10);
-    height = parseInt(resMatch[4]!, 10);
+    width = firstDim;
+    height = secondDim;
   }
 
   return {
     headers: { format, exposure, gamma, primaries },
     width,
     height,
+    scanWidth,
+    scanHeight,
+    firstAxis,
+    secondAxis,
     dataOffset: offset,
   };
 }
@@ -275,6 +300,87 @@ function readRLEScanline(data: Uint8Array, offset: number, width: number): { sca
 }
 
 /**
+ * Rearrange RGB float pixel data from file scan order to standard -Y +X orientation.
+ *
+ * The HDR file stores pixels in scan order defined by the resolution line. The first
+ * axis is rows (scanlines) and the second axis is columns (pixels per scanline).
+ * This function remaps pixel positions to standard top-to-bottom, left-to-right order.
+ *
+ * For Y-first orientations (1-4): scanWidth = output width, scanHeight = output height
+ * For X-first orientations (5-8): scanWidth = output height, scanHeight = output width (transposed)
+ *
+ * @param rgbFloat - Source pixel data in scan order (3 channels per pixel)
+ * @param scanWidth - Number of pixels per scanline
+ * @param scanHeight - Number of scanlines
+ * @param firstAxis - First axis from resolution line (e.g. '-Y', '+Y', '-X', '+X')
+ * @param secondAxis - Second axis from resolution line (e.g. '+X', '-X', '+Y', '-Y')
+ * @returns Rearranged pixel data and final dimensions in standard orientation
+ */
+function rearrangeOrientation(
+  rgbFloat: Float32Array,
+  scanWidth: number,
+  scanHeight: number,
+  firstAxis: string,
+  secondAxis: string,
+): { data: Float32Array; width: number; height: number } {
+  // Standard orientation: no rearrangement needed
+  if (firstAxis === '-Y' && secondAxis === '+X') {
+    return { data: rgbFloat, width: scanWidth, height: scanHeight };
+  }
+
+  const isTransposed = firstAxis.charAt(1) === 'X';
+
+  // Final output dimensions in standard -Y +X space
+  let outWidth: number;
+  let outHeight: number;
+  if (isTransposed) {
+    // X-first: scan rows become columns in the output
+    outWidth = scanHeight;
+    outHeight = scanWidth;
+  } else {
+    outWidth = scanWidth;
+    outHeight = scanHeight;
+  }
+
+  const totalPixels = scanWidth * scanHeight;
+  const result = new Float32Array(totalPixels * 3);
+
+  for (let row = 0; row < scanHeight; row++) {
+    for (let col = 0; col < scanWidth; col++) {
+      const srcIdx = (row * scanWidth + col) * 3;
+
+      // Determine destination (outY, outX) in standard -Y +X coordinate space.
+      //
+      // In the file, "row" runs along the first axis direction and "col" runs
+      // along the second axis direction. We map these to standard coordinates:
+      //   standard Y (top-to-bottom): -Y means row 0 is top, +Y means row 0 is bottom
+      //   standard X (left-to-right): +X means col 0 is left, -X means col 0 is right
+      let outX: number;
+      let outY: number;
+
+      if (!isTransposed) {
+        // Y-first orientations: first axis is Y, second is X
+        // Row maps to Y, col maps to X
+        outY = firstAxis === '-Y' ? row : (scanHeight - 1 - row);
+        outX = secondAxis === '+X' ? col : (scanWidth - 1 - col);
+      } else {
+        // X-first orientations (transposed): first axis is X, second is Y
+        // Row maps to X, col maps to Y
+        outX = firstAxis === '+X' ? row : (scanHeight - 1 - row);
+        outY = secondAxis === '-Y' ? col : (scanWidth - 1 - col);
+      }
+
+      const dstIdx = (outY * outWidth + outX) * 3;
+      result[dstIdx] = rgbFloat[srcIdx]!;
+      result[dstIdx + 1] = rgbFloat[srcIdx + 1]!;
+      result[dstIdx + 2] = rgbFloat[srcIdx + 2]!;
+    }
+  }
+
+  return { data: result, width: outWidth, height: outHeight };
+}
+
+/**
  * Decode a Radiance HDR file from an ArrayBuffer
  */
 export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
@@ -284,38 +390,38 @@ export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
     throw new DecoderError('HDR', 'Invalid HDR file: wrong magic signature');
   }
 
-  const { headers, width, height, dataOffset } = parseHeader(data);
+  const { headers, width, height, scanWidth, scanHeight, firstAxis, secondAxis, dataOffset } = parseHeader(data);
 
   validateImageDimensions(width, height, 'HDR');
 
-  const totalPixels = width * height;
+  const totalPixels = scanWidth * scanHeight;
   const rgbFloat = new Float32Array(totalPixels * 3);
 
   let offset = dataOffset;
 
   // Determine encoding: new-style RLE if scanline starts with [2, 2, hi, lo]
-  // where (hi << 8 | lo) matches the expected width, and width is in [8, 32767].
+  // where (hi << 8 | lo) matches the expected scanline width, and scanWidth is in [8, 32767].
   // Checking the encoded width prevents false positives when uncompressed pixel
   // data happens to start with R=2, G=2.
-  const useNewRLE = width >= 8 && width <= 32767 &&
+  const useNewRLE = scanWidth >= 8 && scanWidth <= 32767 &&
     offset + 4 <= data.length &&
     data[offset] === 2 && data[offset + 1] === 2 &&
-    ((data[offset + 2]! << 8) | data[offset + 3]!) === width;
+    ((data[offset + 2]! << 8) | data[offset + 3]!) === scanWidth;
 
   if (useNewRLE) {
     // New-style adaptive RLE: each scanline independently encoded
-    for (let y = 0; y < height; y++) {
+    for (let y = 0; y < scanHeight; y++) {
       if (offset + 4 > data.length) {
         throw new DecoderError('HDR', 'Truncated HDR file: unexpected end of data');
       }
 
-      const { scanline, bytesRead } = readRLEScanline(data, offset, width);
+      const { scanline, bytesRead } = readRLEScanline(data, offset, scanWidth);
       offset += bytesRead;
 
       // Convert RGBE to float
-      for (let x = 0; x < width; x++) {
+      for (let x = 0; x < scanWidth; x++) {
         const srcIdx = x * 4;
-        const dstIdx = (y * width + x) * 3;
+        const dstIdx = (y * scanWidth + x) * 3;
         const [rf, gf, bf] = rgbeToFloat(
           scanline[srcIdx]!,
           scanline[srcIdx + 1]!,
@@ -347,12 +453,15 @@ export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
     }
   }
 
+  // Rearrange pixel data from file scan order to standard -Y +X orientation
+  const oriented = rearrangeOrientation(rgbFloat, scanWidth, scanHeight, firstAxis, secondAxis);
+
   // Convert 3-channel RGB to 4-channel RGBA
-  const rgbaData = sharedToRGBA(rgbFloat, width, height, 3);
+  const rgbaData = sharedToRGBA(oriented.data, oriented.width, oriented.height, 3);
 
   return {
-    width,
-    height,
+    width: oriented.width,
+    height: oriented.height,
     data: rgbaData,
     channels: 4,
     colorSpace: 'linear',

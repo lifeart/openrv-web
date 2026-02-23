@@ -8,10 +8,20 @@
 import type { Session } from './core/session/Session';
 import type { MediaSource } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
+import type { PaintEngine } from './paint/PaintEngine';
 import type { NetworkSyncManager } from './network/NetworkSyncManager';
 import type { NetworkControl } from './ui/components/NetworkControl';
+import type { ColorControls } from './ui/components/ColorControls';
 import type { HeaderBar } from './ui/components/layout/HeaderBar';
-import type { MediaTransferFileDescriptor, MediaTransferSourceDescriptor } from './network/types';
+import { type Annotation, isValidAnnotation } from './paint/types';
+import type { Note } from './core/session/NoteManager';
+import type {
+  MediaTransferFileDescriptor,
+  MediaTransferSourceDescriptor,
+  AnnotationSyncPayload,
+  NoteSyncPayload,
+  ColorSyncPayload,
+} from './network/types';
 import {
   buildShareURL,
   decodeSessionState,
@@ -23,6 +33,7 @@ import {
   encryptSessionStateWithPin,
   isValidPinCode,
 } from './network/PinEncryption';
+import { createThrottle, type Throttled } from './utils/throttle';
 
 const MEDIA_CHUNK_SIZE_BYTES = 48 * 1024;
 
@@ -60,6 +71,8 @@ interface IncomingMediaTransfer {
 export interface NetworkBridgeContext {
   session: Session;
   viewer: Viewer;
+  paintEngine?: PaintEngine;
+  colorControls?: ColorControls;
   networkSyncManager: NetworkSyncManager;
   networkControl: NetworkControl;
   headerBar: HeaderBar;
@@ -73,6 +86,10 @@ export class AppNetworkBridge {
   private pendingStateByTransferId = new Map<string, SessionURLState>();
   private outgoingMediaTransfers = new Map<string, OutgoingMediaTransfer>();
   private incomingMediaTransfers = new Map<string, IncomingMediaTransfer>();
+  private colorSyncThrottle: Throttled<[ColorSyncPayload]> | null = null;
+  private frameSyncThrottle: Throttled<[number]> | null = null;
+  private lastPlaybackSyncFrame = -1;
+  private lastPlaybackSyncTime = 0;
 
   constructor(ctx: NetworkBridgeContext) {
     this.ctx = ctx;
@@ -106,6 +123,7 @@ export class AppNetworkBridge {
       networkControl.setRoomInfo(null);
       networkControl.setUsers([]);
       networkControl.hideInfo();
+      this.ctx.paintEngine?.setIdPrefix('');
     }));
 
     this.unsubscribers.push(networkControl.on('syncSettingsChanged', (settings) => {
@@ -167,11 +185,20 @@ export class AppNetworkBridge {
       const encodedState = encodeSessionState(this.ctx.getSessionURLState?.() ?? this.captureSessionURLState());
       const pinCode = this.getActivePinCode();
 
+      // Capture annotations and notes for full state transfer
+      const paintSnapshot = this.ctx.paintEngine?.toJSON();
+      const annotations = paintSnapshot
+        ? Object.values(paintSnapshot.frames).flat()
+        : undefined;
+      const notes = session.noteManager.toSerializable();
+
       if (isValidPinCode(pinCode)) {
         try {
           const encrypted = await encryptSessionStateWithPin(encodedState, pinCode);
           networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
             encryptedSessionState: encrypted,
+            annotations,
+            notes,
           });
           return;
         } catch (error) {
@@ -183,6 +210,8 @@ export class AppNetworkBridge {
 
       networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
         sessionState: encodedState,
+        annotations,
+        notes,
       });
     }));
 
@@ -218,11 +247,13 @@ export class AppNetworkBridge {
         if (transferId) {
           this.pendingStateByTransferId.set(transferId, decoded);
           this.applySharedSessionState(decoded);
+          this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
           return;
         }
       }
 
       this.applySharedSessionState(decoded);
+      this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
     }));
 
     this.unsubscribers.push(networkSyncManager.on('mediaSyncRequested', async ({ transferId, requesterUserId }) => {
@@ -357,6 +388,7 @@ export class AppNetworkBridge {
       networkControl.hideInfo();
       networkControl.setRoomInfo(info);
       networkControl.setUsers(info.users);
+      this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
       void this.refreshShareLinkPreview();
     }));
 
@@ -365,6 +397,7 @@ export class AppNetworkBridge {
       networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
       networkControl.setRoomInfo(info);
       networkControl.setUsers(info.users);
+      this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
       void this.refreshShareLinkPreview();
     }));
 
@@ -424,9 +457,175 @@ export class AppNetworkBridge {
       }
     }));
 
+    // Wire incoming color sync
+    this.unsubscribers.push(networkSyncManager.on('syncColor', (payload: ColorSyncPayload) => {
+      const sm = networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        const current = viewer.getColorAdjustments();
+        viewer.setColorAdjustments({
+          ...current,
+          exposure: payload.exposure,
+          gamma: payload.gamma,
+          saturation: payload.saturation,
+          contrast: payload.contrast,
+          temperature: payload.temperature,
+          tint: payload.tint,
+          brightness: payload.brightness,
+        });
+      } finally {
+        sm.endApplyRemote();
+      }
+    }));
+
+    // Wire outgoing color sync when local color adjustments change
+    const colorControls = this.ctx.colorControls;
+    if (colorControls) {
+      this.colorSyncThrottle = createThrottle((payload: ColorSyncPayload) => {
+        networkSyncManager.sendColorSync(payload);
+      }, 100);
+
+      this.unsubscribers.push(colorControls.on('adjustmentsChanged', (adjustments) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          this.colorSyncThrottle!.call({
+            exposure: adjustments.exposure,
+            gamma: adjustments.gamma,
+            saturation: adjustments.saturation,
+            contrast: adjustments.contrast,
+            temperature: adjustments.temperature,
+            tint: adjustments.tint,
+            brightness: adjustments.brightness,
+          });
+        }
+      }));
+    }
+
+    // Wire incoming annotation sync
+    const paintEngine = this.ctx.paintEngine;
+    if (paintEngine) {
+      this.unsubscribers.push(networkSyncManager.on('syncAnnotation', (payload: AnnotationSyncPayload) => {
+        const sm = networkSyncManager.getSyncStateManager();
+        sm.beginApplyRemote();
+        try {
+          switch (payload.action) {
+            case 'add':
+              for (const stroke of payload.strokes) {
+                if (isValidAnnotation(stroke)) {
+                  paintEngine.addRemoteAnnotation(stroke);
+                }
+              }
+              break;
+            case 'remove':
+              if (payload.annotationId) {
+                paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+              }
+              break;
+            case 'clear':
+              paintEngine.clearRemoteFrame(payload.frame);
+              break;
+            case 'update':
+              // For updates, remove then re-add
+              if (payload.annotationId) {
+                paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+              }
+              for (const stroke of payload.strokes) {
+                if (isValidAnnotation(stroke)) {
+                  paintEngine.addRemoteAnnotation(stroke);
+                }
+              }
+              break;
+          }
+        } finally {
+          sm.endApplyRemote();
+        }
+      }));
+
+      // Send outgoing annotation sync when local annotations change
+      this.unsubscribers.push(paintEngine.on('strokeAdded', (annotation: Annotation) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          networkSyncManager.sendAnnotationSync({
+            frame: annotation.frame,
+            strokes: [annotation],
+            action: 'add',
+            annotationId: annotation.id,
+            timestamp: Date.now(),
+          });
+        }
+      }));
+
+      this.unsubscribers.push(paintEngine.on('strokeRemoved', (annotation: Annotation) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          networkSyncManager.sendAnnotationSync({
+            frame: annotation.frame,
+            strokes: [],
+            action: 'remove',
+            annotationId: annotation.id,
+            timestamp: Date.now(),
+          });
+        }
+      }));
+    }
+
+    // Wire incoming note sync
+    this.unsubscribers.push(networkSyncManager.on('syncNote', (payload: NoteSyncPayload) => {
+      const sm = networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        const noteManager = session.noteManager;
+        switch (payload.action) {
+          case 'add': {
+            const note = payload.note as Note | undefined;
+            if (note && note.id) {
+              noteManager.importNote(note);
+            }
+            break;
+          }
+          case 'remove':
+            if (payload.noteId) {
+              noteManager.removeNote(payload.noteId);
+            }
+            break;
+          case 'update': {
+            const note = payload.note as Partial<Note> | undefined;
+            if (payload.noteId && note) {
+              noteManager.updateNote(payload.noteId, {
+                text: note.text,
+                status: note.status,
+                color: note.color,
+              });
+            }
+            break;
+          }
+          case 'clear':
+            noteManager.fromSerializable([]);
+            break;
+          case 'snapshot':
+            if (Array.isArray(payload.notes)) {
+              noteManager.fromSerializable(payload.notes as Note[]);
+            }
+            break;
+        }
+      } finally {
+        sm.endApplyRemote();
+      }
+    }));
+
+    // Send outgoing note sync when notes change
+    this.unsubscribers.push(session.on('notesChanged', () => {
+      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        networkSyncManager.sendNoteSync({
+          action: 'snapshot',
+          notes: session.noteManager.toSerializable(),
+          timestamp: Date.now(),
+        });
+      }
+    }));
+
     // Send outgoing sync when local state changes
     this.unsubscribers.push(session.on('playbackChanged', (isPlaying) => {
       if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        this.lastPlaybackSyncFrame = session.currentFrame;
+        this.lastPlaybackSyncTime = Date.now();
         networkSyncManager.sendPlaybackSync({
           isPlaying,
           currentFrame: session.currentFrame,
@@ -438,9 +637,17 @@ export class AppNetworkBridge {
       }
     }));
 
+    this.frameSyncThrottle = createThrottle((frame: number) => {
+      networkSyncManager.sendFrameSync(frame);
+    }, 50);
+
     this.unsubscribers.push(session.on('frameChanged', (frame) => {
       if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-        networkSyncManager.sendFrameSync(frame);
+        // Skip if this frame was just sent via playbackChanged
+        if (frame === this.lastPlaybackSyncFrame && Date.now() - this.lastPlaybackSyncTime < 50) {
+          return;
+        }
+        this.frameSyncThrottle!.call(frame);
       }
     }));
   }
@@ -502,6 +709,25 @@ export class AppNetworkBridge {
       return url.hash.startsWith('#s=');
     } catch {
       return false;
+    }
+  }
+
+  private applyReceivedAnnotationsAndNotes(annotations?: unknown[], notes?: unknown[]): void {
+    const hasAnnotations = Array.isArray(annotations) && annotations.length > 0 && this.ctx.paintEngine;
+    const hasNotes = Array.isArray(notes) && notes.length > 0;
+    if (!hasAnnotations && !hasNotes) return;
+
+    const sm = this.ctx.networkSyncManager.getSyncStateManager();
+    sm.beginApplyRemote();
+    try {
+      if (hasAnnotations) {
+        this.ctx.paintEngine!.loadFromAnnotations(annotations as import('./paint/types').Annotation[]);
+      }
+      if (hasNotes) {
+        this.ctx.session.noteManager.fromSerializable(notes as import('./core/session/NoteManager').Note[]);
+      }
+    } finally {
+      sm.endApplyRemote();
     }
   }
 
@@ -810,6 +1036,10 @@ export class AppNetworkBridge {
       unsubscribe();
     }
     this.unsubscribers = [];
+    this.colorSyncThrottle?.cancel();
+    this.colorSyncThrottle = null;
+    this.frameSyncThrottle?.cancel();
+    this.frameSyncThrottle = null;
     this.pendingStateByTransferId.clear();
     this.outgoingMediaTransfers.clear();
     this.incomingMediaTransfers.clear();

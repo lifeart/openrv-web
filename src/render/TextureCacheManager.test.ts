@@ -245,6 +245,19 @@ describe('TextureCacheManager', () => {
       expect(cache.getMemoryUsage().used).toBe(0);
       expect(gl.deleteTexture).toHaveBeenCalledTimes(3);
     });
+
+    it('TEX-U028: clear deletes ALL textures when cache has many entries (regression for map mutation)', () => {
+      for (let i = 0; i < 5; i++) {
+        cache.getTexture(`tex-${i}`, 100, 100);
+      }
+      expect(cache.getMemoryUsage().entries).toBe(5);
+
+      cache.clear();
+
+      expect(cache.getMemoryUsage().entries).toBe(0);
+      expect(cache.getMemoryUsage().used).toBe(0);
+      expect(gl.deleteTexture).toHaveBeenCalledTimes(5);
+    });
   });
 
   describe('LRU eviction', () => {

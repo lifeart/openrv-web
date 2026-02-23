@@ -72,6 +72,16 @@ export interface PlaylistManagerEvents extends EventMap {
   playlistEnded: void;
 }
 
+/** An OTIO clip that could not be resolved during import */
+export interface UnresolvedOTIOClip {
+  id: string;
+  name: string;
+  sourceUrl: string;
+  inFrame: number;
+  outFrame: number;
+  timelineIn: number;
+}
+
 /** Result of mapping a global frame to source */
 export interface FrameMapping {
   clip: PlaylistClip;
@@ -89,6 +99,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private currentFrame = 1;
   private loopMode: 'none' | 'single' | 'all' = 'none';
   private nextClipId = 1;
+  private _unresolvedClips: UnresolvedOTIOClip[] = [];
+  private nextUnresolvedId = 1;
 
   constructor() {
     super();
@@ -629,6 +641,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const result = parseOTIO(otioJson);
     if (!result) return 0;
 
+    this._unresolvedClips = [];
     let importedCount = 0;
 
     for (const clip of result.clips) {
@@ -636,10 +649,48 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       if (resolved) {
         this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame);
         importedCount++;
+      } else {
+        this._unresolvedClips.push({
+          id: `unresolved-${this.nextUnresolvedId++}`,
+          name: clip.name,
+          sourceUrl: clip.sourceUrl ?? '',
+          inFrame: clip.inFrame,
+          outFrame: clip.outFrame,
+          timelineIn: clip.timelineInFrame,
+        });
       }
     }
 
     return importedCount;
+  }
+
+  /**
+   * Get clips that could not be resolved during the last OTIO import.
+   */
+  get unresolvedClips(): readonly UnresolvedOTIOClip[] {
+    return this._unresolvedClips;
+  }
+
+  /**
+   * Re-link an unresolved clip to a source.
+   * Returns true if the clip was found and re-linked successfully.
+   */
+  relinkUnresolvedClip(clipId: string, sourceIndex: number, sourceName: string, frameCount: number): boolean {
+    const idx = this._unresolvedClips.findIndex(c => c.id === clipId);
+    if (idx === -1) return false;
+
+    const clip = this._unresolvedClips[idx]!;
+    const outFrame = Math.min(clip.outFrame, frameCount);
+    this.addClip(sourceIndex, sourceName, clip.inFrame, outFrame);
+    this._unresolvedClips.splice(idx, 1);
+    return true;
+  }
+
+  /**
+   * Clear the list of unresolved clips.
+   */
+  clearUnresolvedClips(): void {
+    this._unresolvedClips = [];
   }
 
   dispose(): void {

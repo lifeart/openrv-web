@@ -229,7 +229,7 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('COLLAB-010: sendCursorPosition sends when connected and cursor enabled', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     // Cursor sync is enabled by default
     expect(() => manager.sendCursorPosition(0.5, 0.3)).not.toThrow();
   });
@@ -240,7 +240,7 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('COLLAB-012: sendCursorPosition suppressed when cursor sync disabled', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -253,12 +253,12 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('COLLAB-013: syncCursor event emitted for remote cursor', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     const handler = vi.fn();
     manager.on('syncCursor', handler);
 
     // Simulate receiving a cursor sync message from another user
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     const msg = createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
       userId: alice.id,
       x: 0.7,
@@ -275,8 +275,8 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('COLLAB-014: remoteCursors getter returns stored cursors', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     const msg = createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
       userId: alice.id,
@@ -292,8 +292,8 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('remote cursor cleared when user leaves', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     // Add a cursor
     const msg = createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
@@ -311,8 +311,8 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('COLLAB-046: cursor update from same user overwrites previous position', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     const handle = (manager as unknown as { handleMessage(m: unknown): void }).handleMessage.bind(manager);
 
@@ -332,8 +332,8 @@ describe('NetworkSyncManager cursor sync', () => {
   });
 
   it('COLLAB-047: cursor userId sanitized to sender', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     const handle = (manager as unknown as { handleMessage(m: unknown): void }).handleMessage.bind(manager);
 
@@ -365,7 +365,7 @@ describe('NetworkSyncManager annotation sync', () => {
   });
 
   it('COLLAB-015: sendAnnotationSync sends when connected and annotations enabled', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -383,7 +383,7 @@ describe('NetworkSyncManager annotation sync', () => {
   });
 
   it('COLLAB-016: sendAnnotationSync suppressed when annotations disabled', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     // annotations is false by default
     expect(() => manager.sendAnnotationSync({
       frame: 1,
@@ -394,7 +394,7 @@ describe('NetworkSyncManager annotation sync', () => {
   });
 
   it('COLLAB-017: sendAnnotationSync blocked for viewer role', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -418,7 +418,7 @@ describe('NetworkSyncManager annotation sync', () => {
   });
 
   it('COLLAB-018: syncAnnotation event emitted for remote annotations', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -430,7 +430,7 @@ describe('NetworkSyncManager annotation sync', () => {
     const handler = vi.fn();
     manager.on('syncAnnotation', handler);
 
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     const msg = createMessage('sync.annotation', manager.roomInfo!.roomId, alice.id, {
       frame: 5,
       strokes: [{ id: 'stroke1' }],
@@ -445,7 +445,7 @@ describe('NetworkSyncManager annotation sync', () => {
   });
 
   it('incoming annotation from viewer is blocked', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -454,7 +454,7 @@ describe('NetworkSyncManager annotation sync', () => {
       cursor: true,
     });
 
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     manager.setParticipantPermission(alice.id, 'viewer');
 
     const handler = vi.fn();
@@ -473,13 +473,13 @@ describe('NetworkSyncManager annotation sync', () => {
   });
 
   it('annotation sync respects sync settings', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     // annotations disabled by default
 
     const handler = vi.fn();
     manager.on('syncAnnotation', handler);
 
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     const msg = createMessage('sync.annotation', manager.roomInfo!.roomId, alice.id, {
       frame: 5,
       strokes: [],
@@ -509,18 +509,18 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('COLLAB-019: host permission set on room creation', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     expect(manager.getParticipantPermission(manager.userId)).toBe('host');
   });
 
   it('COLLAB-020: default permission for unknown user is reviewer', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     expect(manager.getParticipantPermission('unknown-user')).toBe('reviewer');
   });
 
   it('COLLAB-021: setParticipantPermission changes role', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     manager.setParticipantPermission(alice.id, 'viewer');
     expect(manager.getParticipantPermission(alice.id)).toBe('viewer');
@@ -530,8 +530,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('COLLAB-022: setParticipantPermission emits event', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     const handler = vi.fn();
     manager.on('participantPermissionChanged', handler);
@@ -545,8 +545,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('COLLAB-023: only host can change permissions', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     // Simulate a non-host trying to set permission by injecting a message
     const msg = createMessage('user.permission', manager.roomInfo!.roomId, alice.id, {
@@ -565,8 +565,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('COLLAB-024: permission change from host is accepted', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     // Simulate host sending permission change (as if relayed via server)
     const msg = createMessage('user.permission', manager.roomInfo!.roomId, manager.userId, {
@@ -589,8 +589,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('COLLAB-025: setParticipantPermission suppressed when not host', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
 
     // Make ourselves not the host (simulate by clearing room's hostId)
     const roomInfo = manager.roomInfo!;
@@ -609,8 +609,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('participantPermissions getter returns all permissions', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
     manager.setParticipantPermission(alice.id, 'reviewer');
 
     const perms = manager.participantPermissions;
@@ -620,8 +620,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('canUserSync returns false for viewers', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
     manager.setParticipantPermission(alice.id, 'viewer');
 
     expect(manager.canUserSync(alice.id)).toBe(false);
@@ -629,8 +629,8 @@ describe('NetworkSyncManager participant permissions', () => {
   });
 
   it('permissions cleared on room leave', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
     manager.setParticipantPermission(alice.id, 'viewer');
 
     expect(manager.participantPermissions.length).toBe(2);
@@ -670,7 +670,7 @@ describe('NetworkSyncManager cursor settings', () => {
   });
 
   it('cursor sync disabled suppresses cursor events', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -682,7 +682,7 @@ describe('NetworkSyncManager cursor settings', () => {
     const handler = vi.fn();
     manager.on('syncCursor', handler);
 
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     const msg = createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
       userId: alice.id,
       x: 0.5,
@@ -746,11 +746,11 @@ describe('collaboration edge cases', () => {
   });
 
   it('COLLAB-028: invalid cursor payload rejected silently', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     const handler = vi.fn();
     manager.on('syncCursor', handler);
 
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     const msg = createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
       // Missing required fields
       x: 0.5,
@@ -761,7 +761,7 @@ describe('collaboration edge cases', () => {
   });
 
   it('COLLAB-029: invalid permission payload rejected silently', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     const handler = vi.fn();
     manager.on('participantPermissionChanged', handler);
 
@@ -792,7 +792,7 @@ describe('collaboration edge cases', () => {
   });
 
   it('invalid annotation payload not emitted', () => {
-    manager.simulateRoomCreated();
+    manager._applyLocalRoomCreation();
     manager.setSyncSettings({
       playback: true,
       view: true,
@@ -804,7 +804,7 @@ describe('collaboration edge cases', () => {
     const handler = vi.fn();
     manager.on('syncAnnotation', handler);
 
-    const alice = manager.simulateUserJoined('Alice');
+    const alice = manager._applyLocalUserJoin('Alice');
     const msg = createMessage('sync.annotation', manager.roomInfo!.roomId, alice.id, {
       frame: NaN, // invalid
       strokes: [],
@@ -817,9 +817,9 @@ describe('collaboration edge cases', () => {
   });
 
   it('multiple remote cursors tracked independently', () => {
-    manager.simulateRoomCreated();
-    const alice = manager.simulateUserJoined('Alice');
-    const bob = manager.simulateUserJoined('Bob');
+    manager._applyLocalRoomCreation();
+    const alice = manager._applyLocalUserJoin('Alice');
+    const bob = manager._applyLocalUserJoin('Bob');
 
     const cursorMsg = (userId: string, x: number, y: number) =>
       createMessage('sync.cursor', manager.roomInfo!.roomId, userId, {

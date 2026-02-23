@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Session, MediaSource } from './Session';
 import { Graph } from '../graph/Graph';
+import { IPNode } from '../../nodes/base/IPNode';
+import type { IPImage } from '../image/Image';
+import type { EvalContext } from '../graph/Graph';
+import type { GTOData } from 'gto-js';
 
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
@@ -283,12 +287,13 @@ describe('Session', () => {
   });
 
   describe('in/out points', () => {
-    it('SES-018: setInPoint() updates inPoint', () => {
+    it('SES-018: setInPoint() with same value does not emit', () => {
       const listener = vi.fn();
       session.on('inOutChanged', listener);
 
       session.setInPoint(1);
       // inPoint already 1, should not emit
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('SES-020: resetInOutPoints() resets to full duration', () => {
@@ -1361,6 +1366,401 @@ describe('Session', () => {
       }]);
       session.goToEnd();
       expect(session.currentFrame).toBe(1);
+    });
+  });
+
+  // ==========================================================================
+  // Session.resolveProperty()
+  // ==========================================================================
+
+  describe('resolveProperty', () => {
+    // Minimal TestNode for creating a graph with typed nodes
+    class ResolverTestNode extends IPNode {
+      constructor(type: string, name?: string) {
+        super(type, name);
+      }
+      protected process(_context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
+        return null;
+      }
+    }
+
+    function createTestGraph(
+      nodes: Array<{ type: string; name?: string; props?: Record<string, unknown> }>,
+    ): Graph {
+      const graph = new Graph();
+      for (const spec of nodes) {
+        const node = new ResolverTestNode(spec.type, spec.name);
+        if (spec.props) {
+          for (const [key, value] of Object.entries(spec.props)) {
+            node.properties.add({ name: key, defaultValue: value });
+          }
+        }
+        graph.addNode(node);
+      }
+      return graph;
+    }
+
+    function createTestGTOData(
+      objects: Array<{
+        name: string;
+        protocol: string;
+        components?: Record<string, Record<string, { type: string; data: unknown[] }>>;
+      }>,
+    ): GTOData {
+      return {
+        version: 4,
+        objects: objects.map((obj) => ({
+          name: obj.name,
+          protocol: obj.protocol,
+          protocolVersion: 1,
+          components: Object.fromEntries(
+            Object.entries(obj.components ?? {}).map(([compName, props]) => [
+              compName,
+              {
+                interpretation: '',
+                properties: Object.fromEntries(
+                  Object.entries(props).map(([propName, propData]) => [
+                    propName,
+                    {
+                      type: propData.type,
+                      size: propData.data.length,
+                      width: 1,
+                      interpretation: '',
+                      data: propData.data,
+                    },
+                  ]),
+                ),
+              },
+            ]),
+          ),
+        })),
+      };
+    }
+
+    it('RP-001: returns null when neither graph nor gtoData is loaded', () => {
+      expect(session.resolveProperty('#RVColor.color.exposure')).toBeNull();
+      expect(session.resolveProperty('@RVDisplayColor')).toBeNull();
+    });
+
+    it('RP-002: returns null for invalid address format', () => {
+      expect(session.resolveProperty('plainString')).toBeNull();
+      expect(session.resolveProperty('')).toBeNull();
+      expect(session.resolveProperty('!invalid')).toBeNull();
+    });
+
+    it('RP-003: resolves hash address against the live graph', () => {
+      const graph = createTestGraph([
+        { type: 'RVColor', props: { exposure: 1.5 } },
+      ]);
+      (session as any)._graph = graph;
+
+      const results = session.resolveProperty('#RVColor.color.exposure');
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(1);
+      expect((results as any)[0].value).toBe(1.5);
+    });
+
+    it('RP-004: resolves at address against the live graph', () => {
+      const graph = createTestGraph([
+        { type: 'RVDisplayColor', name: 'display1' },
+        { type: 'RVDisplayColor', name: 'display2' },
+      ]);
+      (session as any)._graph = graph;
+
+      const results = session.resolveProperty('@RVDisplayColor');
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(2);
+    });
+
+    it('RP-005: falls back to GTOData hash resolution when no graph', () => {
+      const gtoData = createTestGTOData([
+        {
+          name: 'rvColor',
+          protocol: 'RVColor',
+          components: {
+            color: {
+              exposure: { type: 'float', data: [2.0] },
+            },
+          },
+        },
+      ]);
+      (session as any)._gtoData = gtoData;
+
+      const results = session.resolveProperty('#RVColor.color.exposure');
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(1);
+      expect((results as any)[0].value).toBe(2.0);
+      // Verify it's a GTOHashResolveResult (has `object`, not `node`)
+      expect((results as any)[0].object).toBeDefined();
+    });
+
+    it('RP-006: falls back to GTOData at resolution when no graph', () => {
+      const gtoData = createTestGTOData([
+        { name: 'rvDisplay', protocol: 'RVDisplayColor' },
+      ]);
+      (session as any)._gtoData = gtoData;
+
+      const results = session.resolveProperty('@RVDisplayColor');
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(1);
+      expect((results as any)[0].object.name).toBe('rvDisplay');
+    });
+
+    it('RP-007: prefers graph over GTOData when both are present', () => {
+      const graph = createTestGraph([
+        { type: 'RVColor', props: { exposure: 99.0 } },
+      ]);
+      const gtoData = createTestGTOData([
+        {
+          name: 'rvColor',
+          protocol: 'RVColor',
+          components: {
+            color: { exposure: { type: 'float', data: [1.0] } },
+          },
+        },
+      ]);
+      (session as any)._graph = graph;
+      (session as any)._gtoData = gtoData;
+
+      const results = session.resolveProperty('#RVColor.color.exposure');
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(1);
+      // Should return graph value (99.0), not GTO value (1.0)
+      expect((results as any)[0].value).toBe(99.0);
+      // Should be a HashResolveResult (has `node`, not `object`)
+      expect((results as any)[0].node).toBeDefined();
+    });
+
+    it('RP-008: returns null for invalid address with only gtoData', () => {
+      const gtoData = createTestGTOData([
+        { name: 'rvColor', protocol: 'RVColor' },
+      ]);
+      (session as any)._gtoData = gtoData;
+
+      expect(session.resolveProperty('invalidFormat')).toBeNull();
+    });
+
+    it('RP-009: returns empty array for non-matching protocol in graph', () => {
+      const graph = createTestGraph([
+        { type: 'RVColor', props: { exposure: 1.5 } },
+      ]);
+      (session as any)._graph = graph;
+
+      const results = session.resolveProperty('#RVNonExistent.color.exposure');
+      expect(results).not.toBeNull();
+      expect(results).toHaveLength(0);
+    });
+  });
+
+  // ==========================================================================
+  // Metadata: realtime and bgColor fields
+  // ==========================================================================
+
+  describe('metadata realtime and bgColor', () => {
+    it('META-RT-001: metadata initializes with realtime=0', () => {
+      expect(session.metadata.realtime).toBe(0);
+    });
+
+    it('META-RT-002: updateMetadata with realtime emits metadataChanged', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({ realtime: 30 });
+
+      expect(session.metadata.realtime).toBe(30);
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ realtime: 30 })
+      );
+    });
+
+    it('META-RT-003: updateMetadata with same realtime does not emit', () => {
+      session.updateMetadata({ realtime: 30 });
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({ realtime: 30 });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('META-BG-001: metadata initializes with default bgColor (18% gray)', () => {
+      expect(session.metadata.bgColor).toEqual([0.18, 0.18, 0.18, 1.0]);
+    });
+
+    it('META-BG-002: updateMetadata with bgColor emits metadataChanged', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({ bgColor: [0.5, 0.5, 0.5, 1.0] });
+
+      expect(session.metadata.bgColor).toEqual([0.5, 0.5, 0.5, 1.0]);
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ bgColor: [0.5, 0.5, 0.5, 1.0] })
+      );
+    });
+
+    it('META-BG-003: updateMetadata with same bgColor does not emit', () => {
+      session.updateMetadata({ bgColor: [0.5, 0.5, 0.5, 1.0] });
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({ bgColor: [0.5, 0.5, 0.5, 1.0] });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('META-BG-004: updateMetadata creates a defensive copy of bgColor', () => {
+      const bgColor: [number, number, number, number] = [0.3, 0.4, 0.5, 1.0];
+      session.updateMetadata({ bgColor });
+
+      // Mutate the original array
+      bgColor[0] = 999;
+
+      // Session should have its own copy
+      expect(session.metadata.bgColor[0]).toBe(0.3);
+    });
+
+    it('META-RT-BG-001: updateMetadata supports both realtime and bgColor together', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({ realtime: 29.97, bgColor: [0.0, 0.0, 0.0, 1.0] });
+
+      expect(session.metadata.realtime).toBe(29.97);
+      expect(session.metadata.bgColor).toEqual([0.0, 0.0, 0.0, 1.0]);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('META-RT-BG-002: updateMetadata with bgColor preserves other fields', () => {
+      session.setDisplayName('TestSession');
+      session.updateMetadata({ realtime: 30 });
+
+      session.updateMetadata({ bgColor: [1.0, 1.0, 1.0, 1.0] });
+
+      expect(session.metadata.displayName).toBe('TestSession');
+      expect(session.metadata.realtime).toBe(30);
+      expect(session.metadata.bgColor).toEqual([1.0, 1.0, 1.0, 1.0]);
+    });
+  });
+
+  // ==========================================================================
+  // AudioCoordinator wiring
+  // ==========================================================================
+
+  describe('AudioCoordinator wiring', () => {
+    it('AC-WIRE-001: audioPlaybackManager getter returns coordinator manager', () => {
+      const manager = session.audioPlaybackManager;
+      expect(manager).toBeDefined();
+      expect(manager.state).toBe('idle');
+    });
+
+    it('AC-WIRE-002: volume change forwards to AudioCoordinator', () => {
+      // Access the internal coordinator
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'onVolumeChanged');
+
+      session.volume = 0.5;
+
+      expect(spy).toHaveBeenCalledWith(0.5);
+    });
+
+    it('AC-WIRE-003: mute change forwards to AudioCoordinator', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'onMutedChanged');
+
+      session.muted = true;
+
+      expect(spy).toHaveBeenCalledWith(true);
+    });
+
+    it('AC-WIRE-004: frameChanged event forwards to AudioCoordinator', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'onFrameChanged');
+
+      // Set up a source so frame changes are valid
+      session.setSources([{
+        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
+      }]);
+      session.setOutPoint(100);
+
+      session.currentFrame = 10;
+
+      expect(spy).toHaveBeenCalledWith(10, expect.any(Number), expect.any(Boolean));
+    });
+
+    it('AC-WIRE-005: playbackChanged(true) calls AudioCoordinator.onPlaybackStarted', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const startSpy = vi.spyOn(coordinator, 'onPlaybackStarted');
+
+      session.setSources([{
+        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+
+      expect(startSpy).toHaveBeenCalledWith(
+        expect.any(Number), // currentFrame
+        expect.any(Number), // fps
+        expect.any(Number), // playbackSpeed
+        expect.any(Number), // playDirection
+      );
+    });
+
+    it('AC-WIRE-006: playbackChanged(false) calls AudioCoordinator.onPlaybackStopped', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const stopSpy = vi.spyOn(coordinator, 'onPlaybackStopped');
+
+      session.setSources([{
+        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+      session.pause();
+
+      expect(stopSpy).toHaveBeenCalled();
+    });
+
+    it('AC-WIRE-007: playbackSpeedChanged forwards to AudioCoordinator.onSpeedChanged', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'onSpeedChanged');
+
+      session.playbackSpeed = 2;
+
+      expect(spy).toHaveBeenCalledWith(2);
+    });
+
+    it('AC-WIRE-008: playDirectionChanged forwards to AudioCoordinator.onDirectionChanged', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'onDirectionChanged');
+
+      session.setSources([{
+        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
+      }]);
+      session.setOutPoint(100);
+
+      session.togglePlayDirection();
+
+      expect(spy).toHaveBeenCalledWith(-1);
+    });
+
+    it('AC-WIRE-009: dispose calls AudioCoordinator.dispose', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'dispose');
+
+      session.dispose();
+
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('AC-WIRE-010: preservesPitch change forwards to AudioCoordinator.onPreservesPitchChanged', () => {
+      const coordinator = (session as any)._audioCoordinator;
+      const spy = vi.spyOn(coordinator, 'onPreservesPitchChanged');
+
+      session.preservesPitch = false;
+
+      expect(spy).toHaveBeenCalledWith(false);
     });
   });
 

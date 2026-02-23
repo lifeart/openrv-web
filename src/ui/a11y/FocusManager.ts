@@ -150,14 +150,15 @@ export class FocusManager {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
 
-    // Skip if user is typing in a text input
-    if (this.isTextInput(target)) return;
-
-    // Focus trap takes priority
+    // Focus trap takes priority (always handles Tab, even in inputs)
     if (this.trapContainer) {
       this.handleTrapKeydown(e);
-      return;
+      if (e.defaultPrevented) return;
+      if (this.trapContainer && e.key === 'Tab') return; // Handled or should be ignored for other shortcuts
     }
+
+    // Skip other shortcuts (roving tabindex) if user is typing in a text input
+    if (this.isTextInput(target)) return;
 
     // Roving tabindex within zones
     this.handleRovingKeydown(e);
@@ -167,20 +168,49 @@ export class FocusManager {
     if (e.key !== 'Tab') return;
 
     const focusable = this.getTrapFocusable();
-    if (focusable.length === 0) return;
+    if (focusable.length === 0) {
+      e.preventDefault();
+      return;
+    }
 
     const first = focusable[0]!;
     const last = focusable[focusable.length - 1]!;
+    const active = document.activeElement;
+
+    // If focus is outside the trap, snap it back to first (or last if shift)
+    if (!this.trapContainer?.contains(active)) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        last.focus();
+      } else {
+        first.focus();
+      }
+      return;
+    }
 
     if (e.shiftKey) {
-      if (document.activeElement === first) {
+      if (active === first) {
         e.preventDefault();
         last.focus();
+      } else {
+        // Manual move for reliability in all browsers
+        const idx = focusable.indexOf(active as HTMLElement);
+        if (idx > 0) {
+          e.preventDefault();
+          focusable[idx - 1]!.focus();
+        }
       }
     } else {
-      if (document.activeElement === last) {
+      if (active === last) {
         e.preventDefault();
         first.focus();
+      } else {
+        // Manual move for reliability in all browsers
+        const idx = focusable.indexOf(active as HTMLElement);
+        if (idx !== -1 && idx < focusable.length - 1) {
+          e.preventDefault();
+          focusable[idx + 1]!.focus();
+        }
       }
     }
   }
@@ -229,7 +259,11 @@ export class FocusManager {
     if (!this.trapContainer) return [];
     return Array.from(
       this.trapContainer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    );
+    ).filter(el => {
+      // Skip explicitly hidden elements
+      if (el.hidden || el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+      return true;
+    });
   }
 
   private isTextInput(el: HTMLElement): boolean {

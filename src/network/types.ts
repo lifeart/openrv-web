@@ -64,6 +64,7 @@ export type SyncMessageType =
   | 'sync.view'
   | 'sync.color'
   | 'sync.annotation'
+  | 'sync.note'
   | 'sync.state-request'
   | 'sync.state-response'
   | 'sync.media-request'
@@ -177,6 +178,14 @@ export interface AnnotationSyncPayload {
   timestamp: number;
 }
 
+export interface NoteSyncPayload {
+  action: 'add' | 'remove' | 'update' | 'clear' | 'snapshot';
+  note?: unknown;
+  notes?: unknown[];
+  noteId?: string;
+  timestamp: number;
+}
+
 // ---- Cursor Sync ----
 
 export interface CursorSyncPayload {
@@ -220,6 +229,8 @@ export interface StateResponsePayload {
   view?: ViewSyncPayload;
   sessionState?: string;
   encryptedSessionState?: EncryptedSessionStatePayload;
+  annotations?: unknown[];
+  notes?: unknown[];
 }
 
 export interface MediaRequestPayload {
@@ -316,6 +327,7 @@ export interface NetworkSyncEvents extends EventMap {
   syncView: ViewSyncPayload;
   syncColor: ColorSyncPayload;
   syncAnnotation: AnnotationSyncPayload;
+  syncNote: NoteSyncPayload;
   syncCursor: CursorSyncPayload;
   participantPermissionChanged: ParticipantPermission;
   sessionStateRequested: { requestId: string; requesterUserId: string };
@@ -324,6 +336,8 @@ export interface NetworkSyncEvents extends EventMap {
     senderUserId: string;
     sessionState?: string;
     encryptedSessionState?: EncryptedSessionStatePayload;
+    annotations?: unknown[];
+    notes?: unknown[];
     transport: 'webrtc' | 'websocket';
   };
   mediaSyncRequested: {
@@ -400,8 +414,8 @@ export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {
         'turn:openrelay.metered.ca:443',
         'turn:openrelay.metered.ca:443?transport=tcp',
       ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
+      username: import.meta.env.VITE_TURN_USERNAME || '',
+      credential: import.meta.env.VITE_TURN_CREDENTIAL || '',
     },
   ],
   reconnectMaxAttempts: 10,

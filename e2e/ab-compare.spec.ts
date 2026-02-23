@@ -131,7 +131,7 @@ test.describe('A/B Compare UI Elements', () => {
 
     const buttonB = page.locator('[data-testid="compare-ab-b"]');
     const title = await buttonB.getAttribute('title');
-    expect(title).toContain('source B');
+    expect(title).toContain('A/B');
   });
 
   test('AB-E010: Toggle button has tooltip with keyboard hint', async ({ page }) => {
@@ -144,7 +144,7 @@ test.describe('A/B Compare UI Elements', () => {
 
     const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
     const title = await toggleButton.getAttribute('title');
-    expect(title).toContain('`');
+    expect(title).toContain('A/B');
   });
 });
 

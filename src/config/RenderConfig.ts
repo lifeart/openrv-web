@@ -119,6 +119,9 @@ export const INPUT_TRANSFER_SRGB_TO_LINEAR = 5;
 /** Rec.709-to-linear EOTF (RVLinearize Rec709ToLinear=1) */
 export const INPUT_TRANSFER_REC709_TO_LINEAR = 6;
 
+/** SMPTE 240M input (early HDTV standard) */
+export const INPUT_TRANSFER_SMPTE240M = 7;
+
 // ---------------------------------------------------------------------------
 // Render Pipeline — Output Mode Shader Codes
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { OpenRVAPI } from './api/OpenRVAPI';
 // Register nodes with NodeFactory
 import './nodes/sources';
 import './nodes/groups';
+import './nodes/CacheLUTNode';
 
 const app = new App();
 app.mount('#app');

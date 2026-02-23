@@ -26,8 +26,11 @@ export type { ScopeType, ScopesState } from './scopes';
 export type { BackgroundPatternType, BackgroundPatternState } from './background';
 export { DEFAULT_BACKGROUND_PATTERN_STATE, PATTERN_COLORS } from './background';
 
-export type { WipeMode, WipeSide, WipeState } from './wipe';
-export { DEFAULT_WIPE_STATE } from './wipe';
+export type { WipeMode, WipeSide, WipeState, StencilBox } from './wipe';
+export {
+  DEFAULT_WIPE_STATE, DEFAULT_STENCIL_BOX,
+  isStencilBoxActive, computeHorizontalWipeBoxes, computeVerticalWipeBoxes,
+} from './wipe';
 
 export type { LoopMode, MediaType } from './session';
 

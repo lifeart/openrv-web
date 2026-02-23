@@ -15,6 +15,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { detectBrowserColorSpace, colorSpaceLabel, gamutLabel } from '../../color/BrowserColorSpace';
 import { getIconSvg } from './shared/Icons';
+import { TRANSITIONS } from './shared/theme';
 
 export interface DisplayProfileControlEvents extends EventMap {
   stateChanged: DisplayColorState;
@@ -99,10 +100,6 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.createDropdownContent();
     this.container.appendChild(this.dropdown);
 
-    // Close on outside click
-    document.addEventListener('click', this.handleOutsideClick);
-    document.addEventListener('keydown', this.handleDocumentKeydown);
-
     // Initial button state
     this.updateButtonState();
   }
@@ -135,7 +132,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
         display: flex; flex-direction: column; align-items: flex-start;
         padding: 6px 8px; border: 1px solid var(--border-secondary); border-radius: 3px;
         background: var(--bg-secondary); color: var(--text-secondary);
-        font-size: 11px; cursor: pointer; transition: all 0.1s ease; text-align: left;
+        font-size: 11px; cursor: pointer; transition: all ${TRANSITIONS.fast}; text-align: left;
       `;
 
       const labelSpan = document.createElement('span');
@@ -343,6 +340,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.isDropdownOpen = false;
     this.toggleButton.setAttribute('aria-expanded', 'false');
     this.dropdown.style.display = 'none';
+    document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('keydown', this.handleDocumentKeydown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
@@ -428,6 +427,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
       this.toggleButton.setAttribute('aria-expanded', 'true');
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
+      document.addEventListener('keydown', this.handleDocumentKeydown);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     }

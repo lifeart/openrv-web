@@ -358,6 +358,175 @@ describe('MessageProtocol', () => {
       expect(validateColorPayload(null)).toBe(false);
       expect(validateColorPayload({ exposure: 'zero' })).toBe(false);
     });
+
+    it('MPR-028b: rejects payload with only 3 of 7 required fields', () => {
+      // This payload has exposure, gamma, saturation but is missing
+      // contrast, temperature, tint, and brightness
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+      })).toBe(false);
+    });
+
+    it('MPR-028c: rejects payload missing contrast', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028d: rejects payload missing temperature', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028e: rejects payload missing tint', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028f: rejects payload missing brightness', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028g: rejects payload missing exposure', () => {
+      expect(validateColorPayload({
+        gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028h: rejects payload missing gamma', () => {
+      expect(validateColorPayload({
+        exposure: 0, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028i: rejects payload missing saturation', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028j: accepts payload with extra unknown fields alongside 7 required fields', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+        unknownField: 'hello',
+        anotherExtra: 42,
+      })).toBe(true);
+    });
+
+    it('MPR-028k: rejects payload with NaN exposure', () => {
+      expect(validateColorPayload({
+        exposure: NaN, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028l: rejects payload with NaN gamma', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: NaN, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028m: rejects payload with Infinity contrast', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: Infinity, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028n: rejects payload with -Infinity temperature', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: -Infinity, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028o: rejects payload with NaN tint', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: NaN, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028p: rejects payload with NaN brightness', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: NaN,
+      })).toBe(false);
+    });
+
+    it('MPR-028q: rejects payload with NaN saturation', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: NaN,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028r: rejects payload with string value for exposure', () => {
+      expect(validateColorPayload({
+        exposure: '0', gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028s: rejects payload with string value for gamma', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: '1', saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028t: rejects payload with boolean value for contrast', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: true, temperature: 0, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028u: rejects payload with null value for temperature', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: null, tint: 0, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028v: rejects payload with undefined value for tint', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: undefined, brightness: 0,
+      })).toBe(false);
+    });
+
+    it('MPR-028w: rejects payload with array value for brightness', () => {
+      expect(validateColorPayload({
+        exposure: 0, gamma: 1, saturation: 1,
+        contrast: 1, temperature: 0, tint: 0, brightness: [0],
+      })).toBe(false);
+    });
+
+    it('MPR-028x: rejects empty object', () => {
+      expect(validateColorPayload({})).toBe(false);
+    });
+
+    it('MPR-028y: accepts payload with extreme but finite numeric values', () => {
+      expect(validateColorPayload({
+        exposure: -1e10, gamma: 1e10, saturation: -1e10,
+        contrast: Number.MAX_SAFE_INTEGER, temperature: Number.MIN_SAFE_INTEGER,
+        tint: -0, brightness: 0,
+      })).toBe(true);
+    });
   });
 
   describe('state + WebRTC payload validation', () => {

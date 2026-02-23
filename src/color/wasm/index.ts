@@ -13,3 +13,6 @@ export type { ShaderTranslateOptions, TranslatedShader, UniformInfo } from './OC
 
 export { OCIOWasmBridge } from './OCIOWasmBridge';
 export type { OCIOWasmBridgeEvents, OCIOWasmBridgeConfig, WasmPipelineState } from './OCIOWasmBridge';
+
+export { OCIOWasmPipeline } from './OCIOWasmPipeline';
+export type { OCIOPipelineResult, OCIOPipelineMode, OCIOWasmPipelineEvents, OCIOWasmPipelineConfig } from './OCIOWasmPipeline';

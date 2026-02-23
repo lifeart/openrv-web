@@ -119,6 +119,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
         this.setChannel(value as ChannelMode);
       },
       onClose: () => {
+        this.button.setAttribute('aria-expanded', 'false');
         this.updateButtonLabel();
       },
     });
@@ -145,6 +146,8 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     this.button = document.createElement('button');
     this.button.dataset.testid = 'channel-select-button';
     this.button.title = 'Channel isolation (Shift+R/G/B/A/L/Y/N) - Y for grayscale';
+    this.button.setAttribute('aria-haspopup', 'menu');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -166,6 +169,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     this.button.addEventListener('click', (e) => {
       e.stopPropagation();
       this.dropdown.toggle(this.button);
+      this.button.setAttribute('aria-expanded', String(this.dropdown.isVisible()));
       this.updateButtonStyle();
     });
     this.button.addEventListener('mouseenter', () => {

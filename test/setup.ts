@@ -222,6 +222,43 @@ if (typeof File.prototype.arrayBuffer !== 'function') {
   };
 }
 
+// Polyfill PointerEvent if not available in jsdom
+if (typeof globalThis.PointerEvent === 'undefined') {
+  globalThis.PointerEvent = class PointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly width: number;
+    readonly height: number;
+    readonly pressure: number;
+    readonly tangentialPressure: number;
+    readonly tiltX: number;
+    readonly tiltY: number;
+    readonly twist: number;
+    readonly pointerType: string;
+    readonly isPrimary: boolean;
+
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.width = params.width ?? 1;
+      this.height = params.height ?? 1;
+      this.pressure = params.pressure ?? 0;
+      this.tangentialPressure = params.tangentialPressure ?? 0;
+      this.tiltX = params.tiltX ?? 0;
+      this.tiltY = params.tiltY ?? 0;
+      this.twist = params.twist ?? 0;
+      this.pointerType = params.pointerType ?? '';
+      this.isPrimary = params.isPrimary ?? false;
+    }
+  } as unknown as typeof PointerEvent;
+}
+
+// Polyfill pointer capture methods if not available in jsdom
+if (typeof HTMLElement.prototype.hasPointerCapture !== 'function') {
+  HTMLElement.prototype.hasPointerCapture = function () { return false; };
+  HTMLElement.prototype.setPointerCapture = function () {};
+  HTMLElement.prototype.releasePointerCapture = function () {};
+}
+
 // Console warning suppression for expected warnings in tests
 const originalWarn = console.warn;
 console.warn = (...args: unknown[]) => {

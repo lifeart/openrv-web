@@ -197,9 +197,10 @@ describe('DecoderRegistry', () => {
 
     it('should not detect non-float TIFF as float TIFF', () => {
       const registry = new DecoderRegistry();
-      // Non-float TIFF should not be detected by our TIFF decoder
-      // (which only handles float TIFFs)
-      expect(registry.detectFormat(createNonFloatTIFFMagic())).toBeNull();
+      // Non-float TIFF should not be detected by the TIFF (float) decoder,
+      // but will be matched by the RAW preview decoder (TIFF-based non-float)
+      expect(registry.detectFormat(createNonFloatTIFFMagic())).not.toBe('tiff');
+      expect(registry.detectFormat(createNonFloatTIFFMagic())).toBe('raw-preview');
     });
 
     it('should detect HDR format', () => {
@@ -343,17 +344,18 @@ describe('DecoderRegistry', () => {
       expect(decoder!.formatName).toBe('exr');
     });
 
-    it('should have all seven built-in decoders', () => {
+    it('should have all built-in decoders', () => {
       const registry = new DecoderRegistry();
       // Test each format is detectable
       expect(registry.getDecoder(createEXRMagic())?.formatName).toBe('exr');
       expect(registry.getDecoder(createDPXMagic())?.formatName).toBe('dpx');
       expect(registry.getDecoder(createCineonMagic())?.formatName).toBe('cineon');
       expect(registry.getDecoder(createFloatTIFFMagic())?.formatName).toBe('tiff');
+      expect(registry.getDecoder(createNonFloatTIFFMagic())?.formatName).toBe('raw-preview');
       expect(registry.getDecoder(createHDRMagic())?.formatName).toBe('hdr');
       expect(registry.getDecoder(createJXLCodestreamMagic())?.formatName).toBe('jxl');
-      // JPEG Gainmap requires a valid JPEG+MPF buffer which is complex to create,
-      // but the decoder is registered and tested via isGainmapJPEG in its own test suite
+      // JPEG Gainmap, HEIC Gainmap, AVIF Gainmap require valid container buffers
+      // which are complex to create, but are tested via their own test suites
     });
   });
 

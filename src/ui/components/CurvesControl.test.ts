@@ -211,10 +211,7 @@ describe('CurvesControl', () => {
   });
 
   describe('curvesChanged event', () => {
-    it('CURVES-U070: setCurves emits curvesChanged event', () => {
-      const callback = vi.fn();
-      control.on('curvesChanged', callback);
-
+    it('CURVES-U070: setCurves does not throw', () => {
       const newCurves: ColorCurvesData = {
         master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
         red: createDefaultCurve(),
@@ -222,8 +219,7 @@ describe('CurvesControl', () => {
         blue: createDefaultCurve(),
       };
 
-      control.setCurves(newCurves);
-      // The event is emitted via internal editor, may or may not fire depending on impl
+      expect(() => control.setCurves(newCurves)).not.toThrow();
     });
   });
 

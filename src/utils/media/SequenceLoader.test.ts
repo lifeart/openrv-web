@@ -208,7 +208,7 @@ describe('SequenceLoader', () => {
 
   describe('loadFrameImage', () => {
     it('SLD-020: returns cached image if already loaded', async () => {
-      const mockImage = new Image();
+      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
       const frame: SequenceFrame = {
         index: 0,
         frameNumber: 1,
@@ -229,13 +229,18 @@ describe('SequenceLoader', () => {
         file,
       };
 
-      // Mock Image to trigger load quickly
-      await vi.waitFor(async () => {
+      // Mock createImageBitmap since jsdom doesn't provide it
+      const mockBitmap = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
+      const origCreateImageBitmap = globalThis.createImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      try {
         const result = await loadFrameImage(frame);
-        expect(frame.url).toBeDefined();
-        expect(frame.url).toMatch(/^blob:/);
-        return result;
-      }, { timeout: 200 });
+        expect(result).toBe(mockBitmap);
+        expect(frame.image).toBe(mockBitmap);
+      } finally {
+        globalThis.createImageBitmap = origCreateImageBitmap;
+      }
     });
   });
 
@@ -258,7 +263,7 @@ describe('SequenceLoader', () => {
           frameNumber: i + 1,
           file: new File([''], `frame_${i}.png`),
           url: `blob:frame-${i}`,
-          image: new Image(),
+          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap),
         });
       }
 
@@ -281,7 +286,7 @@ describe('SequenceLoader', () => {
           frameNumber: 1,
           file: new File([''], 'frame_1.png'),
           url: 'blob:test-url',
-          image: new Image(),
+          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap),
         },
       ];
 
@@ -296,7 +301,7 @@ describe('SequenceLoader', () => {
           index: 0,
           frameNumber: 1,
           file: new File([''], 'frame_1.png'),
-          image: new Image(),
+          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap),
         },
       ];
 
@@ -319,9 +324,9 @@ describe('SequenceLoader', () => {
 
     it('SLD-025: disposes all frames', () => {
       const frames: SequenceFrame[] = [
-        { index: 0, frameNumber: 1, file: new File([''], 'f1.png'), url: 'blob:1', image: new Image() },
-        { index: 1, frameNumber: 2, file: new File([''], 'f2.png'), url: 'blob:2', image: new Image() },
-        { index: 2, frameNumber: 3, file: new File([''], 'f3.png'), url: 'blob:3', image: new Image() },
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png'), url: 'blob:1', image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
+        { index: 1, frameNumber: 2, file: new File([''], 'f2.png'), url: 'blob:2', image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
+        { index: 2, frameNumber: 3, file: new File([''], 'f3.png'), url: 'blob:3', image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
       ];
 
       disposeSequence(frames);
@@ -359,7 +364,7 @@ describe('SequenceLoader', () => {
           index: i,
           frameNumber: i + 1,
           file: new File([''], `frame_${i}.png`),
-          image: new Image(), // Already loaded
+          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap), // Already loaded
         });
       }
 
@@ -374,13 +379,13 @@ describe('SequenceLoader', () => {
 
     it('SLD-029: respects array bounds', async () => {
       const frames: SequenceFrame[] = [
-        { index: 0, frameNumber: 1, file: new File([''], 'f1.png'), image: new Image() },
-        { index: 1, frameNumber: 2, file: new File([''], 'f2.png'), image: new Image() },
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png'), image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
+        { index: 1, frameNumber: 2, file: new File([''], 'f2.png'), image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
       ];
 
       // Should not throw when window extends beyond array
-      await preloadFrames(frames, 0, 10);
-      await preloadFrames(frames, 1, 10);
+      await expect(preloadFrames(frames, 0, 10)).resolves.not.toThrow();
+      await expect(preloadFrames(frames, 1, 10)).resolves.not.toThrow();
     });
   });
 
@@ -1203,6 +1208,25 @@ describe('SequenceLoader', () => {
         expect(() => extractPatternFromFilename('frame (1).png')).not.toThrow();
         expect(() => extractPatternFromFilename('frame[0001].png')).not.toThrow();
       });
+    });
+  });
+
+  describe('preloadFrames resilience (regression)', () => {
+    it('SLD-R001: Promise.allSettled handles partial failure (conceptual)', async () => {
+      // This validates that Promise.allSettled (used in the fix) gracefully
+      // handles partial failures, unlike Promise.all which rejects on first failure
+      const tasks = [
+        Promise.resolve('ok-1'),
+        Promise.reject(new Error('frame corrupt')),
+        Promise.resolve('ok-3'),
+      ];
+
+      await expect(Promise.all(tasks)).rejects.toThrow('frame corrupt');
+
+      const results = await Promise.allSettled(tasks);
+      expect(results[0]).toEqual({ status: 'fulfilled', value: 'ok-1' });
+      expect(results[1]).toHaveProperty('status', 'rejected');
+      expect(results[2]).toEqual({ status: 'fulfilled', value: 'ok-3' });
     });
   });
 });

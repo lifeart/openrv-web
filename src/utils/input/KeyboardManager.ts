@@ -13,6 +13,8 @@ export interface KeyCombination {
   meta?: boolean;
 }
 
+import type { ContextualKeyboardManager } from './ContextualKeyboardManager';
+
 export interface KeyBinding {
   combo: KeyCombination;
   handler: () => void;
@@ -24,9 +26,14 @@ export class KeyboardManager {
   private bindings: Map<string, KeyBinding> = new Map();
   private eventHandler: (e: KeyboardEvent) => void;
   private enabled = true;
+  private contextualResolver?: ContextualKeyboardManager;
 
   constructor() {
     this.eventHandler = this.handleKeydown.bind(this);
+  }
+
+  setContextualManager(manager: ContextualKeyboardManager): void {
+    this.contextualResolver = manager;
   }
 
   /**
@@ -129,6 +136,15 @@ export class KeyboardManager {
       meta: e.metaKey && !e.ctrlKey // Only set meta if ctrl is not pressed
     };
 
+    if (this.contextualResolver) {
+      const resolved = this.contextualResolver.resolve(combo);
+      if (resolved) {
+        e.preventDefault();
+        resolved.handler();
+        return;
+      }
+    }
+
     const id = this.comboToId(combo);
     const binding = this.bindings.get(id);
 
@@ -171,6 +187,14 @@ export class KeyboardManager {
     // Also check for contenteditable elements
     if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') {
       return true;
+    }
+
+    // Allow Space and Enter to trigger focused buttons
+    if (target instanceof HTMLButtonElement || target.getAttribute('role') === 'button') {
+      const isBareKey = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+      if (isBareKey && (e.key === ' ' || e.key === 'Enter')) {
+        return true;
+      }
     }
 
     return false;

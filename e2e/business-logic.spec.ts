@@ -9,6 +9,16 @@ import {
   waitForTestHelper,
   captureViewerScreenshot,
   imagesAreDifferent,
+  waitForFrame,
+  waitForPlaybackState,
+  waitForLoopMode,
+  waitForCondition,
+  waitForExposure,
+  waitForRotation,
+  waitForTool,
+  waitForWipeMode,
+  waitForCropEnabled,
+  waitForTabActive,
 } from './fixtures';
 
 /**
@@ -52,35 +62,35 @@ test.describe('Session State Management', () => {
 
     // Go to start
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 1);
 
     let state = await getSessionState(page);
     expect(state.currentFrame).toBe(1);
 
     // Step forward
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 2);
 
     state = await getSessionState(page);
     expect(state.currentFrame).toBe(2);
 
     // Step forward again
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 3);
 
     state = await getSessionState(page);
     expect(state.currentFrame).toBe(3);
 
     // Step backward
     await page.keyboard.press('ArrowLeft');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 2);
 
     state = await getSessionState(page);
     expect(state.currentFrame).toBe(2);
 
     // Go to end
     await page.keyboard.press('End');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, initialState.frameCount);
 
     state = await getSessionState(page);
     expect(state.currentFrame).toBe(initialState.frameCount);
@@ -94,9 +104,9 @@ test.describe('Session State Management', () => {
     await page.keyboard.press('Home');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 3);
     await page.keyboard.press('i');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 3; })()`);
 
     let state = await getSessionState(page);
     expect(state.inPoint).toBe(3);
@@ -105,9 +115,9 @@ test.describe('Session State Management', () => {
     // Go to frame 5 and set out point
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 5);
     await page.keyboard.press('o');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === 5; })()`);
 
     state = await getSessionState(page);
     expect(state.inPoint).toBe(3);
@@ -115,7 +125,7 @@ test.describe('Session State Management', () => {
 
     // Reset in/out points
     await page.keyboard.press('r');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 1 && s?.outPoint === ${initialState.frameCount}; })()`);
 
     state = await getSessionState(page);
     expect(state.inPoint).toBe(1);
@@ -131,21 +141,21 @@ test.describe('Session State Management', () => {
 
     // Press Ctrl+L to cycle to 'pingpong'
     await page.keyboard.press('Control+l');
-    await page.waitForTimeout(100);
+    await waitForLoopMode(page, 'pingpong');
 
     state = await getSessionState(page);
     expect(state.loopMode).toBe('pingpong');
 
     // Press Ctrl+L to cycle to 'once'
     await page.keyboard.press('Control+l');
-    await page.waitForTimeout(100);
+    await waitForLoopMode(page, 'once');
 
     state = await getSessionState(page);
     expect(state.loopMode).toBe('once');
 
     // Press Ctrl+L to cycle back to 'loop'
     await page.keyboard.press('Control+l');
-    await page.waitForTimeout(100);
+    await waitForLoopMode(page, 'loop');
 
     state = await getSessionState(page);
     expect(state.loopMode).toBe('loop');
@@ -160,9 +170,9 @@ test.describe('Session State Management', () => {
 
     // Add mark at frame 1
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 1);
     await page.keyboard.press('m');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 1; })()`);
 
     state = await getSessionState(page);
     expect(state.marks).toContain(1);
@@ -172,9 +182,9 @@ test.describe('Session State Management', () => {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 5);
     await page.keyboard.press('m');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 2; })()`);
 
     state = await getSessionState(page);
     expect(state.marks).toHaveLength(2);
@@ -183,7 +193,7 @@ test.describe('Session State Management', () => {
 
     // Toggle off the mark at frame 5
     await page.keyboard.press('m');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 1; })()`);
 
     state = await getSessionState(page);
     expect(state.marks).toHaveLength(1);
@@ -200,14 +210,14 @@ test.describe('Session State Management', () => {
 
     // Start playback
     await page.keyboard.press('Space');
-    await page.waitForTimeout(100);
+    await waitForPlaybackState(page, true);
 
     state = await getSessionState(page);
     expect(state.isPlaying).toBe(true);
 
     // Stop playback
     await page.keyboard.press('Space');
-    await page.waitForTimeout(100);
+    await waitForPlaybackState(page, false);
 
     state = await getSessionState(page);
     expect(state.isPlaying).toBe(false);
@@ -244,7 +254,7 @@ test.describe('Color Adjustments State', () => {
 
     // Open color panel and adjust exposure
     await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'color');
     await page.locator('button[title="Toggle color adjustments panel"]').click();
     await page.waitForTimeout(200);
 
@@ -254,7 +264,7 @@ test.describe('Color Adjustments State', () => {
       el.value = '3';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await page.waitForTimeout(200);
+    await waitForExposure(page, 3);
 
     // Verify state updated
     const newState = await getColorState(page);
@@ -270,7 +280,7 @@ test.describe('Color Adjustments State', () => {
   test('BIZ-012: resetting exposure should return to default state', async ({ page }) => {
     // Open color panel
     await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'color');
     await page.locator('button[title="Toggle color adjustments panel"]').click();
     await page.waitForTimeout(200);
 
@@ -280,14 +290,14 @@ test.describe('Color Adjustments State', () => {
       el.value = '3';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await page.waitForTimeout(100);
+    await waitForExposure(page, 3);
 
     let state = await getColorState(page);
     expect(state.exposure).toBe(3);
 
     // Double-click to reset
     await exposureSlider.dblclick();
-    await page.waitForTimeout(100);
+    await waitForExposure(page, 0);
 
     state = await getColorState(page);
     expect(state.exposure).toBe(0); // Back to default
@@ -313,35 +323,35 @@ test.describe('Transform State', () => {
   test('BIZ-021: rotation should cycle through 0, 90, 180, 270 degrees', async ({ page }) => {
     // Go to Transform tab
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'transform');
 
     let state = await getTransformState(page);
     expect(state.rotation).toBe(0);
 
     // Rotate right (clockwise)
     await page.locator('button[title*="Rotate right"]').click();
-    await page.waitForTimeout(100);
+    await waitForRotation(page, 90);
 
     state = await getTransformState(page);
     expect(state.rotation).toBe(90);
 
     // Rotate right again
     await page.locator('button[title*="Rotate right"]').click();
-    await page.waitForTimeout(100);
+    await waitForRotation(page, 180);
 
     state = await getTransformState(page);
     expect(state.rotation).toBe(180);
 
     // Rotate right again
     await page.locator('button[title*="Rotate right"]').click();
-    await page.waitForTimeout(100);
+    await waitForRotation(page, 270);
 
     state = await getTransformState(page);
     expect(state.rotation).toBe(270);
 
     // Rotate right again - should wrap to 0
     await page.locator('button[title*="Rotate right"]').click();
-    await page.waitForTimeout(100);
+    await waitForRotation(page, 0);
 
     state = await getTransformState(page);
     expect(state.rotation).toBe(0);
@@ -349,14 +359,14 @@ test.describe('Transform State', () => {
 
   test('BIZ-022: flip horizontal should toggle flipH state', async ({ page }) => {
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'transform');
 
     let state = await getTransformState(page);
     expect(state.flipH).toBe(false);
 
     // Flip horizontal
     await page.locator('button[title*="Flip horizontal"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()`);
 
     state = await getTransformState(page);
     expect(state.flipH).toBe(true);
@@ -364,7 +374,7 @@ test.describe('Transform State', () => {
 
     // Flip horizontal again - should toggle off
     await page.locator('button[title*="Flip horizontal"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === false; })()`);
 
     state = await getTransformState(page);
     expect(state.flipH).toBe(false);
@@ -372,14 +382,14 @@ test.describe('Transform State', () => {
 
   test('BIZ-023: flip vertical should toggle flipV state', async ({ page }) => {
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'transform');
 
     let state = await getTransformState(page);
     expect(state.flipV).toBe(false);
 
     // Flip vertical
     await page.locator('button[title*="Flip vertical"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === true; })()`);
 
     state = await getTransformState(page);
     expect(state.flipV).toBe(true);
@@ -387,7 +397,7 @@ test.describe('Transform State', () => {
 
     // Flip vertical again - should toggle off
     await page.locator('button[title*="Flip vertical"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === false; })()`);
 
     state = await getTransformState(page);
     expect(state.flipV).toBe(false);
@@ -395,12 +405,12 @@ test.describe('Transform State', () => {
 
   test('BIZ-024: reset should restore default transform', async ({ page }) => {
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'transform');
 
     // Apply various transforms
     await page.locator('button[title*="Rotate right"]').click();
     await page.locator('button[title*="Flip horizontal"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 90 && s?.flipH === true; })()`);
 
     let state = await getTransformState(page);
     expect(state.rotation).toBe(90);
@@ -408,7 +418,7 @@ test.describe('Transform State', () => {
 
     // Reset transforms
     await page.locator('button[title="Reset transforms"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 0 && s?.flipH === false && s?.flipV === false; })()`);
 
     state = await getTransformState(page);
     expect(state.rotation).toBe(0);
@@ -424,7 +434,7 @@ test.describe('Paint/Annotation State', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.click('button[data-tab-id="annotate"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'annotate');
   });
 
   test('BIZ-030: selecting tools should update currentTool state', async ({ page }) => {
@@ -433,28 +443,28 @@ test.describe('Paint/Annotation State', () => {
 
     // Select pen
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     state = await getPaintState(page);
     expect(state.currentTool).toBe('pen');
 
     // Select eraser
     await page.keyboard.press('e');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'eraser');
 
     state = await getPaintState(page);
     expect(state.currentTool).toBe('eraser');
 
     // Select text
     await page.keyboard.press('t');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'text');
 
     state = await getPaintState(page);
     expect(state.currentTool).toBe('text');
 
     // Select pan
     await page.keyboard.press('v');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pan');
 
     state = await getPaintState(page);
     expect(state.currentTool).toBe('pan');
@@ -463,7 +473,7 @@ test.describe('Paint/Annotation State', () => {
   test('BIZ-031: drawing should add frame to annotatedFrames and enable undo', async ({ page }) => {
     // Select pen
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     // Initially no annotations
     let state = await getPaintState(page);
@@ -492,7 +502,7 @@ test.describe('Paint/Annotation State', () => {
 
   test('BIZ-032: undo should remove stroke and canRedo should become true', async ({ page }) => {
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     const canvas = page.locator('canvas').first();
     const box = await canvas.boundingBox();
@@ -510,7 +520,7 @@ test.describe('Paint/Annotation State', () => {
 
     // Undo
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === false && s?.canRedo === true; })()`);
 
     state = await getPaintState(page);
     expect(state.canUndo).toBe(false);
@@ -519,7 +529,7 @@ test.describe('Paint/Annotation State', () => {
 
   test('BIZ-033: redo should restore stroke', async ({ page }) => {
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     const canvas = page.locator('canvas').first();
     const box = await canvas.boundingBox();
@@ -533,14 +543,14 @@ test.describe('Paint/Annotation State', () => {
 
     // Undo
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
 
     let state = await getPaintState(page);
     expect(state.canRedo).toBe(true);
 
     // Redo
     await page.keyboard.press('Control+y');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()`);
 
     state = await getPaintState(page);
     expect(state.canUndo).toBe(true);
@@ -549,21 +559,22 @@ test.describe('Paint/Annotation State', () => {
 
   test('BIZ-034: toggling brush type should update brushType state', async ({ page }) => {
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     let state = await getPaintState(page);
     const initialBrush = state.brushType;
+    const expectedBrush = initialBrush === 'circle' ? 'gaussian' : 'circle';
 
     // Toggle brush
     await page.keyboard.press('b');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${expectedBrush}'; })()`);
 
     state = await getPaintState(page);
     expect(state.brushType).not.toBe(initialBrush);
 
     // Toggle back
     await page.keyboard.press('b');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`);
 
     state = await getPaintState(page);
     expect(state.brushType).toBe(initialBrush);
@@ -584,31 +595,31 @@ test.describe('Viewer State', () => {
 
     // Press W to cycle
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForWipeMode(page, 'horizontal');
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('horizontal');
 
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForWipeMode(page, 'vertical');
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('vertical');
 
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForWipeMode(page, 'splitscreen-h');
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('splitscreen-h');
 
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForWipeMode(page, 'splitscreen-v');
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('splitscreen-v');
 
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForWipeMode(page, 'off');
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('off');
@@ -620,14 +631,14 @@ test.describe('Viewer State', () => {
 
     // Toggle crop with Shift+K
     await page.keyboard.press('Shift+k');
-    await page.waitForTimeout(100);
+    await waitForCropEnabled(page, true);
 
     state = await getViewerState(page);
     expect(state.cropEnabled).toBe(true);
 
     // Toggle off
     await page.keyboard.press('Shift+k');
-    await page.waitForTimeout(100);
+    await waitForCropEnabled(page, false);
 
     state = await getViewerState(page);
     expect(state.cropEnabled).toBe(false);
@@ -651,7 +662,7 @@ test.describe('End-to-End Workflows', () => {
     await page.keyboard.press('Home');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 3);
 
     session = await getSessionState(page);
     expect(session.currentFrame).toBe(3);
@@ -666,7 +677,7 @@ test.describe('End-to-End Workflows', () => {
       el.value = '1.5';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await page.waitForTimeout(100);
+    await waitForExposure(page, 1.5);
 
     const colorState = await getColorState(page);
     expect(colorState.exposure).toBe(1.5);
@@ -674,7 +685,7 @@ test.describe('End-to-End Workflows', () => {
     // 4. Enable wipe to compare
     await page.locator('button[title="Toggle color adjustments panel"]').click(); // Close panel
     await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
+    await waitForWipeMode(page, 'horizontal');
 
     const viewerState = await getViewerState(page);
     expect(viewerState.wipeMode).toBe('horizontal');
@@ -691,7 +702,7 @@ test.describe('End-to-End Workflows', () => {
 
     // 2. Go to frame 1
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 1);
 
     let session = await getSessionState(page);
     expect(session.currentFrame).toBe(1);
@@ -699,7 +710,7 @@ test.describe('End-to-End Workflows', () => {
     // 3. Switch to annotate and select pen
     await page.click('button[data-tab-id="annotate"]');
     await page.keyboard.press('p');
-    await page.waitForTimeout(100);
+    await waitForTool(page, 'pen');
 
     let paint = await getPaintState(page);
     expect(paint.currentTool).toBe('pen');
@@ -723,7 +734,7 @@ test.describe('End-to-End Workflows', () => {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 5);
 
     session = await getSessionState(page);
     expect(session.currentFrame).toBe(5);
@@ -741,13 +752,13 @@ test.describe('End-to-End Workflows', () => {
 
     // 7. Navigate between annotations
     await page.keyboard.press(','); // Previous annotation
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 1);
 
     session = await getSessionState(page);
     expect(session.currentFrame).toBe(1);
 
     await page.keyboard.press('.'); // Next annotation
-    await page.waitForTimeout(100);
+    await waitForFrame(page, 5);
 
     session = await getSessionState(page);
     expect(session.currentFrame).toBe(5);
@@ -761,11 +772,11 @@ test.describe('End-to-End Workflows', () => {
 
     // 2. Apply transforms
     await page.click('button[data-tab-id="transform"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'transform');
 
     await page.locator('button[title*="Rotate right"]').click();
     await page.locator('button[title*="Flip horizontal"]').click();
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 90 && s?.flipH === true; })()`);
 
     let transform = await getTransformState(page);
     expect(transform.rotation).toBe(90);
@@ -776,7 +787,7 @@ test.describe('End-to-End Workflows', () => {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('i');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 3; })()`);
 
     session = await getSessionState(page);
     expect(session.inPoint).toBe(3);
@@ -784,21 +795,21 @@ test.describe('End-to-End Workflows', () => {
     await page.keyboard.press('End');
     await page.keyboard.press('ArrowLeft');
     await page.keyboard.press('o');
-    await page.waitForTimeout(100);
+    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${totalFrames - 1}; })()`);
 
     session = await getSessionState(page);
     expect(session.outPoint).toBe(totalFrames - 1);
 
     // 4. Start playback
     await page.keyboard.press('Space');
-    await page.waitForTimeout(100);
+    await waitForPlaybackState(page, true);
 
     session = await getSessionState(page);
     expect(session.isPlaying).toBe(true);
 
     // 5. Stop playback
     await page.keyboard.press('Space');
-    await page.waitForTimeout(100);
+    await waitForPlaybackState(page, false);
 
     session = await getSessionState(page);
     expect(session.isPlaying).toBe(false);

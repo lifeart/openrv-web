@@ -76,6 +76,7 @@ test.describe('Timeline Thumbnails', () => {
 
     test('THUMB-E004: timeline updates on frame navigation', async ({ page }) => {
       const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
+      const screenshotBefore = await timelineCanvas.screenshot();
 
       // Navigate to different frame
       await page.keyboard.press('ArrowRight');
@@ -83,8 +84,13 @@ test.describe('Timeline Thumbnails', () => {
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(100);
 
-      // Timeline should still be visible
+      // Timeline should still be visible and the playhead position should have changed
       await expect(timelineCanvas).toBeVisible();
+      const screenshotAfter = await timelineCanvas.screenshot();
+
+      // Verify the timeline visually updated (playhead moved)
+      expect(screenshotAfter.length).toBeGreaterThan(0);
+      expect(Buffer.compare(screenshotBefore, screenshotAfter)).not.toBe(0);
     });
   });
 

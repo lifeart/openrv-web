@@ -151,14 +151,5 @@ test.describe('Grayscale Toggle', () => {
     expect(screenshotY.length).toBeGreaterThan(0);
   });
 
-  test('GRAY-008: grayscale works during video playback', async ({ page }) => {
-    // Skip if no test video
-    test.skip(true, 'Requires test video');
-
-    // This test would:
-    // 1. Load video
-    // 2. Enable grayscale
-    // 3. Start playback
-    // 4. Capture frame and verify it's grayscale
-  });
+  // Deleted GRAY-008 stub (empty body, no assertions - requires test video)
 });

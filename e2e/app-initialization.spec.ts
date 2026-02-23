@@ -108,8 +108,8 @@ test.describe('Application Initialization', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
 
-    // Help button should exist (check by title)
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
+    // Help button should exist (now a dropdown menu)
+    const helpButton = page.locator('[data-testid="help-menu-button"]');
     await expect(helpButton).toBeVisible();
   });
 
@@ -117,16 +117,18 @@ test.describe('Application Initialization', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
 
-    // Click help button
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
+    // Click help menu button to open dropdown
+    const helpButton = page.locator('[data-testid="help-menu-button"]');
     await helpButton.click();
+    await page.waitForTimeout(200);
+
+    // Click "Keyboard Shortcuts" menu item
+    const shortcutsItem = page.locator('[data-testid="help-menu-help"]');
+    await shortcutsItem.click();
 
     // Modal with shortcuts should appear
     await page.waitForTimeout(200);
     const modal = page.getByRole('heading', { name: 'Keyboard Shortcuts' });
-    await expect(modal).toBeVisible();
-
-    // Modal heading visibility confirms shortcuts content was opened
     await expect(modal).toBeVisible();
   });
 

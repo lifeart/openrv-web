@@ -58,6 +58,12 @@ export interface Transform2DSettings {
     softEdge?: number;
     /** Ratio value */
     ratio?: number;
+    /**
+     * Visible box stencil for wipes: [xMin, xMax, yMin, yMax] in normalized 0-1 range.
+     * This is the OpenRV native format (stencil.visibleBox float[4]).
+     * Default [0, 1, 0, 1] means the full image is visible.
+     */
+    visibleBox?: [number, number, number, number];
   };
 }
 
@@ -241,13 +247,21 @@ export const TransformSerializer = {
     // Stencil component (if provided)
     if (settings.stencil) {
       const st = settings.stencil;
-      obj.component('stencil')
+      const stencilComp = obj.component('stencil');
+      stencilComp
         .int('active', st.active ? 1 : 0)
         .int('inverted', st.inverted ? 1 : 0)
         .float('aspect', st.aspect ?? 1.0)
         .float('softEdge', st.softEdge ?? 0)
-        .float('ratio', st.ratio ?? 1.0)
-        .end();
+        .float('ratio', st.ratio ?? 1.0);
+
+      // Write stencil.visibleBox as float[4] = [xMin, xMax, yMin, yMax]
+      // This is the OpenRV native format for wipe stencil boxes.
+      if (st.visibleBox) {
+        stencilComp.float('visibleBox', st.visibleBox);
+      }
+
+      stencilComp.end();
     }
 
     obj.end();

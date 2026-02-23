@@ -21,9 +21,7 @@ import { FramePreloadManager } from '../../utils/media/FramePreloadManager';
 export class SequenceSourceNode extends BaseSourceNode {
   private sequenceInfo: SequenceInfo | null = null;
   private frames: SequenceFrame[] = [];
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  private preloadManager: FramePreloadManager<HTMLImageElement> | null = null;
+  private preloadManager: FramePreloadManager<ImageBitmap> | null = null;
   private playbackDirection: number = 1;
   private isPlaybackActive: boolean = false;
 
@@ -35,13 +33,6 @@ export class SequenceSourceNode extends BaseSourceNode {
     this.properties.add({ name: 'startFrame', defaultValue: 1 });
     this.properties.add({ name: 'endFrame', defaultValue: 1 });
     this.properties.add({ name: 'fps', defaultValue: 24 });
-
-    this.canvas = document.createElement('canvas');
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Failed to get 2D context for sequence source canvas');
-    }
-    this.ctx = ctx;
   }
 
   /**
@@ -64,9 +55,6 @@ export class SequenceSourceNode extends BaseSourceNode {
       fps: info.fps,
     };
 
-    this.canvas.width = info.width;
-    this.canvas.height = info.height;
-
     this.properties.setValue('pattern', info.pattern);
     this.properties.setValue('startFrame', info.startFrame);
     this.properties.setValue('endFrame', info.endFrame);
@@ -82,26 +70,32 @@ export class SequenceSourceNode extends BaseSourceNode {
 
     const totalFrames = this.frames.length;
 
-    const loader = async (frame: number, signal?: AbortSignal): Promise<HTMLImageElement | null> => {
+    const loader = async (frame: number, signal?: AbortSignal): Promise<ImageBitmap | null> => {
       const idx = frame - 1;
       const frameData = this.frames[idx];
       if (!frameData) return null;
       return loadFrameImage(frameData, signal);
     };
 
-    const disposer = (frame: number, _data: HTMLImageElement): void => {
+    const disposer = (frame: number, data: ImageBitmap): void => {
       const idx = frame - 1;
       const frameData = this.frames[idx];
       if (frameData) {
+        if (frameData.image) {
+          frameData.image.close();
+          frameData.image = undefined;
+        }
         if (frameData.url) {
           URL.revokeObjectURL(frameData.url);
           frameData.url = undefined;
         }
-        frameData.image = undefined;
+      }
+      if (data && typeof data.close === 'function') {
+        try { data.close(); } catch (e) {}
       }
     };
 
-    this.preloadManager = new FramePreloadManager<HTMLImageElement>(
+    this.preloadManager = new FramePreloadManager<ImageBitmap>(
       totalFrames,
       loader,
       disposer,
@@ -112,7 +106,7 @@ export class SequenceSourceNode extends BaseSourceNode {
     return this.sequenceInfo !== null && this.frames.length > 0;
   }
 
-  getElement(frame: number): HTMLImageElement | null {
+  getElement(frame: number): ImageBitmap | null {
     if (this.preloadManager) {
       return this.preloadManager.getCachedFrame(frame);
     }
@@ -124,7 +118,7 @@ export class SequenceSourceNode extends BaseSourceNode {
   /**
    * Get frame image, loading if necessary
    */
-  async getFrameImage(frame: number): Promise<HTMLImageElement | null> {
+  async getFrameImage(frame: number): Promise<ImageBitmap | null> {
     if (this.preloadManager) {
       const image = await this.preloadManager.getFrame(frame);
       this.preloadManager.preloadAround(frame);
@@ -151,15 +145,12 @@ export class SequenceSourceNode extends BaseSourceNode {
       return null;
     }
 
-    this.ctx.drawImage(image, 0, 0);
-    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-
     const ipImage = new IPImage({
-      width: imageData.width,
-      height: imageData.height,
+      width: image.width,
+      height: image.height,
       channels: 4,
       dataType: 'uint8',
-      data: imageData.data.buffer.slice(0),
+      imageBitmap: image,
       metadata: {
         sourcePath: frameData?.file?.name,
         frameNumber: context.frame,

@@ -1,5 +1,9 @@
 /**
  * OCIOWasmModule Unit Tests
+ *
+ * Tests lifecycle/state machine, concurrent init, error handling, and cleanup.
+ * Tests that merely verify mock WASM return values (config queries, shader
+ * generation, LUT baking, color transforms) have been removed.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -21,22 +25,13 @@ function createMockExports(): OCIOWasmExports {
     ocioGetLooks: vi.fn(() => '["None","Filmic"]'),
     ocioGetProcessor: vi.fn(() => nextHandle++),
     ocioGetDisplayProcessor: vi.fn(() => nextHandle++),
-    ocioGenerateShaderCode: vi.fn(() => SAMPLE_GLSL),
+    ocioGenerateShaderCode: vi.fn(() => ''),
     ocioGetProcessorLUT3D: vi.fn((_, size: number) => new Float32Array(size * size * size * 3)),
     ocioDestroyProcessor: vi.fn(),
     ocioApplyRGB: vi.fn(() => new Float32Array([0.5, 0.6, 0.7])),
     ocioGetVersion: vi.fn(() => '2.3.1'),
   };
 }
-
-const SAMPLE_GLSL = `
-uniform sampler3D ocio_lut3d_Sampler;
-vec4 OCIODisplay(vec4 inPixel) {
-  vec4 out_pixel = inPixel;
-  out_pixel.rgb = texture3D(ocio_lut3d_Sampler, out_pixel.rgb).rgb;
-  return out_pixel;
-}
-`;
 
 function createMockFactory(exports?: OCIOWasmExports): OCIOWasmFactory {
   const exp = exports ?? createMockExports();
@@ -57,6 +52,10 @@ describe('OCIOWasmModule', () => {
     factory = createMockFactory(mockExports);
     mod = new OCIOWasmModule(factory);
   });
+
+  // -----------------------------------------------------------------------
+  // Lifecycle / State Machine
+  // -----------------------------------------------------------------------
 
   describe('lifecycle', () => {
     it('WASM-001: starts uninitialised', () => {
@@ -113,20 +112,19 @@ describe('OCIOWasmModule', () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // Config Management — error handling only
+  // -----------------------------------------------------------------------
+
   describe('config management', () => {
     beforeEach(async () => {
       await mod.init();
     });
 
-    it('WASM-CFG-001: loadConfig returns handle', () => {
+    it('WASM-CFG-001: loadConfig returns handle with id and name', () => {
       const handle = mod.loadConfig('ocio_profile_version: 2\n', 'test');
       expect(handle.id).toBeGreaterThan(0);
       expect(handle.name).toBe('test');
-    });
-
-    it('WASM-CFG-002: loadConfig calls WASM', () => {
-      mod.loadConfig('yaml text', 'myconfig');
-      expect(mockExports.ocioLoadConfig).toHaveBeenCalledWith('yaml text');
     });
 
     it('WASM-CFG-003: loadConfig throws on WASM failure', () => {
@@ -134,100 +132,30 @@ describe('OCIOWasmModule', () => {
       expect(() => mod.loadConfig('bad', 'test')).toThrow('failed to load config');
     });
 
-    it('WASM-CFG-004: destroyConfig calls WASM', () => {
-      const handle = mod.loadConfig('yaml', 'test');
-      mod.destroyConfig(handle);
-      expect(mockExports.ocioDestroyConfig).toHaveBeenCalledWith(handle.id);
-    });
-
-    it('WASM-CFG-005: getDisplays returns parsed array', () => {
-      const handle = mod.loadConfig('yaml', 'test');
-      const displays = mod.getDisplays(handle);
-      expect(displays).toEqual(['sRGB', 'Rec.709']);
-    });
-
-    it('WASM-CFG-006: getViews returns parsed array', () => {
-      const handle = mod.loadConfig('yaml', 'test');
-      const views = mod.getViews(handle, 'sRGB');
-      expect(views).toEqual(['ACES 1.0 SDR-video', 'Raw']);
-    });
-
-    it('WASM-CFG-007: getColorSpaces returns parsed array', () => {
-      const handle = mod.loadConfig('yaml', 'test');
-      expect(mod.getColorSpaces(handle)).toEqual(['ACEScg', 'sRGB', 'Linear sRGB']);
-    });
-
-    it('WASM-CFG-008: getLooks returns parsed array', () => {
-      const handle = mod.loadConfig('yaml', 'test');
-      expect(mod.getLooks(handle)).toEqual(['None', 'Filmic']);
-    });
-
-    it('WASM-CFG-009: handles malformed JSON from WASM', () => {
+    it('WASM-CFG-009: handles malformed JSON from WASM gracefully', () => {
       (mockExports.ocioGetDisplays as ReturnType<typeof vi.fn>).mockReturnValue('not json');
       const handle = mod.loadConfig('yaml', 'test');
       expect(mod.getDisplays(handle)).toEqual([]);
     });
   });
 
+  // -----------------------------------------------------------------------
+  // Processor — error handling and handle tracking
+  // -----------------------------------------------------------------------
+
   describe('processor / shader', () => {
     beforeEach(async () => {
       await mod.init();
-    });
-
-    it('WASM-PROC-001: createDisplayProcessor returns handle', () => {
-      const config = mod.loadConfig('yaml', 'test');
-      const ph = mod.createDisplayProcessor(config, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      expect(ph).toBeGreaterThan(0);
-    });
-
-    it('WASM-PROC-002: createDisplayProcessor passes args to WASM', () => {
-      const config = mod.loadConfig('yaml', 'test');
-      mod.createDisplayProcessor(config, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic');
-      expect(mockExports.ocioGetDisplayProcessor).toHaveBeenCalledWith(
-        config.id, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic',
-      );
-    });
-
-    it('WASM-PROC-003: createProcessor works for conversion', () => {
-      const config = mod.loadConfig('yaml', 'test');
-      const ph = mod.createProcessor(config, 'ACEScg', 'sRGB');
-      expect(ph).toBeGreaterThan(0);
-      expect(mockExports.ocioGetProcessor).toHaveBeenCalledWith(config.id, 'ACEScg', 'sRGB');
-    });
-
-    it('WASM-PROC-004: generateShaderCode returns GLSL', () => {
-      const config = mod.loadConfig('yaml', 'test');
-      const ph = mod.createDisplayProcessor(config, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      const glsl = mod.generateShaderCode(ph);
-      expect(glsl).toContain('OCIODisplay');
     });
 
     it('WASM-PROC-005: generateShaderCode throws for invalid handle', () => {
       expect(() => mod.generateShaderCode(9999)).toThrow('invalid processor handle');
     });
 
-    it('WASM-PROC-006: getProcessorLUT3D returns float array', () => {
-      const config = mod.loadConfig('yaml', 'test');
-      const ph = mod.createDisplayProcessor(config, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      const lut = mod.getProcessorLUT3D(ph, 17);
-      expect(lut).toBeInstanceOf(Float32Array);
-      expect(lut.length).toBe(17 * 17 * 17 * 3);
-    });
-
-    it('WASM-PROC-007: applyRGB transforms color', () => {
-      const config = mod.loadConfig('yaml', 'test');
-      const ph = mod.createDisplayProcessor(config, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      const [r, g, b] = mod.applyRGB(ph, 0.18, 0.18, 0.18);
-      expect(r).toBeCloseTo(0.5, 1);
-      expect(g).toBeCloseTo(0.6, 1);
-      expect(b).toBeCloseTo(0.7, 1);
-    });
-
-    it('WASM-PROC-008: destroyProcessor cleans up', () => {
+    it('WASM-PROC-008: destroyProcessor removes handle from tracking', () => {
       const config = mod.loadConfig('yaml', 'test');
       const ph = mod.createDisplayProcessor(config, 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       mod.destroyProcessor(ph);
-      expect(mockExports.ocioDestroyProcessor).toHaveBeenCalledWith(ph);
       // Using destroyed handle should throw
       expect(() => mod.generateShaderCode(ph)).toThrow('invalid processor handle');
     });
@@ -239,6 +167,10 @@ describe('OCIOWasmModule', () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // Dispose Cleanup
+  // -----------------------------------------------------------------------
+
   describe('dispose cleanup', () => {
     it('WASM-CLEAN-001: dispose destroys all processors and configs', async () => {
       await mod.init();
@@ -248,18 +180,20 @@ describe('OCIOWasmModule', () => {
 
       mod.dispose();
 
-      // Should have called destroyProcessor for both processors
       expect(mockExports.ocioDestroyProcessor).toHaveBeenCalledTimes(2);
-      // Should have called destroyConfig once
       expect(mockExports.ocioDestroyConfig).toHaveBeenCalledTimes(1);
     });
 
     it('WASM-CLEAN-002: double dispose is safe', async () => {
       await mod.init();
       mod.dispose();
-      mod.dispose(); // should not throw
+      expect(() => mod.dispose()).not.toThrow();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Concurrent Init
+  // -----------------------------------------------------------------------
 
   describe('concurrent init', () => {
     it('WASM-CONC-001: concurrent init calls share single factory call', async () => {

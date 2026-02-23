@@ -481,6 +481,115 @@ describe('GTOGraphLoader - Node Types', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilSoftEdge', 0.05);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilRatio', 0.75);
     });
+
+    it('parses stencil.visibleBox float[4] (OpenRV native wipe format)', () => {
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              stencil: {
+                visibleBox: [0.25, 0.75, 0.1, 0.9],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
+        'stencilVisibleBox',
+        [0.25, 0.75, 0.1, 0.9]
+      );
+    });
+
+    it('preserves exact float values in stencil.visibleBox', () => {
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
+      const exactValues: [number, number, number, number] = [0.123456789, 0.987654321, 0.111111111, 0.999999999];
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              stencil: {
+                visibleBox: exactValues,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
+        'stencilVisibleBox',
+        exactValues
+      );
+    });
+
+    it('parses stencil.visibleBox with all zeros [0, 0, 0, 0]', () => {
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              stencil: {
+                visibleBox: [0, 0, 0, 0],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
+        'stencilVisibleBox',
+        [0, 0, 0, 0]
+      );
+    });
+
+    it('parses stencil.visibleBox with default [0, 1, 0, 1]', () => {
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              stencil: {
+                visibleBox: [0, 1, 0, 1],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
+        'stencilVisibleBox',
+        [0, 1, 0, 1]
+      );
+    });
   });
 
   describe('RVLookLUT parsing', () => {

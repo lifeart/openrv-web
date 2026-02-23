@@ -27,6 +27,8 @@ import {
   gamma26Decode,
   acescctEncode,
   acescctDecode,
+  smpte240mEncode,
+  smpte240mDecode,
 } from './TransferFunctions';
 
 describe('TransferFunctions', () => {
@@ -341,6 +343,76 @@ describe('TransferFunctions', () => {
     it('Gamma 2.6 handles NaN', () => {
       expect(gamma26Encode(NaN)).toBe(0);
       expect(gamma26Decode(NaN)).toBe(0);
+    });
+  });
+
+  // ==========================================================================
+  // SMPTE 240M Tests
+  // ==========================================================================
+  describe('SMPTE 240M', () => {
+    it('SMPTE 240M encode/decode roundtrip', () => {
+      const testValues = [0, 0.001, 0.01, 0.02, 0.05, 0.1, 0.18, 0.5, 0.9, 1.0];
+      for (const v of testValues) {
+        const encoded = smpte240mEncode(v);
+        const decoded = smpte240mDecode(encoded);
+        expect(decoded).toBeCloseTo(v, 4);
+      }
+    });
+
+    it('SMPTE 240M encode maps 0 to 0', () => {
+      expect(smpte240mEncode(0)).toBe(0);
+    });
+
+    it('SMPTE 240M encode maps 1 to ~1', () => {
+      expect(smpte240mEncode(1)).toBeCloseTo(1, 4);
+    });
+
+    it('SMPTE 240M decode maps 0 to 0', () => {
+      expect(smpte240mDecode(0)).toBe(0);
+    });
+
+    it('SMPTE 240M linear segment: V = 4*L for small values', () => {
+      // For L < 0.0228, V = 4*L
+      expect(smpte240mEncode(0.01)).toBeCloseTo(0.04, 6);
+      expect(smpte240mEncode(0.02)).toBeCloseTo(0.08, 6);
+    });
+
+    it('SMPTE 240M decode linear segment: L = V/4 for small values', () => {
+      // For V < 4*0.0228 = 0.0912, L = V/4
+      expect(smpte240mDecode(0.04)).toBeCloseTo(0.01, 6);
+      expect(smpte240mDecode(0.08)).toBeCloseTo(0.02, 6);
+    });
+
+    it('SMPTE 240M is monotonically increasing', () => {
+      let prev = 0;
+      for (let i = 0.01; i <= 1; i += 0.05) {
+        const curr = smpte240mEncode(i);
+        expect(curr).toBeGreaterThan(prev);
+        prev = curr;
+      }
+    });
+
+    it('SMPTE 240M encode is approximately continuous at the threshold (0.0228)', () => {
+      // The SMPTE 240M spec has a very small discontinuity at the threshold;
+      // check that the linear and power segments approximately meet.
+      const justBelow = smpte240mEncode(0.0228 - 1e-8);
+      const justAbove = smpte240mEncode(0.0228 + 1e-8);
+      expect(justBelow).toBeCloseTo(justAbove, 3);
+    });
+
+    it('SMPTE 240M handles NaN', () => {
+      expect(smpte240mEncode(NaN)).toBe(0);
+      expect(smpte240mDecode(NaN)).toBe(0);
+    });
+
+    it('SMPTE 240M handles Infinity', () => {
+      expect(smpte240mEncode(Infinity)).toBe(1);
+      expect(smpte240mDecode(Infinity)).toBe(1);
+    });
+
+    it('SMPTE 240M handles negative values', () => {
+      expect(smpte240mEncode(-0.5)).toBe(0);
+      expect(smpte240mDecode(-0.5)).toBe(0);
     });
   });
 

@@ -22,6 +22,8 @@ import { LuminanceVisualization } from './LuminanceVisualization';
 import { ZebraStripes } from './ZebraStripes';
 import { ClippingOverlay } from './ClippingOverlay';
 import { SpotlightOverlay } from './SpotlightOverlay';
+import { BugOverlay } from './BugOverlay';
+import { EXRWindowOverlay } from './EXRWindowOverlay';
 
 /**
  * Callbacks the OverlayManager needs from the Viewer to wire up
@@ -40,6 +42,8 @@ export class OverlayManager {
   private readonly matteOverlay: MatteOverlay;
   private readonly timecodeOverlay: TimecodeOverlay;
   private readonly spotlightOverlay: SpotlightOverlay;
+  private readonly bugOverlay: BugOverlay;
+  private readonly exrWindowOverlay: EXRWindowOverlay;
 
   // Non-DOM overlays (pixel probe has its own floating panel)
   private readonly pixelProbe: PixelProbe;
@@ -72,6 +76,14 @@ export class OverlayManager {
     // Spotlight overlay
     this.spotlightOverlay = new SpotlightOverlay();
     canvasContainer.appendChild(this.spotlightOverlay.getElement());
+
+    // Bug overlay (corner logo/watermark)
+    this.bugOverlay = new BugOverlay();
+    canvasContainer.appendChild(this.bugOverlay.getElement());
+
+    // EXR window overlay (data/display window boundaries)
+    this.exrWindowOverlay = new EXRWindowOverlay();
+    canvasContainer.appendChild(this.exrWindowOverlay.getElement());
 
     // --- Non-DOM overlays ---
 
@@ -139,6 +151,20 @@ export class OverlayManager {
     } catch (err) {
       console.error('SpotlightOverlay setViewerDimensions failed:', err);
     }
+
+    // Update bug overlay dimensions
+    try {
+      this.bugOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+    } catch (err) {
+      console.error('BugOverlay setViewerDimensions failed:', err);
+    }
+
+    // Update EXR window overlay dimensions
+    try {
+      this.exrWindowOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+    } catch (err) {
+      console.error('EXRWindowOverlay setViewerDimensions failed:', err);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -181,6 +207,14 @@ export class OverlayManager {
     return this.spotlightOverlay;
   }
 
+  getBugOverlay(): BugOverlay {
+    return this.bugOverlay;
+  }
+
+  getEXRWindowOverlay(): EXRWindowOverlay {
+    return this.exrWindowOverlay;
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -194,5 +228,7 @@ export class OverlayManager {
     this.falseColor.dispose();
     this.zebraStripes.dispose();
     this.spotlightOverlay.dispose();
+    this.bugOverlay.dispose();
+    this.exrWindowOverlay.dispose();
   }
 }

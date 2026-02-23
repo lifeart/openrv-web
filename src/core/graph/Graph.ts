@@ -30,10 +30,11 @@ export class Graph {
     if (!node) return;
 
     // Disconnect all inputs and outputs
-    for (const input of node.inputs) {
+    // Copy arrays first because disconnectInput mutates the underlying arrays
+    for (const input of [...node.inputs]) {
       node.disconnectInput(input);
     }
-    for (const output of node.outputs) {
+    for (const output of [...node.outputs]) {
       output.disconnectInput(node);
     }
 
@@ -73,7 +74,9 @@ export class Graph {
   }
 
   private wouldCreateCycle(from: IPNode, to: IPNode): boolean {
-    // Check if connecting from -> to would create a cycle
+    // Check if connecting from -> to would create a cycle.
+    // A cycle would exist if 'to' is already an ancestor of 'from' (reachable
+    // by walking from's inputs upstream). If so, adding from→to creates a loop.
     const visited = new Set<string>();
     const stack = [from];
 

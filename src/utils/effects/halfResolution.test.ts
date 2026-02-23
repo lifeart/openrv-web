@@ -355,6 +355,70 @@ describe('Half-Resolution Processing', () => {
     });
   });
 
+  describe('Sharpen half-res delta-blend quality', () => {
+    let processor: EffectProcessor;
+
+    beforeEach(() => {
+      processor = new EffectProcessor();
+    });
+
+    it('EP-HALF-DELTA-001: sharpen delta-blend produces closer output to full-res than uniform images', () => {
+      // Verify the delta-blend approach preserves full-res detail
+      // Create a simple pattern image with edges
+      const width = 400;
+      const height = 400;
+      const imageDataFull = createGradientImageData(width, height);
+      const imageDataHalf = createGradientImageData(width, height);
+
+      const state = createDefaultEffectsState();
+      state.filterSettings.sharpen = 80;
+
+      // Full-res path
+      processor.applyEffects(imageDataFull, width, height, state, false);
+
+      // Half-res path (uses delta-blend approach)
+      processor.applyEffects(imageDataHalf, width, height, state, true);
+
+      // Calculate RMS error
+      let sumSqErr = 0;
+      const pixelCount = width * height;
+      for (let i = 0; i < imageDataFull.data.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          const diff = (imageDataFull.data[i + c]! - imageDataHalf.data[i + c]!) / 255;
+          sumSqErr += diff * diff;
+        }
+      }
+      const rmsError = Math.sqrt(sumSqErr / (pixelCount * 3));
+
+      // Delta-blend approach should keep RMS error under 10% for interactive preview
+      expect(rmsError).toBeLessThan(0.10);
+    });
+
+    it('EP-HALF-DELTA-002: delta-blend preserves original data better than naive replacement', () => {
+      // The key insight: delta-blend adds sharpening detail on top of full-res data,
+      // while naive replacement would have used upsampled (blurry) full-res + sharp.
+      // Verify the half-res output isn't uniformly blurrier than original.
+      const width = 400;
+      const height = 400;
+      const original = createGradientImageData(width, height);
+      const halfRes = createGradientImageData(width, height);
+
+      const state = createDefaultEffectsState();
+      state.filterSettings.sharpen = 50;
+
+      processor.applyEffects(halfRes, width, height, state, true);
+
+      // The sharpened result should differ from original (sharpen actually does something)
+      let diffCount = 0;
+      const pixelCount = width * height;
+      for (let i = 0; i < original.data.length; i += 4) {
+        if (original.data[i] !== halfRes.data[i]) diffCount++;
+      }
+      // Most inner pixels should be affected (edges excluded)
+      expect(diffCount).toBeGreaterThan(pixelCount * 0.1);
+    });
+  });
+
   describe('Performance', () => {
     let processor: EffectProcessor;
 

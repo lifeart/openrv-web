@@ -65,6 +65,10 @@ import {
   // Deinterlace and film emulation (worker-safe)
   applyDeinterlaceWorker,
   applyFilmEmulationWorker,
+  // Half-resolution utilities
+  HALF_RES_MIN_DIMENSION,
+  downsample2x,
+  upsample2x,
 } from '../utils/effects/effectProcessing.shared';
 
 // ============================================================================
@@ -87,6 +91,21 @@ function ensureSharpenBuffer(size: number): void {
   if (sharpenBufferSize !== size) {
     sharpenOriginalBuffer = new Uint8ClampedArray(size);
     sharpenBufferSize = size;
+  }
+}
+
+// Reusable buffers for sharpen half-res to avoid GC pressure during interactions
+let sharpenHalfOrigBuffer: Uint8ClampedArray | null = null;
+let sharpenHalfSharpBuffer: Uint8ClampedArray | null = null;
+let sharpenDeltaBuffer: Float32Array | null = null;
+let sharpenHalfBufferLen = 0;
+
+function ensureSharpenHalfResBuffers(halfLen: number): void {
+  if (sharpenHalfBufferLen !== halfLen) {
+    sharpenHalfOrigBuffer = new Uint8ClampedArray(halfLen);
+    sharpenHalfSharpBuffer = new Uint8ClampedArray(halfLen);
+    sharpenDeltaBuffer = new Float32Array((halfLen / 4) * 3);
+    sharpenHalfBufferLen = halfLen;
   }
 }
 
@@ -560,6 +579,10 @@ function applyMergedPerPixelEffects(
     reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
     filmicExposureBias: state.toneMappingState.filmicExposureBias,
     filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+    dragoBias: state.toneMappingState.dragoBias,
+    dragoLwa: state.toneMappingState.dragoLwa,
+    dragoLmax: state.toneMappingState.dragoLmax,
+    dragoBrightness: state.toneMappingState.dragoBrightness,
   } : undefined;
 
   const channelMode = state.channelMode;
@@ -804,6 +827,143 @@ function applyMergedPerPixelEffects(
 }
 
 // ============================================================================
+// Half-Resolution Variants
+// ============================================================================
+
+function applyClarityHalfRes(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  ca: ColorAdjustments
+): void {
+  const clarity = ca.clarity / 100;
+  const len = data.length;
+
+  // Downsample to half resolution
+  const half = downsample2x(data, width, height);
+  const halfW = half.width;
+  const halfH = half.height;
+  const halfLen = half.data.length;
+
+  // Ensure clarity buffers for half-res
+  ensureClarityBuffers(halfLen);
+  const halfOriginal = clarityOriginalBuffer!;
+  halfOriginal.set(half.data);
+
+  // Apply blur at half resolution
+  applyGaussianBlur5x5InPlace(halfOriginal, halfW, halfH);
+  const halfBlurred = clarityBlurResultBuffer!;
+
+  // Upsample the blurred result back to full resolution
+  const upsampled = upsample2x(halfBlurred, halfW, halfH, width, height);
+
+  const mask = getMidtoneMask();
+  const effectScale = clarity * CLARITY_EFFECT_SCALE;
+
+  // Apply high-pass blend at full resolution
+  for (let i = 0; i < len; i += 4) {
+    const r = data[i]!;
+    const g = data[i + 1]!;
+    const b = data[i + 2]!;
+
+    const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+    const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+    const adj = mask[lumIndex]! * effectScale;
+
+    data[i] = Math.max(0, Math.min(255, r + (r - upsampled[i]!) * adj));
+    data[i + 1] = Math.max(0, Math.min(255, g + (g - upsampled[i + 1]!) * adj));
+    data[i + 2] = Math.max(0, Math.min(255, b + (b - upsampled[i + 2]!) * adj));
+  }
+}
+
+function applySharpenHalfRes(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  amount: number
+): void {
+  // Downsample to half resolution
+  const half = downsample2x(data, width, height);
+  const halfW = half.width;
+  const halfH = half.height;
+  const halfLen = half.data.length;
+
+  // Ensure reusable buffers are allocated
+  ensureSharpenHalfResBuffers(halfLen);
+  const halfOriginal = sharpenHalfOrigBuffer!;
+  const halfSharpened = sharpenHalfSharpBuffer!;
+  const halfDelta = sharpenDeltaBuffer!;
+
+  halfOriginal.set(half.data);
+  halfSharpened.set(half.data);
+
+  // Apply sharpen kernel at half-res
+  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+
+  for (let y = 1; y < halfH - 1; y++) {
+    for (let x = 1; x < halfW - 1; x++) {
+      const idx = (y * halfW + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0, ki = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            sum += halfOriginal[((y + ky) * halfW + (x + kx)) * 4 + c]! * kernel[ki++]!;
+          }
+        }
+        halfSharpened[idx + c] = Math.max(0, Math.min(255, sum));
+      }
+    }
+  }
+
+  // Compute delta as Float32 at half-res (no quantization loss)
+  for (let y = 0; y < halfH; y++) {
+    for (let x = 0; x < halfW; x++) {
+      const pixIdx = (y * halfW + x) * 4;
+      const dIdx = (y * halfW + x) * 3;
+      halfDelta[dIdx] = halfSharpened[pixIdx]! - halfOriginal[pixIdx]!;
+      halfDelta[dIdx + 1] = halfSharpened[pixIdx + 1]! - halfOriginal[pixIdx + 1]!;
+      halfDelta[dIdx + 2] = halfSharpened[pixIdx + 2]! - halfOriginal[pixIdx + 2]!;
+    }
+  }
+
+  // Blend with bilinear-interpolated float delta (no intermediate full-res allocation)
+  const scaleX = halfW / width;
+  const scaleY = halfH / height;
+
+  for (let y = 0; y < height; y++) {
+    const srcY = y * scaleY;
+    const y0 = Math.floor(srcY);
+    const y1 = Math.min(y0 + 1, halfH - 1);
+    const fy = srcY - y0;
+
+    for (let x = 0; x < width; x++) {
+      const srcX = x * scaleX;
+      const x0 = Math.floor(srcX);
+      const x1 = Math.min(x0 + 1, halfW - 1);
+      const fx = srcX - x0;
+
+      const dstIdx = (y * width + x) * 4;
+
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+
+      const d00 = (y0 * halfW + x0) * 3;
+      const d10 = (y0 * halfW + x1) * 3;
+      const d01 = (y1 * halfW + x0) * 3;
+      const d11 = (y1 * halfW + x1) * 3;
+
+      for (let c = 0; c < 3; c++) {
+        const delta = halfDelta[d00 + c]! * w00 + halfDelta[d10 + c]! * w10 +
+                      halfDelta[d01 + c]! * w01 + halfDelta[d11 + c]! * w11;
+        data[dstIdx + c] = Math.max(0, Math.min(255, Math.round(data[dstIdx + c]! + delta * amount)));
+      }
+    }
+  }
+}
+
+// ============================================================================
 // Main Processing Function
 // ============================================================================
 
@@ -811,7 +971,8 @@ function processEffects(
   data: Uint8ClampedArray,
   width: number,
   height: number,
-  state: AllEffectsState
+  state: AllEffectsState,
+  halfRes = false
 ): void {
   const ca = state.colorAdjustments;
   const hasCDL = !isDefaultCDL(state.cdlValues);
@@ -880,7 +1041,11 @@ function processEffects(
 
   // Pass 1: Clarity (inter-pixel dependency - must be separate, applied first)
   if (hasClarity) {
-    applyClarity(data, width, height, ca);
+    if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
+      applyClarityHalfRes(data, width, height, ca);
+    } else {
+      applyClarity(data, width, height, ca);
+    }
   }
 
   // Pass 2: All per-pixel effects merged into a single loop
@@ -895,7 +1060,12 @@ function processEffects(
 
   // Pass 3: Sharpen (inter-pixel dependency - must be separate, applied last)
   if (hasSharpen) {
-    applySharpen(data, width, height, state.filterSettings.sharpen / 100);
+    const sharpenAmount = state.filterSettings.sharpen / 100;
+    if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
+      applySharpenHalfRes(data, width, height, sharpenAmount);
+    } else {
+      applySharpen(data, width, height, sharpenAmount);
+    }
   }
 }
 
@@ -910,11 +1080,11 @@ const workerSelf = self as unknown as {
 };
 
 workerSelf.onmessage = function (event: MessageEvent<ProcessMessage>) {
-  const { type, id, imageData, width, height, effectsState } = event.data;
+  const { type, id, imageData, width, height, effectsState, halfRes } = event.data;
   if (type !== 'process') return;
 
   try {
-    processEffects(imageData, width, height, effectsState);
+    processEffects(imageData, width, height, effectsState, halfRes ?? false);
     workerSelf.postMessage({ type: 'result', id, imageData }, [imageData.buffer]);
   } catch (error) {
     workerSelf.postMessage({
@@ -939,6 +1109,8 @@ export const __test__ = {
   getMidtoneMask,
   applyClarity,
   applySharpen,
+  applyClarityHalfRes,
+  applySharpenHalfRes,
   applyGaussianBlur5x5InPlace,
   processEffects,
   getBufferState: () => ({
@@ -948,6 +1120,10 @@ export const __test__ = {
     clarityBufferSize,
     sharpenOriginalBuffer,
     sharpenBufferSize,
+    sharpenHalfOrigBuffer,
+    sharpenHalfSharpBuffer,
+    sharpenDeltaBuffer,
+    sharpenHalfBufferLen,
     midtoneMask,
   }),
   resetBuffers: () => {
@@ -957,6 +1133,10 @@ export const __test__ = {
     clarityBufferSize = 0;
     sharpenOriginalBuffer = null;
     sharpenBufferSize = 0;
+    sharpenHalfOrigBuffer = null;
+    sharpenHalfSharpBuffer = null;
+    sharpenDeltaBuffer = null;
+    sharpenHalfBufferLen = 0;
     midtoneMask = null;
     vibrance3DLUT = null;
     vibrance3DLUTParams = null;

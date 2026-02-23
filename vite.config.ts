@@ -22,6 +22,19 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
+    rollupOptions: {
+      onwarn(warning, defaultHandler) {
+        // Suppress "Module has been externalized for browser compatibility" warnings
+        // from libheif-js (emscripten-generated code that safely checks for Node.js modules)
+        if (warning.code === 'PLUGIN_WARNING' &&
+            warning.plugin === 'vite:resolve' &&
+            warning.message?.includes('has been externalized for browser compatibility') &&
+            warning.message?.includes('libheif-js')) {
+          return;
+        }
+        defaultHandler(warning);
+      },
+    },
   },
   server: {
     port: 5173,

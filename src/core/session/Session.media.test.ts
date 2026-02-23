@@ -510,6 +510,8 @@ describe('Session', () => {
     it('SES-036: switchToSource pauses current video if playing', () => {
       const video = document.createElement('video');
       const pauseSpy = vi.spyOn(video, 'pause');
+      // Stub playbackRate to avoid jsdom errors with uninitialized video
+      Object.defineProperty(video, 'playbackRate', { get: () => 1, set: () => {}, configurable: true });
 
       const source1: MediaSource = {
         name: 'v1.mp4', type: 'video', duration: 10, fps: 24, width: 100, height: 100, url: 'v1.mp4', element: video

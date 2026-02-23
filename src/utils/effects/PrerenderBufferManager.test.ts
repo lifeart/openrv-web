@@ -67,8 +67,7 @@ describe('PrerenderBufferManager', () => {
     it('PBM-003: stores effects state', () => {
       const state = createDefaultEffectsState();
       state.colorAdjustments.brightness = 10;
-      manager.updateEffects(state);
-      // No direct way to verify, but should not throw
+      expect(() => manager.updateEffects(state)).not.toThrow();
     });
 
     it('PBM-004: invalidates cache when effects change', () => {
@@ -95,9 +94,7 @@ describe('PrerenderBufferManager', () => {
 
       const state2 = createDefaultEffectsState();
       state2.colorAdjustments.brightness = 10;
-      manager.updateEffects(state2);
-
-      // Should not throw or cause issues
+      expect(() => manager.updateEffects(state2)).not.toThrow();
     });
   });
 
@@ -164,13 +161,10 @@ describe('PrerenderBufferManager', () => {
       state.colorAdjustments.highlights = 20;
       manager.updateEffects(state);
 
-      // Preload near start
-      manager.preloadAround(1);
-      // Should not throw or try to load frame 0
-
-      // Preload near end
-      manager.preloadAround(100);
-      // Should not throw or try to load frame 101
+      expect(() => {
+        manager.preloadAround(1);
+        manager.preloadAround(100);
+      }).not.toThrow();
     });
   });
 
@@ -223,8 +217,7 @@ describe('PrerenderBufferManager', () => {
 
   describe('updateConfig', () => {
     it('PBM-018: updates configuration', () => {
-      manager.updateConfig({ maxCacheSize: 20 });
-      // Should not throw
+      expect(() => manager.updateConfig({ maxCacheSize: 20 })).not.toThrow();
     });
   });
 
@@ -1497,8 +1490,7 @@ describe('PrerenderBufferManager setTargetSize', () => {
   }
 
   it('PBM-TS-001: setTargetSize accepts positive dimensions', () => {
-    // Should not throw
-    manager.setTargetSize(800, 600);
+    expect(() => manager.setTargetSize(800, 600)).not.toThrow();
   });
 
   it('PBM-TS-002: setTargetSize ignores zero dimensions', async () => {

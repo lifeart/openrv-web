@@ -450,6 +450,7 @@ export interface StackLayerState {
   opacity: number;
   blendMode: string;
   sourceIndex: number;
+  stencilBox?: [number, number, number, number];
 }
 
 export interface StackState {

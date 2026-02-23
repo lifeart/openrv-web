@@ -12,6 +12,7 @@ import type { GamutMappingState } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import { DEFAULT_NOISE_REDUCTION_PARAMS, isNoiseReductionActive, applyNoiseReduction } from '../../filters/NoiseReduction';
+import { createNoiseReductionProcessor } from '../../filters/WebGLNoiseReduction';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
@@ -43,10 +44,12 @@ import type { LensDistortionParams } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/export/FrameExporter';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
+import { isStencilBoxActive } from '../../core/types/wipe';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
+import { extractStereoEyes } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import type { SafeAreasOverlay } from './SafeAreasOverlay';
@@ -68,8 +71,8 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 
 // Extracted effect processing utilities
-import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
-import { yieldToMain } from '../../utils/effects/EffectProcessor';
+import { applyHighlightsShadows, applyVibrance, applyToneMappingWithParams } from './ViewerEffects';
+import { yieldToMain, EffectProcessor } from '../../utils/effects/EffectProcessor';
 import { WipeManager } from './WipeManager';
 import type { GhostFrameState } from './GhostFrameControl';
 import { ColorPipelineManager } from './ColorPipelineManager';
@@ -182,6 +185,10 @@ export class Viewer {
   private paintOffsetX = 0;
   private paintOffsetY = 0;
 
+  // Spherical (360) projection reference (wired from AppControlRegistry)
+  private _sphericalProjection: import('../../render/SphericalProjection').SphericalProjection | null = null;
+  private _sphericalUniformsCallback: (() => void) | null = null;
+
   // Drop zone
   private dropOverlay: HTMLElement;
 
@@ -222,6 +229,10 @@ export class Viewer {
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
   private noiseReductionParams: NoiseReductionParams = { ...DEFAULT_NOISE_REDUCTION_PARAMS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
+  private noiseReductionProcessor: ReturnType<typeof createNoiseReductionProcessor> | null = null;
+
+  // CPU effect processor for half-res clarity/sharpen
+  private effectProcessor: EffectProcessor = new EffectProcessor();
 
   // Gamut mapping
   private gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
@@ -313,6 +324,10 @@ export class Viewer {
   // Theme change listener for runtime theme updates
   private boundOnThemeChange: (() => void) | null = null;
 
+  // Reference image overlay (for A/B reference comparison)
+  private _referenceCanvas: HTMLCanvasElement | null = null;
+  private _referenceCtx: CanvasRenderingContext2D | null = null;
+
   // Display capabilities for wide color gamut / HDR support
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
@@ -361,6 +376,7 @@ export class Viewer {
       getImageCanvas: () => this.imageCanvas,
       getPaintCanvas: () => this.paintCanvas,
       getPaintCtx: () => this.paintCtx,
+      getImageCtx: () => this.imageCtx,
       getDisplayWidth: () => this.displayWidth,
       getDisplayHeight: () => this.displayHeight,
       getSourceWidth: () => this.sourceWidth,
@@ -376,10 +392,15 @@ export class Viewer {
       getSession: () => this.session,
       getPixelProbe: () => this.overlayManager.getPixelProbe(),
       getInteractionQuality: () => this.interactionQuality,
+      getSphericalProjection: () => this._sphericalProjection,
+      getGLRenderer: () => this.glRendererManager.glRenderer,
+      isGLRendererActive: () => this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive,
       isViewerContentElement: (el: HTMLElement) => this.isViewerContentElement(el),
       scheduleRender: () => this.scheduleRender(),
       updateCanvasPosition: () => this.updateCanvasPosition(),
+      updateSphericalUniforms: () => this._sphericalUniformsCallback?.(),
       renderPaint: () => this.renderPaint(),
+      invalidateGLRenderCache: () => this.glRendererManager.invalidateRenderCache(),
     };
   }
 
@@ -407,7 +428,13 @@ export class Viewer {
 
     // Initialize interaction quality tiering
     this.interactionQuality = new InteractionQualityManager();
-    this.interactionQuality.setOnQualityChange(() => this.scheduleRender());
+    this.interactionQuality.setOnQualityChange(() => {
+      // When quality is restored (interaction ended), invalidate half-res prerender cache
+      if (!this.interactionQuality.cpuHalfRes && this.prerenderBuffer) {
+        this.prerenderBuffer.invalidateAll();
+      }
+      this.scheduleRender();
+    });
 
     // Wire up transform manager interaction callbacks for smooth zoom animations
     this.transformManager.setInteractionCallbacks(
@@ -683,6 +710,14 @@ export class Viewer {
     } catch (e) {
       console.warn('WebGL sharpen processor not available, falling back to CPU:', e);
       this.sharpenProcessor = null;
+    }
+
+    // Initialize WebGL noise reduction processor (GPU fast-path)
+    try {
+      this.noiseReductionProcessor = createNoiseReductionProcessor();
+    } catch (e) {
+      console.warn('WebGL noise reduction processor not available, falling back to CPU:', e);
+      this.noiseReductionProcessor = null;
     }
 
     // Listen for theme changes to redraw placeholders and overlays with updated colors
@@ -1147,7 +1182,14 @@ export class Viewer {
     this.invalidateLayoutCache();
 
     PerfTrace.count('render.calls');
-    this.renderImage();
+
+    // During an advanced (pixel-destructive) tool stroke, skip renderImage()
+    // for the SDR path so the in-place image canvas modifications are preserved.
+    // For the HDR/GL path, renderImage is still called but the GL render cache
+    // was invalidated so it redraws from the modified texture without re-uploading.
+    if (!this.inputHandler.advancedDrawing || this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive) {
+      this.renderImage();
+    }
     this.renderWatermarkOverlayCanvas();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
@@ -1156,7 +1198,9 @@ export class Viewer {
       this.inputHandler.renderLiveStroke();
     } else if (this.inputHandler.drawingShape && this.inputHandler.currentShapeStart && this.inputHandler.currentShapeCurrent) {
       this.inputHandler.renderLiveShape();
-    } else {
+    } else if (!this.inputHandler.advancedDrawing) {
+      // Skip renderPaint during advanced tool strokes so annotations overlay
+      // is preserved and doesn't clear the visible state.
       this.renderPaint();
     }
 
@@ -1565,6 +1609,7 @@ export class Viewer {
       const prerenderTargetW = userRotation === 90 || userRotation === 270 ? prerenderDisplayH : prerenderDisplayW;
       const prerenderTargetH = userRotation === 90 || userRotation === 270 ? prerenderDisplayW : prerenderDisplayH;
       this.prerenderBuffer.setTargetSize(prerenderTargetW, prerenderTargetH);
+      this.prerenderBuffer.setHalfRes(this.interactionQuality.cpuHalfRes);
     }
 
     // Try prerendered cache first during playback for smooth performance with effects
@@ -1884,63 +1929,44 @@ export class Viewer {
     displayHeight: number
   ): void {
     const ctx = this.imageCtx;
-    const pos = this.wipeManager.position;
 
     // Enable high-quality image smoothing for best picture quality
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    // For wipe, we need to render both with and without filters
-    // Since CSS filters apply to the whole container, we'll use canvas filter property
+    // Compute stencil boxes from wipe position/mode.
+    // boxA = original (no filter) region, boxB = adjusted (with filter) region.
+    const [boxA, boxB] = this.wipeManager.computeStencilBoxes();
 
     ctx.save();
 
-    if (this.wipeManager.mode === 'horizontal') {
-      // Left side: original (no filter)
-      // Right side: with color adjustments
-      const splitX = Math.floor(displayWidth * pos);
+    // Draw original region (boxA) without filters
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(
+      Math.floor(displayWidth * boxA[0]),
+      Math.floor(displayHeight * boxA[2]),
+      Math.ceil(displayWidth * (boxA[1] - boxA[0])),
+      Math.ceil(displayHeight * (boxA[3] - boxA[2]))
+    );
+    ctx.clip();
+    ctx.filter = 'none';
+    this.drawWithTransform(ctx, element, displayWidth, displayHeight);
+    ctx.restore();
 
-      // Draw original (left side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, splitX, displayHeight);
-      ctx.clip();
-      ctx.filter = 'none';
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-
-      // Draw adjusted (right side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(splitX, 0, displayWidth - splitX, displayHeight);
-      ctx.clip();
-      ctx.filter = this.getCanvasFilterString();
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-
-    } else if (this.wipeManager.mode === 'vertical') {
-      // Top side: original (no filter)
-      // Bottom side: with color adjustments
-      const splitY = Math.floor(displayHeight * pos);
-
-      // Draw original (top side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, displayWidth, splitY);
-      ctx.clip();
-      ctx.filter = 'none';
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-
-      // Draw adjusted (bottom side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, splitY, displayWidth, displayHeight - splitY);
-      ctx.clip();
-      ctx.filter = this.getCanvasFilterString();
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-    }
+    // Draw adjusted region (boxB) with color filters
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(
+      Math.floor(displayWidth * boxB[0]),
+      Math.floor(displayHeight * boxB[2]),
+      Math.ceil(displayWidth * (boxB[1] - boxB[0])),
+      Math.ceil(displayHeight * (boxB[3] - boxB[2]))
+    );
+    ctx.clip();
+    ctx.filter = this.getCanvasFilterString();
+    this.drawWithTransform(ctx, element, displayWidth, displayHeight);
+    ctx.restore();
 
     ctx.restore();
   }
@@ -2174,6 +2200,30 @@ export class Viewer {
     this.applyColorFilters();
     this.notifyEffectsChanged();
     this.scheduleRender();
+  }
+
+  // Premult mode
+  setPremultMode(mode: number): void {
+    this.glRendererManager.setPremultMode(mode);
+    this.scheduleRender();
+  }
+
+  // Spherical (360) projection
+  setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this.glRendererManager.setSphericalProjection(state);
+    this.scheduleRender();
+  }
+
+  /**
+   * Wire a SphericalProjection instance so that ViewerInputHandler can
+   * route mouse drag/wheel events to it for 360 navigation.
+   */
+  setSphericalProjectionRef(
+    sp: import('../../render/SphericalProjection').SphericalProjection,
+    updateUniforms: () => void,
+  ): void {
+    this._sphericalProjection = sp;
+    this._sphericalUniformsCallback = updateUniforms;
   }
 
   // Color inversion methods
@@ -2703,8 +2753,10 @@ export class Viewer {
     }
 
     // Apply clarity (local contrast enhancement in midtones)
+    // Uses EffectProcessor with half-res optimization during interactions
     if (hasClarity) {
-      applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
+      const halfRes = this.interactionQuality.cpuHalfRes;
+      this.effectProcessor.applyClarity(imageData, width, height, this.colorPipeline.colorAdjustments, halfRes);
     }
 
     // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
@@ -2744,7 +2796,7 @@ export class Viewer {
 
     // Apply tone mapping (after color adjustments, before channel isolation)
     if (hasToneMapping) {
-      applyToneMapping(imageData, this.colorPipeline.toneMappingState.operator);
+      applyToneMappingWithParams(imageData, this.colorPipeline.toneMappingState);
     }
 
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)
@@ -2758,13 +2810,23 @@ export class Viewer {
     }
 
     // Apply noise reduction (edge-preserving denoise before sharpen).
+    // Try GPU first, fall back to CPU.
     if (hasNoiseReduction) {
-      applyNoiseReduction(imageData, this.noiseReductionParams);
+      if (this.noiseReductionProcessor) {
+        this.noiseReductionProcessor.processInPlace(imageData, this.noiseReductionParams);
+      } else {
+        applyNoiseReduction(imageData, this.noiseReductionParams);
+      }
     }
 
-    // Apply sharpen filter
+    // Apply sharpen filter — prefer GPU (faster than even CPU half-res), fall back to CPU with half-res during interactions
     if (hasSharpen) {
-      this.applySharpenToImageData(imageData);
+      if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
+        this.sharpenProcessor.applyInPlace(imageData, this.filterSettings.sharpen);
+      } else {
+        const halfRes = this.interactionQuality.cpuHalfRes;
+        this.effectProcessor.applySharpenCPU(imageData, width, height, this.filterSettings.sharpen / 100, halfRes);
+      }
     }
 
     // Apply channel isolation (before false color so we can see individual channel exposure)
@@ -2862,8 +2924,10 @@ export class Viewer {
     }
 
     // --- Pass 2: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
+    // Uses EffectProcessor with half-res optimization and chunked async yielding
     if (hasClarity) {
-      applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
+      const halfRes = this.interactionQuality.cpuHalfRes;
+      await this.effectProcessor.applyClarityChunked(imageData, width, height, this.colorPipeline.colorAdjustments, halfRes);
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
@@ -2928,7 +2992,7 @@ export class Viewer {
 
       // Apply tone mapping
       if (hasToneMapping) {
-        applyToneMapping(imageData, this.colorPipeline.toneMappingState.operator);
+        applyToneMappingWithParams(imageData, this.colorPipeline.toneMappingState);
       }
 
       // Apply color inversion
@@ -2946,15 +3010,25 @@ export class Viewer {
     }
 
     // --- Pass 4: Noise reduction (inter-pixel bilateral filter) ---
+    // Try GPU first, fall back to CPU.
     if (hasNoiseReduction) {
-      applyNoiseReduction(imageData, this.noiseReductionParams);
+      if (this.noiseReductionProcessor) {
+        this.noiseReductionProcessor.processInPlace(imageData, this.noiseReductionParams);
+      } else {
+        applyNoiseReduction(imageData, this.noiseReductionParams);
+      }
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 5: Sharpen (inter-pixel dependency - 3x3 kernel) ---
+    // --- Pass 5: Sharpen — prefer GPU, fall back to CPU with half-res during interactions ---
     if (hasSharpen) {
-      this.applySharpenToImageData(imageData);
+      if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
+        this.sharpenProcessor.applyInPlace(imageData, this.filterSettings.sharpen);
+      } else {
+        const halfRes = this.interactionQuality.cpuHalfRes;
+        await this.effectProcessor.applySharpenCPUChunked(imageData, width, height, this.filterSettings.sharpen / 100, halfRes);
+      }
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
@@ -3049,23 +3123,6 @@ export class Viewer {
 
     // Single putImageData call
     ctx.putImageData(imageData, 0, 0);
-  }
-
-  /**
-   * Apply sharpen filter to ImageData in-place.
-   * Uses GPU acceleration when available, falls back to CPU.
-   */
-  private applySharpenToImageData(imageData: ImageData): void {
-    const amount = this.filterSettings.sharpen;
-
-    // Try GPU sharpen first (much faster for large images)
-    if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
-      this.sharpenProcessor.applyInPlace(imageData, amount);
-      return;
-    }
-
-    // CPU fallback: 3x3 unsharp mask kernel convolution
-    applySharpenCPU(imageData, amount / 100);
   }
 
   // Lens distortion methods (delegated to LensDistortionManager)
@@ -3165,6 +3222,20 @@ export class Viewer {
   resetStereoAlignMode(): void {
     this.stereoManager.resetStereoAlignMode();
     this.scheduleRender();
+  }
+
+  /**
+   * Get the left and right eye ImageData from the current stereo source.
+   * Returns null when stereo mode is off or no image data is available.
+   */
+  getStereoPair(): { left: ImageData; right: ImageData } | null {
+    const stereoState = this.stereoManager.getStereoState();
+    if (stereoState.mode === 'off') return null;
+
+    const imageData = this.getImageData();
+    if (!imageData) return null;
+
+    return extractStereoEyes(imageData, 'side-by-side', stereoState.eyeSwap);
   }
 
   // Difference matte methods
@@ -3627,7 +3698,8 @@ export class Viewer {
   }
 
   /**
-   * Composite multiple stack layers together
+   * Composite multiple stack layers together.
+   * Applies per-layer stencilBox clipping when present.
    */
   private compositeStackLayers(width: number, height: number): ImageData | null {
     if (this.stackLayers.length === 0) return null;
@@ -3641,6 +3713,28 @@ export class Viewer {
 
       const layerData = this.renderSourceToImageData(layer.sourceIndex, width, height);
       if (!layerData) continue;
+
+      // Apply stencil box clipping: zero out pixels outside the visible region
+      if (layer.stencilBox && isStencilBoxActive(layer.stencilBox)) {
+        const [xMin, xMax, yMin, yMax] = layer.stencilBox;
+        const pxMinX = Math.floor(xMin * width);
+        const pxMaxX = Math.ceil(xMax * width);
+        const pxMinY = Math.floor(yMin * height);
+        const pxMaxY = Math.ceil(yMax * height);
+        const data = layerData.data;
+
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (x < pxMinX || x >= pxMaxX || y < pxMinY || y >= pxMaxY) {
+              const idx = (y * width + x) * 4;
+              data[idx] = 0;
+              data[idx + 1] = 0;
+              data[idx + 2] = 0;
+              data[idx + 3] = 0;
+            }
+          }
+        }
+      }
 
       // Composite this layer onto result
       result = compositeImageData(result, layerData, layer.blendMode as BlendMode, layer.opacity);
@@ -3960,6 +4054,12 @@ export class Viewer {
       this.sharpenProcessor = null;
     }
 
+    // Cleanup WebGL noise reduction processor
+    if (this.noiseReductionProcessor) {
+      this.noiseReductionProcessor.dispose();
+      this.noiseReductionProcessor = null;
+    }
+
     // Cleanup effects debounce timer
     if (this.effectsChangeDebounceTimer !== null) {
       clearTimeout(this.effectsChangeDebounceTimer);
@@ -4055,6 +4155,20 @@ export class Viewer {
   }
 
   /**
+   * Get the current display width in logical pixels.
+   */
+  getDisplayWidth(): number {
+    return this.displayWidth;
+  }
+
+  /**
+   * Get the current display height in logical pixels.
+   */
+  getDisplayHeight(): number {
+    return this.displayHeight;
+  }
+
+  /**
    * Get the safe areas overlay instance
    */
   getSafeAreasOverlay(): SafeAreasOverlay {
@@ -4126,6 +4240,95 @@ export class Viewer {
    */
   getSpotlightOverlay(): SpotlightOverlay {
     return this.overlayManager.getSpotlightOverlay();
+  }
+
+  getBugOverlay(): import('./BugOverlay').BugOverlay {
+    return this.overlayManager.getBugOverlay();
+  }
+
+  getEXRWindowOverlay(): import('./EXRWindowOverlay').EXRWindowOverlay {
+    return this.overlayManager.getEXRWindowOverlay();
+  }
+
+  /**
+   * Set (or clear) a reference image for overlay comparison.
+   *
+   * When imageData is non-null the reference is composited on top of the
+   * live image canvas using the given viewMode and opacity.
+   * Pass `null` to disable the reference overlay.
+   */
+  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number): void {
+    if (!imageData || viewMode === 'off') {
+      // Hide the overlay canvas if present
+      if (this._referenceCanvas) {
+        this._referenceCanvas.style.display = 'none';
+      }
+      this.scheduleRender();
+      return;
+    }
+
+    // Lazy-create the reference overlay canvas
+    if (!this._referenceCanvas) {
+      this._referenceCanvas = document.createElement('canvas');
+      this._referenceCanvas.className = 'reference-overlay';
+      this._referenceCanvas.dataset.testid = 'reference-overlay';
+      this._referenceCanvas.style.cssText =
+        'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:35;';
+      this.canvasContainer.appendChild(this._referenceCanvas);
+      this._referenceCtx = this._referenceCanvas.getContext('2d');
+    }
+
+    // Size the overlay canvas to match the image canvas
+    const cw = this.imageCanvas.width;
+    const ch = this.imageCanvas.height;
+    if (this._referenceCanvas.width !== cw) this._referenceCanvas.width = cw;
+    if (this._referenceCanvas.height !== ch) this._referenceCanvas.height = ch;
+    this._referenceCanvas.style.display = '';
+
+    const ctx = this._referenceCtx;
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, cw, ch);
+
+    // Scale the reference ImageData to the current canvas size via a temp canvas
+    const tmp = document.createElement('canvas');
+    tmp.width = imageData.width;
+    tmp.height = imageData.height;
+    const tmpCtx = tmp.getContext('2d');
+    if (!tmpCtx) return;
+    tmpCtx.putImageData(imageData, 0, 0);
+
+    if (viewMode === 'overlay') {
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+      ctx.globalAlpha = 1;
+    } else if (viewMode === 'split-h') {
+      // Left half shows reference
+      const splitX = Math.round(cw * 0.5);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, splitX, ch);
+      ctx.clip();
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+      ctx.restore();
+    } else if (viewMode === 'split-v') {
+      // Top half shows reference
+      const splitY = Math.round(ch * 0.5);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, cw, splitY);
+      ctx.clip();
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+      ctx.restore();
+    } else if (viewMode === 'side-by-side') {
+      // Draw reference in left half, live in right half (just draw ref)
+      ctx.drawImage(tmp, 0, 0, Math.round(cw / 2), ch);
+    } else if (viewMode === 'toggle') {
+      // Full replacement
+      ctx.drawImage(tmp, 0, 0, cw, ch);
+    }
+
+    this.scheduleRender();
   }
 
   /**

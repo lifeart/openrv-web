@@ -186,7 +186,7 @@ describe('TabBar', () => {
   });
 
   describe('tab hover effects', () => {
-    it('TAB-U060: inactive tab changes on mouseenter', () => {
+    it('TAB-U060: inactive tab changes on pointerenter', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="color"]') as HTMLButtonElement;
 
@@ -195,7 +195,7 @@ describe('TabBar', () => {
       expect(btn.style.cssText).toContain('var(--text-secondary)');
     });
 
-    it('TAB-U061: inactive tab restores on mouseleave', () => {
+    it('TAB-U061: inactive tab restores on pointerleave', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="color"]') as HTMLButtonElement;
 

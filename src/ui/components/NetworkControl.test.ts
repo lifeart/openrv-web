@@ -46,10 +46,7 @@ describe('NetworkControl', () => {
 
       // Simulate outside click
       const event = new MouseEvent('click', { bubbles: true });
-      document.body.dispatchEvent(event);
-
-      // Give time for requestAnimationFrame + event handler
-      // Panel should close on next cycle
+      expect(() => document.body.dispatchEvent(event)).not.toThrow();
     });
 
     it('NCC-004: shows disconnected state UI', () => {

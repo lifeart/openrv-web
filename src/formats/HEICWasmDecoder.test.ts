@@ -1,151 +1,201 @@
 /**
  * HEICWasmDecoder Unit Tests
+ *
+ * Since libheif-js (WASM) cannot run in the Node/jsdom test environment,
+ * we mock it. However, each test verifies REAL glue logic in the decoder:
+ *   - Buffer allocation (width * height * 4)
+ *   - ArrayBuffer -> Uint8Array conversion before passing to libheif
+ *   - Error handling / error message dispatch
+ *   - Resource cleanup (free() calls on all images)
+ *   - Primary image selection via is_primary()
+ *   - Index-based image selection with bounds checking
+ *   - Sync vs async display() callback handling
+ *
+ * Tests that merely assert mock values back (e.g., "mock returns width=4,
+ * assert width===4") have been removed as they test nothing real.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ---------------------------------------------------------------------------
+// Helpers to build libheif mock images
+// ---------------------------------------------------------------------------
+
+interface MockHeifImage {
+  get_width: () => number;
+  get_height: () => number;
+  is_primary: () => boolean;
+  display: (
+    imageData: { data: Uint8ClampedArray },
+    callback: (r: unknown) => void
+  ) => void;
+  free: ReturnType<typeof vi.fn>;
+}
+
+/**
+ * Create a mock HeifImage with sensible defaults.
+ * The display() callback fills the buffer with `fillValue` (async by default).
+ */
+function createMockImage(opts: {
+  width?: number;
+  height?: number;
+  primary?: boolean;
+  fillValue?: number;
+  sync?: boolean;
+  displayReturnsNull?: boolean;
+  isPrimaryThrows?: boolean;
+} = {}): MockHeifImage {
+  const {
+    width = 2,
+    height = 2,
+    primary = true,
+    fillValue = 128,
+    sync = false,
+    displayReturnsNull = false,
+    isPrimaryThrows = false,
+  } = opts;
+
+  return {
+    get_width: () => width,
+    get_height: () => height,
+    is_primary: isPrimaryThrows
+      ? () => { throw new ReferenceError('heif_image_handle_is_primary_image is not defined'); }
+      : () => primary,
+    display: displayReturnsNull
+      ? (_imageData: unknown, callback: (r: null) => void) => {
+          if (sync) callback(null);
+          else setTimeout(() => callback(null), 0);
+        }
+      : (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
+          imageData.data.fill(fillValue);
+          if (sync) callback(imageData);
+          else setTimeout(() => callback(imageData), 0);
+        },
+    free: vi.fn(),
+  };
+}
+
+/**
+ * Set up the libheif-js mock so `new HeifDecoder().decode()` returns `images`.
+ * Returns an object with the decode spy for additional assertions.
+ */
+function mockLibheif(images: MockHeifImage[] | null) {
+  const decodeFn = vi.fn().mockReturnValue(images);
+  const HeifDecoderMock = vi.fn().mockImplementation(() => ({ decode: decodeFn }));
+  vi.doMock('libheif-js', () => ({ HeifDecoder: HeifDecoderMock }));
+  return { decodeFn, HeifDecoderMock };
+}
+
+/**
+ * Tear down mock after each test.
+ */
+function unmockLibheif() {
+  vi.doUnmock('libheif-js');
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 describe('HEICWasmDecoder', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
+  // =========================================================================
+  // A. decodeHEICToImageData — real glue logic
+  // =========================================================================
+
   describe('decodeHEICToImageData', () => {
-    it('should decode to correct width and height', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 4,
-            get_height: () => 3,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              for (let i = 0; i < imageData.data.length; i += 4) {
-                imageData.data[i] = 100;
-                imageData.data[i + 1] = 150;
-                imageData.data[i + 2] = 200;
-                imageData.data[i + 3] = 255;
-              }
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
-
-      expect(result.width).toBe(4);
-      expect(result.height).toBe(3);
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should return Uint8ClampedArray data', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 2,
-            get_height: () => 2,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              imageData.data.fill(128);
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('allocates an RGBA buffer of exactly width * height * 4 bytes', async () => {
+      // The production code creates `new Uint8ClampedArray(w * h * 4)`.
+      // This test verifies the allocation formula, not the mock's pixel values.
+      const img = createMockImage({ width: 7, height: 3 });
+      mockLibheif([img]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
       const result = await decodeHEICToImageData(new ArrayBuffer(16));
 
       expect(result.data).toBeInstanceOf(Uint8ClampedArray);
-      expect(result.data.length).toBe(2 * 2 * 4);
+      expect(result.data.length).toBe(7 * 3 * 4); // 84
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should return correct RGBA pixel values', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 2,
-            get_height: () => 2,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              for (let i = 0; i < imageData.data.length; i += 4) {
-                imageData.data[i] = 128;
-                imageData.data[i + 1] = 64;
-                imageData.data[i + 2] = 32;
-                imageData.data[i + 3] = 255;
-              }
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('wraps ArrayBuffer in Uint8Array before calling decode()', async () => {
+      const img = createMockImage();
+      const { decodeFn } = mockLibheif([img]);
+
+      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+      const buf = new ArrayBuffer(24);
+      await decodeHEICToImageData(buf);
+
+      expect(decodeFn).toHaveBeenCalledOnce();
+      const arg = decodeFn.mock.calls[0][0];
+      expect(arg).toBeInstanceOf(Uint8Array);
+      expect(arg.buffer).toBe(buf);
+
+      unmockLibheif();
+    });
+
+    it('selects the primary image when it is not at index 0', async () => {
+      // Production code uses findIndex(img => img.is_primary()).
+      // Put the primary at index 1 to verify selection logic.
+      const secondary = createMockImage({ width: 2, height: 2, primary: false, fillValue: 10 });
+      const primary = createMockImage({ width: 5, height: 5, primary: true, fillValue: 99 });
+      mockLibheif([secondary, primary]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
       const result = await decodeHEICToImageData(new ArrayBuffer(16));
 
-      // First pixel
-      expect(result.data[0]).toBe(128); // R
-      expect(result.data[1]).toBe(64);  // G
-      expect(result.data[2]).toBe(32);  // B
-      expect(result.data[3]).toBe(255); // A
+      // Should have picked the 5x5 primary, not the 2x2 secondary
+      expect(result.width).toBe(5);
+      expect(result.height).toBe(5);
+      expect(result.data.length).toBe(5 * 5 * 4);
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should call image.free() for cleanup', async () => {
-      const freeFn = vi.fn();
-
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 1,
-            get_height: () => 1,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              imageData.data.fill(0);
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: freeFn,
-          }]),
-        })),
-      }));
+    it('falls back to index 0 when is_primary() throws', async () => {
+      const first = createMockImage({ width: 3, height: 3, isPrimaryThrows: true });
+      const second = createMockImage({ width: 1, height: 1, isPrimaryThrows: true });
+      mockLibheif([first, second]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      await decodeHEICToImageData(new ArrayBuffer(16));
+      const result = await decodeHEICToImageData(new ArrayBuffer(16));
 
-      expect(freeFn).toHaveBeenCalledOnce();
+      // Should fall back to index 0 (the 3x3 image)
+      expect(result.width).toBe(3);
+      expect(result.height).toBe(3);
+      expect(result.data.length).toBe(3 * 3 * 4);
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should reject when decode returns empty array', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([]),
-        })),
-      }));
+    it('handles synchronous display() callback', async () => {
+      // Some libheif-js builds call the callback synchronously.
+      // The production code wraps it in a Promise — verify it resolves.
+      const img = createMockImage({ width: 2, height: 1, sync: true });
+      mockLibheif([img]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+      const result = await decodeHEICToImageData(new ArrayBuffer(16));
 
-      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow(
-        'libheif decoded no images'
-      );
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(1);
+      expect(result.data.length).toBe(2 * 1 * 4);
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
+  });
 
-    it('should reject when decode returns null', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue(null),
-        })),
-      }));
+  // =========================================================================
+  // B. Error handling — real rejection logic
+  // =========================================================================
+
+  describe('error handling', () => {
+    it('rejects when decode() returns an empty array', async () => {
+      mockLibheif([]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
@@ -153,23 +203,24 @@ describe('HEICWasmDecoder', () => {
         'libheif decoded no images'
       );
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should reject when display() callback returns null', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 2,
-            get_height: () => 2,
-            is_primary: () => true,
-            display: (_imageData: unknown, callback: (r: null) => void) => {
-              setTimeout(() => callback(null), 0);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('rejects when decode() returns null', async () => {
+      mockLibheif(null);
+
+      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+
+      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow(
+        'libheif decoded no images'
+      );
+
+      unmockLibheif();
+    });
+
+    it('rejects when display() callback returns null', async () => {
+      const img = createMockImage({ displayReturnsNull: true });
+      mockLibheif([img]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
@@ -177,45 +228,15 @@ describe('HEICWasmDecoder', () => {
         'display() callback returned null'
       );
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should lazy-load libheif-js module', async () => {
-      const decodeMock = vi.fn().mockReturnValue([{
-        get_width: () => 1,
-        get_height: () => 1,
-        is_primary: () => true,
-        display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-          imageData.data.fill(0);
-          setTimeout(() => callback(imageData), 0);
-        },
-        free: vi.fn(),
-      }]);
-
-      const HeifDecoderMock = vi.fn().mockImplementation(() => ({
-        decode: decodeMock,
-      }));
-
+    it('propagates errors thrown by decode()', async () => {
+      const decodeFn = vi.fn().mockImplementation(() => {
+        throw new Error('Corrupt HEIC bitstream');
+      });
       vi.doMock('libheif-js', () => ({
-        HeifDecoder: HeifDecoderMock,
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      await decodeHEICToImageData(new ArrayBuffer(16));
-
-      expect(HeifDecoderMock).toHaveBeenCalledOnce();
-      expect(decodeMock).toHaveBeenCalledOnce();
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should propagate errors from libheif-js decode()', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockImplementation(() => {
-            throw new Error('Corrupt HEIC bitstream');
-          }),
-        })),
+        HeifDecoder: vi.fn().mockImplementation(() => ({ decode: decodeFn })),
       }));
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
@@ -224,157 +245,47 @@ describe('HEICWasmDecoder', () => {
         'Corrupt HEIC bitstream'
       );
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should allocate correct buffer size for pixel data', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 10,
-            get_height: () => 5,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              imageData.data.fill(255);
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('rejects with validation error for zero-width image', async () => {
+      const img = createMockImage({ width: 0, height: 10 });
+      mockLibheif([img]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
 
-      // 10 * 5 * 4 (RGBA) = 200
-      expect(result.data.length).toBe(200);
+      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow(
+        'Invalid HEIC dimensions'
+      );
 
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should handle 1x1 image', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 1,
-            get_height: () => 1,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              imageData.data[0] = 255;
-              imageData.data[1] = 0;
-              imageData.data[2] = 128;
-              imageData.data[3] = 255;
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
-
-      expect(result.width).toBe(1);
-      expect(result.height).toBe(1);
-      expect(result.data.length).toBe(4);
-      expect(result.data[0]).toBe(255);
-      expect(result.data[2]).toBe(128);
-
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
   });
 
+  // =========================================================================
+  // C. decodeHEICItemToImageData — index-based selection
+  // =========================================================================
+
   describe('decodeHEICItemToImageData', () => {
-    it('should pick correct image by index', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 2,
-              get_height: () => 2,
-              is_primary: () => true,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(10);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-            {
-              get_width: () => 4,
-              get_height: () => 4,
-              is_primary: () => false,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(200);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-          ]),
-        })),
-      }));
+    it('picks the image at the specified index', async () => {
+      const img0 = createMockImage({ width: 2, height: 2, primary: true, fillValue: 10 });
+      const img1 = createMockImage({ width: 6, height: 4, primary: false, fillValue: 200 });
+      mockLibheif([img0, img1]);
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
-      // Index 0 (primary)
-      const result0 = await decodeHEICItemToImageData(new ArrayBuffer(16), 0);
-      expect(result0.width).toBe(2);
-      expect(result0.height).toBe(2);
-      expect(result0.data[0]).toBe(10);
+      // Pick index 1 — verify we get the 6x4 buffer, not the 2x2 one
+      const result = await decodeHEICItemToImageData(new ArrayBuffer(16), 1);
+      expect(result.width).toBe(6);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(6 * 4 * 4);
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should pick second image by index', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 2,
-              get_height: () => 2,
-              is_primary: () => true,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(10);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-            {
-              get_width: () => 4,
-              get_height: () => 4,
-              is_primary: () => false,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(200);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-          ]),
-        })),
-      }));
-
-      const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
-
-      // Index 1 (secondary)
-      const result1 = await decodeHEICItemToImageData(new ArrayBuffer(16), 1);
-      expect(result1.width).toBe(4);
-      expect(result1.height).toBe(4);
-      expect(result1.data[0]).toBe(200);
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should reject for out-of-range index', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 1,
-            get_height: () => 1,
-            is_primary: () => true,
-            display: vi.fn(),
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('rejects for out-of-range index', async () => {
+      const img = createMockImage();
+      mockLibheif([img]);
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
@@ -382,21 +293,12 @@ describe('HEICWasmDecoder', () => {
         'out of range'
       );
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should reject for negative index', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 1,
-            get_height: () => 1,
-            is_primary: () => true,
-            display: vi.fn(),
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('rejects for negative index', async () => {
+      const img = createMockImage();
+      mockLibheif([img]);
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
@@ -404,332 +306,66 @@ describe('HEICWasmDecoder', () => {
         'out of range'
       );
 
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should free image even for first item (index 0)', async () => {
-      const freeFn = vi.fn();
-
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 1,
-            get_height: () => 1,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              imageData.data.fill(0);
-              setTimeout(() => callback(imageData), 0);
-            },
-            free: freeFn,
-          }]),
-        })),
-      }));
-
-      const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
-      await decodeHEICItemToImageData(new ArrayBuffer(16), 0);
-
-      expect(freeFn).toHaveBeenCalledOnce();
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should pass Uint8Array to decoder.decode()', async () => {
-      const decodeFn = vi.fn().mockReturnValue([{
-        get_width: () => 1,
-        get_height: () => 1,
-        is_primary: () => true,
-        display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-          imageData.data.fill(0);
-          setTimeout(() => callback(imageData), 0);
-        },
-        free: vi.fn(),
-      }]);
-
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: decodeFn,
-        })),
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const buf = new ArrayBuffer(16);
-      await decodeHEICToImageData(buf);
-
-      expect(decodeFn).toHaveBeenCalledWith(expect.any(Uint8Array));
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should handle synchronous display callback', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 2,
-            get_height: () => 1,
-            is_primary: () => true,
-            display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-              imageData.data[0] = 42;
-              imageData.data[1] = 43;
-              imageData.data[2] = 44;
-              imageData.data[3] = 255;
-              imageData.data[4] = 10;
-              imageData.data[5] = 20;
-              imageData.data[6] = 30;
-              imageData.data[7] = 255;
-              // Synchronous callback (some libheif versions call synchronously)
-              callback(imageData);
-            },
-            free: vi.fn(),
-          }]),
-        })),
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
-
-      expect(result.width).toBe(2);
-      expect(result.height).toBe(1);
-      expect(result.data[0]).toBe(42);
-      expect(result.data[4]).toBe(10);
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should work with decodeHEICToImageData (defaults to index 0)', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 3,
-              get_height: () => 3,
-              is_primary: () => true,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(77);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-            {
-              get_width: () => 1,
-              get_height: () => 1,
-              is_primary: () => false,
-              display: vi.fn(),
-              free: vi.fn(),
-            },
-          ]),
-        })),
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
-
-      // Should pick index 0 (the 3x3 image)
-      expect(result.width).toBe(3);
-      expect(result.height).toBe(3);
-      expect(result.data[0]).toBe(77);
-
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
   });
 
+  // =========================================================================
+  // D. Resource cleanup — free() contract
+  // =========================================================================
+
   describe('resource cleanup', () => {
-    it('should call free() even when display() rejects', async () => {
-      const freeFn = vi.fn();
-
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 2,
-            get_height: () => 2,
-            is_primary: () => true,
-            display: (_imageData: unknown, callback: (r: null) => void) => {
-              setTimeout(() => callback(null), 0);
-            },
-            free: freeFn,
-          }]),
-        })),
-      }));
+    it('calls free() on the decoded image after success', async () => {
+      const img = createMockImage();
+      mockLibheif([img]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+      await decodeHEICToImageData(new ArrayBuffer(16));
 
-      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow(
-        'display() callback returned null'
-      );
+      expect(img.free).toHaveBeenCalledOnce();
 
-      expect(freeFn).toHaveBeenCalledOnce();
-
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should free all sibling images in multi-image decode', async () => {
-      const freeFns = [vi.fn(), vi.fn(), vi.fn()];
-
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 1,
-              get_height: () => 1,
-              is_primary: () => true,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(10);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: freeFns[0],
-            },
-            {
-              get_width: () => 2,
-              get_height: () => 2,
-              is_primary: () => false,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(20);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: freeFns[1],
-            },
-            {
-              get_width: () => 3,
-              get_height: () => 3,
-              is_primary: () => false,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(30);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: freeFns[2],
-            },
-          ]),
-        })),
-      }));
-
-      const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
-      await decodeHEICItemToImageData(new ArrayBuffer(16), 1);
-
-      // All three images should have been freed
-      expect(freeFns[0]).toHaveBeenCalledOnce();
-      expect(freeFns[1]).toHaveBeenCalledOnce();
-      expect(freeFns[2]).toHaveBeenCalledOnce();
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should use is_primary() to select primary image', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 2,
-              get_height: () => 2,
-              is_primary: () => false,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(10);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-            {
-              get_width: () => 4,
-              get_height: () => 4,
-              is_primary: () => true,
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(99);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-          ]),
-        })),
-      }));
-
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
-
-      // Should pick the primary image at index 1, not index 0
-      expect(result.width).toBe(4);
-      expect(result.height).toBe(4);
-      expect(result.data[0]).toBe(99);
-
-      vi.doUnmock('libheif-js');
-    });
-
-    it('should reject when image dimensions are invalid (zero width)', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([{
-            get_width: () => 0,
-            get_height: () => 10,
-            is_primary: () => true,
-            display: vi.fn(),
-            free: vi.fn(),
-          }]),
-        })),
-      }));
+    it('calls free() even when display() callback returns null', async () => {
+      const img = createMockImage({ displayReturnsNull: true });
+      mockLibheif([img]);
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
       await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow();
+      expect(img.free).toHaveBeenCalledOnce();
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should fall back to index 0 when is_primary() throws', async () => {
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 3,
-              get_height: () => 3,
-              is_primary: () => { throw new ReferenceError('heif_image_handle_is_primary_image is not defined'); },
-              display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => {
-                imageData.data.fill(55);
-                setTimeout(() => callback(imageData), 0);
-              },
-              free: vi.fn(),
-            },
-            {
-              get_width: () => 1,
-              get_height: () => 1,
-              is_primary: () => { throw new ReferenceError('heif_image_handle_is_primary_image is not defined'); },
-              display: vi.fn(),
-              free: vi.fn(),
-            },
-          ]),
-        })),
-      }));
+    it('frees ALL sibling images in a multi-image decode', async () => {
+      const imgs = [
+        createMockImage({ width: 1, height: 1, primary: true, fillValue: 10 }),
+        createMockImage({ width: 2, height: 2, primary: false, fillValue: 20 }),
+        createMockImage({ width: 3, height: 3, primary: false, fillValue: 30 }),
+      ];
+      mockLibheif(imgs);
 
-      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
-      const result = await decodeHEICToImageData(new ArrayBuffer(16));
+      const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
+      await decodeHEICItemToImageData(new ArrayBuffer(16), 1);
 
-      // Should fall back to index 0
-      expect(result.width).toBe(3);
-      expect(result.height).toBe(3);
-      expect(result.data[0]).toBe(55);
+      // The target image (index 1) is freed in the finally block.
+      // Sibling images (index 0, 2) are freed immediately.
+      // All three should have been freed exactly once.
+      for (const img of imgs) {
+        expect(img.free).toHaveBeenCalledOnce();
+      }
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
 
-    it('should free all images when index is out of range', async () => {
-      const freeFns = [vi.fn(), vi.fn()];
-
-      vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({
-          decode: vi.fn().mockReturnValue([
-            {
-              get_width: () => 1,
-              get_height: () => 1,
-              is_primary: () => true,
-              display: vi.fn(),
-              free: freeFns[0],
-            },
-            {
-              get_width: () => 1,
-              get_height: () => 1,
-              is_primary: () => false,
-              display: vi.fn(),
-              free: freeFns[1],
-            },
-          ]),
-        })),
-      }));
+    it('frees all images when index is out of range', async () => {
+      const imgs = [
+        createMockImage({ primary: true }),
+        createMockImage({ primary: false }),
+      ];
+      mockLibheif(imgs);
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
@@ -737,11 +373,11 @@ describe('HEICWasmDecoder', () => {
         'out of range'
       );
 
-      // Both images should have been freed
-      expect(freeFns[0]).toHaveBeenCalledOnce();
-      expect(freeFns[1]).toHaveBeenCalledOnce();
+      for (const img of imgs) {
+        expect(img.free).toHaveBeenCalledOnce();
+      }
 
-      vi.doUnmock('libheif-js');
+      unmockLibheif();
     });
   });
 });

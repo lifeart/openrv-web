@@ -843,4 +843,35 @@ describe('PlaybackTimingController', () => {
       expect(MAX_REVERSE_SPEED).toBe(4);
     });
   });
+
+  describe('computeNextFrame pingpong (regression)', () => {
+    it('PTC-R001: pingpong forward returns outPoint-1 at boundary', () => {
+      const result = controller.computeNextFrame(10, 1, 1, 10, 'pingpong');
+      expect(result).toBe(9);
+    });
+
+    it('PTC-R002: pingpong reverse returns inPoint+1 at boundary', () => {
+      const result = controller.computeNextFrame(1, -1, 1, 10, 'pingpong');
+      expect(result).toBe(2);
+    });
+
+    it('PTC-R003: pingpong does not oscillate between two frames with manual direction tracking', () => {
+      const frames: number[] = [];
+      let frame = 8;
+      let direction = 1;
+
+      for (let i = 0; i < 6; i++) {
+        const next = controller.computeNextFrame(frame, direction, 1, 10, 'pingpong');
+        if (next < frame && direction > 0) {
+          direction = -1;
+        } else if (next > frame && direction < 0) {
+          direction = 1;
+        }
+        frame = next;
+        frames.push(frame);
+      }
+
+      expect(new Set(frames).size).toBeGreaterThan(2);
+    });
+  });
 });

@@ -33,6 +33,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   // Track the currently selected/active text annotation
   private activeTextAnnotationId: string | null = null;
   private activeTextAnnotationFrame: number | null = null;
+  private unsubscribers: (() => void)[] = [];
 
   // Current formatting state
   private state: TextFormattingState = {
@@ -96,21 +97,21 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
 
   private bindEvents(): void {
     // Listen for tool changes to show/hide toolbar
-    this.paintEngine.on('toolChanged', (tool: PaintTool) => {
-      this.updateVisibility(tool);
-    });
-
-    // Listen for new annotations to track newly created text
-    this.paintEngine.on('strokeAdded', (annotation) => {
-      if (annotation.type === 'text') {
-        this.setActiveTextAnnotation(annotation as TextAnnotation);
-      }
-    });
-
-    // Listen for annotation changes to refresh state
-    this.paintEngine.on('annotationsChanged', () => {
-      this.refreshStateFromActiveAnnotation();
-    });
+    this.unsubscribers.push(
+      this.paintEngine.on('toolChanged', (tool: PaintTool) => {
+        this.updateVisibility(tool);
+      }),
+      // Listen for new annotations to track newly created text
+      this.paintEngine.on('strokeAdded', (annotation) => {
+        if (annotation.type === 'text') {
+          this.setActiveTextAnnotation(annotation as TextAnnotation);
+        }
+      }),
+      // Listen for annotation changes to refresh state
+      this.paintEngine.on('annotationsChanged', () => {
+        this.refreshStateFromActiveAnnotation();
+      }),
+    );
   }
 
   private updateVisibility(tool: PaintTool): void {
@@ -317,6 +318,10 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   }
 
   dispose(): void {
-    // Cleanup if needed
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
+    this.removeAllListeners();
   }
 }

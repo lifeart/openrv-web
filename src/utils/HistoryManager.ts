@@ -111,10 +111,9 @@ export class HistoryManager extends EventEmitter<HistoryEvents> implements Manag
     const entry = this.entries[this.currentIndex];
     if (entry?.redo) {
       entry.redo();
-    } else if (entry?.restore) {
-      // If no redo function, the restore function should handle it
-      entry.restore();
     }
+    // Note: do NOT call entry.restore() as fallback — restore is the UNDO callback.
+    // If no redo callback was provided, we just advance the index.
 
     this.emit('currentIndexChanged', this.currentIndex);
 
@@ -129,7 +128,7 @@ export class HistoryManager extends EventEmitter<HistoryEvents> implements Manag
 
     // Apply states from current to target
     if (index < this.currentIndex) {
-      // Going backwards - call restore functions from current down to target+1
+      // Going backwards - call restore (undo) functions from current down to target+1
       for (let i = this.currentIndex; i > index; i--) {
         const entry = this.entries[i];
         if (entry?.restore) {
@@ -142,9 +141,8 @@ export class HistoryManager extends EventEmitter<HistoryEvents> implements Manag
         const entry = this.entries[i];
         if (entry?.redo) {
           entry.redo();
-        } else if (entry?.restore) {
-          entry.restore();
         }
+        // Note: do NOT call entry.restore() as fallback for redo
       }
     }
 

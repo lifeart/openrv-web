@@ -58,12 +58,16 @@ export interface StrokePoint extends Point {
 /** Which A/B compare version an annotation belongs to. */
 export type AnnotationVersion = 'A' | 'B' | 'all';
 
+/** Which stereo eye an annotation applies to. */
+export type AnnotationEye = 'left' | 'right' | 'both';
+
 export interface PenStroke {
   type: 'pen';
   id: string;
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  eye?: AnnotationEye;
   color: [number, number, number, number]; // RGBA 0-1
   width: number | number[]; // Single or per-point widths
   brush: BrushType;
@@ -82,6 +86,7 @@ export interface TextAnnotation {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  eye?: AnnotationEye;
   position: Point;
   color: [number, number, number, number];
   text: string;
@@ -108,6 +113,7 @@ export interface ShapeAnnotation {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  eye?: AnnotationEye;
   shapeType: ShapeType;
   // Bounding points (normalized 0-1)
   startPoint: Point; // First corner or start of line
@@ -128,6 +134,24 @@ export interface ShapeAnnotation {
 }
 
 export type Annotation = PenStroke | TextAnnotation | ShapeAnnotation;
+
+/**
+ * Validates that an unknown value has the minimum required fields
+ * to be treated as an Annotation. Used for network sync payloads
+ * where strokes arrive as `unknown[]`.
+ */
+export function isValidAnnotation(value: unknown): value is Annotation {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.type !== 'string') return false;
+  if (v.type !== 'pen' && v.type !== 'text' && v.type !== 'shape') return false;
+  if (typeof v.id !== 'string' || v.id.length === 0) return false;
+  if (typeof v.frame !== 'number' || !Number.isFinite(v.frame)) return false;
+  if (typeof v.user !== 'string') return false;
+  if (typeof v.startFrame !== 'number') return false;
+  if (typeof v.duration !== 'number') return false;
+  return true;
+}
 
 export interface PaintEffects {
   hold: boolean;

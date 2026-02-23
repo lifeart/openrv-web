@@ -225,6 +225,16 @@ export class NoteManager {
   // ---- Serialization ----
 
   /**
+   * Import a note with a specific ID (for network sync).
+   * Skips if a note with the same ID already exists.
+   */
+  importNote(note: Note): void {
+    if (this._notes.has(note.id)) return;
+    this._notes.set(note.id, { ...note });
+    this.notifyChange();
+  }
+
+  /**
    * Produce a JSON-safe array of all notes (for save/export)
    */
   toSerializable(): Note[] {

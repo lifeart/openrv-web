@@ -110,7 +110,7 @@ describe('FalseColorControl', () => {
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
-    it('FALSE-U024: button mouseleave restores background when disabled', () => {
+    it('FALSE-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
@@ -118,7 +118,7 @@ describe('FalseColorControl', () => {
       expect(button.style.background).toBe('transparent');
     });
 
-    it('FALSE-M20a: borderColor resets to transparent on mouseleave when inactive', () => {
+    it('FALSE-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
@@ -127,7 +127,7 @@ describe('FalseColorControl', () => {
       expect(button.style.borderColor).toBe('transparent');
     });
 
-    it('FALSE-M20b: borderColor remains accent color on mouseleave when active', () => {
+    it('FALSE-M20b: borderColor remains accent color on pointerleave when active', () => {
       const el = control.render();
       falseColor.enable();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
@@ -429,10 +429,10 @@ describe('FalseColorControl', () => {
     });
 
     it('FALSE-U072: dispose clears preset buttons map', () => {
-      control.render();
-      control.dispose();
-      // No error means cleanup was successful
-      expect(true).toBe(true);
+      expect(() => {
+        control.render();
+        control.dispose();
+      }).not.toThrow();
     });
 
     it('FALSE-U073: dispose unsubscribes from state changes', () => {

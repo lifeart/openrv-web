@@ -41,6 +41,17 @@ import type { LoopMode, MediaType } from '../types/session';
 import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import {
+  resolveProperty as _resolveProperty,
+  resolveGTOByHash,
+  resolveGTOByAt,
+} from './PropertyResolver';
+import type {
+  HashResolveResult,
+  AtResolveResult,
+  GTOHashResolveResult,
+  GTOAtResolveResult,
+} from './PropertyResolver';
+import {
   parseInitialSettings as _parseInitialSettings,
   parseColorAdjustments as _parseColorAdjustments,
   parseCDL as _parseCDL,
@@ -63,7 +74,8 @@ import { VersionManager } from './VersionManager';
 import { StatusManager } from './StatusManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
-import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
+import { AudioCoordinator } from '../../audio/AudioCoordinator';
+import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { Logger } from '../../utils/Logger';
 import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 
@@ -135,6 +147,10 @@ export interface SessionMetadata {
   creationContext: number;
   clipboard: number;
   membershipContains: string[];
+  /** Real-time playback rate (0 means use fps) */
+  realtime: number;
+  /** Background color as RGBA float array (0-1 range). Default: 18% gray */
+  bgColor: [number, number, number, number];
 }
 
 /**
@@ -198,7 +214,7 @@ export interface MediaSource {
   height: number;
   duration: number; // in frames
   fps: number;
-  element?: HTMLImageElement | HTMLVideoElement;
+  element?: HTMLImageElement | HTMLVideoElement | ImageBitmap;
   // Sequence-specific data
   sequenceInfo?: SequenceInfo;
   sequenceFrames?: SequenceFrame[];
@@ -225,7 +241,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
-  private _audioPlaybackManager = new AudioPlaybackManager();
+  private _audioCoordinator = new AudioCoordinator();
 
   // Pre-detected HDR canvas resize tier from DisplayCapabilities.
   // Set via setHDRResizeTier() so VideoSourceNode can use it instead of re-probing.
@@ -240,6 +256,8 @@ export class Session extends EventEmitter<SessionEvents> {
     creationContext: 0,
     clipboard: 0,
     membershipContains: [],
+    realtime: 0,
+    bgColor: [0.18, 0.18, 0.18, 1.0],
   };
 
   // Static constant for starvation threshold - kept for backward compatibility
@@ -346,17 +364,33 @@ export class Session extends EventEmitter<SessionEvents> {
       setAudioSyncEnabled: (enabled) => { this._volumeManager.audioSyncEnabled = enabled; },
     });
 
-    // Forward PlaybackEngine events to Session events
+    // Wire AudioCoordinator callback
+    this._audioCoordinator.setCallbacks({
+      onAudioPathChanged: () => this.applyVolumeToVideo(),
+    });
+
+    // Forward PlaybackEngine events to Session events + AudioCoordinator
     this._playbackEngine.on('frameChanged', (frame) => {
       this.emit('frameChanged', frame);
-      // Audio scrub: play a short audio snippet when scrubbing (not during playback)
-      if (!this._playbackEngine.isPlaying) {
-        this._audioPlaybackManager.scrubToFrame(frame, this._playbackEngine.fps);
-      }
+      this._audioCoordinator.onFrameChanged(frame, this._playbackEngine.fps, this._playbackEngine.isPlaying);
     });
-    this._playbackEngine.on('playbackChanged', (playing) => this.emit('playbackChanged', playing));
-    this._playbackEngine.on('playDirectionChanged', (dir) => this.emit('playDirectionChanged', dir));
-    this._playbackEngine.on('playbackSpeedChanged', (speed) => this.emit('playbackSpeedChanged', speed));
+    this._playbackEngine.on('playbackChanged', (playing) => {
+      const pe = this._playbackEngine;
+      if (playing) {
+        this._audioCoordinator.onPlaybackStarted(pe.currentFrame, pe.fps, pe.playbackSpeed, pe.playDirection);
+      } else {
+        this._audioCoordinator.onPlaybackStopped();
+      }
+      this.emit('playbackChanged', playing);
+    });
+    this._playbackEngine.on('playDirectionChanged', (dir) => {
+      this._audioCoordinator.onDirectionChanged(dir);
+      this.emit('playDirectionChanged', dir);
+    });
+    this._playbackEngine.on('playbackSpeedChanged', (speed) => {
+      this._audioCoordinator.onSpeedChanged(speed);
+      this.emit('playbackSpeedChanged', speed);
+    });
     this._playbackEngine.on('loopModeChanged', (mode) => this.emit('loopModeChanged', mode));
     this._playbackEngine.on('fpsChanged', (fps) => this.emit('fpsChanged', fps));
     this._playbackEngine.on('frameIncrementChanged', (inc) => this.emit('frameIncrementChanged', inc));
@@ -382,17 +416,24 @@ export class Session extends EventEmitter<SessionEvents> {
       onStatusChanged: (sourceIndex, status, previous) => this.emit('statusChanged', { sourceIndex, status, previous }),
       onStatusesChanged: () => this.emit('statusesChanged', undefined),
     });
+    // Volume/mute callbacks forward to both the coordinator (for Web Audio gain)
+    // AND applyVolumeToVideo (for the HTMLVideoElement volume/muted properties).
+    // The coordinator doesn't trigger onAudioPathChanged for volume/mute changes,
+    // so the explicit applyVolumeToVideo call is required here.
     this._volumeManager.setCallbacks({
       onVolumeChanged: (v) => {
+        this._audioCoordinator.onVolumeChanged(v);
         this.applyVolumeToVideo();
         this.emit('volumeChanged', v);
       },
       onMutedChanged: (m) => {
+        this._audioCoordinator.onMutedChanged(m);
         this.applyVolumeToVideo();
         this.emit('mutedChanged', m);
       },
       onPreservesPitchChanged: (p) => {
         this.applyPreservesPitchToVideo();
+        this._audioCoordinator.onPreservesPitchChanged(p);
         this.emit('preservesPitchChanged', p);
       },
     });
@@ -452,9 +493,43 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._gtoData;
   }
 
-  /** Audio playback manager for scrub audio and independent audio playback */
+  /**
+   * Resolve an OpenRV property address against the session.
+   *
+   * Supports two addressing modes:
+   * - Hash: `#RVColor.color.exposure` — finds nodes by protocol, resolves component.property
+   * - At: `@RVDisplayColor` — finds all nodes with the given protocol
+   *
+   * Attempts resolution against the live Graph first; falls back to raw GTOData
+   * for full component.property fidelity when no graph is loaded.
+   *
+   * @param address - Property address string (e.g. `#RVColor.color.exposure` or `@RVDisplayColor`)
+   * @returns Matching results, or null if the address format is invalid
+   */
+  resolveProperty(
+    address: string,
+  ): HashResolveResult[] | AtResolveResult[] | GTOHashResolveResult[] | GTOAtResolveResult[] | null {
+    // Try live graph first
+    if (this._graph) {
+      return _resolveProperty(this._graph, address);
+    }
+
+    // Fall back to raw GTO data
+    if (this._gtoData) {
+      if (address.startsWith('#')) {
+        return resolveGTOByHash(this._gtoData, address);
+      }
+      if (address.startsWith('@')) {
+        return resolveGTOByAt(this._gtoData, address);
+      }
+    }
+
+    return null;
+  }
+
+  /** Audio playback manager (via coordinator) for scrub audio and independent audio playback */
   get audioPlaybackManager(): AudioPlaybackManager {
-    return this._audioPlaybackManager;
+    return this._audioCoordinator.manager;
   }
 
   get currentFrame(): number {
@@ -569,10 +644,14 @@ export class Session extends EventEmitter<SessionEvents> {
       membershipContains: patch.membershipContains !== undefined
         ? [...patch.membershipContains]
         : current.membershipContains,
+      realtime: patch.realtime !== undefined ? patch.realtime : current.realtime,
+      bgColor: patch.bgColor !== undefined ? [...patch.bgColor] as [number, number, number, number] : current.bgColor,
     };
 
     const membershipChanged = next.membershipContains.length !== current.membershipContains.length
       || next.membershipContains.some((value, index) => value !== current.membershipContains[index]);
+
+    const bgColorChanged = next.bgColor.some((v, i) => v !== current.bgColor[i]);
 
     const hasChanged = next.displayName !== current.displayName
       || next.comment !== current.comment
@@ -580,7 +659,9 @@ export class Session extends EventEmitter<SessionEvents> {
       || next.origin !== current.origin
       || next.creationContext !== current.creationContext
       || next.clipboard !== current.clipboard
-      || membershipChanged;
+      || membershipChanged
+      || next.realtime !== current.realtime
+      || bgColorChanged;
 
     if (!hasChanged) {
       return;
@@ -744,7 +825,14 @@ export class Session extends EventEmitter<SessionEvents> {
   private applyVolumeToVideo(): void {
     const source = this.currentSource;
     if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      this._volumeManager.applyVolumeToVideo(source.element, this._playDirection);
+      const video = source.element;
+      this._audioCoordinator.applyToVideoElement(
+        video,
+        this._volumeManager.getEffectiveVolume(),
+        this._volumeManager.muted,
+        this._playDirection,
+      );
+      video.playbackRate = this._playbackEngine.playbackSpeed;
     }
   }
 
@@ -1093,7 +1181,9 @@ export class Session extends EventEmitter<SessionEvents> {
           result.sessionInfo.version || result.sessionInfo.origin ||
           result.sessionInfo.creationContext !== undefined ||
           result.sessionInfo.clipboard !== undefined ||
-          result.sessionInfo.membershipContains) {
+          result.sessionInfo.membershipContains ||
+          result.sessionInfo.realtime !== undefined ||
+          result.sessionInfo.bgColor) {
         this._metadata = {
           displayName: result.sessionInfo.displayName ?? '',
           comment: result.sessionInfo.comment ?? '',
@@ -1102,6 +1192,8 @@ export class Session extends EventEmitter<SessionEvents> {
           creationContext: result.sessionInfo.creationContext ?? 0,
           clipboard: result.sessionInfo.clipboard ?? 0,
           membershipContains: result.sessionInfo.membershipContains ?? [],
+          realtime: result.sessionInfo.realtime ?? 0,
+          bgColor: result.sessionInfo.bgColor ?? [0.18, 0.18, 0.18, 1.0],
         };
         this.emit('metadataChanged', this._metadata);
       }
@@ -1207,6 +1299,9 @@ export class Session extends EventEmitter<SessionEvents> {
             });
           }
 
+          // Load audio via Web Audio API (async, falls back to video element audio)
+          this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
+
           this.addSource(source);
 
           // Update session duration to match the first video source
@@ -1262,6 +1357,9 @@ export class Session extends EventEmitter<SessionEvents> {
             element: video,
             videoSourceNode: node,
           };
+
+          // Load audio via Web Audio API (async, falls back to video element audio)
+          this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
 
           this.addSource(source);
 
@@ -1663,6 +1761,9 @@ export class Session extends EventEmitter<SessionEvents> {
           element: video,
         };
 
+        // Load audio via Web Audio API (async, falls back to video element audio)
+        this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
+
         this.addSource(source);
         this._inPoint = 1;
         this._outPoint = duration;
@@ -1747,6 +1848,9 @@ export class Session extends EventEmitter<SessionEvents> {
         log.warn('Initial frame preload error:', err);
       });
     }
+
+    // Load audio via Web Audio API (async, falls back to video element audio)
+    this._audioCoordinator.loadFromVideo(video, this._volumeManager.volume, this._volumeManager.muted);
 
     this.addSource(source);
     this._inPoint = 1;
@@ -1854,7 +1958,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Get the current frame image for a sequence
    * Returns null if current source is not a sequence
    */
-  async getSequenceFrameImage(frameIndex?: number): Promise<HTMLImageElement | null> {
+  async getSequenceFrameImage(frameIndex?: number): Promise<ImageBitmap | null> {
     const source = this.currentSource;
     if (source?.type !== 'sequence' || !source.sequenceFrames) {
       return null;
@@ -1879,7 +1983,7 @@ export class Session extends EventEmitter<SessionEvents> {
   /**
    * Get sequence frame synchronously (returns cached image or null)
    */
-  getSequenceFrameSync(frameIndex?: number): HTMLImageElement | null {
+  getSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
     const source = this.currentSource;
     if (source?.type !== 'sequence' || !source.sequenceFrames) {
       return null;
@@ -2336,6 +2440,7 @@ export class Session extends EventEmitter<SessionEvents> {
       this.disposeVideoSource(source);
     }
     this.sources = [];
+    this._audioCoordinator.dispose();
     this._noteManager.dispose();
     this._versionManager.dispose();
     this._statusManager.dispose();

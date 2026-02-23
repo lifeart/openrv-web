@@ -7,6 +7,12 @@ import {
   waitForTestHelper,
   captureViewerScreenshot,
   imagesAreDifferent,
+  waitForTool,
+  waitForAnnotationCount,
+  waitForTabActive,
+  waitForFrame,
+  waitForFrameChange,
+  waitForCondition,
 } from './fixtures';
 
 /**
@@ -24,21 +30,21 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     await loadVideoFile(page);
     // Switch to Annotate tab
     await page.click('button[data-tab-id="annotate"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'annotate');
   });
 
   test.describe('Tool Selection', () => {
     test('PAINT-010: selecting pan tool with V key should update currentTool state', async ({ page }) => {
       // First select pen to change state
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       let state = await getPaintState(page);
       expect(state.currentTool).toBe('pen');
 
       // Now select pan
       await page.keyboard.press('v');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pan');
 
       state = await getPaintState(page);
       expect(state.currentTool).toBe('pan');
@@ -49,7 +55,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const initialTool = state.currentTool;
 
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       state = await getPaintState(page);
       expect(state.currentTool).toBe('pen');
@@ -57,7 +63,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-012: selecting eraser tool with E key should update currentTool state', async ({ page }) => {
       await page.keyboard.press('e');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'eraser');
 
       const state = await getPaintState(page);
       expect(state.currentTool).toBe('eraser');
@@ -65,7 +71,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-013: selecting text tool with T key should update currentTool state', async ({ page }) => {
       await page.keyboard.press('t');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'text');
 
       const state = await getPaintState(page);
       expect(state.currentTool).toBe('text');
@@ -73,7 +79,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-015: selecting rectangle tool with R key should update currentTool state', async ({ page }) => {
       await page.keyboard.press('r');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'rectangle');
 
       const state = await getPaintState(page);
       expect(state.currentTool).toBe('rectangle');
@@ -81,7 +87,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-016: selecting ellipse tool with O key should update currentTool state', async ({ page }) => {
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'ellipse');
 
       const state = await getPaintState(page);
       expect(state.currentTool).toBe('ellipse');
@@ -89,7 +95,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-017: selecting line tool with L key should update currentTool state', async ({ page }) => {
       await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'line');
 
       const state = await getPaintState(page);
       expect(state.currentTool).toBe('line');
@@ -97,7 +103,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-018: selecting arrow tool with A key should update currentTool state', async ({ page }) => {
       await page.keyboard.press('a');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'arrow');
 
       const state = await getPaintState(page);
       expect(state.currentTool).toBe('arrow');
@@ -105,20 +111,20 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-014: toggling brush type with B key should update brushType state', async ({ page }) => {
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       let state = await getPaintState(page);
       const initialBrush = state.brushType;
 
       await page.keyboard.press('b');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType !== '${initialBrush}'; })()`);
 
       state = await getPaintState(page);
       expect(state.brushType).not.toBe(initialBrush);
 
       // Toggle back
       await page.keyboard.press('b');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`);
 
       state = await getPaintState(page);
       expect(state.brushType).toBe(initialBrush);
@@ -128,7 +134,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
   test.describe('Drawing', () => {
     test('PAINT-020: drawing stroke should modify canvas and add to annotatedFrames', async ({ page }) => {
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       // Capture initial state
       const initialState = await getPaintState(page);
@@ -149,7 +155,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.move(box!.x + 300, box!.y + 150);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -163,7 +169,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-021: drawing multiple strokes should add to undo stack', async ({ page }) => {
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
@@ -174,7 +180,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 150, box!.y + 50);
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -211,7 +217,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Switch to eraser
       await page.keyboard.press('e');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'eraser');
 
       let state = await getPaintState(page);
       expect(state.currentTool).toBe('eraser');
@@ -221,7 +227,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       // Verify eraser action was recorded
       state = await getPaintState(page);
@@ -234,7 +240,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const colorPicker = page.locator('input[type="color"]').first();
       if (await colorPicker.isVisible()) {
         await colorPicker.fill('#00ff00');
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeColor?.toLowerCase() === '#00ff00'; })()`);
 
         const state = await getPaintState(page);
         expect(state.strokeColor.toLowerCase()).toBe('#00ff00');
@@ -246,7 +252,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const bluePreset = page.locator('button[style*="background: rgb(68, 68, 255)"], button[style*="#4444ff"]').first();
       if (await bluePreset.isVisible()) {
         await bluePreset.click();
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeColor?.toLowerCase() === '#4444ff'; })()`);
 
         const state = await getPaintState(page);
         expect(state.strokeColor.toLowerCase()).toBe('#4444ff');
@@ -260,7 +266,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
           el.value = '20';
           el.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeWidth === 20; })()`);
 
         const state = await getPaintState(page);
         expect(state.strokeWidth).toBe(20);
@@ -274,14 +280,14 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const initialGhost = state.ghostMode;
 
       await page.keyboard.press('g');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
 
       state = await getPaintState(page);
       expect(state.ghostMode).toBe(!initialGhost);
 
       // Toggle off
       await page.keyboard.press('g');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === false; })()`);
 
       state = await getPaintState(page);
       expect(state.ghostMode).toBe(initialGhost);
@@ -299,7 +305,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -309,7 +315,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Undo
       await page.keyboard.press('Control+z');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(false);
@@ -330,19 +336,19 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       const screenshotWithStroke = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Control+z');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.canRedo).toBe(true);
 
       // Redo
       await page.keyboard.press('Control+y');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()`);
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -358,9 +364,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-090: annotations should be stored per frame', async ({ page }) => {
       // Draw on frame 1
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 1);
 
       await page.keyboard.press('p');
+      await waitForTool(page, 'pen');
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
 
@@ -368,7 +375,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(1); })()`);
 
       let state = await getPaintState(page);
       expect(state.annotatedFrames).toContain(1);
@@ -377,7 +384,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Go to next frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, 1);
 
       const sessionState = await getSessionState(page);
       const frame2 = sessionState.currentFrame;
@@ -391,7 +398,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 100, box!.y + 100);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(${frame2}); })()`);
 
       state = await getPaintState(page);
       expect(state.annotatedFrames).toContain(1);
@@ -399,7 +406,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Go back to frame 1 - original annotation should be there
       await page.keyboard.press('Home');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 1);
 
       const screenshotFrame1Again = await captureViewerScreenshot(page);
       // Frame 1 should look similar to before (same annotation)
@@ -410,7 +417,9 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-100: navigation with . and , keys should jump between annotated frames', async ({ page }) => {
       // Draw annotations on frame 1 and frame 3
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       await page.keyboard.press('p');
+      await waitForTool(page, 'pen');
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
 
@@ -419,36 +428,36 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 150, box!.y + 150);
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(1); })()`);
 
       // Go to frame 3 and draw
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 3);
 
       await page.mouse.move(box!.x + 100, box!.y + 100);
       await page.mouse.down();
       await page.mouse.move(box!.x + 150, box!.y + 150);
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(3); })()`);
 
       // Go back to start
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 1);
 
       let sessionState = await getSessionState(page);
       expect(sessionState.currentFrame).toBe(1);
 
       // Navigate to next annotation with .
       await page.keyboard.press('.');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 3);
 
       sessionState = await getSessionState(page);
       expect(sessionState.currentFrame).toBe(3);
 
       // Navigate back with ,
       await page.keyboard.press(',');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 1);
 
       sessionState = await getSessionState(page);
       expect(sessionState.currentFrame).toBe(1);
@@ -460,7 +469,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const rectButton = page.locator('button[title*="Rectangle"]').first();
       if (await rectButton.isVisible()) {
         await rectButton.click();
-        await page.waitForTimeout(100);
+        await waitForTool(page, 'rectangle');
 
         const state = await getPaintState(page);
         expect(state.currentTool).toBe('rectangle');
@@ -471,7 +480,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const ellipseButton = page.locator('button[title*="Ellipse"]').first();
       if (await ellipseButton.isVisible()) {
         await ellipseButton.click();
-        await page.waitForTimeout(100);
+        await waitForTool(page, 'ellipse');
 
         const state = await getPaintState(page);
         expect(state.currentTool).toBe('ellipse');
@@ -482,7 +491,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const lineButton = page.locator('button[title*="Line"]').first();
       if (await lineButton.isVisible()) {
         await lineButton.click();
-        await page.waitForTimeout(100);
+        await waitForTool(page, 'line');
 
         const state = await getPaintState(page);
         expect(state.currentTool).toBe('line');
@@ -493,7 +502,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const arrowButton = page.locator('button[title*="Arrow"]').first();
       if (await arrowButton.isVisible()) {
         await arrowButton.click();
-        await page.waitForTimeout(100);
+        await waitForTool(page, 'arrow');
 
         const state = await getPaintState(page);
         expect(state.currentTool).toBe('arrow');
@@ -503,11 +512,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-054: drawing rectangle should modify canvas and add to annotatedFrames', async ({ page }) => {
       const rectButton = page.locator('button[title*="Rectangle"]').first();
       if (!(await rectButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
       await rectButton.click();
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'rectangle');
 
       // Capture initial state
       const initialState = await getPaintState(page);
@@ -526,7 +535,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -541,11 +550,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-055: drawing ellipse should modify canvas and add to annotatedFrames', async ({ page }) => {
       const ellipseButton = page.locator('button[title*="Ellipse"]').first();
       if (!(await ellipseButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
       await ellipseButton.click();
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'ellipse');
 
       // Capture initial state
       const initialState = await getPaintState(page);
@@ -564,7 +573,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -579,11 +588,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-056: drawing line should modify canvas and add to annotatedFrames', async ({ page }) => {
       const lineButton = page.locator('button[title*="Line"]').first();
       if (!(await lineButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
       await lineButton.click();
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'line');
 
       // Capture initial state
       const initialState = await getPaintState(page);
@@ -602,7 +611,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 300, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -617,11 +626,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-057: drawing arrow should modify canvas and add to annotatedFrames', async ({ page }) => {
       const arrowButton = page.locator('button[title*="Arrow"]').first();
       if (!(await arrowButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
       await arrowButton.click();
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'arrow');
 
       // Capture initial state
       const initialState = await getPaintState(page);
@@ -640,7 +649,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 300, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -655,11 +664,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-058: undo should remove shape and update canUndo/canRedo state', async ({ page }) => {
       const rectButton = page.locator('button[title*="Rectangle"]').first();
       if (!(await rectButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
       await rectButton.click();
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'rectangle');
 
       // Draw a rectangle first
       const canvas = await getCanvas(page);
@@ -670,7 +679,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -680,7 +689,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Undo
       await page.keyboard.press('Control+z');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(false);
@@ -696,6 +705,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('PAINT-080: clearing frame should remove all annotations on current frame', async ({ page }) => {
       // Draw strokes
       await page.keyboard.press('p');
+      await waitForTool(page, 'pen');
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
 
@@ -703,7 +713,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
 
       let state = await getPaintState(page);
       const sessionState = await getSessionState(page);
@@ -720,7 +730,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
         if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
           await confirmButton.click();
         }
-        await page.waitForTimeout(200);
+        await waitForAnnotationCount(page, 0);
 
         // Verify annotations removed
         state = await getPaintState(page);
@@ -742,14 +752,14 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
       if (await holdButton.isVisible()) {
         await holdButton.click();
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
         state = await getPaintState(page);
         expect(state.holdMode).toBe(true);
 
         // Toggle off
         await holdButton.click();
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
 
         state = await getPaintState(page);
         expect(state.holdMode).toBe(false);
@@ -761,14 +771,14 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
       if (await holdButton.isVisible()) {
         await holdButton.click();
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
         let state = await getPaintState(page);
         expect(state.holdMode).toBe(true);
       } else {
         // Use keyboard shortcut
         await page.keyboard.press('x');
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
         let state = await getPaintState(page);
         expect(state.holdMode).toBe(true);
@@ -776,8 +786,9 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Draw on frame 1
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
@@ -787,7 +798,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForAnnotationCount(page, 1);
 
       // Verify annotation was created on frame 1
       let state = await getPaintState(page);
@@ -796,7 +807,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Navigate to frame 2
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, 1);
 
       // With hold mode enabled, the annotation should be visible on frame 2
       state = await getPaintState(page);
@@ -806,7 +817,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 5);
 
       // Annotation should still be visible
       state = await getPaintState(page);
@@ -816,7 +827,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E003: hold mode indicator visible in UI when enabled', async ({ page }) => {
       const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
       if (!(await holdButton.isVisible())) {
-        test.skip();
+        test.fixme(); // TODO: implement when feature is complete
         return;
       }
 
@@ -828,7 +839,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Enable hold mode
       await holdButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
@@ -841,7 +852,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Disable hold mode
       await holdButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(false);
@@ -860,8 +871,9 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Draw annotation on frame 1 with hold mode OFF
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
@@ -871,7 +883,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForAnnotationCount(page, 1);
 
       // Verify annotation exists on frame 1
       state = await getPaintState(page);
@@ -880,7 +892,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Navigate to frame 2
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, 1);
 
       // Annotation should NOT be visible on frame 2 (hold was off when drawn)
       state = await getPaintState(page);
@@ -888,7 +900,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Navigate back to frame 1
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 1);
 
       // Annotation should still be visible on frame 1
       state = await getPaintState(page);
@@ -898,28 +910,30 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E005: hold mode state persists during navigation', async ({ page }) => {
       // Enable hold mode via keyboard
       await page.keyboard.press('x');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Navigate forward
+      const initialFrame = (await getSessionState(page)).currentFrame;
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameChange(page, initialFrame);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Navigate backward
+      const frame2 = (await getSessionState(page)).currentFrame;
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(100);
+      await waitForFrameChange(page, frame2);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Go to end
       await page.keyboard.press('End');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.frameCount; })()`);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
@@ -931,14 +945,14 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Enable hold mode with X key
       await page.keyboard.press('x');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Disable hold mode with X key
       await page.keyboard.press('x');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(false);
@@ -947,15 +961,16 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E007: annotations drawn with hold ON persist after hold is turned OFF', async ({ page }) => {
       // Enable hold mode
       await page.keyboard.press('x');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Draw annotation on frame 1 with hold ON
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       await page.keyboard.press('p');
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'pen');
 
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
@@ -965,11 +980,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForAnnotationCount(page, 1);
 
       // Disable hold mode AFTER drawing
       await page.keyboard.press('x');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(false);
@@ -977,7 +992,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       // Navigate to frame 3
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 3);
 
       // Annotation should STILL be visible (it was drawn with hold ON)
       state = await getPaintState(page);
@@ -988,7 +1003,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 250);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForAnnotationCount(page, 2);
 
       // Now we should have 2 visible annotations on frame 3
       state = await getPaintState(page);
@@ -996,7 +1011,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Navigate to frame 4
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 4);
 
       // Only the first annotation (drawn with hold ON) should be visible
       state = await getPaintState(page);
@@ -1006,15 +1021,16 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E008: hold mode works with shapes', async ({ page }) => {
       // Enable hold mode
       await page.keyboard.press('x');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Draw rectangle on frame 1
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       await page.keyboard.press('r'); // Rectangle tool
-      await page.waitForTimeout(100);
+      await waitForTool(page, 'rectangle');
 
       const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
@@ -1024,7 +1040,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(200);
+      await waitForAnnotationCount(page, 1);
 
       // Verify annotation on frame 1
       state = await getPaintState(page);
@@ -1034,7 +1050,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       for (let i = 0; i < 4; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(200);
+      await waitForFrame(page, 5);
 
       // Shape should persist
       state = await getPaintState(page);

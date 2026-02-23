@@ -705,7 +705,7 @@ export class MediaManager implements ManagerBase {
   /**
    * Get the current frame image for a sequence
    */
-  async getSequenceFrameImage(frameIndex?: number): Promise<HTMLImageElement | null> {
+  async getSequenceFrameImage(frameIndex?: number): Promise<ImageBitmap | null> {
     const source = this.currentSource;
     if (source?.type !== 'sequence' || !source.sequenceFrames) {
       return null;
@@ -727,7 +727,7 @@ export class MediaManager implements ManagerBase {
   /**
    * Get sequence frame synchronously (returns cached image or null)
    */
-  getSequenceFrameSync(frameIndex?: number): HTMLImageElement | null {
+  getSequenceFrameSync(frameIndex?: number): ImageBitmap | null {
     const source = this.currentSource;
     if (source?.type !== 'sequence' || !source.sequenceFrames) {
       return null;

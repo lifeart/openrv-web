@@ -5,9 +5,9 @@
  * and that the RenderState interface properly aggregates all render state.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { RenderState } from './RenderState';
-import type { RendererBackend } from './RendererBackend';
+import { ShaderStateManager } from './ShaderStateManager';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import { DEFAULT_CDL } from '../color/CDL';
@@ -38,84 +38,17 @@ function createDefaultRenderState(): RenderState {
   };
 }
 
-/** Create a mock RendererBackend with spied setter methods */
-function createMockRenderer(): RendererBackend {
-  return {
-    initialize: vi.fn(),
-    initAsync: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-    resize: vi.fn(),
-    clear: vi.fn(),
-    renderImage: vi.fn(),
-    setColorAdjustments: vi.fn(),
-    getColorAdjustments: vi.fn().mockReturnValue({ ...DEFAULT_COLOR_ADJUSTMENTS }),
-    resetColorAdjustments: vi.fn(),
-    setColorInversion: vi.fn(),
-    getColorInversion: vi.fn().mockReturnValue(false),
-    setToneMappingState: vi.fn(),
-    getToneMappingState: vi.fn().mockReturnValue({ ...DEFAULT_TONE_MAPPING_STATE }),
-    resetToneMappingState: vi.fn(),
-    setHDROutputMode: vi.fn().mockReturnValue(true),
-    getHDROutputMode: vi.fn().mockReturnValue('sdr'),
-    setHDRHeadroom: vi.fn(),
-    createTexture: vi.fn().mockReturnValue(null),
-    deleteTexture: vi.fn(),
-    getContext: vi.fn().mockReturnValue(null),
-    setBackgroundPattern: vi.fn(),
-    readPixelFloat: vi.fn().mockReturnValue(null),
-    setCDL: vi.fn(),
-    setCurvesLUT: vi.fn(),
-    setColorWheels: vi.fn(),
-    setFalseColor: vi.fn(),
-    setZebraStripes: vi.fn(),
-    setChannelMode: vi.fn(),
-    setLUT: vi.fn(),
-    setDisplayColorState: vi.fn(),
-    setHighlightsShadows: vi.fn(),
-    setVibrance: vi.fn(),
-    setClarity: vi.fn(),
-    setSharpen: vi.fn(),
-    setHSLQualifier: vi.fn(),
-    setGamutMapping: vi.fn(),
-    setPremultMode: vi.fn(),
-    getPremultMode: vi.fn().mockReturnValue(0),
-    setDitherMode: vi.fn(),
-    getDitherMode: vi.fn().mockReturnValue(0),
-    setQuantizeBits: vi.fn(),
-    getQuantizeBits: vi.fn().mockReturnValue(0),
-    applyRenderState: vi.fn(),
-    hasPendingStateChanges: vi.fn().mockReturnValue(false),
-    isShaderReady: vi.fn().mockReturnValue(true),
-    renderSDRFrame: vi.fn().mockReturnValue(null),
-    getCanvasElement: vi.fn().mockReturnValue(null),
-  };
-}
-
 /**
- * Standalone applyRenderState implementation for testing the dispatch pattern
- * (mirrors what Renderer.applyRenderState does)
+ * Create a ShaderStateManager primed to default state with dirty flags cleared,
+ * so that subsequent applyRenderState calls trigger setters only for changed values.
  */
-function applyRenderState(renderer: RendererBackend, state: RenderState): void {
-  renderer.setColorAdjustments(state.colorAdjustments);
-  renderer.setColorInversion(state.colorInversion);
-  renderer.setToneMappingState(state.toneMappingState);
-  renderer.setBackgroundPattern(state.backgroundPattern);
-  renderer.setCDL(state.cdl);
-  renderer.setCurvesLUT(state.curvesLUT);
-  renderer.setColorWheels(state.colorWheels);
-  renderer.setFalseColor(state.falseColor);
-  renderer.setZebraStripes(state.zebraStripes);
-  renderer.setChannelMode(state.channelMode);
-  renderer.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
-  renderer.setDisplayColorState(state.displayColor);
-  renderer.setHighlightsShadows(state.highlightsShadows);
-  renderer.setVibrance({ vibrance: state.vibrance.amount, skinProtection: state.vibrance.skinProtection });
-  renderer.setClarity({ clarity: state.clarity });
-  renderer.setSharpen({ amount: state.sharpen });
-  renderer.setHSLQualifier(state.hslQualifier);
-  if (state.gamutMapping) {
-    renderer.setGamutMapping(state.gamutMapping);
-  }
+function createPrimedManager(): ShaderStateManager {
+  const mgr = new ShaderStateManager();
+  // Apply default state once to seed all internal values
+  mgr.applyRenderState(createDefaultRenderState());
+  // Clear dirty flags so we can track which setters fire on the next call
+  (mgr.getDirtyFlags() as Set<string>).clear();
+  return mgr;
 }
 
 describe('RenderState', () => {
@@ -173,133 +106,177 @@ describe('RenderState', () => {
   });
 
   describe('applyRenderState dispatch', () => {
-    it('calls all 17 setter methods on the renderer', () => {
-      const renderer = createMockRenderer();
-      const state = createDefaultRenderState();
-      applyRenderState(renderer, state);
+    let mgr: ShaderStateManager;
 
-      expect(renderer.setColorAdjustments).toHaveBeenCalledOnce();
-      expect(renderer.setColorInversion).toHaveBeenCalledOnce();
-      expect(renderer.setToneMappingState).toHaveBeenCalledOnce();
-      expect(renderer.setBackgroundPattern).toHaveBeenCalledOnce();
-      expect(renderer.setCDL).toHaveBeenCalledOnce();
-      expect(renderer.setCurvesLUT).toHaveBeenCalledOnce();
-      expect(renderer.setColorWheels).toHaveBeenCalledOnce();
-      expect(renderer.setFalseColor).toHaveBeenCalledOnce();
-      expect(renderer.setZebraStripes).toHaveBeenCalledOnce();
-      expect(renderer.setChannelMode).toHaveBeenCalledOnce();
-      expect(renderer.setLUT).toHaveBeenCalledOnce();
-      expect(renderer.setDisplayColorState).toHaveBeenCalledOnce();
-      expect(renderer.setHighlightsShadows).toHaveBeenCalledOnce();
-      expect(renderer.setVibrance).toHaveBeenCalledOnce();
-      expect(renderer.setClarity).toHaveBeenCalledOnce();
-      expect(renderer.setSharpen).toHaveBeenCalledOnce();
-      expect(renderer.setHSLQualifier).toHaveBeenCalledOnce();
+    beforeEach(() => {
+      mgr = createPrimedManager();
+    });
+
+    it('dispatches to all relevant setters when every field changes', () => {
+      const spies = {
+        setColorAdjustments: vi.spyOn(mgr, 'setColorAdjustments'),
+        setColorInversion: vi.spyOn(mgr, 'setColorInversion'),
+        setToneMappingState: vi.spyOn(mgr, 'setToneMappingState'),
+        setBackgroundPattern: vi.spyOn(mgr, 'setBackgroundPattern'),
+        setCDL: vi.spyOn(mgr, 'setCDL'),
+        setCurvesLUT: vi.spyOn(mgr, 'setCurvesLUT'),
+        setColorWheels: vi.spyOn(mgr, 'setColorWheels'),
+        setFalseColor: vi.spyOn(mgr, 'setFalseColor'),
+        setZebraStripes: vi.spyOn(mgr, 'setZebraStripes'),
+        setChannelMode: vi.spyOn(mgr, 'setChannelMode'),
+        setLUT: vi.spyOn(mgr, 'setLUT'),
+        setDisplayColorState: vi.spyOn(mgr, 'setDisplayColorState'),
+        setHighlightsShadows: vi.spyOn(mgr, 'setHighlightsShadows'),
+        setVibrance: vi.spyOn(mgr, 'setVibrance'),
+        setClarity: vi.spyOn(mgr, 'setClarity'),
+        setSharpen: vi.spyOn(mgr, 'setSharpen'),
+        setHSLQualifier: vi.spyOn(mgr, 'setHSLQualifier'),
+      };
+
+      // Build a state where every field differs from defaults
+      const state = createDefaultRenderState();
+      state.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1.0 };
+      state.colorInversion = true;
+      state.toneMappingState = { enabled: true, operator: 'aces' };
+      state.backgroundPattern = { ...DEFAULT_BACKGROUND_PATTERN_STATE, pattern: 'checker' };
+      state.cdl = { slope: { r: 2, g: 2, b: 2 }, offset: { r: 0.1, g: 0.1, b: 0.1 }, power: { r: 1, g: 1, b: 1 }, saturation: 1 };
+      state.curvesLUT = { red: new Uint8Array(256), green: new Uint8Array(256), blue: new Uint8Array(256), master: new Uint8Array(256) };
+      state.colorWheels = { lift: { r: 0.1, g: 0, b: 0, y: 0 }, gamma: { r: 0, g: 0, b: 0, y: 0 }, gain: { r: 0, g: 0, b: 0, y: 0 }, master: { r: 0, g: 0, b: 0, y: 0 }, linked: false };
+      state.falseColor = { enabled: true, lut: new Uint8Array(256 * 3) };
+      state.zebraStripes = { ...DEFAULT_ZEBRA_STATE, enabled: true, highEnabled: true };
+      state.channelMode = 'red';
+      state.lut = { data: new Float32Array(17 * 17 * 17 * 3), size: 17, intensity: 0.5 };
+      state.displayColor = { transferFunction: 1, displayGamma: 2.4, displayBrightness: 1.2, customGamma: 2.6 };
+      state.highlightsShadows = { highlights: 25, shadows: -30, whites: 10, blacks: -5 };
+      state.vibrance = { amount: 50, skinProtection: false };
+      state.clarity = 42;
+      state.sharpen = 75;
+      state.hslQualifier = { ...JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)), enabled: true };
+
+      mgr.applyRenderState(state);
+
+      expect(spies.setColorAdjustments).toHaveBeenCalledOnce();
+      expect(spies.setColorInversion).toHaveBeenCalledOnce();
+      expect(spies.setToneMappingState).toHaveBeenCalledOnce();
+      expect(spies.setBackgroundPattern).toHaveBeenCalledOnce();
+      expect(spies.setCDL).toHaveBeenCalledOnce();
+      expect(spies.setCurvesLUT).toHaveBeenCalledOnce();
+      expect(spies.setColorWheels).toHaveBeenCalledOnce();
+      expect(spies.setFalseColor).toHaveBeenCalledOnce();
+      expect(spies.setZebraStripes).toHaveBeenCalledOnce();
+      expect(spies.setChannelMode).toHaveBeenCalledOnce();
+      expect(spies.setLUT).toHaveBeenCalledOnce();
+      expect(spies.setDisplayColorState).toHaveBeenCalledOnce();
+      expect(spies.setHighlightsShadows).toHaveBeenCalledOnce();
+      expect(spies.setVibrance).toHaveBeenCalledOnce();
+      expect(spies.setClarity).toHaveBeenCalledOnce();
+      expect(spies.setSharpen).toHaveBeenCalledOnce();
+      expect(spies.setHSLQualifier).toHaveBeenCalledOnce();
     });
 
     it('passes color adjustments correctly', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setColorAdjustments');
       const state = createDefaultRenderState();
       state.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 2.5, gamma: 0.8 };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setColorAdjustments).toHaveBeenCalledWith(
+      expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({ exposure: 2.5, gamma: 0.8 }),
       );
     });
 
     it('passes color inversion correctly', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setColorInversion');
       const state = createDefaultRenderState();
       state.colorInversion = true;
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setColorInversion).toHaveBeenCalledWith(true);
+      expect(spy).toHaveBeenCalledWith(true);
     });
 
     it('passes tone mapping state correctly', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setToneMappingState');
       const state = createDefaultRenderState();
       state.toneMappingState = { enabled: true, operator: 'aces' };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setToneMappingState).toHaveBeenCalledWith(
+      expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({ enabled: true, operator: 'aces' }),
       );
     });
 
     it('passes false color as state object', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setFalseColor');
       const state = createDefaultRenderState();
       const lut = new Uint8Array(256 * 3);
       state.falseColor = { enabled: true, lut };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setFalseColor).toHaveBeenCalledWith({ enabled: true, lut });
+      expect(spy).toHaveBeenCalledWith({ enabled: true, lut });
     });
 
     it('passes LUT as separate arguments', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setLUT');
       const state = createDefaultRenderState();
       const lutData = new Float32Array(17 * 17 * 17 * 3);
       state.lut = { data: lutData, size: 17, intensity: 0.8 };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setLUT).toHaveBeenCalledWith(lutData, 17, 0.8);
+      expect(spy).toHaveBeenCalledWith(lutData, 17, 0.8);
     });
 
     it('passes highlights/shadows as state object', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setHighlightsShadows');
       const state = createDefaultRenderState();
       state.highlightsShadows = { highlights: 25, shadows: -30, whites: 10, blacks: -5 };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setHighlightsShadows).toHaveBeenCalledWith({ highlights: 25, shadows: -30, whites: 10, blacks: -5 });
+      expect(spy).toHaveBeenCalledWith({ highlights: 25, shadows: -30, whites: 10, blacks: -5 });
     });
 
     it('passes vibrance as state object', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setVibrance');
       const state = createDefaultRenderState();
       state.vibrance = { amount: 50, skinProtection: false };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setVibrance).toHaveBeenCalledWith({ vibrance: 50, skinProtection: false });
+      expect(spy).toHaveBeenCalledWith({ vibrance: 50, skinProtection: false });
     });
 
     it('passes channel mode correctly', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setChannelMode');
       const state = createDefaultRenderState();
       state.channelMode = 'red';
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setChannelMode).toHaveBeenCalledWith('red');
+      expect(spy).toHaveBeenCalledWith('red');
     });
 
     it('passes clarity as state object', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setClarity');
       const state = createDefaultRenderState();
       state.clarity = 42;
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setClarity).toHaveBeenCalledWith({ clarity: 42 });
+      expect(spy).toHaveBeenCalledWith({ clarity: 42 });
     });
 
     it('passes sharpen as state object', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setSharpen');
       const state = createDefaultRenderState();
       state.sharpen = 75;
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setSharpen).toHaveBeenCalledWith({ amount: 75 });
+      expect(spy).toHaveBeenCalledWith({ amount: 75 });
     });
 
     it('passes display color config correctly', () => {
-      const renderer = createMockRenderer();
+      const spy = vi.spyOn(mgr, 'setDisplayColorState');
       const state = createDefaultRenderState();
       state.displayColor = { transferFunction: 1, displayGamma: 2.4, displayBrightness: 1.2, customGamma: 2.6 };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setDisplayColorState).toHaveBeenCalledWith({
+      expect(spy).toHaveBeenCalledWith({
         transferFunction: 1,
         displayGamma: 2.4,
         displayBrightness: 1.2,
@@ -310,57 +287,64 @@ describe('RenderState', () => {
 
   describe('HDR override pattern', () => {
     it('supports mutating state for HDR overrides before applying', () => {
-      const renderer = createMockRenderer();
+      const mgr = createPrimedManager();
+      const setColorAdj = vi.spyOn(mgr, 'setColorAdjustments');
+      const setToneMap = vi.spyOn(mgr, 'setToneMappingState');
+
       const state = createDefaultRenderState();
       state.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1.5, gamma: 2.2 };
       state.toneMappingState = { enabled: true, operator: 'aces' };
 
-      // Apply HDR overrides (as Viewer.renderHDRWithWebGL does)
+      // Apply HDR overrides (as Viewer.renderHDRWithWebGL does):
+      // gamma overridden to 1, tone mapping switched to reinhard
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-      state.toneMappingState = { enabled: false, operator: 'off' };
+      state.toneMappingState = { enabled: true, operator: 'reinhard' };
 
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
       // Gamma should be overridden to 1, but exposure preserved
-      expect(renderer.setColorAdjustments).toHaveBeenCalledWith(
+      expect(setColorAdj).toHaveBeenCalledWith(
         expect.objectContaining({ exposure: 1.5, gamma: 1 }),
       );
-      // Tone mapping should be disabled
-      expect(renderer.setToneMappingState).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false, operator: 'off' }),
+      // Tone mapping should reflect the final override value
+      expect(setToneMap).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true, operator: 'reinhard' }),
       );
     });
   });
 
   describe('gamutMapping forwarding', () => {
     it('calls setGamutMapping when gamutMapping is present in state', () => {
-      const renderer = createMockRenderer();
+      const mgr = createPrimedManager();
+      const spy = vi.spyOn(mgr, 'setGamutMapping');
       const state = createDefaultRenderState();
       state.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setGamutMapping).toHaveBeenCalledOnce();
-      expect(renderer.setGamutMapping).toHaveBeenCalledWith({
+      expect(spy).toHaveBeenCalledOnce();
+      expect(spy).toHaveBeenCalledWith({
         mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb',
       });
     });
 
     it('does not call setGamutMapping when gamutMapping is undefined', () => {
-      const renderer = createMockRenderer();
+      const mgr = createPrimedManager();
+      const spy = vi.spyOn(mgr, 'setGamutMapping');
       const state = createDefaultRenderState();
       // gamutMapping is optional and not set in default
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setGamutMapping).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it('passes compress mode gamut mapping correctly', () => {
-      const renderer = createMockRenderer();
+      const mgr = createPrimedManager();
+      const spy = vi.spyOn(mgr, 'setGamutMapping');
       const state = createDefaultRenderState();
       state.gamutMapping = { mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' };
-      applyRenderState(renderer, state);
+      mgr.applyRenderState(state);
 
-      expect(renderer.setGamutMapping).toHaveBeenCalledWith({
+      expect(spy).toHaveBeenCalledWith({
         mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3',
       });
     });

@@ -342,4 +342,31 @@ describe('InteractionQualityManager', () => {
       expect(h).toBe(2160);
     });
   });
+
+  describe('cpuHalfRes', () => {
+    it('IQM-CPU-001: cpuHalfRes is false when no active interactions', () => {
+      expect(manager.cpuHalfRes).toBe(false);
+    });
+
+    it('IQM-CPU-002: cpuHalfRes is true during active interaction', () => {
+      manager.beginInteraction();
+      expect(manager.cpuHalfRes).toBe(true);
+    });
+
+    it('IQM-CPU-003: cpuHalfRes is true with multiple overlapping interactions', () => {
+      manager.beginInteraction();
+      manager.beginInteraction();
+      expect(manager.cpuHalfRes).toBe(true);
+      manager.endInteraction();
+      expect(manager.cpuHalfRes).toBe(true); // Still one active
+    });
+
+    it('IQM-CPU-004: cpuHalfRes returns to false after all interactions end', async () => {
+      manager.beginInteraction();
+      manager.endInteraction();
+      // _activeInteractions drops to 0 immediately on endInteraction,
+      // so cpuHalfRes (_activeInteractions > 0) is already false
+      expect(manager.cpuHalfRes).toBe(false);
+    });
+  });
 });

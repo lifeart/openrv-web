@@ -18,6 +18,7 @@ export class PaintToolbar {
   private ghostButton!: HTMLButtonElement;
   private holdButton!: HTMLButtonElement;
   private versionSelect!: HTMLSelectElement;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(paintEngine: PaintEngine) {
     this.paintEngine = paintEngine;
@@ -48,6 +49,14 @@ export class PaintToolbar {
     this.createToolButton('ellipse', 'circle', 'Ellipse shape (O)');
     this.createToolButton('line', 'minus', 'Line shape (L)');
     this.createToolButton('arrow', 'arrow-right', 'Arrow shape (A)');
+
+    this.addSeparator();
+
+    // Advanced paint tools (pixel-destructive)
+    this.createToolButton('dodge', 'sun', 'Dodge tool (D) \u2013 Lighten pixels under the brush');
+    this.createToolButton('burn', 'moon', 'Burn tool (U) \u2013 Darken pixels under the brush');
+    this.createToolButton('clone', 'copy', 'Clone stamp (C) \u2013 Alt-click to set source, then paint to copy pixels');
+    this.createToolButton('smudge', 'droplet', 'Smudge tool (M) \u2013 Drag to blend and smear pixels');
 
     this.addSeparator();
 
@@ -248,12 +257,14 @@ export class PaintToolbar {
   }
 
   private bindEvents(): void {
-    this.paintEngine.on('toolChanged', () => this.updateToolButtons());
-    this.paintEngine.on('brushChanged', () => this.updateBrushButton());
-    this.paintEngine.on('effectsChanged', () => {
-      this.updateGhostButton();
-      this.updateHoldButton();
-    });
+    this.unsubscribers.push(
+      this.paintEngine.on('toolChanged', () => this.updateToolButtons()),
+      this.paintEngine.on('brushChanged', () => this.updateBrushButton()),
+      this.paintEngine.on('effectsChanged', () => {
+        this.updateGhostButton();
+        this.updateHoldButton();
+      }),
+    );
   }
 
   private updateBrushButton(): void {
@@ -342,6 +353,18 @@ export class PaintToolbar {
       case 'a':
         this.paintEngine.tool = 'arrow';
         return true;
+      case 'd':
+        this.paintEngine.tool = 'dodge';
+        return true;
+      case 'u':
+        this.paintEngine.tool = 'burn';
+        return true;
+      case 'c':
+        this.paintEngine.tool = 'clone';
+        return true;
+      case 'm':
+        this.paintEngine.tool = 'smudge';
+        return true;
       case 'b':
         this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
           ? BrushType.Gaussian
@@ -363,6 +386,9 @@ export class PaintToolbar {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
   }
 }

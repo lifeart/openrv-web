@@ -43,6 +43,8 @@ export interface GTOParseResult {
     markerNotes?: string[];
     /** Marker colors (parallel array to marks) */
     markerColors?: string[];
+    /** Real-time playback rate from GTO (0 means use fps) */
+    realtime?: number;
     /** Frame increment for playback */
     inc?: number;
     /** Session file version */
@@ -80,6 +82,8 @@ export interface GTOParseResult {
     versionGroups?: VersionGroup[];
     /** Shot statuses */
     statuses?: StatusEntry[];
+    /** Background color as RGBA float array (0-1 range) */
+    bgColor?: [number, number, number, number];
   };
 }
 
@@ -127,8 +131,10 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVLayout: 'RVLayout',
   RVSwitch: 'RVSwitch',
 
-  // View nodes
+  // View/Pipeline nodes
   RVViewGroup: 'RVViewGroup',
+  RVDisplayGroup: 'RVDisplayGroup',
+  RVViewPipelineGroup: 'RVViewPipelineGroup',
   RVSoundTrack: 'RVSoundTrack',
   Waveform: 'Waveform',
 
@@ -289,6 +295,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const realtime = sessionComp.property('realtime').value() as number;
       if (typeof realtime === 'number' && realtime > 0) {
         sessionInfo.fps = realtime;
+        sessionInfo.realtime = realtime;
       } else if (typeof fps === 'number' && fps > 0) {
         sessionInfo.fps = fps;
       }
@@ -309,6 +316,18 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const clipboard = sessionComp.property('clipboard').value() as number;
       if (typeof clipboard === 'number') {
         sessionInfo.clipboard = clipboard;
+      }
+
+      // Background color (float[4] RGBA)
+      const bgColorValue = sessionComp.property('bgColor').value();
+      if (Array.isArray(bgColorValue) && bgColorValue.length >= 4) {
+        const r = bgColorValue[0];
+        const g = bgColorValue[1];
+        const b = bgColorValue[2];
+        const a = bgColorValue[3];
+        if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b) && Number.isFinite(a)) {
+          sessionInfo.bgColor = [r, g, b, a];
+        }
       }
     }
 
@@ -882,7 +901,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof maxY === 'number') nodeInfo.properties.visibleBoxMaxY = maxY;
       }
 
-      // Parse stencil component (masking data)
+      // Parse stencil component (masking data + visibleBox for wipes)
       const stencilComp = obj.component('stencil');
       if (stencilComp?.exists()) {
         const active = stencilComp.property('active').value() as number;
@@ -896,6 +915,18 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof aspect === 'number') nodeInfo.properties.stencilAspect = aspect;
         if (typeof softEdge === 'number') nodeInfo.properties.stencilSoftEdge = softEdge;
         if (typeof ratio === 'number') nodeInfo.properties.stencilRatio = ratio;
+
+        // Parse stencil.visibleBox: float[4] = [xMin, xMax, yMin, yMax]
+        // This is the OpenRV native format for wipe stencil boxes on RVTransform2D nodes.
+        const visibleBoxProp = stencilComp.property('visibleBox').value();
+        if (Array.isArray(visibleBoxProp) && visibleBoxProp.length >= 4) {
+          nodeInfo.properties.stencilVisibleBox = [
+            visibleBoxProp[0] as number,
+            visibleBoxProp[1] as number,
+            visibleBoxProp[2] as number,
+            visibleBoxProp[3] as number,
+          ];
+        }
       }
     }
 
@@ -1229,11 +1260,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (wipeComp?.exists()) {
         const x = wipeComp.property('x').value() as number;
         const y = wipeComp.property('y').value() as number;
-        const angle = wipeComp.property('angle').value() as number;
-
         if (typeof x === 'number') nodeInfo.properties.wipeX = x;
         if (typeof y === 'number') nodeInfo.properties.wipeY = y;
-        if (typeof angle === 'number') nodeInfo.properties.wipeAngle = angle;
+        // wipeAngle is parsed from GTO but no longer stored as a node property
       }
 
       // Parse per-layer composite settings

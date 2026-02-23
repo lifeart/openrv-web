@@ -42,7 +42,7 @@ describe('Session', () => {
       // Minimal valid GTO text format
       const gtoText = 'GTOa 5\n\nRVSession : protocol\n{\n    session : component\n    {\n        int frame = 10\n    }\n}\n';
       const bytes = new TextEncoder().encode(gtoText);
-      await session.loadFromGTO(bytes.buffer);
+      await expect(session.loadFromGTO(bytes.buffer)).resolves.not.toThrow();
     });
 
     it('throws error for invalid GTO', async () => {
@@ -62,7 +62,7 @@ describe('Session', () => {
 
     it('handles text GTO input directly', async () => {
       const gtoText = 'GTOa 5\n\nRVSession : protocol\n{\n    session : component\n    {\n        int frame = 20\n    }\n}\n';
-      await session.loadFromGTO(gtoText);
+      await expect(session.loadFromGTO(gtoText)).resolves.not.toThrow();
     });
   });
 

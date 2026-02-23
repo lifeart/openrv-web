@@ -2,7 +2,7 @@
  * PaintRenderer Unit Tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PaintRenderer, RenderOptions } from './PaintRenderer';
 import { PenStroke, TextAnnotation, BrushType, StrokeMode, TextOrigin, LineCap, LineJoin } from './types';
 
@@ -60,8 +60,7 @@ describe('PaintRenderer', () => {
   describe('clear', () => {
     it('RND-007: clears the canvas', () => {
       renderer.resize(100, 100);
-      renderer.clear();
-      // The clear operation should not throw
+      expect(() => renderer.clear()).not.toThrow();
     });
   });
 
@@ -460,6 +459,47 @@ describe('PaintRenderer', () => {
       expect(() => {
         renderer.renderText(text, defaultOptions);
       }).not.toThrow();
+    });
+
+    it('RND-022b: applies letterSpacing safely when rendering text', () => {
+      const text: TextAnnotation = {
+        type: 'text',
+        id: 'spaced-text',
+        frame: 1,
+        user: 'test',
+        text: 'Spaced',
+        position: { x: 0.5, y: 0.5 },
+        color: [1, 1, 1, 1],
+        size: 24,
+        font: 'sans-serif',
+        scale: 1,
+        origin: TextOrigin.Center,
+        rotation: 0,
+        spacing: 5, // Custom spacing
+        startFrame: 1,
+        duration: 1,
+      };
+
+      renderer.resize(800, 600);
+
+      // Access renderer's internal ctx directly (same as canvas.getContext('2d'))
+      const internalCtx = (renderer as any).ctx as CanvasRenderingContext2D;
+
+      // Ensure the letterSpacing property is observable (jsdom may not support it natively)
+      let capturedSpacing: string | undefined;
+      Object.defineProperty(internalCtx, 'letterSpacing', {
+        get() { return capturedSpacing; },
+        set(v: string) { capturedSpacing = v; },
+        configurable: true,
+      });
+
+      const fillTextSpy = vi.spyOn(internalCtx, 'fillText');
+
+      renderer.renderText(text, defaultOptions);
+
+      // Verify the letterSpacing was set on the context
+      expect(capturedSpacing).toBe('5px');
+      expect(fillTextSpy).toHaveBeenCalled();
     });
 
     it('RND-023: handles different text origins', () => {

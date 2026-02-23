@@ -37,7 +37,7 @@ export function frameToTimecode(
   fps: number,
   startFrame: number = 0
 ): { hours: number; minutes: number; seconds: number; frames: number; dropFrame: boolean } {
-  const totalFrame = frame + startFrame - 1; // Convert to 0-based
+  const totalFrame = Math.max(0, frame + startFrame - 1); // Convert to 0-based, clamp negative
   const dropFrame = isDropFrame(fps);
 
   if (dropFrame) {
@@ -100,6 +100,7 @@ export class TimecodeDisplay {
   private frameCounterElement: HTMLElement;
   private session: Session;
   private options: Required<TimecodeOptions>;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(session: Session, options: TimecodeOptions = {}) {
     this.session = session;
@@ -153,9 +154,11 @@ export class TimecodeDisplay {
     }
 
     // Bind events
-    this.session.on('frameChanged', () => this.update());
-    this.session.on('sourceLoaded', () => this.update());
-    this.session.on('durationChanged', () => this.update());
+    this.unsubscribers.push(
+      this.session.on('frameChanged', () => this.update()),
+      this.session.on('sourceLoaded', () => this.update()),
+      this.session.on('durationChanged', () => this.update()),
+    );
 
     // Initial update
     this.update();
@@ -232,6 +235,9 @@ export class TimecodeDisplay {
    * Cleanup
    */
   dispose(): void {
-    // Event listeners are automatically cleaned up when session is disposed
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
   }
 }

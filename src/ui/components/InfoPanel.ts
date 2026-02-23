@@ -262,6 +262,18 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   }
 
   /**
+   * Escape HTML to prevent XSS
+   */
+  private escapeHtml(unsafe: string): string {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  /**
    * Render panel content
    */
   private render(): void {
@@ -270,7 +282,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     const lines: string[] = [];
 
     if (this.fields.filename && this.currentData.filename) {
-      const name = this.truncateFilename(this.currentData.filename, 25);
+      const name = this.escapeHtml(this.truncateFilename(this.currentData.filename, 25));
       lines.push(`<span style="color: var(--accent-primary);">${name}</span>`);
     }
 
@@ -284,11 +296,11 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     }
 
     if (this.fields.timecode && this.currentData.timecode) {
-      lines.push(`TC: ${this.currentData.timecode}`);
+      lines.push(`TC: ${this.escapeHtml(this.currentData.timecode)}`);
     }
 
     if (this.fields.duration && this.currentData.duration) {
-      lines.push(`Duration: ${this.currentData.duration}`);
+      lines.push(`Duration: ${this.escapeHtml(this.currentData.duration)}`);
     }
 
     if (this.fields.fps && this.currentData.fps) {

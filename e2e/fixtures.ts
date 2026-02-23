@@ -857,8 +857,22 @@ export async function loadVideoFile(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for video to load and render
-  await page.waitForTimeout(1000);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
+  // Ensure something is actually rendered on the canvas
+  await page.waitForFunction(async () => {
+    // We can't easily call our async helper inside waitForFunction,
+    // so we'll just wait for a short bit or implement a simplified check.
+    // Actually, we'll just use a retry loop for canvasHasContent in Playwright.
+    return true; 
+  });
+  
+  // Better: use a retry loop in the helper itself
+  for (let i = 0; i < 10; i++) {
+    if (await canvasHasContent(page)) break;
+    await page.waitForTimeout(100);
+  }
 }
 
 export async function loadTwoVideoFiles(page: Page): Promise<void> {
@@ -869,8 +883,9 @@ export async function loadTwoVideoFiles(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles([filePath1, filePath2]);
 
-  // Wait for videos to load and render
-  await page.waitForTimeout(1000);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
 }
 
 /**
@@ -884,8 +899,9 @@ export async function loadSecondVideoFile(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for video to load and render
-  await page.waitForTimeout(1000);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
 }
 
 export async function loadImageFile(page: Page): Promise<void> {
@@ -895,8 +911,9 @@ export async function loadImageFile(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for image to load and render
-  await page.waitForTimeout(500);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
 }
 
 export async function loadRvSession(page: Page): Promise<void> {
@@ -905,8 +922,16 @@ export async function loadRvSession(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for session to load
-  await page.waitForTimeout(1000);
+  // RV sessions don't embed media, so hasMedia stays false.
+  // Wait for session state to be restored (outPoint > 0 indicates loaded).
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.outPoint > 0;
+    },
+    undefined,
+    { timeout: TIMEOUT_LONG }
+  );
 }
 
 /**
@@ -918,8 +943,9 @@ export async function loadExrFile(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for EXR to decode and render
-  await page.waitForTimeout(1000);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
 }
 
 /**
@@ -937,8 +963,9 @@ export async function loadSequenceFiles(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(files);
 
-  // Wait for sequence to load and render
-  await page.waitForTimeout(1000);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
 }
 
 /**
@@ -954,8 +981,9 @@ export async function loadSingleSequenceFrame(page: Page, frameNumber: number = 
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for file to load and render
-  await page.waitForTimeout(500);
+  // Wait for media state to confirm load, then first frame decoded
+  await waitForMediaLoaded(page);
+  await waitForFrame(page, 1);
 }
 
 /**
@@ -997,7 +1025,14 @@ async function getViewerRenderCanvas(page: Page): Promise<ReturnType<Page['locat
  * Resolve the 2D image canvas used for pixel sampling/state probes.
  */
 async function getViewerImageCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
-  return page.locator('canvas[data-testid="viewer-image-canvas"]').first();
+  const glCanvas = page.locator('canvas[data-testid="viewer-gl-canvas"]').first();
+  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]').first();
+  
+  // Use GL canvas if it exists and is visible (where rendering happens when effects are active)
+  if (await glCanvas.isVisible()) {
+    return glCanvas;
+  }
+  return imageCanvas;
 }
 
 /**
@@ -1140,11 +1175,29 @@ export async function getCurrentFrame(page: Page): Promise<number> {
 export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; y: number }>): Promise<Array<{ r: number; g: number; b: number; a: number }>> {
   const canvas = await getViewerImageCanvas(page);
   const pixels = await canvas.evaluate((el: HTMLCanvasElement, pts: Array<{ x: number; y: number }>) => {
+    const gl = el.getContext('webgl2') || el.getContext('webgl');
+    const scaleX = el.clientWidth ? el.width / el.clientWidth : 1;
+    const scaleY = el.clientHeight ? el.height / el.clientHeight : 1;
+
+    if (gl) {
+      const g = gl as WebGL2RenderingContext;
+      const data = new Uint8Array(4);
+      return pts.map(p => {
+        // Scale coordinates from CSS to backing store
+        const glX = Math.floor(p.x * scaleX);
+        const glY = Math.floor(el.height - 1 - (p.y * scaleY));
+        g.readPixels(glX, glY, 1, 1, g.RGBA, g.UNSIGNED_BYTE, data);
+        return { r: data[0]!, g: data[1]!, b: data[2]!, a: data[3]! };
+      });
+    }
+
     const ctx = el.getContext('2d');
     if (!ctx) return pts.map(() => ({ r: 0, g: 0, b: 0, a: 0 }));
 
     return pts.map(pt => {
-      const data = ctx.getImageData(pt.x, pt.y, 1, 1).data;
+      const px = Math.floor(pt.x * scaleX);
+      const py = Math.floor(pt.y * scaleY);
+      const data = ctx.getImageData(px, py, 1, 1).data;
       return { r: data[0] || 0, g: data[1] || 0, b: data[2] || 0, a: data[3] || 0 };
     });
   }, points);
@@ -1157,6 +1210,24 @@ export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; 
 export async function canvasHasContent(page: Page): Promise<boolean> {
   const canvas = await getViewerImageCanvas(page);
   const hasContent = await canvas.evaluate((el: HTMLCanvasElement) => {
+    const gl = el.getContext('webgl2') || el.getContext('webgl');
+    if (gl) {
+      const g = gl as WebGL2RenderingContext;
+      const data = new Uint8Array(4);
+      const width = el.width;
+      const height = el.height;
+      const samplePoints = [
+        { x: Math.floor(width / 4), y: Math.floor(height / 4) },
+        { x: Math.floor(width / 2), y: Math.floor(height / 2) },
+        { x: Math.floor(3 * width / 4), y: Math.floor(3 * height / 4) },
+      ];
+      for (const pt of samplePoints) {
+        g.readPixels(pt.x, pt.y, 1, 1, g.RGBA, g.UNSIGNED_BYTE, data);
+        if (data[0]! > 10 || data[1]! > 10 || data[2]! > 10) return true;
+      }
+      return false;
+    }
+
     const ctx = el.getContext('2d');
     if (!ctx) return false;
 
@@ -1187,6 +1258,33 @@ export async function canvasHasContent(page: Page): Promise<boolean> {
 export async function getCanvasBrightness(page: Page): Promise<number> {
   const canvas = await getViewerImageCanvas(page);
   const brightness = await canvas.evaluate((el: HTMLCanvasElement) => {
+    const gl = el.getContext('webgl2') || el.getContext('webgl');
+    const scaleX = el.width / el.clientWidth;
+    const scaleY = el.height / el.clientHeight;
+
+    if (gl) {
+      const g = gl as WebGL2RenderingContext;
+      const width = el.width;
+      const height = el.height;
+      const gridSize = 10;
+      let totalBrightness = 0;
+      let sampleCount = 0;
+      
+      const pixels = new Uint8Array(4);
+      for (let x = 0; x < gridSize; x++) {
+        for (let y = 0; y < gridSize; y++) {
+          const px = Math.floor((x + 0.5) * width / gridSize);
+          const py = Math.floor((y + 0.5) * height / gridSize);
+          // WebGL coordinates are y-up
+          g.readPixels(px, py, 1, 1, g.RGBA, g.UNSIGNED_BYTE, pixels);
+          const brightness = 0.299 * pixels[0] + 0.587 * pixels[1] + 0.114 * pixels[2];
+          totalBrightness += brightness;
+          sampleCount++;
+        }
+      }
+      return totalBrightness / sampleCount;
+    }
+
     const ctx = el.getContext('2d');
     if (!ctx) return 0;
 
@@ -1497,6 +1595,7 @@ export const TABS = {
   effects: 'button[data-tab-id="effects"]',
   transform: 'button[data-tab-id="transform"]',
   annotate: 'button[data-tab-id="annotate"]',
+  qc: 'button[data-tab-id="qc"]',
 };
 
 // Common selectors
@@ -1506,18 +1605,19 @@ export const SELECTORS = {
   headerBar: '.header-bar',
   tabBar: '.tab-bar',
   contextToolbar: '.context-toolbar',
-  playButton: 'button[title*="Play"], button:has-text("Play"), .play-button',
-  pauseButton: 'button[title*="Pause"], button:has-text("Pause")',
+  playButton: 'button[title*="Play"], button[title*="Pause"]',
   volumeControl: '.volume-control',
-  exportButton: 'button[title*="Export"], .export-button',
-  helpButton: 'button[title*="Help"], button:has-text("?")',
+  exportButton: 'button[title*="Export"], button:has-text("Export")',
+  helpButton: '[data-testid="help-menu-button"]',
   fileInput: 'input[type="file"]',
 };
 
-// Helper to click a tab
-export async function clickTab(page: Page, tabName: 'view' | 'color' | 'effects' | 'transform' | 'annotate'): Promise<void> {
+export type TabName = 'view' | 'color' | 'effects' | 'transform' | 'annotate' | 'qc';
+
+// Helper to click a tab and wait for it to become active
+export async function clickTab(page: Page, tabName: TabName): Promise<void> {
   await page.click(`button[data-tab-id="${tabName}"]`);
-  await page.waitForTimeout(100);
+  await waitForTabActive(page, tabName);
 }
 
 // Helper to get canvas element
@@ -1576,17 +1676,12 @@ export async function getCurrentFrameDisplay(page: Page): Promise<string> {
   return await frameDisplay.textContent() || '';
 }
 
-// Helper to wait for media to load
+/**
+ * @deprecated Use waitForMediaLoaded() instead — this function checks for <video>/<img>
+ * elements that don't exist in a WebGL canvas-based renderer.
+ */
 export async function waitForMediaLoad(page: Page): Promise<void> {
-  // Wait for either video element or image to be present
-  await page.waitForFunction(() => {
-    const videos = document.querySelectorAll('video');
-    const images = document.querySelectorAll('img');
-    return videos.length > 0 || images.length > 0;
-  }, { timeout: 10000 }).catch(() => {
-    // Media might be rendered directly to canvas without video/img elements
-  });
-  await page.waitForTimeout(300);
+  await waitForMediaLoaded(page);
 }
 
 // Helper to check if slider exists and get its value
@@ -1834,5 +1929,516 @@ export async function waitForBufferingState(page: Page, isBuffering: boolean, ti
     },
     isBuffering,
     { timeout }
+  );
+}
+
+// ── Phase 2c: New state-based wait helpers ─────────────────────────────
+
+/**
+ * Wait for a tab to become active (its panel visible in the DOM).
+ */
+export async function waitForTabActive(page: Page, tabName: string, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (name) => {
+      const btn = document.querySelector(`button[data-tab-id="${name}"]`);
+      if (!btn) return false;
+      const cl = btn.getAttribute('class') || '';
+      return cl.includes('active') || cl.includes('selected') || btn.getAttribute('aria-selected') === 'true';
+    },
+    tabName,
+    { timeout }
+  );
+}
+
+// ── ViewerState waiters ────────────────────────────────────────────────
+
+/**
+ * Wait for wipe mode to reach the expected value.
+ */
+export async function waitForWipeMode(page: Page, mode: ViewerState['wipeMode'], timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.wipeMode === expected;
+    },
+    mode,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for channel mode to reach the expected value.
+ */
+export async function waitForChannelMode(page: Page, mode: ViewerState['channelMode'], timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.channelMode === expected;
+    },
+    mode,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for zoom level to reach the expected value (within tolerance).
+ */
+export async function waitForZoomLevel(page: Page, level: number, tolerance = 0.01, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    ({ level: l, tolerance: t }) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state != null && Math.abs(state.zoom - l) <= t;
+    },
+    { level, tolerance },
+    { timeout }
+  );
+}
+
+/**
+ * Wait for stereo mode to reach the expected value.
+ */
+export async function waitForStereoMode(page: Page, mode: ViewerState['stereoMode'], timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.stereoMode === expected;
+    },
+    mode,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for histogram visibility.
+ */
+export async function waitForHistogramVisible(page: Page, visible: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.histogramVisible === expected;
+    },
+    visible,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for difference matte enabled state.
+ */
+export async function waitForDifferenceMatteEnabled(page: Page, enabled: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.differenceMatteEnabled === expected;
+    },
+    enabled,
+    { timeout }
+  );
+}
+
+// ── ColorState waiters ─────────────────────────────────────────────────
+
+/**
+ * Wait for exposure to reach the expected value (within tolerance).
+ */
+export async function waitForExposure(page: Page, value: number, tolerance = 0.01, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    ({ value: v, tolerance: t }) => {
+      const state = (window as any).__OPENRV_TEST__?.getColorState();
+      return state != null && Math.abs(state.exposure - v) <= t;
+    },
+    { value, tolerance },
+    { timeout }
+  );
+}
+
+/**
+ * Wait for all color adjustments to return to default values.
+ */
+export async function waitForColorReset(page: Page, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getColorState();
+      if (!state) return false;
+      return state.exposure === 0 && state.gamma === 1 && state.saturation === 1 &&
+             state.contrast === 1 && state.temperature === 0 && state.tint === 0 &&
+             state.brightness === 0;
+    },
+    undefined,
+    { timeout }
+  );
+}
+
+// ── PaintState waiters ─────────────────────────────────────────────────
+
+/**
+ * Wait for the paint tool to change to the expected value.
+ */
+export async function waitForTool(page: Page, tool: PaintState['currentTool'], timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getPaintState();
+      return state?.currentTool === expected;
+    },
+    tool,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for annotation count on a frame to reach the expected value.
+ */
+export async function waitForAnnotationCount(page: Page, count: number, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getPaintState();
+      return state?.visibleAnnotationCount === expected;
+    },
+    count,
+    { timeout }
+  );
+}
+
+// ── TransformState waiters ─────────────────────────────────────────────
+
+/**
+ * Wait for rotation to reach the expected value.
+ */
+export async function waitForRotation(page: Page, degrees: TransformState['rotation'], timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getTransformState();
+      return state?.rotation === expected;
+    },
+    degrees,
+    { timeout }
+  );
+}
+
+// ── StackState waiters ─────────────────────────────────────────────────
+
+/**
+ * Wait for stack layer count to reach the expected value.
+ */
+export async function waitForStackLayerCount(page: Page, count: number, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getStackState();
+      return state?.layerCount === expected;
+    },
+    count,
+    { timeout }
+  );
+}
+
+// ── SpotlightState waiters ─────────────────────────────────────────────
+
+/**
+ * Wait for spotlight enabled state.
+ */
+export async function waitForSpotlightEnabled(page: Page, enabled: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSpotlightState();
+      return state?.enabled === expected;
+    },
+    enabled,
+    { timeout }
+  );
+}
+
+// ── HistoryPanelState waiters ──────────────────────────────────────────
+
+/**
+ * Wait for history entry count to reach the expected value.
+ */
+export async function waitForHistoryEntryCount(page: Page, count: number, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getHistoryPanelState();
+      return state?.entryCount === expected;
+    },
+    count,
+    { timeout }
+  );
+}
+
+// ── SessionState waiters ───────────────────────────────────────────────
+
+/**
+ * Wait for A/B compare to become available.
+ */
+export async function waitForABCompareAvailable(page: Page, available: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.abCompareAvailable === expected;
+    },
+    available,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for playback speed to reach the expected value.
+ */
+export async function waitForPlaybackSpeed(page: Page, speed: number, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.playbackSpeed === expected;
+    },
+    speed,
+    { timeout }
+  );
+}
+
+// ── Generic condition helper ───────────────────────────────────────────
+
+/**
+ * Wait for an arbitrary JS expression to evaluate to true.
+ * Use for one-off conditions that don't justify a dedicated waiter.
+ */
+export async function waitForCondition(
+  page: Page,
+  evalFn: string,
+  timeout = TIMEOUT_MEDIUM,
+): Promise<void> {
+  await page.waitForFunction(evalFn, undefined, { timeout });
+}
+
+// ── Frame Navigation Helpers ─────────────────────────────────────────
+
+/**
+ * Navigate to a specific frame by going to frame 1 (Home) then stepping forward.
+ * Waits for each step to register, avoiding flaky rapid key presses.
+ */
+export async function navigateToFrame(page: Page, frame: number): Promise<void> {
+  await page.keyboard.press('Home');
+  const state = await getSessionState(page);
+  const startFrame = state.inPoint || 1;
+  await waitForFrame(page, startFrame);
+  for (let i = startFrame; i < frame; i++) {
+    await page.keyboard.press('ArrowRight');
+    await waitForFrame(page, i + 1);
+  }
+}
+
+/**
+ * Step forward N frames from the current position, waiting for each step.
+ */
+export async function stepForward(page: Page, count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    const state = await getSessionState(page);
+    const current = state.currentFrame;
+    await page.keyboard.press('ArrowRight');
+    await waitForFrame(page, current + 1);
+  }
+}
+
+/**
+ * Step backward N frames from the current position, waiting for each step.
+ */
+export async function stepBackward(page: Page, count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    const state = await getSessionState(page);
+    const current = state.currentFrame;
+    await page.keyboard.press('ArrowLeft');
+    await waitForFrame(page, current - 1);
+  }
+}
+
+// ── In/Out Point Helpers ─────────────────────────────────────────────
+
+/**
+ * Wait for inPoint to reach the expected value.
+ */
+export async function waitForInPoint(page: Page, frame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.inPoint === expected;
+    },
+    frame,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for outPoint to reach the expected value.
+ */
+export async function waitForOutPoint(page: Page, frame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.outPoint === expected;
+    },
+    frame,
+    { timeout }
+  );
+}
+
+/**
+ * Set the in point at the given frame.
+ * Navigates to the frame, presses 'i', and waits for confirmation.
+ */
+export async function setInPoint(page: Page, frame: number): Promise<void> {
+  await navigateToFrame(page, frame);
+  await page.keyboard.press('i');
+  await waitForInPoint(page, frame);
+}
+
+/**
+ * Set the out point at the given frame.
+ * Navigates to the frame, presses 'o', and waits for confirmation.
+ */
+export async function setOutPoint(page: Page, frame: number): Promise<void> {
+  await navigateToFrame(page, frame);
+  await page.keyboard.press('o');
+  await waitForOutPoint(page, frame);
+}
+
+/**
+ * Set both in and out points.
+ * Navigates to each frame, sets the point, and waits for confirmation.
+ */
+export async function setInOutRange(page: Page, inFrame: number, outFrame: number): Promise<void> {
+  await setInPoint(page, inFrame);
+  await setOutPoint(page, outFrame);
+}
+
+/**
+ * Reset in/out points to full range by pressing 'r'.
+ */
+export async function resetInOutPoints(page: Page): Promise<void> {
+  await page.keyboard.press('r');
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.inPoint === 1;
+    },
+    undefined,
+    { timeout: TIMEOUT_MEDIUM }
+  );
+}
+
+// ── Loop Mode Helper ─────────────────────────────────────────────────
+
+const LOOP_CYCLE: Array<'loop' | 'pingpong' | 'once'> = ['loop', 'pingpong', 'once'];
+
+/**
+ * Set the loop mode by cycling Ctrl+L until the target mode is reached.
+ * Reads the current mode and presses the minimum number of times.
+ */
+export async function setLoopMode(page: Page, target: 'once' | 'loop' | 'pingpong'): Promise<void> {
+  const state = await getSessionState(page);
+  const current = state.loopMode as typeof target;
+  if (current === target) return;
+
+  const currentIdx = LOOP_CYCLE.indexOf(current);
+  const targetIdx = LOOP_CYCLE.indexOf(target);
+  const steps = (targetIdx - currentIdx + LOOP_CYCLE.length) % LOOP_CYCLE.length;
+
+  for (let i = 0; i < steps; i++) {
+    await page.keyboard.press('Control+l');
+    const nextMode = LOOP_CYCLE[(currentIdx + i + 1) % LOOP_CYCLE.length];
+    await waitForLoopMode(page, nextMode);
+  }
+}
+
+// ── Ghost Mode Helpers ───────────────────────────────────────────────
+
+/**
+ * Wait for ghost mode to reach the expected state.
+ */
+export async function waitForGhostMode(page: Page, enabled: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getPaintState();
+      return state?.ghostMode === expected;
+    },
+    enabled,
+    { timeout }
+  );
+}
+
+/**
+ * Enable ghost mode. No-op if already enabled.
+ * Must be on the Annotate tab with a paint tool active.
+ */
+export async function enableGhostMode(page: Page): Promise<void> {
+  const state = await getPaintState(page);
+  if (state.ghostMode) return;
+  await page.keyboard.press('g');
+  await waitForGhostMode(page, true);
+}
+
+/**
+ * Disable ghost mode. No-op if already disabled.
+ * Must be on the Annotate tab with a paint tool active.
+ */
+export async function disableGhostMode(page: Page): Promise<void> {
+  const state = await getPaintState(page);
+  if (!state.ghostMode) return;
+  await page.keyboard.press('g');
+  await waitForGhostMode(page, false);
+}
+
+// ── Help Menu / Shortcuts Dialog ─────────────────────────────────────
+
+/**
+ * Open the keyboard shortcuts dialog via the help dropdown menu.
+ */
+export async function openKeyboardShortcutsDialog(page: Page): Promise<void> {
+  const helpButton = page.locator('[data-testid="help-menu-button"]');
+  await helpButton.click();
+  await page.waitForTimeout(200);
+  const shortcutsItem = page.locator('[data-testid="help-menu-help"]');
+  await shortcutsItem.click();
+  await page.waitForTimeout(200);
+}
+
+/**
+ * Open the custom key bindings dialog via the help dropdown menu.
+ */
+export async function openCustomKeyBindingsDialog(page: Page): Promise<void> {
+  const helpButton = page.locator('[data-testid="help-menu-button"]');
+  await helpButton.click();
+  await page.waitForTimeout(200);
+  const bindingsItem = page.locator('[data-testid="help-menu-keyboard"]');
+  await bindingsItem.click();
+  await page.waitForTimeout(200);
+}
+
+// ── RV Session Export Helper ─────────────────────────────────────────
+
+/**
+ * Export an RV session (.rv) file via the Export button dropdown.
+ * Returns the downloaded file path.
+ */
+export async function exportRvSession(page: Page, outputPath: string): Promise<void> {
+  const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+  const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+  await exportButton.click();
+  await page.waitForTimeout(200);
+  await page.click('text=Save RV Session (.rv)');
+  const download = await downloadPromise;
+  await download.saveAs(outputPath);
+}
+
+/**
+ * Load an RV session file from a path (for re-importing exported sessions).
+ * Waits for session state to be restored (outPoint > 0).
+ */
+export async function loadRvSessionFile(page: Page, filePath: string): Promise<void> {
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.outPoint > 0;
+    },
+    undefined,
+    { timeout: TIMEOUT_LONG }
   );
 }

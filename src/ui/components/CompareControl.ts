@@ -16,14 +16,14 @@ import {
   ComparisonManager,
   type WipeMode,
   type ABSource,
-  type BlendMode,
+  type ComparisonBlendMode,
   type BlendModeState,
   type CompareState,
   type QuadViewState,
 } from './ComparisonManager';
 
 // Re-export types so external consumers don't need to change imports
-export type { WipeMode, ABSource, BlendMode, BlendModeState, CompareState, QuadViewState };
+export type { WipeMode, ABSource, ComparisonBlendMode, BlendModeState, CompareState, QuadViewState };
 export { DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './ComparisonManager';
 
 export interface CompareControlEvents extends EventMap {
@@ -657,7 +657,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.updateDropdownStates();
   }
 
-  private createBlendModeButton(mode: BlendMode, label: string, icon: IconName): HTMLButtonElement {
+  private createBlendModeButton(mode: ComparisonBlendMode, label: string, icon: IconName): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.blendMode = mode;
     button.dataset.testid = `blend-mode-${mode}`;
@@ -698,7 +698,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     } else if (state.differenceMatte.enabled) {
       parts.push('Diff');
     } else if (state.blendMode.mode !== 'off') {
-      const blendLabels: Record<BlendMode, string> = {
+      const blendLabels: Record<ComparisonBlendMode, string> = {
         off: '',
         onionskin: 'Onion',
         flicker: 'Flicker',
@@ -710,6 +710,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         'off': '',
         'horizontal': 'H-Wipe',
         'vertical': 'V-Wipe',
+        'quad': 'Quad',
         'splitscreen-h': 'Split-H',
         'splitscreen-v': 'Split-V',
       };
@@ -824,7 +825,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     // Update blend mode controls
     const blendSection = this.dropdown.querySelector('.blend-modes-section');
     if (blendSection) {
-      const blendModes: BlendMode[] = ['onionskin', 'flicker', 'blend'];
+      const blendModes: ComparisonBlendMode[] = ['onionskin', 'flicker', 'blend'];
       for (const mode of blendModes) {
         const button = blendSection.querySelector(`[data-blend-mode="${mode}"]`) as HTMLButtonElement;
         if (button) {
@@ -890,7 +891,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     }
   }
 
-  private updateBlendModeButtonStyle(button: HTMLButtonElement, mode: BlendMode): void {
+  private updateBlendModeButtonStyle(button: HTMLButtonElement, mode: ComparisonBlendMode): void {
     const isActive = this.manager.getBlendMode() === mode;
     button.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     button.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
@@ -1089,7 +1090,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * Otherwise, activates the specified mode.
    * @param mode - The blend mode to toggle ('onionskin' | 'flicker' | 'blend')
    */
-  toggleBlendMode(mode: BlendMode): void {
+  toggleBlendMode(mode: ComparisonBlendMode): void {
     this.manager.toggleBlendMode(mode);
   }
 
@@ -1098,7 +1099,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * Automatically disables wipe mode and difference matte when enabling a blend mode.
    * @param mode - The blend mode to set ('off' | 'onionskin' | 'flicker' | 'blend')
    */
-  setBlendMode(mode: BlendMode): void {
+  setBlendMode(mode: ComparisonBlendMode): void {
     this.manager.setBlendMode(mode);
   }
 
@@ -1106,7 +1107,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * Get the current blend mode.
    * @returns The active blend mode ('off' | 'onionskin' | 'flicker' | 'blend')
    */
-  getBlendMode(): BlendMode {
+  getBlendMode(): ComparisonBlendMode {
     return this.manager.getBlendMode();
   }
 

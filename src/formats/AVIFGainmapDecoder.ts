@@ -667,21 +667,134 @@ export function parseHeadroomFromXMPText(xmpText: string): number | null {
 }
 
 /**
- * Parse tmap box for headroom info (ISO 21496-1).
- *
- * Best-effort heuristic: the tmap box structure varies across implementations,
- * so we scan for a reasonable float32 value representing headroom (0.1-20 stops).
- * XMP-based headroom (checked first in extractHeadroom) is more reliable.
+ * Parsed ISO 21496-1 tone_map_metadata from tmap box.
  */
-function parseTmapHeadroom(view: DataView, start: number, end: number): number | null {
+export interface TmapMetadata {
+  channelCount: number;
+  gainMapMin: number[];
+  gainMapMax: number[];
+  gainMapGamma: number[];
+  baseOffset: number[];
+  alternateOffset: number[];
+  baseHdrHeadroom: number;
+  alternateHdrHeadroom: number;
+}
+
+/**
+ * Parse tmap box per ISO 21496-1 tone_map_metadata_box structure.
+ *
+ * Layout (all uint32 big-endian):
+ *   version (1 byte): 0
+ *   flags (3 bytes): bit 0 of flags byte = channel_count flag
+ *     0 → 1 channel (monochrome gain map), 1 → 3 channels
+ *   Per-channel arrays (1 or 3 values each):
+ *     gainMapMinN[], gainMapMinD[]
+ *     gainMapMaxN[], gainMapMaxD[]
+ *     gainMapGammaN[], gainMapGammaD[]
+ *     baseOffsetN[], baseOffsetD[]
+ *     alternateOffsetN[], alternateOffsetD[]
+ *   Scalar fields:
+ *     baseHdrHeadroomN (uint32), baseHdrHeadroomD (uint32)
+ *     alternateHdrHeadroomN (uint32), alternateHdrHeadroomD (uint32)
+ */
+export function parseTmapBox(view: DataView, start: number, end: number): TmapMetadata | null {
+  // Need at least version(1) + flags(3) = 4 bytes
   if (start + 4 > end) return null;
 
-  for (let pos = start; pos + 4 <= end; pos += 4) {
-    const val = view.getFloat32(pos);
-    if (Number.isFinite(val) && val > 0.1 && val < 20) {
-      return val;
-    }
+  const version = view.getUint8(start);
+  if (version !== 0) return null;
+
+  // flags: 3 bytes at start+1..start+3; channel_count flag is bit 0 of the flags field
+  const flagsByte = view.getUint8(start + 3);
+  const channelCount = (flagsByte & 1) ? 3 : 1;
+
+  let pos = start + 4;
+
+  function readUint32(): number | null {
+    if (pos + 4 > end) return null;
+    const val = view.getUint32(pos);
+    pos += 4;
+    return val;
   }
+
+  function readRatioArray(count: number): number[] | null {
+    const numerators: number[] = [];
+    const denominators: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const n = readUint32();
+      if (n === null) return null;
+      numerators.push(n);
+    }
+    for (let i = 0; i < count; i++) {
+      const d = readUint32();
+      if (d === null) return null;
+      denominators.push(d);
+    }
+    const result: number[] = [];
+    for (let i = 0; i < count; i++) {
+      // Zero denominator yields 0; consumers should check for gamma=0 before
+      // using the value in pow() operations (0 gamma is degenerate).
+      result.push(denominators[i]! === 0 ? 0 : numerators[i]! / denominators[i]!);
+    }
+    return result;
+  }
+
+  function readRatio(): number | null {
+    const n = readUint32();
+    const d = readUint32();
+    if (n === null || d === null) return null;
+    return d === 0 ? 0 : n / d;
+  }
+
+  const gainMapMin = readRatioArray(channelCount);
+  if (!gainMapMin) return null;
+
+  const gainMapMax = readRatioArray(channelCount);
+  if (!gainMapMax) return null;
+
+  const gainMapGamma = readRatioArray(channelCount);
+  if (!gainMapGamma) return null;
+
+  const baseOffset = readRatioArray(channelCount);
+  if (!baseOffset) return null;
+
+  const alternateOffset = readRatioArray(channelCount);
+  if (!alternateOffset) return null;
+
+  const baseHdrHeadroom = readRatio();
+  if (baseHdrHeadroom === null) return null;
+
+  const alternateHdrHeadroom = readRatio();
+  if (alternateHdrHeadroom === null) return null;
+
+  return {
+    channelCount,
+    gainMapMin,
+    gainMapMax,
+    gainMapGamma,
+    baseOffset,
+    alternateOffset,
+    baseHdrHeadroom,
+    alternateHdrHeadroom,
+  };
+}
+
+/**
+ * Parse tmap box for headroom info (ISO 21496-1).
+ *
+ * Extracts alternateHdrHeadroom from the spec-compliant tmap structure.
+ * Falls back to gainMapMax[0] if alternateHdrHeadroom is zero.
+ */
+function parseTmapHeadroom(view: DataView, start: number, end: number): number | null {
+  const tmap = parseTmapBox(view, start, end);
+  if (!tmap) return null;
+
+  // Prefer alternateHdrHeadroom (the HDR headroom of the alternate rendering)
+  if (tmap.alternateHdrHeadroom > 0) return tmap.alternateHdrHeadroom;
+
+  // Fall back to gainMapMax (first channel)
+  if (tmap.gainMapMax.length > 0 && tmap.gainMapMax[0]! > 0) return tmap.gainMapMax[0]!;
+
   return null;
 }
 

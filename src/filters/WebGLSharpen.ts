@@ -55,8 +55,8 @@ void main() {
   // Apply kernel: center * 5 - (top + bottom + left + right)
   vec3 sharpened = center.rgb * 5.0 - (top.rgb + bottom.rgb + left.rgb + right.rgb);
 
-  // Clamp to valid range
-  sharpened = clamp(sharpened, 0.0, 1.0);
+  // Only clamp negative (no upper bound) to preserve HDR range
+  sharpened = max(sharpened, 0.0);
 
   // Blend between original and sharpened based on amount
   vec3 finalColor = mix(center.rgb, sharpened, u_amount);

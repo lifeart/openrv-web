@@ -340,8 +340,8 @@ describe('ThemeManager', () => {
       manager.dispose();
 
       // After dispose, events should not fire
-      // (The manager is disposed, so we can't really test this without
-      // accessing internal state, but dispose should clean up)
+      manager.emit('modeChanged', 'dark');
+      expect(callback).not.toHaveBeenCalled();
     });
   });
 });

@@ -292,4 +292,78 @@ describe('Graph', () => {
       expect(json.outputNode).toBe(node2.id);
     });
   });
+
+  describe('removeNode safe disconnection (regression)', () => {
+    it('GRP-009: disconnects ALL downstream nodes when source has 3 outputs', () => {
+      const source = new MockNode('source');
+      const a = new MockNode('a');
+      const b = new MockNode('b');
+      const c = new MockNode('c');
+
+      graph.addNode(source);
+      graph.addNode(a);
+      graph.addNode(b);
+      graph.addNode(c);
+
+      graph.connect(source, a);
+      graph.connect(source, b);
+      graph.connect(source, c);
+
+      expect(source.outputs.length).toBe(3);
+
+      graph.removeNode(source.id);
+
+      expect(a.inputs.length).toBe(0);
+      expect(b.inputs.length).toBe(0);
+      expect(c.inputs.length).toBe(0);
+    });
+
+    it('GRP-010: disconnects ALL upstream nodes when merger has 3 inputs', () => {
+      const a = new MockNode('a');
+      const b = new MockNode('b');
+      const c = new MockNode('c');
+      const merger = new MockNode('merger');
+
+      graph.addNode(a);
+      graph.addNode(b);
+      graph.addNode(c);
+      graph.addNode(merger);
+
+      graph.connect(a, merger);
+      graph.connect(b, merger);
+      graph.connect(c, merger);
+
+      expect(merger.inputs.length).toBe(3);
+
+      graph.removeNode(merger.id);
+
+      expect(a.outputs.length).toBe(0);
+      expect(b.outputs.length).toBe(0);
+      expect(c.outputs.length).toBe(0);
+    });
+  });
+
+  describe('cycle detection (validation)', () => {
+    it('GRP-011: detects direct cycle B→A after A→B', () => {
+      const a = new MockNode('A');
+      const b = new MockNode('B');
+      graph.addNode(a);
+      graph.addNode(b);
+
+      graph.connect(a, b);
+      expect(() => graph.connect(b, a)).toThrow(/cycle/i);
+    });
+
+    it('GRP-012: allows valid non-cyclic diamond connections', () => {
+      const a = new MockNode('A');
+      const b = new MockNode('B');
+      const c = new MockNode('C');
+      graph.addNode(a);
+      graph.addNode(b);
+      graph.addNode(c);
+
+      graph.connect(a, c);
+      expect(() => graph.connect(b, c)).not.toThrow();
+    });
+  });
 });

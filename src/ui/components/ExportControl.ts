@@ -30,6 +30,7 @@ export interface ExportControlEvents extends EventMap {
   rvSessionExportRequested: { format: 'rv' | 'gto' };
   annotationsJSONExportRequested: void;
   annotationsPDFExportRequested: void;
+  reportExportRequested: { format: 'csv' | 'html' };
 }
 
 export class ExportControl extends EventEmitter<ExportControlEvents> {
@@ -191,6 +192,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Annotations');
     this.addMenuItem('download', 'Export Annotations (JSON)', () => this.exportAnnotationsJSON());
     this.addMenuItem('download', 'Export Annotations (PDF)', () => this.exportAnnotationsPDF());
+
+    this.addSeparator();
+
+    // Report export section
+    this.addSectionHeader('Reports');
+    this.addMenuItem('note', 'Export Dailies Report (CSV)', () => this.exportReport('csv'));
+    this.addMenuItem('note', 'Export Dailies Report (HTML)', () => this.exportReport('html'));
 
     this.addSeparator();
 
@@ -452,6 +460,10 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportAnnotationsPDF(): void {
     this.emit('annotationsPDFExportRequested', undefined);
+  }
+
+  private exportReport(format: 'csv' | 'html'): void {
+    this.emit('reportExportRequested', { format });
   }
 
   quickExport(format: ExportFormat = 'png'): void {

@@ -221,15 +221,13 @@ describe('WipeManager', () => {
 
   describe('UI position updates', () => {
     it('WM-U026: updateWipeLine is a no-op without elements', () => {
-      // Should not throw
       const rect = new DOMRect(0, 0, 800, 600);
-      mgr.updateWipeLine(rect, rect, 800, 600);
+      expect(() => mgr.updateWipeLine(rect, rect, 800, 600)).not.toThrow();
     });
 
     it('WM-U027: updateSplitScreenLine is a no-op without elements', () => {
-      // Should not throw
       const rect = new DOMRect(0, 0, 800, 600);
-      mgr.updateSplitScreenLine(rect, rect, 800, 600);
+      expect(() => mgr.updateSplitScreenLine(rect, rect, 800, 600)).not.toThrow();
     });
 
     it('WM-U028: updateWipeLine hides wipe elements in split screen mode', () => {

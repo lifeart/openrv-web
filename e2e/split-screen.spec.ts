@@ -16,6 +16,8 @@ import {
   waitForFrame,
   waitForFrameChange,
   waitForMediaLoaded,
+  waitForWipeMode,
+  waitForTabActive,
 } from './fixtures';
 
 /**
@@ -43,7 +45,7 @@ test.describe('Split Screen A/B Comparison', () => {
     await loadTwoVideoFiles(page);
     // Switch to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(200);
+    await waitForTabActive(page, 'view');
   });
 
   test.describe('Toggle Split Screen Mode', () => {
@@ -53,21 +55,21 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen (horizontal)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
 
       // Toggle to vertical split
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-v');
 
       // Disable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'off');
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
@@ -76,7 +78,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E002: split screen default position should be 0.5 (center)', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const state = await getViewerState(page);
       expect(state.wipePosition).toBeCloseTo(0.5, 1);
@@ -89,7 +91,7 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
@@ -103,13 +105,13 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E004: horizontal vs vertical split produces different views', async ({ page }) => {
       // Enable horizontal split
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const screenshotHorizontal = await captureViewerScreenshot(page);
 
       // Switch to vertical split
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-v');
@@ -125,7 +127,6 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E005: split line should be visible when split screen is active', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       // Check for split line element
       const splitLine = page.locator('[data-testid="split-screen-line"]');
@@ -135,7 +136,6 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E006: A/B labels should be visible when split screen is active', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       // Check for A/B label elements
       const labelA = page.locator('[data-testid="split-screen-label-a"]');
@@ -148,7 +148,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E006b: A/B labels position changes based on split orientation', async ({ page }) => {
       // Enable horizontal split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const labelA = page.locator('[data-testid="split-screen-label-a"]');
       const labelB = page.locator('[data-testid="split-screen-label-b"]');
@@ -164,7 +164,7 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Switch to vertical split
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       // Get positions in vertical mode (A on top, B on bottom)
       const boxAVertical = await labelA.boundingBox();
@@ -186,19 +186,19 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen (horizontal)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
 
       // Toggle to vertical
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-v');
 
       // Disable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'off');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
 
@@ -211,7 +211,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E008: horizontal split line can be dragged left to adjust position', async ({ page }) => {
       // Enable horizontal split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
@@ -239,7 +239,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E008b: horizontal split line can be dragged right to adjust position', async ({ page }) => {
       // Enable horizontal split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // First drag left to create room to drag right
       let state = await getViewerState(page);
@@ -278,9 +278,9 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E008c: vertical split line can be dragged up/down to adjust position', async ({ page }) => {
       // Enable vertical split screen (press twice to get vertical)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-v');
@@ -308,14 +308,12 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E008d: split line has correct resize cursor', async ({ page }) => {
       // Enable horizontal split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       const splitLine = page.locator('[data-testid="split-screen-line"]');
       await expect(splitLine).toHaveCSS('cursor', 'ew-resize');
 
       // Switch to vertical split
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       await expect(splitLine).toHaveCSS('cursor', 'ns-resize');
     });
@@ -323,9 +321,9 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E008e: vertical split line can be dragged down to adjust position', async ({ page }) => {
       // Enable vertical split screen (press twice to get vertical)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-v');
@@ -366,21 +364,23 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E009: split screen state persists across frame navigation', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
 
       // Navigate frames
+      const sessionBefore = await getSessionState(page);
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, sessionBefore.currentFrame);
 
       // State should persist
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
 
+      const sessionAfterRight = await getSessionState(page);
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, sessionAfterRight.currentFrame);
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
@@ -389,7 +389,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E010: split screen and wipe mode are mutually exclusive', async ({ page }) => {
       // Enable wipe mode first (Shift+W cycles wipe mode)
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'horizontal');
 
       let state = await getViewerState(page);
       // Wipe mode should be enabled (horizontal)
@@ -397,7 +397,7 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       state = await getViewerState(page);
       // Should be in split screen mode now
@@ -409,7 +409,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E011: split screen shows source A on one side and source B on other', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // The viewer should be rendering both sources
       const state = await getViewerState(page);
@@ -425,7 +425,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E020: both A and B sides update when navigating frames', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('splitscreen-h');
@@ -439,12 +439,12 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Navigate to a different frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(300);
+      await waitForFrameChange(page, initialFrame);
 
       // Navigate more to ensure visible difference
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(300);
+      await waitForFrame(page, initialFrame + 3);
 
       // Capture screenshot at new frame
       const screenshotFrame4 = await captureViewerScreenshot(page);
@@ -460,7 +460,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E021: B side updates during playback in split screen mode', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('splitscreen-h');
@@ -497,7 +497,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E022: split screen remains functional after playback', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Start and stop playback
       await page.keyboard.press('Space');
@@ -515,7 +515,7 @@ test.describe('Split Screen A/B Comparison', () => {
       // Navigate frames
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrame(page, frameAfterPlayback + 2);
 
       // Capture screenshot after navigation
       const screenshotAfterNav = await captureViewerScreenshot(page);
@@ -531,13 +531,13 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E023: frame navigation works correctly in split screen after multiple play/pause', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Multiple play/pause cycles with generous timeouts
       for (let i = 0; i < 2; i++) {
         await page.keyboard.press('Space');
         // Wait for playback to potentially start
-        await page.waitForTimeout(300);
+        await waitForPlaybackState(page, true);
         const state = await getSessionState(page);
         if (state.isPlaying) {
           await waitForFrameChange(page, state.currentFrame);
@@ -567,20 +567,19 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E024: split screen updates both sources when seeking to start', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Navigate to later frame
       for (let i = 0; i < 10; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(200);
+      await waitForFrameAtLeast(page, 11);
 
       const screenshotMiddle = await captureViewerScreenshot(page);
 
       // Seek to start
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(200);
 
       const screenshotStart = await captureViewerScreenshot(page);
 
@@ -591,18 +590,17 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E025: split screen updates both sources when seeking to end', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to start first
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(200);
 
       const screenshotStart = await captureViewerScreenshot(page);
 
       // Seek to end
       await page.keyboard.press('End');
-      await page.waitForTimeout(300);
+      await waitForFrameChange(page, 1);
 
       const screenshotEnd = await captureViewerScreenshot(page);
 
@@ -613,9 +611,9 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E026: vertical split screen updates both sources during frame navigation', async ({ page }) => {
       // Enable vertical split screen (press twice to get vertical)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       const viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('splitscreen-v');
@@ -627,7 +625,7 @@ test.describe('Split Screen A/B Comparison', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(300);
+      await waitForFrameAtLeast(page, 4);
 
       const screenshotFrame4 = await captureViewerScreenshot(page);
 
@@ -638,7 +636,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E027: split screen playback shows smooth updates on both sides', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to start
       await page.keyboard.press('Home');
@@ -682,7 +680,6 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Load first video
       await loadVideoFile(page);
-      await page.waitForTimeout(500);
 
       // Load second video (simulating "drop" behavior)
       await loadSecondVideoFile(page);
@@ -690,11 +687,11 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Switch to View tab
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       const viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('splitscreen-h');
@@ -702,7 +699,6 @@ test.describe('Split Screen A/B Comparison', () => {
       // Go to frame 1
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(100);
 
       // Capture B side at frame 1
       const bSideFrame1 = await captureBSideScreenshot(page);
@@ -740,7 +736,6 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Load first video
       await loadVideoFile(page);
-      await page.waitForTimeout(500);
 
       // Load second video
       await loadSecondVideoFile(page);
@@ -748,16 +743,15 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Switch to View tab
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(200);
 
       // Capture B side at frame 1
       const bSideFrame1 = await captureBSideScreenshot(page);
@@ -766,7 +760,7 @@ test.describe('Split Screen A/B Comparison', () => {
       for (let i = 0; i < 15; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(300);
+      await waitForFrameAtLeast(page, 16);
 
       // Capture B side at later frame
       const bSideLater = await captureBSideScreenshot(page);
@@ -778,7 +772,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E030: playback in split mode continuously updates both A and B sides', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
@@ -817,7 +811,7 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E031: playback state correctly updates frames in split screen mode', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
@@ -867,7 +861,7 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Verify split screen is active
       const viewerState = await getViewerState(page);
@@ -880,7 +874,6 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E033: A/B indicator reappears when exiting split screen mode', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       // Verify A/B indicator is hidden
       const abIndicator = page.locator('[data-testid="ab-indicator"]');
@@ -888,11 +881,10 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Toggle through split screen modes (horizontal -> vertical -> off)
       await page.keyboard.press('Shift+Alt+s'); // to vertical
-      await page.waitForTimeout(100);
       await expect(abIndicator).toBeHidden(); // still hidden in vertical split
 
       await page.keyboard.press('Shift+Alt+s'); // to off
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'off');
 
       // Verify split screen is off
       const viewerState = await getViewerState(page);
@@ -905,7 +897,6 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E034: only split screen labels (A and B) visible in split screen, not redundant indicators', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       // Split screen labels should be visible
       const splitLabelA = page.locator('[data-testid="split-screen-label-a"]');
@@ -925,7 +916,6 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E035: A/B indicator remains hidden through playback in split screen mode', async ({ page }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
 
       const abIndicator = page.locator('[data-testid="ab-indicator"]');
       await expect(abIndicator).toBeHidden();
@@ -949,9 +939,9 @@ test.describe('Split Screen A/B Comparison', () => {
     test('SPLIT-E036: A/B indicator hidden in vertical split screen mode too', async ({ page }) => {
       // Enable vertical split screen (press twice)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'splitscreen-h');
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       // Verify vertical split is active
       const viewerState = await getViewerState(page);
@@ -976,12 +966,11 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(100);
 
       // Capture both sides at frame 1
       const frame1 = await captureBothSidesScreenshot(page);
@@ -1017,7 +1006,7 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
@@ -1067,12 +1056,11 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(100);
 
       // Capture frame 1
       const frame1 = await captureBothSidesScreenshot(page);
@@ -1081,7 +1069,7 @@ test.describe('Split Screen A/B Comparison', () => {
       for (let i = 0; i < 10; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(200);
+      await waitForFrameAtLeast(page, 11);
 
       // Capture frame 11
       const frame11 = await captureBothSidesScreenshot(page);
@@ -1100,7 +1088,6 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Load first video
       await loadVideoFile(page);
-      await page.waitForTimeout(500);
 
       // Load second video (simulates "drop" behavior)
       await loadSecondVideoFile(page);
@@ -1108,16 +1095,15 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Switch to View tab
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
-      await page.waitForTimeout(100);
 
       // Capture both sides at start
       const startFrame = await captureBothSidesScreenshot(page);
@@ -1146,7 +1132,7 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-h');
 
       // Go to frame 1
       await page.keyboard.press('Home');
@@ -1186,9 +1172,9 @@ test.describe('Split Screen A/B Comparison', () => {
 
       // Enable vertical split screen (press twice)
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'splitscreen-h');
       await page.keyboard.press('Shift+Alt+s');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'splitscreen-v');
 
       const viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('splitscreen-v');

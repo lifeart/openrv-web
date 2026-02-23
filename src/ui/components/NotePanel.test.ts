@@ -389,8 +389,7 @@ describe('NotePanel', () => {
       panel.dispose();
 
       // After dispose, adding notes should not cause errors
-      session.noteManager.addNote(0, 10, 10, 'After dispose', 'Alice');
-      // No crash = success
+      expect(() => session.noteManager.addNote(0, 10, 10, 'After dispose', 'Alice')).not.toThrow();
     });
 
     it('dispose removes all panel listeners', () => {
@@ -398,7 +397,8 @@ describe('NotePanel', () => {
       panel.on('visibilityChanged', callback);
       panel.dispose();
       // After dispose, no events should fire from the panel
-      // (removeAllListeners was called)
+      panel.emit('visibilityChanged', true);
+      expect(callback).not.toHaveBeenCalled();
     });
   });
 

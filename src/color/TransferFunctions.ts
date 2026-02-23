@@ -303,6 +303,49 @@ export function gamma26Decode(encoded: number): number {
 }
 
 // =============================================================================
+// SMPTE 240M - Early HDTV standard transfer function
+// =============================================================================
+
+/** SMPTE 240M constants */
+const SMPTE240M_THRESHOLD = 4 * 0.0228; // = 0.0912
+const SMPTE240M_ALPHA = 1.1115;
+const SMPTE240M_BETA = 0.1115;
+const SMPTE240M_GAMMA = 0.45; // encoding exponent
+const SMPTE240M_INV_GAMMA = 1 / 0.45; // decoding exponent
+
+/**
+ * SMPTE 240M OETF - linear to SMPTE 240M encoded
+ * If L < 0.0228: V = 4 * L
+ * If L >= 0.0228: V = 1.1115 * L^0.45 - 0.1115
+ */
+export function smpte240mEncode(linear: number): number {
+  if (!Number.isFinite(linear)) {
+    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+  }
+  if (linear < 0) return 0;
+  if (linear < 0.0228) {
+    return 4 * linear;
+  }
+  return SMPTE240M_ALPHA * Math.pow(linear, SMPTE240M_GAMMA) - SMPTE240M_BETA;
+}
+
+/**
+ * SMPTE 240M EOTF (inverse OETF) - SMPTE 240M encoded to linear
+ * If V < 4*0.0228: L = V / 4
+ * If V >= 4*0.0228: L = ((V + 0.1115) / 1.1115)^(1/0.45)
+ */
+export function smpte240mDecode(encoded: number): number {
+  if (!Number.isFinite(encoded)) {
+    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+  }
+  if (encoded < 0) return 0;
+  if (encoded < SMPTE240M_THRESHOLD) {
+    return encoded / 4;
+  }
+  return Math.pow((encoded + SMPTE240M_BETA) / SMPTE240M_ALPHA, SMPTE240M_INV_GAMMA);
+}
+
+// =============================================================================
 // ACEScct - ACES contrast-controlled log encoding
 // =============================================================================
 

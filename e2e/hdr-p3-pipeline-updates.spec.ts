@@ -129,6 +129,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
 
     test('HDR-P3-004: histogram extended range is available in HDR mode', async ({ page }) => {
       const hdrSupported = await browserSupportsHDR(page);
+      // @hdr - requires hardware HDR support, skipped in CI
       test.skip(!hdrSupported, 'HDR not supported in this environment');
 
       // Enable histogram
@@ -201,6 +202,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
 
     test('HDR-P3-008: waveform is functional when HDR mode is active', async ({ page }) => {
       const hdrSupported = await browserSupportsHDR(page);
+      // @hdr - requires hardware HDR support, skipped in CI
       test.skip(!hdrSupported, 'HDR not supported in this environment');
 
       // Enable waveform
@@ -253,6 +255,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
 
     test('HDR-P3-011: export options are available when P3 is active', async ({ page }) => {
       const hasP3 = await browserSupportsP3(page);
+      // @hdr - requires hardware HDR support, skipped in CI
       test.skip(!hasP3, 'Browser does not support Display P3');
 
       // Open display profile panel to verify P3-capable environments still expose export controls.
@@ -325,6 +328,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
 
     test('HDR-P3-016: super-white values are accessible in HDR EXR content', async ({ page }) => {
       const hdrSupported = await browserSupportsHDR(page);
+      // @hdr - requires hardware HDR support, skipped in CI
       test.skip(!hdrSupported, 'HDR not supported - super-white display requires HDR pipeline');
 
       await loadExrFile(page);

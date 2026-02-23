@@ -72,7 +72,7 @@ export function createMockRendererGL(
     bufferData: vi.fn(),
     enableVertexAttribArray: vi.fn(),
     vertexAttribPointer: vi.fn(),
-    getUniformLocation: vi.fn(() => ({})),
+    getUniformLocation: vi.fn((_program: unknown, name: string) => ({ __uniformName: name })),
     getAttribLocation: vi.fn(() => 0),
     useProgram: vi.fn(),
     uniform1f: vi.fn(),
@@ -118,6 +118,7 @@ export function createMockRendererGL(
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800,
     CLAMP_TO_EDGE: 0x812f,
+    REPEAT: 0x2901,
     LINEAR: 0x2601,
     RGBA8: 0x8058,
     RGBA: 0x1908,
@@ -171,6 +172,51 @@ export function initRendererWithMockGL(
   return mockGL;
 }
 
+/**
+ * Extract the last value set for a specific uniform via `gl.uniform1i`.
+ *
+ * Works with mock GL contexts created by `createMockRendererGL`, which tags
+ * each uniform location object with `__uniformName`. Scans the recorded
+ * `uniform1i` calls in reverse to find the most recent call for the given
+ * uniform name.
+ *
+ * Returns `undefined` if the uniform was never set.
+ */
+export function getLastUniform1i(
+  mockGL: WebGL2RenderingContext,
+  uniformName: string,
+): number | undefined {
+  const mock = mockGL.uniform1i as unknown as ReturnType<typeof vi.fn>;
+  const calls = mock.mock.calls as Array<[{ __uniformName?: string }, number]>;
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const call = calls[i]!;
+    if (call[0]?.__uniformName === uniformName) {
+      return call[1];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extract the last value set for a specific uniform via `gl.uniform1f`.
+ *
+ * Same approach as `getLastUniform1i` but for float uniforms.
+ */
+export function getLastUniform1f(
+  mockGL: WebGL2RenderingContext,
+  uniformName: string,
+): number | undefined {
+  const mock = mockGL.uniform1f as unknown as ReturnType<typeof vi.fn>;
+  const calls = mock.mock.calls as Array<[{ __uniformName?: string }, number]>;
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const call = calls[i]!;
+    if (call[0]?.__uniformName === uniformName) {
+      return call[1];
+    }
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // WebGL2 – WebGL-processor-style mock (with resource tracking)
 // ---------------------------------------------------------------------------
@@ -209,6 +255,7 @@ export function createMockWebGL2Context() {
     LINEAR: 9729,
     NEAREST: 9728,
     CLAMP_TO_EDGE: 33071,
+    REPEAT: 10497,
     TEXTURE_MIN_FILTER: 10241,
     TEXTURE_MAG_FILTER: 10240,
     TEXTURE_WRAP_S: 10242,

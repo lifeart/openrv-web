@@ -54,7 +54,7 @@ export abstract class BaseSourceNode extends IPNode {
   /**
    * Get the underlying element for a given frame (for direct rendering)
    */
-  abstract getElement(frame: number): HTMLImageElement | HTMLVideoElement | null;
+  abstract getElement(frame: number): HTMLImageElement | HTMLVideoElement | ImageBitmap | null;
 
   /**
    * Serialize to JSON for project save

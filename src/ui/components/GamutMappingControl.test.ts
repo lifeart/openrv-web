@@ -451,19 +451,19 @@ describe('GamutMappingControl', () => {
   });
 
   describe('hover state with active mode (L-42)', () => {
-    it('GM-L42a: after mouseleave with mode active and panel closed, button should show active (non-hover) styling', () => {
+    it('GM-L42a: after pointerleave with mode active and panel closed, button should show active (non-hover) styling', () => {
       // Set mode to clip with different source/target so isActive is true
       control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
 
       const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
 
       // Simulate mouseenter (applies hover styling)
-      btn.dispatchEvent(new Event('mouseenter'));
+      btn.dispatchEvent(new MouseEvent('mouseenter'));
       expect(btn.style.background).toBe('var(--bg-hover)');
       expect(btn.style.color).toBe('var(--text-primary)');
 
       // Simulate mouseleave (should restore active styling, not stay on hover)
-      btn.dispatchEvent(new Event('mouseleave'));
+      btn.dispatchEvent(new MouseEvent('mouseleave'));
       expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
       expect(btn.style.borderColor).toBe('var(--accent-primary)');
       expect(btn.style.color).toBe('var(--accent-primary)');

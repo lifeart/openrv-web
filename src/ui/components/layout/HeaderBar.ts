@@ -27,6 +27,7 @@ export interface HeaderBarEvents extends EventMap {
   openProject: File;
   fullscreenToggle: void;
   presentationToggle: void;
+  externalPresentation: void;
 }
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
@@ -327,6 +328,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.presentationButton.dataset.testid = 'presentation-mode-button';
     utilityGroup.appendChild(this.presentationButton);
 
+    // External Presentation button (opens a secondary window)
+    const externalPresentationButton = this.createIconButton('external-link', '', () => this.emit('externalPresentation', undefined), 'External Presentation (Ctrl+Shift+Alt+P)');
+    externalPresentationButton.dataset.testid = 'external-presentation-button';
+    utilityGroup.appendChild(externalPresentationButton);
+
     // Fullscreen button
     this.fullscreenButton = this.createIconButton('maximize', '', () => this.emit('fullscreenToggle', undefined), 'Fullscreen (F11)');
     this.fullscreenButton.dataset.testid = 'fullscreen-toggle-button';
@@ -421,6 +427,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       'maximize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
       'minimize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
       'monitor': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+      'external-link': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
     };
     return icons[name] || '';
   }
@@ -805,6 +812,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeSpeedMenuCleanup = null;
+      anchor.focus();
     };
 
     // Close menu when clicking outside
@@ -878,7 +886,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
       item.addEventListener('focus', () => { item.style.background = 'var(--bg-hover)'; });
       item.addEventListener('blur', () => { item.style.background = 'transparent'; });
-      item.addEventListener('click', () => { action(); removeMenu(); });
+      item.addEventListener('click', () => {
+        removeMenu();
+        action();
+      });
 
       menu.appendChild(item);
     }
@@ -930,6 +941,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeHelpMenuCleanup = null;
+      anchor.focus();
     };
 
     const closeMenu = (e: MouseEvent) => {
@@ -1020,8 +1032,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       });
 
       item.addEventListener('click', () => {
-        this._layoutPresetApply?.(preset.id);
         removeMenu();
+        this._layoutPresetApply?.(preset.id);
       });
 
       menu.appendChild(item);
@@ -1071,6 +1083,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       document.removeEventListener('click', closeMenu);
       this.layoutButton.setAttribute('aria-expanded', 'false');
       this._activeLayoutMenuCleanup = null;
+      anchor.focus();
     };
 
     const closeMenu = (e: MouseEvent) => {

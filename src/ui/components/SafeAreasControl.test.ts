@@ -95,7 +95,7 @@ describe('SafeAreasControl', () => {
       expect(button.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
     });
 
-    it('SAFE-U024: button mouseleave restores background when disabled', () => {
+    it('SAFE-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
@@ -436,7 +436,7 @@ describe('SafeAreasControl', () => {
   });
 
   describe('dropdown item hover', () => {
-    it('SAFE-U090: item mouseenter changes background', () => {
+    it('SAFE-U090: item pointerenter changes background', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
@@ -447,7 +447,7 @@ describe('SafeAreasControl', () => {
       expect(item.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
     });
 
-    it('SAFE-U091: item mouseleave restores background', () => {
+    it('SAFE-U091: item pointerleave restores background', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();

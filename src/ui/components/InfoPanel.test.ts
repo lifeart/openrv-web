@@ -234,6 +234,7 @@ describe('InfoPanel', () => {
       // Content should not be updated since panel is disabled
       expect(panel.getElement().textContent).not.toContain('hidden.exr');
     });
+
   });
 
   describe('getState', () => {
@@ -345,6 +346,39 @@ describe('InfoPanel', () => {
         panel.setPosition(position);
         expect(panel.getPosition()).toBe(position);
       });
+    });
+  });
+
+  describe('XSS prevention', () => {
+    it('INFO-U056: escapes HTML in filename to prevent XSS', () => {
+      panel.enable();
+      const maliciousName = '<img src="x" onerror="alert(1)">_test.exr';
+      panel.update({ filename: maliciousName });
+
+      const content = panel.getElement().innerHTML;
+      // Must not contain unescaped HTML tags (XSS prevention)
+      expect(content).not.toContain('<img');
+      // Escaped characters should be present (filename is truncated to 25 chars)
+      expect(content).toContain('&lt;img');
+    });
+
+    it('INFO-U057: escapes HTML in timecode to prevent XSS', () => {
+      panel.enable();
+      panel.update({ timecode: '<script>alert(1)</script>' });
+
+      const content = panel.getElement().innerHTML;
+      expect(content).not.toContain('<script>');
+      expect(content).toContain('&lt;script&gt;');
+    });
+
+    it('INFO-U058: escapes HTML in duration to prevent XSS', () => {
+      panel.enable();
+      panel.setFields({ duration: true });
+      panel.update({ duration: '<img onerror="alert(1)">' });
+
+      const content = panel.getElement().innerHTML;
+      expect(content).not.toContain('<img');
+      expect(content).toContain('&lt;img');
     });
   });
 

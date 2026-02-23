@@ -9,7 +9,7 @@ import { Renderer } from './Renderer';
 import { IPImage } from '../core/image/Image';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
-import { createMockRendererGL as createMockGL, initRendererWithMockGL } from '../../test/mocks';
+import { createMockRendererGL as createMockGL, initRendererWithMockGL, getLastUniform1i, getLastUniform1f } from '../../test/mocks';
 
 /**
  * Create capabilities with specified HDR support.
@@ -173,17 +173,12 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    // u_inputTransfer should be set to 0 via uniform1i
-    // Find the call that sets u_inputTransfer
-    const uniform1iMock = mockGL.uniform1i as unknown as ReturnType<typeof vi.fn>;
-    const uniformCalls = uniform1iMock.mock.calls;
-    // At least one call should be for u_inputTransfer = 0
-    // (getUniformLocation is mocked to return {} for all names, so all uniform1i calls go through)
-    expect(uniformCalls.length).toBeGreaterThan(0);
+    // u_inputTransfer should be set to 0 (INPUT_TRANSFER_SRGB)
+    expect(getLastUniform1i(mockGL, 'u_inputTransfer')).toBe(0);
   });
 
   it('REN-SDR-004: renderSDRFrame uses color adjustments', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setColorAdjustments({
@@ -208,6 +203,9 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // Verify color adjustment uniforms were set with the specified values
+    expect(getLastUniform1f(mockGL, 'u_saturation')).toBe(0.5);
+    expect(getLastUniform1f(mockGL, 'u_brightness')).toBe(0.1);
   });
 
   it('REN-SDR-005: renderSDRFrame sets outputMode to 0 (SDR clamp)', () => {
@@ -217,8 +215,8 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    // uniform1i should have been called with u_outputMode = 0
-    expect(mockGL.uniform1i).toHaveBeenCalled();
+    // u_outputMode should be set to 0 (OUTPUT_MODE_SDR)
+    expect(getLastUniform1i(mockGL, 'u_outputMode')).toBe(0);
   });
 
   it('REN-SDR-006: renderSDRFrame reuses SDR texture across calls', () => {
@@ -305,12 +303,14 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    // activeTexture should have been called for TEXTURE1 (curves LUT)
+    // u_curvesEnabled should be set to 1 (curves active)
+    expect(getLastUniform1i(mockGL, 'u_curvesEnabled')).toBe(1);
+    // activeTexture should have been called for curves LUT texture binding
     expect(mockGL.activeTexture).toHaveBeenCalled();
   });
 
   it('REN-SDR-013: renderSDRFrame applies tone mapping state', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setToneMappingState({
@@ -322,10 +322,12 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_toneMappingOperator should be set to 3 (ACES code)
+    expect(getLastUniform1i(mockGL, 'u_toneMappingOperator')).toBe(3);
   });
 
   it('REN-SDR-014: renderSDRFrame applies color inversion', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setColorInversion(true);
@@ -334,6 +336,8 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_invert should be set to 1 (inversion enabled)
+    expect(getLastUniform1i(mockGL, 'u_invert')).toBe(1);
   });
 });
 
@@ -345,7 +349,7 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
   });
 
   it('REN-1B-001: setHighlightsShadows sets shader uniforms', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setHighlightsShadows({ highlights: 50, shadows: -30, whites: 20, blacks: -10 });
@@ -353,10 +357,12 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_hsEnabled should be set to 1 (non-zero values enable the effect)
+    expect(getLastUniform1i(mockGL, 'u_hsEnabled')).toBe(1);
   });
 
   it('REN-1B-002: setVibrance sets shader uniforms', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setVibrance({ vibrance: 75, skinProtection: true });
@@ -364,10 +370,12 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_vibranceEnabled should be set to 1 (non-zero vibrance enables the effect)
+    expect(getLastUniform1i(mockGL, 'u_vibranceEnabled')).toBe(1);
   });
 
   it('REN-1B-003: setClarity sets shader uniforms', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setClarity({ clarity: 50 });
@@ -375,10 +383,12 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_clarityEnabled should be set to 1 (non-zero clarity enables the effect)
+    expect(getLastUniform1i(mockGL, 'u_clarityEnabled')).toBe(1);
   });
 
   it('REN-1B-004: setSharpen sets shader uniforms', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setSharpen({ amount: 60 });
@@ -386,10 +396,12 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_sharpenEnabled should be set to 1 (non-zero amount enables the effect)
+    expect(getLastUniform1i(mockGL, 'u_sharpenEnabled')).toBe(1);
   });
 
   it('REN-1B-005: setHSLQualifier sets shader uniforms', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setHSLQualifier({
@@ -405,6 +417,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_hslQualifierEnabled should be set to 1 (HSL qualifier enabled)
+    expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(1);
   });
 
   it('REN-1B-006: setHighlightsShadows with zero values disables effect', () => {
@@ -415,8 +429,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    // uniform1i should have been called with u_hsEnabled = 0
-    expect(mockGL.uniform1i).toHaveBeenCalled();
+    // u_hsEnabled should be set to 0 (all-zero values disable the effect)
+    expect(getLastUniform1i(mockGL, 'u_hsEnabled')).toBe(0);
   });
 
   it('REN-1B-007: setVibrance with zero disables effect', () => {
@@ -427,7 +441,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    expect(mockGL.uniform1i).toHaveBeenCalled();
+    // u_vibranceEnabled should be set to 0 (zero vibrance disables the effect)
+    expect(getLastUniform1i(mockGL, 'u_vibranceEnabled')).toBe(0);
   });
 
   it('REN-1B-008: setClarity with zero disables effect', () => {
@@ -438,7 +453,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    expect(mockGL.uniform1i).toHaveBeenCalled();
+    // u_clarityEnabled should be set to 0 (zero clarity disables the effect)
+    expect(getLastUniform1i(mockGL, 'u_clarityEnabled')).toBe(0);
   });
 
   it('REN-1B-009: setSharpen with zero disables effect', () => {
@@ -449,7 +465,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    expect(mockGL.uniform1i).toHaveBeenCalled();
+    // u_sharpenEnabled should be set to 0 (zero amount disables the effect)
+    expect(getLastUniform1i(mockGL, 'u_sharpenEnabled')).toBe(0);
   });
 
   it('REN-1B-010: setHSLQualifier with disabled state disables effect', () => {
@@ -468,11 +485,12 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     renderer.resize(100, 100);
     renderer.renderSDRFrame(sourceCanvas);
 
-    expect(mockGL.uniform1i).toHaveBeenCalled();
+    // u_hslQualifierEnabled should be set to 0 (HSL qualifier disabled)
+    expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(0);
   });
 
   it('REN-1B-011: all Phase 1B effects can be active simultaneously', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setHighlightsShadows({ highlights: 50, shadows: -30, whites: 20, blacks: -10 });
@@ -493,10 +511,16 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // All Phase 1B effect enable uniforms should be set to 1
+    expect(getLastUniform1i(mockGL, 'u_hsEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_vibranceEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_clarityEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_sharpenEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(1);
   });
 
   it('REN-1B-012: HSL qualifier matte preview mode works', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
     const sourceCanvas = document.createElement('canvas');
 
     renderer.setHSLQualifier({
@@ -513,6 +537,9 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+    // u_hslQualifierEnabled should be 1 and u_hslMattePreview should be 1
+    expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(1);
+    expect(getLastUniform1i(mockGL, 'u_hslMattePreview')).toBe(1);
   });
 });
 
@@ -624,6 +651,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
       TEXTURE_MIN_FILTER: 0x2801,
       TEXTURE_MAG_FILTER: 0x2800,
       CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
       LINEAR: 0x2601,
       RGBA8: 0x8058,
       RGBA: 0x1908,
@@ -820,6 +848,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
         TEXTURE_MIN_FILTER: 0x2801,
         TEXTURE_MAG_FILTER: 0x2800,
         CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
         LINEAR: 0x2601,
         RGBA8: 0x8058,
         RGBA: 0x1908,
@@ -1020,6 +1049,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
       TEXTURE_MIN_FILTER: 0x2801,
       TEXTURE_MAG_FILTER: 0x2800,
       CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
       LINEAR: 0x2601,
       RGBA8: 0x8058,
       RGBA: 0x1908,
@@ -1238,20 +1268,25 @@ describe('Renderer Extended HDR Mode', () => {
   });
 
   it('REN-EXT-007: setHDRHeadroom clamps to minimum 1.0', () => {
-    initRendererWithMockGL(renderer);
+    const mockGL = initRendererWithMockGL(renderer);
 
     renderer.setHDRHeadroom(0.5);
-    // No direct getter, but verify no crash
-    // The headroom will be used in renderImage uniform, tested below
-    expect(renderer.getHDROutputMode()).toBe('sdr');
+    // Headroom should be clamped to 1.0 (minimum allowed value)
+    expect(renderer.getHDRHeadroom()).toBe(1.0);
+
+    // Render an SDR frame and verify u_hdrHeadroom is set to 1.0
+    const sourceCanvas = document.createElement('canvas');
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+    expect(getLastUniform1f(mockGL, 'u_hdrHeadroom')).toBe(1.0);
   });
 
   it('REN-EXT-008: setHDRHeadroom accepts values > 1.0', () => {
     initRendererWithMockGL(renderer);
 
     renderer.setHDRHeadroom(3.0);
-    // No crash means success - headroom value is internal state
-    expect(renderer.getHDROutputMode()).toBe('sdr');
+    // Headroom should be stored as 3.0 (within valid range)
+    expect(renderer.getHDRHeadroom()).toBe(3.0);
   });
 
   it('REN-EXT-009: initialize auto-detects extended mode when HLG/PQ unavailable', () => {
@@ -1514,6 +1549,7 @@ describe('Renderer HDR Headroom Uniform', () => {
       TEXTURE_MIN_FILTER: 0x2801,
       TEXTURE_MAG_FILTER: 0x2800,
       CLAMP_TO_EDGE: 0x812f,
+      REPEAT: 0x2901,
       LINEAR: 0x2601,
       RGBA8: 0x8058,
       RGBA: 0x1908,
@@ -2840,5 +2876,81 @@ describe('Renderer Dither + Quantize Visualization', () => {
 
     renderer.setQuantizeBits(-5);
     expect(renderer.getQuantizeBits()).toBe(0);
+  });
+});
+
+// ==========================================================================
+// Spherical 360 texture wrap mode
+// ==========================================================================
+
+describe('Renderer spherical 360 texture wrap', () => {
+  function createWrapTrackingGL() {
+    const texParamCalls: Array<{ target: number; pname: number; param: number }> = [];
+    const gl = createMockGL();
+
+    (gl.texParameteri as ReturnType<typeof vi.fn>).mockImplementation(
+      (target: number, pname: number, param: number) => {
+        texParamCalls.push({ target, pname, param });
+      }
+    );
+
+    return { gl, texParamCalls };
+  }
+
+  function initWithWrapTracking(renderer: Renderer) {
+    const tracking = createWrapTrackingGL();
+    const canvas = document.createElement('canvas');
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return tracking.gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+    return tracking;
+  }
+
+  it('REN-SPHERE-001: renderImage sets REPEAT wrap on WRAP_S when spherical is enabled', () => {
+    const renderer = new Renderer();
+    const { gl, texParamCalls } = initWithWrapTracking(renderer);
+    renderer.resize(100, 100);
+
+    renderer.setSphericalProjection({ enabled: true, fov: 1.57, aspect: 1, yaw: 0, pitch: 0 });
+
+    texParamCalls.length = 0; // clear init calls
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    // Should have set REPEAT on WRAP_S during render
+    const repeatCalls = texParamCalls.filter(
+      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT
+    );
+    expect(repeatCalls.length).toBeGreaterThanOrEqual(1);
+
+    // Should have restored CLAMP_TO_EDGE on WRAP_S after render
+    const restoreCalls = texParamCalls.filter(
+      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.CLAMP_TO_EDGE
+    );
+    // The restore call comes after the REPEAT call
+    const lastRepeatIdx = texParamCalls.lastIndexOf(repeatCalls[repeatCalls.length - 1]!);
+    const lastRestoreIdx = texParamCalls.lastIndexOf(restoreCalls[restoreCalls.length - 1]!);
+    expect(lastRestoreIdx).toBeGreaterThan(lastRepeatIdx);
+  });
+
+  it('REN-SPHERE-002: renderImage does NOT set REPEAT when spherical is disabled', () => {
+    const renderer = new Renderer();
+    const { gl, texParamCalls } = initWithWrapTracking(renderer);
+    renderer.resize(100, 100);
+
+    // Spherical is disabled by default
+    texParamCalls.length = 0;
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    const repeatCalls = texParamCalls.filter(
+      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT
+    );
+    expect(repeatCalls.length).toBe(0);
   });
 });

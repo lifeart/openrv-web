@@ -187,6 +187,13 @@
       // Premultiply/unpremultiply alpha: 0=off, 1=premultiply, 2=unpremultiply
       uniform int u_premult;
 
+      // Spherical (equirectangular 360) projection
+      uniform int u_sphericalEnabled;   // 0=off, 1=on
+      uniform float u_sphericalFov;     // horizontal FOV in radians
+      uniform float u_sphericalAspect;  // canvas width / height
+      uniform float u_sphericalYaw;     // yaw in radians
+      uniform float u_sphericalPitch;   // pitch in radians
+
       // Dither + Quantize visualization
       uniform int u_ditherMode;      // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
       uniform int u_quantizeBits;    // 0=off, 2-16 = target bit depth for quantize/posterize
@@ -546,6 +553,25 @@
         ) * pqNormFactor;
       }
 
+      // SMPTE 240M EOTF (inverse OETF, signal -> linear)
+      // Reference: SMPTE ST 240:1999
+      float smpte240mEOTF(float v) {
+        const float threshold = 4.0 * 0.0228; // = 0.0912
+        if (v < threshold) {
+          return v / 4.0;
+        } else {
+          return pow((v + 0.1115) / 1.1115, 1.0 / 0.45);
+        }
+      }
+
+      vec3 smpte240mToLinear(vec3 signal) {
+        return vec3(
+          smpte240mEOTF(signal.r),
+          smpte240mEOTF(signal.g),
+          smpte240mEOTF(signal.b)
+        );
+      }
+
       // Apply 3D LUT with trilinear interpolation
       vec3 applyLUT3D(vec3 color) {
         vec3 c = clamp(color, 0.0, 1.0);
@@ -846,6 +872,43 @@
         return (float(bayer[y * 8 + x]) + 0.5) / 64.0;
       }
 
+      // Compute equirectangular UV from screen-space UV for 360 content
+      vec2 sphericalProject(vec2 screenUV) {
+        // screenUV.y=0 is at the top of the screen (image row 0), but NDC y=+1
+        // is at the top, so we must flip the y component to avoid an upside-down image.
+        vec2 ndc = vec2(screenUV.x * 2.0 - 1.0, 1.0 - screenUV.y * 2.0);
+        float halfFov = u_sphericalFov * 0.5;
+        float tanHalfFov = tan(halfFov);
+        vec3 viewDir = normalize(vec3(
+          ndc.x * tanHalfFov * u_sphericalAspect,
+          ndc.y * tanHalfFov,
+          -1.0
+        ));
+        float cp = cos(u_sphericalPitch);
+        float sp = sin(u_sphericalPitch);
+        vec3 pitchDir = vec3(viewDir.x, viewDir.y * cp - viewDir.z * sp, viewDir.y * sp + viewDir.z * cp);
+        float cy = cos(u_sphericalYaw);
+        float sy = sin(u_sphericalYaw);
+        vec3 worldDir = vec3(pitchDir.x * cy + pitchDir.z * sy, pitchDir.y, -pitchDir.x * sy + pitchDir.z * cy);
+
+        float theta = atan(worldDir.z, worldDir.x);
+        float phi = asin(clamp(worldDir.y, -1.0, 1.0));
+
+        float u = 0.5 + theta / (2.0 * 3.14159265359);
+        float v = 0.5 - phi / 3.14159265359;
+
+        // Stabilize u near poles: atan2(~0, ~0) is numerically unstable,
+        // causing adjacent fragments to compute wildly different u values
+        // which creates a visible spike artifact from pole to seam.
+        // Near the pole all longitudes converge, so u doesn't matter;
+        // blend it smoothly toward a stable value (0.5).
+        float horizLen = length(vec2(worldDir.x, worldDir.z));
+        float poleStability = smoothstep(0.0, 0.05, horizLen);
+        u = mix(0.5, u, poleStability);
+
+        return vec2(u, v);
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
@@ -901,6 +964,12 @@
           }
         }
 
+        // 0a3. Spherical (equirectangular 360) projection
+        if (u_sphericalEnabled == 1) {
+          vec2 eqUV = sphericalProject(v_texCoord);
+          color = texture(u_texture, eqUV);
+        }
+
         // 0b. Channel swizzle (RVChannelMap remapping, before any color processing)
         if (u_channelSwizzle != ivec4(0, 1, 2, 3)) {
           vec4 src = color;
@@ -940,6 +1009,8 @@
             color.rgb = hlgToLinear(color.rgb);
           } else if (u_inputTransfer == 2) {
             color.rgb = pqToLinear(color.rgb);
+          } else if (u_inputTransfer == 7) {
+            color.rgb = smpte240mToLinear(color.rgb);
           }
         }
 
@@ -1034,6 +1105,10 @@
         // GPU and CPU paths, accepted as a design trade-off for single-pass rendering
         // performance. The visual difference is minimal for most grading scenarios.
         if (u_clarityEnabled && u_clarity != 0.0) {
+          // Compute blur and detail entirely in original texture space
+          // to avoid cross-space artifacts between processed color and raw texture.
+          vec3 origCenter = texture(u_texture, v_texCoord).rgb;
+
           // 5x5 Gaussian blur (separable weights: 1,4,6,4,1, total per axis = 16)
           vec3 blurred = vec3(0.0);
           float weights[5] = float[](1.0, 4.0, 6.0, 4.0, 1.0);
@@ -1047,13 +1122,17 @@
           }
           blurred /= totalWeight;
 
+          // Midtone mask based on processed luminance, normalized for HDR
           float clarityLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float deviation = abs(clarityLum - 0.5) * 2.0;
+          float peakLum = max(clarityLum, 1.0);
+          float normLum = clarityLum / peakLum;
+          float deviation = abs(normLum - 0.5) * 2.0;
           float midtoneMask = 1.0 - deviation * deviation;
 
-          vec3 highFreq = color.rgb - blurred;
+          // High-frequency detail from original texture (both terms in same space)
+          vec3 highFreq = origCenter - blurred;
           float effectScale = u_clarity * 0.7; // CLARITY_EFFECT_SCALE
-          color.rgb = clamp(color.rgb + highFreq * midtoneMask * effectScale, 0.0, 1.0);
+          color.rgb = clamp(color.rgb + highFreq * midtoneMask * effectScale, 0.0, max(max(color.r, max(color.g, color.b)), 1.0));
         }
 
         // --- Color grading effects ---
@@ -1213,30 +1292,42 @@
         // CPU paths, accepted as a design trade-off for single-pass rendering performance.
         // The visual difference is minimal for most grading scenarios.
         if (u_sharpenEnabled && u_sharpenAmount > 0.0) {
-          vec3 sharpOriginal = color.rgb;
-          // 3x3 unsharp mask: center=5, cross=-1, diagonal=0
-          vec3 sharpened = color.rgb * 5.0
-            - texture(u_texture, v_texCoord + vec2(-1.0, 0.0) * u_texelSize).rgb
-            - texture(u_texture, v_texCoord + vec2(1.0, 0.0) * u_texelSize).rgb
-            - texture(u_texture, v_texCoord + vec2(0.0, -1.0) * u_texelSize).rgb
-            - texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
-          sharpened = clamp(sharpened, 0.0, 1.0);
-          color.rgb = sharpOriginal + (sharpened - sharpOriginal) * u_sharpenAmount;
+          // Compute Laplacian detail entirely in original texture space
+          // to avoid cross-space artifacts between processed color and raw texture.
+          vec3 origCenter = texture(u_texture, v_texCoord).rgb;
+          vec3 neighbors = texture(u_texture, v_texCoord + vec2(-1.0, 0.0) * u_texelSize).rgb
+            + texture(u_texture, v_texCoord + vec2(1.0, 0.0) * u_texelSize).rgb
+            + texture(u_texture, v_texCoord + vec2(0.0, -1.0) * u_texelSize).rgb
+            + texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
+          // Laplacian: high-frequency edge detail (both terms in same space)
+          vec3 detail = origCenter * 4.0 - neighbors;
+          color.rgb = max(color.rgb + detail * u_sharpenAmount, 0.0);
         }
 
-        // 8. Display transfer function (replaces simple gamma, per-channel)
+        // 8. Display output: transfer function then creative gamma.
+        // Matches OpenRV ordering (DisplayIPNode.cpp): display transfer (sRGB/Rec.709)
+        // is applied FIRST, then creative gamma is applied AFTER:
+        //   if (linear2sRGB)   shaderExpr = newColorLinearToSRGB(shaderExpr);
+        //   if (linear2Rec709) shaderExpr = newColorLinearToRec709(shaderExpr);
+        //   if (displayGamma != 1.0) shaderExpr = newColorGamma(shaderExpr, 1.0/displayGamma);
+
+        // 8a. Display transfer function (linear to display-encoded, per-channel)
         if (u_displayTransfer > 0) {
           color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
-        } else {
-          color.rgb = pow(max(color.rgb, 0.0), 1.0 / u_gammaRGB);
         }
 
-        // 8b. Display gamma override
+        // 8b. Creative gamma (applied AFTER display transfer to match OpenRV ordering).
+        // When u_gammaRGB == vec3(1.0), pow() is identity so skip to avoid cost.
+        if (u_gammaRGB != vec3(1.0)) {
+          color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
+        }
+
+        // 8c. Display gamma override
         if (u_displayGamma != 1.0) {
           color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_displayGamma));
         }
 
-        // 8c. Display brightness
+        // 8d. Display brightness
         color.rgb *= u_displayBrightness;
 
         // 9. Color inversion (after all corrections, before channel isolation)

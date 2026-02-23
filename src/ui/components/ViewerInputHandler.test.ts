@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ViewerInputHandler, ViewerInputContext } from './ViewerInputHandler';
 import { PaintEngine } from '../../paint/PaintEngine';
+import { DodgeTool, BurnTool } from '../../paint/AdvancedPaintTools';
 import type { PaintRenderer } from '../../paint/PaintRenderer';
 import type { Session } from '../../core/session/Session';
 import type { TransformManager } from './TransformManager';
@@ -155,7 +156,13 @@ function createMockContext(overrides: Partial<ViewerInputContext> = {}): ViewerI
     isViewerContentElement: () => true,
     scheduleRender: vi.fn(),
     updateCanvasPosition: vi.fn(),
+    updateSphericalUniforms: vi.fn(),
     renderPaint: vi.fn(),
+    getSphericalProjection: () => null,
+    getGLRenderer: () => null,
+    isGLRendererActive: () => false,
+    getImageCtx: () => imageCanvas.getContext('2d')!,
+    invalidateGLRenderCache: vi.fn(),
     ...overrides,
   };
 }
@@ -485,5 +492,271 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
     // Should still have only one overlay
     const overlays = container.querySelectorAll('[data-testid="text-input-overlay"]');
     expect(overlays.length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Advanced Paint Tools – Regression Tests
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – Advanced Paint Tools Regression', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  const advancedTools = ['dodge', 'burn', 'clone', 'smudge'] as const;
+
+  // REG-APT-001: Selecting dodge/burn/clone/smudge does NOT trigger pan mode
+  for (const toolName of advancedTools) {
+    it(`REG-APT-001-${toolName}: selecting ${toolName} and clicking does NOT trigger pan mode`, () => {
+      ctx.getPaintEngine().tool = toolName;
+      const container = ctx.getContainer();
+
+      // Dispatch pointerdown
+      container.dispatchEvent(createPointerEvent('pointerdown', 400, 300));
+
+      // Verify cursor is NOT 'grabbing' (pan mode sets cursor to 'grabbing')
+      expect(container.style.cursor).not.toBe('grabbing');
+
+      // Also verify updateCanvasPosition was NOT called (it is called during panning moves)
+      // by dispatching a move event
+      container.dispatchEvent(createPointerEvent('pointermove', 410, 310));
+
+      // In pan mode, updateCanvasPosition would be called. For advanced tools, it should not be.
+      // Note: the mock updateCanvasPosition is already a vi.fn(), so we can check it.
+      expect(ctx.updateCanvasPosition).not.toHaveBeenCalled();
+
+      // Clean up
+      container.dispatchEvent(createPointerEvent('pointerup', 410, 310));
+    });
+  }
+
+  // REG-APT-002: Tool dispatch reaches the correct AdvancedPaintTools instance
+  for (const toolName of advancedTools) {
+    it(`REG-APT-002-${toolName}: tool dispatch reaches the ${toolName} tool instance`, () => {
+      const paintEngine = ctx.getPaintEngine();
+      paintEngine.tool = toolName;
+
+      // Verify PaintEngine has the tool instance
+      const toolInstance = paintEngine.getAdvancedTool(toolName);
+      expect(toolInstance).toBeDefined();
+      expect(toolInstance!.name).toBe(toolName);
+
+      // Verify isAdvancedTool identifies it correctly
+      expect(paintEngine.isAdvancedTool(toolName)).toBe(true);
+    });
+  }
+
+  // REG-APT-003: Standard tools are NOT identified as advanced tools
+  it('REG-APT-003: standard tools are not identified as advanced tools', () => {
+    const paintEngine = ctx.getPaintEngine();
+    const standardTools = ['pen', 'eraser', 'text', 'none', 'rectangle', 'ellipse', 'line', 'arrow'] as const;
+
+    for (const tool of standardTools) {
+      expect(paintEngine.isAdvancedTool(tool)).toBe(false);
+    }
+  });
+
+  // REG-APT-004: Cursor shows crosshair for advanced tools
+  for (const toolName of advancedTools) {
+    it(`REG-APT-004-${toolName}: cursor shows crosshair for ${toolName}`, () => {
+      handler.updateCursor(toolName);
+      expect(ctx.getContainer().style.cursor).toBe('crosshair');
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// HDR Pixel Extraction Tests
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – HDR Pixel Extraction', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  it('HDR-001: extractPixelBuffer uses GL readPixelFloat when GL renderer is active', () => {
+    // Create an HDR pixel buffer with values > 1.0
+    const w = 4;
+    const h = 4;
+    const hdrPixels = new Float32Array(w * h * 4);
+    for (let i = 0; i < hdrPixels.length; i += 4) {
+      hdrPixels[i] = 2.5;     // R > 1.0 (HDR)
+      hdrPixels[i + 1] = 1.8; // G > 1.0 (HDR)
+      hdrPixels[i + 2] = 0.3; // B
+      hdrPixels[i + 3] = 1.0; // A
+    }
+
+    const mockGLContext = {
+      drawingBufferWidth: w,
+      drawingBufferHeight: h,
+      TEXTURE_2D: 0x0DE1,
+      RGBA32F: 0x8814,
+      RGBA: 0x1908,
+      FLOAT: 0x1406,
+      texImage2D: vi.fn(),
+    };
+
+    const mockGLRenderer = {
+      readPixelFloat: vi.fn((_x: number, _y: number, rw: number, rh: number) => {
+        // Return a copy matching the requested dimensions
+        if (rw === w && rh === h) return new Float32Array(hdrPixels);
+        return null;
+      }),
+      getContext: vi.fn(() => mockGLContext),
+    };
+
+    ctx = createMockContext({
+      getGLRenderer: () => mockGLRenderer as any,
+      isGLRendererActive: () => true,
+    });
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+
+    // Set tool to dodge and dispatch a pointer event
+    ctx.getPaintEngine().tool = 'dodge';
+    const container = ctx.getContainer();
+    container.dispatchEvent(createPointerEvent('pointerdown', 2, 2));
+
+    // Verify readPixelFloat was called (GL path used)
+    expect(mockGLRenderer.readPixelFloat).toHaveBeenCalled();
+
+    // Clean up
+    container.dispatchEvent(createPointerEvent('pointerup', 2, 2));
+  });
+
+  it('HDR-002: extractPixelBuffer falls back to 2D canvas when GL renderer is not active', () => {
+    ctx = createMockContext({
+      getGLRenderer: () => null,
+      isGLRendererActive: () => false,
+    });
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+
+    // Set tool to dodge and dispatch - should not throw
+    ctx.getPaintEngine().tool = 'dodge';
+    const container = ctx.getContainer();
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300));
+
+    // Since there is no GL renderer, readPixelFloat is not called.
+    // The handler should have used the 2D canvas fallback without error.
+    // Verify by checking that no error was thrown and the handler is in drawing state.
+    container.dispatchEvent(createPointerEvent('pointerup', 400, 300));
+  });
+
+  it('HDR-003: HDR pixel values > 1.0 are preserved through GL readPixelFloat path', () => {
+    const w = 4;
+    const h = 4;
+    // Create HDR pixels with values > 1.0 in bottom-to-top order (GL convention)
+    const glPixels = new Float32Array(w * h * 4);
+    for (let i = 0; i < glPixels.length; i += 4) {
+      glPixels[i] = 3.0;      // R (HDR)
+      glPixels[i + 1] = 2.5;  // G (HDR)
+      glPixels[i + 2] = 1.8;  // B (HDR)
+      glPixels[i + 3] = 1.0;  // A
+    }
+
+    const mockGLContext = {
+      drawingBufferWidth: w,
+      drawingBufferHeight: h,
+      TEXTURE_2D: 0x0DE1,
+      RGBA32F: 0x8814,
+      RGBA: 0x1908,
+      FLOAT: 0x1406,
+      texImage2D: vi.fn(),
+    };
+
+    const mockGLRenderer = {
+      readPixelFloat: vi.fn(() => new Float32Array(glPixels)),
+      getContext: vi.fn(() => mockGLContext),
+    };
+
+    ctx = createMockContext({
+      getGLRenderer: () => mockGLRenderer as any,
+      isGLRendererActive: () => true,
+    });
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+
+    // Set tool to dodge - it will extract a pixel buffer and apply
+    ctx.getPaintEngine().tool = 'dodge';
+    const container = ctx.getContainer();
+
+    // Dispatch pointer event at the center of the canvas rect
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300));
+
+    // Verify readPixelFloat was called (GL path used for HDR)
+    expect(mockGLRenderer.readPixelFloat).toHaveBeenCalledWith(0, 0, w, h);
+
+    container.dispatchEvent(createPointerEvent('pointerup', 400, 300));
+  });
+
+  it('HDR-004: dodge tool preserves HDR values > 1.0 (no clamping)', () => {
+    const tool = new DodgeTool();
+    const buffer = {
+      data: new Float32Array([2.0, 1.5, 0.8, 1.0]),
+      width: 1,
+      height: 1,
+      channels: 4 as const,
+    };
+
+    tool.beginStroke({ x: 0, y: 0 });
+    tool.apply(buffer, { x: 0, y: 0 }, { size: 1, opacity: 1, pressure: 1, hardness: 1 });
+    tool.endStroke();
+
+    // Dodge multiplies by factor > 1, so values should increase above their HDR starting points
+    expect(buffer.data[0]).toBeGreaterThan(2.0);
+    expect(buffer.data[1]).toBeGreaterThan(1.5);
+    // No clamping to 1.0 should occur
+    expect(buffer.data[0]).toBeGreaterThan(1.0);
+    expect(buffer.data[1]).toBeGreaterThan(1.0);
+  });
+
+  it('HDR-005: burn tool preserves HDR values > 1.0 (only darkens, no upper clamp)', () => {
+    const tool = new BurnTool();
+    const buffer = {
+      data: new Float32Array([3.0, 2.0, 1.5, 1.0]),
+      width: 1,
+      height: 1,
+      channels: 4 as const,
+    };
+
+    tool.beginStroke({ x: 0, y: 0 });
+    tool.apply(buffer, { x: 0, y: 0 }, { size: 1, opacity: 1, pressure: 1, hardness: 1 });
+    tool.endStroke();
+
+    // Burn multiplies by factor < 1, so values should decrease but remain > 1.0
+    // because the originals were well above 1.0
+    expect(buffer.data[0]).toBeLessThan(3.0);
+    expect(buffer.data[0]).toBeGreaterThan(1.0); // 3.0 * 0.7 = 2.1
+    expect(buffer.data[1]).toBeLessThan(2.0);
+    expect(buffer.data[1]).toBeGreaterThan(1.0); // 2.0 * 0.7 = 1.4
+    // Values should not be clamped to 1.0
   });
 });

@@ -1670,4 +1670,595 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(tiffBuffer)).rejects.toThrow('Unsupported TIFF predictor: 4');
     });
   });
+
+  // ==================== Tiled TIFF Tests ====================
+
+  /**
+   * Create a tiled TIFF file buffer for testing.
+   * Tiles are stored left-to-right, top-to-bottom.
+   * Partial tiles at the right/bottom edges are padded with zeros to full tile size.
+   */
+  function createTiledTIFF(options: {
+    width: number;
+    height: number;
+    tileWidth: number;
+    tileHeight: number;
+    channels?: number;
+    bigEndian?: boolean;
+    compression?: number;
+    predictor?: number;
+    pixelValues?: number[];
+  }): ArrayBuffer | Promise<ArrayBuffer> {
+    const {
+      width,
+      height,
+      tileWidth,
+      tileHeight,
+      channels = 3,
+      bigEndian = false,
+      compression = 1,
+      predictor = 1,
+      pixelValues,
+    } = options;
+
+    const le = !bigEndian;
+    const bytesPerSample = 4; // float32
+
+    // Calculate tile grid
+    const tilesAcross = Math.ceil(width / tileWidth);
+    const tilesDown = Math.ceil(height / tileHeight);
+
+    // Generate pixel data for the full image
+    const fullPixelValues: number[] = pixelValues ?? [];
+    if (!pixelValues) {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          for (let c = 0; c < channels; c++) {
+            fullPixelValues.push((x + y * width + c) / (width * height * channels));
+          }
+        }
+      }
+    }
+
+    // Build tile data buffers
+    const tileDataBuffers: Uint8Array[] = [];
+    for (let tileRow = 0; tileRow < tilesDown; tileRow++) {
+      for (let tileCol = 0; tileCol < tilesAcross; tileCol++) {
+        // Full tile buffer (padded to tileWidth x tileHeight)
+        const tileBuf = new ArrayBuffer(tileWidth * tileHeight * channels * bytesPerSample);
+        const tileView = new DataView(tileBuf);
+
+        for (let ty = 0; ty < tileHeight; ty++) {
+          for (let tx = 0; tx < tileWidth; tx++) {
+            const imgX = tileCol * tileWidth + tx;
+            const imgY = tileRow * tileHeight + ty;
+            const tilePixelIdx = (ty * tileWidth + tx) * channels;
+
+            for (let c = 0; c < channels; c++) {
+              let value = 0;
+              if (imgX < width && imgY < height) {
+                const imgPixelIdx = (imgY * width + imgX) * channels + c;
+                value = fullPixelValues[imgPixelIdx] ?? 0;
+              }
+              tileView.setFloat32((tilePixelIdx + c) * bytesPerSample, value, le);
+            }
+          }
+        }
+
+        tileDataBuffers.push(new Uint8Array(tileBuf));
+      }
+    }
+
+    // Compress tile data if needed
+    if (compression === 5) {
+      // LZW compression
+      const compressedTiles: Uint8Array[] = [];
+      for (const tileBuf of tileDataBuffers) {
+        let data = tileBuf;
+        if (predictor === 2) {
+          data = applyHorizontalPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+        } else if (predictor === 3) {
+          data = applyFloatingPointPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+        }
+        compressedTiles.push(lzwCompress(data));
+      }
+      return buildTiledTIFFBuffer(
+        width, height, tileWidth, tileHeight, channels, bigEndian, compression, predictor,
+        compressedTiles, le, bytesPerSample
+      );
+    } else if (compression === 8 || compression === 32946) {
+      // Deflate compression - async
+      return (async () => {
+        const compressedTiles: Uint8Array[] = [];
+        for (const tileBuf of tileDataBuffers) {
+          let data = tileBuf;
+          if (predictor === 2) {
+            data = applyHorizontalPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+          } else if (predictor === 3) {
+            data = applyFloatingPointPredictorEncode(data, tileWidth, channels, bytesPerSample, tileHeight);
+          }
+          compressedTiles.push(await deflateCompress(data));
+        }
+        return buildTiledTIFFBuffer(
+          width, height, tileWidth, tileHeight, channels, bigEndian, compression, predictor,
+          compressedTiles, le, bytesPerSample
+        );
+      })();
+    }
+
+    // Uncompressed - use raw tile data
+    return buildTiledTIFFBuffer(
+      width, height, tileWidth, tileHeight, channels, bigEndian, compression, predictor,
+      tileDataBuffers, le, bytesPerSample
+    );
+  }
+
+  function buildTiledTIFFBuffer(
+    width: number,
+    height: number,
+    tileWidth: number,
+    tileHeight: number,
+    channels: number,
+    bigEndian: boolean,
+    compression: number,
+    predictor: number,
+    tileDataBuffers: Uint8Array[],
+    le: boolean,
+    _bytesPerSample: number,
+  ): ArrayBuffer {
+    const numTiles = tileDataBuffers.length;
+    const hasPredictor = predictor !== 1;
+    // Tags: Width, Height, BPS, Compression, Photometric, SPP, SampleFormat,
+    //        TileWidth, TileLength, TileOffsets, TileByteCounts, [Predictor]
+    const numTags = 11 + (hasPredictor ? 1 : 0);
+    const ifdOffset = 8;
+    const ifdSize = 2 + numTags * 12 + 4;
+    const extraDataStart = ifdOffset + ifdSize;
+
+    // BitsPerSample array
+    const needsBPSArray = channels > 2;
+    const bpsArrayOffset = extraDataStart;
+    const bpsArraySize = needsBPSArray ? channels * 2 : 0;
+
+    let nextExtra = extraDataStart + bpsArraySize;
+
+    // TileOffsets array (only needed if numTiles > 1; for 1 tile, value is inline)
+    let tileOffsetsArrayOffset = 0;
+    let tileByteCountsArrayOffset = 0;
+    if (numTiles > 1) {
+      tileOffsetsArrayOffset = nextExtra;
+      nextExtra += numTiles * 4;
+
+      // TileByteCounts array
+      tileByteCountsArrayOffset = nextExtra;
+      nextExtra += numTiles * 4;
+    }
+
+    // Tile data starts here
+    const tileDataStart = nextExtra;
+    const totalTileDataSize = tileDataBuffers.reduce((sum, d) => sum + d.length, 0);
+    const totalSize = tileDataStart + totalTileDataSize;
+
+    const buffer = new ArrayBuffer(totalSize);
+    const view = new DataView(buffer);
+
+    // TIFF Header
+    view.setUint16(0, bigEndian ? TIFF_BE : TIFF_LE, false);
+    view.setUint16(2, TIFF_MAGIC, le);
+    view.setUint32(4, ifdOffset, le);
+
+    let pos = ifdOffset;
+    view.setUint16(pos, numTags, le);
+    pos += 2;
+
+    function writeTag(id: number, type: number, count: number, value: number): void {
+      view.setUint16(pos, id, le);
+      view.setUint16(pos + 2, type, le);
+      view.setUint32(pos + 4, count, le);
+      if (type === 3 && count <= 2) {
+        view.setUint16(pos + 8, value, le);
+      } else if (type === 4 && count === 1) {
+        view.setUint32(pos + 8, value, le);
+      } else {
+        view.setUint32(pos + 8, value, le);
+      }
+      pos += 12;
+    }
+
+    // Tags in ascending order
+    writeTag(256, 4, 1, width);             // ImageWidth
+    writeTag(257, 4, 1, height);            // ImageLength
+    if (needsBPSArray) {
+      writeTag(258, 3, channels, bpsArrayOffset); // BitsPerSample
+    } else {
+      writeTag(258, 3, 1, 32);
+    }
+    writeTag(259, 3, 1, compression);       // Compression
+    writeTag(262, 3, 1, 2);                 // Photometric=RGB
+    writeTag(277, 3, 1, channels);          // SamplesPerPixel
+    if (hasPredictor) {
+      writeTag(317, 3, 1, predictor);       // Predictor
+    }
+    writeTag(322, 4, 1, tileWidth);         // TileWidth
+    writeTag(323, 4, 1, tileHeight);        // TileLength
+    if (numTiles === 1) {
+      writeTag(324, 4, 1, tileDataStart);                     // TileOffsets (inline)
+      writeTag(325, 4, 1, tileDataBuffers[0]!.length);        // TileByteCounts (inline)
+    } else {
+      writeTag(324, 4, numTiles, tileOffsetsArrayOffset);     // TileOffsets
+      writeTag(325, 4, numTiles, tileByteCountsArrayOffset);  // TileByteCounts
+    }
+    writeTag(339, 3, 1, 3);                 // SampleFormat=float
+
+    // Next IFD = 0
+    view.setUint32(pos, 0, le);
+
+    // BitsPerSample array
+    if (needsBPSArray) {
+      for (let i = 0; i < channels; i++) {
+        view.setUint16(bpsArrayOffset + i * 2, 32, le);
+      }
+    }
+
+    // Write tile offsets, byte counts, and data
+    let dataPos = tileDataStart;
+    if (numTiles > 1) {
+      for (let t = 0; t < numTiles; t++) {
+        view.setUint32(tileOffsetsArrayOffset + t * 4, dataPos, le);
+        view.setUint32(tileByteCountsArrayOffset + t * 4, tileDataBuffers[t]!.length, le);
+        new Uint8Array(buffer, dataPos, tileDataBuffers[t]!.length).set(tileDataBuffers[t]!);
+        dataPos += tileDataBuffers[t]!.length;
+      }
+    } else {
+      new Uint8Array(buffer, dataPos, tileDataBuffers[0]!.length).set(tileDataBuffers[0]!);
+    }
+
+    return buffer;
+  }
+
+  describe('Tiled TIFF layout', () => {
+    it('TIFF-TILE001: should decode uncompressed tiled RGB float TIFF (exact tiles)', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(x * 0.1, y * 0.1, (x + y) * 0.05);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels: 3,
+        pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(width * height * 4);
+
+      // Verify pixel (0,0)
+      expect(result.data[0]).toBeCloseTo(0, 4);    // R = 0 * 0.1
+      expect(result.data[1]).toBeCloseTo(0, 4);    // G = 0 * 0.1
+      expect(result.data[2]).toBeCloseTo(0, 4);    // B = (0+0) * 0.05
+      expect(result.data[3]).toBe(1.0);              // A
+
+      // Verify pixel (3, 2) - idx = (2*4+3)*4 = 44
+      const idx = (2 * width + 3) * 4;
+      expect(result.data[idx]).toBeCloseTo(0.3, 4);      // R = 3*0.1
+      expect(result.data[idx + 1]).toBeCloseTo(0.2, 4);  // G = 2*0.1
+      expect(result.data[idx + 2]).toBeCloseTo(0.25, 4); // B = (3+2)*0.05
+
+      // Check metadata
+      expect(result.metadata.tiled).toBe(true);
+      expect(result.metadata.tileWidth).toBe(tileWidth);
+      expect(result.metadata.tileLength).toBe(tileHeight);
+    });
+
+    it('TIFF-TILE002: should decode tiled TIFF with partial tiles at right/bottom edges', async () => {
+      // 5x5 image with 4x4 tiles = 2x2 tile grid, right/bottom tiles partial
+      const width = 5, height = 5, tileWidth = 4, tileHeight = 4;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(x * 0.1 + 0.01, y * 0.1 + 0.02, 0.5);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Verify bottom-right corner pixel (4, 4)
+      const idx = (4 * width + 4) * 4;
+      expect(result.data[idx]).toBeCloseTo(4 * 0.1 + 0.01, 4);
+      expect(result.data[idx + 1]).toBeCloseTo(4 * 0.1 + 0.02, 4);
+      expect(result.data[idx + 2]).toBeCloseTo(0.5, 4);
+      expect(result.data[idx + 3]).toBe(1.0);
+
+      // Verify pixel at tile boundary (3, 3) - still in first tile
+      const idx2 = (3 * width + 3) * 4;
+      expect(result.data[idx2]).toBeCloseTo(3 * 0.1 + 0.01, 4);
+      expect(result.data[idx2 + 1]).toBeCloseTo(3 * 0.1 + 0.02, 4);
+    });
+
+    it('TIFF-TILE003: should decode tiled RGBA float TIFF', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const channels = 4;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(0.1, 0.2, 0.3, 0.5);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.channels).toBe(4);
+      // Check alpha is preserved (not overwritten with 1.0)
+      expect(result.data[3]).toBeCloseTo(0.5, 4);
+      expect(result.data[7]).toBeCloseTo(0.5, 4);
+    });
+
+    it('TIFF-TILE004: should decode big-endian tiled TIFF', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(0.25, 0.5, 0.75);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels: 3,
+        bigEndian: true, pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.data[0]).toBeCloseTo(0.25, 4);
+      expect(result.data[1]).toBeCloseTo(0.5, 4);
+      expect(result.data[2]).toBeCloseTo(0.75, 4);
+    });
+
+    it('TIFF-TILE005: should decode 1x1 tile (entire image is one tile)', async () => {
+      const width = 1, height = 1, tileWidth = 1, tileHeight = 1;
+      const pixelValues = [0.33, 0.66, 0.99];
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels: 3,
+        pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data[0]).toBeCloseTo(0.33, 4);
+      expect(result.data[1]).toBeCloseTo(0.66, 4);
+      expect(result.data[2]).toBeCloseTo(0.99, 4);
+      expect(result.data[3]).toBe(1.0);
+    });
+
+    it('TIFF-TILE006: should decode LZW compressed tiled TIFF', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(x * 0.1, y * 0.2, 0.5);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        compression: 5, pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Verify pixel (1, 2) - idx = (2*4+1)*4 = 36
+      const idx = (2 * width + 1) * 4;
+      expect(result.data[idx]).toBeCloseTo(0.1, 4);   // R = 1*0.1
+      expect(result.data[idx + 1]).toBeCloseTo(0.4, 4); // G = 2*0.2
+      expect(result.data[idx + 2]).toBeCloseTo(0.5, 4); // B = 0.5
+    });
+
+    it('TIFF-TILE007: should decode Deflate compressed tiled TIFF', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(x * 0.1, y * 0.2, 0.5);
+        }
+      }
+
+      const tiffBuffer = await createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        compression: 8, pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      const idx = (2 * width + 1) * 4;
+      expect(result.data[idx]).toBeCloseTo(0.1, 4);
+      expect(result.data[idx + 1]).toBeCloseTo(0.4, 4);
+      expect(result.data[idx + 2]).toBeCloseTo(0.5, 4);
+    });
+
+    it('TIFF-TILE008: should decode LZW tiled TIFF with horizontal predictor', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(0.1, 0.2, 0.3);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        compression: 5, predictor: 2, pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+
+      // All pixels should have the same value
+      for (let i = 0; i < width * height; i++) {
+        expect(result.data[i * 4]).toBeCloseTo(0.1, 4);
+        expect(result.data[i * 4 + 1]).toBeCloseTo(0.2, 4);
+        expect(result.data[i * 4 + 2]).toBeCloseTo(0.3, 4);
+      }
+    });
+
+    it('TIFF-TILE009: should decode LZW tiled TIFF with floating-point predictor', async () => {
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(0.4, 0.5, 0.6);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        compression: 5, predictor: 3, pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      for (let i = 0; i < width * height; i++) {
+        expect(result.data[i * 4]).toBeCloseTo(0.4, 4);
+        expect(result.data[i * 4 + 1]).toBeCloseTo(0.5, 4);
+        expect(result.data[i * 4 + 2]).toBeCloseTo(0.6, 4);
+      }
+    });
+
+    it('TIFF-TILE010: should decode tiled TIFF with non-square tiles', async () => {
+      // 8x6 image with 4x3 tiles
+      const width = 8, height = 6, tileWidth = 4, tileHeight = 3;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(x / width, y / height, 0.5);
+        }
+      }
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.data.length).toBe(width * height * 4);
+
+      // Verify some specific pixels
+      // Pixel (7, 5) - bottom-right corner
+      const idx = (5 * width + 7) * 4;
+      expect(result.data[idx]).toBeCloseTo(7 / width, 4);
+      expect(result.data[idx + 1]).toBeCloseTo(5 / height, 4);
+      expect(result.data[idx + 2]).toBeCloseTo(0.5, 4);
+    });
+
+    it('TIFF-TILE011: should handle tile larger than image', async () => {
+      // 2x2 image with 8x8 tiles
+      const width = 2, height = 2, tileWidth = 8, tileHeight = 8;
+      const pixelValues = [
+        0.1, 0.2, 0.3,
+        0.4, 0.5, 0.6,
+        0.7, 0.8, 0.9,
+        1.0, 0.0, 0.5,
+      ];
+
+      const tiffBuffer = createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels: 3,
+        pixelValues,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer as ArrayBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0);
+
+      // Pixel (1, 1)
+      const idx = (1 * width + 1) * 4;
+      expect(result.data[idx]).toBeCloseTo(1.0, 4);
+      expect(result.data[idx + 1]).toBeCloseTo(0.0, 4);
+      expect(result.data[idx + 2]).toBeCloseTo(0.5, 4);
+    });
+
+    it('TIFF-TILE012: should produce consistent results between strip and tile layout', async () => {
+      // Decode the same pixel data as both strip and tiled, verify identical output
+      const width = 4, height = 4, channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(x * 0.15, y * 0.25, (x + y) * 0.05);
+        }
+      }
+
+      // Strip-based TIFF
+      const stripBuffer = createTestFloatTIFF({
+        width, height, channels,
+        pixelValues,
+      });
+      const stripResult = await decodeTIFFFloat(stripBuffer);
+
+      // Tiled TIFF with 2x2 tiles
+      const tiledBuffer = createTiledTIFF({
+        width, height, tileWidth: 2, tileHeight: 2, channels,
+        pixelValues,
+      });
+      const tiledResult = await decodeTIFFFloat(tiledBuffer as ArrayBuffer);
+
+      expect(tiledResult.width).toBe(stripResult.width);
+      expect(tiledResult.height).toBe(stripResult.height);
+      expect(tiledResult.channels).toBe(stripResult.channels);
+
+      // Every pixel should match
+      for (let i = 0; i < stripResult.data.length; i++) {
+        expect(tiledResult.data[i]).toBeCloseTo(stripResult.data[i]!, 4);
+      }
+    });
+  });
 });

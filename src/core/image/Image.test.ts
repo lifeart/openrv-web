@@ -824,4 +824,44 @@ describe('IPImage', () => {
       expect(image.data.byteLength).toBe(3840 * 2160 * 4);
     });
   });
+
+  describe('clone imageBitmap propagation (regression)', () => {
+    it('IMG-R001: clone preserves imageBitmap reference', () => {
+      const mockBitmap = {
+        width: 100,
+        height: 100,
+        close: () => {},
+      } as unknown as ImageBitmap;
+
+      const original = new IPImage({
+        width: 100,
+        height: 100,
+        channels: 4,
+        dataType: 'uint8',
+        imageBitmap: mockBitmap,
+      });
+
+      const cloned = original.clone();
+      expect(cloned.imageBitmap).toBe(mockBitmap);
+    });
+
+    it('IMG-R002: clone does NOT copy videoFrame (GPU resource)', () => {
+      const mockFrame = {
+        codedWidth: 100,
+        codedHeight: 100,
+        close: () => {},
+      } as unknown as VideoFrame;
+
+      const original = new IPImage({
+        width: 100,
+        height: 100,
+        channels: 4,
+        dataType: 'uint8',
+        videoFrame: mockFrame,
+      });
+
+      const cloned = original.clone();
+      expect(cloned.videoFrame).toBeNull();
+    });
+  });
 });

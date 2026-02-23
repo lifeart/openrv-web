@@ -188,7 +188,7 @@ describe('HistoryManager', () => {
       expect(redo).toHaveBeenCalled();
     });
 
-    it('HM-U034: redo calls restore function if no redo function', () => {
+    it('HM-U034: redo without redo function does NOT call restore (restore is undo)', () => {
       const restore = vi.fn();
       manager.recordAction('Test', 'color', restore);
       manager.undo();
@@ -196,7 +196,10 @@ describe('HistoryManager', () => {
 
       manager.redo();
 
-      expect(restore).toHaveBeenCalled();
+      // restore is the undo callback — it should NOT be called as a redo fallback
+      expect(restore).not.toHaveBeenCalled();
+      // But redo should still succeed (advance the index)
+      expect(manager.getCurrentIndex()).toBe(0);
     });
 
     it('HM-U035: redo increments currentIndex', () => {
@@ -636,6 +639,57 @@ describe('HistoryManager', () => {
           HistoryManager.getCategoryIcon(cat)
         );
       }
+    });
+  });
+
+  describe('redo/jumpTo semantics (regression)', () => {
+    it('HM-R001: redo with explicit redo callback produces correct value', () => {
+      let value = 0;
+
+      value = 1;
+      manager.recordAction('set to 1', 'session', () => { value = 0; }, () => { value = 1; });
+
+      value = 2;
+      manager.recordAction('set to 2', 'session', () => { value = 1; }, () => { value = 2; });
+
+      manager.undo();
+      expect(value).toBe(1);
+
+      manager.redo();
+      expect(value).toBe(2);
+    });
+
+    it('HM-R002: jumpTo forward calls redo callbacks, not restore', () => {
+      let value = 0;
+
+      value = 1;
+      manager.recordAction('set to 1', 'session', () => { value = 0; }, () => { value = 1; });
+
+      value = 2;
+      manager.recordAction('set to 2', 'session', () => { value = 1; }, () => { value = 2; });
+
+      manager.undo();
+      manager.undo();
+      expect(value).toBe(0);
+
+      manager.jumpTo(1);
+      expect(value).toBe(2);
+    });
+
+    it('HM-R003: redo without redo callback does not call restore', () => {
+      let value = 0;
+
+      value = 1;
+      manager.recordAction('set to 1', 'session', () => { value = 0; });
+
+      manager.undo();
+      expect(value).toBe(0);
+
+      const result = manager.redo();
+      expect(result).toBe(true);
+      // restore should NOT have been called again — value stays at 0
+      expect(value).toBe(0);
+      expect(manager.getCurrentIndex()).toBe(0);
     });
   });
 });

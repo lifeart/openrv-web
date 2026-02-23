@@ -281,50 +281,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
    * Calculate histogram from ImageData
    */
   calculate(imageData: ImageData): HistogramData {
-    const data = imageData.data;
-    const red = new Uint32Array(HISTOGRAM_BINS);
-    const green = new Uint32Array(HISTOGRAM_BINS);
-    const blue = new Uint32Array(HISTOGRAM_BINS);
-    const luminance = new Uint32Array(HISTOGRAM_BINS);
-
-    const len = data.length;
-    const pixelCount = len / 4;
-
-    for (let i = 0; i < len; i += 4) {
-      const r = data[i]!;
-      const g = data[i + 1]!;
-      const b = data[i + 2]!;
-
-      red[r]!++;
-      green[g]!++;
-      blue[b]!++;
-
-      // Calculate luminance using Rec.709 coefficients
-      const luma = Math.round(
-        LUMINANCE_COEFFICIENTS.r * r +
-        LUMINANCE_COEFFICIENTS.g * g +
-        LUMINANCE_COEFFICIENTS.b * b
-      );
-      luminance[Math.min(255, luma)]!++;
-    }
-
-    // Find max value for normalization
-    let maxValue = 0;
-    for (let i = 0; i < HISTOGRAM_BINS; i++) {
-      maxValue = Math.max(maxValue, red[i]!, green[i]!, blue[i]!, luminance[i]!);
-    }
-
-    // Calculate clipping statistics
-    const shadows = luminance[0] ?? 0;
-    const highlights = luminance[255] ?? 0;
-    const clipping = {
-      shadows,
-      highlights,
-      shadowsPercent: pixelCount > 0 ? (shadows / pixelCount) * 100 : 0,
-      highlightsPercent: pixelCount > 0 ? (highlights / pixelCount) * 100 : 0,
-    };
-
-    this.data = { red, green, blue, luminance, maxValue, pixelCount, clipping };
+    this.data = calculateHistogram(imageData);
     return this.data;
   }
 

@@ -140,8 +140,8 @@ describe('WorkerPool', () => {
       const lowPriority = pool.submit({ type: 'low' }, undefined, 10);
       const highPriority = pool.submit({ type: 'high' }, undefined, 1);
 
-      await Promise.all([lowPriority, highPriority]);
-      // Both should complete, priority affects order when queued
+      const results = await Promise.all([lowPriority, highPriority]);
+      expect(results).toHaveLength(2);
     });
 
     it('WP-022: higher priority tasks are processed first when queued', async () => {

@@ -9,7 +9,8 @@
  * Viewer because it needs deep session/canvas coupling.
  */
 
-import { WipeState, WipeMode, DEFAULT_WIPE_STATE } from './WipeControl';
+import { DEFAULT_WIPE_STATE } from './WipeControl';
+import type { WipeState, WipeMode } from '../../core/types/wipe';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -28,6 +29,12 @@ import {
   calculateSplitPosition,
   isSplitScreenMode,
 } from './ViewerSplitScreen';
+import type { StencilBox } from '../../core/types/wipe';
+import {
+  DEFAULT_STENCIL_BOX,
+  computeHorizontalWipeBoxes,
+  computeVerticalWipeBoxes,
+} from '../../core/types/wipe';
 
 // Wipe label constants
 const DEFAULT_WIPE_LABEL_A = 'Original';
@@ -267,6 +274,31 @@ export class WipeManager {
   handlePointerUp(): void {
     this._isDraggingWipe = false;
     this._isDraggingSplit = false;
+  }
+
+  // =========================================================================
+  // Stencil Box Computation
+  // =========================================================================
+
+  /**
+   * Compute stencil boxes for two inputs based on the current wipe mode and position.
+   * Returns [boxA, boxB] where each box is [xMin, xMax, yMin, yMax] in 0-1 range.
+   * When wipe is off, both boxes cover the full image.
+   */
+  computeStencilBoxes(): [StencilBox, StencilBox] {
+    if (this._state.mode === 'off') {
+      return [[...DEFAULT_STENCIL_BOX], [...DEFAULT_STENCIL_BOX]];
+    }
+
+    if (this._state.mode === 'horizontal' || this._state.mode === 'splitscreen-h') {
+      return computeHorizontalWipeBoxes(this._state.position);
+    }
+
+    if (this._state.mode === 'vertical' || this._state.mode === 'splitscreen-v') {
+      return computeVerticalWipeBoxes(this._state.position);
+    }
+
+    return [[...DEFAULT_STENCIL_BOX], [...DEFAULT_STENCIL_BOX]];
   }
 
   // =========================================================================

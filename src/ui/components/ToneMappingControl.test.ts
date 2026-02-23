@@ -110,7 +110,7 @@ describe('ToneMappingControl', () => {
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
-    it('TONE-U024: button mouseleave restores background when disabled', () => {
+    it('TONE-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
@@ -745,10 +745,10 @@ describe('ToneMappingControl', () => {
     });
 
     it('TONE-U122: dispose clears operator buttons map', () => {
-      control.render();
-      control.dispose();
-      // No error means cleanup was successful
-      expect(true).toBe(true);
+      expect(() => {
+        control.render();
+        control.dispose();
+      }).not.toThrow();
     });
   });
 

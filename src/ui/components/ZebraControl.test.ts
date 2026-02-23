@@ -105,7 +105,7 @@ describe('ZebraControl', () => {
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
-    it('ZEBRA-U024: button mouseleave restores background when disabled', () => {
+    it('ZEBRA-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
@@ -113,7 +113,7 @@ describe('ZebraControl', () => {
       expect(button.style.background).toBe('transparent');
     });
 
-    it('ZEBRA-M20a: borderColor resets to transparent on mouseleave when inactive', () => {
+    it('ZEBRA-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
@@ -122,7 +122,7 @@ describe('ZebraControl', () => {
       expect(button.style.borderColor).toBe('transparent');
     });
 
-    it('ZEBRA-M20b: borderColor remains accent color on mouseleave when active', () => {
+    it('ZEBRA-M20b: borderColor remains accent color on pointerleave when active', () => {
       const el = control.render();
       zebraStripes.enable();
       zebraStripes.setState({ highEnabled: true });

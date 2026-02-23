@@ -32,3 +32,19 @@ export {
 
 export { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
 export type { GTONodeInfo, GTOParseResult } from './GTOGraphLoader';
+
+export {
+  resolveByHash,
+  resolveByAt,
+  resolveGTOByHash,
+  resolveGTOByAt,
+  resolveProperty,
+  parseHashAddress,
+  parseAtAddress,
+} from './PropertyResolver';
+export type {
+  HashResolveResult,
+  AtResolveResult,
+  GTOHashResolveResult,
+  GTOAtResolveResult,
+} from './PropertyResolver';

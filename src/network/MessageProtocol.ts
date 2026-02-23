@@ -48,6 +48,7 @@ const VALID_MESSAGE_TYPES: Set<SyncMessageType> = new Set([
   'sync.view',
   'sync.color',
   'sync.annotation',
+  'sync.note',
   'sync.state-request',
   'sync.state-response',
   'sync.media-request',
@@ -456,9 +457,13 @@ export function validateColorPayload(payload: unknown): payload is ColorSyncPayl
   if (payload === null || typeof payload !== 'object') return false;
   const p = payload as Record<string, unknown>;
   return (
-    typeof p.exposure === 'number' &&
-    typeof p.gamma === 'number' &&
-    typeof p.saturation === 'number'
+    typeof p.exposure === 'number' && Number.isFinite(p.exposure) &&
+    typeof p.gamma === 'number' && Number.isFinite(p.gamma) &&
+    typeof p.saturation === 'number' && Number.isFinite(p.saturation) &&
+    typeof p.contrast === 'number' && Number.isFinite(p.contrast) &&
+    typeof p.temperature === 'number' && Number.isFinite(p.temperature) &&
+    typeof p.tint === 'number' && Number.isFinite(p.tint) &&
+    typeof p.brightness === 'number' && Number.isFinite(p.brightness)
   );
 }
 

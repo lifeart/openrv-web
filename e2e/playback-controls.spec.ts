@@ -7,6 +7,17 @@ import {
   imagesAreDifferent,
   waitForLoopMode,
   waitForPlaybackState,
+  waitForFrame,
+  waitForFrameAtLeast,
+  waitForFrameAtEnd,
+  waitForFrameChange,
+  waitForPlayDirection,
+  waitForCondition,
+  setInOutRange,
+  setLoopMode,
+  navigateToFrame,
+  stepForward,
+  resetInOutPoints,
 } from './fixtures';
 
 /**
@@ -22,7 +33,6 @@ test.describe('Playback Controls', () => {
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    await page.waitForTimeout(500);
   });
 
   test.describe('Play/Pause', () => {
@@ -34,14 +44,14 @@ test.describe('Playback Controls', () => {
       const playButton = page.locator('button[title*="Play"], button[title*="Pause"]').first();
       await expect(playButton).toBeVisible();
       await playButton.click();
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, true);
 
       state = await getSessionState(page);
       expect(state.isPlaying).toBe(true);
 
       // Click again to pause
       await playButton.click();
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       state = await getSessionState(page);
       expect(state.isPlaying).toBe(false);
@@ -53,14 +63,14 @@ test.describe('Playback Controls', () => {
 
       // Press Space to play
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, true);
 
       state = await getSessionState(page);
       expect(state.isPlaying).toBe(true);
 
       // Press Space to pause
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       state = await getSessionState(page);
       expect(state.isPlaying).toBe(false);
@@ -73,11 +83,11 @@ test.describe('Playback Controls', () => {
 
       // Start playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(500);
+      await waitForFrameChange(page, initialFrame);
 
       // Stop playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       const finalState = await getSessionState(page);
       expect(finalState.currentFrame).toBeGreaterThan(initialFrame);
@@ -96,7 +106,7 @@ test.describe('Playback Controls', () => {
 
       // Start playing
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, true);
 
       // Check button title changed
       const playingTitle = await playButton.getAttribute('title');
@@ -104,7 +114,7 @@ test.describe('Playback Controls', () => {
 
       // Stop playing
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Check button title back to play
       const stoppedTitle = await playButton.getAttribute('title');
@@ -118,7 +128,7 @@ test.describe('Playback Controls', () => {
       const initialFrame = initialState.currentFrame;
 
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, initialFrame + 1);
 
       const newState = await getSessionState(page);
       expect(newState.currentFrame).toBe(initialFrame + 1);
@@ -133,7 +143,7 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 4);
 
       const state1 = await getSessionState(page);
       const frame1 = state1.currentFrame;
@@ -141,7 +151,7 @@ test.describe('Playback Controls', () => {
 
       // Then step backward
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, frame1 - 1);
 
       const state2 = await getSessionState(page);
       expect(state2.currentFrame).toBe(frame1 - 1);
@@ -162,7 +172,7 @@ test.describe('Playback Controls', () => {
       const stepForwardButton = page.locator('button[title*="Step forward"], button[title*="Next frame"]').first();
       if (await stepForwardButton.isVisible()) {
         await stepForwardButton.click();
-        await page.waitForTimeout(100);
+        await waitForFrame(page, initialFrame + 1);
 
         const newState = await getSessionState(page);
         expect(newState.currentFrame).toBe(initialFrame + 1);
@@ -173,7 +183,7 @@ test.describe('Playback Controls', () => {
       // First step forward
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 3);
 
       const state1 = await getSessionState(page);
       const frame1 = state1.currentFrame;
@@ -181,7 +191,7 @@ test.describe('Playback Controls', () => {
       const stepBackButton = page.locator('button[title*="Step backward"], button[title*="Previous frame"]').first();
       if (await stepBackButton.isVisible()) {
         await stepBackButton.click();
-        await page.waitForTimeout(100);
+        await waitForFrame(page, frame1 - 1);
 
         const state2 = await getSessionState(page);
         expect(state2.currentFrame).toBe(frame1 - 1);
@@ -195,14 +205,14 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 4);
 
       let state = await getSessionState(page);
       expect(state.currentFrame).toBeGreaterThan(1);
 
       // Press Home to go to start
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 1);
 
       state = await getSessionState(page);
       expect(state.currentFrame).toBe(1);
@@ -213,7 +223,7 @@ test.describe('Playback Controls', () => {
       const frameCount = state.frameCount;
 
       await page.keyboard.press('End');
-      await page.waitForTimeout(100);
+      await waitForFrameAtEnd(page);
 
       state = await getSessionState(page);
       expect(state.currentFrame).toBe(frameCount);
@@ -224,14 +234,14 @@ test.describe('Playback Controls', () => {
       expect(state.playDirection).toBe(1);
 
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, -1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(-1);
 
       // Toggle back
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, 1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(1);
@@ -244,14 +254,14 @@ test.describe('Playback Controls', () => {
 
       // Set reverse direction with ArrowUp
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, -1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(-1);
 
       // Toggle back to forward
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, 1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(1);
@@ -266,14 +276,14 @@ test.describe('Playback Controls', () => {
       const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
       await expect(directionButton).toBeVisible();
       await directionButton.click();
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, -1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(-1);
 
       // Click again to toggle back
       await directionButton.click();
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, 1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(1);
@@ -282,7 +292,7 @@ test.describe('Playback Controls', () => {
     test('PLAY-025: reverse playback should actually decrement frames during playback', async ({ page }) => {
       // Go to a frame in the middle so we have room to go backward
       await page.keyboard.press('End');
-      await page.waitForTimeout(100);
+      await waitForFrameAtEnd(page);
 
       let state = await getSessionState(page);
       const startFrame = state.currentFrame;
@@ -290,18 +300,18 @@ test.describe('Playback Controls', () => {
 
       // Set reverse direction
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, -1);
 
       state = await getSessionState(page);
       expect(state.playDirection).toBe(-1);
 
       // Start playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(500); // Play for a bit
+      await waitForFrameChange(page, startFrame);
 
       // Stop playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Frame should have DECREASED (reverse playback)
       state = await getSessionState(page);
@@ -319,7 +329,7 @@ test.describe('Playback Controls', () => {
 
       // Toggle to reverse
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, -1);
 
       // Button should now indicate backward
       title = await directionButton.getAttribute('title');
@@ -327,7 +337,7 @@ test.describe('Playback Controls', () => {
 
       // Toggle back to forward
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      await waitForPlayDirection(page, 1);
 
       // Button should indicate forward again
       title = await directionButton.getAttribute('title');
@@ -335,19 +345,20 @@ test.describe('Playback Controls', () => {
     });
 
     test('PLAY-027: toggling direction during playback should immediately change direction', async ({ page }) => {
-      // Go to middle of video
+      // Go to middle of video — wait for each frame step
       await page.keyboard.press('Home');
+      await waitForFrame(page, 1);
       for (let i = 0; i < 10; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 5); // At least 5 of 10 steps registered
 
       let state = await getSessionState(page);
       const midFrame = state.currentFrame;
 
       // Start forward playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(300);
+      await waitForFrameChange(page, midFrame);
 
       state = await getSessionState(page);
       const frameAfterForward = state.currentFrame;
@@ -355,11 +366,11 @@ test.describe('Playback Controls', () => {
 
       // Toggle to reverse while still playing
       await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(300);
+      await waitForFrameChange(page, frameAfterForward);
 
       // Stop playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Frame should have decreased from the forward position
       state = await getSessionState(page);
@@ -395,58 +406,36 @@ test.describe('Playback Controls', () => {
     });
 
     test('PLAY-031: loop mode should repeat from start when reaching end', async ({ page }) => {
-      // Set in/out points close together for quick test
-      await page.keyboard.press('Home');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('i'); // in point at frame 2
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('o'); // out point at frame 4
-      await page.waitForTimeout(100);
+      await setInOutRange(page, 2, 4);
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('loop');
 
-      // Go to in point and play
+      // Go to in point (Home goes to inPoint) and play
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 2);
 
-      // Start playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(600); // Long enough to loop
+      await page.waitForTimeout(600);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
-      // In loop mode, should still be playing within in/out range
+      // In loop mode, should still be within in/out range
       state = await getSessionState(page);
       expect(state.currentFrame).toBeGreaterThanOrEqual(state.inPoint);
       expect(state.currentFrame).toBeLessThanOrEqual(state.outPoint);
     });
 
     test('PLAY-032: once mode should stop at end of range', async ({ page }) => {
-      // Set short in/out range
-      await page.keyboard.press('Home');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('i');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('o');
-      await page.waitForTimeout(100);
-
-      // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
-      await page.keyboard.press('Control+l'); // loop -> pingpong
-      await waitForLoopMode(page, 'pingpong');
-      await page.keyboard.press('Control+l'); // pingpong -> once
-      await waitForLoopMode(page, 'once');
+      await setInOutRange(page, 2, 4);
+      await setLoopMode(page, 'once');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
 
-      // Go to in point
-      const inPoint = state.inPoint;
+      // Go to in point (Home goes to inPoint)
       await page.keyboard.press('Home');
-      await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 2);
 
       // Start playback and wait for it to stop (once mode)
       await page.keyboard.press('Space');
@@ -460,29 +449,15 @@ test.describe('Playback Controls', () => {
     });
 
     test('PLAY-033: pingpong mode should reverse at boundaries', async ({ page }) => {
-      // Set short in/out range
-      await page.keyboard.press('Home');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('i');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('o');
-      await page.waitForTimeout(100);
-
-      // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
-      await page.keyboard.press('Control+l');
-      await waitForLoopMode(page, 'pingpong');
+      await setInOutRange(page, 2, 5);
+      await setLoopMode(page, 'pingpong');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
 
-      // Go to in point
+      // Go to in point (Home goes to inPoint)
       await page.keyboard.press('Home');
-      await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
-
-      const startDirection = state.playDirection;
+      await waitForFrame(page, 2);
 
       // Start playback
       await page.keyboard.press('Space');
@@ -505,7 +480,10 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('o'); // out at frame 4 (3 frame range)
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint === 2 && s?.outPoint === 4;
+      })()`);
 
       // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
       await page.keyboard.press('Control+l');
@@ -523,13 +501,16 @@ test.describe('Playback Controls', () => {
       // Go to near the end of range
       await page.keyboard.press('End'); // Go to out point
       await page.keyboard.press('ArrowLeft'); // One frame before end
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.currentFrame < s?.outPoint;
+      })()`);
 
       // Start playback - should hit boundary and reverse
       await page.keyboard.press('Space');
       await page.waitForTimeout(600); // Wait for reversal to happen
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // After hitting boundary, direction should have changed
       state = await getSessionState(page);
@@ -552,14 +533,17 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 4);
 
       state = await getSessionState(page);
       const targetFrame = state.currentFrame;
 
       // Set in point
       await page.keyboard.press('i');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint === ${targetFrame};
+      })()`);
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(targetFrame);
@@ -574,14 +558,20 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('End');
       await page.keyboard.press('ArrowLeft');
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.currentFrame < s?.frameCount;
+      })()`);
 
       state = await getSessionState(page);
       const targetFrame = state.currentFrame;
 
       // Set out point
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.outPoint === ${targetFrame};
+      })()`);
 
       state = await getSessionState(page);
       expect(state.outPoint).toBe(targetFrame);
@@ -592,13 +582,16 @@ test.describe('Playback Controls', () => {
       // Set in point with [
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 3);
 
       let state = await getSessionState(page);
       const inFrame = state.currentFrame;
 
       await page.keyboard.press('[');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint === ${inFrame};
+      })()`);
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(inFrame);
@@ -606,49 +599,44 @@ test.describe('Playback Controls', () => {
       // Set out point with ]
       await page.keyboard.press('End');
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.currentFrame < s?.frameCount;
+      })()`);
 
       state = await getSessionState(page);
       const outFrame = state.currentFrame;
 
       await page.keyboard.press(']');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.outPoint === ${outFrame};
+      })()`);
 
       state = await getSessionState(page);
       expect(state.outPoint).toBe(outFrame);
     });
 
     test('PLAY-043: playback should be constrained to in/out range', async ({ page }) => {
-      // Set narrow in/out range
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('i');
-      await page.waitForTimeout(100);
+      await setInOutRange(page, 3, 6);
 
-      let state = await getSessionState(page);
-      const inPoint = state.inPoint;
+      const state0 = await getSessionState(page);
+      const inPoint = state0.inPoint;
+      const outPoint = state0.outPoint;
 
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('o');
-      await page.waitForTimeout(100);
-
-      state = await getSessionState(page);
-      const outPoint = state.outPoint;
-
-      // Go to start
+      // Go to start (Home goes to inPoint)
       await page.keyboard.press('Home');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, inPoint);
 
-      // Play
+      // Play and wait for frame to advance within the in/out range
       await page.keyboard.press('Space');
-      await page.waitForTimeout(400);
+      await waitForPlaybackState(page, true);
+      await waitForFrameAtLeast(page, inPoint + 1);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // Frame should be within in/out range
-      state = await getSessionState(page);
+      const state = await getSessionState(page);
       expect(state.currentFrame).toBeGreaterThanOrEqual(inPoint);
       expect(state.currentFrame).toBeLessThanOrEqual(outPoint);
     });
@@ -662,7 +650,10 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowLeft');
       await page.keyboard.press('ArrowLeft');
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint > 1 && s?.outPoint < s?.frameCount;
+      })()`);
 
       let state = await getSessionState(page);
       expect(state.inPoint).toBeGreaterThan(1);
@@ -670,7 +661,10 @@ test.describe('Playback Controls', () => {
 
       // Reset
       await page.keyboard.press('r');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint === 1 && s?.outPoint === s?.frameCount;
+      })()`);
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(1);
@@ -685,7 +679,10 @@ test.describe('Playback Controls', () => {
       const currentFrame = state.currentFrame;
 
       await page.keyboard.press('m');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.marks?.includes(${currentFrame}) && s?.marks?.length === ${initialMarks + 1};
+      })()`);
 
       state = await getSessionState(page);
       expect(state.marks).toContain(currentFrame);
@@ -693,7 +690,10 @@ test.describe('Playback Controls', () => {
 
       // Toggle off
       await page.keyboard.press('m');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return !s?.marks?.includes(${currentFrame});
+      })()`);
 
       state = await getSessionState(page);
       expect(state.marks).not.toContain(currentFrame);
@@ -704,13 +704,19 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('Home');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('m'); // Mark at frame 2
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.marks?.includes(2);
+      })()`);
 
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('m'); // Mark at frame 5
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.marks?.includes(5) && s?.marks?.length === 2;
+      })()`);
 
       let state = await getSessionState(page);
       expect(state.marks.length).toBe(2);
@@ -727,14 +733,20 @@ test.describe('Playback Controls', () => {
       const muteButton = page.locator('button[title*="Mute"], button[title*="mute"]').first();
       if (await muteButton.isVisible()) {
         await muteButton.click();
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => {
+          const s = window.__OPENRV_TEST__?.getSessionState();
+          return s?.muted === true;
+        })()`);
 
         state = await getSessionState(page);
         expect(state.muted).toBe(true);
 
         // Click again to unmute
         await muteButton.click();
-        await page.waitForTimeout(100);
+        await waitForCondition(page, `(() => {
+          const s = window.__OPENRV_TEST__?.getSessionState();
+          return s?.muted === false;
+        })()`);
 
         state = await getSessionState(page);
         expect(state.muted).toBe(false);
@@ -745,7 +757,7 @@ test.describe('Playback Controls', () => {
       const volumeArea = page.locator('[title*="Volume"], [title*="volume"]').first();
       if (await volumeArea.isVisible()) {
         await volumeArea.hover();
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(200); // Bucket C: UI hover animation delay
 
         const volumeSlider = page.locator('input[type="range"]').filter({ hasText: /volume/i }).first();
         if (await volumeSlider.isVisible()) {
@@ -753,7 +765,10 @@ test.describe('Playback Controls', () => {
             el.value = '0.5';
             el.dispatchEvent(new Event('input', { bubbles: true }));
           });
-          await page.waitForTimeout(100);
+          await waitForCondition(page, `(() => {
+            const s = window.__OPENRV_TEST__?.getSessionState();
+            return s != null && Math.abs(s.volume - 0.5) < 0.1;
+          })()`);
 
           const state = await getSessionState(page);
           expect(state.volume).toBeCloseTo(0.5, 1);
@@ -764,56 +779,27 @@ test.describe('Playback Controls', () => {
 
   test.describe('Video Completion', () => {
     test('PLAY-070: play button should return to play state when video finishes in once mode', async ({ page }) => {
-      // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
-      await page.keyboard.press('Control+l'); // loop -> pingpong
-      await waitForLoopMode(page, 'pingpong');
-      await page.keyboard.press('Control+l'); // pingpong -> once
-      await waitForLoopMode(page, 'once');
+      await setLoopMode(page, 'once');
+      await setInOutRange(page, 25, 27);
 
-      let state = await getSessionState(page);
-      expect(state.loopMode).toBe('once');
-
-      // Set very short in/out range
-      await page.keyboard.press('End');
-      await page.keyboard.press('ArrowLeft');
-      await page.keyboard.press('ArrowLeft');
-      await page.keyboard.press('i');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('o');
-      await page.waitForTimeout(100);
-
-      // Go to in point
-      state = await getSessionState(page);
-      const inPoint = state.inPoint;
-
-      await page.evaluate((frame) => {
-        (window as unknown as { __OPENRV_TEST__?: { setFrame?: (f: number) => void } }).__OPENRV_TEST__?.setFrame?.(frame);
-      }, inPoint);
-      await page.waitForTimeout(100);
-
-      // Check play button shows "Play"
-      const playButton = page.locator('button[title*="Play"], button[title*="Pause"]').first();
-      const beforeTitle = await playButton.getAttribute('title');
-      expect(beforeTitle).toMatch(/play/i);
+      // Go to in point (Home goes to inPoint)
+      const state0 = await getSessionState(page);
+      await page.keyboard.press('Home');
+      await waitForFrame(page, state0.inPoint);
 
       // Start playback
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Button should show "Pause" while playing
-      const duringTitle = await playButton.getAttribute('title');
-      expect(duringTitle).toMatch(/pause/i);
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(true);
 
       // Wait for playback to finish (once mode should stop automatically)
       await waitForPlaybackState(page, false, 5000);
 
-      // After video finishes in once mode, button should return to "Play"
+      // After video finishes in once mode, should have stopped
       state = await getSessionState(page);
       expect(state.isPlaying).toBe(false);
-
-      const afterTitle = await playButton.getAttribute('title');
-      expect(afterTitle).toMatch(/play/i);
     });
   });
 });

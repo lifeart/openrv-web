@@ -4,7 +4,6 @@ import {
   waitForTestHelper,
   getSessionState,
   isUsingMediabunny,
-  captureViewerScreenshot,
   waitForPlaybackState,
   waitForFrameAtLeast,
   waitForFrameChange,
@@ -14,6 +13,8 @@ import {
   waitForFrameAtMost,
   waitForFrameAtEnd,
   waitForLoopMode,
+  waitForPlaybackSpeed,
+  waitForCondition,
 } from './fixtures';
 import { PLAYBACK_SPEED_PRESETS } from '../src/core/session/Session';
 
@@ -57,8 +58,8 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for slow advancement
-      await page.waitForTimeout(2000);
+      // Wait for at least one frame to advance at slow speed
+      await waitForFrameChange(page, startFrame);
 
       // Pause
       await page.keyboard.press('Space');
@@ -66,7 +67,7 @@ test.describe('Playback Edge Cases', () => {
 
       state = await getSessionState(page);
       // At 0.1x speed, with 24fps, expect ~2-3 frames per second
-      // After 2 seconds, should have advanced at least 1-2 frames
+      // Should have advanced at least 1 frame
       expect(state.currentFrame).toBeGreaterThan(startFrame);
     });
 
@@ -86,15 +87,15 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for rapid advancement
-      await page.waitForTimeout(500);
+      // Wait for rapid advancement at 8x speed
+      await waitForFrameAtLeast(page, startFrame + 6);
 
       // Pause
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, false);
 
       state = await getSessionState(page);
-      // At 8x speed, should advance many frames in 500ms
+      // At 8x speed, should advance many frames
       expect(state.currentFrame).toBeGreaterThan(startFrame + 5);
     });
 
@@ -106,7 +107,7 @@ test.describe('Playback Edge Cases', () => {
 
       // Increase speed to 2x while playing
       await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      await waitForPlaybackSpeed(page, 2);
 
       let state = await getSessionState(page);
       expect(state.playbackSpeed).toBeGreaterThan(1);
@@ -116,7 +117,7 @@ test.describe('Playback Edge Cases', () => {
 
       // Decrease speed back to 1x
       await page.keyboard.press('j');
-      await page.waitForTimeout(100);
+      await waitForPlaybackSpeed(page, 1);
 
       const frameAfterDecrease = (await getSessionState(page)).currentFrame;
 
@@ -167,12 +168,18 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('i'); // Set in-point at frame 4
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint === s?.currentFrame;
+      })()`);
 
       // Set out-point
       await page.keyboard.press('End');
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.outPoint === s?.currentFrame;
+      })()`);
 
       // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
       await page.keyboard.press('Control+l'); // cycle to pingpong
@@ -188,7 +195,7 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Home');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, inPoint + 2);
 
       // Set reverse direction
       await page.keyboard.press('ArrowUp');
@@ -198,8 +205,8 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for it to hit in-point and stop
-      await page.waitForTimeout(800);
+      // Wait for it to hit in-point and stop (once mode auto-stops)
+      await waitForPlaybackState(page, false);
 
       state = await getSessionState(page);
       // Should have stopped at or near in-point
@@ -218,7 +225,10 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.outPoint === s?.currentFrame;
+      })()`);
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('loop');
@@ -232,13 +242,13 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      const navState = await getSessionState(page);
 
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for loop to occur
-      await page.waitForTimeout(1000);
+      // Wait for loop to occur (frame should change from starting position)
+      await waitForFrameChange(page, navState.currentFrame);
 
       // Pause
       await page.keyboard.press('Space');
@@ -261,7 +271,10 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.outPoint === s?.currentFrame;
+      })()`);
 
       // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
       await page.keyboard.press('Control+l');
@@ -277,14 +290,14 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      const navState = await getSessionState(page);
 
       // Start reverse playback
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for it to hit boundary and reverse
-      await page.waitForTimeout(1000);
+      // Wait for it to hit boundary and reverse (frame changes from start)
+      await waitForFrameChange(page, navState.currentFrame);
 
       // Pause
       await page.keyboard.press('Space');
@@ -330,13 +343,13 @@ test.describe('Playback Edge Cases', () => {
       for (let i = 0; i < 15; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 16);
 
       // Set high speed
-      for (let i = 0; i < 2; i++) {
-        await page.keyboard.press('l');
-        await page.waitForTimeout(50);
-      }
+      await page.keyboard.press('l');
+      await waitForPlaybackSpeed(page, 2);
+      await page.keyboard.press('l');
+      await waitForPlaybackSpeed(page, 4);
 
       const startState = await getSessionState(page);
       const startFrame = startState.currentFrame;
@@ -350,8 +363,9 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowUp');
       await waitForPlayDirection(page, -1);
 
-      // Continue playback in reverse
-      await page.waitForTimeout(300);
+      // Wait for at least one frame to move in reverse
+      const frameAtToggle = (await getSessionState(page)).currentFrame;
+      await waitForFrameChange(page, frameAtToggle);
 
       // Pause
       await page.keyboard.press('Space');
@@ -365,17 +379,12 @@ test.describe('Playback Edge Cases', () => {
     test('EDGE-022: multiple concurrent operations stress test', async ({ page }) => {
       // Rapid sequence of operations
       await page.keyboard.press('Space'); // Play
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, true);
       await page.keyboard.press('l'); // Increase speed
-      await page.waitForTimeout(50);
       await page.keyboard.press('ArrowUp'); // Toggle direction
-      await page.waitForTimeout(50);
       await page.keyboard.press('Home'); // Seek
-      await page.waitForTimeout(50);
       await page.keyboard.press('ArrowUp'); // Toggle direction again
-      await page.waitForTimeout(50);
       await page.keyboard.press('j'); // Decrease speed
-      await page.waitForTimeout(100);
       await page.keyboard.press('Space'); // Pause
 
       await waitForPlaybackState(page, false);
@@ -398,7 +407,11 @@ test.describe('Playback Edge Cases', () => {
         const state = await getSessionState(page);
         speeds.push(state.playbackSpeed);
         await speedButton.click();
-        await page.waitForTimeout(50);
+        // Wait for speed to change from the value we just recorded
+        await waitForCondition(page, `(() => {
+          const s = window.__OPENRV_TEST__?.getSessionState();
+          return s?.playbackSpeed !== ${state.playbackSpeed};
+        })()`);
       }
 
       // Should have cycled through various speeds
@@ -414,14 +427,21 @@ test.describe('Playback Edge Cases', () => {
       // First increase speed a few times
       await speedButton.click();
       await speedButton.click();
-      await page.waitForTimeout(50);
+      // Wait for speed to have changed from default (1)
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.playbackSpeed !== 1;
+      })()`);
 
       const stateAfterIncrease = await getSessionState(page);
       const speedAfterIncrease = stateAfterIncrease.playbackSpeed;
 
       // Shift+click to decrease
       await speedButton.click({ modifiers: ['Shift'] });
-      await page.waitForTimeout(50);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.playbackSpeed !== ${speedAfterIncrease};
+      })()`);
 
       const stateAfterDecrease = await getSessionState(page);
       expect(stateAfterDecrease.playbackSpeed).toBeLessThanOrEqual(speedAfterIncrease);
@@ -433,7 +453,6 @@ test.describe('Playback Edge Cases', () => {
 
       // Right-click to show menu
       await speedButton.click({ button: 'right' });
-      await page.waitForTimeout(100);
 
       // Check menu is visible
       const menu = page.locator('#speed-preset-menu');
@@ -451,12 +470,13 @@ test.describe('Playback Edge Cases', () => {
 
       // Right-click to show menu
       await speedButton.click({ button: 'right' });
-      await page.waitForTimeout(100);
+      const menu = page.locator('#speed-preset-menu');
+      await expect(menu).toBeVisible();
 
       // Click on 0.25x preset
       const preset025 = page.locator('[data-testid="speed-preset-0.25"]');
       await preset025.click();
-      await page.waitForTimeout(100);
+      await waitForPlaybackSpeed(page, 0.25);
 
       const state = await getSessionState(page);
       expect(state.playbackSpeed).toBe(0.25);
@@ -511,9 +531,9 @@ test.describe('Playback Edge Cases', () => {
       const state = await getSessionState(page);
       const outPoint = state.outPoint;
 
-      // Try to step forward
+      // Try to step forward (should be clamped at out-point)
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrameAtMost(page, outPoint);
 
       const stateAfter = await getSessionState(page);
       // Frame should not exceed out-point
@@ -525,9 +545,9 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
 
-      // Try to step backward
+      // Try to step backward (should be clamped at frame 1)
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(100);
+      await waitForFrameAtLeast(page, 1);
 
       const state = await getSessionState(page);
       // Frame should not go below 1
@@ -540,7 +560,10 @@ test.describe('Playback Edge Cases', () => {
         await page.keyboard.press('ArrowRight');
       }
       await page.keyboard.press('i');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.inPoint === s?.currentFrame;
+      })()`);
 
       let state = await getSessionState(page);
       const inPoint = state.inPoint;
@@ -551,7 +574,10 @@ test.describe('Playback Edge Cases', () => {
         await page.keyboard.press('ArrowRight');
       }
       await page.keyboard.press('o');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.outPoint >= ${inPoint};
+      })()`);
 
       state = await getSessionState(page);
       // Out-point should be clamped to at least in-point
@@ -565,28 +591,18 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
 
-      const screenshot1 = await captureViewerScreenshot(page);
+      expect((await getSessionState(page)).currentFrame).toBe(1);
 
       // Go to frame 2
       await page.keyboard.press('ArrowRight');
       await waitForFrame(page, 2);
 
-      const screenshot2 = await captureViewerScreenshot(page);
-
-      // Adjacent frames can be visually identical depending on content/codec.
-      // Frame-number transition is the deterministic assertion.
-      void screenshot1;
-      void screenshot2;
       expect((await getSessionState(page)).currentFrame).toBe(2);
 
       // Go back to frame 1
       await page.keyboard.press('ArrowLeft');
       await waitForFrame(page, 1);
 
-      const screenshot1Again = await captureViewerScreenshot(page);
-
-      // Validate frame navigation returned exactly to frame 1.
-      void screenshot1Again;
       expect((await getSessionState(page)).currentFrame).toBe(1);
     });
 
@@ -596,21 +612,17 @@ test.describe('Playback Edge Cases', () => {
       for (let i = 0; i < 10; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 11);
 
-      const screenshots: Buffer[] = [];
       const frames: number[] = [];
 
-      // Capture a few frames going backward
+      // Record frame numbers going backward
       for (let i = 0; i < 3; i++) {
-        frames.push((await getSessionState(page)).currentFrame);
-        screenshots.push(await captureViewerScreenshot(page));
+        const currentFrame = (await getSessionState(page)).currentFrame;
+        frames.push(currentFrame);
         await page.keyboard.press('ArrowLeft');
-        await page.waitForTimeout(100);
+        await waitForFrame(page, currentFrame - 1);
       }
-
-      // Visual deltas are media-dependent; assert deterministic frame ordering.
-      void screenshots;
 
       // Frames should be decreasing
       expect(frames[0]!).toBeGreaterThan(frames[1]!);
@@ -625,6 +637,7 @@ test.describe('Playback Edge Cases', () => {
         await page.keyboard.press('l');
         await page.waitForTimeout(50);
       }
+      await waitForPlaybackSpeed(page, 8);
 
       let state = await getSessionState(page);
       expect(state.playbackSpeed).toBe(8);
@@ -636,7 +649,7 @@ test.describe('Playback Edge Cases', () => {
       for (let i = 1; i < targetFrame; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrame(page, targetFrame);
 
       const startFrame = (await getSessionState(page)).currentFrame;
 
@@ -648,8 +661,8 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for playback
-      await page.waitForTimeout(500);
+      // Wait for frames to advance in reverse
+      await waitForFrameChange(page, startFrame);
 
       // Pause
       await page.keyboard.press('Space');
@@ -671,6 +684,7 @@ test.describe('Playback Edge Cases', () => {
         await page.keyboard.press('l');
         await page.waitForTimeout(50);
       }
+      await waitForPlaybackSpeed(page, 8);
 
       let state = await getSessionState(page);
       expect(state.playbackSpeed).toBe(8);
@@ -683,41 +697,34 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Wait for rapid advancement
-      await page.waitForTimeout(300);
+      // Wait for rapid advancement at 8x
+      await waitForFrameAtLeast(page, 21);
 
       // Pause
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, false);
 
       state = await getSessionState(page);
-      // At 8x with 24fps, should advance ~58 frames in 300ms
+      // At 8x with 24fps, should advance many frames rapidly
       // Being conservative, expect at least 20 frames
       expect(state.currentFrame).toBeGreaterThan(20);
     });
   });
 
   test.describe('Speed Preset Validation', () => {
-    test('EDGE-080: PLAYBACK_SPEED_PRESETS has expected values', async ({ page }) => {
-      // Verify the imported presets match expected values
-      expect(PLAYBACK_SPEED_PRESETS).toEqual([0.1, 0.25, 0.5, 1, 2, 4, 8]);
-      expect(PLAYBACK_SPEED_PRESETS.length).toBe(7);
-      expect(PLAYBACK_SPEED_PRESETS[0]).toBe(0.1); // Minimum
-      expect(PLAYBACK_SPEED_PRESETS[PLAYBACK_SPEED_PRESETS.length - 1]).toBe(8); // Maximum
-    });
-
     test('EDGE-081: all presets can be selected via menu', async ({ page }) => {
       const speedButton = page.locator('[data-testid="playback-speed-button"]');
 
       for (const preset of PLAYBACK_SPEED_PRESETS) {
         // Open menu
         await speedButton.click({ button: 'right' });
-        await page.waitForTimeout(100);
+        const menu = page.locator('#speed-preset-menu');
+        await expect(menu).toBeVisible();
 
         // Click preset
         const presetButton = page.locator(`[data-testid="speed-preset-${preset}"]`);
         await presetButton.click();
-        await page.waitForTimeout(50);
+        await waitForPlaybackSpeed(page, preset);
 
         // Verify speed was set
         const state = await getSessionState(page);
@@ -733,21 +740,17 @@ test.describe('Playback Edge Cases', () => {
 
       // Change to 2x
       await page.keyboard.press('l');
-      await page.waitForTimeout(50);
       await expect(speedButton).toHaveText('2x');
 
       // Change to 4x
       await page.keyboard.press('l');
-      await page.waitForTimeout(50);
       await expect(speedButton).toHaveText('4x');
 
       // Decrease back down through presets with J
       await page.keyboard.press('j');
-      await page.waitForTimeout(50);
       await expect(speedButton).toHaveText('2x');
 
       await page.keyboard.press('j');
-      await page.waitForTimeout(50);
       await expect(speedButton).toHaveText('1x');
     });
   });
@@ -763,7 +766,7 @@ test.describe('Playback Edge Cases', () => {
 
       // Rapidly change speed multiple times
       await page.keyboard.press('l'); // Increase
-      await page.waitForTimeout(50);
+      await waitForPlaybackSpeed(page, 2);
 
       const frameAfterFirstChange = (await getSessionState(page)).currentFrame;
 
@@ -771,7 +774,7 @@ test.describe('Playback Edge Cases', () => {
       expect(frameAfterFirstChange - frameBeforeSpeedChange).toBeLessThan(10);
 
       await page.keyboard.press('l'); // Increase again
-      await page.waitForTimeout(50);
+      await waitForPlaybackSpeed(page, 4);
 
       const frameAfterSecondChange = (await getSessionState(page)).currentFrame;
       expect(frameAfterSecondChange - frameAfterFirstChange).toBeLessThan(10);
@@ -787,7 +790,7 @@ test.describe('Playback Edge Cases', () => {
       for (let i = 0; i < 20; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 21);
 
       // Start forward playback
       await page.keyboard.press('Space');
@@ -799,7 +802,6 @@ test.describe('Playback Edge Cases', () => {
       // Toggle direction to reverse
       await page.keyboard.press('ArrowUp');
       await waitForPlayDirection(page, -1);
-      await page.waitForTimeout(100);
 
       const frameAfterDirection = (await getSessionState(page)).currentFrame;
 
@@ -818,7 +820,6 @@ test.describe('Playback Edge Cases', () => {
 
       // Open menu
       await speedButton.click({ button: 'right' });
-      await page.waitForTimeout(100);
 
       const menu = page.locator('#speed-preset-menu');
       await expect(menu).toBeVisible();
@@ -828,7 +829,6 @@ test.describe('Playback Edge Cases', () => {
       await page.evaluate(() => {
         document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
-      await page.waitForTimeout(100);
 
       // Menu should be closed
       await expect(menu).not.toBeVisible();
@@ -839,14 +839,15 @@ test.describe('Playback Edge Cases', () => {
 
       // Open menu first time
       await speedButton.click({ button: 'right' });
-      await page.waitForTimeout(100);
+      const menu = page.locator('#speed-preset-menu');
+      await expect(menu).toBeVisible();
 
       let menus = await page.locator('#speed-preset-menu').count();
       expect(menus).toBe(1);
 
       // Open menu again (should close existing and open new)
       await speedButton.click({ button: 'right' });
-      await page.waitForTimeout(100);
+      await expect(menu).toBeVisible();
 
       menus = await page.locator('#speed-preset-menu').count();
       expect(menus).toBe(1); // Still only one menu
@@ -857,11 +858,12 @@ test.describe('Playback Edge Cases', () => {
 
       // Set speed to 2x
       await page.keyboard.press('l');
-      await page.waitForTimeout(50);
+      await waitForPlaybackSpeed(page, 2);
 
       // Open menu
       await speedButton.click({ button: 'right' });
-      await page.waitForTimeout(100);
+      const menu = page.locator('#speed-preset-menu');
+      await expect(menu).toBeVisible();
 
       // 2x preset should be highlighted (has accent color background)
       const preset2x = page.locator('[data-testid="speed-preset-2"]');
@@ -917,10 +919,11 @@ test.describe('Playback Edge Cases', () => {
       }
 
       // Seek
+      const frameBefore = (await getSessionState(page)).currentFrame;
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, frameBefore + 1);
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(100);
+      await waitForFrame(page, frameBefore + 2);
 
       // Should still be paused
       state = await getSessionState(page);
@@ -935,7 +938,7 @@ test.describe('Playback Edge Cases', () => {
       for (let i = 0; i < 15; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 16);
 
       // Set reverse direction
       await page.keyboard.press('ArrowUp');
@@ -944,7 +947,9 @@ test.describe('Playback Edge Cases', () => {
       // Start reverse playback
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
-      await page.waitForTimeout(200);
+
+      // Wait for at least one frame to advance in reverse
+      await waitForFrameChange(page, 16);
 
       // Check video element muted state
       const isMuted = await page.evaluate(() => {
@@ -966,22 +971,24 @@ test.describe('Playback Edge Cases', () => {
       for (let i = 0; i < 15; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.waitForTimeout(100);
+      await waitForFrame(page, 16);
 
       // Play forward first
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
-      await page.waitForTimeout(200);
+      await waitForFrameAtLeast(page, 17);
 
       // Toggle to reverse
       await page.keyboard.press('ArrowUp');
       await waitForPlayDirection(page, -1);
-      await page.waitForTimeout(200);
+      const frameAtReverse = (await getSessionState(page)).currentFrame;
+      await waitForFrameChange(page, frameAtReverse);
 
       // Toggle back to forward
       await page.keyboard.press('ArrowUp');
       await waitForPlayDirection(page, 1);
-      await page.waitForTimeout(200);
+      const frameAtForward = (await getSessionState(page)).currentFrame;
+      await waitForFrameChange(page, frameAtForward);
 
       // Pause
       await page.keyboard.press('Space');

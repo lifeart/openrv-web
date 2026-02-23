@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVideoFile, waitForTestHelper, getSessionState } from './fixtures';
+import { loadVideoFile, waitForTestHelper, getSessionState, openKeyboardShortcutsDialog, openCustomKeyBindingsDialog } from './fixtures';
 
 /**
  * Custom Keybindings Tests
@@ -17,23 +17,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-001: open custom keybindings dialog via header menu', async ({ page }) => {
-    // Click the settings/keybindings menu entry in the header
-    const settingsButton = page.locator('button[title="Settings"], button[title="Preferences"]').first();
-    if (await settingsButton.isVisible().catch(() => false)) {
-      await settingsButton.click();
-    } else {
-      // Fallback: try the keyboard shortcuts help button and look for a "Customize" link
-      const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-      await helpButton.click();
-      await page.waitForTimeout(200);
-    }
-
-    // Look for a "Customize Keybindings" or similar entry
-    const customizeLink = page.locator('button:has-text("Customize"), a:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     // The custom keybindings dialog should be visible
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
@@ -46,15 +30,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-002: rebind an action to a new key', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
@@ -80,15 +56,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-003: rebound key executes the correct action', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
@@ -134,15 +102,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-004: conflict detection when assigning duplicate key combo', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
@@ -175,15 +135,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-005: reset a single binding to its default', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
@@ -214,15 +166,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-006: reset all bindings to defaults', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
@@ -260,15 +204,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-007: custom keybindings persist across page reload', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });
@@ -298,14 +234,7 @@ test.describe('Custom Keybindings', () => {
     await loadVideoFile(page);
 
     // Re-open keybindings dialog
-    const helpButton2 = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton2.click();
-    await page.waitForTimeout(200);
-    const customizeLink2 = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink2.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink2.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog2 = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog2).toBeVisible({ timeout: 3000 });
@@ -317,15 +246,7 @@ test.describe('Custom Keybindings', () => {
   });
 
   test('CKB-008: cancel rebind dialog without saving changes', async ({ page }) => {
-    // Open keybindings dialog
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
-    const customizeLink = page.locator('button:has-text("Customize"), button:has-text("Custom Keybindings")').first();
-    if (await customizeLink.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await customizeLink.click();
-      await page.waitForTimeout(200);
-    }
+    await openCustomKeyBindingsDialog(page);
 
     const dialog = page.locator('[data-testid="custom-keybindings-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3000 });

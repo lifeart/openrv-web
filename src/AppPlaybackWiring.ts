@@ -13,6 +13,7 @@
 import type { AppWiringContext } from './AppWiringContext';
 import type { AppKeyboardHandler } from './AppKeyboardHandler';
 import type { FullscreenManager } from './utils/ui/FullscreenManager';
+import type { AudioMixer } from './audio/AudioMixer';
 import type { Session } from './core/session/Session';
 import type { LoopMode } from './core/types/session';
 import type { PlaylistClip } from './core/session/PlaylistManager';
@@ -27,6 +28,8 @@ import {
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert } from './ui/components/shared/Modal';
+import { generateSlateFrame } from './export/SlateRenderer';
+import { generateReport } from './export/ReportExporter';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -35,6 +38,7 @@ import { showAlert } from './ui/components/shared/Modal';
 export interface PlaybackWiringDeps {
   getKeyboardHandler: () => AppKeyboardHandler;
   getFullscreenManager: () => FullscreenManager | undefined;
+  getAudioMixer?: () => AudioMixer;
 }
 
 /**
@@ -67,16 +71,20 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   const volumeControl = headerBar.getVolumeControl();
   volumeControl.on('volumeChanged', (volume) => {
     session.volume = volume;
+    deps.getAudioMixer?.()?.setMasterVolume(volume);
   });
   volumeControl.on('mutedChanged', (muted) => {
     session.muted = muted;
+    deps.getAudioMixer?.()?.setMasterMuted(muted);
   });
   // Sync back from Session to VolumeControl (for external changes)
   session.on('volumeChanged', (volume) => {
     volumeControl.syncVolume(volume);
+    deps.getAudioMixer?.()?.setMasterVolume(volume);
   });
   session.on('mutedChanged', (muted) => {
     volumeControl.syncMuted(muted);
+    deps.getAudioMixer?.()?.setMasterMuted(muted);
   });
 
   // Export control (from HeaderBar) -> viewer
@@ -99,12 +107,27 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
       return;
     }
     videoExportInProgress = true;
-    void handleVideoExport(session, viewer, request).finally(() => {
+    void handleVideoExport(session, viewer, request, controls).finally(() => {
       videoExportInProgress = false;
     });
   });
   exportControl.on('rvSessionExportRequested', ({ format }) => {
     persistenceManager.saveRvSession(format);
+  });
+  exportControl.on('reportExportRequested', ({ format }) => {
+    generateReport(
+      session,
+      session.noteManager,
+      session.statusManager,
+      session.versionManager,
+      {
+        format,
+        includeNotes: true,
+        includeTimecodes: true,
+        includeVersions: true,
+        title: session.metadata.displayName || 'Dailies Report',
+      }
+    );
   });
 
   // Snapshot panel restore
@@ -120,6 +143,10 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   controls.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {
     jumpToPlaylistClip(session, controls, sourceIndex, frame);
   });
+
+  // Set initial fps and keep playlist panel in sync with session fps
+  controls.playlistPanel.setFps(session.fps || 24);
+  session.on('fpsChanged', (fps) => controls.playlistPanel.setFps(fps));
 
   // Playlist runtime integration (playback/loop/source switching while enabled)
   wirePlaylistRuntime(session, controls);
@@ -152,8 +179,8 @@ async function handleSequenceExport(
     startFrame = session.inPoint;
     endFrame = session.outPoint;
   } else {
-    startFrame = 0;
-    endFrame = session.frameCount - 1;
+    startFrame = 1;
+    endFrame = session.frameCount;
   }
 
   const totalFrames = endFrame - startFrame + 1;
@@ -372,7 +399,8 @@ async function handleVideoExport(
   request: {
     includeAnnotations: boolean;
     useInOutRange: boolean;
-  }
+  },
+  controls?: import('./AppControlRegistry').AppControlRegistry,
 ): Promise<void> {
   const source = session.currentSource;
   if (!source) {
@@ -427,6 +455,31 @@ async function handleVideoExport(
     const fps = Math.max(1, Math.round(session.fps || 24));
     const bitrate = estimateVideoBitrate(width, height, fps);
 
+    // Generate slate frames if configured
+    let slateCanvas: HTMLCanvasElement | null = null;
+    let slateDurationFrames = 0;
+    if (controls) {
+      const slateConfig = controls.slateEditor.generateConfig();
+      // Only prepend if there are fields (i.e., the user configured metadata)
+      if (slateConfig.fields.length > 0) {
+        slateConfig.width = width;
+        slateConfig.height = height;
+        const slateFrame = generateSlateFrame(slateConfig);
+        slateCanvas = document.createElement('canvas');
+        slateCanvas.width = width;
+        slateCanvas.height = height;
+        const slateCtx = slateCanvas.getContext('2d');
+        if (slateCtx) {
+          const imgData = new ImageData(new Uint8ClampedArray(slateFrame.pixels), slateFrame.width, slateFrame.height);
+          slateCtx.putImageData(imgData, 0, 0);
+          // Prepend 2 seconds of slate
+          slateDurationFrames = fps * 2;
+        }
+      }
+    }
+
+    const exportStartFrame = frameRange.startFrame - slateDurationFrames;
+
     const result = await exporter.encode(
       {
         codec,
@@ -435,7 +488,7 @@ async function handleVideoExport(
         fps,
         bitrate,
         frameRange: {
-          start: frameRange.startFrame,
+          start: exportStartFrame,
           end: frameRange.endFrame,
         },
         gopSize: Math.max(1, Math.round(fps * 2)),
@@ -443,6 +496,11 @@ async function handleVideoExport(
         hardwareAcceleration: 'prefer-hardware',
       },
       async (frame) => {
+        // Slate frames come before the real frame range
+        if (slateCanvas && frame < frameRange.startFrame) {
+          return slateCanvas;
+        }
+
         let canvas: HTMLCanvasElement | null;
         if (firstFrameCanvas && frame === frameRange.startFrame) {
           canvas = firstFrameCanvas;

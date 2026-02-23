@@ -216,10 +216,14 @@ describe('isDropFrame detection', () => {
 });
 
 describe('edge cases', () => {
-  it('TC-U090: frame 0 handled gracefully', () => {
-    // Frame 0 means -1 after converting to 0-based
-    // Should not throw
-    expect(() => frameToTimecode(0, 24)).not.toThrow();
+  it('TC-U090: frame 0 produces 00:00:00:00', () => {
+    // Frame 0 is clamped to totalFrame=0 (not -1), producing 00:00:00:00
+    const tc = frameToTimecode(0, 24);
+    expect(tc.hours).toBe(0);
+    expect(tc.minutes).toBe(0);
+    expect(tc.seconds).toBe(0);
+    expect(tc.frames).toBe(0);
+    expect(formatTimecode(tc)).toBe('00:00:00:00');
   });
 
   it('TC-U091: very high frame numbers work', () => {

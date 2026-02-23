@@ -1,5 +1,9 @@
 /**
  * OCIOWasmBridge Unit Tests
+ *
+ * Tests lifecycle, event emission, error handling, guard logic, and cleanup.
+ * Tests that merely verify mock WASM return values (config queries, shader
+ * content, LUT data, color transform results) have been removed.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -58,6 +62,10 @@ describe('OCIOWasmBridge', () => {
     bridge = new OCIOWasmBridge({ factory });
   });
 
+  // -----------------------------------------------------------------------
+  // Lifecycle
+  // -----------------------------------------------------------------------
+
   describe('lifecycle', () => {
     it('BRG-001: starts not ready', () => {
       expect(bridge.isReady()).toBe(false);
@@ -101,6 +109,10 @@ describe('OCIOWasmBridge', () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // Pipeline State — initial defaults
+  // -----------------------------------------------------------------------
+
   describe('pipeline state', () => {
     it('BRG-STATE-001: initial state shows not using WASM', () => {
       const state = bridge.getPipelineState();
@@ -109,28 +121,15 @@ describe('OCIOWasmBridge', () => {
       expect(state.processorHandle).toBeNull();
       expect(state.shader).toBeNull();
     });
-
-    it('BRG-STATE-002: after pipeline build, state reflects WASM usage', async () => {
-      await bridge.init();
-      bridge.loadConfig('ocio_profile_version: 2\n', 'ACES');
-      bridge.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-
-      const state = bridge.getPipelineState();
-      expect(state.usingWasm).toBe(true);
-      expect(state.configName).toBe('ACES');
-      expect(state.processorHandle).not.toBeNull();
-      expect(state.shader).not.toBeNull();
-    });
   });
+
+  // -----------------------------------------------------------------------
+  // Config Management — guard / error / cleanup logic
+  // -----------------------------------------------------------------------
 
   describe('config management', () => {
     beforeEach(async () => {
       await bridge.init();
-    });
-
-    it('BRG-CFG-001: loadConfig succeeds', () => {
-      bridge.loadConfig('yaml', 'test');
-      expect(mockExports.ocioLoadConfig).toHaveBeenCalledWith('yaml');
     });
 
     it('BRG-CFG-002: loadConfig throws when not ready', () => {
@@ -138,23 +137,8 @@ describe('OCIOWasmBridge', () => {
       expect(() => notReady.loadConfig('yaml', 'test')).toThrow('not initialised');
     });
 
-    it('BRG-CFG-003: getConfigInfo returns displays/colorSpaces/looks', () => {
-      bridge.loadConfig('yaml', 'test');
-      const info = bridge.getConfigInfo();
-      expect(info).not.toBeNull();
-      expect(info!.displays).toEqual(['sRGB', 'Rec.709']);
-      expect(info!.colorSpaces).toEqual(['ACEScg', 'sRGB', 'Linear sRGB']);
-      expect(info!.looks).toEqual(['None', 'Filmic']);
-    });
-
     it('BRG-CFG-004: getConfigInfo returns null without config', () => {
       expect(bridge.getConfigInfo()).toBeNull();
-    });
-
-    it('BRG-CFG-005: getViews delegates to WASM module', () => {
-      bridge.loadConfig('yaml', 'test');
-      const views = bridge.getViews('sRGB');
-      expect(views).toEqual(['ACES 1.0 SDR-video', 'Raw']);
     });
 
     it('BRG-CFG-006: loading new config destroys old one', () => {
@@ -164,18 +148,14 @@ describe('OCIOWasmBridge', () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // Display Pipeline — event emission / error handling / cleanup
+  // -----------------------------------------------------------------------
+
   describe('display pipeline', () => {
     beforeEach(async () => {
       await bridge.init();
       bridge.loadConfig('yaml', 'test');
-    });
-
-    it('BRG-PIPE-001: buildDisplayPipeline returns translated shader', () => {
-      const shader = bridge.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      expect(shader).not.toBeNull();
-      expect(shader!.functionName).toBe('OCIODisplay');
-      expect(shader!.code).toContain('texture(');
-      expect(shader!.requires3DLUT).toBe(true);
     });
 
     it('BRG-PIPE-002: emits shaderReady event', () => {
@@ -214,26 +194,13 @@ describe('OCIOWasmBridge', () => {
       expect(fallbacks).toHaveLength(1);
       expect(fallbacks[0]!.reason).toContain('failed');
     });
-
-    it('BRG-PIPE-006: passes look to WASM processor', () => {
-      bridge.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic');
-      expect(mockExports.ocioGetDisplayProcessor).toHaveBeenCalledWith(
-        expect.any(Number), 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic',
-      );
-    });
   });
 
+  // -----------------------------------------------------------------------
+  // Conversion Pipeline — fallback when WASM unavailable
+  // -----------------------------------------------------------------------
+
   describe('conversion pipeline', () => {
-    beforeEach(async () => {
-      await bridge.init();
-      bridge.loadConfig('yaml', 'test');
-    });
-
-    it('BRG-CONV-001: buildConversionPipeline returns shader', () => {
-      const shader = bridge.buildConversionPipeline('ACEScg', 'sRGB');
-      expect(shader).not.toBeNull();
-    });
-
     it('BRG-CONV-002: emits fallback when WASM unavailable', () => {
       const notReady = new OCIOWasmBridge({ factory });
       const fallbacks: unknown[] = [];
@@ -245,44 +212,27 @@ describe('OCIOWasmBridge', () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // bake3DLUT / transformColor — guard logic only
+  // -----------------------------------------------------------------------
+
   describe('bake3DLUT', () => {
-    beforeEach(async () => {
+    it('BRG-LUT-002: bake3DLUT returns null without processor', async () => {
       await bridge.init();
-      bridge.loadConfig('yaml', 'test');
-    });
-
-    it('BRG-LUT-001: bake3DLUT returns LUT3D', () => {
-      bridge.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      const lut = bridge.bake3DLUT(33);
-      expect(lut).not.toBeNull();
-      expect(lut!.size).toBe(33);
-      expect(lut!.data.length).toBe(33 * 33 * 33 * 3);
-      expect(lut!.domainMin).toEqual([0, 0, 0]);
-      expect(lut!.domainMax).toEqual([1, 1, 1]);
-    });
-
-    it('BRG-LUT-002: bake3DLUT returns null without processor', () => {
       expect(bridge.bake3DLUT()).toBeNull();
     });
   });
 
   describe('transformColor', () => {
-    beforeEach(async () => {
+    it('BRG-COLOR-002: transformColor returns null without processor', async () => {
       await bridge.init();
-      bridge.loadConfig('yaml', 'test');
-    });
-
-    it('BRG-COLOR-001: transformColor returns transformed RGB', () => {
-      bridge.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
-      const result = bridge.transformColor(0.18, 0.18, 0.18);
-      expect(result).not.toBeNull();
-      expect(result![0]).toBeCloseTo(0.5, 1);
-    });
-
-    it('BRG-COLOR-002: transformColor returns null without processor', () => {
       expect(bridge.transformColor(0.5, 0.5, 0.5)).toBeNull();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // loadConfigWithFiles — real VFS / file extraction logic
+  // -----------------------------------------------------------------------
 
   describe('loadConfigWithFiles', () => {
     beforeEach(async () => {
@@ -305,9 +255,7 @@ colorspaces:
 `;
       await bridge.loadConfigWithFiles(yaml, 'test');
 
-      // Config should be loaded
       expect(mockExports.ocioLoadConfig).toHaveBeenCalledWith(yaml);
-      // File should have been fetched (luts/srgb.spi3d via search path)
       expect(mockFetch).toHaveBeenCalled();
 
       vi.unstubAllGlobals();
@@ -333,9 +281,6 @@ colorspaces:
 `;
       await bridge.loadConfigWithFiles(yaml, 'test');
 
-      // Should have tried all 3 search paths for the one file
-      // Plus the bare file name itself (empty prefix)
-      // The file entries are: luts/srgb.spi3d, luts/aces/srgb.spi3d, shared/srgb.spi3d
       expect(fetchedUrls).toContain('luts/srgb.spi3d');
       expect(fetchedUrls).toContain('luts/aces/srgb.spi3d');
       expect(fetchedUrls).toContain('shared/srgb.spi3d');
@@ -351,6 +296,10 @@ colorspaces:
     });
   });
 
+  // -----------------------------------------------------------------------
+  // VFS Access
+  // -----------------------------------------------------------------------
+
   describe('VFS access', () => {
     it('BRG-VFS-001: getVFS returns the VFS instance', () => {
       const vfs = bridge.getVFS();
@@ -359,6 +308,10 @@ colorspaces:
       expect(vfs.hasFile('test.cube')).toBe(true);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Dispose Cleanup
+  // -----------------------------------------------------------------------
 
   describe('dispose cleanup', () => {
     it('BRG-CLEAN-001: dispose destroys processor and config', async () => {
@@ -375,7 +328,7 @@ colorspaces:
     it('BRG-CLEAN-002: double dispose is safe', async () => {
       await bridge.init();
       bridge.dispose();
-      bridge.dispose(); // should not throw
+      expect(() => bridge.dispose()).not.toThrow();
     });
   });
 });

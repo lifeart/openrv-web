@@ -60,6 +60,8 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.modeButton = document.createElement('button');
     this.modeButton.dataset.testid = 'stereo-mode-button';
     this.modeButton.title = 'Stereo viewing mode (Shift+3)';
+    this.modeButton.setAttribute('aria-haspopup', 'menu');
+    this.modeButton.setAttribute('aria-expanded', 'false');
     this.modeButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;

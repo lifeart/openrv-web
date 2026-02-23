@@ -127,11 +127,15 @@ function createVideoSource(overrides: Partial<MediaSource> = {}): MediaSource {
   };
 }
 
+function createMockImageBitmap(): ImageBitmap {
+  return { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
+}
+
 function createSequenceSource(overrides: Partial<MediaSource> = {}): MediaSource {
   const frames = [
-    { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: document.createElement('img') },
-    { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: document.createElement('img') },
-    { index: 2, frameNumber: 3, file: new File([], 'frame_003.png'), image: document.createElement('img') },
+    { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: createMockImageBitmap() },
+    { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: createMockImageBitmap() },
+    { index: 2, frameNumber: 3, file: new File([], 'frame_003.png'), image: createMockImageBitmap() },
   ];
   return {
     type: 'sequence',
@@ -748,8 +752,8 @@ describe('MediaManager', () => {
         name: 'frame_###.png',
         pattern: 'frame_###.png',
         frames: [
-          { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: document.createElement('img') },
-          { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: document.createElement('img') },
+          { index: 0, frameNumber: 1, file: new File([], 'frame_001.png'), image: createMockImageBitmap() },
+          { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: createMockImageBitmap() },
         ],
         startFrame: 1,
         endFrame: 2,
@@ -820,7 +824,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-051: loads frame image for sequence source', async () => {
-      const mockImage = document.createElement('img');
+      const mockImage = createMockImageBitmap();
       vi.mocked(loadFrameImage).mockResolvedValue(mockImage);
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);
@@ -841,7 +845,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-053: uses explicit frameIndex parameter', async () => {
-      const mockImage = document.createElement('img');
+      const mockImage = createMockImageBitmap();
       vi.mocked(loadFrameImage).mockResolvedValue(mockImage);
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);
@@ -1049,13 +1053,11 @@ describe('MediaManager', () => {
 
   describe('fetchFrameForSource', () => {
     it('MM-078: does nothing for null source', async () => {
-      await manager.fetchFrameForSource(null, 1);
-      // No error
+      await expect(manager.fetchFrameForSource(null, 1)).resolves.not.toThrow();
     });
 
     it('MM-079: does nothing for non-video source', async () => {
-      await manager.fetchFrameForSource(createImageSource(), 1);
-      // No error
+      await expect(manager.fetchFrameForSource(createImageSource(), 1)).resolves.not.toThrow();
     });
 
     it('MM-080: delegates to videoSourceNode.getFrameAsync', async () => {
@@ -1074,8 +1076,7 @@ describe('MediaManager', () => {
 
   describe('preloadVideoFrames', () => {
     it('MM-081: does nothing when no video source', () => {
-      manager.preloadVideoFrames();
-      // No error
+      expect(() => manager.preloadVideoFrames()).not.toThrow();
     });
 
     it('MM-082: delegates to videoSourceNode.preloadFrames', () => {
@@ -1107,8 +1108,7 @@ describe('MediaManager', () => {
 
   describe('fetchCurrentVideoFrame', () => {
     it('MM-084: does nothing when no video source', async () => {
-      await manager.fetchCurrentVideoFrame();
-      // No error
+      await expect(manager.fetchCurrentVideoFrame()).resolves.not.toThrow();
     });
 
     it('MM-085: skips fetch when frame is already cached', async () => {
@@ -1212,8 +1212,7 @@ describe('MediaManager', () => {
 
   describe('clearVideoCache', () => {
     it('MM-095: does nothing when no video source', () => {
-      manager.clearVideoCache();
-      // No error
+      expect(() => manager.clearVideoCache()).not.toThrow();
     });
 
     it('MM-096: delegates to videoSourceNode.clearCache', () => {
@@ -1262,15 +1261,13 @@ describe('MediaManager', () => {
     });
 
     it('MM-101: does nothing for non-video source', () => {
-      manager.disposeVideoSource(createImageSource());
-      // No error - just doesn't do anything
+      expect(() => manager.disposeVideoSource(createImageSource())).not.toThrow();
     });
 
     it('MM-102: does nothing for video source without videoSourceNode', () => {
       const source = createVideoSource();
       delete source.videoSourceNode;
-      manager.disposeVideoSource(source);
-      // No error
+      expect(() => manager.disposeVideoSource(source)).not.toThrow();
     });
   });
 

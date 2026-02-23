@@ -58,6 +58,7 @@ export const DIRTY_OUT_OF_RANGE = 'outOfRange';
 export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
 export const DIRTY_PREMULT = 'premult';
 export const DIRTY_DITHER = 'dither';
+export const DIRTY_SPHERICAL = 'spherical';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -73,6 +74,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_CHANNEL_SWIZZLE,
   DIRTY_PREMULT,
   DIRTY_DITHER,
+  DIRTY_SPHERICAL,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -340,6 +342,13 @@ export interface InternalShaderState {
   // Out-of-range visualization mode
   outOfRange: number;  // 0=off, 1=clamp-to-black, 2=highlight
 
+  // Spherical (equirectangular 360) projection
+  sphericalEnabled: boolean;
+  sphericalFov: number;     // horizontal FOV in radians
+  sphericalAspect: number;  // canvas width / height
+  sphericalYaw: number;     // yaw in radians
+  sphericalPitch: number;   // pitch in radians
+
   // Channel swizzle (RVChannelMap remapping)
   channelSwizzle: [number, number, number, number]; // default [0,1,2,3] = identity
 
@@ -449,6 +458,11 @@ function createDefaultInternalState(): InternalShaderState {
     inlineLUTData: null,
     inlineLUTDirty: false,
     outOfRange: 0,
+    sphericalEnabled: false,
+    sphericalFov: Math.PI / 2,
+    sphericalAspect: 1,
+    sphericalYaw: 0,
+    sphericalPitch: 0,
     channelSwizzle: [0, 1, 2, 3],
     premultMode: 0,
     ditherMode: 0,
@@ -510,6 +524,13 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   /** Pre-allocated resolution array for applyUniforms */
   private readonly resolutionBuffer: [number, number] = [0, 0];
 
+  /**
+   * Texture unit bindings (u_curvesLUT=1, u_falseColorLUT=2, etc.) are constant
+   * after the first frame. We only set them once, then skip on subsequent frames.
+   * Reset on context restore (markAllDirty) so they are re-sent after a new GL context.
+   */
+  private _textureUnitsInitialized = false;
+
   // -----------------------------------------------------------------------
   // Public accessors
   // -----------------------------------------------------------------------
@@ -524,6 +545,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     for (const flag of ALL_DIRTY_FLAGS) {
       this.dirtyFlags.add(flag);
     }
+    // Reset texture unit bindings so they are re-sent to the new GL context
+    this._textureUnitsInitialized = false;
   }
 
   /** True if any setter has marked dirty flags not yet consumed by applyUniforms(). */
@@ -900,6 +923,19 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.perspectiveInvH = pState.invH;
     this.state.perspectiveQuality = pState.quality;
     this.dirtyFlags.add(DIRTY_PERSPECTIVE);
+  }
+
+  setSphericalProjection(sState: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
+    this.state.sphericalEnabled = sState.enabled;
+    this.state.sphericalFov = sState.fov;
+    this.state.sphericalAspect = sState.aspect;
+    this.state.sphericalYaw = sState.yaw;
+    this.state.sphericalPitch = sState.pitch;
+    this.dirtyFlags.add(DIRTY_SPHERICAL);
+  }
+
+  isSphericalEnabled(): boolean {
+    return this.state.sphericalEnabled;
   }
 
   setLinearize(lzState: LinearizeState): void {
@@ -1635,39 +1671,54 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     }
 
+    // Spherical (equirectangular 360) projection
+    if (dirty.has(DIRTY_SPHERICAL)) {
+      shader.setUniformInt('u_sphericalEnabled', s.sphericalEnabled ? 1 : 0);
+      if (s.sphericalEnabled) {
+        shader.setUniform('u_sphericalFov', s.sphericalFov);
+        shader.setUniform('u_sphericalAspect', s.sphericalAspect);
+        shader.setUniform('u_sphericalYaw', s.sphericalYaw);
+        shader.setUniform('u_sphericalPitch', s.sphericalPitch);
+      }
+    }
+
     // --- Bind effect textures ---
-    // IMPORTANT: Always set sampler uniform-to-unit bindings unconditionally,
-    // even when the effect is disabled. In WebGL2, all sampler uniforms default
-    // to texture unit 0. If a sampler3D (u_lut3D) and a sampler2D (u_texture)
-    // both point to unit 0, glDrawArrays fails with GL_INVALID_OPERATION:
-    // "Two textures of different types use the same sampler location."
+    // Sampler uniform-to-unit bindings are constant (they never change after the
+    // first assignment). We set them once, then skip on subsequent frames.
+    // In WebGL2, all sampler uniforms default to texture unit 0. If a sampler3D
+    // (u_lut3D) and a sampler2D (u_texture) both point to unit 0, glDrawArrays
+    // fails with GL_INVALID_OPERATION: "Two textures of different types use the
+    // same sampler location." So these must be set at least once.
+    if (!this._textureUnitsInitialized) {
+      shader.setUniformInt('u_curvesLUT', 1);
+      shader.setUniformInt('u_falseColorLUT', 2);
+      shader.setUniformInt('u_lut3D', 3);
+      shader.setUniformInt('u_filmLUT', 4);
+      shader.setUniformInt('u_inlineLUT', 5);
+      this._textureUnitsInitialized = true;
+    }
 
     // Texture unit 1: curves LUT
-    shader.setUniformInt('u_curvesLUT', 1);
     if (s.curvesEnabled) {
       texCb.bindCurvesLUTTexture();
     }
 
     // Texture unit 2: false color LUT
-    shader.setUniformInt('u_falseColorLUT', 2);
     if (s.falseColorEnabled) {
       texCb.bindFalseColorLUTTexture();
     }
 
     // Texture unit 3: 3D LUT
-    shader.setUniformInt('u_lut3D', 3);
     if (s.lut3DEnabled) {
       texCb.bindLUT3DTexture();
     }
 
     // Texture unit 4: film emulation LUT
-    shader.setUniformInt('u_filmLUT', 4);
     if (s.filmEnabled) {
       texCb.bindFilmLUTTexture();
     }
 
     // Texture unit 5: inline 1D LUT (RVColor luminanceLUT)
-    shader.setUniformInt('u_inlineLUT', 5);
     if (s.inlineLUTEnabled) {
       texCb.bindInlineLUTTexture();
     }
@@ -1688,5 +1739,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.cachedLUT3DSnapshot = null;
     this.cachedColorAdjustments = null;
     this.cachedToneMappingState = null;
+    this._textureUnitsInitialized = false;
   }
 }

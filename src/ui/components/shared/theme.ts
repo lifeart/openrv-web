@@ -35,6 +35,15 @@ export const COLORS = {
 
   // Shadows
   shadowDropdown: '0 4px 12px rgba(0, 0, 0, 0.4)',
+  shadowPanel: '0 8px 24px rgba(0, 0, 0, 0.5)',
+  shadowModal: '0 8px 32px rgba(0, 0, 0, 0.5)',
+} as const;
+
+// Panel width tokens
+export const PANEL_WIDTHS = {
+  narrow: '220px',
+  standard: '280px',
+  wide: '340px',
 } as const;
 
 // Z-index layers

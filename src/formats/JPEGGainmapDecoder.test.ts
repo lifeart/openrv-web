@@ -7,7 +7,6 @@ import {
   isGainmapJPEG,
   parseGainmapJPEG,
   extractJPEGOrientation,
-  type GainmapInfo,
 } from './JPEGGainmapDecoder';
 
 // Helper to create a minimal JPEG buffer with SOI marker
@@ -157,78 +156,6 @@ describe('JPEGGainmapDecoder', () => {
     });
   });
 
-  describe('GainmapInfo structure', () => {
-    it('has all required fields', () => {
-      const info: GainmapInfo = {
-        baseImageOffset: 0,
-        baseImageLength: 1000,
-        gainmapOffset: 1000,
-        gainmapLength: 500,
-        headroom: 4.0,
-      };
-
-      expect(info.baseImageOffset).toBeDefined();
-      expect(info.baseImageLength).toBeDefined();
-      expect(info.gainmapOffset).toBeDefined();
-      expect(info.gainmapLength).toBeDefined();
-      expect(info.headroom).toBeDefined();
-    });
-  });
-
-  describe('HDR reconstruction math', () => {
-    it('sRGB to linear conversion is correct for known values', () => {
-      // We can't access the private srgbToLinear, but we can verify
-      // the overall behavior through the decoder output
-      // Linear 0 -> 0, Linear 1 -> 1
-      // sRGB 0.5 -> ~0.214 (linear)
-      // sRGB 0.04045 -> ~0.00313 (linear, transition point)
-
-      // These are the expected values from the sRGB spec
-      const testValues = [
-        { srgb: 0.0, linear: 0.0 },
-        { srgb: 1.0, linear: 1.0 },
-        { srgb: 0.5, linear: 0.214 },
-      ];
-
-      // Verify the math is sound by computing manually
-      for (const { srgb, linear } of testValues) {
-        let computed: number;
-        if (srgb <= 0.04045) {
-          computed = srgb / 12.92;
-        } else {
-          computed = Math.pow((srgb + 0.055) / 1.055, 2.4);
-        }
-        expect(computed).toBeCloseTo(linear, 2);
-      }
-    });
-
-    it('gain formula produces values > 1.0 for non-zero gainmap', () => {
-      const headroom = 4.0;
-      const gainmapValue = 0.5; // 50% of headroom
-      const gain = Math.pow(2, gainmapValue * headroom);
-
-      // 2^(0.5*4) = 2^2 = 4.0
-      expect(gain).toBe(4.0);
-
-      // With a linear base of 0.5, result should be 2.0 (> 1.0)
-      const hdrValue = 0.5 * gain;
-      expect(hdrValue).toBe(2.0);
-      expect(hdrValue).toBeGreaterThan(1.0);
-    });
-
-    it('gain formula preserves SDR when gainmap is zero', () => {
-      const headroom = 4.0;
-      const gainmapValue = 0.0;
-      const gain = Math.pow(2, gainmapValue * headroom);
-
-      // 2^0 = 1.0
-      expect(gain).toBe(1.0);
-
-      // SDR values preserved
-      const base = 0.7;
-      expect(base * gain).toBe(base);
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------

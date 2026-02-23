@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForTestHelper } from './fixtures';
+import { waitForTestHelper, openKeyboardShortcutsDialog } from './fixtures';
 
 /**
  * Accessibility & Keyboard Navigation E2E Tests
@@ -34,7 +34,7 @@ test.describe('ARIA Landmarks & Roles', () => {
   });
 
   test('A11Y-003: Tab buttons have role="tab" with aria-selected', async ({ page }) => {
-    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
     for (const tabId of tabIds) {
       const tab = page.locator(`button[data-tab-id="${tabId}"]`);
       await expect(tab).toHaveAttribute('role', 'tab');
@@ -61,7 +61,7 @@ test.describe('ARIA Landmarks & Roles', () => {
   });
 
   test('A11Y-005: Tab buttons have aria-controls pointing to tabpanel IDs', async ({ page }) => {
-    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
     for (const tabId of tabIds) {
       const tab = page.locator(`button[data-tab-id="${tabId}"]`);
       await expect(tab).toHaveAttribute('aria-controls', `tabpanel-${tabId}`);
@@ -69,7 +69,7 @@ test.describe('ARIA Landmarks & Roles', () => {
   });
 
   test('A11Y-006: Tab buttons have unique IDs matching tab-{id} pattern', async ({ page }) => {
-    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
     for (const tabId of tabIds) {
       const tab = page.locator(`button[data-tab-id="${tabId}"]`);
       await expect(tab).toHaveAttribute('id', `tab-${tabId}`);
@@ -98,7 +98,7 @@ test.describe('ARIA Landmarks & Roles', () => {
   });
 
   test('A11Y-009: Tab panel containers have role="tabpanel" with aria-labelledby', async ({ page }) => {
-    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabIds = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
     for (const tabId of tabIds) {
       const panel = page.locator(`#tabpanel-${tabId}`);
       // Panel exists in DOM (may be hidden)
@@ -350,14 +350,14 @@ test.describe('Tab Bar Roving Tabindex', () => {
     focusedTabId = await page.evaluate(() => {
       return (document.activeElement as HTMLElement)?.dataset?.tabId;
     });
-    expect(focusedTabId).toBe('annotate');
+    expect(focusedTabId).toBe('qc');
   });
 
   test('A11Y-045: Arrow key wraps from last tab to first', async ({ page }) => {
-    // Click and focus the last tab (Annotate)
-    await page.click('button[data-tab-id="annotate"]');
-    const annotateTab = page.locator('button[data-tab-id="annotate"]');
-    await annotateTab.focus();
+    // Click and focus the last tab (QC)
+    await page.click('button[data-tab-id="qc"]');
+    const qcTab = page.locator('button[data-tab-id="qc"]');
+    await qcTab.focus();
     await page.waitForTimeout(50);
 
     // ArrowRight from last should wrap to first
@@ -500,21 +500,17 @@ test.describe('Modal Focus Trapping', () => {
 
   test('A11Y-060: Modal has role="dialog" and aria-modal="true"', async ({ page }) => {
     // Open keyboard shortcuts modal via help button
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
-    const modal = page.locator('[role="dialog"]');
+    const modal = page.locator('.modal[role="dialog"]');
     await expect(modal).toBeVisible();
     await expect(modal).toHaveAttribute('aria-modal', 'true');
   });
 
   test('A11Y-061: Modal has aria-labelledby pointing to title', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
-    const modal = page.locator('[role="dialog"]');
+    const modal = page.locator('.modal[role="dialog"]');
     const labelledBy = await modal.getAttribute('aria-labelledby');
     expect(labelledBy).toBeTruthy();
 
@@ -525,11 +521,9 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-062: Escape closes modal', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
-    const modal = page.locator('[role="dialog"]');
+    const modal = page.locator('.modal[role="dialog"]');
     await expect(modal).toBeVisible();
 
     await page.keyboard.press('Escape');
@@ -541,27 +535,23 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-063: Focus returns to trigger button after modal close', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
 
-    // Focus should return to the help button
-    const focusedTitle = await page.evaluate(() => {
-      return document.activeElement?.getAttribute('title');
+    // Focus should return to the help menu button
+    const focusedTestId = await page.evaluate(() => {
+      return document.activeElement?.getAttribute('data-testid');
     });
-    expect(focusedTitle).toBe('Keyboard shortcuts');
+    expect(focusedTestId).toBe('help-menu-button');
   });
 
   test('A11Y-064: Tab key is trapped inside modal', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     // Get all focusable elements inside modal
-    const modal = page.locator('[role="dialog"]');
+    const modal = page.locator('.modal[role="dialog"]');
     await expect(modal).toBeVisible();
 
     // Tab multiple times - focus should stay inside the modal
@@ -579,9 +569,7 @@ test.describe('Modal Focus Trapping', () => {
   });
 
   test('A11Y-065: Shift+Tab wraps backward inside modal', async ({ page }) => {
-    const helpButton = page.locator('button[title="Keyboard shortcuts"]');
-    await helpButton.click();
-    await page.waitForTimeout(200);
+    await openKeyboardShortcutsDialog(page);
 
     // Shift+Tab multiple times
     for (let i = 0; i < 10; i++) {
@@ -781,7 +769,7 @@ test.describe('Full Keyboard Workflow', () => {
     }
   });
 
-  test('A11Y-082: Number keys 1-5 switch tabs and update ARIA state', async ({ page }) => {
+  test('A11Y-082: Number keys 1-6 switch tabs and update ARIA state', async ({ page }) => {
     // Press 2 to switch to Color tab
     await page.keyboard.press('2');
     await page.waitForTimeout(100);
@@ -841,7 +829,7 @@ test.describe('Focus Management Edge Cases', () => {
 
   test('A11Y-090: Focus is not lost to document.body on tab switch', async ({ page }) => {
     // Switch through all tabs and verify focus is never on body
-    const tabIds = ['color', 'effects', 'transform', 'annotate', 'view'];
+    const tabIds = ['color', 'effects', 'transform', 'annotate', 'qc', 'view'];
     for (const tabId of tabIds) {
       await page.click(`button[data-tab-id="${tabId}"]`);
       await page.waitForTimeout(100);

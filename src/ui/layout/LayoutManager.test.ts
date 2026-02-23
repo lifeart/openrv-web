@@ -8,18 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LayoutStore, COLLAPSED_RAIL_SIZE, DEFAULT_PANEL_STATES } from './LayoutStore';
 import { LayoutManager } from './LayoutManager';
 
-// Polyfill PointerEvent for jsdom (which does not implement it)
-if (typeof globalThis.PointerEvent === 'undefined') {
-  (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
-    readonly pointerId: number;
-    readonly pointerType: string;
-    constructor(type: string, params: PointerEventInit & MouseEventInit = {}) {
-      super(type, params);
-      this.pointerId = params.pointerId ?? 0;
-      this.pointerType = params.pointerType ?? '';
-    }
-  };
-}
 
 describe('LayoutManager', () => {
   let store: LayoutStore;
@@ -541,14 +529,14 @@ describe('LayoutManager', () => {
       const root = manager.getElement();
       const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
 
-      // Simulate mouseenter
+      // Simulate pointerenter
       leftHandle.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
 
       // Should show accent color with higher opacity on hover
       expect(leftHandle.style.background).toBe('var(--accent-primary)');
       expect(leftHandle.style.opacity).toBe('0.5');
 
-      // Simulate mouseleave
+      // Simulate pointerleave
       leftHandle.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
 
       // Should restore to subtle rest state

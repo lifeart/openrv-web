@@ -319,6 +319,8 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
   }
 
   dispose(): void {
-    // Cleanup if needed
+    // Inline panel -- no document-level listeners to clean up.
+    // All event listeners are on child elements within this.container
+    // and will be garbage-collected when the container is removed from the DOM.
   }
 }

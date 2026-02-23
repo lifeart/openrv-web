@@ -170,7 +170,7 @@ export function applyStereoModeWithEyeTransforms(
 /**
  * Extract left and right eye images from stereo source
  */
-function extractStereoEyes(
+export function extractStereoEyes(
   sourceData: ImageData,
   inputFormat: StereoInputFormat,
   eyeSwap: boolean
@@ -410,7 +410,7 @@ function renderAnaglyph(left: ImageData, right: ImageData, useLuminance: boolean
         result.data[idx + 1] = rightG;   // Green channel from right eye
         result.data[idx + 2] = rightB;   // Blue channel from right eye
       }
-      result.data[idx + 3] = 255;
+      result.data[idx + 3] = Math.max(left.data[idx + 3]!, scaledRight.data[idx + 3]!);
     }
   }
 

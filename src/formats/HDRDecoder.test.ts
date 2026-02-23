@@ -560,4 +560,218 @@ describe('HDRDecoder', () => {
       expect(result.data[1]!).toBeCloseTo(2.5 / 256, 4);
     });
   });
+
+  describe('orientation rearrangement', () => {
+    //
+    // Reference image layout (3 wide x 2 tall) in standard -Y +X order:
+    //
+    //   (0,0)=A  (1,0)=B  (2,0)=C     row 0 (top)
+    //   (0,1)=D  (1,1)=E  (2,1)=F     row 1 (bottom)
+    //
+    // Each pixel has a unique color so we can verify placement:
+    //   A=[1,0,0] B=[0,1,0] C=[0,0,1] D=[1,1,0] E=[0,1,1] F=[1,0,1]
+    //
+
+    const A: [number, number, number] = [1.0, 0.0, 0.0];
+    const B: [number, number, number] = [0.0, 1.0, 0.0];
+    const C: [number, number, number] = [0.0, 0.0, 1.0];
+    const D: [number, number, number] = [1.0, 1.0, 0.0];
+    const E: [number, number, number] = [0.0, 1.0, 1.0];
+    const F: [number, number, number] = [1.0, 0.0, 1.0];
+
+    /**
+     * Helper to extract the RGB tuple for pixel at (x, y) from a decoded RGBA result.
+     * Uses toBeCloseTo-style comparison since RGBE encoding has limited precision.
+     */
+    function getPixelRGB(data: Float32Array, width: number, x: number, y: number): [number, number, number] {
+      const idx = (y * width + x) * 4;
+      return [data[idx]!, data[idx + 1]!, data[idx + 2]!];
+    }
+
+    function expectPixelClose(actual: [number, number, number], expected: [number, number, number], label: string) {
+      expect(actual[0], `${label} R`).toBeCloseTo(expected[0], 1);
+      expect(actual[1], `${label} G`).toBeCloseTo(expected[1], 1);
+      expect(actual[2], `${label} B`).toBeCloseTo(expected[2], 1);
+    }
+
+    /**
+     * For a given orientation, determine the scan order of the 6 pixels.
+     *
+     * The file stores pixels in scan order: for each row (first axis direction),
+     * for each column (second axis direction). We need to arrange our reference
+     * pixels A-F in that scan order.
+     *
+     * Returns { scanPixels, resLine, expectedWidth, expectedHeight }
+     */
+    function buildOrientationTestData(firstAxis: string, secondAxis: string) {
+      // Build a lookup: standardX, standardY -> pixel color
+      // Standard layout (-Y +X):
+      //   row0: A(0,0) B(1,0) C(2,0)
+      //   row1: D(0,1) E(1,1) F(2,1)
+      const standardGrid: [number, number, number][][] = [
+        [A, B, C], // y=0
+        [D, E, F], // y=1
+      ];
+      const W = 3; // standard width
+      const H = 2; // standard height
+
+      const isTransposed = firstAxis.charAt(1) === 'X';
+
+      // Scan dimensions
+      let scanHeight: number, scanWidth: number;
+      if (isTransposed) {
+        scanHeight = W; // first dim = width = 3
+        scanWidth = H;  // second dim = height = 2
+      } else {
+        scanHeight = H; // first dim = height = 2
+        scanWidth = W;  // second dim = width = 3
+      }
+
+      // Build scan-order pixel list
+      const scanPixels: [number, number, number][] = [];
+      for (let row = 0; row < scanHeight; row++) {
+        for (let col = 0; col < scanWidth; col++) {
+          // Map (row, col) in scan space back to (stdX, stdY) in standard space
+          let stdX: number, stdY: number;
+          if (!isTransposed) {
+            stdY = firstAxis === '-Y' ? row : (scanHeight - 1 - row);
+            stdX = secondAxis === '+X' ? col : (scanWidth - 1 - col);
+          } else {
+            stdX = firstAxis === '+X' ? row : (scanHeight - 1 - row);
+            stdY = secondAxis === '-Y' ? col : (scanWidth - 1 - col);
+          }
+          scanPixels.push(standardGrid[stdY]![stdX]!);
+        }
+      }
+
+      const resLine = `${firstAxis} ${scanHeight} ${secondAxis} ${scanWidth}`;
+
+      return {
+        scanPixels,
+        resLine,
+        scanWidth,
+        scanHeight,
+        expectedWidth: W,
+        expectedHeight: H,
+      };
+    }
+
+    async function testOrientation(firstAxis: string, secondAxis: string) {
+      const { scanPixels, resLine, expectedWidth, expectedHeight } = buildOrientationTestData(firstAxis, secondAxis);
+
+      const buffer = createTestHDR({
+        width: 0,   // ignored since we override resLine
+        height: 0,  // ignored since we override resLine
+        resLine,
+        pixels: scanPixels,
+      });
+
+      const result = await decodeHDR(buffer);
+
+      expect(result.width).toBe(expectedWidth);
+      expect(result.height).toBe(expectedHeight);
+      expect(result.channels).toBe(4);
+
+      // Verify all 6 pixels are in standard -Y +X positions
+      expectPixelClose(getPixelRGB(result.data, result.width, 0, 0), A, '(0,0)=A');
+      expectPixelClose(getPixelRGB(result.data, result.width, 1, 0), B, '(1,0)=B');
+      expectPixelClose(getPixelRGB(result.data, result.width, 2, 0), C, '(2,0)=C');
+      expectPixelClose(getPixelRGB(result.data, result.width, 0, 1), D, '(0,1)=D');
+      expectPixelClose(getPixelRGB(result.data, result.width, 1, 1), E, '(1,1)=E');
+      expectPixelClose(getPixelRGB(result.data, result.width, 2, 1), F, '(2,1)=F');
+    }
+
+    it('HDR-U050: -Y +X (standard, no rearrangement)', async () => {
+      await testOrientation('-Y', '+X');
+    });
+
+    it('HDR-U051: -Y -X (mirror horizontal)', async () => {
+      await testOrientation('-Y', '-X');
+    });
+
+    it('HDR-U052: +Y +X (flip vertical)', async () => {
+      await testOrientation('+Y', '+X');
+    });
+
+    it('HDR-U053: +Y -X (rotate 180)', async () => {
+      await testOrientation('+Y', '-X');
+    });
+
+    it('HDR-U054: +X -Y (transpose)', async () => {
+      await testOrientation('+X', '-Y');
+    });
+
+    it('HDR-U055: +X +Y (transpose + flip vertical)', async () => {
+      await testOrientation('+X', '+Y');
+    });
+
+    it('HDR-U056: -X -Y (transpose + mirror horizontal)', async () => {
+      await testOrientation('-X', '-Y');
+    });
+
+    it('HDR-U057: -X +Y (transpose + rotate 180)', async () => {
+      await testOrientation('-X', '+Y');
+    });
+
+    it('HDR-U058: transposed orientations swap width and height', async () => {
+      // A 4x1 image with +X first axis should produce width=4, height=1
+      const pixels: [number, number, number][] = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 1.0, 1.0],
+      ];
+
+      // +X -Y with scan dims: scanHeight=4 (first), scanWidth=1 (second)
+      // means final width=4, height=1
+      const buffer = createTestHDR({
+        width: 0,
+        height: 0,
+        resLine: '+X 4 -Y 1',
+        pixels,
+      });
+      const result = await decodeHDR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(1);
+    });
+
+    it('HDR-U059: getHDRInfo reports display dimensions for transposed orientations', () => {
+      // +X 5 -Y 3 means: first axis +X with dim 5, second axis -Y with dim 3
+      // Since first axis is X, width=5 (first dim), height=3 (second dim)
+      const buffer = createTestHDR({
+        width: 0,
+        height: 0,
+        resLine: '+X 5 -Y 3',
+        pixels: Array.from({ length: 5 * 3 }, () => [0.5, 0.5, 0.5] as [number, number, number]),
+      });
+      const info = getHDRInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.width).toBe(5);
+      expect(info!.height).toBe(3);
+    });
+
+    it('HDR-U060: 1x1 image works with all orientations', async () => {
+      const pixel: [number, number, number] = [0.5, 0.25, 0.125];
+      const orientations: [string, string][] = [
+        ['-Y', '+X'], ['-Y', '-X'], ['+Y', '+X'], ['+Y', '-X'],
+        ['+X', '-Y'], ['+X', '+Y'], ['-X', '-Y'], ['-X', '+Y'],
+      ];
+
+      for (const [first, second] of orientations) {
+        const buffer = createTestHDR({
+          width: 0,
+          height: 0,
+          resLine: `${first} 1 ${second} 1`,
+          pixels: [pixel],
+        });
+        const result = await decodeHDR(buffer);
+        expect(result.width).toBe(1);
+        expect(result.height).toBe(1);
+        expect(result.data[0]!).toBeCloseTo(0.5, 1);
+        expect(result.data[1]!).toBeCloseTo(0.25, 1);
+        expect(result.data[2]!).toBeCloseTo(0.125, 1);
+      }
+    });
+  });
 });

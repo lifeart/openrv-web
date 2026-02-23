@@ -8,6 +8,12 @@ import {
   getStackState,
   captureViewerScreenshot,
   imagesAreDifferent,
+  waitForTabActive,
+  waitForWipeMode,
+  waitForDifferenceMatteEnabled,
+  waitForStackLayerCount,
+  waitForCondition,
+  waitForFrameChange,
 } from './fixtures';
 
 /**
@@ -31,7 +37,7 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadVideoFile(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-001: Shift+W key cycles through wipe/split modes', async ({ page }) => {
@@ -40,27 +46,27 @@ test.describe('Composition', () => {
 
       // Cycle through: off -> horizontal -> vertical -> splitscreen-h -> splitscreen-v -> off
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'horizontal');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
 
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'vertical');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('vertical');
 
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'splitscreen-h');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-h');
 
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'splitscreen-v');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('splitscreen-v');
 
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'off');
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
     });
@@ -68,12 +74,14 @@ test.describe('Composition', () => {
     test('COMP-002: vertical wipe produces different visual than horizontal', async ({ page }) => {
       // Enable horizontal wipe
       await page.keyboard.press('Shift+w');
+      await waitForWipeMode(page, 'horizontal');
       await page.waitForTimeout(200);
 
       const horizontalScreenshot = await captureViewerScreenshot(page);
 
       // Switch to vertical wipe
       await page.keyboard.press('Shift+w');
+      await waitForWipeMode(page, 'vertical');
       await page.waitForTimeout(200);
 
       const verticalScreenshot = await captureViewerScreenshot(page);
@@ -85,14 +93,14 @@ test.describe('Composition', () => {
     test('COMP-003: wipe mode persists across frame changes', async ({ page }) => {
       // Enable horizontal wipe
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'horizontal');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
 
       // Change frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, 1);
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
@@ -106,7 +114,7 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadTwoVideoFiles(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(300);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-010: backtick key toggles between A and B sources', async ({ page }) => {
@@ -116,14 +124,14 @@ test.describe('Composition', () => {
 
       // Press backtick to switch to B
       await page.keyboard.press('Backquote');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
 
       // Press backtick again to switch back to A
       await page.keyboard.press('Backquote');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`);
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('A');
@@ -135,7 +143,7 @@ test.describe('Composition', () => {
 
       // Press tilde (Shift+Backquote) to switch to B
       await page.keyboard.press('Shift+Backquote');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -146,6 +154,7 @@ test.describe('Composition', () => {
 
       // Switch to B
       await page.keyboard.press('Backquote');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
       await page.waitForTimeout(300);
 
       const screenshotB = await captureViewerScreenshot(page);
@@ -165,7 +174,7 @@ test.describe('Composition', () => {
 
       const bButton = page.locator('[data-testid="compare-ab-b"]');
       await bButton.click();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -182,7 +191,7 @@ test.describe('Composition', () => {
 
       const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
       await toggleButton.click();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -194,7 +203,7 @@ test.describe('Composition', () => {
         await page.keyboard.press('Backquote');
         await page.waitForTimeout(50);
       }
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
 
       // After 5 toggles (odd number), should be on B
       const state = await getSessionState(page);
@@ -209,23 +218,27 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadTwoVideoFiles(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(300);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-020: wipe shows both A and B sources simultaneously', async ({ page }) => {
       // Enable horizontal wipe
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'horizontal');
 
       const state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
 
       // Take screenshot with wipe enabled
+      await page.waitForTimeout(200);
       const wipeScreenshot = await captureViewerScreenshot(page);
 
-      // Disable wipe (cycle: horizontal -> vertical -> off)
+      // Disable wipe (cycle: horizontal -> vertical -> splitscreen-h -> splitscreen-v -> off)
       await page.keyboard.press('Shift+w'); // vertical
+      await page.keyboard.press('Shift+w'); // splitscreen-h
+      await page.keyboard.press('Shift+w'); // splitscreen-v
       await page.keyboard.press('Shift+w'); // off
+      await waitForWipeMode(page, 'off');
       await page.waitForTimeout(200);
 
       const noWipeScreenshot = await captureViewerScreenshot(page);
@@ -237,6 +250,7 @@ test.describe('Composition', () => {
     test('COMP-021: wipe position affects visual split', async ({ page }) => {
       // Enable horizontal wipe
       await page.keyboard.press('Shift+w');
+      await waitForWipeMode(page, 'horizontal');
       await page.waitForTimeout(200);
 
       // Capture at default position (0.5)
@@ -264,17 +278,21 @@ test.describe('Composition', () => {
       // Enable vertical wipe
       await page.keyboard.press('Shift+w'); // horizontal
       await page.keyboard.press('Shift+w'); // vertical
-      await page.waitForTimeout(200);
+      await waitForWipeMode(page, 'vertical');
 
       const state = await getViewerState(page);
       expect(state.wipeMode).toBe('vertical');
 
       // Visual should be different from horizontal
+      await page.waitForTimeout(200);
       const verticalScreenshot = await captureViewerScreenshot(page);
 
-      // Cycle back to horizontal (vertical -> off -> horizontal)
+      // Cycle back to horizontal (vertical -> splitscreen-h -> splitscreen-v -> off -> horizontal)
+      await page.keyboard.press('Shift+w'); // splitscreen-h
+      await page.keyboard.press('Shift+w'); // splitscreen-v
       await page.keyboard.press('Shift+w'); // off
       await page.keyboard.press('Shift+w'); // horizontal
+      await waitForWipeMode(page, 'horizontal');
       await page.waitForTimeout(200);
 
       const horizontalScreenshot = await captureViewerScreenshot(page);
@@ -290,7 +308,7 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadVideoFile(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-030: adding layer changes visual when opacity < 1', async ({ page }) => {
@@ -304,11 +322,11 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 1);
 
       // Add second layer
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       // Modify second layer opacity to see compositing effect
       const state = await getStackState(page);
@@ -316,7 +334,7 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       const layeredScreenshot = await captureViewerScreenshot(page);
 
@@ -335,9 +353,9 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       let state = await getStackState(page);
       expect(state.layerCount).toBe(2);
@@ -350,7 +368,7 @@ test.describe('Composition', () => {
       const secondLayerId = state.layers[1]!.id;
       const visibilityButton = page.locator(`[data-testid="stack-layer-visibility-${secondLayerId}"]`);
       await visibilityButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.visible === false; })()`);
 
       state = await getStackState(page);
       expect(state.layers[1]!.visible).toBe(false);
@@ -364,9 +382,9 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       // Set opacity to 50% to see blend difference (same content at 100% looks identical)
       const state = await getStackState(page);
@@ -374,7 +392,7 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       // Capture with normal blend mode
       const normalScreenshot = await captureViewerScreenshot(page);
@@ -382,6 +400,7 @@ test.describe('Composition', () => {
       // Change to multiply blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('multiply');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'multiply'; })()`);
       await page.waitForTimeout(200);
 
       const multiplyScreenshot = await captureViewerScreenshot(page);
@@ -400,9 +419,9 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       // Set opacity to 50% to see blend difference
       const state = await getStackState(page);
@@ -410,7 +429,7 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       // Capture with normal blend mode
       const normalScreenshot = await captureViewerScreenshot(page);
@@ -418,6 +437,7 @@ test.describe('Composition', () => {
       // Change to add blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('add');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'add'; })()`);
       await page.waitForTimeout(200);
 
       const addScreenshot = await captureViewerScreenshot(page);
@@ -436,9 +456,9 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       // Set opacity to 50% to see blend difference
       const state = await getStackState(page);
@@ -446,17 +466,19 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
 
       // Set to multiply
       await blendSelect.selectOption('multiply');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'multiply'; })()`);
       await page.waitForTimeout(200);
       const multiplyScreenshot = await captureViewerScreenshot(page);
 
       // Set to screen
       await blendSelect.selectOption('screen');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'screen'; })()`);
       await page.waitForTimeout(200);
       const screenScreenshot = await captureViewerScreenshot(page);
 
@@ -471,21 +493,22 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       const state = await getStackState(page);
       const secondLayerId = state.layers[1]!.id;
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       const normalScreenshot = await captureViewerScreenshot(page);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('overlay');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'overlay'; })()`);
       await page.waitForTimeout(200);
 
       const overlayScreenshot = await captureViewerScreenshot(page);
@@ -502,21 +525,22 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       const state = await getStackState(page);
       const secondLayerId = state.layers[1]!.id;
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       const normalScreenshot = await captureViewerScreenshot(page);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('difference');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'difference'; })()`);
       await page.waitForTimeout(200);
 
       const differenceScreenshot = await captureViewerScreenshot(page);
@@ -533,21 +557,22 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       const state = await getStackState(page);
       const secondLayerId = state.layers[1]!.id;
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       const normalScreenshot = await captureViewerScreenshot(page);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('exclusion');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'exclusion'; })()`);
       await page.waitForTimeout(200);
 
       const exclusionScreenshot = await captureViewerScreenshot(page);
@@ -564,16 +589,16 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       const state = await getStackState(page);
       const secondLayerId = state.layers[1]!.id;
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       const blendModes = ['normal', 'add', 'multiply', 'screen', 'overlay', 'difference', 'exclusion'];
@@ -581,6 +606,7 @@ test.describe('Composition', () => {
 
       for (const mode of blendModes) {
         await blendSelect.selectOption(mode);
+        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === '${mode}'; })()`);
         await page.waitForTimeout(150);
         screenshots[mode] = await captureViewerScreenshot(page);
       }
@@ -602,9 +628,9 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(50);
+      await waitForStackLayerCount(page, 1);
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 2);
 
       let state = await getStackState(page);
       const firstLayerId = state.layers[0]!.id;
@@ -612,7 +638,7 @@ test.describe('Composition', () => {
       // Set different blend modes to make order matter
       const blendSelect1 = page.locator(`[data-testid="stack-layer-blend-${firstLayerId}"]`);
       await blendSelect1.selectOption('multiply');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`);
 
       const beforeReorderScreenshot = await captureViewerScreenshot(page);
 
@@ -636,7 +662,7 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadTwoVideoFiles(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(300);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-040: difference matte shows visual difference between A and B', async ({ page }) => {
@@ -645,11 +671,12 @@ test.describe('Composition', () => {
 
       // Enable difference matte via keyboard
       await page.keyboard.press('Shift+d');
-      await page.waitForTimeout(200);
+      await waitForDifferenceMatteEnabled(page, true);
 
       const state = await getViewerState(page);
       expect(state.differenceMatteEnabled).toBe(true);
 
+      await page.waitForTimeout(200);
       const diffScreenshot = await captureViewerScreenshot(page);
 
       // Difference matte should produce different visual
@@ -659,6 +686,7 @@ test.describe('Composition', () => {
     test('COMP-041: difference matte gain increases visual intensity', async ({ page }) => {
       // Enable difference matte
       await page.keyboard.press('Shift+d');
+      await waitForDifferenceMatteEnabled(page, true);
       await page.waitForTimeout(200);
 
       // Capture at default gain (1)
@@ -672,6 +700,7 @@ test.describe('Composition', () => {
       const gainSlider = page.locator('[data-testid="diff-matte-gain"]');
       await gainSlider.fill('10');
       await gainSlider.dispatchEvent('input');
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.differenceMatteGain >= 9; })()`);
       await page.waitForTimeout(200);
 
       const highGainScreenshot = await captureViewerScreenshot(page);
@@ -683,6 +712,7 @@ test.describe('Composition', () => {
     test('COMP-042: heatmap mode shows color-coded differences', async ({ page }) => {
       // Enable difference matte
       await page.keyboard.press('Shift+d');
+      await waitForDifferenceMatteEnabled(page, true);
       await page.waitForTimeout(200);
 
       // Capture grayscale difference
@@ -695,11 +725,12 @@ test.describe('Composition', () => {
 
       const heatmapToggle = page.locator('[data-testid="diff-matte-heatmap"]');
       await heatmapToggle.click();
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.differenceMatteHeatmap === true; })()`);
 
       const state = await getViewerState(page);
       expect(state.differenceMatteHeatmap).toBe(true);
 
+      await page.waitForTimeout(200);
       const heatmapScreenshot = await captureViewerScreenshot(page);
 
       // Heatmap should look different from grayscale
@@ -714,7 +745,7 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadTwoVideoFiles(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(300);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-050: wipe mode persists when switching tabs', async ({ page }) => {
@@ -724,22 +755,22 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadVideoFile(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       // Enable wipe
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'horizontal');
 
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
 
       // Switch to Color tab
       await page.click('button[data-tab-id="color"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
 
       // Switch back to View tab
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
@@ -748,16 +779,16 @@ test.describe('Composition', () => {
     test('COMP-051: A/B state persists when switching tabs', async ({ page }) => {
       // Switch to B
       await page.keyboard.press('Backquote');
-      await page.waitForTimeout(200);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
 
       let state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
 
       // Switch tabs
       await page.click('button[data-tab-id="color"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -766,14 +797,15 @@ test.describe('Composition', () => {
     test('COMP-052: difference matte state persists across frame changes', async ({ page }) => {
       // Enable difference matte
       await page.keyboard.press('Shift+d');
-      await page.waitForTimeout(200);
+      await waitForDifferenceMatteEnabled(page, true);
 
       let state = await getViewerState(page);
       expect(state.differenceMatteEnabled).toBe(true);
 
       // Change frame
+      const currentFrame = (await getSessionState(page)).currentFrame;
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await waitForFrameChange(page, currentFrame);
 
       state = await getViewerState(page);
       expect(state.differenceMatteEnabled).toBe(true);
@@ -787,14 +819,14 @@ test.describe('Composition', () => {
 
       const addButton = page.locator('[data-testid="stack-add-layer-button"]');
       await addButton.click();
-      await page.waitForTimeout(100);
+      await waitForStackLayerCount(page, 1);
 
       // Change blend mode
       let state = await getStackState(page);
       const layerId = state.layers[0]!.id;
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('screen');
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`);
 
       // Close panel
       await stackButton.click();
@@ -802,9 +834,9 @@ test.describe('Composition', () => {
 
       // Switch tabs
       await page.click('button[data-tab-id="color"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'color');
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
 
       // Verify state persisted
       state = await getStackState(page);
@@ -820,7 +852,7 @@ test.describe('Composition', () => {
       await waitForTestHelper(page);
       await loadVideoFile(page);
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(200);
+      await waitForTabActive(page, 'view');
     });
 
     test('COMP-060: A/B toggle button disabled with single source', async ({ page }) => {
@@ -850,7 +882,6 @@ test.describe('Composition', () => {
     test('COMP-062: clicking A button when already on A has no effect', async ({ page }) => {
       // Load two files so A/B is available
       await loadTwoVideoFiles(page);
-      await page.waitForTimeout(300);
 
       let state = await getSessionState(page);
       expect(state.currentAB).toBe('A');
@@ -862,7 +893,7 @@ test.describe('Composition', () => {
 
       const aButton = page.locator('[data-testid="compare-ab-a"]');
       await aButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`);
 
       // Still on A
       state = await getSessionState(page);
@@ -875,6 +906,7 @@ test.describe('Composition', () => {
 
       // Try to toggle with backtick
       await page.keyboard.press('Backquote');
+      // Small wait since we expect no change -- can't wait for a state transition that won't happen
       await page.waitForTimeout(100);
 
       // Should still be A (no B source available)
@@ -885,18 +917,17 @@ test.describe('Composition', () => {
     test('COMP-064: enabling difference matte disables wipe mode', async ({ page }) => {
       // Enable horizontal wipe first
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'horizontal');
 
       let viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('horizontal');
 
       // Load second file for difference matte
       await loadTwoVideoFiles(page);
-      await page.waitForTimeout(300);
 
       // Enable difference matte
       await page.keyboard.press('Shift+d');
-      await page.waitForTimeout(200);
+      await waitForDifferenceMatteEnabled(page, true);
 
       viewerState = await getViewerState(page);
       expect(viewerState.differenceMatteEnabled).toBe(true);
@@ -905,20 +936,19 @@ test.describe('Composition', () => {
 
     test('COMP-065: wipe mode can be enabled after disabling difference matte', async ({ page }) => {
       await loadTwoVideoFiles(page);
-      await page.waitForTimeout(300);
 
       // Enable then disable difference matte
       await page.keyboard.press('Shift+d');
-      await page.waitForTimeout(100);
+      await waitForDifferenceMatteEnabled(page, true);
       await page.keyboard.press('Shift+d');
-      await page.waitForTimeout(100);
+      await waitForDifferenceMatteEnabled(page, false);
 
       let viewerState = await getViewerState(page);
       expect(viewerState.differenceMatteEnabled).toBe(false);
 
       // Now enable wipe
       await page.keyboard.press('Shift+w');
-      await page.waitForTimeout(100);
+      await waitForWipeMode(page, 'horizontal');
 
       viewerState = await getViewerState(page);
       expect(viewerState.wipeMode).toBe('horizontal');
@@ -926,7 +956,6 @@ test.describe('Composition', () => {
 
     test('COMP-066: multiple toggle button clicks work correctly', async ({ page }) => {
       await loadTwoVideoFiles(page);
-      await page.waitForTimeout(300);
 
       const compareButton = page.locator('[data-testid="compare-control-button"]');
       await compareButton.click();
@@ -936,17 +965,17 @@ test.describe('Composition', () => {
 
       // Click toggle 3 times
       await toggleButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
       let state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
 
       await toggleButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`);
       state = await getSessionState(page);
       expect(state.currentAB).toBe('A');
 
       await toggleButton.click();
-      await page.waitForTimeout(100);
+      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
     });

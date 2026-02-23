@@ -181,7 +181,7 @@ test.describe('Network Sync', () => {
 
   // --- Skipped tests requiring mock WebSocket server fixture ---
 
-  test.skip('NET-005: creating a room generates a shareable code', async ({ page }) => {
+  test.fixme('NET-005: creating a room generates a shareable code', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();
@@ -203,7 +203,7 @@ test.describe('Network Sync', () => {
     expect(code!.length).toBeGreaterThanOrEqual(4);
   });
 
-  test.skip('NET-007: join a room using a room code', async ({ page }) => {
+  test.fixme('NET-007: join a room using a room code', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();
@@ -226,7 +226,7 @@ test.describe('Network Sync', () => {
     await expect(connectedIndicator).toBeVisible({ timeout: 5000 });
   });
 
-  test.skip('NET-008: leave room and disconnect', async ({ page }) => {
+  test.fixme('NET-008: leave room and disconnect', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
     // First join a room
     const networkButton = page.locator('button[data-testid="network-button"]').first();
@@ -251,7 +251,7 @@ test.describe('Network Sync', () => {
     await expect(createButton).toBeVisible({ timeout: 3000 });
   });
 
-  test.skip('NET-020: user presence list shows connected users', async ({ page }) => {
+  test.fixme('NET-020: user presence list shows connected users', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture with multiple simulated clients
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();
@@ -271,7 +271,7 @@ test.describe('Network Sync', () => {
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
-  test.skip('NET-030: playback sync - play/pause propagates to peers', async ({ page }) => {
+  test.fixme('NET-030: playback sync - play/pause propagates to peers', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture to verify message emission
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();
@@ -298,7 +298,7 @@ test.describe('Network Sync', () => {
     // the mock WebSocket server fixture capturing outgoing messages.
   });
 
-  test.skip('NET-031: frame position sync propagates to peers', async ({ page }) => {
+  test.fixme('NET-031: frame position sync propagates to peers', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();
@@ -322,7 +322,7 @@ test.describe('Network Sync', () => {
     // over the WebSocket to connected peers.
   });
 
-  test.skip('NET-040: view sync - zoom and pan propagate to peers', async ({ page }) => {
+  test.fixme('NET-040: view sync - zoom and pan propagate to peers', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();
@@ -344,7 +344,7 @@ test.describe('Network Sync', () => {
     // to peers over the WebSocket connection.
   });
 
-  test.skip('NET-050: reconnection handling after connection drop', async ({ page }) => {
+  test.fixme('NET-050: reconnection handling after connection drop', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture with disconnect/reconnect simulation
     const networkButton = page.locator('button[data-testid="network-button"]').first();
     await networkButton.click();

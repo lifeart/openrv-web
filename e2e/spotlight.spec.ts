@@ -3,6 +3,11 @@ import {
   loadVideoFile,
   getSpotlightState,
   waitForTestHelper,
+  waitForSpotlightEnabled,
+  waitForCondition,
+  waitForTabActive,
+  waitForFrameChange,
+  waitForPlaybackState,
 } from './fixtures';
 
 /**
@@ -30,13 +35,13 @@ test.describe('Spotlight Display', () => {
     expect(state.enabled).toBe(false);
 
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
 
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, false);
 
     state = await getSpotlightState(page);
     expect(state.enabled).toBe(false);
@@ -51,7 +56,7 @@ test.describe('Spotlight Display', () => {
     });
 
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(200);
+    await waitForSpotlightEnabled(page, true);
 
     // Capture spotlight overlay state after enabling
     const afterData = await page.evaluate(() => {
@@ -66,7 +71,6 @@ test.describe('Spotlight Display', () => {
 
   test('SL-E004: spotlight overlay is visible when enabled', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
 
     const overlay = page.locator('[data-testid="spotlight-overlay"], .spotlight-overlay');
     await expect(overlay).toBeVisible();
@@ -81,7 +85,7 @@ test.describe('Spotlight Properties', () => {
     await loadVideoFile(page);
     // Enable spotlight
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-E010: default shape is circle', async ({ page }) => {
@@ -104,7 +108,7 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.3, 0.7);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.3) < 0.05; })()');
 
     const state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.3, 1);
@@ -115,7 +119,7 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.4, 0.4);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.4) < 0.05; })()');
 
     const state = await getSpotlightState(page);
     expect(state.width).toBeCloseTo(0.4, 1);
@@ -126,7 +130,7 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0.5);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.dimAmount - 0.5) < 0.05; })()');
 
     const state = await getSpotlightState(page);
     expect(state.dimAmount).toBeCloseTo(0.5, 1);
@@ -136,7 +140,7 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0.1);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.feather - 0.1) < 0.05; })()');
 
     const state = await getSpotlightState(page);
     expect(state.feather).toBeCloseTo(0.1, 1);
@@ -150,14 +154,14 @@ test.describe('Spotlight Shape', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-E020: changing shape to rectangle updates state', async ({ page }) => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()');
 
     const state = await getSpotlightState(page);
     expect(state.shape).toBe('rectangle');
@@ -199,7 +203,7 @@ test.describe('Spotlight UI Controls', () => {
   test('SL-E030: spotlight control exists in View tab', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     // Look for spotlight control
     const control = page.locator('[data-testid="spotlight-toggle-btn"]');
@@ -215,7 +219,7 @@ test.describe('Spotlight Interaction', () => {
     await loadVideoFile(page);
     // Enable spotlight
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-E050: spotlight overlay has correct CSS dimensions when enabled', async ({ page }) => {
@@ -303,7 +307,7 @@ test.describe('Spotlight Interaction', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.25, 0.75);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.25) < 0.05; })()');
 
     state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.25, 1);
@@ -319,7 +323,7 @@ test.describe('Spotlight Interaction', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.75, 0.25);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.75) < 0.05; })()');
 
     const afterData = await page.evaluate(() => {
       const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
@@ -382,7 +386,7 @@ test.describe('Spotlight Regression Tests', () => {
     await loadVideoFile(page);
     // Enable spotlight
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-R001: spotlight canvas CSS size matches bounding rect (HiDPI fix)', async ({ page }) => {
@@ -521,7 +525,7 @@ test.describe('Spotlight Regression Tests', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.3) < 0.05; })()');
 
     let state = await getSpotlightState(page);
     const initialWidth = state.width;
@@ -608,14 +612,14 @@ test.describe('Spotlight State Persistence', () => {
 
   test('SL-E040: spotlight state persists when changing frames', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     let state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
 
     // Navigate frames
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrameChange(page, 1);
 
     state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
@@ -623,20 +627,20 @@ test.describe('Spotlight State Persistence', () => {
 
   test('SL-E041: spotlight position persists when changing frames', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Change position
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.3, 0.7);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.3) < 0.05; })()');
 
     let state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.3, 1);
 
     // Navigate frames
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForFrameChange(page, 1);
 
     state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.3, 1);
@@ -644,14 +648,14 @@ test.describe('Spotlight State Persistence', () => {
 
   test('SL-E042: spotlight state persists when changing tabs', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     let state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
 
     // Switch tabs
     await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'color');
 
     state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
@@ -674,7 +678,7 @@ test.describe('Spotlight UI Button Toggle', () => {
   test('SL-E060: clicking spotlight button enables spotlight', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     // Verify spotlight is disabled initially
     let state = await getSpotlightState(page);
@@ -683,7 +687,7 @@ test.describe('Spotlight UI Button Toggle', () => {
     // Click spotlight button
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
     await spotlightButton.click();
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Verify spotlight is enabled
     state = await getSpotlightState(page);
@@ -692,26 +696,26 @@ test.describe('Spotlight UI Button Toggle', () => {
 
   test('SL-E061: clicking spotlight button twice disables spotlight', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
     // Enable spotlight
     await spotlightButton.click();
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
     let state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
 
     // Disable spotlight
     await spotlightButton.click();
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, false);
     state = await getSpotlightState(page);
     expect(state.enabled).toBe(false);
   });
 
   test('SL-E062: spotlight button has active styling when enabled', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
@@ -721,7 +725,7 @@ test.describe('Spotlight UI Button Toggle', () => {
 
     // Enable spotlight
     await spotlightButton.click();
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Check active styling
     bgColor = await spotlightButton.evaluate(el => el.style.background);
@@ -730,13 +734,13 @@ test.describe('Spotlight UI Button Toggle', () => {
 
   test('SL-E063: spotlight button syncs with keyboard toggle', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
     // Enable via keyboard
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Button should show active styling
     const bgColor = await spotlightButton.evaluate(el => el.style.background);
@@ -757,7 +761,7 @@ test.describe('Spotlight Shape Switching', () => {
     await loadVideoFile(page);
     // Enable spotlight
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-E070: can switch from circle to rectangle shape', async ({ page }) => {
@@ -767,7 +771,7 @@ test.describe('Spotlight Shape Switching', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()');
 
     state = await getSpotlightState(page);
     expect(state.shape).toBe('rectangle');
@@ -778,7 +782,7 @@ test.describe('Spotlight Shape Switching', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()');
 
     let state = await getSpotlightState(page);
     expect(state.shape).toBe('rectangle');
@@ -787,7 +791,7 @@ test.describe('Spotlight Shape Switching', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('circle');
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "circle"; })()');
 
     state = await getSpotlightState(page);
     expect(state.shape).toBe('circle');
@@ -823,7 +827,7 @@ test.describe('Spotlight Shape Switching', () => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle" && Math.abs(s.width - 0.3) < 0.05; })()');
 
     // Verify rectangle mode is active
     const state = await getSpotlightState(page);
@@ -867,7 +871,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-E080: increasing feather produces softer edge', async ({ page }) => {
@@ -900,7 +904,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather === 0; })()');
 
     const state = await getSpotlightState(page);
     expect(state.feather).toBe(0);
@@ -936,7 +940,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.dimAmount === 0; })()');
 
     const state = await getSpotlightState(page);
     expect(state.dimAmount).toBe(0);
@@ -947,7 +951,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(1.5);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather <= 0.5; })()');
 
     let state = await getSpotlightState(page);
     expect(state.feather).toBeLessThanOrEqual(0.5);
@@ -956,7 +960,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(-0.5);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather >= 0; })()');
 
     state = await getSpotlightState(page);
     expect(state.feather).toBeGreaterThanOrEqual(0);
@@ -975,14 +979,14 @@ test.describe('Spotlight Edge Cases', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
   });
 
   test('SL-E090: spotlight at corner position (0, 0)', async ({ page }) => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0, 0);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x === 0 && s.y === 0; })()');
 
     const state = await getSpotlightState(page);
     expect(state.x).toBe(0);
@@ -993,7 +997,7 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(1, 1);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x === 1 && s.y === 1; })()');
 
     const state = await getSpotlightState(page);
     expect(state.x).toBe(1);
@@ -1004,7 +1008,7 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(-0.5, 1.5);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x <= 0 && s.y >= 1; })()');
 
     const state = await getSpotlightState(page);
     expect(state.x).toBeGreaterThanOrEqual(0);
@@ -1017,7 +1021,7 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.001, 0.001);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width < 0.2; })()');
 
     const state = await getSpotlightState(page);
     // Minimum size is 0.01
@@ -1029,7 +1033,7 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(1, 1);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width === 1 && s.height === 1; })()');
 
     const state = await getSpotlightState(page);
     expect(state.width).toBe(1);
@@ -1040,7 +1044,7 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(2, 2);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width !== 0.2; })()');
 
     const state = await getSpotlightState(page);
     expect(state.width).toBeLessThanOrEqual(1);
@@ -1052,7 +1056,7 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.3) < 0.05; })()');
 
     const overlay = page.locator('[data-testid="spotlight-overlay"]');
     const box = await overlay.boundingBox();
@@ -1095,7 +1099,7 @@ test.describe('Spotlight Feature Interactions', () => {
 
   test('SL-E100: spotlight works with zoom', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     let state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
@@ -1104,7 +1108,7 @@ test.describe('Spotlight Feature Interactions', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setViewerZoom(2);
     });
-    await page.waitForTimeout(200);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s && Math.abs(s.zoom - 2) < 0.1; })()');
 
     // Spotlight should still be enabled
     state = await getSpotlightState(page);
@@ -1117,13 +1121,13 @@ test.describe('Spotlight Feature Interactions', () => {
 
   test('SL-E101: spotlight works with pan', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Pan the viewer (not the spotlight)
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setViewerPan(50, 50);
     });
-    await page.waitForTimeout(100);
+    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s && s.panX === 50 && s.panY === 50; })()');
 
     const state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
@@ -1134,7 +1138,7 @@ test.describe('Spotlight Feature Interactions', () => {
 
   test('SL-E102: spotlight renders above main canvas', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Check z-index
     const zIndex = await page.evaluate(() => {
@@ -1152,11 +1156,11 @@ test.describe('Spotlight Feature Interactions', () => {
 
   test('SL-E103: spotlight does not interfere with playback', async ({ page }) => {
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Start playback
     await page.keyboard.press('Space');
-    await page.waitForTimeout(500);
+    await waitForPlaybackState(page, true);
 
     // Spotlight should still be enabled
     const state = await getSpotlightState(page);
@@ -1169,22 +1173,22 @@ test.describe('Spotlight Feature Interactions', () => {
   test('SL-E104: enabling spotlight via button after keyboard works', async ({ page }) => {
     // Enable via keyboard
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     // Disable via keyboard
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, false);
 
     let state = await getSpotlightState(page);
     expect(state.enabled).toBe(false);
 
     // Enable via button
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
     await spotlightButton.click();
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
@@ -1205,7 +1209,7 @@ test.describe('Spotlight Without Media', () => {
 
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForTabActive(page, 'view');
 
     // Button should exist
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
@@ -1219,7 +1223,7 @@ test.describe('Spotlight Without Media', () => {
     // Don't load any media
 
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
+    await waitForSpotlightEnabled(page, true);
 
     const state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);
@@ -1232,7 +1236,6 @@ test.describe('Spotlight Without Media', () => {
     // Don't load any media
 
     await page.keyboard.press('Shift+q');
-    await page.waitForTimeout(100);
 
     const overlay = page.locator('[data-testid="spotlight-overlay"]');
     await expect(overlay).toBeVisible();

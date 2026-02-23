@@ -17,6 +17,8 @@ import { BaseGroupNode } from './BaseGroupNode';
 import { RegisterNode } from '../base/NodeFactory';
 import type { EvalContext } from '../../core/graph/Graph';
 import type { BlendMode } from '../../composite/BlendModes';
+import type { StencilBox } from '../../core/types/wipe';
+import { DEFAULT_STENCIL_BOX } from '../../core/types/wipe';
 
 /**
  * Per-layer compositing settings
@@ -31,17 +33,30 @@ export interface LayerCompositeSettings {
 }
 
 /**
- * Stack composite types as defined in RV spec
+ * Stack composite types as defined in RV spec.
+ *
+ * OpenRV compatibility (IPImage.h BlendMode enum + getBlendModeFromString):
+ * - 'replace':  IPImage::Replace — glDisable(GL_BLEND), last write wins
+ * - 'over':     IPImage::Over — premultiplied alpha over (GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
+ * - 'add':      IPImage::Add — additive (GL_ONE, GL_ONE)
+ * - 'difference': IPImage::Difference — GL_FUNC_SUBTRACT
+ * - '-difference': IPImage::ReverseDifference — GL_FUNC_REVERSE_SUBTRACT
+ * - 'dissolve': IPImage::Dissolve — per-pixel random noise selection (InlineDissolve2.glsl)
+ * - 'topmost':  Maps to IPImage::Replace + topmostOnly flag (only first input evaluated)
+ *
+ * Note: OpenRV has no explicit 'minus' type; '-difference' is the closest equivalent.
+ * The 'layer' type is deprecated: OpenRV StackIPNode converts 'layer' to 'topmost' on init.
  */
 export type StackCompositeType =
-  | 'replace'     // Top replaces bottom
-  | 'over'        // Porter-Duff over (alpha composite)
-  | 'add'         // Additive
-  | 'difference'  // Absolute difference
-  | 'dissolve'    // Cross-dissolve
-  | 'minus'       // Subtractive
-  | 'topmost'     // Show topmost non-transparent
-  | string;       // Allow custom types
+  | 'replace'       // Top replaces bottom (OpenRV: IPImage::Replace)
+  | 'over'          // Porter-Duff over (OpenRV: premultiplied alpha)
+  | 'add'           // Additive (OpenRV: IPImage::Add)
+  | 'difference'    // Absolute difference (OpenRV: IPImage::Difference)
+  | '-difference'   // Reverse difference (OpenRV: IPImage::ReverseDifference)
+  | 'dissolve'      // Cross-dissolve (OpenRV: per-pixel noise, InlineDissolve2.glsl)
+  | 'minus'         // Subtractive (web extension, maps to ReverseDifference behavior)
+  | 'topmost'       // Show topmost non-transparent (OpenRV: Replace + topmostOnly)
+  | string;         // Allow custom types
 
 @RegisterNode('RVStackGroup')
 export class StackGroupNode extends BaseGroupNode {
@@ -55,7 +70,6 @@ export class StackGroupNode extends BaseGroupNode {
     // Wipe control properties
     this.properties.add({ name: 'wipeX', defaultValue: 0.5 });
     this.properties.add({ name: 'wipeY', defaultValue: 0.5 });
-    this.properties.add({ name: 'wipeAngle', defaultValue: 0 });
 
     // Per-layer blend modes (array indexed by input)
     this.properties.add({ name: 'layerBlendModes', defaultValue: [] });
@@ -63,6 +77,8 @@ export class StackGroupNode extends BaseGroupNode {
     this.properties.add({ name: 'layerOpacities', defaultValue: [] });
     // Per-layer visibility (array indexed by input)
     this.properties.add({ name: 'layerVisible', defaultValue: [] });
+    // Per-layer stencil boxes (array of StencilBox indexed by input)
+    this.properties.add({ name: 'layerStencilBoxes', defaultValue: [] });
 
     // Output configuration
     this.properties.add({ name: 'chosenAudioInput', defaultValue: 0 });
@@ -170,11 +186,10 @@ export class StackGroupNode extends BaseGroupNode {
   /**
    * Get wipe position (0-1)
    */
-  getWipePosition(): { x: number; y: number; angle: number } {
+  getWipePosition(): { x: number; y: number } {
     return {
       x: this.properties.getValue('wipeX') as number,
       y: this.properties.getValue('wipeY') as number,
-      angle: this.properties.getValue('wipeAngle') as number,
     };
   }
 
@@ -186,6 +201,51 @@ export class StackGroupNode extends BaseGroupNode {
     if (y !== undefined) {
       this.properties.setValue('wipeY', Math.max(0, Math.min(1, y)));
     }
+    this.markDirty();
+  }
+
+  /**
+   * Get the stencil box for a specific layer.
+   * Returns [xMin, xMax, yMin, yMax] in normalized 0-1 range.
+   */
+  getLayerStencilBox(layerIndex: number): StencilBox {
+    const boxes = this.properties.getValue('layerStencilBoxes') as StencilBox[];
+    return boxes[layerIndex] ?? [...DEFAULT_STENCIL_BOX];
+  }
+
+  /**
+   * Set the stencil box for a specific layer.
+   * Values are clamped to [0, 1] and min < max is enforced.
+   */
+  setLayerStencilBox(layerIndex: number, box: StencilBox): void {
+    const boxes = [...(this.properties.getValue('layerStencilBoxes') as StencilBox[])];
+    const clamped: StencilBox = [
+      Math.max(0, Math.min(1, box[0])),
+      Math.max(0, Math.min(1, box[1])),
+      Math.max(0, Math.min(1, box[2])),
+      Math.max(0, Math.min(1, box[3])),
+    ];
+    // Enforce min < max
+    if (clamped[0] > clamped[1]) clamped[1] = Math.min(1, clamped[0] + 0.001);
+    if (clamped[2] > clamped[3]) clamped[3] = Math.min(1, clamped[2] + 0.001);
+    boxes[layerIndex] = clamped;
+    this.properties.setValue('layerStencilBoxes', boxes);
+    this.markDirty();
+  }
+
+  /**
+   * Set stencil boxes for all layers.
+   */
+  setLayerStencilBoxes(boxes: StencilBox[]): void {
+    this.properties.setValue('layerStencilBoxes', boxes);
+    this.markDirty();
+  }
+
+  /**
+   * Reset all layer stencil boxes to full visibility.
+   */
+  resetLayerStencilBoxes(): void {
+    this.properties.setValue('layerStencilBoxes', []);
     this.markDirty();
   }
 }

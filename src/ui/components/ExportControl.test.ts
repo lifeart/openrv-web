@@ -208,6 +208,17 @@ describe('ExportControl', () => {
       expect(callback1).toHaveBeenCalled();
       expect(callback2).toHaveBeenCalled();
     });
+
+    it('EXPORT-U046: exportReport emits reportExportRequested event with format', () => {
+      const callback = vi.fn();
+      control.on('reportExportRequested', callback);
+
+      // We need to call exportReport directly, as the menu items are constructed within render
+      // But they trigger this method
+      (control as any).exportReport('html');
+
+      expect(callback).toHaveBeenCalledWith({ format: 'html' });
+    });
   });
 
   describe('export formats', () => {
@@ -228,7 +239,7 @@ describe('ExportControl', () => {
   });
 
   describe('button interactions', () => {
-    it('EXPORT-U060: button changes background on mouseenter', () => {
+    it('EXPORT-U060: button changes background on pointerenter', () => {
       const el = control.render();
       const button = el.querySelector('button') as HTMLButtonElement;
       const originalBg = button.style.background;
@@ -239,7 +250,7 @@ describe('ExportControl', () => {
       expect(button.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a hover
     });
 
-    it('EXPORT-U061: button restores transparent background on mouseleave', () => {
+    it('EXPORT-U061: button restores transparent background on pointerleave', () => {
       const el = control.render();
       const button = el.querySelector('button') as HTMLButtonElement;
 

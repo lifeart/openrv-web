@@ -693,4 +693,89 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       expect(workerData).toEqual(referenceData);
     });
   });
+
+  describe('Worker half-resolution processing', () => {
+    beforeEach(() => {
+      resetBuffers();
+    });
+
+    it('WK-HALF-001: processEffects with halfRes=true for clarity routes to half-res', () => {
+      const width = 400;
+      const height = 400;
+      // Use a checkerboard pattern so clarity has local contrast to enhance
+      // (a smooth gradient has no local contrast, so clarity would be a no-op)
+      const createCheckerData = (w: number, h: number): Uint8ClampedArray => {
+        const d = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            const checker = ((x >> 3) + (y >> 3)) & 1;
+            const v = checker ? 200 : 56;
+            d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+          }
+        }
+        return d;
+      };
+      const data = createCheckerData(width, height);
+      const dataHalf = createCheckerData(width, height);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.clarity = 50;
+
+      // Full-res
+      processEffects(data, width, height, state, false);
+      // Half-res
+      processEffects(dataHalf, width, height, state, true);
+
+      // Both should modify the data
+      const original = createCheckerData(width, height);
+      let fullDiff = false, halfDiff = false;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] !== original[i]) fullDiff = true;
+        if (dataHalf[i] !== original[i]) halfDiff = true;
+        if (fullDiff && halfDiff) break;
+      }
+      expect(fullDiff).toBe(true);
+      expect(halfDiff).toBe(true);
+    });
+
+    it('WK-HALF-002: halfRes=undefined backward compatibility (defaults to false)', () => {
+      const width = 400;
+      const height = 400;
+      const data1 = createGradientPixelData(width, height);
+      const data2 = createGradientPixelData(width, height);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.clarity = 50;
+
+      // Without halfRes param (defaults to false)
+      processEffects(data1, width, height, state);
+      // Explicit false
+      processEffects(data2, width, height, state, false);
+
+      // Should produce identical results
+      for (let i = 0; i < data1.length; i++) {
+        expect(data1[i]).toBe(data2[i]);
+      }
+    });
+
+    it('WK-HALF-003: worker half-res sharpen uses delta-blend approach', () => {
+      const width = 400;
+      const height = 400;
+      const data = createGradientPixelData(width, height);
+      const original = createGradientPixelData(width, height);
+
+      const state = createDefaultWorkerEffectsState();
+      state.filterSettings.sharpen = 50;
+
+      processEffects(data, width, height, state, true);
+
+      // Sharpen should modify pixels
+      let diffCount = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] !== original[i]) diffCount++;
+      }
+      expect(diffCount).toBeGreaterThan(0);
+    });
+  });
 });

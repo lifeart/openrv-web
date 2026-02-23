@@ -1,0 +1,138 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        run: pnpm test:e2e:smoke
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  e2e:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests (shard ${{ matrix.shard }}/3)
+        run: pnpm test:e2e:ci --shard=${{ matrix.shard }}/3 --reporter=json --reporter=html
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results-shard-${{ matrix.shard }}
+          path: |
+            playwright-report/
+            test-results/
+            results.json
+          retention-days: 7
+
+  e2e-report:
+    if: github.event_name == 'push' && always()
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download all shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-test-results-shard-*
+          merge-multiple: true
+
+      - name: Check pass rate
+        run: |
+          if [ -f results.json ]; then
+            TOTAL=$(jq '.stats.expected + .stats.unexpected + .stats.flaky' results.json)
+            PASSED=$(jq '.stats.expected' results.json)
+            if [ "$TOTAL" -gt 0 ]; then
+              RATE=$(( PASSED * 100 / TOTAL ))
+              echo "Pass rate: ${RATE}% (${PASSED}/${TOTAL})"
+              if [ "$RATE" -lt 80 ]; then
+                echo "::warning::E2E pass rate ${RATE}% is below 80% threshold"
+              fi
+            fi
+          else
+            echo "No results.json found — skipping pass rate check"
+          fi

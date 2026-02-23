@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   exportOTIO,
+  exportOTIOMultiTrack,
   buildExportClips,
   type OTIOExportClip,
+  type OTIOExportTransition,
 } from './OTIOWriter';
-import { parseOTIO } from './OTIOParser';
+import { parseOTIO, parseOTIOMultiTrack } from './OTIOParser';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -248,6 +250,478 @@ describe('OTIOWriter', () => {
       );
 
       expect(result[0]!.fps).toBe(30);
+    });
+  });
+
+  // =========================================================================
+  // exportOTIOMultiTrack
+  // =========================================================================
+
+  describe('exportOTIOMultiTrack', () => {
+    it('OTIO-MW001: produces valid Timeline.1 with multiple video tracks', () => {
+      const json = exportOTIOMultiTrack({
+        name: 'Multi-Track Timeline',
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [createClip('v1_a', 'file:///v1a.exr', 1, 48, 1)],
+          },
+          {
+            name: 'V2',
+            clips: [createClip('v2_a', 'file:///v2a.exr', 1, 100, 1)],
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      expect(parsed.OTIO_SCHEMA).toBe('Timeline.1');
+      expect(parsed.name).toBe('Multi-Track Timeline');
+      expect(parsed.tracks.OTIO_SCHEMA).toBe('Stack.1');
+      expect(parsed.tracks.children).toHaveLength(2);
+      expect(parsed.tracks.children[0].name).toBe('V1');
+      expect(parsed.tracks.children[0].kind).toBe('Video');
+      expect(parsed.tracks.children[1].name).toBe('V2');
+      expect(parsed.tracks.children[1].kind).toBe('Video');
+    });
+
+    it('OTIO-MW002: clips on each track are correct', () => {
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'Video 1',
+            clips: [
+              createClip('shot_A', 'file:///A.exr', 1, 48, 1),
+              createClip('shot_B', 'file:///B.exr', 1, 24, 49),
+            ],
+          },
+          {
+            name: 'Video 2',
+            clips: [createClip('overlay', 'file:///overlay.exr', 1, 100, 1)],
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      const track1 = parsed.tracks.children[0];
+      const track2 = parsed.tracks.children[1];
+
+      expect(track1.children).toHaveLength(2);
+      expect(track1.children[0].name).toBe('shot_A');
+      expect(track1.children[1].name).toBe('shot_B');
+
+      expect(track2.children).toHaveLength(1);
+      expect(track2.children[0].name).toBe('overlay');
+    });
+
+    it('OTIO-MW003: gaps are generated on each track independently', () => {
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 24, 1),
+              createClip('B', 'file:///B.exr', 1, 24, 49), // gap at 25-48 = 24 frames
+            ],
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      const children = parsed.tracks.children[0].children;
+      expect(children).toHaveLength(3); // clip, gap, clip
+      expect(children[0].OTIO_SCHEMA).toBe('Clip.1');
+      expect(children[1].OTIO_SCHEMA).toBe('Gap.1');
+      expect(children[1].source_range.duration.value).toBe(24);
+      expect(children[2].OTIO_SCHEMA).toBe('Clip.1');
+    });
+
+    it('OTIO-MW004: transition between clips is emitted as Transition.1', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(0, {
+        name: 'Dissolve',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 6,
+        outOffset: 6,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 48, 1),
+              createClip('B', 'file:///B.exr', 1, 48, 49),
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      const children = parsed.tracks.children[0].children;
+      expect(children).toHaveLength(3); // clip, transition, clip
+
+      expect(children[0].OTIO_SCHEMA).toBe('Clip.1');
+      expect(children[0].name).toBe('A');
+
+      expect(children[1].OTIO_SCHEMA).toBe('Transition.1');
+      expect(children[1].name).toBe('Dissolve');
+      expect(children[1].transition_type).toBe('SMPTE_Dissolve');
+      expect(children[1].in_offset.value).toBe(6);
+      expect(children[1].in_offset.rate).toBe(24);
+      expect(children[1].out_offset.value).toBe(6);
+      expect(children[1].out_offset.rate).toBe(24);
+
+      expect(children[2].OTIO_SCHEMA).toBe('Clip.1');
+      expect(children[2].name).toBe('B');
+    });
+
+    it('OTIO-MW005: multiple transitions in one track', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(0, {
+        name: 'Diss1',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 4,
+        outOffset: 4,
+        fps: 24,
+      });
+      transitions.set(1, {
+        name: 'Diss2',
+        transitionType: 'Custom_Transition',
+        inOffset: 8,
+        outOffset: 8,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 48, 1),
+              createClip('B', 'file:///B.exr', 1, 48, 49),
+              createClip('C', 'file:///C.exr', 1, 24, 97),
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      const children = parsed.tracks.children[0].children;
+      // clip, transition, clip, transition, clip
+      expect(children).toHaveLength(5);
+      expect(children[0].OTIO_SCHEMA).toBe('Clip.1');
+      expect(children[1].OTIO_SCHEMA).toBe('Transition.1');
+      expect(children[1].name).toBe('Diss1');
+      expect(children[2].OTIO_SCHEMA).toBe('Clip.1');
+      expect(children[3].OTIO_SCHEMA).toBe('Transition.1');
+      expect(children[3].name).toBe('Diss2');
+      expect(children[3].transition_type).toBe('Custom_Transition');
+      expect(children[4].OTIO_SCHEMA).toBe('Clip.1');
+    });
+
+    it('OTIO-MW006: transition metadata is preserved', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(0, {
+        name: 'MetaDiss',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 6,
+        outOffset: 6,
+        fps: 24,
+        metadata: { curve: 'ease-in-out', version: 1 },
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 48, 1),
+              createClip('B', 'file:///B.exr', 1, 48, 49),
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      const trans = parsed.tracks.children[0].children[1];
+      expect(trans.metadata).toEqual({ curve: 'ease-in-out', version: 1 });
+    });
+
+    it('OTIO-MW007: transition without metadata omits metadata field', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(0, {
+        name: 'Diss',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 6,
+        outOffset: 6,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 48, 1),
+              createClip('B', 'file:///B.exr', 1, 48, 49),
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      const trans = parsed.tracks.children[0].children[1];
+      expect(trans.metadata).toBeUndefined();
+    });
+
+    it('OTIO-MW008: default track names when not provided', () => {
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          { clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] },
+          { clips: [createClip('B', 'file:///B.exr', 1, 24, 1)] },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      expect(parsed.tracks.children[0].name).toBe('Video Track 1');
+      expect(parsed.tracks.children[1].name).toBe('Video Track 2');
+    });
+
+    it('OTIO-MW009: empty tracks array produces empty stack', () => {
+      const json = exportOTIOMultiTrack({
+        name: 'Empty Multi',
+        fps: 24,
+        tracks: [],
+      });
+
+      const parsed = JSON.parse(json);
+      expect(parsed.OTIO_SCHEMA).toBe('Timeline.1');
+      expect(parsed.tracks.children).toHaveLength(0);
+    });
+
+    it('OTIO-MW010: default name and fps when not specified', () => {
+      const json = exportOTIOMultiTrack({
+        tracks: [
+          { clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] },
+        ],
+      });
+
+      const parsed = JSON.parse(json);
+      expect(parsed.name).toBe('Untitled Timeline');
+      expect(parsed.global_start_time.rate).toBe(24);
+    });
+
+    it('OTIO-MW011: produces pretty-printed JSON', () => {
+      const json = exportOTIOMultiTrack({
+        tracks: [
+          { clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] },
+        ],
+      });
+
+      expect(json).toContain('\n');
+      expect(json).toContain('  ');
+    });
+  });
+
+  // =========================================================================
+  // Round-trip: exportOTIOMultiTrack -> parseOTIOMultiTrack
+  // =========================================================================
+
+  describe('multi-track round-trip', () => {
+    it('OTIO-RT001: round-trip multi-track export/import preserves clips', () => {
+      const json = exportOTIOMultiTrack({
+        name: 'Round Trip Multi',
+        fps: 24,
+        tracks: [
+          {
+            name: 'Video 1',
+            clips: [
+              createClip('v1_a', 'file:///v1a.exr', 1, 48, 1),
+              createClip('v1_b', 'file:///v1b.exr', 1, 24, 49),
+            ],
+          },
+          {
+            name: 'Video 2',
+            clips: [createClip('v2_a', 'file:///v2a.exr', 1, 100, 1)],
+          },
+        ],
+      });
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result).not.toBeNull();
+      expect(result.tracks).toHaveLength(2);
+      expect(result.tracks[0]!.clips).toHaveLength(2);
+      expect(result.tracks[0]!.clips[0]!.name).toBe('v1_a');
+      expect(result.tracks[0]!.clips[0]!.sourceUrl).toBe('file:///v1a.exr');
+      expect(result.tracks[0]!.clips[1]!.name).toBe('v1_b');
+      expect(result.tracks[1]!.clips).toHaveLength(1);
+      expect(result.tracks[1]!.clips[0]!.name).toBe('v2_a');
+    });
+
+    it('OTIO-RT002: round-trip preserves transitions', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(0, {
+        name: 'Dissolve',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 6,
+        outOffset: 6,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        name: 'Transition Round Trip',
+        fps: 24,
+        tracks: [
+          {
+            name: 'Video 1',
+            clips: [
+              createClip('A', 'file:///A.exr', 0, 47, 1),
+              createClip('B', 'file:///B.exr', 0, 47, 49),
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.transitions).toHaveLength(1);
+
+      const trans = result.transitions[0]!;
+      expect(trans.name).toBe('Dissolve');
+      expect(trans.transitionType).toBe('SMPTE_Dissolve');
+      expect(trans.inOffset).toBe(6);
+      expect(trans.outOffset).toBe(6);
+      expect(trans.duration).toBe(12);
+      expect(trans.outgoingClipIndex).toBe(0);
+      expect(trans.incomingClipIndex).toBe(1);
+    });
+
+    it('OTIO-RT003: round-trip with gaps and transitions', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(1, {
+        name: 'CrossFade',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 4,
+        outOffset: 4,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 24, 1),      // 24 frames
+              createClip('B', 'file:///B.exr', 1, 48, 49),      // gap of 24 frames before, then 48 frames
+              createClip('C', 'file:///C.exr', 1, 24, 97),      // 24 frames
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.clips).toHaveLength(3);
+      expect(result.transitions).toHaveLength(1);
+      expect(result.transitions[0]!.name).toBe('CrossFade');
+      expect(result.transitions[0]!.outgoingClipIndex).toBe(1);
+      expect(result.transitions[0]!.incomingClipIndex).toBe(2);
+    });
+
+    it('OTIO-RT004: round-trip with Custom_Transition type', () => {
+      const transitions = new Map<number, OTIOExportTransition>();
+      transitions.set(0, {
+        name: 'Wipe',
+        transitionType: 'Custom_Transition',
+        inOffset: 10,
+        outOffset: 10,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'V1',
+            clips: [
+              createClip('A', 'file:///A.exr', 1, 48, 1),
+              createClip('B', 'file:///B.exr', 1, 48, 49),
+            ],
+            transitions,
+          },
+        ],
+      });
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.transitions[0]!.transitionType).toBe('Custom_Transition');
+    });
+
+    it('OTIO-RT005: round-trip multi-track with transitions on different tracks', () => {
+      const t1 = new Map<number, OTIOExportTransition>();
+      t1.set(0, {
+        name: 'Track1Diss',
+        transitionType: 'SMPTE_Dissolve',
+        inOffset: 4,
+        outOffset: 4,
+        fps: 24,
+      });
+
+      const t2 = new Map<number, OTIOExportTransition>();
+      t2.set(0, {
+        name: 'Track2Diss',
+        transitionType: 'Custom_Transition',
+        inOffset: 8,
+        outOffset: 8,
+        fps: 24,
+      });
+
+      const json = exportOTIOMultiTrack({
+        fps: 24,
+        tracks: [
+          {
+            name: 'Video 1',
+            clips: [
+              createClip('v1_a', 'file:///v1a.exr', 1, 48, 1),
+              createClip('v1_b', 'file:///v1b.exr', 1, 48, 49),
+            ],
+            transitions: t1,
+          },
+          {
+            name: 'Video 2',
+            clips: [
+              createClip('v2_a', 'file:///v2a.exr', 1, 100, 1),
+              createClip('v2_b', 'file:///v2b.exr', 1, 50, 101),
+            ],
+            transitions: t2,
+          },
+        ],
+      });
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.tracks).toHaveLength(2);
+      expect(result.transitions).toHaveLength(2);
+
+      // Track 1 transition
+      expect(result.tracks[0]!.transitions[0]!.name).toBe('Track1Diss');
+      expect(result.tracks[0]!.transitions[0]!.transitionType).toBe('SMPTE_Dissolve');
+
+      // Track 2 transition
+      expect(result.tracks[1]!.transitions[0]!.name).toBe('Track2Diss');
+      expect(result.tracks[1]!.transitions[0]!.transitionType).toBe('Custom_Transition');
     });
   });
 });

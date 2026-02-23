@@ -44,3 +44,22 @@ export {
   type EDLClip,
   type EDLExportConfig,
 } from './EDLWriter';
+
+export {
+  buildSlateFields,
+  getFontSize,
+  computeLogoRect,
+  layoutText,
+  renderSlate,
+  generateSlateFrame,
+  generateLeaderFrames,
+  type SlateField,
+  type LogoPosition,
+  type SlateConfig,
+  type SlateMetadata,
+  type SlateFrame,
+  type LogoRect,
+  type TextLine,
+} from './SlateRenderer';
+
+// Note: OTIOWriter lives in src/utils/media/OTIOWriter.ts
