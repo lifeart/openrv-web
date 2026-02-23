@@ -457,13 +457,13 @@ describe('GamutMappingControl', () => {
 
       const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
 
-      // Simulate pointerenter (applies hover styling)
-      btn.dispatchEvent(new Event('pointerenter'));
+      // Simulate mouseenter (applies hover styling)
+      btn.dispatchEvent(new MouseEvent('mouseenter'));
       expect(btn.style.background).toBe('var(--bg-hover)');
       expect(btn.style.color).toBe('var(--text-primary)');
 
-      // Simulate pointerleave (should restore active styling, not stay on hover)
-      btn.dispatchEvent(new Event('pointerleave'));
+      // Simulate mouseleave (should restore active styling, not stay on hover)
+      btn.dispatchEvent(new MouseEvent('mouseleave'));
       expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
       expect(btn.style.borderColor).toBe('var(--accent-primary)');
       expect(btn.style.color).toBe('var(--accent-primary)');

@@ -239,6 +239,10 @@ export class FocusManager {
       newIdx = (currentIdx + 1) % items.length;
     } else if (e.key === prevKey) {
       newIdx = (currentIdx - 1 + items.length) % items.length;
+    } else if (e.key === 'Home') {
+      newIdx = 0;
+    } else if (e.key === 'End') {
+      newIdx = items.length - 1;
     }
 
     if (newIdx !== -1) {
@@ -256,8 +260,9 @@ export class FocusManager {
     return Array.from(
       this.trapContainer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
     ).filter(el => {
-      // Basic visibility check
-      return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+      // Skip explicitly hidden elements
+      if (el.hidden || el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+      return true;
     });
   }
 

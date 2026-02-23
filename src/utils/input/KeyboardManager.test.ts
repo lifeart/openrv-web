@@ -1025,13 +1025,13 @@ describe('KeyboardManager', () => {
     });
 
     it('KBM-063: allows shortcuts on button elements', () => {
-      keyboardManager.register({ code: 'Space' }, mockHandler);
+      keyboardManager.register({ code: 'KeyA' }, mockHandler);
 
       const mockButton = document.createElement('button');
 
       const mockEvent = {
-        code: 'Space',
-        key: ' ',
+        code: 'KeyA',
+        key: 'a',
         ctrlKey: false,
         shiftKey: false,
         altKey: false,

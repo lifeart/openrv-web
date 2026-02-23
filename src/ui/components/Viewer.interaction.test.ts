@@ -523,7 +523,7 @@ describe('Viewer', () => {
       viewer.onCursorColorChange(cursorCallback);
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      container.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
 
       expect(cursorCallback).toHaveBeenCalledWith(null, null);
     });

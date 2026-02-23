@@ -244,7 +244,7 @@ describe('ExportControl', () => {
       const button = el.querySelector('button') as HTMLButtonElement;
       const originalBg = button.style.background;
 
-      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
 
       expect(button.style.background).not.toBe(originalBg);
       expect(button.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a hover
@@ -254,8 +254,8 @@ describe('ExportControl', () => {
       const el = control.render();
       const button = el.querySelector('button') as HTMLButtonElement;
 
-      button.dispatchEvent(new PointerEvent('pointerenter'));
-      button.dispatchEvent(new PointerEvent('pointerleave'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('mouseleave'));
 
       expect(button.style.background).toBe('transparent');
     });

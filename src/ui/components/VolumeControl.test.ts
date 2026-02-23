@@ -182,7 +182,7 @@ describe('VolumeControl', () => {
       expect(sliderContainer.style.width).toBe('96px');
 
       // Simulate pointerleave on the container
-      element.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      element.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
 
       // Should still be expanded because it was pinned via click
       expect(volumeControl.isSliderExpanded()).toBe(true);
@@ -243,11 +243,11 @@ describe('VolumeControl', () => {
       const sliderContainer = element.querySelector('div')!;
 
       // Hover to expand (without clicking)
-      element.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('96px');
 
       // Pointer leave should collapse since not pinned
-      element.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      element.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('0px');
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });

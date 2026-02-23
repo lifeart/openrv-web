@@ -614,10 +614,10 @@ describe('StackControl layer button hover states', () => {
     expect(visBtn).toBeTruthy();
 
     const originalColor = visBtn.style.color;
-    visBtn.dispatchEvent(new PointerEvent('pointerenter'));
+    visBtn.dispatchEvent(new MouseEvent('mouseenter'));
     expect(visBtn.style.color).toBe('var(--text-primary)');
 
-    visBtn.dispatchEvent(new PointerEvent('pointerleave'));
+    visBtn.dispatchEvent(new MouseEvent('mouseleave'));
     expect(visBtn.style.color).toBe(originalColor);
   });
 
@@ -630,12 +630,12 @@ describe('StackControl layer button hover states', () => {
     expect(moveUpBtn).toBeTruthy();
     expect(moveUpBtn.disabled).toBe(false);
 
-    moveUpBtn.dispatchEvent(new PointerEvent('pointerenter'));
+    moveUpBtn.dispatchEvent(new MouseEvent('mouseenter'));
     expect(moveUpBtn.style.background).toBe('var(--bg-hover)');
     expect(moveUpBtn.style.borderColor).toBe('var(--border-primary)');
     expect(moveUpBtn.style.color).toBe('var(--text-primary)');
 
-    moveUpBtn.dispatchEvent(new PointerEvent('pointerleave'));
+    moveUpBtn.dispatchEvent(new MouseEvent('mouseleave'));
     expect(moveUpBtn.style.background).toBe('transparent');
     expect(moveUpBtn.style.borderColor).toBe('transparent');
   });
@@ -649,12 +649,12 @@ describe('StackControl layer button hover states', () => {
     expect(moveDownBtn).toBeTruthy();
     expect(moveDownBtn.disabled).toBe(false);
 
-    moveDownBtn.dispatchEvent(new PointerEvent('pointerenter'));
+    moveDownBtn.dispatchEvent(new MouseEvent('mouseenter'));
     expect(moveDownBtn.style.background).toBe('var(--bg-hover)');
     expect(moveDownBtn.style.borderColor).toBe('var(--border-primary)');
     expect(moveDownBtn.style.color).toBe('var(--text-primary)');
 
-    moveDownBtn.dispatchEvent(new PointerEvent('pointerleave'));
+    moveDownBtn.dispatchEvent(new MouseEvent('mouseleave'));
     expect(moveDownBtn.style.background).toBe('transparent');
     expect(moveDownBtn.style.borderColor).toBe('transparent');
   });
@@ -666,11 +666,11 @@ describe('StackControl layer button hover states', () => {
     const deleteBtn = document.querySelector(`[data-testid="stack-layer-delete-${layers[0]!.id}"]`) as HTMLButtonElement;
     expect(deleteBtn).toBeTruthy();
 
-    deleteBtn.dispatchEvent(new PointerEvent('pointerenter'));
+    deleteBtn.dispatchEvent(new MouseEvent('mouseenter'));
     expect(deleteBtn.style.background).toBe('rgba(var(--error-rgb, 255, 100, 100), 0.15)');
     expect(deleteBtn.style.borderColor).toBe('var(--error)');
 
-    deleteBtn.dispatchEvent(new PointerEvent('pointerleave'));
+    deleteBtn.dispatchEvent(new MouseEvent('mouseleave'));
     expect(deleteBtn.style.background).toBe('transparent');
     expect(deleteBtn.style.borderColor).toBe('transparent');
   });
@@ -688,7 +688,7 @@ describe('StackControl layer button hover states', () => {
     const borderBefore = moveUpBtn.style.borderColor;
     const colorBefore = moveUpBtn.style.color;
 
-    moveUpBtn.dispatchEvent(new PointerEvent('pointerenter'));
+    moveUpBtn.dispatchEvent(new MouseEvent('mouseenter'));
     // Styles should NOT change for disabled button
     expect(moveUpBtn.style.background).toBe(bgBefore);
     expect(moveUpBtn.style.borderColor).toBe(borderBefore);

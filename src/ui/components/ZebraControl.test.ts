@@ -101,24 +101,24 @@ describe('ZebraControl', () => {
     it('ZEBRA-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
     it('ZEBRA-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new PointerEvent('pointerenter'));
-      button.dispatchEvent(new PointerEvent('pointerleave'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.background).toBe('transparent');
     });
 
     it('ZEBRA-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
       expect(button.style.borderColor).toBe('var(--border-primary)');
-      button.dispatchEvent(new PointerEvent('pointerleave'));
+      button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.borderColor).toBe('transparent');
     });
 
@@ -127,8 +127,8 @@ describe('ZebraControl', () => {
       zebraStripes.enable();
       zebraStripes.setState({ highEnabled: true });
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new PointerEvent('pointerenter'));
-      button.dispatchEvent(new PointerEvent('pointerleave'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.borderColor).toBe('var(--accent-primary)');
     });
   });

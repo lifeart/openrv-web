@@ -106,15 +106,15 @@ describe('ToneMappingControl', () => {
     it('TONE-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new PointerEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
     it('TONE-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new PointerEvent('pointerenter'));
-      button.dispatchEvent(new PointerEvent('pointerleave'));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.background).toBe('transparent');
     });
   });
