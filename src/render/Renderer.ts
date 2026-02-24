@@ -38,6 +38,15 @@ const SCOPE_DISPLAY_CONFIG: DisplayColorConfig = {
   transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2,
 };
 
+/** Determine if an image requires RGBA16F scope FBO (HDR) or can use RGBA8 (SDR). */
+export function isHDRContent(image: IPImage): boolean {
+  if (image.dataType === 'float32' || image.dataType === 'uint16') return true;
+  if (image.videoFrame) return true;
+  const tf = image.metadata?.transferFunction;
+  if (tf === 'hlg' || tf === 'pq' || tf === 'smpte240m') return true;
+  return false;
+}
+
 // Re-export TONE_MAPPING_OPERATOR_CODES for backward compatibility
 export { TONE_MAPPING_OPERATOR_CODES } from './ShaderStateManager';
 
@@ -136,8 +145,11 @@ export class Renderer implements RendererBackend {
   private scopePBOWidth = 0;
   private scopePBOHeight = 0;
   private scopePBOCachedPixels: Float32Array | null = null;
+  private scopePBOCachedPixelsUint8: Uint8Array | null = null;
   private scopePBOReady = false;
   private scopeTempRow: Float32Array | null = null; // cached Y-flip temp buffer
+  private scopeFBOFormat: 'rgba16f' | 'rgba8' = 'rgba16f';
+  private scopePBOFormat: 'rgba16f' | 'rgba8' = 'rgba16f';
 
   // Mipmap support for float textures (requires OES_texture_float_linear + EXT_color_buffer_float)
   private _mipmapSupported = false;
@@ -1155,12 +1167,20 @@ export class Renderer implements RendererBackend {
     if (!gl || !this.displayShader) return null;
 
     // Use dedicated scope FBO/PBO pool (separate from display blit path)
-    const pixels = this.renderImageToFloatAsyncForScopes(image, targetWidth, targetHeight);
-    if (!pixels) return null;
+    const rawPixels = this.renderImageToFloatAsyncForScopes(image, targetWidth, targetHeight);
+    if (!rawPixels) return null;
 
-    // Copy the PBO cached data so the Y-flip doesn't mutate the shared cache.
-    // At scope resolution this is small (~900KB for 320×180×4×4).
-    const result = new Float32Array(pixels);
+    // Convert Uint8Array readback to Float32Array for downstream consumers,
+    // or copy Float32Array so Y-flip doesn't mutate the shared PBO cache.
+    let result: Float32Array;
+    if (rawPixels instanceof Uint8Array) {
+      result = new Float32Array(rawPixels.length);
+      for (let i = 0; i < rawPixels.length; i++) {
+        result[i] = rawPixels[i]! / 255.0;
+      }
+    } else {
+      result = new Float32Array(rawPixels);
+    }
 
     // Y-flip: gl.readPixels returns bottom-to-top rows; scopes expect top-to-bottom.
     const rowSize = targetWidth * RGBA_CHANNELS;
@@ -1185,27 +1205,32 @@ export class Renderer implements RendererBackend {
    * Identical logic to renderImageToFloatAsync but uses scope-specific resources
    * to avoid contention with the display blit path.
    */
-  private renderImageToFloatAsyncForScopes(image: IPImage, width: number, height: number): Float32Array | null {
+  private renderImageToFloatAsyncForScopes(image: IPImage, width: number, height: number): Float32Array | Uint8Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
 
-    // Check EXT_color_buffer_float once (shared with display path)
-    if (this.hasColorBufferFloat === null) {
-      this.hasColorBufferFloat = gl.getExtension('EXT_color_buffer_float') !== null;
-    }
-    if (!this.hasColorBufferFloat) return null;
+    const neededFormat = isHDRContent(image) ? 'rgba16f' : 'rgba8';
+    const isSDR = neededFormat === 'rgba8';
 
-    // Ensure scope FBO exists and matches dimensions
-    this.ensureScopeFBO(width, height);
+    // RGBA16F FBO requires EXT_color_buffer_float; RGBA8 does not
+    if (!isSDR) {
+      if (this.hasColorBufferFloat === null) {
+        this.hasColorBufferFloat = gl.getExtension('EXT_color_buffer_float') !== null;
+      }
+      if (!this.hasColorBufferFloat) return null;
+    }
+
+    // Ensure scope FBO exists and matches dimensions + format
+    this.ensureScopeFBO(width, height, neededFormat);
     if (!this.scopeFBO) return null;
 
-    // If dimensions changed, invalidate scope PBO state
-    if (this.scopePBOWidth !== width || this.scopePBOHeight !== height) {
+    // If dimensions or format changed, invalidate scope PBO state
+    if (this.scopePBOWidth !== width || this.scopePBOHeight !== height || this.scopePBOFormat !== neededFormat) {
       this.disposeScopePBOs();
     }
 
     // Ensure scope PBOs exist
-    this.ensureScopePBOs(width, height);
+    this.ensureScopePBOs(width, height, neededFormat);
 
     // If PBO allocation failed, fall back to sync path using scope FBO
     if (!this.scopePBOs[0] || !this.scopePBOs[1]) {
@@ -1213,8 +1238,14 @@ export class Renderer implements RendererBackend {
     }
 
     const pixelCount = width * height * RGBA_CHANNELS;
-    if (!this.scopePBOCachedPixels || this.scopePBOCachedPixels.length !== pixelCount) {
-      this.scopePBOCachedPixels = new Float32Array(pixelCount);
+    if (isSDR) {
+      if (!this.scopePBOCachedPixelsUint8 || this.scopePBOCachedPixelsUint8.length !== pixelCount) {
+        this.scopePBOCachedPixelsUint8 = new Uint8Array(pixelCount);
+      }
+    } else {
+      if (!this.scopePBOCachedPixels || this.scopePBOCachedPixels.length !== pixelCount) {
+        this.scopePBOCachedPixels = new Float32Array(pixelCount);
+      }
     }
 
     // Neutralize display/tone-mapping output so scopes show scene-referred data
@@ -1229,7 +1260,11 @@ export class Renderer implements RendererBackend {
     if (disableToneMappingForScopes) {
       this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
     }
-    this.hdrOutputMode = 'hlg';
+    // SDR: clamp output to [0,1] for RGBA8 FBO; HDR: preserve >1.0 values
+    this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
+
+    const readType = isSDR ? gl.UNSIGNED_BYTE : gl.FLOAT;
+    const readBuf = isSDR ? this.scopePBOCachedPixelsUint8! : this.scopePBOCachedPixels!;
 
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.scopeFBO);
@@ -1245,7 +1280,7 @@ export class Renderer implements RendererBackend {
           gl.deleteSync(fence);
           this.scopePBOFences[i] = null;
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
-          gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.scopePBOCachedPixels!);
+          gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, readBuf);
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
           this.scopePBOReady = true;
         }
@@ -1255,7 +1290,7 @@ export class Renderer implements RendererBackend {
       for (let i = 0; i < 2; i++) {
         if (!this.scopePBOFences[i]) {
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
-          gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
+          gl.readPixels(0, 0, width, height, gl.RGBA, readType, 0);
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
           this.scopePBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
           gl.flush();
@@ -1265,7 +1300,7 @@ export class Renderer implements RendererBackend {
 
       // Step 4: First-frame fallback — sync readPixels (one-time stall)
       if (!this.scopePBOReady) {
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.scopePBOCachedPixels!);
+        gl.readPixels(0, 0, width, height, gl.RGBA, readType, readBuf);
         this.scopePBOReady = true;
       }
     } finally {
@@ -1278,15 +1313,17 @@ export class Renderer implements RendererBackend {
       }
     }
 
-    return this.scopePBOCachedPixels;
+    return readBuf;
   }
 
   /**
    * Synchronous float readback using a specific FBO (fallback when PBOs fail).
    */
-  private renderImageToFloatSync(image: IPImage, width: number, height: number, fbo: WebGLFramebuffer): Float32Array | null {
+  private renderImageToFloatSync(image: IPImage, width: number, height: number, fbo: WebGLFramebuffer): Float32Array | Uint8Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
+
+    const isSDR = !isHDRContent(image);
 
     // Neutralize display/tone-mapping output so scopes show scene-referred data
     const prevDisplayState = this.stateManager.getDisplayColorState();
@@ -1299,16 +1336,18 @@ export class Renderer implements RendererBackend {
     if (disableToneMappingForScopes) {
       this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
     }
-    this.hdrOutputMode = 'hlg';
+    this.hdrOutputMode = isSDR ? 'sdr' : 'hlg';
 
-    const pixels = new Float32Array(width * height * RGBA_CHANNELS);
+    const pixelCount = width * height * RGBA_CHANNELS;
+    const pixels: Float32Array | Uint8Array = isSDR ? new Uint8Array(pixelCount) : new Float32Array(pixelCount);
+    const readType = isSDR ? gl.UNSIGNED_BYTE : gl.FLOAT;
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
       gl.viewport(0, 0, width, height);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       this.renderImage(image, 0, 0, 1, 1);
-      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
+      gl.readPixels(0, 0, width, height, gl.RGBA, readType, pixels);
     } finally {
       this.hdrOutputMode = prevHdrMode;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1325,11 +1364,11 @@ export class Renderer implements RendererBackend {
   /**
    * Ensure scope-dedicated FBO exists and matches dimensions.
    */
-  private ensureScopeFBO(width: number, height: number): void {
+  private ensureScopeFBO(width: number, height: number, format: 'rgba16f' | 'rgba8' = 'rgba16f'): void {
     const gl = this.gl;
     if (!gl) return;
 
-    if (this.scopeFBO && this.scopeFBOWidth === width && this.scopeFBOHeight === height) {
+    if (this.scopeFBO && this.scopeFBOWidth === width && this.scopeFBOHeight === height && this.scopeFBOFormat === format) {
       return;
     }
 
@@ -1339,7 +1378,11 @@ export class Renderer implements RendererBackend {
     const texture = gl.createTexture();
     if (!texture) return;
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+    if (format === 'rgba8') {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1364,17 +1407,25 @@ export class Renderer implements RendererBackend {
     this.scopeFBOTexture = texture;
     this.scopeFBOWidth = width;
     this.scopeFBOHeight = height;
+    this.scopeFBOFormat = format;
   }
 
   /**
    * Ensure scope-dedicated PBOs exist.
    */
-  private ensureScopePBOs(width: number, height: number): void {
+  private ensureScopePBOs(width: number, height: number, format: 'rgba16f' | 'rgba8' = 'rgba16f'): void {
     const gl = this.gl;
     if (!gl) return;
-    if (this.scopePBOs[0] && this.scopePBOs[1]) return;
+    if (this.scopePBOs[0] && this.scopePBOs[1] && this.scopePBOFormat === format
+        && this.scopePBOWidth === width && this.scopePBOHeight === height) return;
 
-    const byteSize = width * height * RGBA_CHANNELS * Float32Array.BYTES_PER_ELEMENT;
+    // If PBOs exist but format changed, dispose them first
+    if (this.scopePBOs[0] || this.scopePBOs[1]) {
+      this.disposeScopePBOs();
+    }
+
+    const bytesPerChannel = format === 'rgba8' ? 1 : Float32Array.BYTES_PER_ELEMENT;
+    const byteSize = width * height * RGBA_CHANNELS * bytesPerChannel;
     const pbo0 = gl.createBuffer();
     const pbo1 = gl.createBuffer();
     if (!pbo0 || !pbo1) {
@@ -1393,6 +1444,8 @@ export class Renderer implements RendererBackend {
     this.scopePBOHeight = height;
     this.scopePBOReady = false;
     this.scopePBOCachedPixels = null;
+    this.scopePBOCachedPixelsUint8 = null;
+    this.scopePBOFormat = format;
   }
 
   /**
@@ -1410,6 +1463,8 @@ export class Renderer implements RendererBackend {
     this.scopePBOHeight = 0;
     this.scopePBOReady = false;
     this.scopePBOCachedPixels = null;
+    this.scopePBOFormat = 'rgba16f';
+    this.scopePBOCachedPixelsUint8 = null;
   }
 
   setBackgroundPattern(state: BackgroundPatternState): void {
@@ -2158,6 +2213,7 @@ export class Renderer implements RendererBackend {
     this.scopeFBO = null;
     this.scopeFBOWidth = 0;
     this.scopeFBOHeight = 0;
+    this.scopeFBOFormat = 'rgba16f';
     this.scopeTempRow = null;
 
     // Release OCIO WASM resources

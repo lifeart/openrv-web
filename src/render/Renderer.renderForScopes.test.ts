@@ -8,6 +8,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ShaderStateManager, DIRTY_DISPLAY } from './ShaderStateManager';
 import type { DisplayColorConfig } from './RenderState';
+import { IPImage } from '../core/image/Image';
+import { isHDRContent } from './Renderer';
 
 // We test the Y-flip logic independently since it's the most error-prone part.
 // The renderForScopes method is integration-tested via e2e.
@@ -237,5 +239,146 @@ describe('Scope rendering display state neutralization', () => {
 
     // And DIRTY_DISPLAY should be set (so next main render pushes uniforms)
     expect(mgr.getDirtyFlags().has(DIRTY_DISPLAY)).toBe(true);
+  });
+});
+
+// --- Scope FBO Format Negotiation Tests ---
+
+describe('isHDRContent helper', () => {
+  it('SFBO-010: uint8 + srgb + no videoFrame = SDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      metadata: { transferFunction: 'srgb' },
+    });
+    expect(isHDRContent(image)).toBe(false);
+  });
+
+  it('SFBO-011: uint8 + no metadata = SDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+    });
+    expect(isHDRContent(image)).toBe(false);
+  });
+
+  it('SFBO-012: float32 = HDR regardless of metadata', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'float32',
+      metadata: { transferFunction: 'srgb' },
+    });
+    expect(isHDRContent(image)).toBe(true);
+  });
+
+  it('SFBO-013: uint16 = HDR regardless of metadata', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint16',
+    });
+    expect(isHDRContent(image)).toBe(true);
+  });
+
+  it('SFBO-014: uint8 + hlg = HDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      metadata: { transferFunction: 'hlg' },
+    });
+    expect(isHDRContent(image)).toBe(true);
+  });
+
+  it('SFBO-015: uint8 + pq = HDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      metadata: { transferFunction: 'pq' },
+    });
+    expect(isHDRContent(image)).toBe(true);
+  });
+
+  it('SFBO-016: uint8 + smpte240m = HDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      metadata: { transferFunction: 'smpte240m' },
+    });
+    expect(isHDRContent(image)).toBe(true);
+  });
+
+  it('SFBO-017: uint8 + videoFrame = HDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      videoFrame: {} as VideoFrame,
+    });
+    expect(isHDRContent(image)).toBe(true);
+  });
+
+  it('SFBO-018: uint8 + srgb + imageBitmap (no videoFrame) = SDR', () => {
+    const image = new IPImage({
+      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      metadata: { transferFunction: 'srgb' },
+      imageBitmap: {} as ImageBitmap,
+    });
+    expect(isHDRContent(image)).toBe(false);
+  });
+});
+
+describe('Uint8 to Float32 conversion', () => {
+  // Extracted conversion logic for testability (mirrors renderForScopes)
+  function uint8ToFloat32(uint8Data: Uint8Array): Float32Array {
+    const result = new Float32Array(uint8Data.length);
+    for (let i = 0; i < uint8Data.length; i++) {
+      result[i] = uint8Data[i]! / 255.0;
+    }
+    return result;
+  }
+
+  it('SFBO-005: [0, 128, 255, 255] converts to [0.0, ~0.502, 1.0, 1.0]', () => {
+    const input = new Uint8Array([0, 128, 255, 255]);
+    const result = uint8ToFloat32(input);
+    expect(result[0]).toBeCloseTo(0.0, 6);
+    expect(result[1]).toBeCloseTo(128 / 255, 4);
+    expect(result[2]).toBeCloseTo(1.0, 6);
+    expect(result[3]).toBeCloseTo(1.0, 6);
+  });
+
+  it('SFBO-060: all-zero Uint8 converts to all-zero Float32', () => {
+    const input = new Uint8Array(16).fill(0);
+    const result = uint8ToFloat32(input);
+    for (let i = 0; i < result.length; i++) {
+      expect(result[i]).toBe(0.0);
+    }
+  });
+
+  it('SFBO-061: all-255 Uint8 converts to all-1.0 Float32', () => {
+    const input = new Uint8Array(16).fill(255);
+    const result = uint8ToFloat32(input);
+    for (let i = 0; i < result.length; i++) {
+      expect(result[i]).toBe(1.0);
+    }
+  });
+
+  it('SFBO-062: conversion result length matches input length', () => {
+    const input = new Uint8Array(640 * 360 * 4);
+    const result = uint8ToFloat32(input);
+    expect(result.length).toBe(input.length);
+  });
+
+  it('SFBO-063: conversion preserves monotonicity', () => {
+    const input = new Uint8Array([0, 1, 127, 128, 254, 255]);
+    const result = uint8ToFloat32(input);
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i]!).toBeGreaterThan(result[i - 1]!);
+    }
+  });
+
+  it('SFBO-064: Y-flip works correctly on converted SDR data', () => {
+    // 1x2 image: row0=[0,0,0,255], row1=[128,128,128,255]
+    const uint8Data = new Uint8Array([0, 0, 0, 255, 128, 128, 128, 255]);
+    const floatData = uint8ToFloat32(uint8Data);
+    // Y-flip
+    const result = new Float32Array(floatData);
+    const rowSize = 1 * 4;
+    const temp = new Float32Array(rowSize);
+    temp.set(result.subarray(0, rowSize));
+    result.copyWithin(0, rowSize, rowSize * 2);
+    result.set(temp, rowSize);
+    // After flip: row0 should be ~[0.502, 0.502, 0.502, 1.0]
+    expect(result[0]).toBeCloseTo(128 / 255, 4);
+    expect(result[4]).toBeCloseTo(0.0, 6);
   });
 });
