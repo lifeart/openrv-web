@@ -32,7 +32,7 @@ const RETRY_DELAY_MS = 500;
 
 export class ThumbnailManager {
   private session: Session;
-  private cache = new LRUCache<string, HTMLCanvasElement | OffscreenCanvas>(150);
+  private cache: LRUCache<string, HTMLCanvasElement | OffscreenCanvas>;
   private pendingLoads: Map<number, Promise<void>> = new Map();
   private maxConcurrent = 2;
   private abortController: AbortController | null = null;
@@ -41,6 +41,8 @@ export class ThumbnailManager {
   private pendingRetries: PendingFrame[] = [];
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private _loadingPaused = false;
+  private canvasPool: (HTMLCanvasElement | OffscreenCanvas)[] = [];
+  private static readonly MAX_POOL_SIZE = 30;
 
   // Thumbnail sizing
   private slotHeight = 20;
@@ -48,6 +50,9 @@ export class ThumbnailManager {
 
   constructor(session: Session) {
     this.session = session;
+    this.cache = new LRUCache<string, HTMLCanvasElement | OffscreenCanvas>(150, (_key, canvas) => {
+      this.returnToPool(canvas);
+    });
   }
 
   /**
@@ -95,6 +100,7 @@ export class ThumbnailManager {
   clear(): void {
     this.abortPending();
     this.cache.clear();
+    this.canvasPool.length = 0;
     this.slots = [];
     this.sourceId = '';
   }
@@ -242,12 +248,6 @@ export class ThumbnailManager {
       const thumbWidth = slot?.width ?? 48;
       const thumbHeight = slot?.height ?? 27;
 
-      const canvas = document.createElement('canvas');
-      canvas.width = thumbWidth;
-      canvas.height = thumbHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
       // Get frame image based on source type
       let sourceElement: CanvasImageSource | null = null;
 
@@ -275,42 +275,21 @@ export class ThumbnailManager {
       if (!sourceElement || signal.aborted) return;
 
       // Guard against detached ImageBitmaps (closed before thumbnail generation)
-      if (sourceElement instanceof ImageBitmap && (sourceElement.width === 0 || sourceElement.height === 0)) {
+      if (typeof ImageBitmap !== 'undefined' && sourceElement instanceof ImageBitmap && (sourceElement.width === 0 || sourceElement.height === 0)) {
         this.queueRetry(frame);
         return;
       }
 
-      // Use OffscreenCanvas if available for better performance
-      let targetCanvas: HTMLCanvasElement | OffscreenCanvas;
-      let targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-
-      if (typeof OffscreenCanvas !== 'undefined') {
-        targetCanvas = new OffscreenCanvas(thumbWidth, thumbHeight);
-        targetCtx = targetCanvas.getContext('2d');
-      } else {
-        targetCanvas = canvas;
-        targetCtx = ctx;
-      }
-
-      if (!targetCtx) return;
+      // Acquire canvas from pool or create new
+      const acquired = this.acquireCanvas(thumbWidth, thumbHeight);
+      if (!acquired) return;
+      const { canvas: targetCanvas, ctx: targetCtx } = acquired;
 
       // Draw scaled thumbnail
       targetCtx.drawImage(sourceElement, 0, 0, thumbWidth, thumbHeight);
 
-      // Add to cache with LRU eviction
-      // For OffscreenCanvas, we need to convert to regular canvas for storage
-      if (typeof OffscreenCanvas !== 'undefined' && targetCanvas instanceof OffscreenCanvas) {
-        const regularCanvas = document.createElement('canvas');
-        regularCanvas.width = thumbWidth;
-        regularCanvas.height = thumbHeight;
-        const regularCtx = regularCanvas.getContext('2d');
-        if (regularCtx) {
-          regularCtx.drawImage(targetCanvas, 0, 0);
-          this.addToCache(frame, regularCanvas);
-        }
-      } else {
-        this.addToCache(frame, targetCanvas as HTMLCanvasElement);
-      }
+      // Store directly in cache (OffscreenCanvas or HTMLCanvasElement)
+      this.addToCache(frame, targetCanvas);
 
       // Notify that a thumbnail is ready
       if (this.onThumbnailReady) {
@@ -333,7 +312,7 @@ export class ThumbnailManager {
   /**
    * Add thumbnail to cache with LRU eviction
    */
-  private addToCache(frame: number, canvas: HTMLCanvasElement): void {
+  private addToCache(frame: number, canvas: HTMLCanvasElement | OffscreenCanvas): void {
     const key = this.getCacheKey(frame);
     this.cache.set(key, canvas);
   }
@@ -343,7 +322,7 @@ export class ThumbnailManager {
    */
   getThumbnail(frame: number): HTMLCanvasElement | OffscreenCanvas | null {
     const key = this.getCacheKey(frame);
-    return this.cache.get(key) ?? null;
+    return this.cache.peek(key) ?? null;
   }
 
   /**
@@ -461,10 +440,48 @@ export class ThumbnailManager {
     }
   }
 
+  private returnToPool(canvas: HTMLCanvasElement | OffscreenCanvas): void {
+    if (this.canvasPool.length < ThumbnailManager.MAX_POOL_SIZE) {
+      this.canvasPool.push(canvas);
+    }
+  }
+
+  private acquireCanvas(width: number, height: number): {
+    canvas: HTMLCanvasElement | OffscreenCanvas;
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  } | null {
+    // Try to reuse from pool
+    const pooled = this.canvasPool.pop();
+    if (pooled) {
+      // Resizing resets the bitmap (per spec) -- no stale pixels
+      pooled.width = width;
+      pooled.height = height;
+      const ctx = pooled.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+      if (ctx) return { canvas: pooled, ctx };
+      // If getContext fails on pooled canvas (shouldn't happen), fall through
+    }
+
+    // Create new
+    if (typeof OffscreenCanvas !== 'undefined') {
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      return { canvas, ctx };
+    } else {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      return { canvas, ctx };
+    }
+  }
+
   dispose(): void {
     this.clear();
     this.clearRetryTimer();
     this.pendingRetries = [];
     this._loadingPaused = false;
+    this.canvasPool.length = 0;
   }
 }

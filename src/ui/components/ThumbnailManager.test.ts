@@ -680,6 +680,352 @@ describe('ThumbnailManager', () => {
   // Detached ImageBitmap guard
   // =============================================================================
 
+  describe('Task 6.1: Store OffscreenCanvas directly', () => {
+    it('THUMB-001: OffscreenCanvas path does not create intermediate HTMLCanvasElement', async () => {
+      const origOffscreen = globalThis.OffscreenCanvas;
+      const mockGetContext = vi.fn(() => ({
+        drawImage: vi.fn(),
+      }));
+      globalThis.OffscreenCanvas = vi.fn((w: number, h: number) => ({
+        width: w,
+        height: h,
+        getContext: mockGetContext,
+      })) as any;
+
+      stub.currentSource = {
+        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 10,
+        element: document.createElement('canvas'),
+      } as unknown as MediaSource;
+
+      // Pre-set sourceId to avoid clear() emptying slots during loadThumbnails
+      (manager as any).sourceId = 'test.exr-1920x1080';
+      manager.calculateSlots(60, 35, 500, 24, 10, 1920, 1080);
+
+      const createElementSpy = vi.spyOn(document, 'createElement');
+      await manager.loadThumbnails();
+
+      // createElement('canvas') should NOT have been called in the OffscreenCanvas path
+      const canvasCreations = createElementSpy.mock.calls.filter(
+        ([tag]) => tag === 'canvas'
+      );
+      expect(canvasCreations.length).toBe(0);
+
+      createElementSpy.mockRestore();
+      globalThis.OffscreenCanvas = origOffscreen;
+    });
+
+    it('THUMB-002: drawImage called exactly once per thumbnail (no double-draw)', async () => {
+      const origOffscreen = globalThis.OffscreenCanvas;
+      const drawImageSpy = vi.fn();
+      const mockGetContext = vi.fn(() => ({
+        drawImage: drawImageSpy,
+      }));
+      globalThis.OffscreenCanvas = vi.fn((w: number, h: number) => ({
+        width: w, height: h,
+        getContext: mockGetContext,
+      })) as any;
+
+      stub.currentSource = {
+        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 5,
+        element: document.createElement('canvas'),
+      } as unknown as MediaSource;
+
+      // Pre-set sourceId to avoid clear() emptying slots during loadThumbnails
+      (manager as any).sourceId = 'test.exr-1920x1080';
+      manager.calculateSlots(60, 35, 500, 24, 5, 1920, 1080);
+      await manager.loadThumbnails();
+
+      const slots = manager.getSlots();
+      // Each thumbnail should have exactly one drawImage call, not two
+      expect(drawImageSpy).toHaveBeenCalledTimes(slots.length);
+
+      globalThis.OffscreenCanvas = origOffscreen;
+    });
+
+    it('THUMB-003: HTMLCanvasElement fallback still works without OffscreenCanvas', async () => {
+      const origOffscreen = globalThis.OffscreenCanvas;
+      delete (globalThis as any).OffscreenCanvas;
+
+      stub.currentSource = {
+        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 3,
+        element: document.createElement('canvas'),
+      } as unknown as MediaSource;
+
+      // Pre-set sourceId to avoid clear() emptying slots during loadThumbnails
+      (manager as any).sourceId = 'test.exr-1920x1080';
+      manager.calculateSlots(60, 35, 500, 24, 3, 1920, 1080);
+      await manager.loadThumbnails();
+
+      const slots = manager.getSlots();
+      expect(slots.length).toBeGreaterThan(0);
+      const slot = slots[0]!;
+      const thumb = manager.getThumbnail(slot.frame);
+      expect(thumb).not.toBeNull();
+      expect(thumb).toBeInstanceOf(HTMLCanvasElement);
+
+      globalThis.OffscreenCanvas = origOffscreen;
+    });
+
+    it('THUMB-004: drawThumbnails works with OffscreenCanvas cache entries', async () => {
+      const origOffscreen = globalThis.OffscreenCanvas;
+      globalThis.OffscreenCanvas = vi.fn((w: number, h: number) => ({
+        width: w, height: h,
+        getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      })) as any;
+
+      stub.currentSource = {
+        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 3,
+        element: document.createElement('canvas'),
+      } as unknown as MediaSource;
+
+      // Pre-set sourceId to avoid clear() emptying slots during loadThumbnails
+      (manager as any).sourceId = 'test.exr-1920x1080';
+      manager.calculateSlots(60, 35, 500, 24, 3, 1920, 1080);
+      await manager.loadThumbnails();
+
+      const drawImageSpy = vi.fn();
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        drawImage: drawImageSpy,
+        strokeRect: vi.fn(),
+        shadowColor: '',
+        shadowBlur: 0,
+        shadowOffsetY: 0,
+        strokeStyle: '',
+        lineWidth: 1,
+      } as unknown as CanvasRenderingContext2D;
+
+      manager.drawThumbnails(mockCtx);
+
+      expect(drawImageSpy.mock.calls.length).toBeGreaterThan(0);
+
+      globalThis.OffscreenCanvas = origOffscreen;
+    });
+  });
+
+  describe('Task 6.2: Use peek() in drawThumbnails', () => {
+    it('THUMB-005: getThumbnail uses peek (no LRU reorder)', () => {
+      const cache = (manager as any).cache;
+      const peekSpy = vi.spyOn(cache, 'peek');
+      const getSpy = vi.spyOn(cache, 'get');
+
+      (manager as any).sourceId = 'test-1920x1080';
+
+      cache.set('test-1920x1080-1', document.createElement('canvas'));
+
+      manager.getThumbnail(1);
+
+      expect(peekSpy).toHaveBeenCalledWith('test-1920x1080-1');
+      expect(getSpy).not.toHaveBeenCalled();
+
+      peekSpy.mockRestore();
+      getSpy.mockRestore();
+    });
+
+    it('THUMB-005c: loadThumbnails uses get() to refresh LRU for cached entries', async () => {
+      const cache = (manager as any).cache;
+      (manager as any).sourceId = 'test.exr-1920x1080';
+
+      stub.currentSource = {
+        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 5,
+        element: document.createElement('canvas'),
+      } as unknown as MediaSource;
+
+      manager.calculateSlots(60, 35, 500, 24, 5, 1920, 1080);
+      const slots = manager.getSlots();
+
+      // Pre-populate cache for all slots
+      for (const slot of slots) {
+        const key = `test.exr-1920x1080-${slot.frame}`;
+        cache.set(key, document.createElement('canvas'));
+      }
+
+      const getSpy = vi.spyOn(cache, 'get');
+      const peekSpy = vi.spyOn(cache, 'peek');
+
+      // loadThumbnails should call get() for cached entries (to refresh LRU)
+      await manager.loadThumbnails();
+
+      // get() should have been called for each unique cached slot
+      expect(getSpy).toHaveBeenCalled();
+      expect(getSpy.mock.calls.length).toBeGreaterThan(0);
+
+      getSpy.mockRestore();
+      peekSpy.mockRestore();
+    });
+
+    it('THUMB-005b: drawThumbnails does not refresh LRU order', () => {
+      const cache = (manager as any).cache;
+      (manager as any).sourceId = 'test-1920x1080';
+
+      manager.calculateSlots(60, 35, 500, 24, 10, 1920, 1080);
+      const slots = manager.getSlots();
+
+      for (const slot of slots) {
+        const key = `test-1920x1080-${slot.frame}`;
+        cache.set(key, document.createElement('canvas'));
+      }
+
+      const getSpy = vi.spyOn(cache, 'get');
+
+      const mockCtx = {
+        save: vi.fn(), restore: vi.fn(), drawImage: vi.fn(),
+        strokeRect: vi.fn(), shadowColor: '', shadowBlur: 0,
+        shadowOffsetY: 0, strokeStyle: '', lineWidth: 1,
+      } as unknown as CanvasRenderingContext2D;
+
+      manager.drawThumbnails(mockCtx);
+
+      expect(getSpy).not.toHaveBeenCalled();
+
+      getSpy.mockRestore();
+    });
+  });
+
+  describe('Task 6.3: Canvas element pooling', () => {
+    it('THUMB-POOL-001: evicted canvas is returned to pool', () => {
+      const pool = (manager as any).canvasPool as any[];
+      const cache = (manager as any).cache;
+
+      (manager as any).sourceId = 'test-1920x1080';
+
+      cache.setCapacity(2);
+      try {
+        const c1 = document.createElement('canvas');
+        const c2 = document.createElement('canvas');
+        const c3 = document.createElement('canvas');
+
+        cache.set('test-1920x1080-1', c1);
+        cache.set('test-1920x1080-2', c2);
+
+        expect(pool.length).toBe(0);
+
+        cache.set('test-1920x1080-3', c3);
+
+        expect(pool.length).toBe(1);
+        expect(pool[0]).toBe(c1);
+      } finally {
+        cache.setCapacity(150);
+      }
+    });
+
+    it('THUMB-POOL-002: acquireCanvas reuses pooled canvas instead of creating new', () => {
+      const pool = (manager as any).canvasPool as any[];
+
+      const recycledCanvas = document.createElement('canvas');
+      recycledCanvas.width = 100;
+      recycledCanvas.height = 100;
+      pool.push(recycledCanvas);
+
+      const createSpy = vi.spyOn(document, 'createElement');
+
+      const result = (manager as any).acquireCanvas(48, 27);
+
+      expect(result).not.toBeNull();
+      expect(result.canvas).toBe(recycledCanvas);
+      expect(recycledCanvas.width).toBe(48);
+      expect(recycledCanvas.height).toBe(27);
+
+      expect(createSpy).not.toHaveBeenCalledWith('canvas');
+
+      createSpy.mockRestore();
+    });
+
+    it('THUMB-POOL-003: pool is bounded at MAX_POOL_SIZE', () => {
+      const pool = (manager as any).canvasPool as any[];
+      const MAX = (ThumbnailManager as any).MAX_POOL_SIZE ?? 30;
+
+      for (let i = 0; i < MAX + 10; i++) {
+        (manager as any).returnToPool(document.createElement('canvas'));
+      }
+
+      expect(pool.length).toBe(MAX);
+    });
+
+    it('THUMB-POOL-004: clear() drains the pool', () => {
+      const pool = (manager as any).canvasPool as any[];
+
+      pool.push(document.createElement('canvas'));
+      pool.push(document.createElement('canvas'));
+      expect(pool.length).toBe(2);
+
+      manager.clear();
+
+      expect((manager as any).canvasPool.length).toBe(0);
+    });
+
+    it('THUMB-POOL-005: pooled canvas is resized before reuse', () => {
+      const pool = (manager as any).canvasPool as any[];
+
+      const oldCanvas = document.createElement('canvas');
+      oldCanvas.width = 200;
+      oldCanvas.height = 150;
+      pool.push(oldCanvas);
+
+      const result = (manager as any).acquireCanvas(48, 27);
+
+      expect(result.canvas.width).toBe(48);
+      expect(result.canvas.height).toBe(27);
+    });
+
+    it('THUMB-POOL-006: dispose() drains the pool', () => {
+      const pool = (manager as any).canvasPool as any[];
+      pool.push(document.createElement('canvas'));
+
+      manager.dispose();
+
+      expect((manager as any).canvasPool.length).toBe(0);
+    });
+
+    it('THUMB-POOL-007: acquireCanvas creates new canvas when pool is empty', () => {
+      const pool = (manager as any).canvasPool as any[];
+      expect(pool.length).toBe(0);
+
+      const result = (manager as any).acquireCanvas(48, 27);
+
+      expect(result).not.toBeNull();
+      expect(result.canvas.width).toBe(48);
+      expect(result.canvas.height).toBe(27);
+      expect(result.canvas).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('THUMB-POOL-008: acquireCanvas returns null when getContext fails', () => {
+      // Mock getContext to return null
+      const origGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
+
+      // Ensure OffscreenCanvas is not available (jsdom default)
+      const origOffscreen = globalThis.OffscreenCanvas;
+      delete (globalThis as any).OffscreenCanvas;
+
+      try {
+        const result = (manager as any).acquireCanvas(48, 27);
+        expect(result).toBeNull();
+      } finally {
+        HTMLCanvasElement.prototype.getContext = origGetContext;
+        globalThis.OffscreenCanvas = origOffscreen;
+      }
+    });
+
+    it('THUMB-POOL-009: pooled canvas with failed getContext falls through to new canvas', () => {
+      const pool = (manager as any).canvasPool as any[];
+
+      // Add a canvas to pool that will fail getContext
+      const badCanvas = document.createElement('canvas');
+      badCanvas.getContext = vi.fn(() => null) as any;
+      pool.push(badCanvas);
+
+      const result = (manager as any).acquireCanvas(48, 27);
+
+      // Should have fallen through and created a new canvas (not the bad one)
+      expect(result).not.toBeNull();
+      expect(result.canvas).not.toBe(badCanvas);
+      expect(result.canvas.width).toBe(48);
+      expect(result.canvas.height).toBe(27);
+    });
+  });
+
   describe('detached ImageBitmap guard', () => {
     it('THUMB-GUARD-001: queues retry for detached ImageBitmap (width=0)', async () => {
       // Set up a video source with an ImageBitmap-returning getVideoFrameCanvas
