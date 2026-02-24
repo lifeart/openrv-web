@@ -4,6 +4,7 @@ import {
   getHueRotationMatrix,
   clearHueRotationCache,
   applyHueRotation,
+  applyHueRotationInto,
   isIdentityHueRotation,
   buildHueRotationMatrixMul,
 } from './HueRotation';
@@ -288,6 +289,62 @@ describe('HueRotation', () => {
 
     it('returns false for 90', () => {
       expect(isIdentityHueRotation(90)).toBe(false);
+    });
+  });
+
+  describe('applyHueRotationInto', () => {
+    it('HRM-INTO-001: produces identical results to applyHueRotation', () => {
+      const angles = [0, 30, 90, 137, 180, 270];
+      const out: [number, number, number] = [0, 0, 0];
+      for (const deg of angles) {
+        const [er, eg, eb] = applyHueRotation(0.8, 0.3, 0.5, deg);
+        applyHueRotationInto(0.8, 0.3, 0.5, deg, out);
+        expect(out[0]).toBeCloseTo(er, 6);
+        expect(out[1]).toBeCloseTo(eg, 6);
+        expect(out[2]).toBeCloseTo(eb, 6);
+      }
+    });
+
+    it('HRM-INTO-002: output buffer is same reference across calls', () => {
+      const out: [number, number, number] = [0, 0, 0];
+      applyHueRotationInto(1, 0, 0, 90, out);
+      const ref = out;
+      applyHueRotationInto(0, 1, 0, 180, out);
+      expect(out).toBe(ref);
+    });
+
+    it('HRM-INTO-003: clamps output to [0,1]', () => {
+      const out: [number, number, number] = [0, 0, 0];
+      // Use extreme values that might produce out-of-range results
+      applyHueRotationInto(1, 0, 0, 120, out);
+      for (let i = 0; i < 3; i++) {
+        expect(out[i]).toBeGreaterThanOrEqual(0);
+        expect(out[i]).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it('HRM-INTO-004: preserves neutral gray', () => {
+      const out: [number, number, number] = [0, 0, 0];
+      applyHueRotationInto(0.5, 0.5, 0.5, 90, out);
+      expect(out[0]).toBeCloseTo(0.5, 5);
+      expect(out[1]).toBeCloseTo(0.5, 5);
+      expect(out[2]).toBeCloseTo(0.5, 5);
+    });
+
+    it('HRM-INTO-005: handles (0,0,0) black', () => {
+      const out: [number, number, number] = [0, 0, 0];
+      applyHueRotationInto(0, 0, 0, 90, out);
+      expect(out[0]).toBe(0);
+      expect(out[1]).toBe(0);
+      expect(out[2]).toBe(0);
+    });
+
+    it('HRM-INTO-006: handles (1,1,1) white', () => {
+      const out: [number, number, number] = [0, 0, 0];
+      applyHueRotationInto(1, 1, 1, 90, out);
+      expect(out[0]).toBeCloseTo(1, 5);
+      expect(out[1]).toBeCloseTo(1, 5);
+      expect(out[2]).toBeCloseTo(1, 5);
     });
   });
 });

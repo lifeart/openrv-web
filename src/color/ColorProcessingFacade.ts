@@ -91,6 +91,7 @@ export { parseLUT } from './LUTFormatDetect';
 // =============================================================================
 export {
   applyHueRotation,
+  applyHueRotationInto,
   isIdentityHueRotation,
 } from './HueRotation';
 

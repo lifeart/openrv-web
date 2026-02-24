@@ -257,29 +257,51 @@ export class ShaderProgram {
       } else {
         gl.uniform1f(location, value);
       }
-    } else if (Array.isArray(value) || value instanceof Float32Array) {
-      const arr = value instanceof Float32Array ? value : new Float32Array(value);
-      switch (arr.length) {
+    } else if (value instanceof Float32Array) {
+      switch (value.length) {
         case 1:
-          gl.uniform1fv(location, arr);
+          gl.uniform1fv(location, value);
           break;
         case 2:
-          gl.uniform2fv(location, arr);
+          gl.uniform2fv(location, value);
           break;
         case 3:
-          gl.uniform3fv(location, arr);
+          gl.uniform3fv(location, value);
           break;
         case 4:
-          gl.uniform4fv(location, arr);
+          gl.uniform4fv(location, value);
           break;
         case 9:
-          gl.uniformMatrix3fv(location, false, arr);
+          gl.uniformMatrix3fv(location, false, value);
           break;
         case 16:
-          gl.uniformMatrix4fv(location, false, arr);
+          gl.uniformMatrix4fv(location, false, value);
           break;
         default:
-          console.warn(`Unsupported uniform array length: ${arr.length}`);
+          console.warn(`Unsupported uniform array length: ${value.length}`);
+      }
+    } else if (Array.isArray(value)) {
+      switch (value.length) {
+        case 1:
+          gl.uniform1fv(location, value);
+          break;
+        case 2:
+          gl.uniform2fv(location, value);
+          break;
+        case 3:
+          gl.uniform3fv(location, value);
+          break;
+        case 4:
+          gl.uniform4fv(location, value);
+          break;
+        case 9:
+          gl.uniformMatrix3fv(location, false, new Float32Array(value));
+          break;
+        case 16:
+          gl.uniformMatrix4fv(location, false, new Float32Array(value));
+          break;
+        default:
+          console.warn(`Unsupported uniform array length: ${value.length}`);
       }
     } else if (value instanceof Int32Array) {
       switch (value.length) {

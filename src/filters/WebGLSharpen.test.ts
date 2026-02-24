@@ -130,7 +130,7 @@ describe('WebGLSharpenProcessor', () => {
       expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.anything(), 0.5); // u_amount = 50/100
       expect(mockGl.uniform2fv).toHaveBeenCalledWith(
         expect.anything(),
-        expect.any(Float32Array),
+        expect.any(Array),
       ); // u_texelSize via ShaderProgram.setUniform
     });
 

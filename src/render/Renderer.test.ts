@@ -2954,3 +2954,252 @@ describe('Renderer spherical 360 texture wrap', () => {
     expect(repeatCalls.length).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// GC Pressure Optimization Tests (Tasks 1, 4, 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock GL that supports mipmap generation for float textures.
+ *
+ * The standard `createMockRendererGL` mock only returns non-null for
+ * `KHR_parallel_shader_compile`. The RGB-to-RGBA padding path requires
+ * `_mipmapSupported = true`, which needs `OES_texture_float_linear` and
+ * `EXT_color_buffer_float` extensions plus a `generateMipmap` method.
+ */
+function initRendererWithMipmapGL(renderer: Renderer): WebGL2RenderingContext {
+  const mockGL = createMockGL();
+
+  // Override getExtension to also return non-null for float-texture extensions
+  (mockGL.getExtension as ReturnType<typeof vi.fn>).mockImplementation((name: string) => {
+    if (name === 'KHR_parallel_shader_compile') return {};
+    if (name === 'OES_texture_float_linear') return {};
+    if (name === 'EXT_color_buffer_float') return {};
+    return null;
+  });
+
+  // Add generateMipmap (required for _mipmapSupported check and actual mipmap generation)
+  (mockGL as any).generateMipmap = vi.fn();
+
+  // Add missing GL constants for float texture formats
+  (mockGL as any).FLOAT = 0x1406;
+  (mockGL as any).R32F = 0x822e;
+  (mockGL as any).RG32F = 0x8230;
+  (mockGL as any).RGB32F = 0x8815;
+  (mockGL as any).RGBA32F = 0x8814;
+  (mockGL as any).RED = 0x1903;
+  (mockGL as any).RG = 0x8227;
+  (mockGL as any).RGB = 0x1907;
+  (mockGL as any).LINEAR_MIPMAP_LINEAR = 0x2703;
+
+  const canvas = document.createElement('canvas');
+  const originalGetContext = canvas.getContext.bind(canvas);
+  canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    if (contextId === 'webgl2') return mockGL;
+    return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+  }) as typeof canvas.getContext;
+
+  renderer.initialize(canvas);
+  return mockGL;
+}
+
+describe('GC Pressure: RGB-to-RGBA buffer pooling', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('REN-PAD-001: 3-channel float image renders correctly with pooled RGBA buffer', () => {
+    const mockGL = initRendererWithMipmapGL(renderer);
+    renderer.resize(100, 100);
+
+    // Create a 3-channel float32 image (triggers canPadToRGBA)
+    const img = new IPImage({ width: 2, height: 2, channels: 3, dataType: 'float32' });
+    const src = img.getTypedArray() as Float32Array;
+    // Set test pixel values (12 values for 2x2 RGB)
+    src[0] = 0.1; src[1] = 0.2; src[2] = 0.3;
+    src[3] = 0.4; src[4] = 0.5; src[5] = 0.6;
+    src[6] = 0.7; src[7] = 0.8; src[8] = 0.9;
+    src[9] = 1.0; src[10] = 0.0; src[11] = 0.5;
+    img.textureNeedsUpdate = true;
+
+    renderer.renderImage(img);
+
+    // texImage2D should have been called with RGBA data (4 channels, padded from 3)
+    const texCalls = (mockGL.texImage2D as ReturnType<typeof vi.fn>).mock.calls;
+    const lastCall = texCalls[texCalls.length - 1];
+    const uploadedData = lastCall?.[lastCall.length - 1] as Float32Array;
+
+    expect(uploadedData).toBeInstanceOf(Float32Array);
+    // 2x2 image with 4 channels = 16 values
+    expect(uploadedData.length).toBe(16);
+    // Verify first pixel: RGB preserved, alpha padded to 1.0
+    // Use toBeCloseTo because Float32Array has limited precision (~7 decimal digits)
+    expect(uploadedData[0]).toBeCloseTo(0.1, 5);  // R
+    expect(uploadedData[1]).toBeCloseTo(0.2, 5);  // G
+    expect(uploadedData[2]).toBeCloseTo(0.3, 5);  // B
+    expect(uploadedData[3]).toBe(1.0);              // A (padded, exact)
+    // Verify last pixel
+    expect(uploadedData[12]).toBe(1.0);             // R (exact)
+    expect(uploadedData[13]).toBe(0.0);             // G (exact)
+    expect(uploadedData[14]).toBeCloseTo(0.5, 5);  // B
+    expect(uploadedData[15]).toBe(1.0);             // A (padded, exact)
+  });
+
+  it('REN-PAD-002: pooled buffer is reused for same-dimension images', () => {
+    initRendererWithMipmapGL(renderer);
+    renderer.resize(100, 100);
+
+    const img1 = new IPImage({ width: 10, height: 10, channels: 3, dataType: 'float32' });
+    img1.textureNeedsUpdate = true;
+    renderer.renderImage(img1);
+
+    // Capture the internal buffer reference after first render
+    const bufBefore = (renderer as any).rgbaPadBuffer;
+    expect(bufBefore).toBeInstanceOf(Float32Array);
+
+    const img2 = new IPImage({ width: 10, height: 10, channels: 3, dataType: 'float32' });
+    img2.textureNeedsUpdate = true;
+    renderer.renderImage(img2);
+
+    const bufAfter = (renderer as any).rgbaPadBuffer;
+    // Same buffer reference should be reused (no new allocation)
+    expect(bufAfter).toBe(bufBefore);
+  });
+
+  it('REN-PAD-003: buffer is reallocated when dimensions change', () => {
+    initRendererWithMipmapGL(renderer);
+    renderer.resize(100, 100);
+
+    const img1 = new IPImage({ width: 10, height: 10, channels: 3, dataType: 'float32' });
+    img1.textureNeedsUpdate = true;
+    renderer.renderImage(img1);
+    const buf1 = (renderer as any).rgbaPadBuffer;
+    expect(buf1).toBeInstanceOf(Float32Array);
+    expect(buf1.length).toBe(10 * 10 * 4);
+
+    const img2 = new IPImage({ width: 20, height: 20, channels: 3, dataType: 'float32' });
+    img2.textureNeedsUpdate = true;
+    renderer.renderImage(img2);
+    const buf2 = (renderer as any).rgbaPadBuffer;
+
+    // Different dimensions mean a new buffer was allocated
+    expect(buf2).not.toBe(buf1);
+    expect(buf2.length).toBe(20 * 20 * 4);
+  });
+
+  it('REN-PAD-004: 4-channel float image does NOT use RGBA pad buffer', () => {
+    initRendererWithMipmapGL(renderer);
+    renderer.resize(100, 100);
+
+    const img = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+    img.textureNeedsUpdate = true;
+    renderer.renderImage(img);
+
+    // rgbaPadBufferSize should remain 0 (never allocated for 4-channel images)
+    expect((renderer as any).rgbaPadBufferSize).toBe(0);
+  });
+});
+
+describe('GC Pressure: Cached TextureCallbacks', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('REN-TC-001: createTextureCallbacks returns same object on second call', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    const cb1 = (renderer as any).createTextureCallbacks();
+    const cb2 = (renderer as any).createTextureCallbacks();
+    expect(cb2).toBe(cb1);
+  });
+
+  it('REN-TC-002: dispose nulls cachedTextureCallbacks', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    // Force creation of cached callbacks
+    (renderer as any).createTextureCallbacks();
+    expect((renderer as any).cachedTextureCallbacks).not.toBeNull();
+
+    renderer.dispose();
+    expect((renderer as any).cachedTextureCallbacks).toBeNull();
+  });
+
+  it('REN-TC-003: initialize resets cachedTextureCallbacks', () => {
+    initRendererWithMockGL(renderer);
+
+    // Force creation of cached callbacks
+    (renderer as any).createTextureCallbacks();
+    expect((renderer as any).cachedTextureCallbacks).not.toBeNull();
+
+    // Re-initialize should null out the cached callbacks
+    initRendererWithMockGL(renderer);
+    expect((renderer as any).cachedTextureCallbacks).toBeNull();
+  });
+});
+
+describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('REN-UB-001: u_offset and u_scale are set with Float32Array via uniform2fv', () => {
+    const mockGL = initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    const img = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    img.textureNeedsUpdate = true;
+    renderer.renderImage(img, 0.5, 0.5, 2.0, 2.0);
+
+    // uniform2fv should have been called for u_offset and u_scale
+    const calls = (mockGL.uniform2fv as ReturnType<typeof vi.fn>).mock.calls as Array<[{ __uniformName?: string }, Float32Array]>;
+
+    const offsetCall = calls.find(c => c[0]?.__uniformName === 'u_offset');
+    const scaleCall = calls.find(c => c[0]?.__uniformName === 'u_scale');
+
+    expect(offsetCall).toBeDefined();
+    expect(offsetCall![1]).toBeInstanceOf(Float32Array);
+    expect(offsetCall![1][0]).toBe(0.5);
+    expect(offsetCall![1][1]).toBe(0.5);
+
+    expect(scaleCall).toBeDefined();
+    expect(scaleCall![1]).toBeInstanceOf(Float32Array);
+    expect(scaleCall![1][0]).toBe(2.0);
+    expect(scaleCall![1][1]).toBe(2.0);
+  });
+
+  it('REN-UB-002: offset/scale buffers are pre-allocated (not created per frame)', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    // Access the internal buffers before any render
+    const offsetBuf = (renderer as any).offsetBuffer;
+    const scaleBuf = (renderer as any).scaleBuffer;
+    expect(offsetBuf).toBeInstanceOf(Float32Array);
+    expect(scaleBuf).toBeInstanceOf(Float32Array);
+    expect(offsetBuf.length).toBe(2);
+    expect(scaleBuf.length).toBe(2);
+
+    // Render with specific values
+    const img = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    img.textureNeedsUpdate = true;
+    renderer.renderImage(img, 1.0, 2.0, 3.0, 4.0);
+
+    // Same buffer references should be reused (not new allocations)
+    expect((renderer as any).offsetBuffer).toBe(offsetBuf);
+    expect((renderer as any).scaleBuffer).toBe(scaleBuf);
+
+    // Values should have been written into the existing buffers
+    expect(offsetBuf[0]).toBe(1.0);
+    expect(offsetBuf[1]).toBe(2.0);
+    expect(scaleBuf[0]).toBe(3.0);
+    expect(scaleBuf[1]).toBe(4.0);
+  });
+});

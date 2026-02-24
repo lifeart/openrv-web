@@ -105,6 +105,18 @@ export class Renderer implements RendererBackend {
   private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
   private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
 
+  // --- Pooled RGB-to-RGBA padding buffer (avoids per-frame Float32Array allocation) ---
+  private rgbaPadBuffer: Float32Array | null = null;
+  private rgbaPadBufferSize = 0;
+
+  // --- Cached TextureCallbacks (avoids per-frame closure allocation) ---
+  private cachedTextureCallbacks: TextureCallbacks | null = null;
+  private canvasSizeCache = { width: 0, height: 0 };
+
+  // --- Pre-allocated uniform buffers for u_offset / u_scale ---
+  private readonly offsetBuffer = new Float32Array(2);
+  private readonly scaleBuffer = new Float32Array(2);
+
   // --- OCIO WASM shader integration ---
   // When OCIO WASM is active, the baked 3D LUT from the WASM processor is
   // uploaded through the existing u_lut3D uniform path. The OCIO shader code
@@ -174,6 +186,7 @@ export class Renderer implements RendererBackend {
   private _userFlipV = false;
 
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
+    this.cachedTextureCallbacks = null;
     this.canvas = canvas;
 
     // For HDR displays, request preserveDrawingBuffer so readPixels works after compositing.
@@ -425,8 +438,10 @@ export class Renderer implements RendererBackend {
 
     // Use display shader
     this.displayShader.use();
-    this.displayShader.setUniform('u_offset', [offsetX, offsetY]);
-    this.displayShader.setUniform('u_scale', [scaleX, scaleY]);
+    this.offsetBuffer[0] = offsetX; this.offsetBuffer[1] = offsetY;
+    this.displayShader.setUniform('u_offset', this.offsetBuffer);
+    this.scaleBuffer[0] = scaleX; this.scaleBuffer[1] = scaleY;
+    this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
     // Set HDR output mode uniform
     this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? OUTPUT_MODE_SDR : OUTPUT_MODE_HDR);
@@ -549,38 +564,46 @@ export class Renderer implements RendererBackend {
    * the correct texture unit, and binds the texture.
    */
   private createTextureCallbacks(): TextureCallbacks {
-    const gl = this.gl!;
-    return {
+    if (this.cachedTextureCallbacks) return this.cachedTextureCallbacks;
+
+    this.cachedTextureCallbacks = {
       bindCurvesLUTTexture: () => {
         this.ensureCurvesLUTTexture();
+        const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.curvesLUTTexture);
       },
       bindFalseColorLUTTexture: () => {
         this.ensureFalseColorLUTTexture();
+        const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, this.falseColorLUTTexture);
       },
       bindLUT3DTexture: () => {
         this.ensureLUT3DTexture();
+        const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_3D, this.lut3DTexture);
       },
       bindFilmLUTTexture: () => {
         this.ensureFilmLUTTexture();
+        const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE4);
         gl.bindTexture(gl.TEXTURE_2D, this.filmLUTTexture);
       },
       bindInlineLUTTexture: () => {
         this.ensureInlineLUTTexture();
+        const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE5);
         gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
       },
-      getCanvasSize: () => ({
-        width: this.canvas?.width ?? 0,
-        height: this.canvas?.height ?? 0,
-      }),
+      getCanvasSize: () => {
+        this.canvasSizeCache.width = this.canvas?.width ?? 0;
+        this.canvasSizeCache.height = this.canvas?.height ?? 0;
+        return this.canvasSizeCache;
+      },
     };
+    return this.cachedTextureCallbacks;
   }
 
   // --- LUT texture management ---
@@ -846,7 +869,11 @@ export class Renderer implements RendererBackend {
     if (canPadToRGBA) {
       const src = image.getTypedArray() as Float32Array;
       const pixelCount = image.width * image.height;
-      const rgba = new Float32Array(pixelCount * 4);
+      if (this.rgbaPadBufferSize !== pixelCount) {
+        this.rgbaPadBuffer = new Float32Array(pixelCount * 4);
+        this.rgbaPadBufferSize = pixelCount;
+      }
+      const rgba = this.rgbaPadBuffer!;
       for (let i = 0; i < pixelCount; i++) {
         const si = i * 3;
         const di = i * 4;
@@ -2103,8 +2130,10 @@ export class Renderer implements RendererBackend {
 
     // Use display shader
     this.displayShader.use();
-    this.displayShader.setUniform('u_offset', [0, 0]);
-    this.displayShader.setUniform('u_scale', [1, 1]);
+    this.offsetBuffer[0] = 0; this.offsetBuffer[1] = 0;
+    this.displayShader.setUniform('u_offset', this.offsetBuffer);
+    this.scaleBuffer[0] = 1; this.scaleBuffer[1] = 1;
+    this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
@@ -2191,6 +2220,9 @@ export class Renderer implements RendererBackend {
     this.lut3DRGBABufferSize = 0;
     this.inlineLUTDeinterleavedBuffer = null;
     this.inlineLUTDeinterleavedBufferSize = 0;
+    this.rgbaPadBuffer = null;
+    this.rgbaPadBufferSize = 0;
+    this.cachedTextureCallbacks = null;
 
     // Release HDR FBO resources
     if (this.hdrFBOTexture) gl.deleteTexture(this.hdrFBOTexture);

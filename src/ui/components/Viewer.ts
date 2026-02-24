@@ -37,7 +37,7 @@ import {
   isDisplayStateActive,
   type DisplayCapabilities,
   safeCanvasContext2D,
-  applyHueRotation as applyHueRotationPixel,
+  applyHueRotationInto as applyHueRotationPixelInto,
   isIdentityHueRotation,
 } from '../../color/ColorProcessingFacade';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
@@ -2763,14 +2763,15 @@ export class Viewer {
     if (hasHueRotation) {
       const data = imageData.data;
       const len = data.length;
+      const hueOut: [number, number, number] = [0, 0, 0];
       for (let i = 0; i < len; i += 4) {
         const r = data[i]! / 255;
         const g = data[i + 1]! / 255;
         const b = data[i + 2]! / 255;
-        const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorPipeline.colorAdjustments.hueRotation);
-        data[i] = Math.round(nr * 255);
-        data[i + 1] = Math.round(ng * 255);
-        data[i + 2] = Math.round(nb * 255);
+        applyHueRotationPixelInto(r, g, b, this.colorPipeline.colorAdjustments.hueRotation, hueOut);
+        data[i] = Math.round(hueOut[0] * 255);
+        data[i + 1] = Math.round(hueOut[1] * 255);
+        data[i + 2] = Math.round(hueOut[2] * 255);
       }
     }
 
@@ -2959,14 +2960,15 @@ export class Viewer {
       if (hasHueRotation) {
         const data = imageData.data;
         const len = data.length;
+        const hueOut: [number, number, number] = [0, 0, 0];
         for (let i = 0; i < len; i += 4) {
           const r = data[i]! / 255;
           const g = data[i + 1]! / 255;
           const b = data[i + 2]! / 255;
-          const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorPipeline.colorAdjustments.hueRotation);
-          data[i] = Math.round(nr * 255);
-          data[i + 1] = Math.round(ng * 255);
-          data[i + 2] = Math.round(nb * 255);
+          applyHueRotationPixelInto(r, g, b, this.colorPipeline.colorAdjustments.hueRotation, hueOut);
+          data[i] = Math.round(hueOut[0] * 255);
+          data[i + 1] = Math.round(hueOut[1] * 255);
+          data[i + 2] = Math.round(hueOut[2] * 255);
         }
       }
 

@@ -570,6 +570,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   /** Pre-allocated resolution array for applyUniforms */
   private readonly resolutionBuffer: [number, number] = [0, 0];
 
+  /** Pre-allocated color grading tuple buffers for applyUniforms */
+  private readonly exposureRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly gammaRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly contrastRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly safeGammaRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly safeExposureRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly scaleRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly offsetRGBBuffer: [number, number, number] = [0, 0, 0];
+  private readonly channelSwizzleBuffer = new Int32Array(4);
+
   /**
    * Texture unit bindings (u_curvesLUT=1, u_falseColorLUT=2, etc.) are constant
    * after the first frame. We only set them once, then skip on subsequent frames.
@@ -1455,36 +1465,66 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     if (dirty.has(DIRTY_COLOR)) {
       // Per-channel vec3 uniforms: broadcast scalar when per-channel data is absent
       const adj = s.colorAdjustments;
-      const expRGB = adj.exposureRGB ?? [adj.exposure, adj.exposure, adj.exposure];
-      const gamRGB = adj.gammaRGB ?? [adj.gamma, adj.gamma, adj.gamma];
-      const conRGB = adj.contrastRGB ?? [adj.contrast, adj.contrast, adj.contrast];
+
+      // Write exposure into pre-allocated buffer
+      const expBuf = this.exposureRGBBuffer;
+      if (adj.exposureRGB) {
+        expBuf[0] = adj.exposureRGB[0]; expBuf[1] = adj.exposureRGB[1]; expBuf[2] = adj.exposureRGB[2];
+      } else {
+        expBuf[0] = adj.exposure; expBuf[1] = adj.exposure; expBuf[2] = adj.exposure;
+      }
+
+      // Write gamma into pre-allocated buffer
+      const gamBuf = this.gammaRGBBuffer;
+      if (adj.gammaRGB) {
+        gamBuf[0] = adj.gammaRGB[0]; gamBuf[1] = adj.gammaRGB[1]; gamBuf[2] = adj.gammaRGB[2];
+      } else {
+        gamBuf[0] = adj.gamma; gamBuf[1] = adj.gamma; gamBuf[2] = adj.gamma;
+      }
+
+      // Write contrast into pre-allocated buffer
+      const conBuf = this.contrastRGBBuffer;
+      if (adj.contrastRGB) {
+        conBuf[0] = adj.contrastRGB[0]; conBuf[1] = adj.contrastRGB[1]; conBuf[2] = adj.contrastRGB[2];
+      } else {
+        conBuf[0] = adj.contrast; conBuf[1] = adj.contrast; conBuf[2] = adj.contrast;
+      }
 
       // Sanitize: clamp gamma to avoid division by zero in shader (1.0/0.0 = Inf)
-      const safeGammaRGB: [number, number, number] = [
-        gamRGB[0] <= 0 ? 1e-4 : gamRGB[0],
-        gamRGB[1] <= 0 ? 1e-4 : gamRGB[1],
-        gamRGB[2] <= 0 ? 1e-4 : gamRGB[2],
-      ];
+      const safeGamBuf = this.safeGammaRGBBuffer;
+      safeGamBuf[0] = gamBuf[0] <= 0 ? 1e-4 : gamBuf[0];
+      safeGamBuf[1] = gamBuf[1] <= 0 ? 1e-4 : gamBuf[1];
+      safeGamBuf[2] = gamBuf[2] <= 0 ? 1e-4 : gamBuf[2];
 
       // Sanitize exposure: replace non-finite values with 0
-      const safeExposureRGB: [number, number, number] = [
-        Number.isFinite(expRGB[0]) ? expRGB[0] : 0,
-        Number.isFinite(expRGB[1]) ? expRGB[1] : 0,
-        Number.isFinite(expRGB[2]) ? expRGB[2] : 0,
-      ];
+      const safeExpBuf = this.safeExposureRGBBuffer;
+      safeExpBuf[0] = Number.isFinite(expBuf[0]) ? expBuf[0] : 0;
+      safeExpBuf[1] = Number.isFinite(expBuf[1]) ? expBuf[1] : 0;
+      safeExpBuf[2] = Number.isFinite(expBuf[2]) ? expBuf[2] : 0;
 
       // Per-channel scale: broadcast scalar when per-channel is absent; identity = [1,1,1]
+      const sclBuf = this.scaleRGBBuffer;
       const scaleScalar = adj.scale ?? 1;
-      const sclRGB = adj.scaleRGB ?? [scaleScalar, scaleScalar, scaleScalar];
-      // Per-channel offset: broadcast scalar when per-channel is absent; identity = [0,0,0]
-      const offsetScalar = adj.offset ?? 0;
-      const offRGB = adj.offsetRGB ?? [offsetScalar, offsetScalar, offsetScalar];
+      if (adj.scaleRGB) {
+        sclBuf[0] = adj.scaleRGB[0]; sclBuf[1] = adj.scaleRGB[1]; sclBuf[2] = adj.scaleRGB[2];
+      } else {
+        sclBuf[0] = scaleScalar; sclBuf[1] = scaleScalar; sclBuf[2] = scaleScalar;
+      }
 
-      shader.setUniform('u_exposureRGB', safeExposureRGB);
-      shader.setUniform('u_gammaRGB', safeGammaRGB);
-      shader.setUniform('u_contrastRGB', conRGB);
-      shader.setUniform('u_scaleRGB', sclRGB);
-      shader.setUniform('u_offsetRGB', offRGB);
+      // Per-channel offset: broadcast scalar when per-channel is absent; identity = [0,0,0]
+      const offBuf = this.offsetRGBBuffer;
+      const offsetScalar = adj.offset ?? 0;
+      if (adj.offsetRGB) {
+        offBuf[0] = adj.offsetRGB[0]; offBuf[1] = adj.offsetRGB[1]; offBuf[2] = adj.offsetRGB[2];
+      } else {
+        offBuf[0] = offsetScalar; offBuf[1] = offsetScalar; offBuf[2] = offsetScalar;
+      }
+
+      shader.setUniform('u_exposureRGB', safeExpBuf);
+      shader.setUniform('u_gammaRGB', safeGamBuf);
+      shader.setUniform('u_contrastRGB', conBuf);
+      shader.setUniform('u_scaleRGB', sclBuf);
+      shader.setUniform('u_offsetRGB', offBuf);
       shader.setUniform('u_saturation', adj.saturation);
       shader.setUniform('u_brightness', adj.brightness);
       shader.setUniform('u_temperature', adj.temperature);
@@ -1753,7 +1793,11 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
 
     // Channel swizzle (RVChannelMap remapping)
     if (dirty.has(DIRTY_CHANNEL_SWIZZLE)) {
-      shader.setUniform('u_channelSwizzle', new Int32Array(s.channelSwizzle));
+      this.channelSwizzleBuffer[0] = s.channelSwizzle[0];
+      this.channelSwizzleBuffer[1] = s.channelSwizzle[1];
+      this.channelSwizzleBuffer[2] = s.channelSwizzle[2];
+      this.channelSwizzleBuffer[3] = s.channelSwizzle[3];
+      shader.setUniform('u_channelSwizzle', this.channelSwizzleBuffer);
     }
 
     // Perspective Correction

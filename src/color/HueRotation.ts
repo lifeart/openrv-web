@@ -124,3 +124,24 @@ export function applyHueRotation(
     Math.max(0, Math.min(1, outB)),
   ];
 }
+
+/**
+ * Apply hue rotation to an RGB pixel, writing into a provided output buffer (zero-alloc).
+ *
+ * Follows the hexToRgbInto naming convention for write-into-buffer functions.
+ *
+ * @param r - Red channel [0, 1]
+ * @param g - Green channel [0, 1]
+ * @param b - Blue channel [0, 1]
+ * @param degrees - Hue rotation in degrees
+ * @param out - Pre-allocated [r, g, b] tuple to write results into
+ */
+export function applyHueRotationInto(
+  r: number, g: number, b: number, degrees: number,
+  out: [number, number, number]
+): void {
+  const mat = getHueRotationMatrix(degrees);
+  out[0] = Math.max(0, Math.min(1, mat[0]! * r + mat[3]! * g + mat[6]! * b));
+  out[1] = Math.max(0, Math.min(1, mat[1]! * r + mat[4]! * g + mat[7]! * b));
+  out[2] = Math.max(0, Math.min(1, mat[2]! * r + mat[5]! * g + mat[8]! * b));
+}

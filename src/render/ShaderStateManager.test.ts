@@ -1942,4 +1942,193 @@ describe('ShaderStateManager', () => {
       expect(outMat[0]).toBeCloseTo(0.8225, 3);
     });
   });
+
+  // =================================================================
+  // GC Pressure: Pre-allocated color grading buffers (Task 3)
+  // =================================================================
+
+  describe('GC Pressure: Pre-allocated color grading buffers', () => {
+    function createMockShaderAndTexCb() {
+      const uniformCalls: Record<string, unknown> = {};
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      return { uniformCalls, intCalls, mockShader, mockTexCb };
+    }
+
+    it('SSM-GC-001: u_exposureRGB receives correct values', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 1.0,
+        exposureRGB: [0.5, 1.0, 1.5],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const expRGB = uniformCalls['u_exposureRGB'] as number[];
+      expect(expRGB).toBeDefined();
+      expect(expRGB[0]).toBe(0.5);
+      expect(expRGB[1]).toBe(1.0);
+      expect(expRGB[2]).toBe(1.5);
+    });
+
+    it('SSM-GC-002: u_gammaRGB clamps zero to epsilon', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 0,
+        gammaRGB: [0, 0, 0],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const gammaRGB = uniformCalls['u_gammaRGB'] as number[];
+      expect(gammaRGB).toBeDefined();
+      // Each channel should be clamped to a small positive epsilon (1e-4), not zero
+      for (const v of gammaRGB) {
+        expect(v).toBeGreaterThan(0);
+        expect(v).toBeLessThanOrEqual(1e-4);
+        expect(Number.isFinite(v)).toBe(true);
+      }
+    });
+
+    it('SSM-GC-003: u_exposureRGB sanitizes non-finite values', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 0,
+        exposureRGB: [Infinity, -Infinity, NaN],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const expRGB = uniformCalls['u_exposureRGB'] as number[];
+      expect(expRGB).toBeDefined();
+      // All non-finite values should be sanitized to 0
+      expect(expRGB[0]).toBe(0);
+      expect(expRGB[1]).toBe(0);
+      expect(expRGB[2]).toBe(0);
+    });
+
+    it('SSM-GC-010: u_exposureRGB same tuple reference across frames', () => {
+      // First frame
+      const { uniformCalls: calls1, mockShader: shader1, mockTexCb: texCb1 } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 1.0,
+        exposureRGB: [0.5, 1.0, 1.5],
+      });
+      mgr.applyUniforms(shader1, texCb1);
+      const ref1 = calls1['u_exposureRGB'];
+
+      // Second frame: change values but re-use the manager
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 2.0,
+        exposureRGB: [2.0, 3.0, 4.0],
+      });
+
+      const { uniformCalls: calls2, mockShader: shader2, mockTexCb: texCb2 } = createMockShaderAndTexCb();
+      mgr.applyUniforms(shader2, texCb2);
+      const ref2 = calls2['u_exposureRGB'];
+
+      // The pre-allocated buffer should be the same object reference
+      expect(ref1).toBe(ref2);
+      // But values should have changed to the new values
+      expect(ref2).toEqual([2.0, 3.0, 4.0]);
+    });
+
+    it('SSM-GC-011: u_gammaRGB same reference across frames', () => {
+      // First frame
+      const { uniformCalls: calls1, mockShader: shader1, mockTexCb: texCb1 } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 1.0,
+        gammaRGB: [1.0, 1.5, 2.0],
+      });
+      mgr.applyUniforms(shader1, texCb1);
+      const ref1 = calls1['u_gammaRGB'];
+
+      // Second frame: change values
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 2.0,
+        gammaRGB: [2.2, 2.4, 2.6],
+      });
+
+      const { uniformCalls: calls2, mockShader: shader2, mockTexCb: texCb2 } = createMockShaderAndTexCb();
+      mgr.applyUniforms(shader2, texCb2);
+      const ref2 = calls2['u_gammaRGB'];
+
+      // The pre-allocated safe gamma buffer should be the same object reference
+      expect(ref1).toBe(ref2);
+      // Values should reflect the updated gamma
+      expect(ref2).toEqual([2.2, 2.4, 2.6]);
+    });
+
+    it('SSM-GC-020: u_channelSwizzle uses pre-allocated Int32Array', () => {
+      const { uniformCalls: calls1, mockShader: shader1, mockTexCb: texCb1 } = createMockShaderAndTexCb();
+
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      mgr.applyUniforms(shader1, texCb1);
+
+      const ref1 = calls1['u_channelSwizzle'];
+      expect(ref1).toBeInstanceOf(Int32Array);
+
+      // Second frame
+      mgr.setChannelSwizzle([3, 2, 1, 0]);
+
+      const { uniformCalls: calls2, mockShader: shader2, mockTexCb: texCb2 } = createMockShaderAndTexCb();
+      mgr.applyUniforms(shader2, texCb2);
+
+      const ref2 = calls2['u_channelSwizzle'];
+      // Same pre-allocated Int32Array instance
+      expect(ref1).toBe(ref2);
+    });
+
+    it('SSM-GC-021: u_channelSwizzle values update when swizzle changes', () => {
+      // First apply with BGR swizzle
+      const { uniformCalls: calls1, mockShader: shader1, mockTexCb: texCb1 } = createMockShaderAndTexCb();
+
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      mgr.applyUniforms(shader1, texCb1);
+
+      const swizzle1 = calls1['u_channelSwizzle'] as Int32Array;
+      expect(swizzle1[0]).toBe(2);
+      expect(swizzle1[1]).toBe(1);
+      expect(swizzle1[2]).toBe(0);
+      expect(swizzle1[3]).toBe(3);
+
+      // Now change to a reversed swizzle
+      mgr.setChannelSwizzle([3, 2, 1, 0]);
+
+      const { uniformCalls: calls2, mockShader: shader2, mockTexCb: texCb2 } = createMockShaderAndTexCb();
+      mgr.applyUniforms(shader2, texCb2);
+
+      const swizzle2 = calls2['u_channelSwizzle'] as Int32Array;
+      expect(swizzle2[0]).toBe(3);
+      expect(swizzle2[1]).toBe(2);
+      expect(swizzle2[2]).toBe(1);
+      expect(swizzle2[3]).toBe(0);
+    });
+  });
 });
