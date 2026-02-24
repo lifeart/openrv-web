@@ -28,7 +28,6 @@ interface CacheEntry {
   type: number;
   internalFormat: number;
   sizeBytes: number;
-  lastAccessed: number;
 }
 
 const DEFAULT_CONFIG: CacheConfig = {
@@ -114,7 +113,6 @@ export class TextureCacheManager implements ManagerBase {
   private config: CacheConfig;
   private cache: Map<string, CacheEntry> = new Map();
   private currentMemoryUsage = 0;
-  private accessCounter = 0;
   private contextLost = false;
   private canvas: HTMLCanvasElement | null = null;
   private boundContextLostHandler: ((e: Event) => void) | null = null;
@@ -205,8 +203,9 @@ export class TextureCacheManager implements ManagerBase {
         existing.height === height &&
         existing.internalFormat === iFormat
       ) {
-        // Update access time and return existing texture
-        existing.lastAccessed = ++this.accessCounter;
+        // Move to end (MRU position) and return existing texture
+        this.cache.delete(key);
+        this.cache.set(key, existing);
         return existing.texture;
       }
 
@@ -246,7 +245,6 @@ export class TextureCacheManager implements ManagerBase {
       type: dataType,
       internalFormat: iFormat,
       sizeBytes: newSize,
-      lastAccessed: ++this.accessCounter,
     };
     this.cache.set(key, entry);
     this.currentMemoryUsage += newSize;
@@ -301,8 +299,9 @@ export class TextureCacheManager implements ManagerBase {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    // Update access time
-    entry.lastAccessed = ++this.accessCounter;
+    // Move to end (MRU position)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
     return true;
   }
 
@@ -379,7 +378,7 @@ export class TextureCacheManager implements ManagerBase {
    */
   private ensureCapacity(requiredSize: number): void {
     // Check entry count limit
-    while (this.cache.size >= this.config.maxEntries) {
+    while (this.cache.size >= this.config.maxEntries && this.cache.size > 0) {
       this.evictLRU();
     }
 
@@ -396,18 +395,9 @@ export class TextureCacheManager implements ManagerBase {
    * Evict the least recently used cache entry
    */
   private evictLRU(): void {
-    let oldestKey: string | null = null;
-    let oldestAccess = Infinity;
-
-    for (const [key, entry] of this.cache) {
-      if (entry.lastAccessed < oldestAccess) {
-        oldestAccess = entry.lastAccessed;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
-      this.deleteEntry(oldestKey);
+    const oldest = this.cache.keys().next().value;
+    if (oldest !== undefined) {
+      this.deleteEntry(oldest);
     }
   }
 

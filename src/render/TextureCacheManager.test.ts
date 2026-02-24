@@ -280,6 +280,121 @@ describe('TextureCacheManager', () => {
       expect(smallCache.hasTexture('frame-4')).toBe(true);
     });
 
+    it('TEX-U029: updateTexture refreshes LRU order', () => {
+      const smallCache = new TextureCacheManager(gl, { maxEntries: 3, maxMemoryBytes: 10000000 });
+
+      smallCache.getTexture('A', 10, 10);
+      smallCache.getTexture('B', 10, 10);
+      smallCache.getTexture('C', 10, 10);
+
+      // Update A -- refreshes its LRU position to newest
+      const data = new Uint8Array(10 * 10 * 4);
+      smallCache.updateTexture('A', data);
+
+      // Insert D -- should evict B (now the oldest)
+      smallCache.getTexture('D', 10, 10);
+
+      expect(smallCache.hasTexture('A')).toBe(true);  // refreshed via updateTexture
+      expect(smallCache.hasTexture('B')).toBe(false); // evicted as oldest
+      expect(smallCache.hasTexture('C')).toBe(true);
+      expect(smallCache.hasTexture('D')).toBe(true);
+    });
+
+    it('TEX-U030: multiple access pattern maintains correct eviction order', () => {
+      const smallCache = new TextureCacheManager(gl, { maxEntries: 3, maxMemoryBytes: 10000000 });
+
+      smallCache.getTexture('A', 10, 10);
+      smallCache.getTexture('B', 10, 10);
+      smallCache.getTexture('C', 10, 10);
+
+      // Access in order C -> B -> A (A becomes newest, C becomes oldest)
+      smallCache.getTexture('C', 10, 10);
+      smallCache.getTexture('B', 10, 10);
+      smallCache.getTexture('A', 10, 10);
+
+      // Insert D -- should evict C (the oldest after re-access)
+      smallCache.getTexture('D', 10, 10);
+
+      expect(smallCache.hasTexture('C')).toBe(false); // evicted as oldest
+      expect(smallCache.hasTexture('B')).toBe(true);
+      expect(smallCache.hasTexture('A')).toBe(true);
+      expect(smallCache.hasTexture('D')).toBe(true);
+    });
+
+    it('TEX-U031: dimension-change re-creation places entry at MRU position', () => {
+      const smallCache = new TextureCacheManager(gl, { maxEntries: 3, maxMemoryBytes: 10000000 });
+
+      smallCache.getTexture('A', 10, 10);
+      smallCache.getTexture('B', 10, 10);
+      smallCache.getTexture('C', 10, 10);
+
+      // Re-create A with different dimensions -- deleteEntry + set puts it at end
+      smallCache.getTexture('A', 20, 20);
+
+      // Insert D -- should evict B (oldest after A was re-created)
+      smallCache.getTexture('D', 10, 10);
+
+      expect(smallCache.hasTexture('A')).toBe(true);  // re-created at MRU position
+      expect(smallCache.hasTexture('B')).toBe(false); // evicted as oldest
+      expect(smallCache.hasTexture('C')).toBe(true);
+      expect(smallCache.hasTexture('D')).toBe(true);
+    });
+
+    it('TEX-U032: memory-based eviction respects LRU order', () => {
+      // 10x10 RGBA8 = 400 bytes; limit allows ~2 entries
+      const smallCache = new TextureCacheManager(gl, { maxMemoryBytes: 800, maxEntries: 100 });
+
+      smallCache.getTexture('A', 10, 10); // 400 bytes
+      smallCache.getTexture('B', 10, 10); // 400 bytes (total: 800)
+
+      // Access A to refresh it
+      smallCache.getTexture('A', 10, 10);
+
+      // Insert C -- exceeds memory, should evict B (the oldest)
+      smallCache.getTexture('C', 10, 10);
+
+      expect(smallCache.hasTexture('A')).toBe(true);  // refreshed, survived
+      expect(smallCache.hasTexture('B')).toBe(false); // evicted as oldest
+      expect(smallCache.hasTexture('C')).toBe(true);
+    });
+
+    it('TEX-U033: sequential evictions evict in correct oldest-first order', () => {
+      const smallCache = new TextureCacheManager(gl, { maxEntries: 2, maxMemoryBytes: 10000000 });
+
+      smallCache.getTexture('A', 10, 10);
+      smallCache.getTexture('B', 10, 10);
+
+      // Access A so B is oldest
+      smallCache.getTexture('A', 10, 10);
+
+      // Add C -- evicts B (oldest)
+      smallCache.getTexture('C', 10, 10);
+      expect(smallCache.hasTexture('B')).toBe(false);
+      expect(smallCache.hasTexture('A')).toBe(true);
+
+      // Add D -- evicts A (now oldest; C is newer)
+      smallCache.getTexture('D', 10, 10);
+      expect(smallCache.hasTexture('A')).toBe(false);
+      expect(smallCache.hasTexture('C')).toBe(true);
+      expect(smallCache.hasTexture('D')).toBe(true);
+    });
+
+    it('TEX-U034: maxEntries 0 does not cause infinite loop', () => {
+      const zeroCache = new TextureCacheManager(gl, { maxEntries: 0, maxMemoryBytes: 10000000 });
+
+      // Should not hang -- ensureCapacity is a no-op on empty cache, entry is added
+      const texture = zeroCache.getTexture('A', 10, 10);
+      expect(texture).toBeDefined();
+      expect(zeroCache.getMemoryUsage().entries).toBe(1);
+
+      // Second insert: ensureCapacity evicts A (size 1 >= 0, size > 0), then B is added
+      const texture2 = zeroCache.getTexture('B', 10, 10);
+      expect(texture2).toBeDefined();
+      expect(zeroCache.getMemoryUsage().entries).toBe(1);
+      expect(zeroCache.hasTexture('A')).toBe(false);
+      expect(zeroCache.hasTexture('B')).toBe(true);
+    });
+
     it('TEX-U018: evicts when memory limit exceeded', () => {
       // Small memory limit that can only hold ~2 small textures
       const smallCache = new TextureCacheManager(gl, { maxMemoryBytes: 800, maxEntries: 100 });
