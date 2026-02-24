@@ -6,6 +6,8 @@
  * - Waveform/Vectorscope: Uses point rendering with additive blending
  */
 
+import { ShaderProgram } from '../render/ShaderProgram';
+
 // Vertex shader for bar histogram - renders bars from pre-computed histogram data
 // Uses gl_VertexID to determine bar index and vertex within bar (6 vertices per bar = 2 triangles)
 const HISTOGRAM_BAR_VERTEX_SHADER = `#version 300 es
@@ -265,9 +267,10 @@ export class WebGLScopesProcessor {
   private canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
 
-  private histogramProgram: WebGLProgram | null = null;
-  private waveformProgram: WebGLProgram | null = null;
-  private vectorscopeProgram: WebGLProgram | null = null;
+  private histogramShader: ShaderProgram | null = null;
+  private waveformShader: ShaderProgram | null = null;
+  private vectorscopeShader: ShaderProgram | null = null;
+  private parallelCompileExt: object | null = null;
 
   private imageTexture: WebGLTexture | null = null;
   private histogramDataTexture: WebGLTexture | null = null;
@@ -336,6 +339,7 @@ export class WebGLScopesProcessor {
     }
 
     this.gl = gl;
+    this.parallelCompileExt = gl.getExtension('KHR_parallel_shader_compile');
 
     // Create downscaling canvas for image preprocessing
     this.downscaleCanvas = document.createElement('canvas');
@@ -359,39 +363,9 @@ export class WebGLScopesProcessor {
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
 
-    this.histogramProgram = this.createProgram(HISTOGRAM_BAR_VERTEX_SHADER, HISTOGRAM_BAR_FRAGMENT_SHADER);
-    this.waveformProgram = this.createProgram(WAVEFORM_VERTEX_SHADER, WAVEFORM_FRAGMENT_SHADER);
-    this.vectorscopeProgram = this.createProgram(VECTORSCOPE_VERTEX_SHADER, VECTORSCOPE_FRAGMENT_SHADER);
-
-    if (!this.histogramProgram || !this.waveformProgram || !this.vectorscopeProgram) {
-      console.error('Failed to create scope programs');
-      return;
-    }
-
-    this.histogramUniforms = {
-      u_histogramData: gl.getUniformLocation(this.histogramProgram, 'u_histogramData'),
-      u_channel: gl.getUniformLocation(this.histogramProgram, 'u_channel'),
-      u_maxValue: gl.getUniformLocation(this.histogramProgram, 'u_maxValue'),
-      u_logScale: gl.getUniformLocation(this.histogramProgram, 'u_logScale'),
-      u_opacity: gl.getUniformLocation(this.histogramProgram, 'u_opacity'),
-    };
-
-    this.waveformUniforms = {
-      u_image: gl.getUniformLocation(this.waveformProgram, 'u_image'),
-      u_imageSize: gl.getUniformLocation(this.waveformProgram, 'u_imageSize'),
-      u_mode: gl.getUniformLocation(this.waveformProgram, 'u_mode'),
-      u_channel: gl.getUniformLocation(this.waveformProgram, 'u_channel'),
-      u_opacity: gl.getUniformLocation(this.waveformProgram, 'u_opacity'),
-      u_waveformMaxValue: gl.getUniformLocation(this.waveformProgram, 'u_waveformMaxValue'),
-    };
-
-    this.vectorscopeUniforms = {
-      u_image: gl.getUniformLocation(this.vectorscopeProgram, 'u_image'),
-      u_imageSize: gl.getUniformLocation(this.vectorscopeProgram, 'u_imageSize'),
-      u_zoom: gl.getUniformLocation(this.vectorscopeProgram, 'u_zoom'),
-      u_opacity: gl.getUniformLocation(this.vectorscopeProgram, 'u_opacity'),
-      u_saturationScale: gl.getUniformLocation(this.vectorscopeProgram, 'u_saturationScale'),
-    };
+    this.histogramShader = new ShaderProgram(gl, HISTOGRAM_BAR_VERTEX_SHADER, HISTOGRAM_BAR_FRAGMENT_SHADER, this.parallelCompileExt);
+    this.waveformShader = new ShaderProgram(gl, WAVEFORM_VERTEX_SHADER, WAVEFORM_FRAGMENT_SHADER, this.parallelCompileExt);
+    this.vectorscopeShader = new ShaderProgram(gl, VECTORSCOPE_VERTEX_SHADER, VECTORSCOPE_FRAGMENT_SHADER, this.parallelCompileExt);
 
     this.imageTexture = gl.createTexture();
     this.histogramDataTexture = gl.createTexture();
@@ -409,51 +383,45 @@ export class WebGLScopesProcessor {
     this.isInitialized = true;
   }
 
-  private createProgram(vertexSource: string, fragmentSource: string): WebGLProgram | null {
-    const gl = this.gl;
+  private histogramUniformsResolved = false;
+  private waveformUniformsResolved = false;
+  private vectorscopeUniformsResolved = false;
 
-    const vertexShader = this.createShader(gl.VERTEX_SHADER, vertexSource);
-    const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, fragmentSource);
-
-    if (!vertexShader || !fragmentShader) {
-      return null;
-    }
-
-    const program = gl.createProgram();
-    if (!program) return null;
-
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(program));
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      return null;
-    }
-
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-
-    return program;
+  private resolveHistogramUniforms(): void {
+    if (this.histogramUniformsResolved || !this.histogramShader) return;
+    this.histogramUniforms = {
+      u_histogramData: this.histogramShader.getUniformLocation('u_histogramData'),
+      u_channel: this.histogramShader.getUniformLocation('u_channel'),
+      u_maxValue: this.histogramShader.getUniformLocation('u_maxValue'),
+      u_logScale: this.histogramShader.getUniformLocation('u_logScale'),
+      u_opacity: this.histogramShader.getUniformLocation('u_opacity'),
+    };
+    this.histogramUniformsResolved = true;
   }
 
-  private createShader(type: number, source: string): WebGLShader | null {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) return null;
+  private resolveWaveformUniforms(): void {
+    if (this.waveformUniformsResolved || !this.waveformShader) return;
+    this.waveformUniforms = {
+      u_image: this.waveformShader.getUniformLocation('u_image'),
+      u_imageSize: this.waveformShader.getUniformLocation('u_imageSize'),
+      u_mode: this.waveformShader.getUniformLocation('u_mode'),
+      u_channel: this.waveformShader.getUniformLocation('u_channel'),
+      u_opacity: this.waveformShader.getUniformLocation('u_opacity'),
+      u_waveformMaxValue: this.waveformShader.getUniformLocation('u_waveformMaxValue'),
+    };
+    this.waveformUniformsResolved = true;
+  }
 
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-
-    return shader;
+  private resolveVectorscopeUniforms(): void {
+    if (this.vectorscopeUniformsResolved || !this.vectorscopeShader) return;
+    this.vectorscopeUniforms = {
+      u_image: this.vectorscopeShader.getUniformLocation('u_image'),
+      u_imageSize: this.vectorscopeShader.getUniformLocation('u_imageSize'),
+      u_zoom: this.vectorscopeShader.getUniformLocation('u_zoom'),
+      u_opacity: this.vectorscopeShader.getUniformLocation('u_opacity'),
+      u_saturationScale: this.vectorscopeShader.getUniformLocation('u_saturationScale'),
+    };
+    this.vectorscopeUniformsResolved = true;
   }
 
   private ensureCanvasSize(width: number, height: number): void {
@@ -555,7 +523,10 @@ export class WebGLScopesProcessor {
   }
 
   isReady(): boolean {
-    return this.isInitialized;
+    return this.isInitialized
+        && (this.histogramShader?.isReady() ?? false)
+        && (this.waveformShader?.isReady() ?? false)
+        && (this.vectorscopeShader?.isReady() ?? false);
   }
 
   setImage(imageData: ImageData): void {
@@ -708,7 +679,8 @@ export class WebGLScopesProcessor {
     mode: 'rgb' | 'luminance' | 'separate' = 'rgb',
     logScale: boolean = false
   ): void {
-    if (!this.isInitialized || !this.histogramProgram || !this.histogramDataTexture) return;
+    if (!this.isInitialized || !this.histogramShader?.isReady() || !this.histogramDataTexture) return;
+    this.resolveHistogramUniforms();
     if (histogramData.maxValue === 0) return;
 
     const gl = this.gl;
@@ -738,7 +710,7 @@ export class WebGLScopesProcessor {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.useProgram(this.histogramProgram);
+    this.histogramShader!.use();
     gl.uniform1i(this.histogramUniforms.u_histogramData!, 0);
     gl.uniform1f(this.histogramUniforms.u_maxValue!, histogramData.maxValue);
     gl.uniform1i(this.histogramUniforms.u_logScale!, logScale ? 1 : 0);
@@ -784,7 +756,8 @@ export class WebGLScopesProcessor {
     mode: WaveformMode = 'luma',
     options?: WaveformRenderOptions,
   ): void {
-    if (!this.isInitialized || !this.waveformProgram || this.vertexCount === 0) return;
+    if (!this.isInitialized || !this.waveformShader?.isReady() || this.vertexCount === 0) return;
+    this.resolveWaveformUniforms();
 
     const gl = this.gl;
     const outputCtx = outputCanvas.getContext('2d');
@@ -799,7 +772,7 @@ export class WebGLScopesProcessor {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.useProgram(this.waveformProgram);
+    this.waveformShader!.use();
     gl.uniform1i(this.waveformUniforms.u_image!, 0);
     gl.uniform2f(this.waveformUniforms.u_imageSize!, this.analysisWidth, this.analysisHeight);
     const requestedIntensity = options?.intensity;
@@ -850,7 +823,8 @@ export class WebGLScopesProcessor {
     outputCanvas: HTMLCanvasElement,
     zoom: number = 1
   ): void {
-    if (!this.isInitialized || !this.vectorscopeProgram || this.vertexCount === 0) return;
+    if (!this.isInitialized || !this.vectorscopeShader?.isReady() || this.vertexCount === 0) return;
+    this.resolveVectorscopeUniforms();
 
     const gl = this.gl;
     const outputCtx = outputCanvas.getContext('2d');
@@ -864,7 +838,7 @@ export class WebGLScopesProcessor {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.useProgram(this.vectorscopeProgram);
+    this.vectorscopeShader!.use();
     gl.uniform1i(this.vectorscopeUniforms.u_image!, 0);
     gl.uniform2f(this.vectorscopeUniforms.u_imageSize!, this.analysisWidth, this.analysisHeight);
     gl.uniform1f(this.vectorscopeUniforms.u_zoom!, zoom);
@@ -888,10 +862,10 @@ export class WebGLScopesProcessor {
   dispose(): void {
     const gl = this.gl;
 
-    // Delete WebGL programs
-    if (this.histogramProgram) gl.deleteProgram(this.histogramProgram);
-    if (this.waveformProgram) gl.deleteProgram(this.waveformProgram);
-    if (this.vectorscopeProgram) gl.deleteProgram(this.vectorscopeProgram);
+    // Delete ShaderPrograms
+    this.histogramShader?.dispose();
+    this.waveformShader?.dispose();
+    this.vectorscopeShader?.dispose();
 
     // Delete textures
     if (this.imageTexture) gl.deleteTexture(this.imageTexture);
@@ -899,13 +873,16 @@ export class WebGLScopesProcessor {
     if (this.vao) gl.deleteVertexArray(this.vao);
 
     // Null out references
-    this.histogramProgram = null;
-    this.waveformProgram = null;
-    this.vectorscopeProgram = null;
+    this.histogramShader = null;
+    this.waveformShader = null;
+    this.vectorscopeShader = null;
     this.imageTexture = null;
     this.histogramDataTexture = null;
     this.vao = null;
     this.textureConfigured = false;
+    this.histogramUniformsResolved = false;
+    this.waveformUniformsResolved = false;
+    this.vectorscopeUniformsResolved = false;
 
     // Clean up helper canvases to free memory
     this.downscaleCanvas.width = 0;
@@ -929,6 +906,26 @@ export class WebGLScopesProcessor {
 
 let sharedProcessor: WebGLScopesProcessor | null = null;
 
+// Cached HDR mode state: allows callers to set HDR mode before the processor
+// is created (deferred creation). The cached values are applied when
+// getSharedScopesProcessor() first instantiates the processor.
+let cachedHDRActive: boolean = false;
+let cachedHDRHeadroom: number | null = null;
+
+/**
+ * Set HDR mode for the shared scopes processor.
+ * If the processor already exists, the mode is applied immediately.
+ * Otherwise the values are cached and applied when the processor is created.
+ */
+export function setScopesHDRMode(active: boolean, headroom?: number): void {
+  cachedHDRActive = active;
+  cachedHDRHeadroom = headroom ?? null;
+  // If processor already exists, apply immediately
+  if (sharedProcessor) {
+    sharedProcessor.setHDRMode(active, headroom);
+  }
+}
+
 export function getSharedScopesProcessor(): WebGLScopesProcessor | null {
   if (!sharedProcessor) {
     try {
@@ -936,6 +933,10 @@ export function getSharedScopesProcessor(): WebGLScopesProcessor | null {
     } catch (e) {
       console.warn('WebGL scopes processor not available:', e);
       return null;
+    }
+    // Apply cached HDR state to the newly created processor
+    if (sharedProcessor) {
+      sharedProcessor.setHDRMode(cachedHDRActive, cachedHDRHeadroom ?? undefined);
     }
   }
   return sharedProcessor;

@@ -9,6 +9,7 @@
 import type { LUT3D } from '../LUTLoader';
 import { createLUTTexture } from '../LUTLoader';
 import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from '../LUTUtils';
+import { ShaderProgram } from '../../render/ShaderProgram';
 
 // Vertex shader - simple fullscreen quad
 const VERTEX_SHADER = `#version 300 es
@@ -151,7 +152,8 @@ function createDefaultStageState(): StageState {
 
 export class GPULUTChain {
   private gl: WebGL2RenderingContext;
-  private program: WebGLProgram | null = null;
+  private shaderProgram: ShaderProgram | null = null;
+  private parallelCompileExt: object | null = null;
   private positionBuffer: WebGLBuffer | null = null;
   private texCoordBuffer: WebGLBuffer | null = null;
   private imageTexture: WebGLTexture | null = null;
@@ -162,45 +164,86 @@ export class GPULUTChain {
   private lookStage: StageState = createDefaultStageState();
   private displayStage: StageState = createDefaultStageState();
 
-  // Uniform locations
+  // Uniform locations (lazily resolved after shader is ready)
   private uniforms: Record<string, WebGLUniformLocation | null> = {};
+  private uniformsResolved = false;
 
   private isInitialized = false;
+  private attributesSetUp = false;
 
-  constructor(gl: WebGL2RenderingContext) {
+  constructor(gl: WebGL2RenderingContext, parallelCompileExt?: object | null) {
     this.gl = gl;
+    this.parallelCompileExt = parallelCompileExt ?? null;
     this.init();
   }
 
   private init(): void {
     const gl = this.gl;
 
-    // Create shader program
-    const vertexShader = this.createShader(gl.VERTEX_SHADER, VERTEX_SHADER);
-    const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
-
-    if (!vertexShader || !fragmentShader) {
-      console.error('GPULUTChain: Failed to create shaders');
+    // Create shader program using ShaderProgram
+    try {
+      this.shaderProgram = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, this.parallelCompileExt);
+    } catch (e) {
+      console.error('GPULUTChain: Failed to create shader program:', e);
       return;
     }
 
-    this.program = gl.createProgram();
-    if (!this.program) return;
+    // Create position buffer (fullscreen quad)
+    this.positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1, 1, -1, -1, 1, 1, 1,
+    ]), gl.STATIC_DRAW);
 
-    gl.attachShader(this.program, vertexShader);
-    gl.attachShader(this.program, fragmentShader);
-    gl.linkProgram(this.program);
+    // Create texture coordinate buffer
+    this.texCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      0, 0, 1, 0, 0, 1, 1, 1,
+    ]), gl.STATIC_DRAW);
 
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      console.error('GPULUTChain: Shader link error:', gl.getProgramInfoLog(this.program));
-      return;
-    }
+    // Create image texture
+    this.imageTexture = gl.createTexture();
 
-    // Get attribute locations
-    const aPosition = gl.getAttribLocation(this.program, 'a_position');
-    const aTexCoord = gl.getAttribLocation(this.program, 'a_texCoord');
+    // Create framebuffer for output
+    this.framebuffer = gl.createFramebuffer();
 
-    // Get uniform locations
+    this.isInitialized = true;
+  }
+
+  /** Deferred attribute setup - must only be called after isReady() returns true. */
+  private setUpAttributesIfNeeded(): void {
+    if (this.attributesSetUp || !this.shaderProgram) return;
+    const gl = this.gl;
+
+    const aPosition = this.shaderProgram.getAttributeLocation('a_position');
+    const aTexCoord = this.shaderProgram.getAttributeLocation('a_texCoord');
+
+    this.shaderProgram.use();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+
+    this.attributesSetUp = true;
+  }
+
+  /** Whether the shader program is fully compiled, linked, and ready for use. */
+  isReady(): boolean {
+    return this.shaderProgram?.isReady() ?? false;
+  }
+
+  /**
+   * Lazily resolve all uniform locations once the shader program is ready.
+   * Must be called before accessing this.uniforms in render paths.
+   */
+  private resolveUniformsIfNeeded(): void {
+    if (this.uniformsResolved || !this.shaderProgram) return;
+
     const uniformNames = [
       'u_image',
       'u_fileLUT', 'u_lookLUT', 'u_displayLUT',
@@ -218,58 +261,10 @@ export class GPULUTChain {
       'u_displayLUTHasInMatrix', 'u_displayLUTHasOutMatrix',
     ];
     for (const name of uniformNames) {
-      this.uniforms[name] = gl.getUniformLocation(this.program, name);
+      this.uniforms[name] = this.shaderProgram.getUniformLocation(name);
     }
 
-    // Create position buffer (fullscreen quad)
-    this.positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1, 1, -1, -1, 1, 1, 1,
-    ]), gl.STATIC_DRAW);
-
-    // Create texture coordinate buffer
-    this.texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      0, 0, 1, 0, 0, 1, 1, 1,
-    ]), gl.STATIC_DRAW);
-
-    // Set up vertex attributes
-    gl.useProgram(this.program);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.enableVertexAttribArray(aTexCoord);
-    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
-
-    // Create image texture
-    this.imageTexture = gl.createTexture();
-
-    // Create framebuffer for output
-    this.framebuffer = gl.createFramebuffer();
-
-    this.isInitialized = true;
-  }
-
-  private createShader(type: number, source: string): WebGLShader | null {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) return null;
-
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('GPULUTChain: Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-
-    return shader;
+    this.uniformsResolved = true;
   }
 
   private setStageTexture(stage: StageState, lut: LUT3D | null): void {
@@ -345,19 +340,20 @@ export class GPULUTChain {
     const hasIn = stage.inMatrix !== null;
     const hasOut = stage.outMatrix !== null;
 
-    gl.uniform1i(this.uniforms[hasInMatrixUniform]!, hasIn ? 1 : 0);
-    gl.uniform1i(this.uniforms[hasOutMatrixUniform]!, hasOut ? 1 : 0);
+    gl.uniform1i(this.uniforms[hasInMatrixUniform] ?? null, hasIn ? 1 : 0);
+    gl.uniform1i(this.uniforms[hasOutMatrixUniform] ?? null, hasOut ? 1 : 0);
 
     // Upload inMatrix (transpose=true to convert row-major to column-major for GLSL)
+    // Using gl.uniformMatrix4fv directly because ShaderProgram.setUniformMatrix4 hardcodes transpose=false
     gl.uniformMatrix4fv(
-      this.uniforms[inMatrixUniform]!,
+      this.uniforms[inMatrixUniform] ?? null,
       true, // transpose: row-major -> column-major
       hasIn ? stage.inMatrix! : IDENTITY_MATRIX_4X4,
     );
 
     // Upload outMatrix
     gl.uniformMatrix4fv(
-      this.uniforms[outMatrixUniform]!,
+      this.uniforms[outMatrixUniform] ?? null,
       true,
       hasOut ? stage.outMatrix! : IDENTITY_MATRIX_4X4,
     );
@@ -367,27 +363,29 @@ export class GPULUTChain {
    * Render the multi-LUT chain. Called during the rendering pipeline.
    */
   render(width: number, height: number): void {
-    if (!this.isInitialized || !this.program) return;
+    if (!this.isInitialized || !this.isReady()) return;
 
     const gl = this.gl;
 
-    gl.useProgram(this.program);
+    this.setUpAttributesIfNeeded();
+    this.resolveUniformsIfNeeded();
+    this.shaderProgram!.use();
 
     // Set up image texture on unit 0
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
-    gl.uniform1i(this.uniforms['u_image']!, 0);
+    gl.uniform1i(this.uniforms['u_image'] ?? null, 0);
 
     // File LUT on unit 1
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_3D, this.fileStage.texture ?? null);
-    gl.uniform1i(this.uniforms['u_fileLUT']!, 1);
-    gl.uniform1i(this.uniforms['u_fileLUTEnabled']!, (this.fileStage.lut && this.fileStage.enabled) ? 1 : 0);
-    gl.uniform1f(this.uniforms['u_fileLUTIntensity']!, this.fileStage.intensity);
+    gl.uniform1i(this.uniforms['u_fileLUT'] ?? null, 1);
+    gl.uniform1i(this.uniforms['u_fileLUTEnabled'] ?? null, (this.fileStage.lut && this.fileStage.enabled) ? 1 : 0);
+    gl.uniform1f(this.uniforms['u_fileLUTIntensity'] ?? null, this.fileStage.intensity);
     if (this.fileStage.lut) {
-      gl.uniform3fv(this.uniforms['u_fileLUTDomainMin']!, this.fileStage.lut.domainMin);
-      gl.uniform3fv(this.uniforms['u_fileLUTDomainMax']!, this.fileStage.lut.domainMax);
-      gl.uniform1f(this.uniforms['u_fileLUTSize']!, this.fileStage.lut.size);
+      gl.uniform3fv(this.uniforms['u_fileLUTDomainMin'] ?? null, this.fileStage.lut.domainMin);
+      gl.uniform3fv(this.uniforms['u_fileLUTDomainMax'] ?? null, this.fileStage.lut.domainMax);
+      gl.uniform1f(this.uniforms['u_fileLUTSize'] ?? null, this.fileStage.lut.size);
     }
     this.uploadStageMatrixUniforms(
       this.fileStage,
@@ -398,13 +396,13 @@ export class GPULUTChain {
     // Look LUT on unit 2
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_3D, this.lookStage.texture ?? null);
-    gl.uniform1i(this.uniforms['u_lookLUT']!, 2);
-    gl.uniform1i(this.uniforms['u_lookLUTEnabled']!, (this.lookStage.lut && this.lookStage.enabled) ? 1 : 0);
-    gl.uniform1f(this.uniforms['u_lookLUTIntensity']!, this.lookStage.intensity);
+    gl.uniform1i(this.uniforms['u_lookLUT'] ?? null, 2);
+    gl.uniform1i(this.uniforms['u_lookLUTEnabled'] ?? null, (this.lookStage.lut && this.lookStage.enabled) ? 1 : 0);
+    gl.uniform1f(this.uniforms['u_lookLUTIntensity'] ?? null, this.lookStage.intensity);
     if (this.lookStage.lut) {
-      gl.uniform3fv(this.uniforms['u_lookLUTDomainMin']!, this.lookStage.lut.domainMin);
-      gl.uniform3fv(this.uniforms['u_lookLUTDomainMax']!, this.lookStage.lut.domainMax);
-      gl.uniform1f(this.uniforms['u_lookLUTSize']!, this.lookStage.lut.size);
+      gl.uniform3fv(this.uniforms['u_lookLUTDomainMin'] ?? null, this.lookStage.lut.domainMin);
+      gl.uniform3fv(this.uniforms['u_lookLUTDomainMax'] ?? null, this.lookStage.lut.domainMax);
+      gl.uniform1f(this.uniforms['u_lookLUTSize'] ?? null, this.lookStage.lut.size);
     }
     this.uploadStageMatrixUniforms(
       this.lookStage,
@@ -415,13 +413,13 @@ export class GPULUTChain {
     // Display LUT on unit 3
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_3D, this.displayStage.texture ?? null);
-    gl.uniform1i(this.uniforms['u_displayLUT']!, 3);
-    gl.uniform1i(this.uniforms['u_displayLUTEnabled']!, (this.displayStage.lut && this.displayStage.enabled) ? 1 : 0);
-    gl.uniform1f(this.uniforms['u_displayLUTIntensity']!, this.displayStage.intensity);
+    gl.uniform1i(this.uniforms['u_displayLUT'] ?? null, 3);
+    gl.uniform1i(this.uniforms['u_displayLUTEnabled'] ?? null, (this.displayStage.lut && this.displayStage.enabled) ? 1 : 0);
+    gl.uniform1f(this.uniforms['u_displayLUTIntensity'] ?? null, this.displayStage.intensity);
     if (this.displayStage.lut) {
-      gl.uniform3fv(this.uniforms['u_displayLUTDomainMin']!, this.displayStage.lut.domainMin);
-      gl.uniform3fv(this.uniforms['u_displayLUTDomainMax']!, this.displayStage.lut.domainMax);
-      gl.uniform1f(this.uniforms['u_displayLUTSize']!, this.displayStage.lut.size);
+      gl.uniform3fv(this.uniforms['u_displayLUTDomainMin'] ?? null, this.displayStage.lut.domainMin);
+      gl.uniform3fv(this.uniforms['u_displayLUTDomainMax'] ?? null, this.displayStage.lut.domainMax);
+      gl.uniform1f(this.uniforms['u_displayLUTSize'] ?? null, this.displayStage.lut.size);
     }
     this.uploadStageMatrixUniforms(
       this.displayStage,
@@ -439,7 +437,7 @@ export class GPULUTChain {
    * Reads pixels, processes through GPU, writes back.
    */
   applyToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (!this.isInitialized || !this.hasAnyLUT()) return;
+    if (!this.isInitialized || !this.isReady() || !this.hasAnyLUT()) return;
 
     const gl = this.gl;
     const canvas = gl.canvas as HTMLCanvasElement;
@@ -494,12 +492,18 @@ export class GPULUTChain {
     if (this.positionBuffer) gl.deleteBuffer(this.positionBuffer);
     if (this.texCoordBuffer) gl.deleteBuffer(this.texCoordBuffer);
     if (this.framebuffer) gl.deleteFramebuffer(this.framebuffer);
-    if (this.program) gl.deleteProgram(this.program);
+    if (this.shaderProgram) {
+      this.shaderProgram.dispose();
+      this.shaderProgram = null;
+    }
 
     this.fileStage = createDefaultStageState();
     this.lookStage = createDefaultStageState();
     this.displayStage = createDefaultStageState();
 
+    this.uniforms = {};
+    this.uniformsResolved = false;
+    this.attributesSetUp = false;
     this.isInitialized = false;
   }
 }

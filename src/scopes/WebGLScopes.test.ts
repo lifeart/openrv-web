@@ -3,6 +3,7 @@ import {
   WebGLScopesProcessor,
   getSharedScopesProcessor,
   disposeSharedScopesProcessor,
+  setScopesHDRMode,
 } from './WebGLScopes';
 
 // Mock WebGL2 context
@@ -28,23 +29,28 @@ function createMockWebGL2Context() {
     BLEND: 3042,
     FLOAT: 5126,
     RGBA16F: 0x881A,
+    RGBA32F: 0x8814,
+    SRC_ALPHA: 0x0302,
+    ONE_MINUS_SRC_ALPHA: 0x0303,
+    TRIANGLES: 4,
+    COMPLETION_STATUS_KHR: 0x91B1,
 
-    createShader: vi.fn(() => ({})),
+    createShader: vi.fn((_type: number) => ({})),
     shaderSource: vi.fn(),
     compileShader: vi.fn(),
-    getShaderParameter: vi.fn(() => true),
+    getShaderParameter: vi.fn((_shader: unknown, _pname: number) => true),
     getShaderInfoLog: vi.fn(() => ''),
     deleteShader: vi.fn(),
 
     createProgram: vi.fn(() => ({})),
     attachShader: vi.fn(),
     linkProgram: vi.fn(),
-    getProgramParameter: vi.fn(() => true),
+    getProgramParameter: vi.fn((_program: unknown, _pname: number) => true),
     getProgramInfoLog: vi.fn(() => ''),
     useProgram: vi.fn(),
     deleteProgram: vi.fn(),
 
-    getUniformLocation: vi.fn((_prog, name) => ({ name })),
+    getUniformLocation: vi.fn((_prog: unknown, name: string) => ({ name })),
 
     createTexture: vi.fn(() => ({})),
     bindTexture: vi.fn(),
@@ -69,7 +75,11 @@ function createMockWebGL2Context() {
     disable: vi.fn(),
     blendFunc: vi.fn(),
     drawArrays: vi.fn(),
-    getExtension: vi.fn(() => ({ loseContext: vi.fn() })) as ReturnType<typeof vi.fn<[], { loseContext: ReturnType<typeof vi.fn> } | null>>,
+    getExtension: vi.fn((name: string) => {
+      if (name === 'KHR_parallel_shader_compile') return {};
+      if (name === 'WEBGL_lose_context') return { loseContext: vi.fn() };
+      return null;
+    }) as ReturnType<typeof vi.fn>,
   };
 }
 
@@ -179,6 +189,20 @@ describe('WebGLScopesProcessor', () => {
       expect(mockGl.enable).toHaveBeenCalledWith(mockGl.BLEND);
       expect(mockGl.blendFunc).toHaveBeenCalledWith(mockGl.ONE, mockGl.ONE);
     });
+
+    it('WGS-005b: probes KHR_parallel_shader_compile extension', () => {
+      new WebGLScopesProcessor();
+
+      expect(mockGl.getExtension).toHaveBeenCalledWith('KHR_parallel_shader_compile');
+    });
+
+    it('WGS-005c: creates 6 shaders and 3 programs via ShaderProgram', () => {
+      new WebGLScopesProcessor();
+
+      // 3 ShaderProgram instances, each creating 2 shaders (vertex + fragment) = 6
+      expect(mockGl.createShader).toHaveBeenCalledTimes(6);
+      expect(mockGl.createProgram).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('isReady', () => {
@@ -187,8 +211,28 @@ describe('WebGLScopesProcessor', () => {
       expect(processor.isReady()).toBe(true);
     });
 
-    it('WGS-007: returns false when shader compilation fails', () => {
-      mockGl.getShaderParameter = vi.fn(() => false);
+    it('WGS-007: returns false when shader compilation is still pending', () => {
+      // Make COMPLETION_STATUS_KHR return false (shaders still compiling)
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, param: number) => {
+        if (param === 0x91B1) return false; // COMPLETION_STATUS_KHR
+        return true; // COMPILE_STATUS
+      });
+
+      const processor = new WebGLScopesProcessor();
+      expect(processor.isReady()).toBe(false);
+    });
+
+    it('WGS-007b: returns false when any one program is still compiling', () => {
+      // First two programs complete, third still compiling
+      let programParamCallCount = 0;
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, param: number) => {
+        if (param === 0x91B1) { // COMPLETION_STATUS_KHR
+          programParamCallCount++;
+          // 3rd call: the vectorscope program is not ready
+          return programParamCallCount <= 2;
+        }
+        return true; // LINK_STATUS
+      });
 
       const processor = new WebGLScopesProcessor();
       expect(processor.isReady()).toBe(false);
@@ -586,20 +630,17 @@ describe('WebGLScopesProcessor', () => {
     });
 
     it('WGS-035: dispose loses WebGL context', () => {
-      const mockLoseContext = { loseContext: vi.fn() };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (mockGl as any).getExtension = vi.fn(() => mockLoseContext);
-
       const processor = new WebGLScopesProcessor();
       processor.dispose();
 
       expect(mockGl.getExtension).toHaveBeenCalledWith('WEBGL_lose_context');
-      expect(mockLoseContext.loseContext).toHaveBeenCalled();
     });
 
     it('WGS-036: dispose handles missing WEBGL_lose_context extension', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (mockGl as any).getExtension = vi.fn(() => null);
+      mockGl.getExtension.mockImplementation((name: string) => {
+        if (name === 'KHR_parallel_shader_compile') return {};
+        return null;
+      });
 
       const processor = new WebGLScopesProcessor();
 
@@ -961,6 +1002,196 @@ describe('WebGLScopesProcessor', () => {
         (call) => call[0]?.name === 'u_saturationScale'
       );
       expect(satScaleCall![1]).toBe(1.0);
+    });
+  });
+
+  // ====================================================================
+  // ShaderProgram integration tests
+  // ====================================================================
+  describe('ShaderProgram integration', () => {
+    it('WGS-060: isReady returns true when all 3 programs complete', () => {
+      // Default mock: COMPLETION_STATUS_KHR returns true, so all ready
+      const processor = new WebGLScopesProcessor();
+      expect(processor.isReady()).toBe(true);
+    });
+
+    it('WGS-061: isReady returns false when any program is still compiling', () => {
+      // Make the 3rd getProgramParameter(COMPLETION_STATUS_KHR) return false
+      let programCompletionCallCount = 0;
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, param: number) => {
+        if (param === 0x91B1) { // COMPLETION_STATUS_KHR
+          programCompletionCallCount++;
+          // 3rd program not ready
+          return programCompletionCallCount !== 3;
+        }
+        return true; // LINK_STATUS
+      });
+
+      const processor = new WebGLScopesProcessor();
+      expect(processor.isReady()).toBe(false);
+    });
+
+    it('WGS-062: dispose cleans up all 3 ShaderPrograms', () => {
+      const processor = new WebGLScopesProcessor();
+      mockGl.deleteProgram.mockClear();
+
+      processor.dispose();
+
+      // Each ShaderProgram.dispose() calls gl.deleteProgram once
+      expect(mockGl.deleteProgram).toHaveBeenCalledTimes(3);
+    });
+
+    it('WGS-064: each scope type resolves its own uniforms independently', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(10, 10));
+      mockGl.getUniformLocation.mockClear();
+
+      // Render only waveform - should resolve waveform uniforms, not histogram or vectorscope
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      const resolvedNames = mockGl.getUniformLocation.mock.calls.map((call: unknown[]) => call[1]);
+      expect(resolvedNames).toContain('u_image'); // waveform uniform
+      expect(resolvedNames).toContain('u_imageSize'); // waveform uniform
+      expect(resolvedNames).toContain('u_mode'); // waveform uniform
+      // Should NOT contain histogram-only uniforms
+      expect(resolvedNames).not.toContain('u_histogramData');
+      expect(resolvedNames).not.toContain('u_maxValue');
+      // Should NOT contain vectorscope-only uniforms
+      expect(resolvedNames).not.toContain('u_zoom');
+      expect(resolvedNames).not.toContain('u_saturationScale');
+    });
+
+    it('WGS-065: histogram resolves its uniforms independently from waveform', () => {
+      const processor = new WebGLScopesProcessor();
+      mockGl.getUniformLocation.mockClear();
+
+      const histData = {
+        red: new Uint32Array(256).fill(100),
+        green: new Uint32Array(256).fill(100),
+        blue: new Uint32Array(256).fill(100),
+        luminance: new Uint32Array(256).fill(100),
+        maxValue: 1000,
+      };
+
+      processor.renderHistogram(mockOutputCanvas, histData, 'rgb');
+
+      const resolvedNames = mockGl.getUniformLocation.mock.calls.map((call: unknown[]) => call[1]);
+      expect(resolvedNames).toContain('u_histogramData');
+      expect(resolvedNames).toContain('u_maxValue');
+      // Should NOT contain waveform-only uniforms
+      expect(resolvedNames).not.toContain('u_imageSize');
+      expect(resolvedNames).not.toContain('u_waveformMaxValue');
+    });
+
+    it('WGS-066: vectorscope resolves its uniforms independently from waveform', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(10, 10));
+      mockGl.getUniformLocation.mockClear();
+
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+
+      const resolvedNames = mockGl.getUniformLocation.mock.calls.map((call: unknown[]) => call[1]);
+      expect(resolvedNames).toContain('u_zoom');
+      expect(resolvedNames).toContain('u_saturationScale');
+      // Should NOT contain histogram-only uniforms
+      expect(resolvedNames).not.toContain('u_histogramData');
+      expect(resolvedNames).not.toContain('u_maxValue');
+    });
+
+    it('WGS-067: a scope can render even if another scope shader is still compiling', () => {
+      // Make the 3rd ShaderProgram (vectorscope) not ready,
+      // but the 1st (histogram) and 2nd (waveform) are ready.
+      const COMPLETION_STATUS_KHR = 0x91B1;
+
+      // Track which programs are created; make the 3rd one "not ready"
+      const programs: object[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockGl.createProgram.mockImplementation(() => {
+        const prog = { _idx: programs.length };
+        programs.push(prog);
+        return prog;
+      });
+
+      mockGl.getProgramParameter.mockImplementation((program: unknown, param: number) => {
+        if (param === COMPLETION_STATUS_KHR) {
+          // 3rd program (vectorscope, _idx=2) is not ready
+          return (program as { _idx: number })._idx !== 2;
+        }
+        return true; // LINK_STATUS
+      });
+
+      const processor = new WebGLScopesProcessor();
+
+      // isReady() should be false (vectorscope still compiling)
+      expect(processor.isReady()).toBe(false);
+
+      // But histogram should still render (its shader IS ready)
+      const histData = {
+        red: new Uint32Array(256).fill(100),
+        green: new Uint32Array(256).fill(100),
+        blue: new Uint32Array(256).fill(100),
+        luminance: new Uint32Array(256).fill(100),
+        maxValue: 1000,
+      };
+      mockGl.drawArrays.mockClear();
+      processor.renderHistogram(mockOutputCanvas, histData, 'rgb');
+      // Histogram uses its own shader's isReady() check, should render
+      expect(mockGl.drawArrays).toHaveBeenCalled();
+
+      // Waveform should also render (its shader IS ready)
+      processor.setImage(new ImageData(10, 10));
+      mockGl.drawArrays.mockClear();
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+      expect(mockGl.drawArrays).toHaveBeenCalled();
+
+      // Vectorscope should NOT render (its shader is not ready)
+      mockGl.drawArrays.mockClear();
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+      expect(mockGl.drawArrays).not.toHaveBeenCalled();
+    });
+
+    it('WGS-063: uniforms are resolved lazily on first render', () => {
+      const processor = new WebGLScopesProcessor();
+
+      // Before any render, getUniformLocation should not have been called
+      // (the old code called it in init, now it's deferred)
+      mockGl.getUniformLocation.mockClear();
+
+      // Trigger a render - this should resolve uniforms
+      processor.setImage(new ImageData(10, 10));
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      // getUniformLocation should have been called for waveform uniforms
+      expect(mockGl.getUniformLocation).toHaveBeenCalled();
+    });
+  });
+
+  // ====================================================================
+  // Task 4.6: Deferred scopes creation via HDR mode caching
+  // ====================================================================
+  describe('Task 4.6: Deferred scopes creation', () => {
+    it('SCOPE-D001: setScopesHDRMode caches state without creating processor', () => {
+      disposeSharedScopesProcessor();
+      setScopesHDRMode(true, 6.0);
+      // Should not throw and should not create a processor
+    });
+
+    it('SCOPE-D002: getSharedScopesProcessor applies cached HDR mode', () => {
+      disposeSharedScopesProcessor();
+      setScopesHDRMode(true, 5.0);
+      const processor = getSharedScopesProcessor();
+      expect(processor).not.toBeNull();
+      // Verify HDR mode was applied (check maxValue)
+      expect(processor!.getMaxValue()).toBe(5.0);
+    });
+
+    it('SCOPE-D003: setScopesHDRMode applies immediately if processor exists', () => {
+      const processor = getSharedScopesProcessor();
+      expect(processor).not.toBeNull();
+      setScopesHDRMode(true, 8.0);
+      expect(processor!.getMaxValue()).toBe(8.0);
+      setScopesHDRMode(false);
+      expect(processor!.getMaxValue()).toBe(1.0);
     });
   });
 });

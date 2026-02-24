@@ -50,19 +50,19 @@ function createMockGL(): WebGL2RenderingContext {
     deleteProgram: vi.fn(),
     useProgram: vi.fn(),
     linkProgram: vi.fn(),
-    getProgramParameter: vi.fn(() => true),
+    getProgramParameter: vi.fn((_program: unknown, _pname: number) => true),
     getProgramInfoLog: vi.fn(() => ''),
 
-    createShader: vi.fn(() => ({})),
+    createShader: vi.fn((_type: number) => ({})),
     deleteShader: vi.fn(),
     shaderSource: vi.fn(),
     compileShader: vi.fn(),
     attachShader: vi.fn(),
-    getShaderParameter: vi.fn(() => true),
+    getShaderParameter: vi.fn((_shader: unknown, _pname: number) => true),
     getShaderInfoLog: vi.fn(() => ''),
 
-    getAttribLocation: vi.fn(() => 0),
-    getUniformLocation: vi.fn(() => ({})),
+    getAttribLocation: vi.fn((_program: unknown, _name: string) => 0),
+    getUniformLocation: vi.fn((_program: unknown, _name: string) => ({})),
     enableVertexAttribArray: vi.fn(),
     vertexAttribPointer: vi.fn(),
 
@@ -337,6 +337,187 @@ describe('GPULUTChain', () => {
 
       // After dispose, no errors when re-initializing
       expect(chain.hasFileLUT()).toBe(false);
+    });
+  });
+
+  describe('deferred attribute setup', () => {
+    it('GCHAIN-U024: attributes are NOT set up during construction', () => {
+      // enableVertexAttribArray and vertexAttribPointer should NOT be called during init
+      expect(gl.enableVertexAttribArray).not.toHaveBeenCalled();
+      expect(gl.vertexAttribPointer).not.toHaveBeenCalled();
+    });
+
+    it('GCHAIN-U025: attributes are set up on first render()', () => {
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+
+      expect(gl.enableVertexAttribArray).toHaveBeenCalledTimes(2); // a_position + a_texCoord
+      expect(gl.vertexAttribPointer).toHaveBeenCalledTimes(2);
+    });
+
+    it('GCHAIN-U026: attributes are set up only once across multiple render calls', () => {
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+      chain.render(200, 200);
+
+      // Should still be 2 total (once per attribute), not 4
+      expect(gl.enableVertexAttribArray).toHaveBeenCalledTimes(2);
+      expect(gl.vertexAttribPointer).toHaveBeenCalledTimes(2);
+    });
+
+    it('GCHAIN-U027: attributes are NOT set up when shader is not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      const gl2 = createMockGL();
+      vi.mocked(gl2.getShaderParameter).mockImplementation(
+        (_shader: unknown, pname: number) => {
+          if (pname === COMPLETION_STATUS_KHR) return false;
+          return true;
+        },
+      );
+      vi.mocked(gl2.getProgramParameter).mockImplementation(
+        (_prog: unknown, pname: number) => {
+          if (pname === COMPLETION_STATUS_KHR) return false;
+          return true;
+        },
+      );
+
+      const chain2 = new GPULUTChain(gl2, {});
+      chain2.setFileLUT(createTestLUT3D());
+      chain2.render(100, 100);
+
+      // Shader not ready, so attributes should not be set up
+      expect(gl2.enableVertexAttribArray).not.toHaveBeenCalled();
+      expect(gl2.vertexAttribPointer).not.toHaveBeenCalled();
+      chain2.dispose();
+    });
+  });
+
+  describe('lazy uniform resolution', () => {
+    it('GCHAIN-U028: uniforms are NOT resolved during construction', () => {
+      // getUniformLocation should NOT have been called with LUT uniform names during construction
+      expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'u_image'
+      );
+    });
+
+    it('GCHAIN-U029: uniforms are resolved on first render()', () => {
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+
+      expect(gl.getUniformLocation).toHaveBeenCalledWith(
+        expect.anything(),
+        'u_image'
+      );
+      expect(gl.getUniformLocation).toHaveBeenCalledWith(
+        expect.anything(),
+        'u_fileLUT'
+      );
+    });
+  });
+
+  describe('not-ready to ready transition', () => {
+    it('GCHAIN-U030: render works after transitioning from not-ready to ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      const gl2 = createMockGL();
+      let compilationComplete = false;
+
+      vi.mocked(gl2.getShaderParameter).mockImplementation(
+        (_shader: unknown, pname: number) => {
+          if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+          return true;
+        },
+      );
+      vi.mocked(gl2.getProgramParameter).mockImplementation(
+        (_prog: unknown, pname: number) => {
+          if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+          return true;
+        },
+      );
+
+      const chain2 = new GPULUTChain(gl2, {});
+      chain2.setFileLUT(createTestLUT3D());
+
+      // Not ready yet
+      expect(chain2.isReady()).toBe(false);
+      chain2.render(100, 100);
+      expect(gl2.drawArrays).not.toHaveBeenCalled();
+
+      // Mark as complete
+      compilationComplete = true;
+      expect(chain2.isReady()).toBe(true);
+
+      // Now render should work
+      chain2.render(100, 100);
+      expect(gl2.drawArrays).toHaveBeenCalled();
+
+      chain2.dispose();
+    });
+  });
+
+  describe('dispose resets state', () => {
+    it('GCHAIN-U031: dispose resets attribute and uniform resolved state', () => {
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+
+      chain.dispose();
+
+      // After dispose, isReady should be false
+      expect(chain.isReady()).toBe(false);
+      // Uniforms and attributes should be cleared (hasAnyLUT returns false since stages are reset)
+      expect(chain.hasFileLUT()).toBe(false);
+      expect(chain.hasAnyLUT()).toBe(false);
+    });
+  });
+
+  describe('ShaderProgram integration', () => {
+    it('GCHAIN-U021: accepts parallelCompileExt in constructor', () => {
+      const gl2 = createMockGL();
+      const ext = {};
+      // Should not throw when passing the extension
+      const chain2 = new GPULUTChain(gl2, ext);
+      expect(chain2).toBeDefined();
+      chain2.dispose();
+    });
+
+    it('GCHAIN-U022: isReady() returns true when compilation complete', () => {
+      // Default mock returns true for all parameters (sync path), so isReady() should be true
+      expect(chain.isReady()).toBe(true);
+    });
+
+    it('GCHAIN-U023: render() is no-op when shader not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      const gl2 = createMockGL();
+
+      // Override getProgramParameter to return false for COMPLETION_STATUS_KHR
+      // and true for everything else (LINK_STATUS, COMPILE_STATUS, etc.)
+      vi.mocked(gl2.getProgramParameter).mockImplementation(
+        (_prog: unknown, pname: number) => {
+          if (pname === COMPLETION_STATUS_KHR) return false;
+          return true;
+        },
+      );
+      // Override getShaderParameter to return false for COMPLETION_STATUS_KHR
+      // and true for COMPILE_STATUS
+      vi.mocked(gl2.getShaderParameter).mockImplementation(
+        (_shader: unknown, pname: number) => {
+          if (pname === COMPLETION_STATUS_KHR) return false;
+          return true;
+        },
+      );
+
+      // Pass a non-null ext to enable the parallel compile path
+      const chain2 = new GPULUTChain(gl2, {});
+      chain2.setFileLUT(createTestLUT3D());
+
+      // isReady() should be false because COMPLETION_STATUS_KHR returns false
+      expect(chain2.isReady()).toBe(false);
+
+      // render() should be a no-op since shader is not ready
+      chain2.render(100, 100);
+      expect(gl2.drawArrays).not.toHaveBeenCalled();
+
+      chain2.dispose();
     });
   });
 });

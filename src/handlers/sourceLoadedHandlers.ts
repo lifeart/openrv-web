@@ -5,7 +5,7 @@
 
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { EXRChannelRemapping } from '../formats/EXRDecoder';
-import { getSharedScopesProcessor } from '../scopes/WebGLScopes';
+import { setScopesHDRMode } from '../scopes/WebGLScopes';
 
 /**
  * Handle sourceLoaded event: update info panel, crop, OCIO, HDR auto-config,
@@ -54,7 +54,6 @@ export function handleSourceLoaded(
   const viewer = context.getViewer();
   const isHDRDisplay = viewer.isDisplayHDRCapable();
   const histogram = context.getHistogram();
-  const scopesProcessor = getSharedScopesProcessor();
 
   if (isHDR) {
     const formatName = source?.fileSourceNode?.formatName ?? 'unknown';
@@ -78,7 +77,7 @@ export function handleSourceLoaded(
       }
 
       histogram.setHDRMode(true, Math.max(headroom, 4.0));
-      scopesProcessor?.setHDRMode(true, Math.max(headroom, 4.0));
+      setScopesHDRMode(true, Math.max(headroom, 4.0));
     } else {
       // SDR display: apply ACES tone mapping + gamma 2.2 to compress HDR to displayable range.
       // Scopes analyze the tone-mapped output which is SDR range (0-1.0).
@@ -86,11 +85,11 @@ export function handleSourceLoaded(
       context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
       context.getColorControls().setAdjustments({ gamma: 2.2 });
       histogram.setHDRMode(false);
-      scopesProcessor?.setHDRMode(false);
+      setScopesHDRMode(false);
     }
   } else {
     histogram.setHDRMode(false);
-    scopesProcessor?.setHDRMode(false);
+    setScopesHDRMode(false);
   }
 
   // GTO store and stack updates

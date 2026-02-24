@@ -107,7 +107,8 @@ export class ColorPipelineManager {
         preserveDrawingBuffer: false,
       });
       if (chainGl) {
-        this._gpuLUTChain = new GPULUTChain(chainGl);
+        const parallelCompileExt = chainGl.getExtension('KHR_parallel_shader_compile');
+        this._gpuLUTChain = new GPULUTChain(chainGl, parallelCompileExt);
       }
     } catch (e) {
       console.warn('GPU LUT chain not available:', e);

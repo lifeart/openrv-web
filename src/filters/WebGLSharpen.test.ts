@@ -72,7 +72,7 @@ describe('WebGLSharpenProcessor', () => {
     });
 
     it('WGS-006: returns false when shader compilation fails', () => {
-      mockGl.getShaderParameter = vi.fn(() => false);
+      mockGl.getShaderParameter.mockImplementation(() => false);
 
       const processor = new WebGLSharpenProcessor();
       expect(processor.isReady()).toBe(false);
@@ -128,7 +128,10 @@ describe('WebGLSharpenProcessor', () => {
 
       expect(mockGl.uniform1i).toHaveBeenCalled(); // u_image
       expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.anything(), 0.5); // u_amount = 50/100
-      expect(mockGl.uniform2f).toHaveBeenCalledWith(expect.anything(), 0.01, 0.01); // u_texelSize
+      expect(mockGl.uniform2fv).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(Float32Array),
+      ); // u_texelSize via ShaderProgram.setUniform
     });
 
     it('WGS-012: uploads texture with correct parameters', () => {
@@ -213,6 +216,171 @@ describe('WebGLSharpenProcessor', () => {
       const processor2 = getSharedSharpenProcessor();
 
       expect(processor1).not.toBe(processor2);
+    });
+  });
+
+  describe('ShaderProgram integration', () => {
+    it('WGS-022: constructor probes KHR_parallel_shader_compile extension', () => {
+      new WebGLSharpenProcessor();
+
+      expect(mockGl.getExtension).toHaveBeenCalledWith('KHR_parallel_shader_compile');
+    });
+
+    it('WGS-023: isReady() returns true when ShaderProgram reports ready', () => {
+      // Default mock: getShaderParameter and getProgramParameter both return true,
+      // so parallel compilation finalization succeeds immediately on first isReady() poll.
+      const processor = new WebGLSharpenProcessor();
+      expect(processor.isReady()).toBe(true);
+    });
+
+    it('WGS-024: isReady() returns false during parallel compilation', () => {
+      // Override getShaderParameter to return false for COMPLETION_STATUS_KHR
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true; // COMPILE_STATUS
+      });
+
+      const processor = new WebGLSharpenProcessor();
+      expect(processor.isReady()).toBe(false);
+    });
+
+    it('WGS-025: apply() returns original imageData when shader not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+
+      const processor = new WebGLSharpenProcessor();
+      const imageData = new ImageData(10, 10);
+
+      const result = processor.apply(imageData, 50);
+
+      expect(result).toBe(imageData);
+      expect(mockGl.drawArrays).not.toHaveBeenCalled();
+    });
+
+    it('WGS-026: dispose() cleans up ShaderProgram resources', () => {
+      const processor = new WebGLSharpenProcessor();
+      processor.dispose();
+
+      // ShaderProgram.dispose() calls deleteProgram, and the processor
+      // also cleans up buffers and textures
+      expect(mockGl.deleteProgram).toHaveBeenCalled();
+      expect(mockGl.deleteBuffer).toHaveBeenCalledTimes(2);
+      expect(mockGl.deleteTexture).toHaveBeenCalled();
+    });
+
+    it('WGS-027: uses ShaderProgram for shader creation (createShader 2x, createProgram 1x, linkProgram 1x)', () => {
+      new WebGLSharpenProcessor();
+
+      // ShaderProgram constructor calls createShader twice (vertex + fragment)
+      expect(mockGl.createShader).toHaveBeenCalledTimes(2);
+      // ShaderProgram constructor calls createProgram once
+      expect(mockGl.createProgram).toHaveBeenCalledTimes(1);
+      // ShaderProgram constructor calls linkProgram once
+      expect(mockGl.linkProgram).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('deferred attribute setup', () => {
+    it('WGS-028: attributes are NOT set up during construction', () => {
+      new WebGLSharpenProcessor();
+
+      // enableVertexAttribArray and vertexAttribPointer should NOT be called during init
+      expect(mockGl.enableVertexAttribArray).not.toHaveBeenCalled();
+      expect(mockGl.vertexAttribPointer).not.toHaveBeenCalled();
+    });
+
+    it('WGS-029: attributes are set up on first apply() when ready', () => {
+      const processor = new WebGLSharpenProcessor();
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 50);
+
+      // After first apply, attributes should be set up
+      expect(mockGl.enableVertexAttribArray).toHaveBeenCalledTimes(2); // a_position + a_texCoord
+      expect(mockGl.vertexAttribPointer).toHaveBeenCalledTimes(2);
+    });
+
+    it('WGS-030: attributes are set up only once across multiple apply calls', () => {
+      const processor = new WebGLSharpenProcessor();
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 50);
+      processor.apply(imageData, 75);
+
+      // Should still be called only twice (once per attribute), not four times
+      expect(mockGl.enableVertexAttribArray).toHaveBeenCalledTimes(2);
+      expect(mockGl.vertexAttribPointer).toHaveBeenCalledTimes(2);
+    });
+
+    it('WGS-031: attributes are NOT set up if shader is not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+
+      const processor = new WebGLSharpenProcessor();
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 50);
+
+      // Shader not ready, so attributes should not be set up
+      expect(mockGl.enableVertexAttribArray).not.toHaveBeenCalled();
+      expect(mockGl.vertexAttribPointer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('not-ready to ready transition', () => {
+    it('WGS-032: apply works after transitioning from not-ready to ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      let compilationComplete = false;
+
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+        return true;
+      });
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+        return true;
+      });
+
+      const processor = new WebGLSharpenProcessor();
+      const imageData = new ImageData(10, 10);
+
+      // Not ready yet
+      expect(processor.isReady()).toBe(false);
+      let result = processor.apply(imageData, 50);
+      expect(result).toBe(imageData);
+      expect(mockGl.drawArrays).not.toHaveBeenCalled();
+
+      // Mark as complete
+      compilationComplete = true;
+      expect(processor.isReady()).toBe(true);
+
+      // Now apply should process
+      result = processor.apply(imageData, 50);
+      expect(result).not.toBe(imageData);
+      expect(mockGl.drawArrays).toHaveBeenCalled();
+    });
+  });
+
+  describe('dispose and re-init', () => {
+    it('WGS-033: dispose resets attribute setup state', () => {
+      const processor = new WebGLSharpenProcessor();
+      const imageData = new ImageData(10, 10);
+
+      // First apply sets up attributes
+      processor.apply(imageData, 50);
+      expect(mockGl.enableVertexAttribArray).toHaveBeenCalledTimes(2);
+
+      processor.dispose();
+
+      // After dispose, isReady should be false
+      expect(processor.isReady()).toBe(false);
     });
   });
 

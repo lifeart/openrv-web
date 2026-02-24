@@ -5,6 +5,8 @@
  * Significantly faster than CPU-based sharpen for large images.
  */
 
+import { ShaderProgram } from '../render/ShaderProgram';
+
 // Vertex shader - simple fullscreen quad
 const VERTEX_SHADER = `#version 300 es
 precision highp float;
@@ -68,17 +70,12 @@ void main() {
 export class WebGLSharpenProcessor {
   private canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
-  private program: WebGLProgram | null = null;
+  private shaderProgram: ShaderProgram | null = null;
+  private parallelCompileExt: object | null = null;
   private positionBuffer: WebGLBuffer | null = null;
   private texCoordBuffer: WebGLBuffer | null = null;
   private imageTexture: WebGLTexture | null = null;
-
-  private isInitialized = false;
-
-  // Uniform locations
-  private uImage: WebGLUniformLocation | null = null;
-  private uAmount: WebGLUniformLocation | null = null;
-  private uTexelSize: WebGLUniformLocation | null = null;
+  private attributesSetUp = false;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -92,41 +89,15 @@ export class WebGLSharpenProcessor {
     }
 
     this.gl = gl;
+    this.parallelCompileExt = gl.getExtension('KHR_parallel_shader_compile');
     this.init();
   }
 
   private init(): void {
     const gl = this.gl;
 
-    // Create shader program
-    const vertexShader = this.createShader(gl.VERTEX_SHADER, VERTEX_SHADER);
-    const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
-
-    if (!vertexShader || !fragmentShader) {
-      console.error('Failed to create shaders');
-      return;
-    }
-
-    this.program = gl.createProgram();
-    if (!this.program) return;
-
-    gl.attachShader(this.program, vertexShader);
-    gl.attachShader(this.program, fragmentShader);
-    gl.linkProgram(this.program);
-
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      console.error('Shader program link error:', gl.getProgramInfoLog(this.program));
-      return;
-    }
-
-    // Get attribute locations
-    const aPosition = gl.getAttribLocation(this.program, 'a_position');
-    const aTexCoord = gl.getAttribLocation(this.program, 'a_texCoord');
-
-    // Get uniform locations
-    this.uImage = gl.getUniformLocation(this.program, 'u_image');
-    this.uAmount = gl.getUniformLocation(this.program, 'u_amount');
-    this.uTexelSize = gl.getUniformLocation(this.program, 'u_texelSize');
+    // Create shader program using ShaderProgram class
+    this.shaderProgram = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, this.parallelCompileExt);
 
     // Create position buffer (fullscreen quad)
     this.positionBuffer = gl.createBuffer();
@@ -148,8 +119,24 @@ export class WebGLSharpenProcessor {
       1, 1,
     ]), gl.STATIC_DRAW);
 
-    // Set up VAO-like state (WebGL2)
-    gl.useProgram(this.program);
+    // Create image texture
+    this.imageTexture = gl.createTexture();
+  }
+
+  /**
+   * Set up vertex attributes once the shader program is ready.
+   * This is deferred because attribute locations cannot be queried
+   * reliably until compilation is complete.
+   */
+  private setupAttributes(): void {
+    if (this.attributesSetUp || !this.shaderProgram) return;
+
+    const gl = this.gl;
+
+    const aPosition = this.shaderProgram.getAttributeLocation('a_position');
+    const aTexCoord = this.shaderProgram.getAttributeLocation('a_texCoord');
+
+    this.shaderProgram.use();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
     gl.enableVertexAttribArray(aPosition);
@@ -159,34 +146,14 @@ export class WebGLSharpenProcessor {
     gl.enableVertexAttribArray(aTexCoord);
     gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
 
-    // Create image texture
-    this.imageTexture = gl.createTexture();
-
-    this.isInitialized = true;
-  }
-
-  private createShader(type: number, source: string): WebGLShader | null {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) return null;
-
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-
-    return shader;
+    this.attributesSetUp = true;
   }
 
   /**
    * Check if the processor is ready to use
    */
   isReady(): boolean {
-    return this.isInitialized;
+    return this.shaderProgram?.isReady() ?? false;
   }
 
   /**
@@ -196,8 +163,13 @@ export class WebGLSharpenProcessor {
    * @returns Sharpened image data
    */
   apply(imageData: ImageData, amount: number): ImageData {
-    if (!this.isInitialized || amount <= 0) {
+    if (!this.isReady() || amount <= 0) {
       return imageData;
+    }
+
+    // Lazy-init vertex attributes on first ready frame
+    if (!this.attributesSetUp) {
+      this.setupAttributes();
     }
 
     const gl = this.gl;
@@ -220,10 +192,10 @@ export class WebGLSharpenProcessor {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     // Use program and set uniforms
-    gl.useProgram(this.program);
-    gl.uniform1i(this.uImage, 0);
-    gl.uniform1f(this.uAmount, amount / 100); // Normalize to 0-1
-    gl.uniform2f(this.uTexelSize, 1.0 / width, 1.0 / height);
+    this.shaderProgram!.use();
+    this.shaderProgram!.setUniformInt('u_image', 0);
+    this.shaderProgram!.setUniform('u_amount', amount / 100); // Normalize to 0-1
+    this.shaderProgram!.setUniform('u_texelSize', [1.0 / width, 1.0 / height]);
 
     // Render to canvas
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -243,7 +215,7 @@ export class WebGLSharpenProcessor {
    * @param amount Sharpen amount (0-100)
    */
   applyInPlace(imageData: ImageData, amount: number): void {
-    if (!this.isInitialized || amount <= 0) {
+    if (!this.isReady() || amount <= 0) {
       return;
     }
 
@@ -257,12 +229,13 @@ export class WebGLSharpenProcessor {
   dispose(): void {
     const gl = this.gl;
 
-    if (this.program) gl.deleteProgram(this.program);
+    this.shaderProgram?.dispose();
+    this.shaderProgram = null;
     if (this.positionBuffer) gl.deleteBuffer(this.positionBuffer);
     if (this.texCoordBuffer) gl.deleteBuffer(this.texCoordBuffer);
     if (this.imageTexture) gl.deleteTexture(this.imageTexture);
 
-    this.isInitialized = false;
+    this.attributesSetUp = false;
   }
 }
 

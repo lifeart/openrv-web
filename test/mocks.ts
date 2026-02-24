@@ -53,7 +53,10 @@ export function createMockRendererGL(
       // If unsupported, silently ignore (like real browsers)
     },
     drawingBufferStorage: opts.supportDrawingBufferStorage ? vi.fn() : undefined,
-    getExtension: vi.fn(() => null),
+    getExtension: vi.fn((name: string) => {
+      if (name === 'KHR_parallel_shader_compile') return {};
+      return null;
+    }),
     createProgram: vi.fn(() => ({})),
     attachShader: vi.fn(),
     linkProgram: vi.fn(),
@@ -128,6 +131,7 @@ export function createMockRendererGL(
     TEXTURE_3D: 0x806f,
     TEXTURE_WRAP_R: 0x8072,
     TEXTURE3: 0x84c3,
+    COMPLETION_STATUS_KHR: 0x91B1,
   } as unknown as WebGL2RenderingContext;
 
   return gl;
@@ -271,22 +275,24 @@ export function createMockWebGL2Context() {
     RGBA16F: 0x881a,
     RGBA8: 0x8058,
     RGB32F: 0x8815,
+    COMPLETION_STATUS_KHR: 0x91B1,
 
     getExtension: vi.fn((name: string) => {
       if (name === 'EXT_color_buffer_float') return {};
       if (name === 'OES_texture_float_linear') return {};
+      if (name === 'KHR_parallel_shader_compile') return {};
       return null;
     }),
     getError: vi.fn(() => 0),
 
-    createShader: vi.fn(() => {
+    createShader: vi.fn((_type: number) => {
       const shader = {};
       shaders.push(shader);
       return shader;
     }),
     shaderSource: vi.fn(),
     compileShader: vi.fn(),
-    getShaderParameter: vi.fn(() => true),
+    getShaderParameter: vi.fn((_shader: unknown, _pname: number) => true),
     getShaderInfoLog: vi.fn(() => ''),
     deleteShader: vi.fn(),
 
@@ -297,7 +303,7 @@ export function createMockWebGL2Context() {
     }),
     attachShader: vi.fn(),
     linkProgram: vi.fn(),
-    getProgramParameter: vi.fn(() => true),
+    getProgramParameter: vi.fn((_program: unknown, _pname: number) => true),
     getProgramInfoLog: vi.fn(() => ''),
     useProgram: vi.fn(),
     deleteProgram: vi.fn(),
@@ -341,7 +347,9 @@ export function createMockWebGL2Context() {
 
     uniform1i: vi.fn(),
     uniform1f: vi.fn(),
+    uniform1fv: vi.fn(),
     uniform2f: vi.fn(),
+    uniform2fv: vi.fn(),
     uniform3fv: vi.fn(),
     uniformMatrix4fv: vi.fn(),
 

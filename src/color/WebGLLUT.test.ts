@@ -245,6 +245,208 @@ describe('WebGLLUTProcessor', () => {
     });
   });
 
+  describe('ShaderProgram integration', () => {
+    it('WLUT-017: constructor probes KHR_parallel_shader_compile', () => {
+      new WebGLLUTProcessor();
+
+      expect(mockGl.getExtension).toHaveBeenCalledWith('KHR_parallel_shader_compile');
+    });
+
+    it('WLUT-018: apply() returns original when shader not ready', () => {
+      // Make COMPLETION_STATUS_KHR return false to simulate compilation in progress
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true; // COMPILE_STATUS
+      });
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true; // LINK_STATUS
+      });
+
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      // Shader is still compiling, so apply should return original data
+      const result = processor.apply(imageData, 1.0);
+      expect(result).toBe(imageData);
+    });
+
+    it('WLUT-019: applyFloat() returns original data when shader not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const floatData = new Float32Array(10 * 10 * 4);
+      floatData[0] = 0.5;
+
+      const result = processor.applyFloat(floatData, 10, 10, 1.0);
+      expect(result).toBe(floatData);
+    });
+
+    it('WLUT-020: dispose() cleans up ShaderProgram', () => {
+      const processor = new WebGLLUTProcessor();
+
+      // deleteProgram is called by ShaderProgram.dispose()
+      mockGl.deleteProgram.mockClear();
+
+      processor.dispose();
+
+      // ShaderProgram.dispose() calls gl.deleteProgram
+      expect(mockGl.deleteProgram).toHaveBeenCalled();
+    });
+
+    it('WLUT-021: apply() works after shader becomes ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      let compilationComplete = false;
+
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+        return true; // COMPILE_STATUS
+      });
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+        return true; // LINK_STATUS
+      });
+
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      // Not ready yet
+      expect(processor.apply(imageData, 1.0)).toBe(imageData);
+
+      // Mark compilation as complete
+      compilationComplete = true;
+
+      // Now apply should process the image
+      const result = processor.apply(imageData, 1.0);
+      expect(result).not.toBe(imageData);
+      expect(mockGl.drawArrays).toHaveBeenCalled();
+    });
+
+    it('WLUT-022: isReady() returns false after dispose()', () => {
+      const processor = new WebGLLUTProcessor();
+      expect(processor.isReady()).toBe(true);
+
+      processor.dispose();
+      expect(processor.isReady()).toBe(false);
+    });
+  });
+
+  describe('deferred attribute setup', () => {
+    it('WLUT-023: attributes are NOT set up during construction', () => {
+      new WebGLLUTProcessor();
+
+      // enableVertexAttribArray and vertexAttribPointer should NOT be called during init
+      expect(mockGl.enableVertexAttribArray).not.toHaveBeenCalled();
+      expect(mockGl.vertexAttribPointer).not.toHaveBeenCalled();
+    });
+
+    it('WLUT-024: attributes are set up on first apply() when ready', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 1.0);
+
+      expect(mockGl.enableVertexAttribArray).toHaveBeenCalledTimes(2);
+      expect(mockGl.vertexAttribPointer).toHaveBeenCalledTimes(2);
+    });
+
+    it('WLUT-025: attributes are set up only once across multiple apply calls', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 1.0);
+      processor.apply(imageData, 0.5);
+
+      // Should be called only 2 times total (once per attribute), not 4
+      expect(mockGl.enableVertexAttribArray).toHaveBeenCalledTimes(2);
+      expect(mockGl.vertexAttribPointer).toHaveBeenCalledTimes(2);
+    });
+
+    it('WLUT-026: attributes are NOT set up when shader is not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91B1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 1.0);
+
+      expect(mockGl.enableVertexAttribArray).not.toHaveBeenCalled();
+      expect(mockGl.vertexAttribPointer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('lazy uniform resolution', () => {
+    it('WLUT-027: uniforms are NOT resolved during construction', () => {
+      new WebGLLUTProcessor();
+
+      // getUniformLocation should NOT have been called with LUT-specific uniform names
+      expect(mockGl.getUniformLocation).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'u_image'
+      );
+    });
+
+    it('WLUT-028: uniforms are resolved on first apply()', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 1.0);
+
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
+        expect.anything(),
+        'u_image'
+      );
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
+        expect.anything(),
+        'u_lut'
+      );
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
+        expect.anything(),
+        'u_intensity'
+      );
+    });
+  });
+
+  describe('dispose and state reset', () => {
+    it('WLUT-029: dispose resets attribute and uniform resolved flags', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      // First apply sets up everything
+      processor.apply(imageData, 1.0);
+
+      processor.dispose();
+
+      // After dispose, isReady should be false
+      expect(processor.isReady()).toBe(false);
+    });
+  });
+
   describe('image orientation', () => {
     it('WLUT-011: preserves vertical orientation (top row stays at top)', () => {
       // Create a mock that returns a vertically asymmetric pattern

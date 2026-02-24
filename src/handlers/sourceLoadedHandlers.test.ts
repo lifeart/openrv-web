@@ -12,6 +12,7 @@ import {
   updateEXRLayers,
   handleEXRLayerChange,
 } from './sourceLoadedHandlers';
+import * as WebGLScopes from '../scopes/WebGLScopes';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
 function createMockContext(overrides: {
@@ -399,6 +400,82 @@ describe('handleSourceLoaded', () => {
     // Video HDR: display handles HLG/PQ natively — no tone mapping
     expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+  });
+
+  it('SLH-U024: calls setScopesHDRMode(false) for SDR content', () => {
+    const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.jpg',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => false },
+      },
+    });
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(spy).toHaveBeenCalledWith(false);
+    spy.mockRestore();
+  });
+
+  it('SLH-U025: calls setScopesHDRMode(true, headroom) for HDR on HDR display', () => {
+    const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(spy).toHaveBeenCalledWith(true, expect.any(Number));
+    const headroom = spy.mock.calls[0]![1];
+    expect(headroom).toBeGreaterThanOrEqual(4.0);
+    spy.mockRestore();
+  });
+
+  it('SLH-U026: calls setScopesHDRMode(false) for HDR content on SDR display', () => {
+    const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+    // Default: SDR display (isDisplayHDRCapable returns false)
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(spy).toHaveBeenCalledWith(false);
+    spy.mockRestore();
+  });
+
+  it('SLH-U027: calls setScopesHDRMode instead of creating scopes processor directly', () => {
+    // Verify that the handler delegates to setScopesHDRMode and does not import/call
+    // getSharedScopesProcessor or create a WebGLScopesProcessor directly
+    const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.mov',
+        width: 100,
+        height: 100,
+        videoSourceNode: { isHDR: () => true },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // setScopesHDRMode should be called (deferred creation pattern)
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it('SLH-U021c: SDR display + JPEG gainmap → ACES + gamma 2.2 (unchanged)', () => {

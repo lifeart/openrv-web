@@ -82,16 +82,18 @@ export class ShaderProgram {
       log.info('Shader program created with parallel compilation (KHR_parallel_shader_compile)');
     } else {
       // Synchronous path (original behavior): check status immediately.
-      this.checkShaderCompileStatus(vertShader);
-      this.checkShaderCompileStatus(fragShader);
-      this.checkProgramLinkStatus();
-
-      // Clean up shaders after linking
-      gl.deleteShader(vertShader);
-      gl.deleteShader(fragShader);
-      this.vertShader = null;
-      this.fragShader = null;
-      this._ready = true;
+      try {
+        this.checkShaderCompileStatus(vertShader);
+        this.checkShaderCompileStatus(fragShader);
+        this.checkProgramLinkStatus();
+        this._ready = true;
+      } finally {
+        // Clean up shaders regardless of success/failure
+        gl.deleteShader(vertShader);
+        gl.deleteShader(fragShader);
+        this.vertShader = null;
+        this.fragShader = null;
+      }
     }
   }
 
@@ -113,7 +115,6 @@ export class ShaderProgram {
     const gl = this.gl;
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
       const error = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
       throw new RenderError(`Shader compile error: ${error}`);
     }
   }
@@ -251,7 +252,7 @@ export class ShaderProgram {
 
     if (typeof value === 'number') {
       // Check if integer or float based on name convention or value
-      if (Number.isInteger(value) && (name.startsWith('u_') && name.includes('texture') || name.includes('sampler'))) {
+      if (Number.isInteger(value) && ((name.startsWith('u_') && name.includes('texture')) || name.includes('sampler'))) {
         gl.uniform1i(location, value);
       } else {
         gl.uniform1f(location, value);

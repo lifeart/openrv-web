@@ -5,6 +5,7 @@
  */
 
 import { NoiseReductionParams, applyNoiseReduction } from './NoiseReduction';
+import { ShaderProgram } from '../render/ShaderProgram';
 
 // Maximum radius supported by the bilateral filter kernel
 // This is hardcoded in the shader loop bounds for GPU efficiency
@@ -93,19 +94,28 @@ void main() {
 
 export class WebGLNoiseReductionProcessor {
   private gl: WebGL2RenderingContext;
-  private program: WebGLProgram;
+  private shaderProgram: ShaderProgram | null = null;
+  private parallelCompileExt: object | null = null;
   private positionBuffer: WebGLBuffer;
   private texCoordBuffer: WebGLBuffer;
   private sourceTexture: WebGLTexture;
   private framebuffer: WebGLFramebuffer;
   private outputTexture: WebGLTexture;
   private uniforms: {
-    image: WebGLUniformLocation;
-    strength: WebGLUniformLocation;
-    rangeSigma: WebGLUniformLocation;
-    radius: WebGLUniformLocation;
-    resolution: WebGLUniformLocation;
+    image: WebGLUniformLocation | null;
+    strength: WebGLUniformLocation | null;
+    rangeSigma: WebGLUniformLocation | null;
+    radius: WebGLUniformLocation | null;
+    resolution: WebGLUniformLocation | null;
+  } = {
+    image: null,
+    strength: null,
+    rangeSigma: null,
+    radius: null,
+    resolution: null,
   };
+  private uniformsResolved = false;
+  private attributesSetUp = false;
   private width = 0;
   private height = 0;
 
@@ -121,17 +131,11 @@ export class WebGLNoiseReductionProcessor {
 
     this.gl = gl;
 
-    // Create shader program
-    this.program = this.createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
+    // Probe for parallel shader compile extension
+    this.parallelCompileExt = gl.getExtension('KHR_parallel_shader_compile');
 
-    // Get uniform locations
-    this.uniforms = {
-      image: gl.getUniformLocation(this.program, 'u_image')!,
-      strength: gl.getUniformLocation(this.program, 'u_strength')!,
-      rangeSigma: gl.getUniformLocation(this.program, 'u_rangeSigma')!,
-      radius: gl.getUniformLocation(this.program, 'u_radius')!,
-      resolution: gl.getUniformLocation(this.program, 'u_resolution')!,
-    };
+    // Create shader program
+    this.shaderProgram = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, this.parallelCompileExt);
 
     // Create buffers
     this.positionBuffer = this.createPositionBuffer();
@@ -143,41 +147,46 @@ export class WebGLNoiseReductionProcessor {
     this.framebuffer = gl.createFramebuffer()!;
   }
 
-  private createShader(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type)!;
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const error = gl.getShaderInfoLog(shader);
-      gl.deleteShader(shader);
-      throw new Error(`Shader compile error: ${error}`);
-    }
-
-    return shader;
+  /**
+   * Resolve uniform locations from the ShaderProgram.
+   * Called lazily once the shader program is ready.
+   */
+  private resolveUniforms(): void {
+    if (this.uniformsResolved || !this.shaderProgram) return;
+    this.uniforms = {
+      image: this.shaderProgram.getUniformLocation('u_image'),
+      strength: this.shaderProgram.getUniformLocation('u_strength'),
+      rangeSigma: this.shaderProgram.getUniformLocation('u_rangeSigma'),
+      radius: this.shaderProgram.getUniformLocation('u_radius'),
+      resolution: this.shaderProgram.getUniformLocation('u_resolution'),
+    };
+    this.uniformsResolved = true;
   }
 
-  private createProgram(vertexSource: string, fragmentSource: string): WebGLProgram {
+  /**
+   * Whether the shader program is compiled and ready for use.
+   */
+  isReady(): boolean {
+    return this.shaderProgram?.isReady() ?? false;
+  }
+
+  /** Deferred attribute setup - called once after isReady() returns true. */
+  private setUpAttributesIfNeeded(): void {
+    if (this.attributesSetUp || !this.shaderProgram) return;
     const gl = this.gl;
-    const vertexShader = this.createShader(gl.VERTEX_SHADER, vertexSource);
-    const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, fragmentSource);
 
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
+    const positionLocation = this.shaderProgram.getAttributeLocation('a_position');
+    const texCoordLocation = this.shaderProgram.getAttributeLocation('a_texCoord');
 
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const error = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      throw new Error(`Program link error: ${error}`);
-    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
+    gl.enableVertexAttribArray(texCoordLocation);
+    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-    return program;
+    this.attributesSetUp = true;
   }
 
   private createPositionBuffer(): WebGLBuffer {
@@ -241,6 +250,14 @@ export class WebGLNoiseReductionProcessor {
       return imageData;
     }
 
+    // Early-out if shader program is not yet compiled
+    if (!this.isReady()) {
+      return imageData;
+    }
+
+    // Resolve uniforms lazily once the program is ready
+    this.resolveUniforms();
+
     // Resize if needed
     if (width !== this.width || height !== this.height) {
       this.width = width;
@@ -263,7 +280,7 @@ export class WebGLNoiseReductionProcessor {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.outputTexture, 0);
 
     // Use program
-    gl.useProgram(this.program);
+    this.shaderProgram!.use();
 
     // Set uniforms
     // Clamp radius to MAX_FILTER_RADIUS (hardcoded shader loop bounds)
@@ -278,17 +295,8 @@ export class WebGLNoiseReductionProcessor {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
 
-    // Set up attributes
-    const positionLocation = gl.getAttribLocation(this.program, 'a_position');
-    const texCoordLocation = gl.getAttribLocation(this.program, 'a_texCoord');
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+    // Set up attributes (deferred, runs once)
+    this.setUpAttributesIfNeeded();
 
     // Draw
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -310,17 +318,22 @@ export class WebGLNoiseReductionProcessor {
     if (params.strength === 0) return;
 
     const result = this.process(imageData, params);
-    imageData.data.set(result.data);
+    if (result !== imageData) {
+      imageData.data.set(result.data);
+    }
   }
 
   dispose(): void {
     const gl = this.gl;
-    gl.deleteProgram(this.program);
+    this.shaderProgram?.dispose();
+    this.shaderProgram = null;
     gl.deleteBuffer(this.positionBuffer);
     gl.deleteBuffer(this.texCoordBuffer);
     gl.deleteTexture(this.sourceTexture);
     gl.deleteTexture(this.outputTexture);
     gl.deleteFramebuffer(this.framebuffer);
+    this.attributesSetUp = false;
+    this.uniformsResolved = false;
   }
 }
 

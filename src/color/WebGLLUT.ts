@@ -7,6 +7,7 @@
 
 import { LUT3D, createLUTTexture } from './LUTLoader';
 import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from './LUTUtils';
+import { ShaderProgram } from '../render/ShaderProgram';
 
 /**
  * Convert Float32Array to Uint16Array of IEEE 754 half-float values
@@ -230,7 +231,8 @@ function testFramebufferCompleteness(
 export class WebGLLUTProcessor {
   private canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
-  private program: WebGLProgram | null = null;
+  private shaderProgram: ShaderProgram | null = null;
+  private parallelCompileExt: object | null = null;
   private positionBuffer: WebGLBuffer | null = null;
   private texCoordBuffer: WebGLBuffer | null = null;
   private imageTexture: WebGLTexture | null = null;
@@ -239,7 +241,7 @@ export class WebGLLUTProcessor {
   private outputTexture: WebGLTexture | null = null;
 
   private currentLUT: LUT3D | null = null;
-  private isInitialized = false;
+  private buffersInitialized = false;
 
   // Float precision state
   private _precisionMode: PrecisionMode = 'auto';
@@ -261,17 +263,22 @@ export class WebGLLUTProcessor {
   private _inMatrix: Float32Array | null = null;
   private _outMatrix: Float32Array | null = null;
 
-  // Uniform locations
+  // Lazy uniform resolution
+  private uniformsResolved = false;
   private uImage: WebGLUniformLocation | null = null;
   private uLut: WebGLUniformLocation | null = null;
   private uIntensity: WebGLUniformLocation | null = null;
   private uDomainMin: WebGLUniformLocation | null = null;
   private uDomainMax: WebGLUniformLocation | null = null;
   private uLutSize: WebGLUniformLocation | null = null;
-  private uInMatrix: WebGLUniformLocation | null = null;
-  private uOutMatrix: WebGLUniformLocation | null = null;
+  // Note: u_inMatrix and u_outMatrix locations are resolved directly via
+  // shaderProgram.getUniformLocation() in uploadMatrixUniforms() because
+  // they need transpose=true which ShaderProgram.setUniformMatrix4 does not support.
   private uHasInMatrix: WebGLUniformLocation | null = null;
   private uHasOutMatrix: WebGLUniformLocation | null = null;
+
+  // Lazy attribute setup
+  private attributesSetUp = false;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -285,6 +292,7 @@ export class WebGLLUTProcessor {
     }
 
     this.gl = gl;
+    this.parallelCompileExt = gl.getExtension('KHR_parallel_shader_compile');
     this.detectPrecision();
     this.init();
   }
@@ -371,45 +379,18 @@ export class WebGLLUTProcessor {
     return this._precisionMode;
   }
 
+  /**
+   * Whether the shader program is fully compiled, linked, and buffers are initialized.
+   */
+  isReady(): boolean {
+    return this.shaderProgram !== null && this.shaderProgram.isReady() && this.buffersInitialized;
+  }
+
   private init(): void {
     const gl = this.gl;
 
-    // Create shader program
-    const vertexShader = this.createShader(gl.VERTEX_SHADER, VERTEX_SHADER);
-    const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
-
-    if (!vertexShader || !fragmentShader) {
-      console.error('Failed to create shaders');
-      return;
-    }
-
-    this.program = gl.createProgram();
-    if (!this.program) return;
-
-    gl.attachShader(this.program, vertexShader);
-    gl.attachShader(this.program, fragmentShader);
-    gl.linkProgram(this.program);
-
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      console.error('Shader program link error:', gl.getProgramInfoLog(this.program));
-      return;
-    }
-
-    // Get attribute locations
-    const aPosition = gl.getAttribLocation(this.program, 'a_position');
-    const aTexCoord = gl.getAttribLocation(this.program, 'a_texCoord');
-
-    // Get uniform locations
-    this.uImage = gl.getUniformLocation(this.program, 'u_image');
-    this.uLut = gl.getUniformLocation(this.program, 'u_lut');
-    this.uIntensity = gl.getUniformLocation(this.program, 'u_intensity');
-    this.uDomainMin = gl.getUniformLocation(this.program, 'u_domainMin');
-    this.uDomainMax = gl.getUniformLocation(this.program, 'u_domainMax');
-    this.uLutSize = gl.getUniformLocation(this.program, 'u_lutSize');
-    this.uInMatrix = gl.getUniformLocation(this.program, 'u_inMatrix');
-    this.uOutMatrix = gl.getUniformLocation(this.program, 'u_outMatrix');
-    this.uHasInMatrix = gl.getUniformLocation(this.program, 'u_hasInMatrix');
-    this.uHasOutMatrix = gl.getUniformLocation(this.program, 'u_hasOutMatrix');
+    // Create shader program with optional parallel compilation
+    this.shaderProgram = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, this.parallelCompileExt);
 
     // Create position buffer (fullscreen quad)
     this.positionBuffer = gl.createBuffer();
@@ -431,8 +412,46 @@ export class WebGLLUTProcessor {
       1, 1,
     ]), gl.STATIC_DRAW);
 
-    // Set up VAO-like state (WebGL2)
-    gl.useProgram(this.program);
+    // Create image texture
+    this.imageTexture = gl.createTexture();
+
+    // Create framebuffer for output
+    this.framebuffer = gl.createFramebuffer();
+
+    this.buffersInitialized = true;
+  }
+
+  /**
+   * Resolve all uniform locations from the shader program (lazy, called once).
+   */
+  private resolveUniformsIfNeeded(): void {
+    if (this.uniformsResolved || !this.shaderProgram) return;
+
+    this.uImage = this.shaderProgram.getUniformLocation('u_image');
+    this.uLut = this.shaderProgram.getUniformLocation('u_lut');
+    this.uIntensity = this.shaderProgram.getUniformLocation('u_intensity');
+    this.uDomainMin = this.shaderProgram.getUniformLocation('u_domainMin');
+    this.uDomainMax = this.shaderProgram.getUniformLocation('u_domainMax');
+    this.uLutSize = this.shaderProgram.getUniformLocation('u_lutSize');
+    // u_inMatrix / u_outMatrix are resolved in uploadMatrixUniforms() via shaderProgram directly
+    this.uHasInMatrix = this.shaderProgram.getUniformLocation('u_hasInMatrix');
+    this.uHasOutMatrix = this.shaderProgram.getUniformLocation('u_hasOutMatrix');
+
+    this.uniformsResolved = true;
+  }
+
+  /**
+   * Set up vertex attribute pointers (lazy, called once when shader is first ready).
+   */
+  private setUpAttributesIfNeeded(): void {
+    if (this.attributesSetUp || !this.shaderProgram) return;
+
+    const gl = this.gl;
+
+    const aPosition = this.shaderProgram.getAttributeLocation('a_position');
+    const aTexCoord = this.shaderProgram.getAttributeLocation('a_texCoord');
+
+    this.shaderProgram.use();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
     gl.enableVertexAttribArray(aPosition);
@@ -442,30 +461,7 @@ export class WebGLLUTProcessor {
     gl.enableVertexAttribArray(aTexCoord);
     gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
 
-    // Create image texture
-    this.imageTexture = gl.createTexture();
-
-    // Create framebuffer for output
-    this.framebuffer = gl.createFramebuffer();
-
-    this.isInitialized = true;
-  }
-
-  private createShader(type: number, source: string): WebGLShader | null {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (!shader) return null;
-
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-
-    return shader;
+    this.attributesSetUp = true;
   }
 
   /**
@@ -525,13 +521,15 @@ export class WebGLLUTProcessor {
     gl.uniform1i(this.uHasOutMatrix, hasOut ? 1 : 0);
 
     // Upload with transpose=true: row-major -> column-major for GLSL
+    // NOTE: We use gl.uniformMatrix4fv directly (not shaderProgram.setUniformMatrix4)
+    // because ShaderProgram hardcodes transpose=false, but we need transpose=true here.
     gl.uniformMatrix4fv(
-      this.uInMatrix,
+      this.shaderProgram!.getUniformLocation('u_inMatrix'),
       true,
       hasIn ? this._inMatrix! : IDENTITY_MATRIX_4X4,
     );
     gl.uniformMatrix4fv(
-      this.uOutMatrix,
+      this.shaderProgram!.getUniformLocation('u_outMatrix'),
       true,
       hasOut ? this._outMatrix! : IDENTITY_MATRIX_4X4,
     );
@@ -541,9 +539,12 @@ export class WebGLLUTProcessor {
    * Apply the LUT to an ImageData
    */
   apply(imageData: ImageData, intensity: number = 1.0): ImageData {
-    if (!this.isInitialized || !this.currentLUT || !this.lutTexture) {
+    if (!this.isReady() || !this.currentLUT || !this.lutTexture) {
       return imageData;
     }
+
+    this.resolveUniformsIfNeeded();
+    this.setUpAttributesIfNeeded();
 
     const gl = this.gl;
     const { width, height } = imageData;
@@ -587,7 +588,7 @@ export class WebGLLUTProcessor {
     gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
 
     // Use program and set uniforms
-    gl.useProgram(this.program);
+    this.shaderProgram!.use();
     gl.uniform1i(this.uImage, 0);
     gl.uniform1i(this.uLut, 1);
     gl.uniform1f(this.uIntensity, intensity);
@@ -624,9 +625,12 @@ export class WebGLLUTProcessor {
     height: number,
     intensity: number = 1.0
   ): Float32Array {
-    if (!this.isInitialized || !this.currentLUT || !this.lutTexture) {
+    if (!this.isReady() || !this.currentLUT || !this.lutTexture) {
       return data;
     }
+
+    this.resolveUniformsIfNeeded();
+    this.setUpAttributesIfNeeded();
 
     const gl = this.gl;
 
@@ -677,7 +681,7 @@ export class WebGLLUTProcessor {
     gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
 
     // Use program and set uniforms
-    gl.useProgram(this.program);
+    this.shaderProgram!.use();
     gl.uniform1i(this.uImage, 0);
     gl.uniform1i(this.uLut, 1);
     gl.uniform1f(this.uIntensity, intensity);
@@ -760,7 +764,7 @@ export class WebGLLUTProcessor {
    * Apply LUT directly to a canvas context
    */
   applyToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number, intensity: number = 1.0): void {
-    if (!this.isInitialized || !this.currentLUT || !this.lutTexture) {
+    if (!this.isReady() || !this.currentLUT || !this.lutTexture) {
       return;
     }
 
@@ -789,7 +793,8 @@ export class WebGLLUTProcessor {
   dispose(): void {
     const gl = this.gl;
 
-    if (this.program) gl.deleteProgram(this.program);
+    this.shaderProgram?.dispose();
+    this.shaderProgram = null;
     if (this.positionBuffer) gl.deleteBuffer(this.positionBuffer);
     if (this.texCoordBuffer) gl.deleteBuffer(this.texCoordBuffer);
     if (this.imageTexture) gl.deleteTexture(this.imageTexture);
@@ -799,7 +804,9 @@ export class WebGLLUTProcessor {
     if (this.floatOutputTexture) gl.deleteTexture(this.floatOutputTexture);
     if (this.floatFBO) gl.deleteFramebuffer(this.floatFBO);
 
-    this.isInitialized = false;
+    this.buffersInitialized = false;
+    this.uniformsResolved = false;
+    this.attributesSetUp = false;
   }
 }
 
