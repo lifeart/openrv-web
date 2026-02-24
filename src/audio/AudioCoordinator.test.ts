@@ -526,4 +526,178 @@ describe('AudioCoordinator', () => {
       expect(mockSourceNode.start).toHaveBeenCalledWith(0, 0);
     });
   });
+
+  // ======================================================================
+  // Double audio prevention (suspended AudioContext race condition)
+  // ======================================================================
+
+  describe('double audio prevention', () => {
+    it('AC-090: isWebAudioActive is true synchronously after onPlaybackStarted even when AudioContext is suspended', async () => {
+      await loadWebAudio();
+
+      // After loading, simulate AudioContext becoming suspended (browser policy)
+      // and make resume() hang so manager.play() stays in-flight
+      let resolveResume!: () => void;
+      mockAudioContext.state = 'suspended';
+      mockAudioContext.resume.mockReturnValue(new Promise<void>(r => { resolveResume = r; }));
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+
+      // manager.play() is awaiting audioContext.resume(), so manager.isPlaying is still false
+      expect(coordinator.manager.isPlaying).toBe(false);
+      // But isWebAudioActive must be true to prevent double audio
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      // Clean up — resolve the pending resume
+      mockAudioContext.state = 'running';
+      resolveResume();
+      await vi.waitFor(() => {
+        expect(coordinator.manager.isPlaying).toBe(true);
+      });
+    });
+
+    it('AC-091: onAudioPathChanged callback fires with isWebAudioActive already true during suspended context', async () => {
+      // This simulates the real Session flow:
+      //   PlaybackEngine.play() → safeVideoPlay(video) → emit('playbackChanged')
+      //   → Session handler → audioCoordinator.onPlaybackStarted()
+      //     → activateAppropriateAudioPath() → onAudioPathChanged callback
+      //     → Session.applyVolumeToVideo() reads isWebAudioActive
+      //
+      // The callback MUST see isWebAudioActive=true so the video gets muted.
+      await loadWebAudio();
+
+      let resolveResume!: () => void;
+      mockAudioContext.state = 'suspended';
+      mockAudioContext.resume.mockReturnValue(new Promise<void>(r => { resolveResume = r; }));
+
+      // Record what isWebAudioActive returns inside the callback
+      let activeInCallback: boolean | undefined;
+      coordinator.setCallbacks({
+        onAudioPathChanged: () => {
+          activeInCallback = coordinator.isWebAudioActive;
+        },
+      });
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+
+      // The callback should have already fired synchronously, and seen isWebAudioActive=true
+      expect(activeInCallback).toBe(true);
+
+      // Clean up
+      mockAudioContext.state = 'running';
+      resolveResume();
+      await vi.waitFor(() => {
+        expect(coordinator.manager.isPlaying).toBe(true);
+      });
+    });
+
+    it('AC-092: isWebAudioActive stays true during loop wrap (onended → restart)', async () => {
+      await loadWebAudio();
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      // Simulate AudioBufferSourceNode.onended (loop wrap) — the real
+      // AudioPlaybackManager wires this callback on line 249, so calling
+      // it triggers real manager code that sets _isPlaying = false
+      if (mockSourceNode.onended) {
+        mockSourceNode.onended();
+      }
+
+      // manager.isPlaying is now false (source ended), but coordinator
+      // is still in "playing" state — isWebAudioActive must stay true
+      // so the video stays muted during the gap before restart
+      expect(coordinator.manager.isPlaying).toBe(false);
+      expect(coordinator.isWebAudioActive).toBe(true);
+    });
+
+    it('AC-093: isWebAudioActive is false when not playing even with Web Audio loaded', async () => {
+      // Negative complement to AC-090: the fix must not make isWebAudioActive
+      // always return true. When coordinator is not playing (before play or
+      // after stop), isWebAudioActive must be false so the video element
+      // produces audio normally.
+      await loadWebAudio();
+
+      // Audio is loaded, shouldUseWebAudio() would return true, but no
+      // playback has been started → isWebAudioActive must be false
+      expect(coordinator.manager.isUsingWebAudio).toBe(true);
+      expect(coordinator.isWebAudioActive).toBe(false);
+
+      // Start then stop — verify it transitions back to false
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      coordinator.onPlaybackStopped();
+      expect(coordinator.isWebAudioActive).toBe(false);
+    });
+
+    it('AC-094: play/pause/play cycle with suspended context mutes video each time', async () => {
+      // Verifies no state leaks across multiple play/pause cycles
+      await loadWebAudio();
+
+      // First play (context running) — straightforward
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      coordinator.onPlaybackStopped();
+      expect(coordinator.isWebAudioActive).toBe(false);
+
+      // Second play — context has become suspended (common on mobile
+      // after the tab loses focus)
+      let resolveResume!: () => void;
+      mockAudioContext.state = 'suspended';
+      mockAudioContext.resume.mockReturnValue(new Promise<void>(r => { resolveResume = r; }));
+
+      coordinator.onPlaybackStarted(10, 24, 1, 1);
+
+      // manager hasn't finished resuming, but coordinator must report active
+      expect(coordinator.manager.isPlaying).toBe(false);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      // After resume completes, still active
+      mockAudioContext.state = 'running';
+      resolveResume();
+      await vi.waitFor(() => {
+        expect(coordinator.manager.isPlaying).toBe(true);
+      });
+      expect(coordinator.isWebAudioActive).toBe(true);
+    });
+
+    it('AC-095: late audio load during playback immediately reports isWebAudioActive', async () => {
+      // Simulates: user presses play before audio has finished loading.
+      // loadFromVideo checks _isPlaying after load completes and calls
+      // activateAppropriateAudioPath(). isWebAudioActive must be true
+      // at that point so Session mutes the video.
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      // Start playback before audio is loaded
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+
+      // isWebAudioActive is false because no audio is loaded yet
+      expect(coordinator.isWebAudioActive).toBe(false);
+
+      // Record callback — this fires when loadFromVideo completes and
+      // detects _isPlaying=true
+      let activeInCallback: boolean | undefined;
+      coordinator.setCallbacks({
+        onAudioPathChanged: () => {
+          activeInCallback = coordinator.isWebAudioActive;
+        },
+      });
+
+      // Now audio finishes loading — since _isPlaying is true,
+      // loadFromVideo triggers activateAppropriateAudioPath which
+      // calls manager.play(), transitioning straight to 'playing'
+      coordinator.loadFromVideo(video, 0.7, false);
+      await vi.waitFor(() => {
+        expect(coordinator.manager.isUsingWebAudio).toBe(true);
+      });
+
+      // The late-load path should have activated Web Audio and the
+      // callback should see it as active
+      expect(activeInCallback).toBe(true);
+      expect(coordinator.isWebAudioActive).toBe(true);
+    });
+  });
 });
