@@ -392,7 +392,7 @@ test.describe('Playback Edge Cases', () => {
       // App should still be responsive
       const state = await getSessionState(page);
       expect(state.isPlaying).toBe(false);
-      expect(typeof state.currentFrame).toBe('number');
+      expect(state.currentFrame).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -903,11 +903,12 @@ test.describe('Playback Edge Cases', () => {
         await page.waitForTimeout(50);
       }
 
-      // Final state should be consistent
+      // Final state should be consistent - isPlaying must be a definite value,
+      // and frame number must be valid (within playable range)
       const state = await getSessionState(page);
-      expect(typeof state.isPlaying).toBe('boolean');
-      expect(typeof state.currentFrame).toBe('number');
+      expect([true, false]).toContain(state.isPlaying);
       expect(state.currentFrame).toBeGreaterThanOrEqual(1);
+      expect(state.currentFrame).toBeLessThanOrEqual(state.frameCount);
     });
 
     test('EDGE-112: seeking while paused does not start playback', async ({ page }) => {

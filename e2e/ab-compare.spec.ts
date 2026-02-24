@@ -162,13 +162,13 @@ test.describe('A/B Indicator Display', () => {
   });
 
   test('AB-E021: Viewer area does not show A/B badge initially', async ({ page }) => {
-    // Take screenshot of viewer area
-    const viewer = page.locator('.viewer-container').first();
-    const screenshot = await viewer.screenshot();
+    // A/B indicator badge should not be present with single source
+    const badge = page.locator('[data-testid="ab-indicator-badge"]');
+    await expect(badge).toBeHidden();
 
-    // The indicator should not be visible, so this is a baseline
-    // We're just verifying the viewer renders without the badge
-    expect(screenshot.length).toBeGreaterThan(0);
+    // Compare button should show no B indicator
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await expect(compareButton).not.toContainText('B');
   });
 });
 
@@ -424,16 +424,11 @@ test.describe('A/B Screenshot Comparison', () => {
     await buttonA.scrollIntoViewIfNeeded();
     await page.waitForTimeout(100);
 
-    // Take a screenshot of the element directly
-    const screenshot = await buttonA.screenshot();
-
-    // Verify we got a meaningful screenshot (not empty)
-    expect(screenshot.length).toBeGreaterThan(100);
-
     // Verify button is visible and has correct text
     await expect(buttonA).toBeVisible();
     await expect(buttonA).toHaveText('A');
     await expect(toggleButton).toBeVisible();
+    await expect(toggleButton).toHaveText('⇄');
   });
 });
 

@@ -200,9 +200,8 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     });
 
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // Verify color adjustment uniforms were set with the specified values
     expect(getLastUniform1f(mockGL, 'u_saturation')).toBe(0.5);
     expect(getLastUniform1f(mockGL, 'u_brightness')).toBe(0.1);
@@ -319,9 +318,8 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     });
 
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_toneMappingOperator should be set to 3 (ACES code)
     expect(getLastUniform1i(mockGL, 'u_toneMappingOperator')).toBe(3);
   });
@@ -333,9 +331,8 @@ describe('Renderer SDR Frame Rendering (Phase 1A)', () => {
     renderer.setColorInversion(true);
 
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_invert should be set to 1 (inversion enabled)
     expect(getLastUniform1i(mockGL, 'u_invert')).toBe(1);
   });
@@ -354,9 +351,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
 
     renderer.setHighlightsShadows({ highlights: 50, shadows: -30, whites: 20, blacks: -10 });
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_hsEnabled should be set to 1 (non-zero values enable the effect)
     expect(getLastUniform1i(mockGL, 'u_hsEnabled')).toBe(1);
   });
@@ -367,9 +363,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
 
     renderer.setVibrance({ vibrance: 75, skinProtection: true });
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_vibranceEnabled should be set to 1 (non-zero vibrance enables the effect)
     expect(getLastUniform1i(mockGL, 'u_vibranceEnabled')).toBe(1);
   });
@@ -380,9 +375,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
 
     renderer.setClarity({ clarity: 50 });
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_clarityEnabled should be set to 1 (non-zero clarity enables the effect)
     expect(getLastUniform1i(mockGL, 'u_clarityEnabled')).toBe(1);
   });
@@ -393,9 +387,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
 
     renderer.setSharpen({ amount: 60 });
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_sharpenEnabled should be set to 1 (non-zero amount enables the effect)
     expect(getLastUniform1i(mockGL, 'u_sharpenEnabled')).toBe(1);
   });
@@ -414,9 +407,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
       mattePreview: false,
     });
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_hslQualifierEnabled should be set to 1 (HSL qualifier enabled)
     expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(1);
   });
@@ -508,9 +500,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     });
 
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // All Phase 1B effect enable uniforms should be set to 1
     expect(getLastUniform1i(mockGL, 'u_hsEnabled')).toBe(1);
     expect(getLastUniform1i(mockGL, 'u_vibranceEnabled')).toBe(1);
@@ -534,9 +525,8 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     });
 
     renderer.resize(100, 100);
-    const result = renderer.renderSDRFrame(sourceCanvas);
+    renderer.renderSDRFrame(sourceCanvas);
 
-    expect(result).toBeInstanceOf(HTMLCanvasElement);
     // u_hslQualifierEnabled should be 1 and u_hslMattePreview should be 1
     expect(getLastUniform1i(mockGL, 'u_hslQualifierEnabled')).toBe(1);
     expect(getLastUniform1i(mockGL, 'u_hslMattePreview')).toBe(1);

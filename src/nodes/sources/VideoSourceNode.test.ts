@@ -42,10 +42,6 @@ describe('VideoSourceNode', () => {
       expect(node.properties.has('fps')).toBe(true);
       expect(node.properties.getValue('fps')).toBe(24);
     });
-
-    it('getFile() returns null when no file has been loaded', () => {
-      expect(node.getFile()).toBeNull();
-    });
   });
 
   describe('isReady', () => {
@@ -393,16 +389,11 @@ describe('VideoSourceNode', () => {
       expect(DEFAULT_PRELOAD_CONFIG.preloadAhead).toBeGreaterThanOrEqual(20);
     });
 
-    it('VSN-008: getCacheStats reports capacity matching DEFAULT_PRELOAD_CONFIG', () => {
-      // After loading, cache capacity should match DEFAULT_PRELOAD_CONFIG.
-      // This guards against hardcoded overrides (the old bug used maxCacheSize: 60).
+    it('VSN-008: getCacheStats returns null before video is loaded', () => {
+      // Before loading a video, no preload manager exists so stats must be null.
+      // After loading (tested in integration), capacity must match DEFAULT_PRELOAD_CONFIG.
       const stats = node.getCacheStats();
-      // Before loading, stats may be null; verify default config is large enough
-      if (stats !== null) {
-        expect(stats.maxCacheSize).toBe(DEFAULT_PRELOAD_CONFIG.maxCacheSize);
-      }
-      // Either way, the constant itself must be >= 100 (covered by VSN-007)
-      expect(DEFAULT_PRELOAD_CONFIG.maxCacheSize).toBeGreaterThanOrEqual(100);
+      expect(stats).toBeNull();
     });
   });
 

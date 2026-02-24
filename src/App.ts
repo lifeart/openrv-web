@@ -9,6 +9,7 @@
  * - AppTransformWiring: transform control <-> viewer (with history)
  * - AppPlaybackWiring: volume/export/headerbar/playlist controls
  * - AppStackWiring: stack/composite controls <-> viewer
+ * - AppDCCWiring: DCCBridge events <-> session/viewer/controls
  *
  * Handles top-level lifecycle (init, mount, dispose) and the render loop.
  */
@@ -49,6 +50,7 @@ import { wireEffectsControls } from './AppEffectsWiring';
 import { wireTransformControls } from './AppTransformWiring';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
+import { wireDCCBridge } from './AppDCCWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 import { ShortcutCheatSheet } from './ui/components/ShortcutCheatSheet';
@@ -99,7 +101,6 @@ export class App {
   private audioInitialized = false;
   private dccBridge: DCCBridge | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
-  private _suppressFrameSync = false;
   private focusManager!: FocusManager;
   private ariaAnnouncer!: AriaAnnouncer;
 
@@ -413,55 +414,11 @@ export class App {
     if (dccUrl) {
       this.dccBridge = new DCCBridge({ url: dccUrl });
 
-      // Inbound: syncFrame with loop protection
-      this.dccBridge.on('syncFrame', (msg) => {
-        this._suppressFrameSync = true;
-        try {
-          this.session.goToFrame(msg.frame);
-        } finally {
-          this._suppressFrameSync = false;
-        }
-      });
-
-      // Inbound: loadMedia - load file directly via session
-      this.dccBridge.on('loadMedia', (msg) => {
-        const path = msg.path;
-        const ext = path.split('.').pop()?.toLowerCase() ?? '';
-        const name = path.split('/').pop() ?? path;
-        const videoExts = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
-        if (videoExts.includes(ext)) {
-          this.session.loadVideo(name, path).then(() => {
-            if (typeof msg.frame === 'number') {
-              this.session.goToFrame(msg.frame);
-            }
-          }).catch(() => { /* load error */ });
-        } else {
-          this.session.loadImage(name, path).then(() => {
-            if (typeof msg.frame === 'number') {
-              this.session.goToFrame(msg.frame);
-            }
-          }).catch(() => { /* load error */ });
-        }
-      });
-
-      // Inbound: syncColor - apply color settings to viewer
-      this.dccBridge.on('syncColor', (msg) => {
-        const adjustments: Record<string, number> = {};
-        if (typeof msg.exposure === 'number') adjustments.exposure = msg.exposure;
-        if (typeof msg.gamma === 'number') adjustments.gamma = msg.gamma;
-        if (typeof msg.temperature === 'number') adjustments.temperature = msg.temperature;
-        if (typeof msg.tint === 'number') adjustments.tint = msg.tint;
-        if (Object.keys(adjustments).length > 0) {
-          this.controls.colorControls.setAdjustments(adjustments);
-          this.viewer.setColorAdjustments(this.controls.colorControls.getAdjustments());
-        }
-      });
-
-      // Outbound: frameChanged (with loop protection)
-      this.session.on('frameChanged', () => {
-        if (!this._suppressFrameSync) {
-          this.dccBridge?.sendFrameChanged(this.session.currentFrame, this.session.frameCount);
-        }
+      wireDCCBridge({
+        dccBridge: this.dccBridge,
+        session: this.session,
+        viewer: this.viewer,
+        colorControls: this.controls.colorControls,
       });
 
       this.dccBridge.connect();
@@ -490,16 +447,6 @@ export class App {
       getAudioMixer: () => this.audioMixer,
     });
     wireStackControls(wiringCtx);
-
-    // Outbound DCC: send color changes to DCC bridge
-    this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
-      this.dccBridge?.sendColorChanged({
-        exposure: adjustments.exposure,
-        gamma: adjustments.gamma,
-        temperature: adjustments.temperature,
-        tint: adjustments.tint,
-      });
-    });
 
     // Timeline editor wiring (EDL/SequenceGroup integration)
     this.controls.timelineEditor.on('cutSelected', ({ cutIndex }) => this.handleTimelineEditorCutSelected(cutIndex));

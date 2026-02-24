@@ -359,12 +359,16 @@ describe('MediabunnyFrameExtractor', () => {
   });
 
   describe('AbortController support', () => {
-    it('should have abortPendingOperations method', () => {
+    it('should not throw when calling abortPendingOperations before load', () => {
       const extractor = new MediabunnyFrameExtractor();
 
-      // Method should exist and not throw
-      expect(typeof extractor.abortPendingOperations).toBe('function');
+      // Calling abortPendingOperations on a fresh extractor should be safe
       extractor.abortPendingOperations();
+
+      // After abort, the signal should be fresh (not aborted) since a new
+      // controller is created after each abort
+      const signal = extractor.getAbortSignal();
+      expect(signal.aborted).toBe(false);
     });
 
     it('should have getAbortSignal method that returns AbortSignal', () => {
@@ -958,18 +962,7 @@ describe('MediabunnyFrameExtractor', () => {
       expect(result.frameNumber).toBe(1);
     });
 
-    it('MFE-FPS-002: getFrameImageData rejects before load', async () => {
-      // getFrameImageData must support ImageBitmap input (from snapshotCanvas).
-      // Verify it throws when extractor is not initialized.
-      const extractor = new MediabunnyFrameExtractor();
-      await expect(extractor.getFrameImageData(1)).rejects.toThrow('Extractor not initialized');
-    });
-
-    it('MFE-FPS-003: getFrameBlob rejects before load', async () => {
-      // getFrameBlob must support ImageBitmap input (from snapshotCanvas).
-      // Verify it throws when extractor is not initialized.
-      const extractor = new MediabunnyFrameExtractor();
-      await expect(extractor.getFrameBlob(1)).rejects.toThrow('Extractor not initialized');
-    });
+    // MFE-FPS-002 and MFE-FPS-003 removed: duplicate of initialization state tests
+    // (getFrameImageData/getFrameBlob reject-before-load already covered above)
   });
 });

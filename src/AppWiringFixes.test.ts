@@ -1,15 +1,14 @@
 /**
- * Regression tests for ContextualKeyboardManager and AudioMixer wiring fixes.
+ * Regression tests for DCCBridge wiring, ContextualKeyboardManager, and
+ * AudioMixer wiring fixes.
  *
  * These tests verify:
+ * - DCCBridge loadMedia calls actual session file loading via wireDCCBridge
+ * - DCCBridge syncColor applies color settings via wireDCCBridge
+ * - DCCBridge frame sync has loop protection via wireDCCBridge
+ * - Outbound colorChanged is sent when adjustments change
  * - ContextualKeyboardManager is instantiated and used for key conflict resolution
  * - AudioMixer volume is wired to volume control via wirePlaybackControls
- *
- * DCCBridge wiring tests (DCCFIX-001 through DCCFIX-007, DCCFIX-020 through
- * DCCFIX-023) were removed because they copy-pasted inline handler logic from
- * App.ts into the test body and asserted against the copy. Those tests could
- * never detect regressions if the real App.ts diverged. The DCC wiring lives
- * inside the App constructor and is not exported as a testable function.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,7 +16,225 @@ import { EventEmitter } from './utils/EventEmitter';
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
 import { ActiveContextManager } from './utils/input/ActiveContextManager';
 import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiring';
+import { wireDCCBridge, type DCCWiringDeps } from './AppDCCWiring';
 import type { AppWiringContext } from './AppWiringContext';
+
+// ---------------------------------------------------------------------------
+// Lightweight test doubles for DCCBridge wiring
+// ---------------------------------------------------------------------------
+
+function createMockDCCBridge() {
+  const emitter = new EventEmitter();
+  return Object.assign(emitter, {
+    sendFrameChanged: vi.fn(),
+    sendColorChanged: vi.fn(),
+  });
+}
+
+function createMockDCCSession() {
+  const emitter = new EventEmitter();
+  return Object.assign(emitter, {
+    currentFrame: 1,
+    frameCount: 100,
+    goToFrame: vi.fn(),
+    loadImage: vi.fn().mockResolvedValue(undefined),
+    loadVideo: vi.fn().mockResolvedValue(undefined),
+  });
+}
+
+function createMockDCCViewer() {
+  return {
+    setColorAdjustments: vi.fn(),
+  };
+}
+
+function createMockColorControls() {
+  const emitter = new EventEmitter();
+  return Object.assign(emitter, {
+    setAdjustments: vi.fn(),
+    getAdjustments: vi.fn(() => ({
+      exposure: 0,
+      gamma: 1,
+      temperature: 0,
+      tint: 0,
+      saturation: 1,
+      contrast: 1,
+    })),
+  });
+}
+
+function createDCCDeps() {
+  const dccBridge = createMockDCCBridge();
+  const session = createMockDCCSession();
+  const viewer = createMockDCCViewer();
+  const colorControls = createMockColorControls();
+
+  const deps: DCCWiringDeps = {
+    dccBridge: dccBridge as any,
+    session: session as any,
+    viewer: viewer as any,
+    colorControls: colorControls as any,
+  };
+
+  return { deps, dccBridge, session, viewer, colorControls };
+}
+
+// ---------------------------------------------------------------------------
+// DCCBridge loadMedia wiring tests (via real wireDCCBridge)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge loadMedia wiring fix', () => {
+  it('DCCFIX-001: loadMedia should call session.loadImage for image paths', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr' });
+
+    // loadImage is called async; await the microtask
+    await vi.waitFor(() => {
+      expect(session.loadImage).toHaveBeenCalledWith('shot.exr', '/mnt/shows/shot.exr');
+    });
+    expect(session.loadVideo).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-002: loadMedia should call session.loadVideo for video paths', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/clip.mp4' });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalledWith('clip.mp4', '/mnt/shows/clip.mp4');
+    });
+    expect(session.loadImage).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-003: loadMedia should seek to frame if provided', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', {
+      type: 'loadMedia',
+      path: '/mnt/shows/shot.exr',
+      frame: 42,
+    });
+
+    // Wait for loadImage promise to resolve, then goToFrame is called
+    await vi.waitFor(() => {
+      expect(session.goToFrame).toHaveBeenCalledWith(42);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DCCBridge syncColor wiring tests (via real wireDCCBridge)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge syncColor wiring fix', () => {
+  it('DCCFIX-004: syncColor should apply exposure, gamma, temperature, tint to colorControls', () => {
+    const { deps, dccBridge, colorControls, viewer } = createDCCDeps();
+    colorControls.getAdjustments.mockReturnValue({
+      exposure: 1.5,
+      gamma: 1.2,
+      temperature: 100,
+      tint: 5,
+      saturation: 1,
+      contrast: 1,
+    });
+
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', {
+      type: 'syncColor',
+      exposure: 1.5,
+      gamma: 1.2,
+      temperature: 100,
+      tint: 5,
+    });
+
+    expect(colorControls.setAdjustments).toHaveBeenCalledWith({
+      exposure: 1.5,
+      gamma: 1.2,
+      temperature: 100,
+      tint: 5,
+    });
+    expect(viewer.setColorAdjustments).toHaveBeenCalled();
+  });
+
+  it('DCCFIX-005: syncColor with no numeric fields should not call setAdjustments', () => {
+    const { deps, dccBridge, colorControls, viewer } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', { type: 'syncColor' });
+
+    expect(colorControls.setAdjustments).not.toHaveBeenCalled();
+    expect(viewer.setColorAdjustments).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DCCBridge frame sync loop protection tests (via real wireDCCBridge)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge frame sync loop protection', () => {
+  it('DCCFIX-006: inbound syncFrame should suppress outbound frameChanged', () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+
+    // Make goToFrame emit frameChanged synchronously (simulating session behavior)
+    session.goToFrame.mockImplementation(() => {
+      session.emit('frameChanged', 42);
+    });
+
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncFrame', { type: 'syncFrame', frame: 42 });
+
+    // goToFrame was called (inbound sync worked)
+    expect(session.goToFrame).toHaveBeenCalledWith(42);
+    // But outbound sendFrameChanged should NOT have been triggered
+    expect(dccBridge.sendFrameChanged).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-007: non-inbound frame changes should still send outbound frameChanged', () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.currentFrame = 10;
+    session.frameCount = 200;
+
+    wireDCCBridge(deps);
+
+    // Simulate a user-initiated frame change (not from DCC bridge)
+    session.emit('frameChanged', 10);
+
+    expect(dccBridge.sendFrameChanged).toHaveBeenCalledWith(10, 200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DCC outbound color change tests (via real wireDCCBridge)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge outbound color change wiring', () => {
+  it('DCCFIX-020: adjustmentsChanged should call dccBridge.sendColorChanged', () => {
+    const { deps, dccBridge, colorControls } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    colorControls.emit('adjustmentsChanged', {
+      exposure: 2.0,
+      gamma: 1.1,
+      temperature: 50,
+      tint: -10,
+      saturation: 1,
+      contrast: 1,
+    });
+
+    expect(dccBridge.sendColorChanged).toHaveBeenCalledWith({
+      exposure: 2.0,
+      gamma: 1.1,
+      temperature: 50,
+      tint: -10,
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // ContextualKeyboardManager instantiation and usage tests

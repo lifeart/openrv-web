@@ -9,8 +9,6 @@ import {
   parseHEICGainmapInfo,
   parseHEICColorInfo,
   buildStandaloneHEIC,
-  type HEICGainmapInfo,
-  type HEICColorInfo,
 } from './HEICGainmapDecoder';
 import { parseHeadroomFromXMPText, readBox, findBox } from './AVIFGainmapDecoder';
 
@@ -1201,117 +1199,6 @@ describe('HEICGainmapDecoder', () => {
       const hvcC = createMinimalHvcCBox();
       const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       expect(result.byteLength).toBeGreaterThan(100000);
-    });
-  });
-
-  // =========================================================================
-  // K. HDR Reconstruction Math Tests
-  // =========================================================================
-
-  describe('HDR reconstruction math', () => {
-    it('gain formula produces values > 1.0 for non-zero gainmap', () => {
-      const headroom = 4.0;
-      const gainmapValue = 0.5;
-      const gain = Math.pow(2, gainmapValue * headroom);
-      expect(gain).toBe(4.0);
-
-      const hdrValue = 0.5 * gain;
-      expect(hdrValue).toBe(2.0);
-      expect(hdrValue).toBeGreaterThan(1.0);
-    });
-
-    it('gain formula preserves SDR when gainmap is zero', () => {
-      const headroom = 4.0;
-      const gainmapValue = 0.0;
-      const gain = Math.pow(2, gainmapValue * headroom);
-      expect(gain).toBe(1.0);
-
-      const base = 0.7;
-      expect(base * gain).toBe(base);
-    });
-
-    it('sRGB to linear conversion is correct for known values', () => {
-      const testValues = [
-        { srgb: 0.0, linear: 0.0 },
-        { srgb: 1.0, linear: 1.0 },
-        { srgb: 0.5, linear: 0.214 },
-      ];
-
-      for (const { srgb, linear } of testValues) {
-        let computed: number;
-        if (srgb <= 0.04045) {
-          computed = srgb / 12.92;
-        } else {
-          computed = Math.pow((srgb + 0.055) / 1.055, 2.4);
-        }
-        expect(computed).toBeCloseTo(linear, 2);
-      }
-    });
-
-    it('gain LUT produces correct values for different headroom', () => {
-      for (const headroom of [2.0, 4.0, 8.0]) {
-        // gainmap = 0 → gain = 1.0
-        const gain0 = Math.exp((0 / 255.0) * headroom * Math.LN2);
-        expect(gain0).toBeCloseTo(1.0, 5);
-
-        // gainmap = 255 → gain = 2^headroom
-        const gain255 = Math.exp((255 / 255.0) * headroom * Math.LN2);
-        expect(gain255).toBeCloseTo(Math.pow(2, headroom), 2);
-      }
-    });
-
-    it('headroom of 0 produces gain of 1.0 for all values', () => {
-      const headroom = 0;
-      for (let v = 0; v <= 255; v++) {
-        const gain = Math.exp((v / 255.0) * headroom * Math.LN2);
-        expect(gain).toBeCloseTo(1.0, 5);
-      }
-    });
-  });
-
-  // =========================================================================
-  // L. HEICGainmapInfo structure Tests
-  // =========================================================================
-
-  describe('HEICGainmapInfo structure', () => {
-    it('has all required fields', () => {
-      const info: HEICGainmapInfo = {
-        primaryItemId: 1,
-        gainmapItemId: 2,
-        primaryOffset: 100,
-        primaryLength: 1000,
-        gainmapOffset: 1100,
-        gainmapLength: 500,
-        headroom: 4.0,
-        gainmapHvcC: null,
-        gainmapWidth: 640,
-        gainmapHeight: 480,
-      };
-
-      expect(info.primaryItemId).toBeDefined();
-      expect(info.gainmapItemId).toBeDefined();
-      expect(info.primaryOffset).toBeDefined();
-      expect(info.primaryLength).toBeDefined();
-      expect(info.gainmapOffset).toBeDefined();
-      expect(info.gainmapLength).toBeDefined();
-      expect(info.headroom).toBeDefined();
-      expect(info.gainmapHvcC).toBeDefined();
-      expect(info.gainmapWidth).toBeDefined();
-      expect(info.gainmapHeight).toBeDefined();
-    });
-  });
-
-  describe('HEICColorInfo structure', () => {
-    it('has all required fields', () => {
-      const info: HEICColorInfo = {
-        transferFunction: 'pq',
-        colorPrimaries: 'bt2020',
-        isHDR: true,
-      };
-
-      expect(info.transferFunction).toBeDefined();
-      expect(info.colorPrimaries).toBeDefined();
-      expect(info.isHDR).toBeDefined();
     });
   });
 

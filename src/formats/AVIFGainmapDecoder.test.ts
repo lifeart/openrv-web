@@ -11,7 +11,6 @@ import {
   parseISOBMFFOrientation,
   parseISOBMFFTransforms,
   parseTmapBox,
-  type AVIFGainmapInfo,
 } from './AVIFGainmapDecoder';
 
 // =============================================================================
@@ -1011,69 +1010,6 @@ describe('AVIFGainmapDecoder', () => {
         view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
       );
       expect(ftypType).toBe('ftyp');
-    });
-  });
-
-  describe('AVIFGainmapInfo structure', () => {
-    it('has all required fields', () => {
-      const info: AVIFGainmapInfo = {
-        primaryItemId: 1,
-        gainmapItemId: 2,
-        primaryOffset: 100,
-        primaryLength: 1000,
-        gainmapOffset: 1100,
-        gainmapLength: 500,
-        headroom: 4.0,
-      };
-
-      expect(info.primaryItemId).toBeDefined();
-      expect(info.gainmapItemId).toBeDefined();
-      expect(info.primaryOffset).toBeDefined();
-      expect(info.primaryLength).toBeDefined();
-      expect(info.gainmapOffset).toBeDefined();
-      expect(info.gainmapLength).toBeDefined();
-      expect(info.headroom).toBeDefined();
-    });
-  });
-
-  describe('HDR reconstruction math', () => {
-    it('gain formula produces values > 1.0 for non-zero gainmap', () => {
-      const headroom = 4.0;
-      const gainmapValue = 0.5;
-      const gain = Math.pow(2, gainmapValue * headroom);
-      expect(gain).toBe(4.0);
-
-      const hdrValue = 0.5 * gain;
-      expect(hdrValue).toBe(2.0);
-      expect(hdrValue).toBeGreaterThan(1.0);
-    });
-
-    it('gain formula preserves SDR when gainmap is zero', () => {
-      const headroom = 4.0;
-      const gainmapValue = 0.0;
-      const gain = Math.pow(2, gainmapValue * headroom);
-      expect(gain).toBe(1.0);
-
-      const base = 0.7;
-      expect(base * gain).toBe(base);
-    });
-
-    it('sRGB to linear conversion is correct for known values', () => {
-      const testValues = [
-        { srgb: 0.0, linear: 0.0 },
-        { srgb: 1.0, linear: 1.0 },
-        { srgb: 0.5, linear: 0.214 },
-      ];
-
-      for (const { srgb, linear } of testValues) {
-        let computed: number;
-        if (srgb <= 0.04045) {
-          computed = srgb / 12.92;
-        } else {
-          computed = Math.pow((srgb + 0.055) / 1.055, 2.4);
-        }
-        expect(computed).toBeCloseTo(linear, 2);
-      }
     });
   });
 

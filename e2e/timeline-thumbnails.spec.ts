@@ -40,17 +40,16 @@ test.describe('Timeline Thumbnails', () => {
     test('THUMB-E002: timeline has visual content after video load', async ({ page }) => {
       const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
-      // Take screenshot of timeline
-      const screenshot = await timelineCanvas.screenshot();
-      expect(screenshot.length).toBeGreaterThan(0);
-
-      // Verify canvas has non-zero dimensions
+      // Verify canvas has meaningful dimensions
       const box = await timelineCanvas.boundingBox();
       expect(box).not.toBeNull();
-      if (box) {
-        expect(box.width).toBeGreaterThan(0);
-        expect(box.height).toBeGreaterThan(0);
-      }
+      expect(box!.width).toBeGreaterThan(100);
+      expect(box!.height).toBeGreaterThan(10);
+
+      // Take screenshot - a rendered timeline with content should produce
+      // a non-trivial PNG (minimum header + pixel data)
+      const screenshot = await timelineCanvas.screenshot();
+      expect(screenshot.length).toBeGreaterThan(100);
     });
   });
 
@@ -69,9 +68,10 @@ test.describe('Timeline Thumbnails', () => {
       // Take second screenshot - may have more thumbnails
       const screenshot2 = await timelineCanvas.screenshot();
 
-      // Both screenshots should exist
-      expect(screenshot1.length).toBeGreaterThan(0);
-      expect(screenshot2.length).toBeGreaterThan(0);
+      // Both screenshots should have meaningful content (PNG has header overhead,
+      // so a non-blank canvas should produce at least a few hundred bytes)
+      expect(screenshot1.length).toBeGreaterThan(100);
+      expect(screenshot2.length).toBeGreaterThan(100);
     });
 
     test('THUMB-E004: timeline updates on frame navigation', async ({ page }) => {
@@ -114,55 +114,68 @@ test.describe('Timeline Thumbnails', () => {
   });
 
   test.describe('Source Change', () => {
-    test('THUMB-E006: thumbnails reload on source change', async ({ page }) => {
+    test('THUMB-E006: timeline remains functional after frame navigation', async ({ page }) => {
       const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
-      // Take screenshot with first source
+      // Take screenshot with initial frame
       const screenshot1 = await timelineCanvas.screenshot();
 
-      // Load a different file (this will clear and reload thumbnails)
-      // For this test we just verify the timeline is still functional
-      await page.waitForTimeout(200);
+      // Navigate several frames forward to trigger thumbnail updates
+      for (let i = 0; i < 5; i++) {
+        await page.keyboard.press('ArrowRight');
+        await page.waitForTimeout(50);
+      }
+      await page.waitForTimeout(300);
 
-      // Timeline should still be visible
+      // Timeline should still be visible and rendering
       await expect(timelineCanvas).toBeVisible();
 
-      // Take another screenshot
+      // Take another screenshot - playhead should have moved
       const screenshot2 = await timelineCanvas.screenshot();
-      expect(screenshot2.length).toBeGreaterThan(0);
+      expect(Buffer.compare(screenshot1, screenshot2)).not.toBe(0);
     });
   });
 
   test.describe('Timeline Interaction', () => {
-    test('THUMB-E007: timeline responds to click for frame navigation', async ({ page }) => {
+    test('THUMB-E007: timeline click navigates to a frame', async ({ page }) => {
       const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       const box = await timelineCanvas.boundingBox();
+      expect(box).not.toBeNull();
 
-      if (box) {
-        // Click near the middle of the timeline
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        await page.waitForTimeout(100);
+      // Go to first frame first
+      await page.keyboard.press('Home');
+      await page.waitForTimeout(100);
 
-        // Timeline should still be visible after click
-        await expect(timelineCanvas).toBeVisible();
-      }
+      const screenshotBefore = await timelineCanvas.screenshot();
+
+      // Click near the middle of the timeline to navigate
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.waitForTimeout(200);
+
+      // Timeline should update (playhead moved)
+      await expect(timelineCanvas).toBeVisible();
+      const screenshotAfter = await timelineCanvas.screenshot();
+      expect(Buffer.compare(screenshotBefore, screenshotAfter)).not.toBe(0);
     });
 
     test('THUMB-E008: timeline supports drag scrubbing', async ({ page }) => {
       const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       const box = await timelineCanvas.boundingBox();
+      expect(box).not.toBeNull();
 
-      if (box) {
-        // Drag across timeline
-        await page.mouse.move(box.x + 50, box.y + box.height / 2);
-        await page.mouse.down();
-        await page.mouse.move(box.x + box.width - 50, box.y + box.height / 2);
-        await page.mouse.up();
-        await page.waitForTimeout(100);
+      const screenshotBefore = await timelineCanvas.screenshot();
 
-        // Timeline should still be visible after drag
-        await expect(timelineCanvas).toBeVisible();
-      }
+      // Drag across timeline from left to right
+      await page.mouse.move(box!.x + 50, box!.y + box!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + box!.width - 50, box!.y + box!.height / 2);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Timeline should have updated during scrubbing
+      await expect(timelineCanvas).toBeVisible();
+      const screenshotAfter = await timelineCanvas.screenshot();
+      expect(Buffer.compare(screenshotBefore, screenshotAfter)).not.toBe(0);
     });
   });
 
@@ -190,7 +203,10 @@ test.describe('Timeline Thumbnails', () => {
     test('THUMB-E010: timeline updates during playback', async ({ page }) => {
       const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
-      // Start playback
+      // Capture timeline before playback
+      const screenshotBefore = await timelineCanvas.screenshot();
+
+      // Start playback and let frames advance
       await page.keyboard.press('l');
       await page.waitForTimeout(500);
 
@@ -198,12 +214,10 @@ test.describe('Timeline Thumbnails', () => {
       await page.keyboard.press('k');
       await page.waitForTimeout(100);
 
-      // Timeline should still be visible and functional
+      // Timeline should still be visible and its playhead should have moved
       await expect(timelineCanvas).toBeVisible();
-
-      // Take screenshot to verify content
-      const screenshot = await timelineCanvas.screenshot();
-      expect(screenshot.length).toBeGreaterThan(0);
+      const screenshotAfter = await timelineCanvas.screenshot();
+      expect(Buffer.compare(screenshotBefore, screenshotAfter)).not.toBe(0);
     });
   });
 });

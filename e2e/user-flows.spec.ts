@@ -264,11 +264,11 @@ test.describe('Color Grading Workflow', () => {
     await page.keyboard.press('Shift+Alt+f');
     await page.waitForTimeout(200);
 
-    // Capture after disabling
+    // Capture after disabling - should return to normal view (different from false color)
     const afterDisable = await captureViewerScreenshot(page);
 
-    // Should match baseline again
-    // Note: May have minor differences due to rendering
+    // After disabling, the image should differ from the false-color view
+    expect(imagesAreDifferent(withFalseColor, afterDisable)).toBe(true);
   });
 });
 
@@ -828,9 +828,9 @@ test.describe('Stereo 3D Workflow', () => {
     const viewerState = await getViewerState(page);
     expect(viewerState.stereoMode).toBe('off');
 
-    // Verify stereo-related state properties exist
-    expect(viewerState.stereoEyeSwap).toBeDefined();
-    expect(viewerState.stereoOffset).toBeDefined();
+    // Verify stereo-related state has correct default values
+    expect(viewerState.stereoEyeSwap).toBe(false);
+    expect(viewerState.stereoOffset).toBe(0);
 
     // Stereo mode feature is available in the app
     // Note: Stereo button UI and Shift+3 shortcut tests are covered
