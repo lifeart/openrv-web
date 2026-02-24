@@ -281,6 +281,50 @@ describe('WaveformRenderer', () => {
       expect(stereoBuffer.getChannelData).toHaveBeenCalledWith(0);
       expect(stereoBuffer.getChannelData).toHaveBeenCalledWith(1);
     });
+
+    describe('fetch cache behavior', () => {
+      it('EXT-011: HTTP URL fetch uses cache: force-cache', async () => {
+        const video = document.createElement('video');
+        video.src = 'https://cdn.example.com/test.mp4';
+
+        await extractAudioFromVideo(video);
+
+        expect(fetch).toHaveBeenCalledWith('https://cdn.example.com/test.mp4', expect.objectContaining({
+          cache: 'force-cache',
+          mode: 'cors',
+        }));
+      });
+
+      it('EXT-012: Blob URL fetch does NOT use force-cache', async () => {
+        const video = document.createElement('video');
+        video.src = 'blob:http://localhost:3000/abc-123';
+
+        await extractAudioFromVideo(video);
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch).toHaveBeenCalledWith('blob:http://localhost:3000/abc-123', expect.objectContaining({
+          mode: 'same-origin',
+        }));
+        expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+          cache: expect.anything(),
+        }));
+      });
+
+      it('EXT-013: Data URL fetch does NOT use force-cache', async () => {
+        const video = document.createElement('video');
+        video.src = 'data:video/mp4;base64,AAAA';
+
+        await extractAudioFromVideo(video);
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch).toHaveBeenCalledWith('data:video/mp4;base64,AAAA', expect.objectContaining({
+          mode: 'same-origin',
+        }));
+        expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+          cache: expect.anything(),
+        }));
+      });
+    });
   });
 
   describe('extractAudioWithFallback', () => {

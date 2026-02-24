@@ -126,6 +126,14 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Get the File object associated with this video source.
+   * Returns null if no file has been loaded via loadFile().
+   */
+  getFile(): File | null {
+    return this.file;
+  }
+
+  /**
    * Load video from URL
    * @param hdrResizeTier - Pre-detected HDR canvas resize tier from DisplayCapabilities
    */

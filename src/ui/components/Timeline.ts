@@ -202,7 +202,15 @@ export class Timeline {
       return;
     }
 
-    const success = await this.waveformRenderer.loadFromVideo(element);
+    // Try to use the original File object directly (avoids redundant blob URL fetch)
+    const file = source.videoSourceNode?.getFile();
+    let success: boolean;
+    if (file) {
+      success = await this.waveformRenderer.loadFromBlob(file);
+    } else {
+      success = await this.waveformRenderer.loadFromVideo(element);
+    }
+
     this.waveformLoaded = success;
     if (success) {
       this.draw();

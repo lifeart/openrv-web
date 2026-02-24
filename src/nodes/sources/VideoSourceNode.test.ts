@@ -42,6 +42,10 @@ describe('VideoSourceNode', () => {
       expect(node.properties.has('fps')).toBe(true);
       expect(node.properties.getValue('fps')).toBe(24);
     });
+
+    it('getFile() returns null when no file has been loaded', () => {
+      expect(node.getFile()).toBeNull();
+    });
   });
 
   describe('isReady', () => {

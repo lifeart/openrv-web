@@ -692,4 +692,57 @@ describe('Timeline', () => {
       });
     });
   });
+
+  describe('waveform loading with File optimization', () => {
+    it('TML-WAV-001: uses loadFromBlob when videoSourceNode.getFile() returns a File', async () => {
+      const mockFile = new File(['audio-data'], 'test.mp4', { type: 'video/mp4' });
+
+      // Attach videoSourceNode with getFile() to the existing current source
+      const currentSource = session.currentSource!;
+      (currentSource as any).videoSourceNode = {
+        getFile: () => mockFile,
+      };
+
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      const loadFromBlobSpy = vi.spyOn(waveformRenderer, 'loadFromBlob').mockResolvedValue(true);
+      const loadFromVideoSpy = vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(true);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      await (timeline as any).loadWaveform();
+
+      expect(loadFromBlobSpy).toHaveBeenCalledWith(mockFile);
+      expect(loadFromVideoSpy).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it('TML-WAV-002: falls back to loadFromVideo when no videoSourceNode', async () => {
+      // The default source from beforeEach has no videoSourceNode
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      const loadFromBlobSpy = vi.spyOn(waveformRenderer, 'loadFromBlob').mockResolvedValue(true);
+      const loadFromVideoSpy = vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(true);
+
+      await (timeline as any).loadWaveform();
+
+      expect(loadFromVideoSpy).toHaveBeenCalled();
+      expect(loadFromBlobSpy).not.toHaveBeenCalled();
+    });
+
+    it('TML-WAV-003: falls back to loadFromVideo when getFile() returns null', async () => {
+      // Attach videoSourceNode with getFile() returning null to the existing current source
+      const currentSource = session.currentSource!;
+      (currentSource as any).videoSourceNode = {
+        getFile: () => null,
+      };
+
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      const loadFromBlobSpy = vi.spyOn(waveformRenderer, 'loadFromBlob').mockResolvedValue(true);
+      const loadFromVideoSpy = vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(true);
+
+      await (timeline as any).loadWaveform();
+
+      expect(loadFromVideoSpy).toHaveBeenCalled();
+      expect(loadFromBlobSpy).not.toHaveBeenCalled();
+    });
+  });
 });

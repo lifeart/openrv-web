@@ -126,7 +126,7 @@ export async function extractAudioFromVideo(
       });
     }
 
-    // Skip blob URLs that might have CORS issues
+    // Detect blob/data URLs for fetch configuration
     const isBlobUrl = videoSrc.startsWith('blob:');
     const isDataUrl = videoSrc.startsWith('data:');
 
@@ -141,6 +141,8 @@ export async function extractAudioFromVideo(
         // Use cors mode for external URLs, same-origin for blob/data
         mode: isBlobUrl || isDataUrl ? 'same-origin' : 'cors',
         credentials: 'same-origin',
+        // Use force-cache for remote URLs to avoid re-downloading the same file
+        cache: isBlobUrl || isDataUrl ? undefined : 'force-cache',
       });
       clearTimeout(timeoutId);
     } catch (fetchError) {

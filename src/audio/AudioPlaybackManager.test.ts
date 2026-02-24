@@ -528,6 +528,51 @@ describe('AudioPlaybackManager', () => {
     });
   });
 
+  describe('fetch cache behavior', () => {
+    it('APM-130: HTTP URL fetch uses cache: force-cache and mode: cors', async () => {
+      const video = document.createElement('video');
+      video.src = 'https://cdn.example.com/test.mp4';
+
+      await manager.loadFromVideo(video);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith('https://cdn.example.com/test.mp4', expect.objectContaining({
+        cache: 'force-cache',
+        mode: 'cors',
+      }));
+    });
+
+    it('APM-131: Blob URL fetch does NOT use force-cache and uses same-origin mode', async () => {
+      const video = document.createElement('video');
+      video.src = 'blob:http://localhost:3000/abc-123';
+
+      await manager.loadFromVideo(video);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith('blob:http://localhost:3000/abc-123', expect.objectContaining({
+        mode: 'same-origin',
+      }));
+      expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        cache: expect.anything(),
+      }));
+    });
+
+    it('APM-132: Data URL fetch does NOT use force-cache and uses same-origin mode', async () => {
+      const video = document.createElement('video');
+      video.src = 'data:video/mp4;base64,AAAA';
+
+      await manager.loadFromVideo(video);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith('data:video/mp4;base64,AAAA', expect.objectContaining({
+        mode: 'same-origin',
+      }));
+      expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        cache: expect.anything(),
+      }));
+    });
+  });
+
   describe('audio scrubbing', () => {
     beforeEach(async () => {
       vi.useFakeTimers();

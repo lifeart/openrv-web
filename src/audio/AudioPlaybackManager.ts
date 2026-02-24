@@ -130,6 +130,10 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       return true;
     }
 
+    // Detect blob/data URLs for fetch configuration
+    const isBlobUrl = videoSrc.startsWith('blob:');
+    const isDataUrl = videoSrc.startsWith('data:');
+
     // Set up timeout before any async operations
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -150,8 +154,10 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       try {
         const response = await fetch(videoSrc, {
           signal: controller.signal,
-          mode: 'cors',
+          mode: isBlobUrl || isDataUrl ? 'same-origin' : 'cors',
           credentials: 'same-origin',
+          // Use force-cache for remote URLs to avoid re-downloading the same file
+          cache: isBlobUrl || isDataUrl ? undefined : 'force-cache',
         });
 
         clearTimeout(timeoutId);
