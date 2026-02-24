@@ -28,12 +28,13 @@ import {
   findItemWithProperty,
   findAuxlItem,
   extractHeadroom,
-  srgbToLinear,
   getItemPropertyIndices,
   parseISOBMFFOrientation,
   parseISOBMFFTransforms,
+  parseTmapBox,
 } from './AVIFGainmapDecoder';
 import { drawImageWithOrientation } from './shared';
+import { type GainMapMetadata, parseGainMapMetadataFromXMP, tmapToGainMapMetadata, reconstructHDR, defaultGainMapMetadata } from './GainMapMetadata';
 
 // =============================================================================
 // Types
@@ -54,6 +55,8 @@ export interface HEICGainmapInfo {
   gainmapWidth: number;
   /** Gainmap image height from ispe property */
   gainmapHeight: number;
+  /** Full gain map metadata (ISO 21496-1) */
+  gainMapMetadata?: GainMapMetadata;
 }
 
 export interface HEICColorInfo {
@@ -288,10 +291,13 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
   const gainmapOffset = gainmapLoc.baseOffset + gainmapLoc.extents[0]!.offset;
   const gainmapLength = gainmapLoc.extents.reduce((sum, e) => sum + e.length, 0);
 
-  // 6. Extract headroom from XMP mime items or tmap box
-  let headroom = extractHeadroom(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd);
+  // 6. Extract headroom and full metadata from XMP mime items or tmap box
+  const metaResult = extractHEICGainMapMetadata(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd);
+  let headroom = metaResult?.headroom ?? null;
+  const gainMapMetadata = metaResult?.metadata;
+
   if (headroom === null) {
-    headroom = 2.0; // fallback
+    headroom = extractHeadroom(view, buffer, items, locations, ipco.dataStart, ipco.dataEnd) ?? 2.0;
   }
 
   // 7. Extract hvcC and ispe for gainmap item (needed by standalone HEIC wrapper)
@@ -339,7 +345,59 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
     gainmapHvcC,
     gainmapWidth,
     gainmapHeight,
+    gainMapMetadata,
   };
+}
+
+/**
+ * Extract full gain map metadata from HEIC XMP or tmap box.
+ */
+function extractHEICGainMapMetadata(
+  view: DataView,
+  buffer: ArrayBuffer,
+  items: import('./AVIFGainmapDecoder').ItemEntry[],
+  locations: import('./AVIFGainmapDecoder').ItemLocation[],
+  ipcoStart: number,
+  ipcoEnd: number
+): { headroom: number; metadata: GainMapMetadata } | null {
+  // Try XMP from mime-type items
+  for (const item of items) {
+    if (item.type === 'mime') {
+      const loc = locations.find(l => l.itemId === item.id);
+      if (!loc || loc.extents.length === 0) continue;
+
+      const offset = loc.baseOffset + loc.extents[0]!.offset;
+      const length = loc.extents.reduce((sum, e) => sum + e.length, 0);
+      if (offset + length > buffer.byteLength) continue;
+
+      const bytes = new Uint8Array(buffer, offset, length);
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+
+      if (text.includes('xmlns:') || text.includes('http://ns.adobe.com/')) {
+        const meta = parseGainMapMetadataFromXMP(text);
+        if (meta) {
+          return { headroom: meta.hdrCapacityMax, metadata: meta };
+        }
+      }
+    }
+  }
+
+  // Try tmap box in ipco
+  let offset = ipcoStart;
+  while (offset + 8 <= ipcoEnd) {
+    const box = readBox(view, offset, ipcoEnd);
+    if (!box) break;
+    if (box.type === 'tmap') {
+      const tmap = parseTmapBox(view, box.dataStart, box.dataEnd);
+      if (tmap) {
+        const meta = tmapToGainMapMetadata(tmap);
+        return { headroom: meta.hdrCapacityMax, metadata: meta };
+      }
+    }
+    offset = box.boxEnd;
+  }
+
+  return null;
 }
 
 // =============================================================================
@@ -735,41 +793,10 @@ export async function decodeHEICGainmapToFloat32(
     );
   }
 
-  // Apply HDR reconstruction per-pixel
-  // HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
+  // Apply HDR reconstruction per-pixel using shared module
   const pixelCount = width * height;
-  const result = new Float32Array(pixelCount * 4);
-  const headroom = info.headroom;
-
-  // Pre-compute sRGB-to-linear LUT for uint8 values (0-255)
-  const srgbLUT = new Float32Array(256);
-  for (let i = 0; i < 256; i++) {
-    srgbLUT[i] = srgbToLinear(i / 255.0);
-  }
-
-  // Pre-compute gain LUT: gain = 2^(v/255 * headroom) = exp(v/255 * headroom * LN2)
-  const gainLUT = new Float32Array(256);
-  const headroomLN2 = headroom * Math.LN2;
-  for (let i = 0; i < 256; i++) {
-    gainLUT[i] = Math.exp((i / 255.0) * headroomLN2);
-  }
-
-  for (let i = 0; i < pixelCount; i++) {
-    const srcIdx = i * 4;
-    const dstIdx = i * 4;
-
-    const r = srgbLUT[baseData[srcIdx]!]!;
-    const g = srgbLUT[baseData[srcIdx + 1]!]!;
-    const b = srgbLUT[baseData[srcIdx + 2]!]!;
-
-    // Gainmap is grayscale — use red channel
-    const gain = gainLUT[gainData[srcIdx]!]!;
-
-    result[dstIdx] = r * gain;
-    result[dstIdx + 1] = g * gain;
-    result[dstIdx + 2] = b * gain;
-    result[dstIdx + 3] = 1.0;
-  }
+  const gainMeta = info.gainMapMetadata ?? defaultGainMapMetadata(info.headroom);
+  const result = reconstructHDR(baseData, gainData, pixelCount, gainMeta);
 
   return { width, height, data: result, channels: 4 };
 }

@@ -14,6 +14,7 @@
 
 import type { ManagerBase } from '../core/ManagerBase';
 import type { ShaderProgram } from './ShaderProgram';
+import type { ColorPrimaries } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type { ToneMappingState, ToneMappingOperator, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
@@ -59,6 +60,7 @@ export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
 export const DIRTY_PREMULT = 'premult';
 export const DIRTY_DITHER = 'dither';
 export const DIRTY_SPHERICAL = 'spherical';
+export const DIRTY_COLOR_PRIMARIES = 'colorPrimaries';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -75,6 +77,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_PREMULT,
   DIRTY_DITHER,
   DIRTY_SPHERICAL,
+  DIRTY_COLOR_PRIMARIES,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -106,6 +109,39 @@ const GAMUT_MODE_CODES: Record<string, number> = {
   'clip': 0,
   'compress': 1,
 };
+
+/**
+ * Color primaries conversion matrices (column-major for GLSL mat3).
+ * Derived from CIE xy chromaticity coordinates and the Bradford chromatic
+ * adaptation transform.
+ */
+const COLOR_PRIMARIES_MATRICES = {
+  IDENTITY: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+  // BT.2020 → BT.709/sRGB
+  REC2020_TO_SRGB: new Float32Array([
+     1.6605, -0.1246, -0.0182,
+    -0.5877,  1.1329, -0.1006,
+    -0.0728, -0.0083,  1.1187,
+  ]),
+  // Display-P3 → BT.709/sRGB
+  P3_TO_SRGB: new Float32Array([
+     1.2249, -0.0420, -0.0197,
+    -0.2247,  1.0419, -0.0786,
+    -0.0002,  0.0001,  1.0983,
+  ]),
+  // BT.709/sRGB → Display-P3
+  SRGB_TO_P3: new Float32Array([
+     0.8225,  0.0332,  0.0171,
+     0.1774,  0.9669,  0.0724,
+     0.0001, -0.0001,  0.9105,
+  ]),
+  // BT.709/sRGB → BT.2020
+  SRGB_TO_REC2020: new Float32Array([
+     0.6274,  0.0691,  0.0164,
+     0.3293,  0.9195,  0.0880,
+     0.0433,  0.0114,  0.8956,
+  ]),
+} as const;
 
 /** Map ChannelMode string to shader integer */
 const CHANNEL_MODE_CODES: Record<ChannelMode, number> = {
@@ -358,6 +394,12 @@ export interface InternalShaderState {
   // Dither + Quantize visualization
   ditherMode: number;    // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
   quantizeBits: number;  // 0=off, 2-16 = target bit depth for quantize/posterize
+
+  // Automatic color primaries conversion
+  inputPrimariesEnabled: boolean;
+  inputPrimariesMatrix: Float32Array;   // 9 floats, column-major mat3
+  outputPrimariesEnabled: boolean;
+  outputPrimariesMatrix: Float32Array;  // 9 floats, column-major mat3
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -467,6 +509,10 @@ function createDefaultInternalState(): InternalShaderState {
     premultMode: 0,
     ditherMode: 0,
     quantizeBits: 0,
+    inputPrimariesEnabled: false,
+    inputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    outputPrimariesEnabled: false,
+    outputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
   };
 }
 
@@ -896,6 +942,46 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     const target = (targetEntries.find(([, v]) => v === s.gamutTargetCode)?.[0] ?? 'srgb') as GamutIdentifier;
     const mode = s.gamutMappingModeCode === 1 ? 'compress' : 'clip';
     return { mode, sourceGamut: source, targetGamut: target, highlightOutOfGamut: s.gamutHighlightEnabled };
+  }
+
+  /**
+   * Set automatic color primaries conversion matrices.
+   *
+   * Input matrix: source primaries → BT.709 working space (before grading)
+   * Output matrix: BT.709 working space → display gamut (before display OETF)
+   *
+   * @param inputPrimaries - Source image color primaries (undefined = BT.709)
+   * @param outputColorSpace - Display color space ('srgb', 'display-p3', 'rec2020')
+   */
+  setColorPrimaries(
+    inputPrimaries: ColorPrimaries | undefined,
+    outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+  ): void {
+    // Input: convert source → BT.709
+    if (inputPrimaries === 'bt2020') {
+      this.state.inputPrimariesEnabled = true;
+      this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB;
+    } else if (inputPrimaries === 'p3') {
+      this.state.inputPrimariesEnabled = true;
+      this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.P3_TO_SRGB;
+    } else {
+      this.state.inputPrimariesEnabled = false;
+      this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.IDENTITY;
+    }
+
+    // Output: convert BT.709 → display gamut
+    if (outputColorSpace === 'display-p3') {
+      this.state.outputPrimariesEnabled = true;
+      this.state.outputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.SRGB_TO_P3;
+    } else if (outputColorSpace === 'rec2020') {
+      this.state.outputPrimariesEnabled = true;
+      this.state.outputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.SRGB_TO_REC2020;
+    } else {
+      this.state.outputPrimariesEnabled = false;
+      this.state.outputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.IDENTITY;
+    }
+
+    this.dirtyFlags.add(DIRTY_COLOR_PRIMARIES);
   }
 
   setDeinterlace(diState: { enabled: boolean; method: number; fieldOrder: number }): void {
@@ -1601,6 +1687,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         shader.setUniformInt('u_gamutHighlightEnabled', s.gamutHighlightEnabled ? 1 : 0);
       } else {
         shader.setUniformInt('u_gamutHighlightEnabled', 0);
+      }
+    }
+
+    // Automatic Color Primaries Conversion
+    if (dirty.has(DIRTY_COLOR_PRIMARIES)) {
+      shader.setUniformInt('u_inputPrimariesEnabled', s.inputPrimariesEnabled ? 1 : 0);
+      if (s.inputPrimariesEnabled) {
+        shader.setUniformMatrix3('u_inputPrimariesMatrix', s.inputPrimariesMatrix);
+      }
+      shader.setUniformInt('u_outputPrimariesEnabled', s.outputPrimariesEnabled ? 1 : 0);
+      if (s.outputPrimariesEnabled) {
+        shader.setUniformMatrix3('u_outputPrimariesMatrix', s.outputPrimariesMatrix);
       }
     }
 

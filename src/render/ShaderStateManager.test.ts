@@ -20,6 +20,7 @@ import {
   DIRTY_CHANNEL_SWIZZLE,
   DIRTY_PREMULT,
   DIRTY_DITHER,
+  DIRTY_COLOR_PRIMARIES,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -1823,6 +1824,122 @@ describe('ShaderStateManager', () => {
 
     it('DITHER-SM-014: DIRTY_DITHER is in ALL_DIRTY_FLAGS', () => {
       expect(ALL_DIRTY_FLAGS).toContain(DIRTY_DITHER);
+    });
+  });
+
+  // =========================================================================
+  // Color Primaries Conversion
+  // =========================================================================
+
+  describe('Color Primaries', () => {
+    it('CP-SM-001: SDR BT.709 on sRGB display — both disabled', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'srgb');
+      const flags = (mgr as unknown as { dirtyFlags: Set<string> }).dirtyFlags;
+      expect(flags.has(DIRTY_COLOR_PRIMARIES)).toBe(true);
+      // Access state indirectly via applyUniforms
+      const uploaded: Record<string, unknown> = {};
+      const shader = {
+        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+      };
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
+      expect(uploaded['u_outputPrimariesEnabled']).toBe(0);
+    });
+
+    it('CP-SM-002: BT.2020 input — correct input matrix selected', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries('bt2020', 'srgb');
+      const uploaded: Record<string, unknown> = {};
+      const shader = {
+        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+      };
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
+      const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
+      expect(mat).toBeInstanceOf(Float32Array);
+      expect(mat.length).toBe(9);
+      // First element should be ~1.66 (REC2020_TO_SRGB[0])
+      expect(mat[0]).toBeCloseTo(1.6605, 3);
+    });
+
+    it('CP-SM-003: P3 display output — correct output matrix selected', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'display-p3');
+      const uploaded: Record<string, unknown> = {};
+      const shader = {
+        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+      };
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
+      expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
+      const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
+      expect(mat[0]).toBeCloseTo(0.8225, 3);
+    });
+
+    it('CP-SM-004: HDR output (rec2020) — output matrix is SRGB_TO_REC2020', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries(undefined, 'rec2020');
+      const uploaded: Record<string, unknown> = {};
+      const shader = {
+        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+      };
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
+      const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
+      expect(mat[0]).toBeCloseTo(0.6274, 3);
+    });
+
+    it('CP-SM-005: DIRTY_COLOR_PRIMARIES is in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_COLOR_PRIMARIES);
+    });
+
+    it('CP-SM-006: P3 input primaries — input matrix is P3_TO_SRGB', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries('p3', 'srgb');
+      const uploaded: Record<string, unknown> = {};
+      const shader = {
+        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+      };
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
+      const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
+      expect(mat).toBeInstanceOf(Float32Array);
+      expect(mat.length).toBe(9);
+      // First element should be ~1.2249 (P3_TO_SRGB[0])
+      expect(mat[0]).toBeCloseTo(1.2249, 3);
+      // Output should remain disabled for sRGB display
+      expect(uploaded['u_outputPrimariesEnabled']).toBe(0);
+    });
+
+    it('CP-SM-007: Combined bt2020 input + display-p3 output — both matrices enabled', () => {
+      const mgr = new ShaderStateManager();
+      mgr.setColorPrimaries('bt2020', 'display-p3');
+      const uploaded: Record<string, unknown> = {};
+      const shader = {
+        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+      };
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      // Input: bt2020 → sRGB (REC2020_TO_SRGB)
+      expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
+      const inMat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
+      expect(inMat[0]).toBeCloseTo(1.6605, 3);
+      // Output: sRGB → display-p3 (SRGB_TO_P3)
+      expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
+      const outMat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
+      expect(outMat[0]).toBeCloseTo(0.8225, 3);
     });
   });
 });

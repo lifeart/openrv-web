@@ -18,7 +18,7 @@
  * Based on the OpenEXR file format specification.
  */
 
-import { IPImage, ImageMetadata } from '../core/image/Image';
+import { IPImage, ImageMetadata, type ColorPrimaries } from '../core/image/Image';
 import { decompressPIZ } from './EXRPIZCodec';
 import { decompressDWA } from './EXRDWACodec';
 import { validateImageDimensions } from './shared';
@@ -2298,6 +2298,42 @@ export async function decodeEXR(
   }
 }
 
+// Known CIE xy chromaticity coordinates for standard color primaries.
+// Layout: [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy]
+const KNOWN_CHROMATICITIES: { primaries: ColorPrimaries; values: readonly number[] }[] = [
+  { primaries: 'bt709', values: [0.64, 0.33, 0.30, 0.60, 0.15, 0.06, 0.3127, 0.329] },
+  { primaries: 'bt2020', values: [0.708, 0.292, 0.17, 0.797, 0.131, 0.046, 0.3127, 0.329] },
+  { primaries: 'p3', values: [0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329] },
+];
+
+/**
+ * Detect color primaries from EXR chromaticities header attribute.
+ * Matches against known CIE xy values for BT.709, BT.2020, and Display-P3.
+ * Returns undefined for unrecognized primaries (e.g. ACES AP0/AP1).
+ *
+ * @param chromaticities - Float32Array of 8 values: [Rx, Ry, Gx, Gy, Bx, By, Wx, Wy]
+ * @param tolerance - Maximum deviation per coordinate (default 0.005)
+ */
+export function detectColorPrimariesFromChromaticities(
+  chromaticities: Float32Array,
+  tolerance = 0.005,
+): ColorPrimaries | undefined {
+  if (chromaticities.length < 8) return undefined;
+
+  for (const known of KNOWN_CHROMATICITIES) {
+    let match = true;
+    for (let i = 0; i < 8; i++) {
+      if (Math.abs(chromaticities[i]! - known.values[i]!) > tolerance) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return known.primaries;
+  }
+
+  return undefined;
+}
+
 /**
  * Convert EXR decode result to IPImage
  */
@@ -2323,6 +2359,10 @@ export function exrToIPImage(result: EXRDecodeResult, sourcePath?: string): IPIm
 
   if (result.header.chromaticities) {
     metadata.attributes!.chromaticities = Array.from(result.header.chromaticities);
+    const detected = detectColorPrimariesFromChromaticities(result.header.chromaticities);
+    if (detected && detected !== 'bt709') {
+      metadata.colorPrimaries = detected;
+    }
   }
 
   return new IPImage({

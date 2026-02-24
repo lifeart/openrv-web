@@ -223,8 +223,16 @@ export class ViewerGLRenderer {
       return this._gamutMappingState;
     }
 
-    const sourceGamut: GamutIdentifier =
-      image.metadata?.colorPrimaries === 'bt2020' ? 'rec2020' : 'srgb';
+    // When auto primaries normalization is active, the shader has already
+    // converted source primaries → BT.709 working space. Creative gamut
+    // mapping always operates in BT.709 space, so source is always 'srgb'.
+    const hasInputNormalization =
+      image.metadata?.colorPrimaries === 'bt2020' ||
+      image.metadata?.colorPrimaries === 'p3';
+
+    const sourceGamut: GamutIdentifier = hasInputNormalization
+      ? 'srgb' // already normalized to BT.709 by input primaries conversion
+      : 'srgb';
     const targetGamut: GamutIdentifier =
       this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
         ? 'display-p3' : 'srgb';
@@ -602,6 +610,24 @@ export class ViewerGLRenderer {
     // Gamut mapping: only auto-detect when user hasn't explicitly configured it
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
       state.gamutMapping = this.detectGamutMapping(image);
+    }
+
+    // Automatic color primaries conversion (separate from creative gamut mapping)
+    // Skip when OCIO is active — OCIO handles its own color space transforms.
+    if (renderer.isOCIOWasmActive()) {
+      renderer.setColorPrimaries(undefined, 'srgb');
+    } else {
+      // Determine output gamut from HDR output mode and display capabilities
+      const hdrMode = renderer.getHDROutputMode();
+      let outputColorSpace: 'srgb' | 'display-p3' | 'rec2020' = 'srgb';
+      if (hdrMode === 'hlg' || hdrMode === 'pq') {
+        outputColorSpace = 'rec2020';
+      } else if (this._capabilities?.displayGamut === 'p3') {
+        outputColorSpace = 'display-p3';
+      } else if (this._capabilities?.displayGamut === 'rec2020') {
+        outputColorSpace = 'rec2020';
+      }
+      renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
     }
 
     PerfTrace.end('buildRenderState');

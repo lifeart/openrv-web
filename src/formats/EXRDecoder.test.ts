@@ -11,6 +11,7 @@ import {
   extractLayerInfo,
   resolveChannelMapping,
   applyUncrop,
+  detectColorPrimariesFromChromaticities,
   EXRCompression,
   EXRPixelType,
   EXRChannel,
@@ -4855,6 +4856,170 @@ describe('EXR Tiled Image Support', () => {
       for (const part of parts) { result.set(part, pos); pos += part.length; }
 
       await expect(decodeEXR(result.buffer)).rejects.toThrow(/[Dd]eep.*tiled|deeptile/);
+    });
+  });
+
+  // =========================================================================
+  // detectColorPrimariesFromChromaticities
+  // =========================================================================
+
+  describe('detectColorPrimariesFromChromaticities', () => {
+    it('should detect BT.709 chromaticities', () => {
+      const chrom = new Float32Array([0.64, 0.33, 0.30, 0.60, 0.15, 0.06, 0.3127, 0.329]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt709');
+    });
+
+    it('should detect BT.2020 chromaticities', () => {
+      const chrom = new Float32Array([0.708, 0.292, 0.17, 0.797, 0.131, 0.046, 0.3127, 0.329]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt2020');
+    });
+
+    it('should detect Display-P3 chromaticities', () => {
+      const chrom = new Float32Array([0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBe('p3');
+    });
+
+    it('should detect BT.709 with slightly perturbed values within tolerance', () => {
+      const chrom = new Float32Array([0.641, 0.331, 0.299, 0.601, 0.151, 0.059, 0.3130, 0.3285]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt709');
+    });
+
+    it('should detect BT.2020 with slightly perturbed values within tolerance', () => {
+      const chrom = new Float32Array([0.710, 0.290, 0.172, 0.795, 0.133, 0.044, 0.3130, 0.3285]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt2020');
+    });
+
+    it('should return undefined for ACES AP0 chromaticities', () => {
+      // ACES AP0: R(0.7347, 0.2653) G(0.0, 1.0) B(0.0001, -0.077) W(0.32168, 0.33767)
+      const chrom = new Float32Array([0.7347, 0.2653, 0.0, 1.0, 0.0001, -0.077, 0.32168, 0.33767]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBeUndefined();
+    });
+
+    it('should return undefined for ACES AP1 chromaticities', () => {
+      // ACES AP1: R(0.713, 0.293) G(0.165, 0.830) B(0.128, 0.044) W(0.32168, 0.33767)
+      const chrom = new Float32Array([0.713, 0.293, 0.165, 0.830, 0.128, 0.044, 0.32168, 0.33767]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBeUndefined();
+    });
+
+    it('should return undefined for short array', () => {
+      const chrom = new Float32Array([0.64, 0.33, 0.30]);
+      expect(detectColorPrimariesFromChromaticities(chrom)).toBeUndefined();
+    });
+
+    it('should respect custom tolerance', () => {
+      // Values offset by 0.01 from BT.709 — should fail with default tolerance (0.005) but pass with 0.015
+      const chrom = new Float32Array([0.65, 0.34, 0.31, 0.61, 0.16, 0.07, 0.3227, 0.339]);
+      expect(detectColorPrimariesFromChromaticities(chrom, 0.005)).toBeUndefined();
+      expect(detectColorPrimariesFromChromaticities(chrom, 0.015)).toBe('bt709');
+    });
+  });
+
+  // =========================================================================
+  // exrToIPImage — chromaticity-based colorPrimaries detection
+  // =========================================================================
+
+  describe('exrToIPImage chromaticity detection', () => {
+    it('should set colorPrimaries to bt2020 when BT.2020 chromaticities present', () => {
+      const result = {
+        width: 2,
+        height: 2,
+        channels: 4,
+        data: new Float32Array(2 * 2 * 4),
+        header: {
+          channels: [
+            { name: 'R', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'G', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'B', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'A', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+          ] as EXRChannel[],
+          compression: EXRCompression.NONE,
+          dataWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          displayWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          chromaticities: new Float32Array([0.708, 0.292, 0.17, 0.797, 0.131, 0.046, 0.3127, 0.329]),
+        } as unknown as EXRHeader,
+        layers: [],
+        decodedLayer: undefined,
+      };
+
+      const image = exrToIPImage(result);
+      expect(image.metadata.colorPrimaries).toBe('bt2020');
+    });
+
+    it('should set colorPrimaries to p3 when P3 chromaticities present', () => {
+      const result = {
+        width: 2,
+        height: 2,
+        channels: 4,
+        data: new Float32Array(2 * 2 * 4),
+        header: {
+          channels: [
+            { name: 'R', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'G', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'B', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'A', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+          ] as EXRChannel[],
+          compression: EXRCompression.NONE,
+          dataWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          displayWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          chromaticities: new Float32Array([0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329]),
+        } as unknown as EXRHeader,
+        layers: [],
+        decodedLayer: undefined,
+      };
+
+      const image = exrToIPImage(result);
+      expect(image.metadata.colorPrimaries).toBe('p3');
+    });
+
+    it('should not set colorPrimaries for BT.709 chromaticities (default)', () => {
+      const result = {
+        width: 2,
+        height: 2,
+        channels: 4,
+        data: new Float32Array(2 * 2 * 4),
+        header: {
+          channels: [
+            { name: 'R', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'G', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'B', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'A', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+          ] as EXRChannel[],
+          compression: EXRCompression.NONE,
+          dataWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          displayWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          chromaticities: new Float32Array([0.64, 0.33, 0.30, 0.60, 0.15, 0.06, 0.3127, 0.329]),
+        } as unknown as EXRHeader,
+        layers: [],
+        decodedLayer: undefined,
+      };
+
+      const image = exrToIPImage(result);
+      expect(image.metadata.colorPrimaries).toBeUndefined();
+    });
+
+    it('should not set colorPrimaries when no chromaticities', () => {
+      const result = {
+        width: 2,
+        height: 2,
+        channels: 4,
+        data: new Float32Array(2 * 2 * 4),
+        header: {
+          channels: [
+            { name: 'R', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'G', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'B', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+            { name: 'A', pixelType: EXRPixelType.HALF, xSampling: 1, ySampling: 1 },
+          ] as EXRChannel[],
+          compression: EXRCompression.NONE,
+          dataWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+          displayWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
+        } as unknown as EXRHeader,
+        layers: [],
+        decodedLayer: undefined,
+      };
+
+      const image = exrToIPImage(result);
+      expect(image.metadata.colorPrimaries).toBeUndefined();
     });
   });
 });

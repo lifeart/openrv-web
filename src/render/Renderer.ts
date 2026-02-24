@@ -1,4 +1,4 @@
-import { IPImage, DataType } from '../core/image/Image';
+import { IPImage, DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
@@ -1928,6 +1928,10 @@ export class Renderer implements RendererBackend {
 
   setGamutMapping(state: GamutMappingState): void {
     this.stateManager.setGamutMapping(state);
+  }
+
+  setColorPrimaries(inputPrimaries: ColorPrimaries | undefined, outputColorSpace: 'srgb' | 'display-p3' | 'rec2020'): void {
+    this.stateManager.setColorPrimaries(inputPrimaries, outputColorSpace);
   }
 
   setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void {

@@ -408,6 +408,8 @@ describe('ViewerGLRenderer', () => {
         clear: vi.fn(),
         renderImage: vi.fn(),
         hasPendingStateChanges: vi.fn(() => true),
+        setColorPrimaries: vi.fn(),
+        isOCIOWasmActive: vi.fn(() => false),
         dispose: vi.fn(),
       };
 
@@ -541,6 +543,29 @@ describe('ViewerGLRenderer', () => {
       // No transferFunction → not HLG/PQ → tone mapping preserved
       expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
       expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
+    });
+
+    it('VGLR-038: setColorPrimaries called with bt2020 input for bt2020 image', () => {
+      const { glRenderer, mockRendererObj } = setupHDRRenderer('hlg');
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { colorPrimaries: 'bt2020' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      // HLG output → rec2020 output color space; bt2020 input from image metadata
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith('bt2020', 'rec2020');
+    });
+
+    it('VGLR-039: HLG output mode sets output color space to rec2020', () => {
+      const { glRenderer, mockRendererObj } = setupHDRRenderer('hlg');
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      // HLG output → rec2020 output; no colorPrimaries metadata → undefined input
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith(undefined, 'rec2020');
     });
   });
 

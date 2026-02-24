@@ -3,6 +3,8 @@
  */
 
 export * from './EXRDecoder';
+export type { GainMapMetadata } from './GainMapMetadata';
+export { parseGainMapMetadataFromXMP, reconstructHDR, srgbToLinear as srgbToLinearShared, isSimpleGainMap } from './GainMapMetadata';
 export {
   isMultiViewEXR,
   getEXRViews,

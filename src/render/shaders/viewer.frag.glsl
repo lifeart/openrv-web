@@ -145,6 +145,12 @@
       uniform int u_targetGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
       uniform bool u_gamutHighlightEnabled; // highlight out-of-gamut pixels
 
+      // Automatic color primaries conversion (separate from creative gamut mapping)
+      uniform bool u_inputPrimariesEnabled;   // source primaries → BT.709 working space
+      uniform mat3 u_inputPrimariesMatrix;
+      uniform bool u_outputPrimariesEnabled;  // BT.709 working space → display gamut
+      uniform mat3 u_outputPrimariesMatrix;
+
       // Linearize (RVLinearize log-to-linear conversion)
       uniform int u_linearizeLogType;    // 0=none, 1=cineon, 2=viper, 3=logc3
       uniform float u_linearizeFileGamma; // 1.0 = no-op
@@ -1014,6 +1020,11 @@
           }
         }
 
+        // 0e. Input primaries normalization (source → BT.709 working space)
+        if (u_inputPrimariesEnabled) {
+            color.rgb = u_inputPrimariesMatrix * color.rgb;
+        }
+
         // 1. Exposure (in stops, applied in linear space, per-channel)
         color.rgb *= exp2(u_exposureRGB);
 
@@ -1302,6 +1313,11 @@
           // Laplacian: high-frequency edge detail (both terms in same space)
           vec3 detail = origCenter * 4.0 - neighbors;
           color.rgb = max(color.rgb + detail * u_sharpenAmount, 0.0);
+        }
+
+        // 7c. Output primaries conversion (BT.709 working space → display gamut)
+        if (u_outputPrimariesEnabled) {
+            color.rgb = u_outputPrimariesMatrix * color.rgb;
         }
 
         // 8. Display output: transfer function then creative gamma.

@@ -20,6 +20,7 @@
  */
 
 import { drawImageWithOrientation } from './shared';
+import { type GainMapMetadata, parseGainMapMetadataFromXMP, reconstructHDR, defaultGainMapMetadata } from './GainMapMetadata';
 
 export interface GainmapInfo {
   baseImageOffset: number;
@@ -28,6 +29,8 @@ export interface GainmapInfo {
   gainmapLength: number;
   /** HDR headroom (typically 2.0-8.0 stops) */
   headroom: number;
+  /** Full gain map metadata (ISO 21496-1) */
+  gainMapMetadata?: GainMapMetadata;
 }
 
 /**
@@ -66,15 +69,38 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   const baseImage = images[0]!;
   const gainmapImage = images[1]!;
 
-  // Extract headroom from XMP metadata
+  // Extract headroom and full metadata from XMP
   // First try the primary image's XMP (Apple format)
-  let headroom = extractHeadroomFromXMP(buffer, 0, undefined);
-  if (headroom === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
+  let xmpResult = extractXMPFromJPEG(buffer, 0, undefined);
+  if (xmpResult === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
     // Try the gainmap image's own XMP (Google Ultra HDR format)
-    headroom = extractHeadroomFromXMP(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
+    xmpResult = extractXMPFromJPEG(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
+  }
+
+  let gainMapMetadata: GainMapMetadata | undefined;
+  let headroom: number | null = null;
+
+  if (xmpResult) {
+    gainMapMetadata = parseGainMapMetadataFromXMP(xmpResult) ?? undefined;
+    if (gainMapMetadata) {
+      headroom = gainMapMetadata.hdrCapacityMax;
+    } else {
+      headroom = parseHeadroomFromXMPText(xmpResult);
+    }
+  }
+
+  // Fallback: try legacy headroom extraction
+  if (headroom === null) {
+    headroom = extractHeadroomFromXMP(buffer, 0, undefined);
+    if (headroom === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
+      headroom = extractHeadroomFromXMP(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
+    }
   }
 
   const finalHeadroom = headroom ?? 2.0;
+  if (!gainMapMetadata) {
+    gainMapMetadata = defaultGainMapMetadata(finalHeadroom);
+  }
 
   return {
     baseImageOffset: baseImage.offset,
@@ -82,6 +108,7 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
     gainmapOffset: gainmapImage.offset,
     gainmapLength: gainmapImage.size,
     headroom: finalHeadroom,
+    gainMapMetadata,
   };
 }
 
@@ -151,44 +178,10 @@ export async function decodeGainmapToFloat32(
   const gainData = gainCtx.getImageData(0, 0, width, height).data;
   gainmapBitmap.close();
 
-  // Apply HDR reconstruction per-pixel
-  // HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
+  // Apply HDR reconstruction per-pixel using shared module
   const pixelCount = width * height;
-  const result = new Float32Array(pixelCount * 4); // RGBA
-  const headroom = info.headroom;
-
-  // Pre-compute sRGB-to-linear LUT for uint8 values (0-255)
-  const srgbLUT = new Float32Array(256);
-  for (let i = 0; i < 256; i++) {
-    srgbLUT[i] = srgbToLinear(i / 255.0);
-  }
-
-  // Pre-compute gain LUT: gainmap values come from uint8 source (0-255),
-  // so there are only 256 possible gain multipliers.
-  // gain = 2^(v/255 * headroom) = exp(v/255 * headroom * LN2)
-  const gainLUT = new Float32Array(256);
-  const headroomLN2 = headroom * Math.LN2;
-  for (let i = 0; i < 256; i++) {
-    gainLUT[i] = Math.exp((i / 255.0) * headroomLN2);
-  }
-
-  for (let i = 0; i < pixelCount; i++) {
-    const srcIdx = i * 4;
-    const dstIdx = i * 4;
-
-    // sRGB to linear via pre-computed LUT
-    const r = srgbLUT[baseData[srcIdx]!]!;
-    const g = srgbLUT[baseData[srcIdx + 1]!]!;
-    const b = srgbLUT[baseData[srcIdx + 2]!]!;
-
-    // Gainmap is grayscale - use red channel; gain via pre-computed LUT
-    const gain = gainLUT[gainData[srcIdx]!]!;
-
-    result[dstIdx] = r * gain;
-    result[dstIdx + 1] = g * gain;
-    result[dstIdx + 2] = b * gain;
-    result[dstIdx + 3] = 1.0; // Full alpha
-  }
+  const meta = info.gainMapMetadata ?? defaultGainMapMetadata(info.headroom);
+  const result = reconstructHDR(baseData, gainData, pixelCount, meta);
 
   return { width, height, data: result, channels: 4 };
 }
@@ -293,16 +286,6 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
 // =============================================================================
 // Internal helpers
 // =============================================================================
-
-/**
- * sRGB to linear conversion (gamma decode)
- */
-function srgbToLinear(s: number): number {
-  if (s <= 0.04045) {
-    return s / 12.92;
-  }
-  return Math.pow((s + 0.055) / 1.055, 2.4);
-}
 
 interface MPFImageEntry {
   offset: number;
@@ -510,6 +493,55 @@ function extractHeadroomFromXMP(buffer: ArrayBuffer, startOffset: number, endOff
         if (text.includes('http://ns.adobe.com/xap/') || text.includes('xmlns:')) {
           const headroom = parseHeadroomFromXMPText(text);
           if (headroom !== null) return headroom;
+        }
+      }
+    }
+
+    offset += 2 + segmentLength;
+  }
+
+  return null;
+}
+
+/**
+ * Extract raw XMP text from a JPEG region.
+ * Scans APP1 markers for XMP data.
+ */
+function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset: number | undefined): string | null {
+  const view = new DataView(buffer);
+
+  let offset = startOffset;
+  if (offset + 1 < view.byteLength && view.getUint8(offset) === 0xFF && view.getUint8(offset + 1) === 0xD8) {
+    offset += 2;
+  }
+
+  const scanEnd = Math.min(endOffset ?? (startOffset + 65536), view.byteLength);
+
+  while (offset < scanEnd - 4) {
+    if (view.getUint8(offset) !== 0xFF) {
+      offset++;
+      continue;
+    }
+
+    const marker = view.getUint8(offset + 1);
+
+    if (marker === 0xDA) break;
+    if (marker === 0xFF) { offset++; continue; }
+    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+      offset += 2;
+      continue;
+    }
+
+    if (offset + 3 >= scanEnd) break;
+    const segmentLength = view.getUint16(offset + 2);
+
+    if (marker === 0xE1) {
+      const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
+      if (dataLen > 0) {
+        const segmentData = new Uint8Array(buffer, offset + 4, dataLen);
+        const text = new TextDecoder('ascii', { fatal: false }).decode(segmentData);
+        if (text.includes('http://ns.adobe.com/xap/') || text.includes('xmlns:')) {
+          return text;
         }
       }
     }

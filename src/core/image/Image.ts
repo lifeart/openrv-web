@@ -1,7 +1,7 @@
 export type DataType = 'uint8' | 'uint16' | 'float32';
 
 export type TransferFunction = 'srgb' | 'hlg' | 'pq' | 'smpte240m';
-export type ColorPrimaries = 'bt709' | 'bt2020';
+export type ColorPrimaries = 'bt709' | 'bt2020' | 'p3';
 
 export interface ImageMetadata {
   colorSpace?: string;

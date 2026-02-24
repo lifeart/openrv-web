@@ -12,6 +12,7 @@
  */
 
 import type { ShaderProgram } from './ShaderProgram';
+import type { ColorPrimaries } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
@@ -126,6 +127,9 @@ export interface StateAccessor {
 
   /** Get the current gamut mapping state. */
   getGamutMapping(): GamutMappingState;
+
+  /** Set automatic color primaries conversion (source→BT.709 input, BT.709→display output). */
+  setColorPrimaries(inputPrimaries: ColorPrimaries | undefined, outputColorSpace: 'srgb' | 'display-p3' | 'rec2020'): void;
 
   /** Set deinterlace state for GPU shader. */
   setDeinterlace(state: { enabled: boolean; method: number; fieldOrder: number }): void;

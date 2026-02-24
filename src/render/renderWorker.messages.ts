@@ -100,7 +100,7 @@ export interface RenderHDRMessage extends BaseWorkerMessage {
   dataType: number; // 0=uint8, 1=uint16, 2=float32
   channels: number;
   transferFunction?: number; // 0=srgb, 1=hlg, 2=pq
-  colorPrimaries?: number; // 0=bt709, 1=bt2020
+  colorPrimaries?: number; // 0=bt709, 1=bt2020, 2=p3
 }
 
 /** Set color adjustments (fire-and-forget). */
@@ -381,7 +381,8 @@ export const TRANSFER_FUNCTION_FROM_CODE = ['srgb', 'hlg', 'pq', 'smpte240m'] as
 export const COLOR_PRIMARIES_CODES = {
   bt709: 0,
   bt2020: 1,
+  p3: 2,
 } as const;
 
 /** Map numeric code back to ColorPrimaries string. */
-export const COLOR_PRIMARIES_FROM_CODE = ['bt709', 'bt2020'] as const;
+export const COLOR_PRIMARIES_FROM_CODE = ['bt709', 'bt2020', 'p3'] as const;
