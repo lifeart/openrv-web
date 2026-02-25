@@ -349,6 +349,250 @@ describe('MatteOverlay', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // render coordinate assertions
+  // ---------------------------------------------------------------------------
+  describe('render coordinate assertions', () => {
+    /**
+     * The mock setup creates a new MockCanvasRenderingContext2D per getContext('2d') call,
+     * so we capture the context at construction time by intercepting getContext.
+     */
+    let capturedCtx: ReturnType<HTMLCanvasElement['getContext']>;
+    let coordOverlay: MatteOverlay;
+
+    /**
+     * Helper: create a MatteOverlay and capture the 2D context it receives.
+     * The mock getContext returns vi.fn()-based fillRect/clearRect we can inspect.
+     */
+    function createOverlayWithCapturedCtx(): MatteOverlay {
+      const originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: [string, ...unknown[]]) {
+        const ctx = originalGetContext.apply(this, args as Parameters<typeof originalGetContext>);
+        capturedCtx = ctx;
+        return ctx;
+      } as typeof HTMLCanvasElement.prototype.getContext;
+
+      const o = new MatteOverlay();
+
+      HTMLCanvasElement.prototype.getContext = originalGetContext;
+      return o;
+    }
+
+    beforeEach(() => {
+      capturedCtx = null;
+      coordOverlay = createOverlayWithCapturedCtx();
+    });
+
+    afterEach(() => {
+      coordOverlay.dispose();
+    });
+
+    it('MATTE-200: letterbox renders top and bottom bars at correct positions', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      // Source is 800x600 = 4:3 aspect (1.333)
+      // Target is 2.39 (wider than 1.333) => letterbox
+      coordOverlay.setAspect(2.39);
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      // setViewerDimensions already called render(); check the mock
+      // sourceAspect = 800/600 = 1.333
+      // visibleHeight = 800 / 2.39 = 334.73
+      // barHeight = (600 - 334.73) / 2 = 132.64
+      const visibleHeight = 800 / 2.39;
+      const barHeight = (600 - visibleHeight) / 2;
+
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      const barCalls = fillRectFn.mock.calls.filter((call: number[]) => call[2] === 800);
+
+      expect(barCalls.length).toBe(2);
+
+      // Top bar: fillRect(offsetX, offsetY, displayWidth, topBarHeight)
+      expect(barCalls[0]![0]).toBe(0);
+      expect(barCalls[0]![1]).toBe(0);
+      expect(barCalls[0]![2]).toBe(800);
+      expect(barCalls[0]![3]).toBeCloseTo(barHeight, 0);
+
+      // Bottom bar: fillRect(offsetX, offsetY + displayHeight - bottomBarHeight, displayWidth, bottomBarHeight)
+      expect(barCalls[1]![0]).toBe(0);
+      expect(barCalls[1]![1]).toBeCloseTo(600 - barHeight, 0);
+      expect(barCalls[1]![2]).toBe(800);
+      expect(barCalls[1]![3]).toBeCloseTo(barHeight, 0);
+    });
+
+    it('MATTE-201: pillarbox renders left and right bars at correct positions', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      // Source is 800x600 = 4:3 aspect (1.333)
+      // Target is 1.0 (narrower than 1.333) => pillarbox
+      coordOverlay.setAspect(1.0);
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      // visibleWidth = displayHeight * targetAspect = 600 * 1.0 = 600
+      // barWidth = (800 - 600) / 2 = 100
+      const visibleWidth = 600 * 1.0;
+      const barWidth = (800 - visibleWidth) / 2;
+
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      const barCalls = fillRectFn.mock.calls.filter((call: number[]) => call[3] === 600);
+
+      expect(barCalls.length).toBe(2);
+
+      // Left bar
+      expect(barCalls[0]![0]).toBe(0);
+      expect(barCalls[0]![1]).toBe(0);
+      expect(barCalls[0]![2]).toBeCloseTo(barWidth, 0);
+      expect(barCalls[0]![3]).toBe(600);
+
+      // Right bar
+      expect(barCalls[1]![0]).toBeCloseTo(800 - barWidth, 0);
+      expect(barCalls[1]![1]).toBe(0);
+      expect(barCalls[1]![2]).toBeCloseTo(barWidth, 0);
+      expect(barCalls[1]![3]).toBe(600);
+    });
+
+    it('MATTE-202: matching aspect ratios draw no bars', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      // Source is 800x600 = 1.333, target is also 1.333
+      coordOverlay.setAspect(800 / 600);
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      // No fillRect calls should be made for matching aspect ratios
+      expect(fillRectFn).not.toHaveBeenCalled();
+    });
+
+    it('MATTE-203: letterbox with center offset shifts bars asymmetrically', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      coordOverlay.setAspect(2.39);
+      coordOverlay.setCenterPoint(0, 0.5); // shift down
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      const visibleHeight = 800 / 2.39;
+      const barHeight = (600 - visibleHeight) / 2;
+      const offsetAdjust = 0.5 * barHeight;
+
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      const barCalls = fillRectFn.mock.calls.filter((call: number[]) => call[2] === 800);
+
+      expect(barCalls.length).toBe(2);
+
+      // Top bar should be smaller (shifted down): barHeight - offsetAdjust
+      expect(barCalls[0]![3]).toBeCloseTo(barHeight - offsetAdjust, 0);
+
+      // Bottom bar should be larger: barHeight + offsetAdjust
+      expect(barCalls[1]![3]).toBeCloseTo(barHeight + offsetAdjust, 0);
+    });
+
+    it('MATTE-204: pillarbox with center offset shifts bars asymmetrically', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      coordOverlay.setAspect(1.0);
+      coordOverlay.setCenterPoint(0.5, 0); // shift right
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      const visibleWidth = 600 * 1.0;
+      const barWidth = (800 - visibleWidth) / 2;
+      const offsetAdjust = 0.5 * barWidth;
+
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      const barCalls = fillRectFn.mock.calls.filter((call: number[]) => call[3] === 600);
+
+      expect(barCalls.length).toBe(2);
+
+      // Left bar should be smaller: barWidth - offsetAdjust
+      expect(barCalls[0]![2]).toBeCloseTo(barWidth - offsetAdjust, 0);
+
+      // Right bar should be larger: barWidth + offsetAdjust
+      expect(barCalls[1]![2]).toBeCloseTo(barWidth + offsetAdjust, 0);
+    });
+
+    it('MATTE-205: letterbox bars account for viewport offset', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      coordOverlay.setAspect(2.39);
+      coordOverlay.setViewerDimensions(800, 600, 50, 30, 700, 540);
+
+      // sourceAspect = 700/540 = 1.296
+      // targetAspect = 2.39 (wider) => letterbox
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      const barCalls = fillRectFn.mock.calls.filter((call: number[]) => call[2] === 700);
+
+      expect(barCalls.length).toBe(2);
+
+      // Top bar x should be offsetX
+      expect(barCalls[0]![0]).toBe(50);
+      // Top bar y should be offsetY
+      expect(barCalls[0]![1]).toBe(30);
+    });
+
+    it('MATTE-206: opacity is applied to fill style', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      coordOverlay.setOpacity(0.5);
+      coordOverlay.setAspect(2.39);
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      // fillStyle should contain opacity 0.5
+      expect(ctx.fillStyle).toContain('0.5');
+    });
+
+    it('MATTE-207: heightVisible fraction overrides aspect-based calculation', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      coordOverlay.setSettings({ heightVisible: 0.5 });
+      coordOverlay.setAspect(2.39); // wide => letterbox
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      // heightVisible = 0.5, so visibleHeight = 600 * 0.5 = 300
+      // barHeight = (600 - 300) / 2 = 150
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      const barCalls = fillRectFn.mock.calls.filter((call: number[]) => call[2] === 800);
+
+      expect(barCalls.length).toBe(2);
+
+      expect(barCalls[0]![3]).toBeCloseTo(150, 0);
+      expect(barCalls[1]![3]).toBeCloseTo(150, 0);
+    });
+
+    it('MATTE-208: render clears canvas before drawing', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      coordOverlay.enable();
+      coordOverlay.setAspect(2.39);
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      const clearRectFn = ctx.clearRect as unknown as ReturnType<typeof vi.fn>;
+      // clearRect should have been called at least once with full canvas dimensions
+      expect(clearRectFn).toHaveBeenCalled();
+      // Find the call with canvas dimensions (800, 600 from setViewerDimensions)
+      const matchingCall = clearRectFn.mock.calls.find(
+        (call: number[]) => call[0] === 0 && call[1] === 0 && call[2] === 800 && call[3] === 600
+      );
+      expect(matchingCall).toBeDefined();
+    });
+
+    it('MATTE-209: disabled overlay clears canvas without drawing bars', () => {
+      const ctx = capturedCtx as CanvasRenderingContext2D;
+      // Ensure disabled
+      coordOverlay.disable();
+      coordOverlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+      const fillRectFn = ctx.fillRect as unknown as ReturnType<typeof vi.fn>;
+      // setViewerDimensions should not call render when not visible,
+      // but calling render manually while disabled should clearRect but not fillRect
+      (fillRectFn as ReturnType<typeof vi.fn>).mockClear();
+      const clearRectFn = ctx.clearRect as unknown as ReturnType<typeof vi.fn>;
+      (clearRectFn as ReturnType<typeof vi.fn>).mockClear();
+
+      coordOverlay.render();
+
+      expect(clearRectFn).toHaveBeenCalled();
+      expect(fillRectFn).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // isVisible
   // ---------------------------------------------------------------------------
   describe('isVisible', () => {

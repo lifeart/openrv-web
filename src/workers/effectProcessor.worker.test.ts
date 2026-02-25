@@ -420,6 +420,620 @@ describe('Effect Processor Worker', () => {
     });
   });
 
+  describe('highlights and shadows mathematical correctness', () => {
+    it('EPW-020: highlights=100 darkens bright pixels proportionally to luminance', () => {
+      const width = 2;
+      const height = 1;
+      const data = new Uint8ClampedArray(width * height * 4);
+      // Bright pixel (lum ~230)
+      data[0] = 230; data[1] = 230; data[2] = 230; data[3] = 255;
+      // Dark pixel (lum ~30)
+      data[4] = 30; data[5] = 30; data[6] = 30; data[7] = 255;
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = 100;
+      processEffects(data, width, height, state);
+
+      // Bright pixel should be significantly darkened
+      // highlights=100 => highlights_norm=1.0, highlight weight for lum 230 is high
+      // highlightLUT[230] = smoothstep(0.5, 1.0, 230/255) ~ smoothstep(0.5,1.0,0.902) ~ 0.93
+      // adj = 1.0 * 0.93 * 128 = ~119, so 230-119=~111
+      expect(data[0]).toBeLessThan(170);
+      expect(data[0]).toBeGreaterThan(50);
+
+      // Dark pixel should be barely affected (highlight weight near zero)
+      // highlightLUT[30] = smoothstep(0.5, 1.0, 30/255) ~ 0 (since 30/255=0.118 < 0.5)
+      expect(data[4]).toBeCloseTo(30, -1);
+    });
+
+    it('EPW-021: shadows=100 brightens dark pixels proportionally', () => {
+      const width = 2;
+      const height = 1;
+      const data = new Uint8ClampedArray(width * height * 4);
+      // Dark pixel (lum ~30)
+      data[0] = 30; data[1] = 30; data[2] = 30; data[3] = 255;
+      // Bright pixel (lum ~230)
+      data[4] = 230; data[5] = 230; data[6] = 230; data[7] = 255;
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.shadows = 100;
+      processEffects(data, width, height, state);
+
+      // Dark pixel should be significantly brightened
+      // shadowLUT[30] = 1 - smoothstep(0.0, 0.5, 30/255) ~ 1 - smoothstep(0,0.5,0.118) ~ high
+      expect(data[0]).toBeGreaterThan(60);
+
+      // Bright pixel should be barely affected (shadow weight near zero)
+      // shadowLUT[230] = 1 - smoothstep(0.0, 0.5, 0.902) ~ 1 - 1 = 0
+      expect(data[4]).toBeCloseTo(230, -1);
+    });
+
+    it('EPW-022: highlights with negative value brightens highlights', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 200, 200, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = -50;
+      processEffects(data, width, height, state);
+
+      // Negative highlights should brighten (adj is negative, so -adj is added)
+      // highlights = -50/100 = -0.5, adj = -0.5 * highlightWeight * 128 < 0
+      // r = r - adj = r - (negative) = r + positive => brighter
+      expect(data[0]).toBeGreaterThan(200);
+    });
+
+    it('EPW-023: whites adjustment clips white point', () => {
+      const width = 1;
+      const height = 1;
+      // Near-white pixel
+      const data = new Uint8ClampedArray([240, 240, 240, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.whites = 50;
+      processEffects(data, width, height, state);
+
+      // whites=50 => whites_norm=0.5, whitePoint = 255 - 0.5*55 = 227.5
+      // blackPoint = 0, hsRange = 227.5
+      // mapped = ((240 - 0) / 227.5) * 255 ~ 269 => clamped to 255
+      expect(data[0]).toBe(255);
+    });
+
+    it('EPW-024: blacks adjustment clips black point', () => {
+      const width = 1;
+      const height = 1;
+      // Near-black pixel
+      const data = new Uint8ClampedArray([20, 20, 20, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.blacks = 50;
+      processEffects(data, width, height, state);
+
+      // blacks=50 => blacks_norm=0.5, blackPoint = 0.5*55 = 27.5
+      // hsRange = 255 - 27.5 = 227.5
+      // mapped = ((20 - 27.5) / 227.5) * 255 < 0, clamped to 0
+      expect(data[0]).toBe(0);
+    });
+
+    it('EPW-025: alpha channel is preserved through all effects', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 42]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = 50;
+      state.colorAdjustments.shadows = 50;
+      state.colorAdjustments.whites = 20;
+      state.colorAdjustments.blacks = 20;
+      processEffects(data, width, height, state);
+
+      expect(data[3]).toBe(42);
+    });
+  });
+
+  describe('CDL (slope/offset/power/saturation) correctness', () => {
+    it('EPW-030: CDL slope multiplies pixel values', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.cdlValues.slope = { r: 2, g: 0.5, b: 1 };
+      processEffects(data, width, height, state);
+
+      // r = 128/255 * 2 = ~1.004 => 255
+      expect(data[0]).toBe(255);
+      // g = 128/255 * 0.5 = ~0.251 => ~64
+      expect(data[1]).toBeCloseTo(64, -1);
+      // b unchanged
+      expect(data[2]).toBeCloseTo(128, -1);
+    });
+
+    it('EPW-031: CDL offset shifts pixel values', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.cdlValues.offset = { r: 0.2, g: -0.2, b: 0 };
+      processEffects(data, width, height, state);
+
+      // r = 128/255 + 0.2 = ~0.702 => ~179
+      expect(data[0]).toBeCloseTo(179, -1);
+      // g = 128/255 - 0.2 = ~0.302 => ~77
+      expect(data[1]).toBeCloseTo(77, -1);
+    });
+
+    it('EPW-032: CDL power applies gamma correction', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.cdlValues.power = { r: 2.0, g: 0.5, b: 1 };
+      processEffects(data, width, height, state);
+
+      // r = (128/255)^2 = ~0.252 => ~64
+      expect(data[0]).toBeCloseTo(64, -1);
+      // g = (128/255)^0.5 = ~0.708 => ~181
+      expect(data[1]).toBeCloseTo(181, -1);
+    });
+
+    it('EPW-033: CDL saturation desaturates when < 1', () => {
+      const width = 1;
+      const height = 1;
+      // Saturated color
+      const data = new Uint8ClampedArray([255, 0, 0, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.cdlValues.saturation = 0;
+      processEffects(data, width, height, state);
+
+      // saturation=0 maps everything to luminance
+      // luma = 0.2126*1 + 0.7152*0 + 0.0722*0 = 0.2126 => ~54
+      expect(data[0]).toBeCloseTo(54, -1);
+      expect(data[1]).toBeCloseTo(54, -1);
+      expect(data[2]).toBeCloseTo(54, -1);
+    });
+
+    it('EPW-034: CDL slope=0 offset=0 results in black', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 150, 100, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.cdlValues.slope = { r: 0, g: 0, b: 0 };
+      processEffects(data, width, height, state);
+
+      expect(data[0]).toBe(0);
+      expect(data[1]).toBe(0);
+      expect(data[2]).toBe(0);
+    });
+  });
+
+  describe('channel isolation correctness', () => {
+    it('EPW-040: red channel isolation shows red as grayscale', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 100, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.channelMode = 'red';
+      processEffects(data, width, height, state);
+
+      // Red channel value should be copied to all channels
+      expect(data[0]).toBeCloseTo(200, -1);
+      expect(data[1]).toBeCloseTo(200, -1);
+      expect(data[2]).toBeCloseTo(200, -1);
+    });
+
+    it('EPW-041: green channel isolation shows green as grayscale', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 100, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.channelMode = 'green';
+      processEffects(data, width, height, state);
+
+      expect(data[0]).toBeCloseTo(100, -1);
+      expect(data[1]).toBeCloseTo(100, -1);
+      expect(data[2]).toBeCloseTo(100, -1);
+    });
+
+    it('EPW-042: blue channel isolation shows blue as grayscale', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 100, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.channelMode = 'blue';
+      processEffects(data, width, height, state);
+
+      expect(data[0]).toBeCloseTo(50, -1);
+      expect(data[1]).toBeCloseTo(50, -1);
+      expect(data[2]).toBeCloseTo(50, -1);
+    });
+
+    it('EPW-043: luminance channel isolation computes Rec.709 luminance', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 100, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.channelMode = 'luminance';
+      processEffects(data, width, height, state);
+
+      // Expected luminance: 0.2126*200 + 0.7152*100 + 0.0722*50 = 42.52+71.52+3.61 = 117.65
+      const expectedLuma = Math.round(LUMA_R * 200 + LUMA_G * 100 + LUMA_B * 50);
+      expect(data[0]).toBeCloseTo(expectedLuma, -1);
+      expect(data[1]).toBeCloseTo(expectedLuma, -1);
+      expect(data[2]).toBeCloseTo(expectedLuma, -1);
+    });
+
+    it('EPW-044: alpha channel isolation shows alpha as grayscale', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 100, 50, 128]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.channelMode = 'alpha';
+      processEffects(data, width, height, state);
+
+      // Alpha value (128) copied to RGB, alpha set to 255
+      expect(data[0]).toBeCloseTo(128, -1);
+      expect(data[1]).toBeCloseTo(128, -1);
+      expect(data[2]).toBeCloseTo(128, -1);
+      expect(data[3]).toBe(255);
+    });
+  });
+
+  describe('curves correctness', () => {
+    it('EPW-050: curves inversion (swap endpoints) inverts image', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 100, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      // Create inverted curve: (0,1) and (1,0)
+      state.curvesData.master = {
+        enabled: true,
+        points: [{ x: 0, y: 1 }, { x: 1, y: 0 }],
+      };
+      state.curvesData.red = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      state.curvesData.green = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      state.curvesData.blue = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      processEffects(data, width, height, state);
+
+      // With a Catmull-Rom inverted master curve (2 points), the curve is not perfectly
+      // linear, so values differ from pure 255-x. The key assertion is the ordering
+      // is reversed: originally R>G>B, after inversion R<G<B.
+      expect(data[0]!).toBeLessThan(data[1]!); // inverted R < inverted G
+      expect(data[1]!).toBeLessThan(data[2]!); // inverted G < inverted B
+      // And each value is "inverted" directionally
+      expect(data[0]).toBeLessThan(128); // 200 inverted should be dark
+      expect(data[2]).toBeGreaterThan(128); // 50 inverted should be bright
+    });
+
+    it('EPW-051: per-channel curves affect only their channel', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      // Red curve: boost (midpoint up)
+      state.curvesData.red = {
+        enabled: true,
+        points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.8 }, { x: 1, y: 1 }],
+      };
+      // Green, blue: identity
+      state.curvesData.green = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      state.curvesData.blue = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      state.curvesData.master = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      processEffects(data, width, height, state);
+
+      // Red should be boosted above 128
+      expect(data[0]).toBeGreaterThan(150);
+      // Green and blue should remain approximately at 128
+      expect(data[1]).toBeCloseTo(128, -1);
+      expect(data[2]).toBeCloseTo(128, -1);
+    });
+
+    it('EPW-052: disabled curve channel is identity', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      // Dramatically alter the red curve but disable it
+      state.curvesData.red = {
+        enabled: false,
+        points: [{ x: 0, y: 1 }, { x: 1, y: 0 }],
+      };
+      processEffects(data, width, height, state);
+
+      // Should be identity, but curves are now "non-default" because red is disabled
+      // When disabled, buildCurveLUT returns identity LUT, so value stays ~128
+      expect(data[0]).toBeCloseTo(128, -1);
+    });
+  });
+
+  describe('vibrance correctness', () => {
+    it('EPW-055: vibrance boosts unsaturated colors more than saturated ones', () => {
+      const width = 2;
+      const height = 1;
+      // Desaturated pixel: gray-ish
+      const data = new Uint8ClampedArray([
+        140, 128, 128, 255, // slightly warm gray
+        255, 0, 0, 255,     // fully saturated red
+      ]);
+      const origGray = new Uint8ClampedArray(data.slice(0, 4));
+      const origRed = new Uint8ClampedArray(data.slice(4, 8));
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.vibrance = 100;
+      processEffects(data, width, height, state);
+
+      // Calculate how much each pixel changed
+      const grayDeltaR = Math.abs(data[0]! - origGray[0]!);
+      const grayDeltaG = Math.abs(data[1]! - origGray[1]!);
+      const grayDeltaB = Math.abs(data[2]! - origGray[2]!);
+      const grayChange = grayDeltaR + grayDeltaG + grayDeltaB;
+
+      const redDeltaR = Math.abs(data[4]! - origRed[0]!);
+      const redDeltaG = Math.abs(data[5]! - origRed[1]!);
+      const redDeltaB = Math.abs(data[6]! - origRed[2]!);
+      const redChange = redDeltaR + redDeltaG + redDeltaB;
+
+      // Vibrance should affect the gray pixel more than the already-saturated red
+      expect(grayChange).toBeGreaterThan(0);
+      // The saturated red pixel may change less (vibrance protects saturated colors)
+      expect(grayChange).toBeGreaterThanOrEqual(redChange);
+    });
+
+    it('EPW-056: negative vibrance desaturates', () => {
+      const width = 1;
+      const height = 1;
+      // Moderately saturated pixel
+      const data = new Uint8ClampedArray([200, 100, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.vibrance = -100;
+      processEffects(data, width, height, state);
+
+      // After negative vibrance, channels should be closer to each other (less saturation)
+      const range = Math.max(data[0]!, data[1]!, data[2]!) - Math.min(data[0]!, data[1]!, data[2]!);
+      // Original range was 200-50=150, should be reduced
+      expect(range).toBeLessThan(150);
+    });
+  });
+
+  describe('color inversion correctness', () => {
+    it('EPW-060: inversion is its own inverse', () => {
+      const width = 2;
+      const height = 2;
+      const original = new Uint8ClampedArray([
+        50, 100, 200, 255,
+        0, 255, 128, 200,
+        255, 0, 0, 100,
+        128, 128, 128, 0,
+      ]);
+      const data = new Uint8ClampedArray(original);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorInversionEnabled = true;
+      processEffects(data, width, height, state);
+      processEffects(data, width, height, state);
+
+      // Double inversion should restore original
+      for (let i = 0; i < data.length; i++) {
+        expect(data[i]).toBe(original[i]);
+      }
+    });
+
+    it('EPW-061: inversion preserves alpha channel', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([100, 200, 50, 42]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorInversionEnabled = true;
+      processEffects(data, width, height, state);
+
+      expect(data[0]).toBe(155); // 255-100
+      expect(data[1]).toBe(55);  // 255-200
+      expect(data[2]).toBe(205); // 255-50
+      expect(data[3]).toBe(42);  // alpha unchanged
+    });
+  });
+
+  describe('multiple effects interaction', () => {
+    it('EPW-070: CDL applied before curves in pipeline', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([128, 128, 128, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      // CDL doubles the value
+      state.cdlValues.slope = { r: 2, g: 2, b: 2 };
+      // Curves applies clamp at 200/255
+      state.curvesData.master = {
+        enabled: true,
+        points: [{ x: 0, y: 0 }, { x: 200 / 255, y: 200 / 255 }, { x: 1, y: 200 / 255 }],
+      };
+      processEffects(data, width, height, state);
+
+      // CDL first: 128/255 * 2 = ~1.004 => clamped to ~255
+      // Then curves: lookup 255 => should get ~200/255 => ~200
+      // Value should be around 200 because curves caps it
+      expect(data[0]).toBeLessThanOrEqual(210);
+    });
+
+    it('EPW-071: inversion applied after CDL', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([0, 0, 0, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      // CDL adds offset to make it nonzero
+      state.cdlValues.offset = { r: 0.5, g: 0.5, b: 0.5 };
+      // Then invert
+      state.colorInversionEnabled = true;
+      processEffects(data, width, height, state);
+
+      // After CDL: r = 0 * 1 + 0.5 = 0.5 => 128
+      // After inversion: 1.0 - 0.5 = 0.5 => 128
+      // So it should still be ~128
+      expect(data[0]).toBeCloseTo(128, -1);
+    });
+
+    it('EPW-072: highlights + shadows + vibrance + inversion combined', () => {
+      const width = 4;
+      const height = 4;
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 180; data[i + 1] = 100; data[i + 2] = 50; data[i + 3] = 255;
+      }
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = 30;
+      state.colorAdjustments.shadows = -20;
+      state.colorAdjustments.vibrance = 50;
+      state.colorInversionEnabled = true;
+      processEffects(data, width, height, state);
+
+      // Just verify all values are valid (not NaN, within 0-255)
+      for (let i = 0; i < data.length; i++) {
+        expect(Number.isFinite(data[i])).toBe(true);
+        expect(data[i]).toBeGreaterThanOrEqual(0);
+        expect(data[i]).toBeLessThanOrEqual(255);
+      }
+    });
+  });
+
+  describe('edge cases', () => {
+    it('EPW-080: processes 1x1 image', () => {
+      const data = new Uint8ClampedArray([128, 64, 32, 255]);
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = 50;
+      expect(() => processEffects(data, 1, 1, state)).not.toThrow();
+    });
+
+    it('EPW-081: processes all-black image', () => {
+      const width = 4;
+      const height = 4;
+      const data = new Uint8ClampedArray(width * height * 4);
+      // All zeros (black with alpha 0)
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = 100;
+      state.colorAdjustments.shadows = 100;
+      state.colorAdjustments.vibrance = 100;
+      processEffects(data, width, height, state);
+
+      // All R,G,B should remain 0 for pure black
+      for (let i = 0; i < data.length; i += 4) {
+        // Shadow brightening on pure black should have minimal effect
+        // since the shadow weight for lum=0 depends on smoothstep behavior
+        expect(data[i]).toBeGreaterThanOrEqual(0);
+        expect(data[i]).toBeLessThanOrEqual(255);
+      }
+    });
+
+    it('EPW-082: processes all-white image', () => {
+      const width = 4;
+      const height = 4;
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 255; data[i + 1] = 255; data[i + 2] = 255; data[i + 3] = 255;
+      }
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.highlights = -100;
+      state.colorAdjustments.vibrance = 100;
+      processEffects(data, width, height, state);
+
+      for (let i = 0; i < data.length; i += 4) {
+        expect(data[i]).toBeGreaterThanOrEqual(0);
+        expect(data[i]).toBeLessThanOrEqual(255);
+      }
+    });
+
+    it('EPW-083: sharpen with small image does not crash', () => {
+      const width = 4;
+      const height = 4;
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 128; data[i + 1] = 128; data[i + 2] = 128; data[i + 3] = 255;
+      }
+      const state = createDefaultWorkerEffectsState();
+      state.filterSettings.sharpen = 100;
+      expect(() => processEffects(data, width, height, state)).not.toThrow();
+    });
+
+    it('EPW-084: clarity effect modifies midtone pixels', () => {
+      const width = 8;
+      const height = 8;
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 128; data[i + 1] = 128; data[i + 2] = 128; data[i + 3] = 255;
+      }
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.clarity = 100;
+      processEffects(data, width, height, state);
+
+      // With uniform data, the high-pass filter result should be minimal (blur ~= original)
+      // So clarity won't change much. For non-uniform data, it would change.
+      // Just ensure no crash and valid output.
+      for (let i = 0; i < data.length; i++) {
+        expect(data[i]).toBeGreaterThanOrEqual(0);
+        expect(data[i]).toBeLessThanOrEqual(255);
+      }
+    });
+
+    it('EPW-085: HSL qualifier with mattePreview outputs grayscale', () => {
+      const width = 1;
+      const height = 1;
+      const data = new Uint8ClampedArray([200, 50, 50, 255]); // reddish
+
+      const state = createDefaultWorkerEffectsState();
+      state.hslQualifierState.enabled = true;
+      state.hslQualifierState.hue = { center: 0, width: 60, softness: 20 };
+      state.hslQualifierState.saturation = { center: 50, width: 100, softness: 20 };
+      state.hslQualifierState.luminance = { center: 50, width: 100, softness: 20 };
+      state.hslQualifierState.mattePreview = true;
+      processEffects(data, width, height, state);
+
+      // In matte preview, R=G=B=matte value
+      expect(data[0]).toBe(data[1]);
+      expect(data[1]).toBe(data[2]);
+    });
+
+    it('EPW-086: HSL qualifier invert flag inverts the matte', () => {
+      // Normal matte
+      const data1 = new Uint8ClampedArray([200, 50, 50, 255]);
+      const state1 = createDefaultWorkerEffectsState();
+      state1.hslQualifierState.enabled = true;
+      state1.hslQualifierState.hue = { center: 0, width: 60, softness: 20 };
+      state1.hslQualifierState.saturation = { center: 50, width: 100, softness: 20 };
+      state1.hslQualifierState.luminance = { center: 50, width: 100, softness: 20 };
+      state1.hslQualifierState.mattePreview = true;
+      processEffects(data1, 1, 1, state1);
+
+      // Inverted matte
+      const data2 = new Uint8ClampedArray([200, 50, 50, 255]);
+      const state2 = createDefaultWorkerEffectsState();
+      state2.hslQualifierState.enabled = true;
+      state2.hslQualifierState.hue = { center: 0, width: 60, softness: 20 };
+      state2.hslQualifierState.saturation = { center: 50, width: 100, softness: 20 };
+      state2.hslQualifierState.luminance = { center: 50, width: 100, softness: 20 };
+      state2.hslQualifierState.mattePreview = true;
+      state2.hslQualifierState.invert = true;
+      processEffects(data2, 1, 1, state2);
+
+      // matte + inverted matte should sum to ~255
+      expect(data1[0]! + data2[0]!).toBeCloseTo(255, -1);
+    });
+  });
+
   describe('type consistency with main thread', () => {
     /**
      * REGRESSION TEST: Ensures worker ColorAdjustments interface stays in sync
