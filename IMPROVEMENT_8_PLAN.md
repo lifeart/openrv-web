@@ -68,14 +68,6 @@ import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 
 /**
- * Processing backend preference for an effect node.
- * - 'cpu': Always use CPU (ImageData) processing.
- * - 'gpu': Prefer GPU (WebGL/WebGPU shader) when available, fallback to CPU.
- * - 'auto': Let the runtime decide based on image size and capabilities.
- */
-export type EffectBackend = 'cpu' | 'gpu' | 'auto';
-
-/**
  * Category for grouping and ordering effects in the UI.
  */
 export type EffectCategory = 'color' | 'tone' | 'spatial' | 'diagnostic';
@@ -173,6 +165,11 @@ export abstract class EffectNode extends IPNode {
   /**
    * Linearly blend two images by the given factor.
    * factor=0 returns `a`, factor=1 returns `b`.
+   *
+   * For RGBA images (channels >= 4), the alpha channel is preserved
+   * from the input image `a` rather than interpolated. This prevents
+   * corruption of premultiplied-alpha images where linear interpolation
+   * of alpha would produce incorrect compositing results.
    */
   private blendImages(a: IPImage, b: IPImage, factor: number): IPImage {
     const output = a.deepClone();
@@ -180,8 +177,23 @@ export abstract class EffectNode extends IPNode {
     const dstData = b.getTypedArray();
     const outData = output.getTypedArray();
     const len = srcData.length;
-    for (let i = 0; i < len; i++) {
-      outData[i] = srcData[i]! * (1 - factor) + dstData[i]! * factor;
+    const channels = a.channels;
+
+    if (channels >= 4) {
+      // RGBA: blend RGB channels, preserve alpha from input
+      for (let i = 0; i < len; i++) {
+        if ((i + 1) % channels === 0) {
+          // Alpha channel: preserve from input image
+          outData[i] = srcData[i]!;
+        } else {
+          outData[i] = srcData[i]! * (1 - factor) + dstData[i]! * factor;
+        }
+      }
+    } else {
+      // Non-RGBA (1 or 3 channels): blend all channels
+      for (let i = 0; i < len; i++) {
+        outData[i] = srcData[i]! * (1 - factor) + dstData[i]! * factor;
+      }
     }
     return output;
   }
@@ -192,7 +204,7 @@ export abstract class EffectNode extends IPNode {
 
 ```typescript
 export { EffectNode } from './EffectNode';
-export type { EffectBackend, EffectCategory } from './EffectNode';
+export type { EffectCategory } from './EffectNode';
 
 // Individual effect nodes (added as they are implemented)
 export { CDLNode } from './CDLNode';
@@ -212,11 +224,51 @@ export { ColorWheelsNode } from './ColorWheelsNode';
 
 ---
 
-### Phase 2: Concrete Effect Nodes
+### Phase 2: IPImage CPU/GPU Interop
+
+Currently `IPImage` (`src/core/image/Image.ts`) stores pixel data as typed arrays. Several effect node subclasses delegate to existing functions that operate on `ImageData` (e.g., `applyNoiseReduction(imageData, ...)`, `applyCDLToImageData(imageData, ...)`, `applySharpenCPU(imageData, ...)`). To support this delegation pattern, IPImage needs instance-level `toImageData()` and `fromImageData()` convenience methods.
+
+**This phase must be completed before Phase 3 (Concrete Effect Nodes)** because 6 of the 13 planned effect nodes -- NoiseReductionNode, SharpenNode, DeinterlaceNode, FilmEmulationNode, StabilizationNode, ClarityNode, and CDLNode -- depend on these methods for their `applyEffect()` implementations.
+
+```typescript
+// Additions to IPImage (src/core/image/Image.ts)
+
+/** Convert this image to an ImageData for CPU effect processing.
+ *
+ * NOTE: For float32 and uint16 images, this performs a lossy conversion
+ * to uint8 (Uint8ClampedArray). Subtle gradients and HDR values outside
+ * [0, 255] will be clamped. This is acceptable for the initial
+ * implementation; a future float-native effect path will address
+ * precision for scene-referred linear-light workflows.
+ */
+toImageData(): ImageData {
+  // Already possible via existing getTypedArray() + width/height
+  // For uint8: direct copy to Uint8ClampedArray
+  // For uint16: normalize from [0, 65535] to [0, 255]
+  // For float32: normalize from [0, 1] to [0, 255], clamping values outside range
+}
+
+/** Update this image's pixel data from an ImageData.
+ *
+ * Converts the Uint8ClampedArray back to the image's native data type.
+ */
+fromImageData(imageData: ImageData): void {
+  // Copy ImageData.data into the internal typed array
+  // For uint8: direct copy
+  // For uint16: scale from [0, 255] to [0, 65535]
+  // For float32: scale from [0, 255] to [0, 1]
+}
+```
+
+These methods are thin wrappers around the existing `IPImage.fromImageData()` static factory and `getTypedArray()` functionality. If `IPImage` already has equivalent functionality, these can delegate to it. The key requirement is instance-level access for use inside `applyEffect()` implementations.
+
+---
+
+### Phase 3: Concrete Effect Nodes
 
 Each effect node wraps the existing processing function. No pixel logic is duplicated -- nodes delegate to the functions already in `src/color/`, `src/filters/`, and `src/ui/components/ViewerEffects.ts`.
 
-#### 2a. CDLNode
+#### 3a. CDLNode
 
 **File:** `src/nodes/effects/CDLNode.ts`
 
@@ -1155,3 +1207,302 @@ The plan's parallel-evaluation migration strategy (Stage 2) is sound and follows
 4. **No tests for interaction with `CacheLUTNode`.** The existing `CacheLUTNode` bakes exposure/contrast/saturation/gamma/temperature/tint into a 3D LUT. Several of these transforms overlap with proposed EffectNodes (exposure, contrast, saturation are listed as "future" nodes). If both `CacheLUTNode` and future EffectNodes run on the same parameters, effects will be double-applied. A boundary test should verify that when `CacheLUTNode` is active in the graph, its handled transforms are not also applied by EffectNodes.
 
 5. **The `EffectChain` hardcodes Graph evaluation resolution.** The internal `Graph.evaluate(frame)` uses hardcoded `width: 1920, height: 1080, quality: 'full'` (Graph.ts line 136-140). If the source image is 4K or 720p, the EvalContext will carry wrong dimensions. `EffectChain.evaluate()` should accept a full `EvalContext` parameter, not just a frame number.
+
+---
+
+## Expert Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+This plan is architecturally well-conceived and demonstrates genuine understanding of the VFX pipeline domain (ASC CDL semantics, single-input/single-output transform chain model, identity bypass, mix blending). The EffectNode abstraction fits cleanly into the existing IPNode/Graph/NodeProcessor infrastructure without requiring invasive changes. Both Round 1 reviews identified real issues; the majority are fixable without redesigning the architecture. Below is a consolidated assessment.
+
+### Round 1 Feedback Assessment
+
+**Expert Review -- Round 1** was highly accurate. All seven concerns are valid and substantive:
+
+1. **`deepClone()` performance (Concern #1):** Confirmed critical. The ping-pong buffer suggestion is the correct industry-standard mitigation. This must be addressed before Phase 2 implementation begins, not retroactively.
+
+2. **`blendImages()` alpha handling (Concern #2):** Confirmed bug. The linear interpolation of alpha in premultiplied workflows produces incorrect compositing. The suggested fix (preserve input alpha for RGBA) is the minimum viable correction.
+
+3. **HDR / high-bit-depth data flow (Concern #3):** Confirmed architectural gap. The CDLNode's 0-255 round-trip destroys scene-referred linear light data. The `applyCDL()` function itself operates in 0-255 space (confirmed: `applyCDLToValue()` normalizes `value/255`, applies SOP, returns `v*255`). For float32 scene-linear data, the correct approach is either (a) a float-native CDL implementation that skips the 0-255 normalization, or (b) accepting the ImageData (uint8) pathway as an interim measure with a documented precision limitation. This is a deeper issue than either review fully unpacks -- the entire underlying effect function library assumes 0-255 integer pixel values.
+
+4. **EffectChain isolated Graph (Concern #4):** Confirmed design limitation. The EffectChain's internal Graph precludes branching and carries hardcoded 1920x1080 resolution. The Expert Review's suggestion to wire effect nodes into the application-level Graph is the cleaner long-term approach.
+
+5. **Missing `fromJSON()` (Concern #5):** Confirmed incomplete. Serialization without deserialization fails the stated goal of exportable effect pipelines.
+
+6. **Animated properties (Concern #6):** Confirmed gap. The Property system already supports `animatable`, `addKeyframe()`, and `getAnimatedValue(frame)` (verified in `src/core/graph/Property.ts` lines 99-177). The EffectNode base class never calls `getAnimatedValue()` with the current frame. This is a straightforward fix: the `process()` method should call a `resolveAnimatedProperties(context.frame)` step that updates property values from keyframes before `applyEffect()` runs.
+
+7. **StabilizationNode multi-frame access (Concern #7):** Confirmed design gap. The `applyEffect(context, input)` signature provides no mechanism to request images at other frames. This is an inherent limitation of the single-input model for temporal effects. Stabilization needs either (a) a `getInputAtFrame(frame)` callback on EvalContext, or (b) an internal ring buffer that the node populates across sequential evaluations. Neither is designed.
+
+**QA Review -- Round 1** was largely accurate with one factual error:
+
+1. **IPImage `toImageData()`/`fromImageData()` ordering (Risk #1):** Correctly identified as a compile blocker. Phase 6 must precede Phase 2 for all ImageData-dependent nodes.
+
+2. **Test count expansion to ~224:** The rationale is sound. The additional test categories (data type coverage, alpha preservation, channel count mismatch, edge-case sizes, mix=0 bypass, dispose idempotence) are all necessary.
+
+3. **Property min/max enforcement (Risk #5):** **Factually incorrect.** The QA review states "PropertyContainer does not enforce min/max" and that "`setValue()` stores whatever value is passed." This is wrong. The `Property.value` setter (`src/core/graph/Property.ts` lines 67-72) explicitly clamps numeric values: `if (this.min !== undefined) newValue = Math.max(this.min, newValue)` and `if (this.max !== undefined) newValue = Math.min(this.max, newValue)`. The `PropertyContainer.setValue()` delegates to `prop.value = value` which hits this setter. Min/max IS enforced at the Property level. Tests for "parameter clamping" as originally proposed in the plan are correct and the QA concern can be dismissed. That said, testing that clamping works as expected is still good practice.
+
+4. **CacheLUTNode boundary concern:** Valid. The CacheLUTNode bakes exposure/contrast/saturation/gamma/temperature/tint into a 3D LUT. The plan lists these as "(future)" EffectNodes. The boundary must be documented: CacheLUTNode owns the "display transform" (always-on core adjustments), while EffectNodes own "creative effects" (CDL, noise reduction, film emulation, etc.). If future ExposureNode/ContrastNode/etc. are created, they must replace CacheLUTNode's role, not run alongside it.
+
+5. **EffectChain hardcoded resolution:** Valid and confirmed. `Graph.evaluate(frame)` constructs an EvalContext with `width: 1920, height: 1080, quality: 'full'`. The EffectChain must accept a full `EvalContext` or at minimum pass through width/height/quality from the caller.
+
+### Consolidated Required Changes (before implementation)
+
+These must be resolved before coding begins. They are ordered by dependency.
+
+1. **Reorder phases: Phase 6 before Phase 2.** The `toImageData()` and `fromImageData()` instance methods on IPImage are required by 6 of 13 concrete nodes. Implement them first, or extract them as standalone utility functions (`ipImageToImageData(image)`, `imageDataToIPImage(imageData, sourceImage)`) in a helper module. The latter approach avoids modifying the core IPImage class early in the migration.
+
+2. **Fix CDLNode to delegate to `applyCDLToImageData()`.** The current plan's CDLNode manually iterates pixels with a 0-255 normalization round-trip. Replace with delegation to `applyCDLToImageData(imageData, cdl)` via the ImageData pathway, exactly as the existing `CDLEffect` adapter does. This eliminates code duplication and the precision bug for non-uint8 images. Document that CDL precision is limited to 8-bit when using the ImageData pathway, with a future TODO for a float-native CDL path.
+
+3. **Fix `blendImages()` to preserve alpha.** For RGBA images (channels >= 4), the mix blend must not interpolate the alpha channel. Preserve the input image's alpha in the output. This is a one-line conditional in the inner loop.
+
+4. **Add ping-pong buffer strategy to EffectChain (or document the deferral).** At minimum, document that `deepClone()` per-effect is the initial implementation with known 4K performance implications, and that ping-pong buffering is the planned optimization. Better: implement a two-buffer pool in EffectChain that effects write into alternately. The `applyEffect()` signature change to `applyEffect(context, input, output)` is invasive but correct. An acceptable intermediate step: add a `reuseBuffer` flag on EffectNode that lets the chain pass a pre-allocated output buffer when available.
+
+5. **Change `EffectChain.evaluate(frame)` to `EffectChain.evaluate(context: EvalContext)`.** The internal Graph's hardcoded 1920x1080 context is incorrect for arbitrary image resolutions. Either pass the EvalContext through, or have the EffectChain construct the context from the source image dimensions.
+
+6. **Implement `fromJSON()` on EffectChain.** Use `NodeFactory.create(type)` to reconstruct nodes by type string, then call `node.properties.fromJSON(data)` to restore property values. Without this, the serialization goal is incomplete.
+
+7. **Remove the unused `EffectBackend` type** or integrate it into the architecture (e.g., as a property on EffectNode that the EffectChain uses to select CPU vs GPU processing). Dead code in a plan signals incomplete design thinking.
+
+### Consolidated Nice-to-Haves
+
+These improve the architecture but are not blockers for initial implementation.
+
+1. **Animated property resolution.** Add `resolveAnimatedProperties(frame: number)` to EffectNode.process() that calls `getAnimatedValue(frame)` on each animatable property. Declare effect properties as `animatable: true` where appropriate. This can be added in a follow-up pass after the basic chain works.
+
+2. **`inputColorSpace` metadata on EffectNode.** A `readonly inputColorSpace: 'scene-linear' | 'display-referred' | 'any'` field would enable the chain (or a future validator) to warn about incorrect orderings (e.g., CDL after tone mapping). This is documentation/metadata only and does not affect processing.
+
+3. **ROI propagation.** Add an optional `roi: { x, y, width, height }` to EvalContext that spatial effects expand by their kernel radius. This is a significant performance optimization for interactive 4K+ playback but can be deferred to a post-initial-implementation phase.
+
+4. **Async `applyEffect()` return type.** Change signature to `applyEffect(context, input): IPImage | Promise<IPImage>` to allow Web Worker offloading for CPU-heavy spatial effects. The existing `EffectProcessor.applyEffectsAsync()` demonstrates the pattern. This can be added later without breaking the synchronous path.
+
+5. **Smart caching strategy.** Only cache at branch points (nodes with `outputs.length > 1`) and at explicitly marked "cache here" nodes. Linear chain intermediates do not benefit from caching since their sole consumer triggers re-evaluation anyway. This reduces memory from O(N) intermediates to O(branch points).
+
+6. **VideoFrame/ImageBitmap cleanup on cache eviction.** When `IPNode.evaluate()` replaces `cachedImage` with a new result, the previous cached image's `close()` method should be called if it carries a VideoFrame or ImageBitmap. This is a pre-existing issue in IPNode that becomes more acute with effect chains. Can be addressed as a general IPNode improvement independent of this plan.
+
+7. **StabilizationNode multi-frame design.** Defer StabilizationNode to a Phase 2b after the basic chain works. It requires a fundamentally different input model (temporal access to neighboring frames) that does not fit the single-input `applyEffect()` contract. Design options: (a) internal ring buffer populated across sequential evaluations, (b) `TemporalEffectNode` subclass with a `getInputAtFrame(frame)` callback. Either approach needs its own design document.
+
+8. **CacheLUTNode boundary documentation.** Add a comment or section to the plan explicitly stating: CacheLUTNode owns exposure/contrast/saturation/brightness/gamma/temperature/tint. These transforms are NOT implemented as EffectNodes in this plan. If future EffectNodes for these transforms are created, they must replace CacheLUTNode, not coexist with it.
+
+### Final Risk Rating: MEDIUM
+
+The plan's core architecture (EffectNode extending IPNode, NodeProcessor GPU strategy, EffectChain orchestration) is sound and low-risk. The MEDIUM rating comes from:
+
+- The `deepClone()` memory allocation issue is a real performance cliff at 4K. Without the ping-pong buffer mitigation, the feature may be unusable for production 4K float32 workflows. However, it will work fine for HD uint8 workflows, which is the majority use case today.
+- The HDR/float32 precision issue (0-255 round-trip in underlying effect functions) is a latent correctness problem that predates this plan. The plan does not make it worse, but it does not fix it either. Effects applied via the ImageData pathway will be limited to 8-bit precision regardless of the input data type.
+- The StabilizationNode design gap is real but isolated -- it can be deferred without affecting the other 12 effect nodes.
+
+### Final Effort Estimate: 4-5 weeks
+
+The plan estimates 3-4 weeks. The additional week accounts for:
+
+- Phase reordering (Phase 6 before Phase 2) adds dependency overhead.
+- Implementing `fromJSON()` and the ping-pong buffer strategy were not in the original estimate.
+- The expanded test count (~224 vs ~130) adds approximately 2-3 days.
+- Integration testing during the parallel-evaluation migration (Stage 2) typically takes longer than planned due to subtle pixel-level discrepancies requiring investigation.
+
+### Implementation Readiness: READY
+
+The required changes listed above are all concrete, scoped modifications to the existing plan. None of them require a fundamental redesign. The plan can proceed to implementation after:
+
+1. Reordering Phase 6 to precede Phase 2.
+2. Fixing the three code-level bugs (CDLNode delegation, blendImages alpha, EffectChain.evaluate signature).
+3. Adding `fromJSON()` to EffectChain.
+4. Removing or integrating the dead `EffectBackend` type.
+
+The nice-to-haves (animated properties, ROI, async processing, smart caching, StabilizationNode redesign) can all be addressed in follow-up iterations without blocking the initial implementation.
+
+---
+
+## QA Review — Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+This plan is architecturally sound and well-aligned with the existing `IPNode`/`Graph`/`NodeProcessor` infrastructure. Both Round 1 reviews and the Expert Review Round 2 identified substantive issues that must be addressed before implementation. This final QA assessment consolidates all findings, evaluates the accuracy of prior reviews, corrects one factual error from QA Round 1, and provides the definitive test requirements and implementation-readiness determination.
+
+### Round 1 Feedback Assessment
+
+**Expert Review Round 1 -- Rating: HIGHLY ACCURATE**
+
+All seven concerns are valid and technically substantive. The recommended changes are actionable. No factual errors found. Specific assessments:
+
+- Concern #1 (deepClone performance): Confirmed critical by code inspection. `IPImage.deepClone()` (`src/core/image/Image.ts` lines 216-225) calls `this.data.slice(0)` which copies the full ArrayBuffer. For 4K float32 RGBA: `3840 * 2160 * 4 * 4 = ~127 MB` per clone. The ping-pong buffer suggestion is correct and standard for GPU post-processing pipelines.
+- Concern #2 (blendImages alpha): Confirmed. The blend loop at plan lines 183-186 operates on all channels uniformly. Alpha interpolation corrupts premultiplied compositing.
+- Concern #3 (HDR/high-bit-depth): Confirmed. The `applyCDLToValue()` function (`src/color/CDL.ts` lines 51-76) normalizes to 0-1 via `value / 255`, applies SOP, then returns `v * 255`. This is inherently 8-bit. The plan's CDLNode compounds this by adding an additional normalization layer for uint16/float32 data types.
+- Concern #4 (EffectChain isolated Graph): Confirmed by code inspection. `Graph.evaluate()` (`src/core/graph/Graph.ts` lines 131-144) hardcodes `width: 1920, height: 1080, quality: 'full'`.
+- Concern #5 (no fromJSON): Confirmed. `PropertyContainer.fromJSON()` exists (`src/core/graph/Property.ts` lines 323-327), so per-node deserialization is possible. The missing piece is `EffectChain.fromJSON()` which requires `NodeFactory.create(type)` to reconstruct nodes.
+- Concern #6 (animated properties): Valid but low priority for initial implementation.
+- Concern #7 (StabilizationNode multi-frame): Confirmed. `StabilizeMotion.ts` uses `estimateMotion(prevGray, currGray, ...)` requiring two consecutive frames. The single-input signature cannot supply the previous frame.
+
+All six "Missing Considerations" are legitimate. The most urgent is #5 (disposal of VideoFrame-carrying intermediates): `IPNode.dispose()` (`src/nodes/base/IPNode.ts` line 161) sets `this.cachedImage = null` without calling `this.cachedImage?.close()`, which leaks GPU resources.
+
+**QA Review Round 1 -- Rating: ACCURATE WITH ONE FACTUAL ERROR**
+
+The test coverage analysis and expanded test count (~224 tests) are well-justified. The phase ordering dependency identification is correct and critical. However:
+
+- **FACTUAL ERROR: Risk #5 ("PropertyContainer does not enforce min/max").** The QA Round 1 review states: "Reviewing `src/core/graph/Property.ts`, the `min`/`max` fields are metadata for UI display -- `setValue()` stores whatever value is passed." This is **incorrect**. The `Property.value` setter (`src/core/graph/Property.ts` lines 67-72) explicitly clamps:
+  ```typescript
+  set value(newValue: T) {
+    if (typeof newValue === 'number') {
+      if (this.min !== undefined) newValue = Math.max(this.min, newValue as number) as T;
+      if (this.max !== undefined) newValue = Math.min(this.max, newValue as number) as T;
+    }
+    // ...
+  }
+  ```
+  `PropertyContainer.setValue()` (`Property.ts` lines 251-256) delegates to `prop.value = value`, which triggers this setter. Min/max IS enforced. The plan's "parameter clamping" tests are valid and will verify working behavior, not missing behavior. Tests for extreme values should still be written to confirm clamping works as expected, but the underlying risk is lower than QA Round 1 indicated.
+
+All other QA Round 1 findings are accurate:
+- Phase 6 / Phase 2 ordering: confirmed compile blocker.
+- `toImageData()` / `fromImageData()` instance methods: confirmed absent from IPImage (only `static fromImageData()` exists at line 234).
+- `deepClone()` and `blendImages()` issues: confirmed by code inspection.
+- Test category expansions (data type coverage, alpha preservation, channel count safety, 1x1 edge case, mix=0, dispose idempotent): all necessary.
+
+**Expert Review Round 2 -- Rating: ACCURATE AND COMPREHENSIVE**
+
+The consolidated required changes and nice-to-haves are well-prioritized. The factual correction of QA Round 1's Property min/max error is accurate. The adjusted effort estimate (4-5 weeks vs 3-4) is realistic given the expanded scope. The "READY" implementation readiness assessment is slightly optimistic -- see below.
+
+### Minimum Test Requirements
+
+The following test matrix represents the minimum viable coverage for a safe implementation. This consolidates and refines proposals from both Round 1 reviews.
+
+**1. EffectNode Base Class Tests (8 tests)**
+
+| # | Test Description | Validates |
+|---|-----------------|-----------|
+| 1 | `enabled=false` returns input reference unchanged | Core bypass contract |
+| 2 | Identity parameters return input reference (no allocation) | Performance: `isIdentity()` skips `deepClone()` |
+| 3 | `mix=0.0` produces output equivalent to unprocessed input | Boundary: zero mix must fully bypass |
+| 4 | `mix=0.5` produces midpoint blend between input and effected output | Core mix functionality |
+| 5 | `mix=1.0` returns fully effected output (no blend) | Default fast path |
+| 6 | `mix < 1.0` preserves alpha for RGBA images | Correctness: alpha must not be interpolated (requires fix #3 from Expert Review Round 2) |
+| 7 | Property change triggers `markDirty()` on node | Dirty propagation via PropertyContainer.propertyChanged signal |
+| 8 | `dispose()` called twice does not throw | Robustness / idempotence |
+
+**2. Per-Effect Node Tests (14 tests each x 13 nodes = 182 tests)**
+
+For CDLNode, ColorInversionNode, NoiseReductionNode, SharpenNode, ToneMappingNode, HueRotationNode, HighlightsShadowsNode, VibranceNode, ClarityNode, DeinterlaceNode, FilmEmulationNode, StabilizationNode, ColorWheelsNode:
+
+| # | Category | Description |
+|---|----------|-------------|
+| 1 | Identity detection | `isIdentity()` returns true at default parameter values |
+| 2 | Non-identity detection | `isIdentity()` returns false when parameters deviate from defaults |
+| 3 | Enabled/disabled bypass | `enabled=false` returns input reference without processing |
+| 4 | Mix blending | `mix=0.5` produces blended output (verifiable per-pixel) |
+| 5 | Parameter clamping | Setting value beyond min/max is clamped by Property setter (verified, not just assumed) |
+| 6 | Dirty propagation | Changing a parameter marks the node and downstream outputs dirty |
+| 7 | Cache validity | Evaluating twice at same frame with no changes returns cached result (same reference) |
+| 8 | Pixel correctness (uint8) | Output matches direct call to underlying function (e.g., `applyCDLToImageData()`) for uint8 input |
+| 9 | Pixel correctness (float32) | Output values are within tolerance for float32 input (documents precision characteristics) |
+| 10 | Alpha preservation | Alpha channel unchanged after processing RGBA image |
+| 11 | 1x1 edge case | Single-pixel image processes without crash or NaN |
+| 12 | Mix=0 produces unprocessed output | Distinct from enabled=false: mix=0 with enabled=true still skips effect |
+| 13 | Dispose cleanup | `dispose()` nullifies cached state, does not throw on double-call |
+| 14 | Channel count safety | 1-channel and 3-channel inputs handled without out-of-bounds array access |
+
+**StabilizationNode exception:** Requires 3 additional tests (total 17):
+- Sequential frame evaluation produces temporally consistent output
+- Random-access frame jump (e.g., frame 50 to frame 2) handles missing motion history gracefully
+- Cache invalidation when reference frame changes
+
+**3. EffectChain Integration Tests (20 tests)**
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | Empty chain evaluate | No source, no effects: returns null |
+| 2 | Source-only pass-through | Source set, zero effects: returns source image unchanged |
+| 3 | Single effect | One effect applies correctly |
+| 4 | Ordering sensitivity | CDL->Sharpen produces different result than Sharpen->CDL |
+| 5 | Insert at index | `insert(0, effect)` correctly prepends |
+| 6 | Remove effect | Removal re-wires chain correctly |
+| 7 | Reorder effects | `reorder(from, to)` updates evaluation order |
+| 8 | Disabled effect skip | Disabled node in mid-chain is transparent |
+| 9 | Identity effect skip | Identity-parameterized node is transparent |
+| 10 | Cache efficiency | Changing only last node in 5-node chain re-evaluates only 1 node |
+| 11 | `toJSON()` structure | Output has correct shape (effect types, properties per node) |
+| 12 | `fromJSON()` round-trip | Deserialized chain has identical parameters (requires `fromJSON()` implementation) |
+| 13 | Duplicate node guard | Adding same node instance twice: either error or no-op, not corruption |
+| 14 | Dispose chain | `dispose()` disposes all child effect nodes |
+| 15 | Double dispose | Chain `dispose()` called twice does not throw |
+| 16 | Source change | `setSource()` with new source re-wires all connections |
+| 17 | `getEffects()` ordering | Returns effects in current chain order |
+| 18 | Large chain | 10-node chain evaluates without stack overflow |
+| 19 | All effects disabled | Returns source image unchanged |
+| 20 | Remove non-existent | `remove(unknownEffect)` is a no-op |
+
+**4. GPU Processor Tests (8 tests)**
+
+| # | Test | Description |
+|---|------|-------------|
+| 1 | GPU fallback to CPU | GPU processor constructor failure: node processes via CPU `applyEffect()` |
+| 2 | GPU mock initialization | Using `createMockWebGL2Context()` from `test/mocks.ts`, processor initializes correctly |
+| 3 | Processor swap at runtime | Attach GPU processor, set to null, verify CPU path resumes |
+| 4 | Node dispose calls processor dispose | `node.dispose()` triggers `processor.dispose()` (existing pattern in `NodeProcessor.test.ts`) |
+| 5 | Property change calls processor invalidate | `markDirty()` cascade triggers `processor.invalidate()` |
+| 6 | GPU sharpen mock output | Mock `readPixels` returns expected sharpened data |
+| 7 | GPU noise reduction mock output | Mock `readPixels` returns expected denoised data |
+| 8 | Context loss graceful degradation | After simulated context loss, processor reports not ready, node falls back to CPU |
+
+**5. ViewerEffectChain Bridge Tests (15 tests)**
+
+| # | Test | Description |
+|---|------|-------------|
+| 1-10 | Property sync per effect group | One test per: CDL (4 params), sharpen, noise reduction (4 params), highlights/shadows, vibrance, clarity, tone mapping, color wheels, deinterlace, film emulation. Each verifies `syncFromViewerState()` correctly propagates flat state to node properties. |
+| 11 | Effect ordering match | Assert chain node ordering matches `EffectProcessor.applyEffects()` three-pass structure |
+| 12 | Full pipeline parity (uint8) | All effects active, pixel comparison vs `EffectProcessor.applyEffects()`, tolerance = 1 LSB |
+| 13 | Full pipeline parity (float32) | Same test for float32, tolerance = 1e-5 relative |
+| 14 | Single-effect parity | Each effect individually active, compare outputs between old and new paths |
+| 15 | Identity parity | All effects at defaults: both paths produce identical pixels (zero tolerance) |
+
+**Minimum Total: 233 tests**
+- EffectNode base class: 8
+- Per-node (13 x 14 + 3 StabilizationNode extras): 185
+- EffectChain: 20
+- GPU processors: 8
+- ViewerEffectChain bridge: 15
+- Rounding margin for discovered edge cases: ~12
+
+**Recommended Total: ~245 tests** (accounting for additional discovered edge cases during implementation).
+
+### Final Risk Rating: MEDIUM
+
+**Risk Breakdown:**
+
+| Risk | Severity | Likelihood | Status |
+|------|----------|------------|--------|
+| `deepClone()` memory pressure at 4K float32 | HIGH | MEDIUM | Mitigable via ping-pong buffer; acceptable for HD uint8 without mitigation |
+| Phase ordering (Phase 6 before Phase 2) causing delays | LOW | HIGH | Straightforward to fix in plan; does not require redesign |
+| `blendImages()` alpha corruption | MEDIUM | HIGH (whenever mix < 1.0 on RGBA) | One-line fix in inner loop |
+| CDLNode precision loss (0-255 round-trip) | MEDIUM | HIGH (whenever float32 input used) | Pre-existing in `applyCDL()`; plan does not make it worse but does not fix it |
+| StabilizationNode design gap (multi-frame access) | MEDIUM | HIGH (this node will not work correctly) | Descope to Phase 2b; does not block other 12 nodes |
+| VideoFrame leak on cache eviction | LOW | MEDIUM | Pre-existing `IPNode` bug; fix independently |
+| `Graph.evaluate()` hardcoded resolution | LOW | HIGH | Trivial fix: pass `EvalContext` through |
+| Missing `fromJSON()` | LOW | HIGH | Straightforward implementation using `NodeFactory` |
+
+The overall MEDIUM rating reflects that: (a) the core architecture is sound and low-risk, (b) all identified issues have known mitigations, (c) the highest-severity risk (memory pressure) is only triggered for 4K float32 workflows which are not the majority use case today, and (d) no risk requires a fundamental redesign.
+
+### Implementation Readiness: NEEDS WORK
+
+While the Expert Review Round 2 rated readiness as "READY," the QA assessment is more conservative. The plan requires the following changes before implementation should begin. The distinction is that some items are not merely "code-level bugs to fix during implementation" but structural issues in the plan document that affect implementation sequencing and developer understanding.
+
+**Must-Fix Before Implementation Begins (4 items):**
+
+1. **Reorder Phase 6 to Phase 1b in the plan document.** This is not a suggestion to "fix during implementation." The plan as written tells an implementer to build 13 concrete nodes (Phase 2) before the `toImageData()`/`fromImageData()` methods they depend on exist (Phase 6). An implementer following the plan sequentially will encounter compile failures on 6 of 13 nodes with no guidance on resolution. The plan document must be updated to reflect the correct dependency order.
+
+2. **Replace the CDLNode code sample with `applyCDLToImageData()` delegation.** The current code sample is a negative example that an implementer would copy. It duplicates iteration logic, introduces an unnecessary normalization layer, and bypasses the existing tested function. The plan should show the correct pattern: clone input, convert to ImageData, call `applyCDLToImageData()`, convert back.
+
+3. **Fix the `blendImages()` code sample to preserve alpha.** This is in the plan's code listing and will be copied by implementers. The fix is adding an alpha-channel check to the inner loop.
+
+4. **Add `fromJSON()` to the EffectChain code sample or note it as a required addition.** The plan's Testing Strategy section references `toJSON()/fromJSON()` round-trip testing, but the EffectChain listing has no `fromJSON()`. This creates a testing requirement with no corresponding implementation. Either add the method or update the testing section to match.
+
+**Should-Fix Before Implementation (3 items):**
+
+5. **Document the `deepClone()` mitigation strategy.** The plan should include at least a design sketch for ping-pong buffering or buffer pooling. The Expert Review's Recommended Change #3 provides a concrete API change (`applyEffect(context, input, output)`). This does not need to be fully implemented in the plan, but the approach should be documented so the implementer knows it is coming and does not build abstractions that prevent it.
+
+6. **Change `EffectChain.evaluate()` signature to accept `EvalContext`.** This is a one-line change to the plan's code sample that prevents the hardcoded 1920x1080 resolution from propagating.
+
+7. **Descope StabilizationNode with explicit rationale.** Move it from the Phase 2 node list to a "Phase 2b: Temporal Effects" section with a brief note explaining why single-input `applyEffect()` is insufficient and what design work is needed. This prevents an implementer from attempting to build it and discovering the design gap mid-implementation.
+
+Once the 4 must-fix items are addressed in the plan document, implementation can proceed. The should-fix items can be resolved during early implementation without significant rework.
+
+**Summary:** The plan demonstrates strong architectural judgment and thorough domain understanding. The EffectNode abstraction is the right design for the stated goals (composability, caching, serialization, reordering). The issues identified across three rounds of review are all tractable and none require fundamental redesign. After the plan document is updated with the must-fix items above, the implementation is well-scoped for a 4-5 week timeline with ~245 tests providing adequate coverage for a safe migration.

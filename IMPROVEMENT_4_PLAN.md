@@ -752,3 +752,209 @@ The plan proposes 3-5 new tests for `globalErrorHandler.ts` but does not provide
 5. **Global error handler `window.addEventListener('error')` will fire for `<script>` and `<link>` load errors.** These are `Event` objects (not `ErrorEvent` with `.error`), so the `instanceof Error` guard will filter them out. However, some bundler errors during development DO produce `ErrorEvent` with an `Error` instance. This could cause duplicate logging (once from the Logger via the global handler, once from the Vite overlay). This is acceptable for development but should be documented.
 
 6. **The plan's success metric "Silent `.catch(() => {})` in `src/`: 18 -> 0" should be updated to 19 -> 0** to account for the missed `Renderer.ts:2098` catch.
+
+---
+
+## Expert Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+### Round 1 Feedback Assessment
+
+Both the Expert Review and QA Review from Round 1 were thorough and well-calibrated. I verified every claim against the actual source code and can confirm the following:
+
+**Expert Review findings -- all validated:**
+
+1. **OCIO log level debate (`warn` vs `error`):** The Expert raised a valid point about `OCIOWasmBridge.ts:72`. After examining the code at lines 65-93, the constructor comment says "Fire-and-forget init (errors emitted via event)" and the `init()` method at line 83 catches errors and emits them via `statusChanged`. The `warn` level is the correct choice here: the `statusChanged` event is the primary error channel (it carries structured status info consumed by the UI), and the logger message serves as a secondary breadcrumb for developers reading console output. Upgrading to `error` would create noise for a condition that already has a dedicated reporting mechanism. **Keep `warn` as proposed.**
+
+2. **`AudioMixer.ts:396` downgrade to `debug`:** Agreed. The Expert correctly identified the inconsistency with `App.ts:452` (identical pattern: closing AudioContext during cleanup). Both should be `debug`. **Accept this change.**
+
+3. **Idempotency guard:** Agreed. The testing strategy explicitly mentions testing idempotency, but the implementation lacks it. The proposed `let installed = false` pattern is correct and minimal. **Accept this change.**
+
+4. **Global `error` event handler value:** The Expert's concern about the `window.addEventListener('error', ...)` handler is well-founded. After examining the codebase, there are no existing `window.onerror` or `unhandledrejection` handlers anywhere in `src/`. The `unhandledrejection` handler alone fills the critical gap (silent promise swallowing). The generic `error` handler's value is marginal -- errors caught by try/catch do not fire this event, and uncaught synchronous errors that reach the global handler are rare in a modern async codebase. **Recommend removing the `window.addEventListener('error', ...)` handler entirely** to keep the global handler focused and avoid the double-logging concern. This simplifies the implementation and the tests.
+
+5. **`event.preventDefault()` for `unhandledrejection`:** The Expert correctly noted this is a design decision. Without `preventDefault()`, the browser will also log the rejection. During development this means double output, but it is actually preferable: the Logger provides a formatted, module-prefixed entry, while the browser provides a stack trace with source maps. **Do not call `preventDefault()`.** Document this explicitly in a code comment.
+
+**QA Review findings -- all validated:**
+
+1. **Missed `Renderer.ts:2098` catch:** Confirmed. Line 2098 has `} catch (e) { // Shouldn't fail for 'srgb', but guard defensively }` which is a silent catch identical in pattern to line 839. The count should be 19, not 18. **Accept this correction.**
+
+2. **Test console noise in CI:** The QA review correctly identifies that `import.meta.env.DEV` is `true` in Vitest, so Logger defaults to `DEBUG` level. However, the affected catch blocks mostly use `debug` level for fire-and-forget operations, and the tests that could trigger them (e.g., HDR preload tests) would need to fail to produce output. Since the plan does not change behavior, existing passing tests will not suddenly trigger catch blocks. This is a theoretical concern, not a practical one. **No action needed.**
+
+3. **jsdom `PromiseRejectionEvent` limitation:** Validated. jsdom does not support `PromiseRejectionEvent`. The QA review's suggested workaround (`new Event('unhandledrejection')` with `Object.defineProperty`) is correct and practical. **Accept this test guidance.**
+
+4. **e2e `AudioMixer.e2e.test.ts` duplication:** Valid observation but explicitly out of scope. **Note for follow-up only.**
+
+5. **ESLint rule for regression prevention:** Both reviewers mention this. It is a natural follow-up but correctly excluded from this plan's scope. **Note for follow-up only.**
+
+### Consolidated Required Changes (before implementation)
+
+These changes MUST be made before implementation proceeds:
+
+1. **Update `Renderer.ts` count from 1 to 2 catch fixes.** Add `Renderer.ts:2098` to the detailed steps (Section 2.10) with an additional entry 2.10.2:
+   ```typescript
+   } catch (e) {
+     log.debug('gl.unpackColorSpace reset to srgb not supported:', e);
+   }
+   ```
+   Update the summary table to show 19 production silent catches (not 18). Update the success metric table accordingly.
+
+2. **Downgrade `AudioMixer.ts:396` from `warn` to `debug`.** The AudioContext close during `dispose()` is a cleanup operation where failure is harmless. This is consistent with the `debug` level used for the identical `audioCtx.close()` pattern at `App.ts:452`.
+
+3. **Add idempotency guard to `installGlobalErrorHandler`.** Use a module-level `let installed = false` flag:
+   ```typescript
+   let installed = false;
+   export function installGlobalErrorHandler(): void {
+     if (installed || typeof window === 'undefined') return;
+     installed = true;
+     // ...listeners...
+   }
+   ```
+
+4. **Remove the `window.addEventListener('error', ...)` handler from the global error handler.** Keep only the `unhandledrejection` handler. The generic error handler adds marginal value while introducing double-logging risk and complicating the test surface. The plan's stated goal is to address silent promise failures; the `unhandledrejection` handler fulfills this goal completely. If a generic error handler is desired later, it can be added as a separate task with its own scope.
+
+5. **Add a code comment in `installGlobalErrorHandler` documenting the decision NOT to call `event.preventDefault()`.** Example:
+   ```typescript
+   // Note: We intentionally do NOT call event.preventDefault().
+   // The browser's default console output provides stack traces with source maps,
+   // complementing the Logger's formatted, module-prefixed entry.
+   ```
+
+### Consolidated Nice-to-Haves
+
+These are improvements that would enhance the plan but are NOT blockers:
+
+1. **Structured error metadata for `AppDCCWiring.ts` error-level catches.** Including the file path as a structured field (e.g., `log.error('Failed to load video from DCC:', { path, error: err })`) would help log aggregation. Minor improvement; the current string-based approach is functional.
+
+2. **Add test for `OCIOWasmBridge` autoInit catch path.** The QA review correctly notes that the constructor's `autoInit` path at line 72 has zero test coverage. A single test verifying the catch fires `log.warn` on factory rejection would close this gap.
+
+3. **Add tests for `NetworkSyncManager` WebRTC error paths.** `handleWebRTCAnswer` with a failing `setRemoteDescription` and `handleWebRTCIce` with a failing `addIceCandidate` have zero coverage.
+
+4. **Provide detailed test implementation for `globalErrorHandler.test.ts`.** The plan describes 3-5 tests but does not include code. Given the jsdom limitation with `PromiseRejectionEvent`, including a reference implementation in the plan would prevent implementation-time surprises.
+
+5. **Follow-up: migrate `Viewer.ts` raw `console.*` calls to Logger.** The file has ~25 raw `console.log`/`console.warn` calls despite already having a Logger instance. Natural companion task.
+
+6. **Follow-up: add an ESLint rule to prevent regression.** Either `no-empty-function` scoped to catch handlers or a custom `eslint-plugin-promise` rule to flag `.catch(() => {})` patterns.
+
+7. **Scope note on bare `catch { }` patterns.** The codebase contains approximately 80+ bare `catch { }` blocks (parameterless catch without logging) across production files. These are distinct from the `.catch(() => {})` promise patterns targeted by this plan. Many are legitimate feature-detection or fallback patterns (e.g., `DisplayCapabilities.ts` has ~15 of them for browser capability probing, `SafeCanvasContext.ts` has 3 for color space negotiation). However, some are arguably silent failures that could benefit from logging (e.g., `AudioPlaybackManager.ts:505,530` with `// Ignore errors from already stopped nodes`, `NetworkSyncManager.ts:1293,1303,1615,1622` with `// ignore close errors`, `OCIOWasmModule.ts:154,160` with `/* best effort */`). A follow-up plan could audit these bare catch blocks with the same methodology used here.
+
+### Final Risk Rating: LOW
+
+The plan is logging-only changes with zero behavioral modifications. The required changes above further reduce risk by:
+- Removing the `window.addEventListener('error', ...)` handler (eliminates double-logging risk)
+- Adding the idempotency guard (eliminates HMR duplicate-registration risk)
+- Correcting the catch count (eliminates missed-catch risk)
+
+The only residual risk is minor CI console noise during test runs, which the QA review correctly assessed as theoretical rather than practical.
+
+### Final Effort Estimate: 4 hours
+
+The original 4-hour estimate remains accurate. The required changes (adding one more catch fix, downgrading one log level, adding an idempotency guard, removing the error handler) are all minimal modifications that do not change the overall work profile. The removal of the `window.addEventListener('error', ...)` handler actually slightly reduces both implementation and test effort.
+
+### Implementation Readiness: READY
+
+With the five required changes incorporated, this plan is ready for implementation. The inventory is comprehensive (19 catches after the Renderer.ts:2098 correction), the log level assignments are well-calibrated, the testing strategy is sound, and the risk profile is low. The plan is a clean, focused improvement that delivers immediate debugging value with no behavioral side effects.
+
+---
+
+## QA Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+### Round 1 Feedback Assessment
+
+I independently verified every claim from the Expert Review (Round 1), QA Review (Round 1), and Expert Review (Round 2) against the current source code. All source file line numbers, Logger import statuses, catch patterns, and behavioral descriptions were confirmed accurate as of this review. Below is my consolidated assessment.
+
+**Points of agreement across all prior reviews:**
+
+1. **Missed `Renderer.ts:2098` catch (QA Round 1, Concern #1):** Independently confirmed. The catch at line 2098 contains `catch (e) { // Shouldn't fail for 'srgb', but guard defensively }` -- this is a silent catch identical in pattern to line 839. Both the QA Round 1 and Expert Round 2 agree this must be added. The corrected count is 19 production silent catches, not 18. **Accepted by all reviewers.**
+
+2. **`AudioMixer.ts:396` downgrade from `warn` to `debug` (Expert Round 1, Concern #2):** Independently verified the code at line 390-399. The `audioContext.close()` call during `dispose()` occurs after `masterGain.disconnect()` and sets `audioContext = null` immediately after. Failure here is harmless -- the AudioContext may already be in `'closed'` state. The pattern is identical to `App.ts:452`. All reviewers agree on `debug`. **Accepted unanimously.**
+
+3. **Idempotency guard for `installGlobalErrorHandler` (Expert Round 1, Concern #3):** Verified that `src/main.ts` has no `import.meta.hot` handling. While Vite does full page reloads for `main.ts` changes (not HMR), the guard is zero-cost defensive programming. All reviewers agree. **Accepted unanimously.**
+
+4. **OCIO auto-init log level should remain `warn` (Expert Round 1, Concern #1):** Verified at `OCIOWasmBridge.ts:65-73` that the constructor comment explicitly says "errors emitted via event." The `init()` method at lines 83+ handles error reporting via `statusChanged`. The `warn` from the catch is a secondary breadcrumb, not the primary error channel. Both the plan and the Expert Round 2 agree on `warn`. **Accepted -- keep `warn` as proposed.**
+
+5. **jsdom `PromiseRejectionEvent` limitation (QA Round 1):** Confirmed. jsdom lacks `PromiseRejectionEvent`. The workaround using `new Event('unhandledrejection')` with `Object.defineProperty` is the standard approach in Vitest/jsdom environments. **Accepted as test implementation guidance.**
+
+**Point of divergence -- `window.addEventListener('error')` handler:**
+
+The Expert Round 2 recommends **removing** the `error` event handler entirely. I partially disagree. The `error` handler catches uncaught synchronous exceptions (e.g., a `throw` in a synchronous callback that is not wrapped in try/catch). While rare, these do occur in production -- for example, a `RangeError` in a render loop or a `TypeError` from an unexpected `null` in a UI callback. These errors do NOT produce `unhandledrejection` events.
+
+However, the Expert Round 2's concern about double-logging is valid: Vite's error overlay already catches these in development, and browsers display them in the console natively. The Logger entry provides module-prefixed formatting but no additional stack information.
+
+**My recommendation:** Keep the `error` handler but guard it behind `import.meta.env.PROD` so it only fires in production builds where there is no Vite overlay. In development, the browser's native error display and Vite overlay are sufficient. This eliminates the double-logging concern while preserving the safety net in production:
+
+```typescript
+// Only install the generic error handler in production.
+// In development, Vite's error overlay and the browser console provide
+// sufficient visibility for uncaught synchronous exceptions.
+if (import.meta.env.PROD) {
+  window.addEventListener('error', (event: ErrorEvent) => {
+    if (event.error instanceof Error) {
+      log.error('Uncaught error:', event.error.message, event.error);
+    }
+  });
+}
+```
+
+If the team prefers simplicity over this nuance, removing the handler entirely (as Expert Round 2 suggests) is also acceptable. The `unhandledrejection` handler alone addresses 95%+ of the silent-failure gap this plan targets.
+
+### Minimum Test Requirements
+
+**Required (blocking):**
+
+| # | Test | File | Rationale |
+|---|------|------|-----------|
+| 1 | `installGlobalErrorHandler` registers `unhandledrejection` listener | `src/utils/globalErrorHandler.test.ts` (new) | Core functionality of new module |
+| 2 | Idempotency: second call does not duplicate listeners | `src/utils/globalErrorHandler.test.ts` (new) | Required change #3 demands test coverage |
+| 3 | Synthetic `unhandledrejection` event triggers `Logger.error` | `src/utils/globalErrorHandler.test.ts` (new) | Verifies the handler actually works |
+| 4 | No-op when `window` is undefined | `src/utils/globalErrorHandler.test.ts` (new) | SSR/worker safety |
+| 5 | Full existing test suite passes (`npx vitest run`) | All existing test files | Regression gate -- 7600+ tests |
+
+**Implementation guidance for test #3:** jsdom does not support `PromiseRejectionEvent`. Use this pattern:
+```typescript
+const spy = vi.spyOn(Logger.prototype, 'error');
+const event = new Event('unhandledrejection');
+Object.defineProperty(event, 'reason', { value: new Error('test rejection') });
+window.dispatchEvent(event);
+expect(spy).toHaveBeenCalledWith('Unhandled promise rejection:', expect.any(Error));
+```
+
+**Recommended (non-blocking):**
+
+| # | Test | File | Rationale |
+|---|------|------|-----------|
+| 6 | If `error` handler is kept: `ErrorEvent` with `Error` triggers `Logger.error` | `src/utils/globalErrorHandler.test.ts` | Only if handler is retained |
+| 7 | If `error` handler is kept: `ErrorEvent` without `Error` does NOT trigger | `src/utils/globalErrorHandler.test.ts` | Guard correctness |
+| 8 | `OCIOWasmBridge` autoInit with rejecting factory fires `log.warn` | `src/color/wasm/OCIOWasmBridge.test.ts` | Zero coverage for this path |
+| 9 | `NetworkSyncManager` `setRemoteDescription` rejection fires `log.warn` + peer disposal | `src/network/NetworkSyncManager.test.ts` | Zero coverage for this path |
+| 10 | `NetworkSyncManager` `addIceCandidate` rejection fires `log.debug` | `src/network/NetworkSyncManager.test.ts` | Zero coverage for this path |
+
+### Final Risk Rating: LOW
+
+**Confirmed low risk based on the following verified facts:**
+
+1. **Zero behavioral changes.** Every one of the 19 catch replacements adds only a `log.*()` call. All existing side effects (`disposeWebRTCPeer`, `tryCanvas2DFallback`, `return undefined`, `audioCtx.close()`) are preserved verbatim. I verified this by reading every affected catch block in context.
+
+2. **Production log volume is bounded.** Of the 19 catches: 13 use `debug` (suppressed in production, where default level is `WARN`), 4 use `warn` (fires only on genuinely degraded conditions), 2 use `error` (fires only on user content load failures from DCC bridge). None of these are in hot loops. The highest-frequency candidates (HDR preload at `VideoSourceNode.ts:745`, `Viewer.ts:1517`, `ViewerExport.ts:417`) all use `debug` and will produce zero output in production.
+
+3. **Logger is battle-tested.** The `Logger` class at `src/utils/Logger.ts` is 65 lines, has 205 lines of tests, and is already adopted in 25+ modules. Adding it to 8 more files is routine. The `error()` method unconditionally emits (no level guard), which is correct for the 2 error-level catches.
+
+4. **No new dependencies.** The global error handler uses only `Logger` (already in the dependency graph) and built-in browser APIs (`window.addEventListener`).
+
+5. **Test impact is nil for existing tests.** The affected catch blocks are in error paths that existing tests do not exercise (verified: zero test coverage for autoInit, WebRTC error paths, HDR preload failures, AudioContext close failures). No existing test assertions will change.
+
+6. **The idempotency guard** (required change #3) eliminates the only identified medium-risk concern (HMR double-registration).
+
+### Implementation Readiness: READY
+
+The plan is ready for implementation once the following 5 required changes are incorporated (all agreed upon by both Expert and QA reviewers across both rounds):
+
+1. Add `Renderer.ts:2098` as item 2.10.2 (total: 19 catches, not 18).
+2. Downgrade `AudioMixer.ts:396` from `warn` to `debug`.
+3. Add idempotency guard (`let installed = false`) to `installGlobalErrorHandler`.
+4. Resolve `window.addEventListener('error')` handler: either remove it (Expert Round 2 recommendation) or guard with `import.meta.env.PROD` (QA Round 2 recommendation). Either approach is acceptable.
+5. Add code comment documenting intentional omission of `event.preventDefault()` on `unhandledrejection`.
+
+The plan's inventory is complete (confirmed by independent regex audit: 19 production silent catches + 2 intentional ShotGridBridge catches). The log level assignments are well-calibrated and internally consistent. The estimated 4-hour effort is realistic. No blocking issues remain.

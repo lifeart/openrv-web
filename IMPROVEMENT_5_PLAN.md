@@ -1204,3 +1204,492 @@ The plan converts `IPImage.videoFrame` from a public field to a getter that dele
    but the Renderer behavioral change (Step 6 -- removing `image.close()` on fallback) could
    affect integration scenarios where the Renderer is the only code path that disposes a
    VideoFrame-backed IPImage after a GPU upload failure. A targeted test should be added.
+
+## QA Review — Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+This plan is well-researched, correctly maps the VideoFrame lifecycle across the codebase, and proposes a structurally sound solution. Both the Expert Review and QA Round 1 raised valid concerns that must be addressed before implementation. The core approach (reference-counted `ManagedVideoFrame` wrapper) is appropriate for the problem scope, but the implementation details need several corrections. The plan is implementable after the changes outlined below.
+
+### Round 1 Feedback Assessment
+
+Both the Expert Review and QA Round 1 converged on the same critical issues. Here is a consolidated assessment of what was raised and whether it was adequately addressed between rounds:
+
+**1. `__DEV__` does not exist in the build pipeline (raised by both rounds) -- UNRESOLVED, MUST FIX**
+
+Both reviews correctly identified this. The codebase uses `import.meta.env.DEV` exclusively (confirmed at `src/main.ts:14`, `src/utils/Logger.ts:24`). There is no `define` entry in `vite.config.ts` or `vitest.config.ts` for `__DEV__`. The `declare const __DEV__: boolean` in the proposed class would cause a `ReferenceError` at runtime. This is a blocking issue that must be resolved by replacing all `__DEV__` references with `import.meta.env.DEV`.
+
+**2. `videoFrame` field-to-getter migration breaks write sites (raised by QA Round 1) -- UNRESOLVED, MUST FIX**
+
+QA Round 1 correctly identified that `src/core/image/Image.ts:54` (`this.videoFrame = options.videoFrame ?? null`) and line 164 (`this.videoFrame = null`) are direct field writes. Converting `videoFrame` to a getter-only property would cause a TypeError at these sites. The Expert Review did not catch this. QA Round 1 proposed a getter/setter pair as a compatibility shim. This is the correct approach and must be included in the implementation plan. Without it, the migration will break the constructor and `close()` method of `IPImage` itself.
+
+**3. Renderer `image.close()` removal creates a degraded-state loop (raised by Expert Review) -- PARTIALLY ADDRESSED**
+
+The Expert Review identified that removing `image.close()` at `Renderer.ts:813` leaves a failed VideoFrame in the LRU cache, causing repeated `texImage2D` failures on every render of that cached frame. QA Round 1 reiterated this. The Expert Review proposed closing only the VideoFrame and evicting from cache. This is the correct fix, but the plan has not been updated to reflect it. The implementation must:
+- Release the `managedVideoFrame` from the IPImage (not close the entire IPImage).
+- Set `image.managedVideoFrame = null` so subsequent renders skip the VideoFrame path.
+- Recognize that the typed-array fallback will produce garbage for HDR VideoFrame-backed IPImages (4-byte placeholder data), so the Renderer should log an error and skip rendering entirely for such frames rather than uploading garbage data.
+
+**4. `ManagedVideoFrame.wrap()` double-wrap risk (raised by QA Round 1) -- UNRESOLVED, SHOULD FIX**
+
+QA Round 1 raised that wrapping the same raw `VideoFrame` twice creates two independent refcount owners, leading to use-after-close. The proposed `WeakSet<VideoFrame>` guard in `wrap()` is a sound solution and should be included. In the current codebase this scenario is unlikely (ownership is linear), but the guard is cheap insurance and aligns with the defensive posture of the entire plan.
+
+**5. `clone()` behavioral change breaks existing tests (raised by QA Round 1) -- UNRESOLVED, MUST FIX**
+
+QA Round 1 correctly identified that Step 10 changes `clone()` from not copying `videoFrame` to sharing it via `acquire()`. This reverses documented behavior (see `Image.ts:188-189`: "videoFrame is not copied because VideoFrame is a GPU resource that cannot be safely shared between IPImage instances"). Tests that assert `clone().videoFrame === null` will fail. The plan must explicitly acknowledge this as an intentional behavioral change, list the affected test assertions, and update them. With `ManagedVideoFrame`, sharing becomes safe via refcounting, so the change is correct in principle -- but the migration plan must account for the test updates.
+
+**6. `cachedIPImage` overwrite without close in FileSourceNode (raised by Expert Review) -- UNRESOLVED, SHOULD FIX**
+
+The Expert Review identified that assigning `this.cachedIPImage = new IPImage(...)` at lines 1223, 1287, and 1418 overwrites the previous `cachedIPImage` without calling `close()`. I verified this against the current source: there is no `this.cachedIPImage?.close()` before the assignment in any of the three HDR loaders (`loadAVIFHDR`, `loadJXLHDR`, `loadHEICHDR`). If these methods are called multiple times (e.g., user reloads the same HDR file), the previous IPImage and its VideoFrame leak. This is a pre-existing bug independent of the `ManagedVideoFrame` proposal, but it should be fixed in Phase 2 since the plan is already touching these methods. The fix is a one-line addition at the top of each method: `this.cachedIPImage?.close();`.
+
+**7. MediabunnyFrameExtractor probe path lacks try/finally (raised by Expert Review) -- UNRESOLVED, SHOULD FIX**
+
+The Expert Review correctly noted that `probeFrame.close()` at `MediabunnyFrameExtractor.ts:298` is not inside a `finally` block. If any code between `probeSample.toVideoFrame()` (line 277) and `probeFrame.close()` (line 298) throws, the probeFrame leaks. The outer `try/catch` at line 273 catches the error but does not close the probeFrame. The fix is straightforward: wrap lines 278-297 in a `try { ... } finally { probeFrame.close(); }` block. This is a low-cost fix with high defensive value.
+
+**8. FinalizationRegistry holds strong reference to VideoFrame (raised by Expert Review) -- UNRESOLVED, LOW PRIORITY**
+
+The Expert Review identified that the FinalizationRegistry closure captures a strong reference to the `frame` object, preventing GC of the JS wrapper even after `close()` releases the GPU resource. QA Round 1 did not dispute this. Using `WeakRef<VideoFrame>` or a `Map<number, WeakRef<VideoFrame>>` side-table is the correct fix. Since this only affects dev mode and has zero VRAM impact (the GPU resource is released by `close()`), this is low priority but should be addressed for correctness.
+
+**9. Static state leakage between tests (raised by QA Round 1) -- UNRESOLVED, MUST FIX**
+
+QA Round 1 correctly identified that `_nextId` and `_activeCount` as static module-level fields will accumulate across tests. The `resetForTesting()` method is essential for test reliability. Without it, `activeCount`-based assertions depend on the order and success of prior tests, making the test suite brittle. The proposed delta-based pattern (`const before = ManagedVideoFrame.activeCount; ... expect(activeCount).toBe(before)`) is a workaround but fragile if a prior test leaks. A `beforeEach` reset is the robust solution.
+
+**10. `sample.close()` not called in `fetchHDRFrame` error path (raised by QA Round 1) -- UNRESOLVED, MUST FIX**
+
+QA Round 1 identified that the `catch` block in `fetchHDRFrame` (line 1065) does not close the `sample`. If `hdrSampleToIPImage` throws, both the IPImage (if partially constructed) and the sample leak. The plan's Step 4 fix adds `ipImage?.close()` to the catch block but omits `sample?.close()`. The sample must also be closed in the error path. The fix should use a `finally` block: `finally { sample?.close(); }`.
+
+### Minimum Test Requirements
+
+The following tests are the minimum gate for merging this improvement. They must all pass before the implementation is considered complete.
+
+**ManagedVideoFrame unit tests (new file: `src/core/image/ManagedVideoFrame.test.ts`):**
+
+1. `wrap()` creates a managed frame with refCount 1 and increments `activeCount`.
+2. `release()` calls `VideoFrame.close()` when refCount reaches 0 and decrements `activeCount`.
+3. `acquire()` increments refCount; `release()` does not close until all references are released.
+4. `acquire()` on a closed frame throws an error.
+5. `release()` is idempotent (double-release does not decrement `activeCount` below the baseline or call `close()` twice).
+6. `wrap()` with an already-closed VideoFrame (`frame.format === null`) throws immediately.
+7. `wrap()` with a VideoFrame already managed by another `ManagedVideoFrame` throws (double-wrap guard).
+8. `enableLeakDetection()` accepts a callback without throwing.
+9. `resetForTesting()` resets `_activeCount` and `_nextId` to initial values.
+
+**IPImage integration tests (additions to `src/core/image/Image.test.ts`):**
+
+10. Constructing IPImage with `videoFrame` option auto-wraps in `ManagedVideoFrame`.
+11. Constructing IPImage with `managedVideoFrame` option uses it directly (does not double-wrap).
+12. `image.videoFrame` getter returns the raw `VideoFrame` from the managed wrapper.
+13. `image.close()` calls `managedVideoFrame.release()` and subsequent `image.videoFrame` returns `null`.
+14. `clone()` with a managed VideoFrame calls `acquire()` and shares the reference.
+15. Closing the clone does not close the VideoFrame if the original still holds a reference.
+16. Closing both original and clone closes the VideoFrame exactly once.
+17. Setting `image.videoFrame = someFrame` via setter auto-wraps and releases the previous managed frame.
+
+**Error path tests (additions to existing test files):**
+
+18. `VideoSourceNode.test.ts`: `hdrSampleToIPImage` cleans up VideoFrame when `new IPImage()` throws.
+19. `VideoSourceNode.test.ts`: `fetchHDRFrame` catch block closes both `ipImage` and `sample` on error.
+20. `FileSourceNode.test.ts`: At least one of AVIF/JXL/HEIC HDR loaders closes VideoFrame when IPImage construction fails.
+21. `FileSourceNode.test.ts`: Re-loading an HDR file closes the previous `cachedIPImage` before creating a new one.
+22. `MediabunnyFrameExtractor.test.ts`: Probe path closes `probeFrame` even when colorSpace access throws.
+23. `Renderer.test.ts`: `texImage2D` failure for a VideoFrame-backed IPImage releases the managed VideoFrame but does not destroy the entire IPImage.
+
+**Lifecycle tests:**
+
+24. `VideoSourceNode.test.ts`: After `dispose()`, `ManagedVideoFrame.activeCount` returns to baseline (all cache entries released).
+25. `FileSourceNode.test.ts`: After `dispose()`, the `cachedIPImage`'s VideoFrame is closed.
+
+### Final Risk Rating: MEDIUM
+
+The risk is MEDIUM, not HIGH, because:
+
+- The identified VRAM leaks are real but only manifest on error paths, not during normal playback. Under normal operation, the existing cleanup chain (LRU eviction -> `image.close()` -> `videoFrame.close()`) works correctly.
+- The `ManagedVideoFrame` wrapper introduces a new abstraction layer that, if implemented carelessly (mismatched acquire/release, double-wrap), could cause use-after-close bugs that are harder to diagnose than the original leak bugs.
+- The `videoFrame` field-to-getter migration is a breaking API change within the codebase. While the compatibility shim (getter + setter) mitigates this, any code path that was not audited could silently break.
+- The Renderer fallback change (removing `image.close()`) alters behavior in a failure scenario that is difficult to reproduce in automated tests (requires an actual GPU driver rejection of a VideoFrame).
+- The static `_activeCount` in `ManagedVideoFrame` is global mutable state that will complicate test parallelization if Vitest ever runs test files concurrently.
+
+The risk is not LOW because the plan touches 10+ files across 4 subsystems (core image, source nodes, renderer, export) and changes a public field to a getter/setter, which is a structural API change.
+
+### Implementation Readiness: NEEDS WORK
+
+The plan is architecturally sound and the gap analysis is accurate, but the following items must be resolved before implementation begins:
+
+**Blocking (must fix before starting):**
+
+1. Replace all `__DEV__` with `import.meta.env.DEV` and remove the `declare const __DEV__` line.
+2. Add a getter/setter pair for `videoFrame` on `IPImage` to maintain backward compatibility with direct field assignment in the constructor and `close()` method.
+3. Add `resetForTesting()` static method to `ManagedVideoFrame` and document its use in `beforeEach`.
+4. Add `sample?.close()` to the `fetchHDRFrame` catch block in Step 4.
+5. Explicitly list the test assertions that must change due to the `clone()` behavioral change (Step 10), and document the rationale for the change.
+
+**Should fix (strongly recommended before merging):**
+
+6. Add a `WeakSet<VideoFrame>` double-wrap guard in `ManagedVideoFrame.wrap()`.
+7. Add `this.cachedIPImage?.close()` at the top of `loadAVIFHDR`, `loadJXLHDR`, and `loadHEICHDR` in FileSourceNode.
+8. Add try/finally around the probe path in `MediabunnyFrameExtractor.ts` (lines 277-299).
+9. Fix the Renderer fallback strategy: release the managed VideoFrame from the IPImage, do not fall through to typed-array upload for 4-byte placeholder buffers, and optionally evict the IPImage from the LRU cache.
+10. Add `frame.format !== null` validation in `ManagedVideoFrame.wrap()` to reject already-closed frames.
+11. Use `WeakRef<VideoFrame>` in the FinalizationRegistry payload to avoid preventing GC of the JS VideoFrame object.
+12. Call `_registry?.unregister(this)` in `release()` when refCount hits 0 to prevent finalizer noise for properly-released frames.
+
+**Nice to have (can be deferred to follow-up):**
+
+13. Add an `afterEach` global hook in `test/setup.ts` that warns if `ManagedVideoFrame.activeCount !== 0`.
+14. Benchmark `acquire()`/`release()` overhead under 1000-frame scrub to validate the "no hot-path cost" claim.
+15. Document the worker-safety constraint (ManagedVideoFrame must not be shared across Web Workers without Atomics).
+
+---
+
+## Expert Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+This plan is ready for implementation once the consolidated required changes below are applied.
+The core problem -- VideoFrame VRAM leaking through unguarded error paths -- is real, correctly
+diagnosed, and the proposed solution is appropriate for the codebase's current constraints. Both
+Round 1 reviews raised valid concerns that largely converge on the same set of issues. The plan
+does not require architectural revision; it requires targeted corrections to the implementation
+details.
+
+### Round 1 Feedback Assessment
+
+**Expert Review (Round 1) raised 6 concerns and 6 missing considerations.** Assessment:
+
+1. **Concern 1 (ManagedVideoFrame adds complexity for error-path-only problem): PARTIALLY AGREE.**
+   The Expert is correct that the normal ownership flow is linear and does not require reference
+   counting. However, the plan's `activeCount` tracking provides a testable invariant that is
+   impossible to express with bare try/finally. The wrapper's value is primarily in its monitoring
+   and leak-detection capabilities, not the refcounting itself. **Verdict: keep ManagedVideoFrame
+   but defer the clone/acquire change (Step 10) to a separate follow-up.** This eliminates the
+   only multi-owner scenario and reduces the refcounting to a simple 1-to-0 transition, which
+   is equivalent to a disposable pattern but with the monitoring benefit.
+
+2. **Concern 2 (`__DEV__` does not exist): CONFIRMED. Both reviews flagged this.** Must use
+   `import.meta.env.DEV`. This is a blocking issue -- the proposed code would crash at runtime.
+
+3. **Concern 3 (FinalizationRegistry strong reference to frame): CONFIRMED.** Holding a strong
+   reference to the VideoFrame JS object in the registry payload prevents GC of the wrapper
+   from cleaning up the JS heap entry. While the GPU resource is released by `close()`, the
+   JS object lingers. Using a `WeakRef<VideoFrame>` or an `activeIds: Set<number>` approach
+   (as the QA review also suggested) is the correct fix.
+
+4. **Concern 4 (Renderer fallback close strategy): CONFIRMED. This is the most important
+   correctness issue.** Both reviews identified the problem: removing `image.close()` from the
+   Renderer fallback path (line 813) without a replacement strategy leaves a broken VideoFrame
+   in the LRU cache. The Expert's analysis is precise: HDR VideoFrame-backed IPImages have a
+   4-byte placeholder data buffer, so there is no meaningful typed-array fallback. The correct
+   approach is:
+   - Release *only* the ManagedVideoFrame (not the entire IPImage).
+   - Mark the IPImage as VideoFrame-degraded so subsequent renders skip the VideoFrame path.
+   - Log a warning.
+   - The IPImage remains in the cache but renders as a blank/error frame rather than crashing
+     or silently leaking VRAM.
+
+5. **Concern 5 (sample.close() ordering): NOTED.** This is informational. The `sample` and
+   `videoFrame` are independent resources after `toVideoFrame()` transfers the decoded buffer.
+   No action needed beyond documentation.
+
+6. **Concern 6 (Worker thread safety): CONFIRMED.** The plan should add a single-line constraint
+   note: "ManagedVideoFrame must not be shared across Worker boundaries. If worker-based
+   rendering is added, a transfer-based protocol must replace reference counting."
+
+**Expert Missing Considerations (6 items):**
+
+1. **HDRFrameResizer double-frame leak if `videoFrame.close()` throws after `new VideoFrame(canvas)`
+   succeeds (line 109-114):** CONFIRMED as a real edge case. If `videoFrame.close()` at line 114
+   throws, the `resized` VideoFrame leaks because the catch block at line 127 returns the original
+   `videoFrame` without closing `resized`. However, `VideoFrame.close()` throwing is
+   extraordinarily rare (only possible if the frame was already closed or the platform is in a
+   corrupted state). **Nice-to-have fix, not blocking.**
+
+2. **FileSourceNode `cachedIPImage` overwrite without close:** CONFIRMED. This is a genuine leak
+   independent of the ManagedVideoFrame proposal. If `loadAVIFHDR` is called twice on the same
+   node, the first IPImage (and its VideoFrame) leaks. **Must fix in Phase 2.** The fix is
+   trivial: add `this.cachedIPImage?.close()` at the top of each HDR loader.
+
+3. **ImageBitmap leak if `new VideoFrame(bitmap, ...)` fails:** CONFIRMED. The bitmap is closed
+   *after* the VideoFrame constructor, so if the constructor throws, the bitmap leaks. The
+   try/finally structure in Step 5 should wrap the bitmap lifecycle as well. **Must fix.**
+
+4. **Performance measurement for refcount overhead:** NOTED. With Step 10 deferred, `acquire()`
+   is never called on the hot path. The only hot-path interaction is the `videoFrame` getter
+   (a property access through `managedVideoFrame?.frame`), which is negligible. **No action
+   needed if Step 10 is deferred.**
+
+5. **`ManagedVideoFrame.wrap()` on already-closed frame:** CONFIRMED. A defensive check
+   `if (frame.format === null) throw` in `wrap()` is cheap and prevents a confusing downstream
+   failure. **Should fix.**
+
+6. **`videoFrame` field-to-getter migration risk:** CONFIRMED. Both reviews identified this. The
+   QA review's setter recommendation is the correct backward-compatible approach. **Must fix.**
+
+**QA Review (Round 1) raised 5 risks and 5 concerns.** Assessment:
+
+1. **Risk 1 (Static state leakage between tests): CONFIRMED.** A `resetForTesting()` method is
+   essential. The delta-based assertion pattern (`const before = activeCount`) is fragile
+   when tests run in parallel or a previous test leaks. **Must add.**
+
+2. **Risk 2 (`__DEV__` not defined): CONFIRMED.** Same as Expert Concern 2. Already addressed.
+
+3. **Risk 3 (FinalizationRegistry non-deterministic in tests): CONFIRMED.** Test the setup path
+   only, not GC-triggered behavior. The plan's testing strategy should explicitly state this.
+
+4. **Risk 4 (jsdom has no VideoFrame): NOTED.** Not a blocker; mocking is sufficient.
+
+5. **Risk 5 (Renderer fallback needs dedicated test): CONFIRMED.** The behavioral change at
+   Renderer.ts:813 is one of the riskiest modifications. It must have a targeted test.
+
+6. **QA Concern 1 (fetchHDRFrame catch block does not close sample): CONFIRMED.** The plan's
+   Step 4 fix addresses IPImage cleanup but misses sample cleanup. If `hdrSampleToIPImage`
+   throws, the `sample` is never closed because `sample.close()` at line 1054 is only
+   reached on the success path. The try/finally must include sample cleanup. **Must fix.**
+
+7. **QA Concern 2 (Double-wrap guard): CONFIRMED.** A `WeakSet<VideoFrame>` in `wrap()` that
+   throws on duplicate wrapping is a good defensive measure. **Should add.**
+
+8. **QA Concern 3 (`format !== null` in mock environments): CONFIRMED.** The `Set<number>`
+   approach for active ID tracking is more robust than relying on `VideoFrame.format` behavior
+   in mocks. **Should fix.**
+
+9. **QA Concern 4 (No `afterEach` guard): CONFIRMED.** A global test hook is the most effective
+   way to catch test-level leaks. **Nice-to-have.**
+
+10. **QA Concern 5 (Renderer test needed): CONFIRMED.** Same as Risk 5 above.
+
+**QA Round 2 Review Assessment:**
+
+The QA Round 2 review is thorough and well-organized. Its categorization of blocking vs.
+should-fix vs. nice-to-have items is sound. I agree with its verdict of APPROVE WITH CHANGES
+and its NEEDS WORK readiness assessment -- however, the gap between its requirements and mine
+is small. The QA review lists 5 blocking items and 7 should-fix items. I assess the should-fix
+items 6-9 from the QA review as **must-fix** (specifically: `cachedIPImage` overwrite,
+MediabunnyFrameExtractor probe path, Renderer fallback strategy, and `frame.format` validation
+in `wrap()`). These are not optional enhancements -- they are correctness fixes for actual leak
+paths that the plan is specifically designed to eliminate.
+
+The QA Round 2 minimum test requirements (25 tests) are comprehensive and appropriate. I endorse
+the full list, with one addition noted below.
+
+### Consolidated Required Changes (before implementation)
+
+These must be addressed before implementation begins. The plan is not safe to execute as-is.
+
+1. **Replace `__DEV__` with `import.meta.env.DEV`** throughout `ManagedVideoFrame`. Remove the
+   `declare const __DEV__: boolean` line. (Expert R1 Concern 2, QA R1 Risk 2, QA R2 Item 1)
+
+2. **Fix the Renderer fallback strategy (Step 6).** The current proposal (just remove
+   `image.close()`) creates a silent failure mode where broken VideoFrames stay in the LRU
+   cache. The correct fix:
+   ```typescript
+   } catch (e) {
+     log.warn('VideoFrame texImage2D failed, falling back:', e);
+     // Release only the VideoFrame to free VRAM; the IPImage stays in cache
+     // but will not attempt VideoFrame upload again.
+     if (image.managedVideoFrame) {
+       image.managedVideoFrame.release();
+       image.managedVideoFrame = null;
+     }
+     // Fall through: for HDR VideoFrame-only IPImages the data buffer is a
+     // 4-byte placeholder, so the typed-array path will produce a blank frame.
+     // This is acceptable degradation -- the alternative is a VRAM leak.
+   }
+   ```
+   (Expert R1 Concern 4, QA R1 Risk 5, QA R2 Item 9)
+
+3. **Add a `videoFrame` setter to IPImage (Step 2)** for backward compatibility. The two
+   internal write sites (`Image.ts:54` and `Image.ts:164`) will break if `videoFrame` becomes
+   a getter-only property. Implement the getter/setter pair:
+   ```typescript
+   get videoFrame(): VideoFrame | null {
+     return this.managedVideoFrame?.frame ?? null;
+   }
+   set videoFrame(frame: VideoFrame | null) {
+     if (this.managedVideoFrame) this.managedVideoFrame.release();
+     this.managedVideoFrame = frame ? ManagedVideoFrame.wrap(frame) : null;
+   }
+   ```
+   (QA R1 Migration Safety, Expert R1 Missing #6, QA R2 Item 2)
+
+4. **Fix FileSourceNode `cachedIPImage` overwrite leak.** Add `this.cachedIPImage?.close()`
+   at the top of `loadAVIFHDR`, `loadJXLHDR`, and `loadHEICHDR`. This is an existing bug
+   independent of the ManagedVideoFrame work but should be fixed in the same pass since the
+   plan is already modifying these methods.
+   (Expert R1 Missing #2, QA R2 Item 7)
+
+5. **Fix bitmap leak in FileSourceNode HDR loaders (Step 5).** Wrap the bitmap lifecycle in
+   try/finally so that if `new VideoFrame(bitmap, ...)` throws, the bitmap is still closed:
+   ```typescript
+   const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+   let videoFrame: VideoFrame | null = null;
+   try {
+     videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+     bitmap.close();
+     // ... IPImage construction ...
+     videoFrame = null; // ownership transferred
+   } catch (e) {
+     bitmap.close();
+     if (videoFrame) { try { videoFrame.close(); } catch {} }
+     throw e;
+   }
+   ```
+   (Expert R1 Missing #3)
+
+6. **Fix `fetchHDRFrame` catch block to close the sample (Step 4).** If `hdrSampleToIPImage`
+   throws, the `sample` is never closed. The restructured code must close both the IPImage
+   (if created) and the sample (if obtained) in error paths:
+   ```typescript
+   let ipImage: IPImage | null = null;
+   let sample: VideoSample | null = null;
+   try {
+     sample = await this.frameExtractor.getFrameHDR(frame);
+     if (!sample || !this.frameExtractor) return null;
+     ipImage = this.hdrSampleToIPImage(sample, frame, targetSize);
+     sample.close();
+     sample = null; // prevent double-close in catch
+     // ... cache ...
+   } catch {
+     ipImage?.close();
+     sample?.close();
+     return null;
+   }
+   ```
+   (QA R1 Concern 1, QA R2 Item 4)
+
+7. **Add `resetForTesting()` static method to ManagedVideoFrame.** Reset `_nextId`,
+   `_activeCount`, and `_registry`. Without this, test isolation is unreliable.
+   (QA R1 Risk 1, QA R2 Item 3)
+
+8. **Defer Step 10 (clone with acquire).** The clone behavioral change introduces multi-owner
+   semantics that are not needed today, would break 3+ existing tests (IMG-R002, the `clone
+   does not copy videoFrame` test, and the `deepClone does not copy videoFrame` test), and
+   adds a category of bugs (mismatched acquire/release) for a feature that has no current
+   consumer. Remove Step 10 from the initial implementation and revisit when a concrete use
+   case for VideoFrame-sharing clones arises. If the team decides to keep Step 10, the QA R2
+   Item 5 requirement (explicitly listing all affected tests and updating them) must be
+   fulfilled first.
+   (Expert R1 Concern 1, QA R1 Migration Safety, QA R2 Item 5)
+
+9. **Add probeFrame try/finally in MediabunnyFrameExtractor (lines 277-299).** If
+   `probeFrame.colorSpace` access or downstream logic throws, the probeFrame leaks. The outer
+   catch at line 301 catches the exception but never closes the probeFrame. Fix:
+   ```typescript
+   const probeFrame = probeSample.toVideoFrame();
+   try {
+     // ... colorSpace inspection (lines 278-297) ...
+   } finally {
+     probeFrame.close();
+   }
+   probeSample.close();
+   ```
+   (Expert R1 Recommended Change #4, QA R2 Item 8)
+
+10. **Add `frame.format !== null` validation in `ManagedVideoFrame.wrap()`.** Wrapping an
+    already-closed VideoFrame creates a managed wrapper around a dead frame. The constructor
+    should validate that the frame is still open and throw immediately if not. This is a
+    one-line guard with significant defensive value.
+    (Expert R1 Missing #5, QA R2 Item 10)
+
+11. **Add `WeakSet<VideoFrame>` double-wrap guard in `ManagedVideoFrame.wrap()`.** If the same
+    raw VideoFrame is wrapped by two independent `ManagedVideoFrame` instances, the first
+    `release()` closes the underlying frame while the second still holds a "live" reference
+    to a closed frame. A `WeakSet` guard prevents this with negligible overhead.
+    (QA R1 Concern 2, QA R2 Item 6)
+
+### Consolidated Nice-to-Haves
+
+These improve robustness but are not blocking for initial implementation.
+
+1. **Use `WeakRef<VideoFrame>` in FinalizationRegistry payload** to avoid preventing GC of the
+   raw VideoFrame JS object after `close()` has released the GPU resource.
+   (Expert R1 Concern 3, QA R2 Item 11)
+
+2. **Call `_registry?.unregister(this)` in `release()`** when refCount hits 0 to prevent the
+   finalizer from firing for properly-released frames.
+   (Expert R1 Recommended Change #5, QA R2 Item 12)
+
+3. **Use `Set<number>` for active ID tracking in FinalizationRegistry** instead of relying on
+   `frame.format` checks. More portable across test environments and mock implementations.
+   (QA R1 Concern 3)
+
+4. **Add global `afterEach` hook in test setup** that warns if `ManagedVideoFrame.activeCount`
+   is non-zero, catching test-level leaks early.
+   (QA R1 Concern 4, QA R2 Item 13)
+
+5. **HDRFrameResizer: guard against `resized` VideoFrame leak** if `videoFrame.close()` throws
+   at line 114 after `new VideoFrame(canvas)` succeeds at line 109. While extremely unlikely,
+   the fix is to close `resized` in the catch block if it exists.
+   (Expert R1 Missing #1)
+
+6. **Benchmark `acquire()`/`release()` overhead** under 1000-frame scrub to validate the "no
+   hot-path cost" claim. Only relevant if Step 10 is re-introduced later.
+   (Expert R1 Missing #4, QA R2 Item 14)
+
+7. **Document the worker-thread constraint:** "ManagedVideoFrame must only be used on the main
+   thread. Cross-worker VideoFrame transfer requires a different protocol."
+   (Expert R1 Concern 6, QA R2 Item 15)
+
+8. **Add a Renderer-specific test** for the texImage2D failure path to verify that the IPImage
+   is not fully destroyed and that the ManagedVideoFrame is properly released.
+   (QA R1 Risk 5, QA R1 Recommended Test #6)
+
+### Final Risk Rating: MEDIUM
+
+The risk is MEDIUM. The core changes (try/finally guards, ManagedVideoFrame wrapper) are
+well-scoped and individually low-risk. The two medium-risk items are:
+
+- **The `videoFrame` field-to-getter/setter migration** in IPImage, which touches every consumer
+  of `image.videoFrame`. The setter approach mitigates this, but any site that uses
+  `Object.keys()` or `hasOwnProperty()` checks on IPImage could behave differently for a
+  getter/setter vs. a plain field. A codebase grep for such patterns should be done before
+  implementation. I performed a targeted search and found no such patterns in the current
+  codebase -- all access to `image.videoFrame` is via dot notation reads or writes, which
+  the getter/setter handles transparently.
+
+- **The Renderer fallback behavior change** at line 813, which alters the failure mode for
+  VideoFrame-backed IPImages whose GPU upload fails. The current behavior (close everything,
+  fall through to typed-array) is wrong but at least frees VRAM. The new behavior (release
+  VideoFrame only, degrade gracefully) is correct but needs a test to ensure the degraded
+  path does not crash when encountering the 4-byte placeholder buffer.
+
+The remaining changes (try/finally guards in 5 locations, `cachedIPImage` overwrite fix,
+sample cleanup in catch block) are all strictly additive safety improvements with near-zero
+regression risk.
+
+### Final Effort Estimate: 5-6 days
+
+The original estimate of 5-9 days is reasonable but can be tightened with Step 10 deferred:
+
+| Phase | Tasks | Estimate |
+|-------|-------|----------|
+| Phase 1: Core infrastructure | `ManagedVideoFrame` class (with `import.meta.env.DEV`, `resetForTesting()`, double-wrap guard, closed-frame guard), IPImage getter/setter migration, unit tests | 2 days |
+| Phase 2: Fix identified leaks | try/finally in `hdrSampleToIPImage`, `fetchHDRFrame` catch fix (with sample cleanup), FileSourceNode HDR loaders (with bitmap guard and `cachedIPImage` overwrite fix), MediabunnyFrameExtractor probeFrame try/finally, Renderer fallback fix | 2 days |
+| Phase 3: Leak detection and testing | Dev-mode `enableLeakDetection`, `activeCount`-based tests for all error paths, Renderer fallback test, manual HDR scrub testing | 1-2 days |
+| Phase 4 (deferred): Clone sharing | Step 10 (`acquire()` in `clone()`) -- implement only when a concrete use case exists | 1 day (future) |
+| **Total (initial)** | | **5-6 days** |
+
+Step 10 deferral saves approximately 1 day and eliminates the multi-owner bug class entirely
+from the initial delivery.
+
+### Implementation Readiness: READY
+
+The plan is ready for implementation once the 11 required changes above are incorporated. The
+core architecture (ManagedVideoFrame with reference counting, IPImage integration with
+getter/setter, try/finally guards at all creation sites) is sound. The required changes are
+corrections to implementation details, not to the architectural approach. No further planning
+rounds are needed.
+
+I note the QA Round 2 assessed readiness as NEEDS WORK. I upgrade this to READY because the
+gap between the current plan and an implementable plan is small -- the 11 required changes are
+all well-defined, localized fixes with clear code examples provided by both Round 1 reviews.
+An implementer can apply these corrections during Phase 1 without needing another planning
+cycle. The key distinction: NEEDS WORK implies the plan requires rethinking; READY WITH CHANGES
+implies the plan needs patching. This plan needs patching.
+
+**Recommended implementation order:**
+1. Start with `ManagedVideoFrame` class + unit tests (isolated, testable, no dependencies).
+2. Update `IPImage` with getter/setter + compatibility tests (validates the migration approach).
+3. Fix the 5 try/finally sites (each is independently verifiable).
+4. Fix the Renderer fallback (highest-risk change, save for last so all other safety nets are
+   in place).
+5. Wire up dev-mode leak detection and run manual HDR scrub tests as final validation.

@@ -944,3 +944,205 @@ Specifically:
    ```
 
 6. **The `boundOnThemeChange` scope is 16 files, not 3.** As noted in Risk Assessment, the migration scope for Phase 3 is significantly larger than documented. If Phase 3 is intended to be incremental, the plan should explicitly list which files are in-scope for the initial pass and which are deferred.
+
+---
+
+## QA Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+The plan is well-constructed, the problem analysis is accurate, and the proposed `DisposableSubscriptionManager` is a sound abstraction that standardizes an already-proven internal pattern. Both the Expert Review (Round 1) and QA Review (Round 1) identified substantive issues that must be addressed before implementation begins. This Round 2 review consolidates all findings and provides a final implementation checklist.
+
+### Round 1 Feedback Assessment
+
+**Expert Review findings -- all valid and actionable:**
+
+1. **`onEvent()` type-safety gap (Concern 1):** Confirmed. The `string` event parameter erases the `keyof Events` type constraint. The Expert's recommendation to remove `onEvent()` entirely is the correct call. The one-liner `subs.add(emitter.on('event', handler))` preserves full type safety and is already the most natural usage pattern. Removing `onEvent()` also removes `connectSignal()` from the public API surface discussion -- however, `connectSignal()` IS properly typed (it constrains to `Signal<T>`), so it can stay as a convenience.
+
+2. **`addDOMListener()` signal override (Concern 3):** Confirmed. The `{ ...options, signal: this.abortController.signal }` silently overwrites any caller-provided `signal`. The Expert's recommendation to throw if `options.signal` is set is the correct fix. Verified that no existing code in the codebase passes `signal` via `addEventListener` options, so this guard is preventive only.
+
+3. **`PropertyContainer.dispose()` not called by `IPNode.dispose()` (Concern 4):** Confirmed critical. Inspected `IPNode.dispose()` at `/Users/lifeart/Repos/openrv-web/src/nodes/base/IPNode.ts` line 156. It calls `disconnectAll()` on its own three signals (`inputsChanged`, `outputsChanged`, `propertyChanged`) but never severs the upstream `this.properties.propertyChanged.connect(...)` subscription created in the constructor at line 42. The fix in `IPNode.dispose()` must include `this.properties.dispose()` before clearing its own signals.
+
+4. **`handleVideoExport` scoped listeners (Concern 5):** Confirmed. Lines 457-458 and 561-562 of `AppPlaybackWiring.ts` show that `disposeCancelListener` and `disposeProgressListener` are properly scoped to the export operation's lifetime and cleaned up in the `finally` block. These must NOT be migrated to the wiring-level manager.
+
+5. **`viewer.setOnCropRegionChanged(callback)` is not an EventEmitter subscription (Concern 6):** Confirmed. This is a callback-setter at `AppEffectsWiring.ts` line 43. It requires explicit nullification (`subs.add(() => viewer.setOnCropRegionChanged(null))`) rather than the standard `subs.add(emitter.on(...))` pattern.
+
+6. **Child manager lifecycle / self-removal (Concern 7):** The Expert correctly identifies that independently disposed children leave stale references in the parent's `children` array. The idempotent `dispose()` guard makes double-dispose harmless, but the stale reference prevents GC of the child's closure graph. The self-removal approach (back-reference to parent + splice on dispose) is the cleanest fix.
+
+7. **`AppTransformWiring.ts` missing from inventory (Concern 7 / Expert item 7):** Confirmed. `AppTransformWiring.ts` exists at `/Users/lifeart/Repos/openrv-web/src/AppTransformWiring.ts` with 1 `.on()` call at line 31. It is called from `App.ts` and must be added to the wiring modules table and files-to-modify list.
+
+**QA Review Round 1 findings -- all valid:**
+
+1. **`EventEmitter` lacks `listenerCount()` / `hasListeners()` introspection:** Confirmed. `EventEmitter` at `/Users/lifeart/Repos/openrv-web/src/utils/EventEmitter.ts` has no listener introspection API. `Signal` has `hasConnections` (line 52). This asymmetry means disposal verification tests for EventEmitter-based subscriptions must use the indirect observation pattern (emit and check mock was not called). Adding `listenerCount()` to `EventEmitter` is recommended before Phase 2, but is not a blocker since the indirect pattern works and is already used in existing tests (HistoryPanel, AppNetworkBridge).
+
+2. **`App.ts` `bindEvents()` separation from `init()` (Missing Consideration 1):** Confirmed. `bindEvents()` is a separate private method at line 1104 of `App.ts`, called from `init()` at line 531. It contains 3 additional `.on()` calls on `this.paintEngine` (lines 1114-1129) plus 2 `window/document.addEventListener` calls (lines 1106, 1109). The `window/document` listeners are properly cleaned up in `dispose()` via stored bound references. The 3 `paintEngine.on()` calls are NOT cleaned up. The `wiringSubscriptions` manager must cover `bindEvents()` as well, or `bindEvents()` should use its own `DisposableSubscriptionManager` that is disposed in `App.dispose()`.
+
+3. **ESLint infeasibility (Concern 1):** Confirmed. Zero ESLint infrastructure exists in the project. The grep-based CI check alternative is pragmatic. However, even the grep approach has limitations -- it cannot distinguish `emitter.on('event', handler)` from `const unsub = emitter.on('event', handler)`. A TypeScript compiler plugin or a simple `ts-morph` script that checks for unused return values of `.on()` and `.connect()` calls would be more accurate, but the effort is disproportionate. Recommendation: defer automated prevention to Phase 4 and rely on code review conventions for now.
+
+4. **`ComputedSignal.value` getter after `dispose()` (Concern 4):** Critical correctness issue. The `dispose()` method as proposed does not set `this.dirty = false`. If `dirty` is true at the time of disposal (which can happen if a dependency signal fired between the last `.value` access and `dispose()`), a post-disposal `.value` access will call `this.compute()`. The compute function may reference disposed objects. Fix: `dispose()` must set `this.dirty = false` to freeze the cached value.
+
+5. **`PropertyContainer.add()` duplicate name leak (Concern 5):** Theoretically valid, but low practical risk. Verified via grep that all `properties.add()` calls in the codebase occur in constructors with hardcoded unique names. No dynamic or repeated `add()` calls exist. The fix (check for existing unsubscriber before overwriting) is still correct defensive programming and should be included.
+
+6. **`boundOnThemeChange` scope is 16 files (Concern 6):** Confirmed independently. Grep for `boundOnThemeChange` returns exactly 16 files: `HistoryPanel`, `InfoPanel`, `CurveEditor`, `FalseColorControl`, `HSLQualifierControl`, `Waveform`, `MarkerListPanel`, `ColorWheels`, `Histogram`, `CacheIndicator`, `ThemeControl`, `Viewer`, `NotePanel`, `Timeline`, `Vectorscope`, `GamutDiagram`. The plan lists only 3 (`InfoPanel`, `CacheIndicator`, `HistoryPanel`) in Step 6. The remaining 13 files must be added to the Phase 3 migration scope.
+
+### Minimum Test Requirements
+
+Before implementation can be considered complete for each phase, the following tests are mandatory:
+
+**Phase 1 -- Foundation (must ship with the utility):**
+
+| Test Area | Min. Test Count | Critical Cases |
+|-----------|----------------|----------------|
+| `DisposableSubscriptionManager` | 12 | `add()` + `dispose()` calls all disposers; idempotent `dispose()`; `add()` after `dispose()` immediately calls disposer; `addDOMListener()` cleanup via AbortController; `createChild()` cascading dispose; child self-removal from parent on independent dispose; error in one disposer does not block others; `count` property accuracy; throw on `options.signal` in `addDOMListener()` |
+| `ComputedSignal.dispose()` | 5 | Dep emission after `dispose()` does not recompute; `changed.hasConnections === false` after `dispose()`; idempotent; `.value` after `dispose()` returns frozen cached value (no recompute); zero-dependency dispose is safe |
+| `PropertyContainer.dispose()` | 5 | After `dispose()`, setting property value does not emit on `propertyChanged`; `propertyChanged.hasConnections === false`; idempotent; individual `Property.changed` signals are cleared; duplicate-name `add()` cleans old subscription |
+| **Phase 1 Total** | **22** | |
+
+**Phase 2 -- Core wiring (must ship with the wiring refactor):**
+
+| Test Area | Min. Test Count | Critical Cases |
+|-----------|----------------|----------------|
+| Per wiring module disposal (7 modules) | 14 (2 each) | Callbacks fire before dispose; callbacks do not fire after dispose |
+| `App.dispose()` integration | 2 | After `dispose()`, `session.emit('frameChanged')` does not trigger wiring callbacks; `bindEvents()` paint subscriptions are also cleaned |
+| `IPNode.dispose()` calls `properties.dispose()` | 1 | After `IPNode.dispose()`, property change does not forward to `IPNode.propertyChanged` |
+| **Phase 2 Total** | **17** | |
+
+**Combined minimum: 39 tests.** This aligns with the QA Round 1 estimate of ~37-39 and exceeds the plan's original target of 15-20. The higher count is justified by the number of wiring modules (7, not 6) and the additional edge cases identified in both review rounds.
+
+### Final Risk Rating: LOW
+
+Rationale:
+
+1. **The core abstraction (`DisposableSubscriptionManager`) is proven.** It is functionally identical to the `unsubscribers: (() => void)[]` + loop-and-call pattern already battle-tested in `AppSessionBridge` (line 298-304), `AppNetworkBridge`, `NetworkSyncManager` (with `_unsubscribers`), `HistoryPanel`, and 10 other components. The only additions are `addDOMListener()` (AbortController integration) and `createChild()` (hierarchical ownership), both of which are straightforward.
+
+2. **The wiring module refactor is purely mechanical.** Each `.on()` call gains a `subs.add(...)` wrapper. No callback logic changes. No control flow changes. No new behavior is introduced -- only cleanup capability is added. The existing 7600+ test suite covers the forward path (callbacks fire correctly) and will catch any accidental breakage of the subscription wiring itself.
+
+3. **Disposal order is well-defined.** Wiring subscriptions are disposed before component disposal in `App.dispose()`. Components that call `removeAllListeners()` in their own `dispose()` make the wiring unsubscribe calls redundant (idempotent `Set.delete` on already-cleared sets). This is harmless.
+
+4. **The changes are purely additive for Phase 1.** No existing method signatures change. No existing interfaces break. `ComputedSignal.dispose()` and `PropertyContainer.dispose()` are new methods on existing classes.
+
+5. **Phase 2 carries the most risk but is bounded.** The 7 wiring modules + `App.ts` are a finite set of files with well-understood structure. Each module can be migrated and tested independently.
+
+The one risk factor that prevents a "VERY LOW" rating: `App.dispose()` integration touches the teardown sequence of the entire application. An error in disposal ordering could cause a stale callback to fire on a partially-disposed object. The mandatory `App.dispose()` integration test (Phase 2) mitigates this.
+
+### Implementation Readiness: READY
+
+The plan is ready for implementation with the following mandatory changes incorporated before coding begins:
+
+**Must-fix items (block implementation if not addressed):**
+
+1. Remove `onEvent()` from `DisposableSubscriptionManager`. Use `subs.add(emitter.on(...))` as the standard pattern.
+2. Add `options.signal` guard to `addDOMListener()` that throws if caller provides their own signal.
+3. Add `this.dirty = false` to `ComputedSignal.dispose()` to freeze cached value.
+4. Add `this.properties.dispose()` to `IPNode.dispose()` at `/Users/lifeart/Repos/openrv-web/src/nodes/base/IPNode.ts` line 157 (before the `disconnectAll` calls).
+5. Add duplicate-name guard to `PropertyContainer.add()` that unsubscribes the old forwarding subscription before creating a new one.
+6. Add `subs.add(() => viewer.setOnCropRegionChanged(null))` to `AppEffectsWiring.ts` disposal for the callback-setter pattern.
+7. Add `AppTransformWiring.ts` to the wiring modules table (1 `.on()` call) and files-to-modify list.
+8. Implement child self-removal from parent on independent `dispose()` in `DisposableSubscriptionManager`.
+9. Add all property `changed.disconnectAll()` calls to `PropertyContainer.dispose()` (iterate `this.properties.values()`).
+10. Ensure `App.dispose()` also cleans up the 3 `paintEngine.on(...)` subscriptions from `bindEvents()`.
+
+**Should-fix items (address during implementation, not blockers):**
+
+1. Add `listenerCount(event?: K): number` to `EventEmitter` before Phase 2 to enable direct disposal verification in tests.
+2. Update Phase 3 scope to list all 16 `boundOnThemeChange` files rather than 3.
+3. Document that `handleVideoExport`'s internal `disposeCancelListener`/`disposeProgressListener` are intentionally NOT migrated to the wiring-level manager.
+4. Update test count target from "15-20" to "at least 39".
+5. Note that `once()` subscriptions do not need tracking (auto-unsubscribe after first emission).
+6. Replace the ESLint rule proposal (Step 7) with a code review convention or deferred `ts-morph` script, since no ESLint infrastructure exists in the project.
+7. Document that `removeAllListeners()` in component `dispose()` methods makes wiring unsubscribe calls redundant but harmless (idempotent `Set.delete`).
+
+---
+
+## Expert Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+The plan is architecturally sound, the problem inventory is verified accurate against the source code, and the proposed `DisposableSubscriptionManager` is a well-grounded formalization of an internal pattern already proven across 15+ components. Both Round 1 reviews independently converged on the same verdict and identified overlapping concerns, which gives high confidence that the critical gaps have been surfaced. The QA Round 2 review produced an excellent consolidated checklist. This Expert Round 2 review validates that checklist, adds two final observations, and confirms implementation readiness.
+
+### Round 1 Feedback Assessment
+
+**Both Round 1 reviews were high quality and complementary.** The Expert Review focused on API design issues (type safety of convenience methods, `addDOMListener()` signal override, child manager lifecycle) and missing inventory items (`AppTransformWiring.ts`, `setOnCropRegionChanged` callback-setter, `bindEvents()` subscriptions). The QA Review focused on testability gaps (absence of `EventEmitter.listenerCount()`, zero disposal tests across all wiring modules, `ComputedSignal.value` correctness after dispose, double-add leak in `PropertyContainer`). Together they cover the design, correctness, and verification dimensions comprehensively.
+
+**The QA Round 2 consolidation is thorough and accurate.** I verified every must-fix and should-fix item against the source code. All items are valid and correctly characterized. I have two additions and one refinement:
+
+**Addition 1: `connectSignal()` should also be removed, not retained.** The QA Round 2 review (line 960) states that `connectSignal()` "IS properly typed" and "can stay as a convenience." I disagree. While the typing is correct, having `connectSignal()` without `onEvent()` creates an asymmetry: signals get a convenience method but emitters do not. This inconsistency will confuse developers. The API surface should be uniform: `subs.add(signal.connect(cb))` and `subs.add(emitter.on('event', cb))`. Both are one-liners. Keeping `connectSignal()` as the sole convenience method implies it is somehow preferred or necessary, when it is not. Remove it for API consistency. The `DisposableSubscriptionManager` public API should be exactly four methods: `add()`, `addDOMListener()`, `createChild()`, `dispose()`, plus the `isDisposed` and `count` accessors.
+
+**Addition 2: The `App.ts` inline subscriptions in `init()` (lines 507-521) are also leaks that need tracking.** The QA Round 2 correctly flags the `bindEvents()` subscriptions (3 `paintEngine.on()` calls at lines 1114-1129), but there is an additional cluster of 10 inline `.on()` calls in `init()` at lines 507-521 (6 `timelineEditor.on()` + 3 `session.on()` + 1 `playlistManager.on()`) that are ALSO untracked. These are distinct from the wiring module subscriptions because they are not delegated to any wiring function -- they are inline in `App.init()`. The `wiringSubscriptions` manager must cover these 10 subscriptions as well. The total inline subscription count in `App.ts` that needs tracking is: 10 in `init()` + 3 in `bindEvents()` = 13 (in addition to the ~84 in wiring modules).
+
+**Refinement on must-fix item 8 (child self-removal):** The QA Round 2 lists child self-removal as must-fix. I would downgrade this to should-fix. The rationale: `dispose()` is idempotent, so a parent disposing an already-disposed child is a harmless no-op. The only consequence of NOT implementing self-removal is that the parent's `children` array retains a reference to the disposed child until the parent itself is disposed. In this codebase, the parent is `App.wiringSubscriptions` and the child would be `wirePlaylistRuntime`'s subscriptions. Both share the same lifetime (they are both disposed in `App.dispose()`), so the stale reference never outlives the parent. If a future use case introduces short-lived children with long-lived parents, self-removal becomes necessary -- but that pattern does not exist today. Implementing it now adds complexity (back-references, splice operations) for a scenario that is not yet present. However, I do not object if the implementer chooses to include it for forward-looking correctness.
+
+### Consolidated Required Changes (before implementation)
+
+The following is the definitive list, incorporating both Round 1 reviews, the QA Round 2 review, and this Expert Round 2 assessment. Items marked with the originating review for traceability.
+
+1. **Add `AppTransformWiring.ts` to the wiring modules inventory.** The file exists with 1 leaked `.on()` call. The wiring module count is 7, total leaked `.on()` calls ~84. *(Expert R1 #7)*
+
+2. **Remove both `onEvent()` and `connectSignal()` from `DisposableSubscriptionManager`.** The `add()` method is the universal entry point. `subs.add(signal.connect(cb))` and `subs.add(emitter.on('event', cb))` are each one line, fully type-safe, and consistent with each other. No convenience wrappers are needed. *(Expert R1 #1, Expert R2 Addition 1)*
+
+3. **Add `this.properties.dispose()` to `IPNode.dispose()`.** Insert after `this.disconnectAllInputs()` and before the `disconnectAll()` calls. Without this, the `PropertyContainer.dispose()` method is never invoked in production. *(Expert R1 #4, QA R1 #3, QA R2 must-fix #4)*
+
+4. **Set `this.dirty = false` in `ComputedSignal.dispose()`.** This prevents post-dispose `.value` access from calling `this.compute()` on stale/disposed dependencies. This is a correctness requirement. *(QA R1 #4, QA R2 must-fix #3)*
+
+5. **Add `subs.add(() => viewer.setOnCropRegionChanged(null))` in `AppEffectsWiring.ts`.** The callback-setter pattern does not return an unsubscribe function and requires explicit nullification. *(Expert R1 #6, QA R2 must-fix #6)*
+
+6. **Track the raw `addEventListener('mousemove', ...)` in `AppViewWiring.ts` line 174.** Use `subs.addDOMListener()` or manually track removal via `subs.add()`. *(Expert R1, verified in source)*
+
+7. **Add `options.signal` guard to `addDOMListener()`.** Throw if the caller passes their own `signal` option, since the manager controls the `AbortController`. *(Expert R1 #5, QA R2 must-fix #2)*
+
+8. **Guard against duplicate `PropertyContainer.add()` with the same name.** Unsubscribe the existing forwarding subscription before overwriting in the `propertyUnsubscribers` Map. *(QA R1 #5, QA R2 must-fix #5)*
+
+9. **Track the 13 inline `.on()` calls in `App.ts`.** 10 in `init()` (lines 507-521: 6 `timelineEditor.on()` + 3 `session.on()` + 1 `playlistManager.on()`) and 3 in `bindEvents()` (lines 1114-1129: 3 `paintEngine.on()` calls). All must be wrapped with the `wiringSubscriptions` manager. *(Expert R1 missing consideration #1, QA R2 must-fix #10, Expert R2 Addition 2)*
+
+10. **Update test count target to at least 39.** Breakdown: 12 `DisposableSubscriptionManager` + 5 `ComputedSignal.dispose()` + 5 `PropertyContainer.dispose()` + 14 wiring module disposal (7 modules x 2) + 2 `App.dispose()` integration + 1 `IPNode.dispose()` calls `properties.dispose()` = 39. *(QA R1 #3, QA R2)*
+
+11. **Replace Step 7 (ESLint rule) with a code review convention or deferred CI check.** No ESLint infrastructure exists in the project. *(QA R1 #1)*
+
+12. **Add `prop.changed.disconnectAll()` for all owned properties in `PropertyContainer.dispose()`.** Iterate `this.properties.values()` and clear each property's `changed` signal to ensure thorough teardown. *(Expert R1 #3, QA R2 must-fix #9)*
+
+### Consolidated Nice-to-Haves
+
+1. **Add `EventEmitter.listenerCount(event?: K): number`** for test observability parity with `Signal.hasConnections`. Trivial implementation, significant test ergonomics improvement. *(QA R1, QA R2 should-fix #1)*
+
+2. **Implement child self-removal from parent on independent `dispose()`.** Prevents stale references in the parent's `children` array. Low practical impact today since parent and child share the same lifetime, but architecturally cleaner. *(Expert R1 #6 -- downgraded from QA R2 must-fix to nice-to-have per Expert R2 assessment)*
+
+3. **Update Phase 3 scope to list all 16 `boundOnThemeChange` files.** Explicitly separate into initial pass (InfoPanel, CacheIndicator, HistoryPanel) and deferred pass (remaining 13). *(QA R1 #6, QA R2 should-fix #2)*
+
+4. **Document that `handleVideoExport`'s scoped listeners are NOT migrated to the wiring-level manager.** They are properly managed within `try/finally`. *(Expert R1 #5, QA R2 should-fix #3)*
+
+5. **Document `removeAllListeners()` interaction.** Wiring unsubscribe calls on components that call `removeAllListeners()` in their own `dispose()` are redundant but harmless. *(Expert R1 missing consideration #3, QA R2 should-fix #7)*
+
+6. **Note that `once()` subscriptions do not need tracking.** No wiring modules use `once()`, but the migration guide should mention this. *(Expert R1 missing consideration #6, QA R2 should-fix #5)*
+
+### Final Risk Rating: LOW
+
+I concur with the QA Round 2 risk assessment. The key factors:
+
+- Phase 1 is purely additive -- new class, new methods on existing classes. Zero regression risk.
+- Phase 2 is mechanical wrapping -- 84+ `.on()` calls gain `subs.add(...)`. No callback logic changes. The existing 7600+ test suite covers functional correctness.
+- The `DisposableSubscriptionManager` is not a novel abstraction. It is the `unsubscribers[]` pattern (already in 15+ files) with a class wrapper, `addDOMListener()`, and `createChild()` added.
+- Disposal order (wiring before components) is safe, and `removeAllListeners()` provides a redundant safety net.
+- All identified edge cases (`dirty` flag after dispose, duplicate `add()`, `options.signal` override, callback-setter patterns) have concrete one-line fixes.
+
+The single factor that prevents a "VERY LOW" rating: the `App.dispose()` integration touches the teardown sequence of the entire application. The mandatory integration test mitigates this adequately.
+
+### Final Effort Estimate: 15-17 hours
+
+Adjustments from the plan's original 13-14 hours:
+- +20 min: `AppTransformWiring.ts` (7th module, originally missing)
+- +30 min: 13 inline `.on()` calls in `App.ts` (init + bindEvents)
+- +2 hours: expanded test target (39+ tests vs. original 15-20, delta of ~20 additional tests)
+- +30 min: `EventEmitter.listenerCount()` (if included)
+- -30 min: removal of `onEvent()` and `connectSignal()` (less code to write/test)
+- Net: +2.5-3 hours, landing at 15-17 hours total across all 4 phases.
+
+### Implementation Readiness: READY
+
+The plan is ready for implementation. The 12 required changes above are concrete, self-contained, and can be applied to the plan document in under an hour. No further design iteration is needed. The phased approach (Foundation -> Core wiring -> Component standardization -> Prevention) correctly front-loads the highest-value, lowest-risk work.
+
+**Recommended execution sequence:**
+1. Incorporate the 12 required changes into the plan document
+2. Phase 1: `DisposableSubscriptionManager` + `ComputedSignal.dispose()` + `PropertyContainer.dispose()` + `IPNode.dispose()` update + 22 unit tests
+3. Phase 2: All 7 wiring modules + `App.ts` (init + bindEvents + dispose) + 17 tests
+4. Phase 3: `boundOnThemeChange` migration (incremental, per-component)
+5. Phase 4: Code review convention + optional CI grep check

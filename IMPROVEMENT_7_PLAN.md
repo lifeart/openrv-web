@@ -142,18 +142,22 @@ export interface PluginContext {
   registerDecoder(decoder: import('../formats/DecoderRegistry').FormatDecoder): void;
   /** Register a node type */
   registerNode(type: string, creator: () => import('../nodes/base/IPNode').IPNode): void;
-  /** Register a paint tool */
+  /** Register a paint tool (delegates to PaintEngine.registerAdvancedTool) */
   registerTool(name: string, factory: () => import('../paint/AdvancedPaintTools').PaintToolInterface): void;
-  /** Register an exporter */
+  /** Register an exporter (delegates to standalone ExporterRegistry) */
   registerExporter(name: string, exporter: ExporterContribution): void;
   /** Register a blend mode */
   registerBlendMode(name: string, blendFn: BlendModeContribution): void;
   /** Register a UI panel */
   registerUIPanel(panel: UIPanelContribution): void;
-  /** Access the public OpenRV API */
+  /** Access the public OpenRV API (late-bound via closure over PluginRegistry) */
   readonly api: import('../api/OpenRVAPI').OpenRVAPI;
-  /** Subscribe to application events; returns unsubscribe function */
-  onEvent(event: string, handler: (...args: unknown[]) => void): () => void;
+  /**
+   * NOTE: onEvent() is deferred to Phase 2. The existing EventsAPI uses a closed
+   * OpenRVEventName union that cannot accommodate arbitrary plugin event strings.
+   * Shipping a no-op stub would violate the principle of least surprise.
+   * See Phase 2 enhancements list.
+   */
   /** Logger scoped to this plugin */
   readonly log: {
     info(msg: string, ...args: unknown[]): void;
@@ -203,18 +207,30 @@ export interface Plugin {
 // ---------------------------------------------------------------------------
 
 /**
- * Exporter contribution: produces a file/blob from a frame range.
+ * Exporter contribution type discriminator.
+ *
+ * The existing export system includes several distinct output models:
+ * - VideoExporter: chunk-based (EncodedChunk[] -> muxToMP4Blob)
+ * - ReportExporter: text-based (CSV/HTML strings)
+ * - EDLWriter: text-based (EDL text)
+ * - OTIOWriter: text-based (OTIO JSON)
+ *
+ * A single Promise<Blob> interface cannot express all of these. We use a
+ * discriminated union so plugins can contribute any export type.
  */
-export interface ExporterContribution {
+
+/** Blob-based exporter (e.g., image sequences, custom video encodings) */
+export interface BlobExporterContribution {
+  kind: 'blob';
   /** Human-readable label shown in export UI */
   label: string;
   /** File extension(s) this exporter produces */
   extensions: string[];
-  /** Export function */
-  export(config: ExporterConfig): Promise<Blob>;
+  /** Export function returning a Blob */
+  export(config: BlobExporterConfig): Promise<Blob>;
 }
 
-export interface ExporterConfig {
+export interface BlobExporterConfig {
   frameRange: { start: number; end: number };
   width: number;
   height: number;
@@ -222,6 +238,27 @@ export interface ExporterConfig {
   getFrame: (frame: number) => Promise<ImageData>;
   onProgress?: (pct: number) => void;
 }
+
+/** Text-based exporter (e.g., CSV reports, EDL, OTIO, HTML) */
+export interface TextExporterContribution {
+  kind: 'text';
+  /** Human-readable label shown in export UI */
+  label: string;
+  /** File extension(s) this exporter produces (e.g., ['csv'], ['edl'], ['otio']) */
+  extensions: string[];
+  /** MIME type for the output (e.g., 'text/csv', 'application/json') */
+  mimeType: string;
+  /** Export function returning text content */
+  export(config: TextExporterConfig): Promise<string>;
+}
+
+export interface TextExporterConfig {
+  /** Application state/data the exporter needs -- varies by export type */
+  [key: string]: unknown;
+}
+
+/** Union of all exporter contribution types */
+export type ExporterContribution = BlobExporterContribution | TextExporterContribution;
 
 /**
  * Blend mode contribution: a per-channel blending function.
@@ -1274,3 +1311,334 @@ This is a well-structured plan that correctly identifies the existing proto-plug
 9. **No consideration of tree-shaking impact.** The `PluginRegistry` imports `decoderRegistry`, `NodeFactory`, and types from the paint system. If the plugin module is imported, these dependencies are pulled into the bundle even if no plugins are used. Since the plan's success metric includes "< 2KB gzipped addition to core bundle," the imports should be lazy (dynamic import or dependency injection) or the plugin module should be a separate entry point that is not included in the core bundle unless explicitly imported.
 
 10. **Reframing the sandboxing narrative.** The plan should replace "sandboxing" with "trust boundary." In V1, plugin security is based on: (a) only loading plugins from allowlisted origins, (b) providing a narrow `PluginContext` API to guide plugin authors toward supported extension points, and (c) CSP headers configured at the deployment level. True isolation requires Web Workers (Phase 2). Framing it as "trust-based" rather than "sandboxed" sets correct expectations for the security posture.
+
+---
+
+## QA Review — Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+The plan presents a sound architectural direction for introducing a plugin system to OpenRV Web. The design correctly builds on existing registries (`DecoderRegistry`, `NodeFactory`, `PaintEngine.advancedTools`) rather than replacing them, and the additive approach minimizes migration risk for a codebase with 7600+ tests. Both Round 1 reviews (QA and Expert) converged on the same set of critical issues, which strengthens confidence that the problem areas are well understood. However, implementation cannot proceed until the issues flagged below are resolved -- several are correctness bugs that would produce broken runtime behavior, not just design preferences.
+
+### Round 1 Feedback Assessment
+
+Both Round 1 reviews were thorough and accurate. I verified their claims against the actual source files:
+
+**Confirmed Critical Issues (must fix before implementation):**
+
+1. **`PluginContext.api` getter bug -- CONFIRMED.** Verified that `createContext()` builds a plain object literal. The `get api()` uses `(this as any)._registry?.apiRef` where `this` is the context object, not the `PluginRegistry`. There is no `_registry` property on the context. This will always throw. The closure-based fix proposed by both reviewers is correct:
+   ```typescript
+   const registry = this; // capture PluginRegistry instance
+   return {
+     get api() {
+       if (!registry.apiRef) throw new Error('OpenRV API not yet initialized');
+       return registry.apiRef;
+     },
+   };
+   ```
+
+2. **`unregisterContributions()` does not unregister decoders or nodes -- CONFIRMED.** The method body contains comments ("DecoderRegistry currently lacks unregister, so we will add it") but Steps 3 and 4 add those methods. The implementation in Step 2 never calls them. After implementing Steps 3-4, the method MUST add:
+   ```typescript
+   for (const name of reg.decoders) decoderRegistry.unregisterDecoder(name);
+   for (const type of reg.nodes) NodeFactory.unregister(type);
+   ```
+   Without this, the deactivation lifecycle guarantee is hollow -- decoders and nodes registered by a deactivated plugin remain live in the system.
+
+3. **Topological sort lacks cycle detection -- CONFIRMED.** The `visited` Set prevents re-visiting but does not distinguish "currently being visited" from "fully processed." A cycle A->B->A will silently produce a partial ordering. The three-color DFS fix proposed by both reviewers is the standard solution and must be implemented.
+
+4. **`onEvent` is a non-functional stub -- CONFIRMED.** Verified that `EventsAPI` uses a closed `OpenRVEventName` union and `VALID_EVENTS` Set for validation. The stub in `PluginContext` returns `() => {}` and does nothing. This should be removed from the V1 `PluginContext` interface entirely and deferred to a follow-up. Shipping a documented API method that silently does nothing is worse than not having it.
+
+**Confirmed Design Issues (should fix before implementation):**
+
+5. **`activate()` re-calls `init()` on re-activation -- CONFIRMED.** The `activate()` method calls `init()` unconditionally if it exists, regardless of whether the plugin is in `Registered` or `Inactive` state. For re-activation after deactivate, `init()` should be skipped (resources are already allocated). The guard is: if `entry.state === 'inactive'`, skip directly to `activate()`.
+
+6. **`ExporterRegistry` duplication -- CONFIRMED.** `PluginRegistry` has a private `exporterRegistry = new Map<string, ExporterContribution>()` with getter methods, AND Step 5 creates a standalone `ExporterRegistryClass`. These are two separate data structures. The standalone `ExporterRegistry` should be the source of truth, and `PluginRegistry` should delegate to it -- consistent with how decoder registration delegates to `decoderRegistry` and node registration delegates to `NodeFactory`.
+
+7. **PaintEngine tool registration split -- CONFIRMED.** Verified that `PaintEngine` (line 59 of `PaintEngine.ts`) has `private advancedTools: Map<string, PaintToolInterface>`. Step 6 proposes adding `registerAdvancedTool()`/`unregisterAdvancedTool()` to `PaintEngine`, but Step 2's `PluginContext.registerTool()` stores factories in `PluginRegistry.toolRegistry` instead. These are two separate Maps with no bridge. Plugin-registered tools would be invisible to `PaintEngine.isAdvancedTool()` and `PaintEngine.getAdvancedTool()`. The fix: `PluginContext.registerTool()` must delegate to `PaintEngine.registerAdvancedTool()`, which requires `PluginRegistry` to hold a reference to the `PaintEngine` instance (dependency injection, similar to `setAPI()`).
+
+8. **BlendMode integration gap -- CONFIRMED.** Verified that `blendChannel()` in `src/composite/BlendModes.ts` (line 61) takes a `BlendMode` parameter and uses a `switch` with a `default` that returns `bn` (pass-through). Plugin blend modes registered via `PluginContext.registerBlendMode()` are stored in `PluginRegistry.blendModeRegistry` but `blendChannel()` never consults this map. The `default` case must be modified to look up plugin blend modes.
+
+9. **`dispose()` deletes the plugin entry then emits a signal -- CONFIRMED.** After `this.plugins.delete(id)`, subsequent `getPlugin(id)` and `getState(id)` return `undefined`, which contradicts the `PluginState.Disposed` state existing. The entry should be retained in the Map with `Disposed` state, or the deletion should be documented as intentional.
+
+10. **`FormatName` closed union -- CONFIRMED.** `DecoderRegistry.ts` line 13 defines `FormatName = 'exr' | 'dpx' | ... | null`. The `detectFormat()` method casts `decoder.formatName as FormatName` (line 779). Plugin decoders with novel format names will be cast to a type they do not belong to. The type should be widened to `string | null`.
+
+**Issues Not Yet Addressed by Round 1 Reviews (new findings):**
+
+11. **`PaintTool` type widening affects `ViewerInputHandler` switch statements.** Verified in `src/ui/components/ViewerInputHandler.ts` (lines 228-246) that `updateCursor()` has a `switch` on `PaintTool` with a `default` case that sets `cursor = 'grab'`. This `default` case would silently handle plugin tools, giving them the grab cursor instead of crosshair. This is likely incorrect for paint-style plugin tools. The switch should be audited: the `default` case behavior for unknown tool names should either (a) check if it is an advanced tool and use crosshair, or (b) be documented as the expected behavior for plugin tools.
+
+12. **`PluginContext` is recreated on every lifecycle call.** `createContext(entry)` is called in `activate()`, `deactivate()`, and `dispose()`. Each call produces a new object. If a plugin stores `context` during `init()` and tries to use it in `deactivate()`, the stored reference works (structurally identical) but the `registrations` tracking may not bind correctly because the closures close over `entry.registrations` (which is shared). This is actually fine for correctness, but it is confusing API design. Consider creating the context once per plugin entry at registration time.
+
+13. **No manifest validation in `register()`.** The `register()` method only checks `this.plugins.has(id)`. It does not validate that `manifest.id` is a non-empty string, that `manifest.contributes` is a non-empty array, or that `manifest.version` is present. A plugin with `manifest.id = ''` would be registered under key `''` and could shadow other empty-ID plugins silently. Add basic validation: `id` must be non-empty string, `contributes` must be non-empty array, `version` must be present.
+
+14. **`ExporterContribution` interface mismatch with existing export system.** Verified that the existing export system in `src/export/` has `VideoExporter` (returns `ExportResult` with `EncodedChunk[]`), `ReportExporter` (generates CSV/HTML strings), `EDLWriter` (generates EDL text), and `OTIOWriter` (generates OTIO JSON). None of these produce a simple `Promise<Blob>`. The `ExporterContribution` interface with `export(config): Promise<Blob>` covers only a subset of export use cases. This interface should either be generalized or renamed to `VideoExporterContribution` to avoid confusion.
+
+### Minimum Test Requirements
+
+The following tests are **mandatory** before the implementation can be considered complete. This consolidates and deduplicates the test lists from both Round 1 reviews:
+
+**PluginRegistry core (new file: `src/plugin/PluginRegistry.test.ts`) -- 20 tests minimum:**
+
+| # | Test Case | Priority |
+|---|-----------|----------|
+| 1 | `register()` stores plugin and sets state to `Registered` | P0 |
+| 2 | `register()` with duplicate ID throws | P0 |
+| 3 | `register()` with empty/missing manifest ID throws | P0 |
+| 4 | `register()` with missing `contributes` throws | P1 |
+| 5 | `activate()` calls `init()` then `activate()` in order | P0 |
+| 6 | `activate()` resolves dependencies before activating dependent | P0 |
+| 7 | `activate()` with circular dependency (A->B->A) throws with descriptive error | P0 |
+| 8 | `activate()` with transitive circular dependency (A->B->C->A) throws | P0 |
+| 9 | `activate()` with missing dependency throws naming the missing plugin | P0 |
+| 10 | `activate()` on already-active plugin is idempotent | P1 |
+| 11 | `activate()` on inactive plugin (re-activation) skips `init()` | P0 |
+| 12 | `activate()` on disposed plugin throws or errors | P1 |
+| 13 | `activate()` when `init()` throws sets state to `Error` and propagates | P0 |
+| 14 | `deactivate()` calls plugin's `deactivate()` and unregisters all contributions | P0 |
+| 15 | `deactivate()` cascades to dependents first | P0 |
+| 16 | `dispose()` transitions through deactivate if active, then calls `dispose()` | P0 |
+| 17 | `dispose()` is idempotent (double-dispose does not throw) | P1 |
+| 18 | `activateAll()` processes plugins in topological dependency order | P0 |
+| 19 | `PluginContext.api` returns API after `setAPI()` is called | P0 |
+| 20 | `PluginContext.api` throws before `setAPI()` is called | P0 |
+
+**PluginContext contribution delegation (can be in same file or separate) -- 8 tests minimum:**
+
+| # | Test Case | Priority |
+|---|-----------|----------|
+| 21 | `context.registerDecoder()` delegates to `decoderRegistry.registerDecoder()` | P0 |
+| 22 | `context.registerNode()` delegates to `NodeFactory.register()` | P0 |
+| 23 | `context.registerTool()` delegates to `PaintEngine.registerAdvancedTool()` | P0 |
+| 24 | `context.registerExporter()` stores in exporter registry | P0 |
+| 25 | `context.registerBlendMode()` stores in blend mode registry | P1 |
+| 26 | `context.registerUIPanel()` stores in UI panel registry | P1 |
+| 27 | Deactivation removes decoder from `decoderRegistry` | P0 |
+| 28 | Deactivation removes node from `NodeFactory` | P0 |
+
+**Dynamic loading (new file or section) -- 2 tests minimum:**
+
+| # | Test Case | Priority |
+|---|-----------|----------|
+| 29 | `loadFromURL()` with valid module registers and returns ID | P1 |
+| 30 | `loadFromURL()` with invalid module (no default export) throws | P1 |
+
+**Registry modifications -- 6 tests minimum:**
+
+| # | Test Case | Priority |
+|---|-----------|----------|
+| 31 | `DecoderRegistry.unregisterDecoder()` removes by format name | P0 |
+| 32 | `DecoderRegistry.unregisterDecoder()` returns false for unknown name | P1 |
+| 33 | `NodeFactory.unregister()` removes node type | P0 |
+| 34 | `NodeFactory.create()` returns null after `unregister()` | P0 |
+| 35 | `PaintEngine.registerAdvancedTool()` adds discoverable tool | P0 |
+| 36 | `PaintEngine.unregisterAdvancedTool()` removes tool | P0 |
+
+**Integration tests (new file: `src/plugin/PluginRegistry.integration.test.ts`) -- 4 tests minimum:**
+
+| # | Test Case | Priority |
+|---|-----------|----------|
+| 37 | Full lifecycle: register -> activate -> use decoder -> deactivate -> decoder gone | P0 |
+| 38 | Full lifecycle: register -> activate -> create node -> deactivate -> node type gone | P0 |
+| 39 | Two plugins with dependency: B depends on A, both activate in correct order | P0 |
+| 40 | Plugin re-activation after deactivate: contributions re-registered | P1 |
+
+**Total minimum: 40 test cases.** This exceeds the plan's stated target of 25, but the additional cases cover critical edge cases (cycle detection, re-activation state machine, contribution cleanup verification) that Round 1 reviews identified as untested.
+
+### Final Risk Rating: MEDIUM
+
+**Rationale:** The plan is architecturally sound and additive, which keeps the risk to existing functionality low. However, the implementation as written contains four correctness bugs (broken `api` getter, incomplete `unregisterContributions`, missing cycle detection, `init()` re-invocation on re-activation) that would cause runtime failures if shipped as-is. These are all straightforward fixes, but they must be applied before implementation begins. The integration gaps (BlendMode, PaintEngine tool routing, ExporterContribution mismatch) are design-level issues that would result in "dead code" -- registered contributions that nothing actually uses. These reduce the value of the plugin system but do not break existing functionality.
+
+The risk is MEDIUM rather than HIGH because:
+- All changes are additive; no existing code paths are modified in a breaking way
+- The `PaintTool` type widening has a safe `default` case in every existing switch statement (verified in `ViewerInputHandler.ts` and `AdvancedPaintTools.ts`)
+- The `FormatName` widening is a type-only change with no runtime impact
+- The four bugs are localized to the new `PluginRegistry` code and do not affect existing registries
+
+The risk is MEDIUM rather than LOW because:
+- Four distinct correctness bugs in the core `PluginRegistry` implementation
+- Three integration gaps (BlendMode, PaintEngine tools, ExporterContribution) that would produce non-functional extension points
+- The `loadFromURL()` testing strategy is unspecified for the Vitest/Node.js environment
+- Singleton mutation in tests (global `decoderRegistry`, global `NodeFactory`) could cause test ordering issues
+
+### Implementation Readiness: NEEDS WORK
+
+---
+
+## Expert Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+The plan describes a sound, additive plugin architecture that correctly layers a lifecycle orchestrator on top of the existing proto-plugin patterns (`DecoderRegistry`, `NodeFactory`, `PaintToolInterface`, `@RegisterNode`). Both Round 1 reviews converged on the same set of critical bugs and design gaps, which reinforces confidence that the issues are well-understood and bounded. None of the identified problems require an architectural redesign -- they are fixable within the current structure. The plan is ready for implementation once the required changes below are applied.
+
+### Round 1 Feedback Assessment
+
+The QA review and Expert review are in strong agreement. Every issue raised by QA was independently confirmed or extended by the Expert review. No contradictions exist between the two reviews. The QA Round 2 review then verified all findings against the actual source code. The key consensus points are:
+
+1. **`PluginContext.api` getter is broken** -- All three prior reviews identified the `this` scoping bug in the object literal's `get api()`. The closure-based fix is agreed upon and straightforward. **Must fix.**
+
+2. **`unregisterContributions` is incomplete** -- All reviews confirmed that decoder and node unregistration calls are missing from the method body despite the methods being added in Steps 3-4. **Must fix.**
+
+3. **`topologicalSort` lacks cycle detection** -- All reviews identified this and propose the same two-Set DFS solution. The plan's own test case "activate() with circular dependency throws" cannot pass without this fix. **Must fix.**
+
+4. **`onEvent` is an unfinished stub** -- Consensus is to remove it from V1 entirely. The `EventsAPI` uses a closed `OpenRVEventName` union that cannot accommodate arbitrary plugin event strings. Shipping a no-op documented method is worse than omitting it. **Must fix (remove).**
+
+5. **`ExporterRegistry` duplication** -- Consensus is to keep the standalone `ExporterRegistry` as the source of truth and have `PluginRegistry` delegate to it, matching the `decoderRegistry`/`NodeFactory` pattern. **Must fix.**
+
+6. **`activate()` re-calls `init()` on re-activation** -- All reviews agree this violates the stated lifecycle semantics. Guard with a state check. **Must fix.**
+
+7. **PaintEngine tool registration gap** -- The Expert Round 1 and QA Round 2 reviews both identified that `PluginContext.registerTool()` and `PaintEngine.advancedTools` are disconnected Maps. **Must fix** via delegation.
+
+8. **BlendMode integration missing** -- The Expert Round 1 and QA Round 2 reviews both confirmed that `blendChannel()` never consults the plugin blend mode registry. **Must fix** by modifying the `default` case.
+
+9. **`FormatName` closed union** -- All reviews agree it should be widened to `string | null`. **Should fix.**
+
+10. **Manifest validation absent** -- QA Round 1 and QA Round 2 both flagged this. A plugin with `id: ''` registers silently. **Should fix.**
+
+11. **`dispose()` deletes the entry then emits** -- QA Round 2 identified this inconsistency. After deletion, `getState()` returns `undefined` rather than `'disposed'`. **Should fix** by retaining the entry with `Disposed` state.
+
+The QA Round 2 review introduced three new findings (items 11-14 in their numbering) that I can verify and assess:
+
+- **`PaintTool` widening and `ViewerInputHandler.updateCursor()` switch** -- Verified. The `default` case sets `cursor = 'grab'`, which is incorrect for paint-style plugin tools that should get `'crosshair'`. The fix is to check `PaintEngine.isAdvancedTool()` in the default case before falling back to `'grab'`. This is a valid concern but is a nice-to-have rather than a blocker.
+
+- **`PluginContext` recreated per lifecycle call** -- Verified. The closures close over `entry.registrations` which is shared, so registration tracking works correctly. The concern is about API clarity, not correctness. Nice-to-have.
+
+- **`ExporterContribution` interface mismatch** -- Verified. The existing `VideoExporter` returns `ExportResult` with `EncodedChunk[]`, `ReportExporter` produces CSV/HTML strings, `EDLWriter` produces EDL text. The `Promise<Blob>` interface covers only a narrow use case. This should be addressed before implementation to avoid building an extension point that cannot express the existing export types.
+
+### Consolidated Required Changes (before implementation)
+
+These must be addressed before writing production code. They are ordered by criticality:
+
+1. **Fix `PluginContext.api` getter.** Replace the broken `(this as any)._registry?.apiRef` pattern with a closure over the `PluginRegistry` instance:
+   ```typescript
+   private createContext(entry: PluginEntry): PluginContext {
+     const registry = this;
+     return {
+       // ...
+       get api() {
+         if (!registry.apiRef) throw new Error('OpenRV API not yet initialized');
+         return registry.apiRef;
+       },
+     };
+   }
+   ```
+
+2. **Complete `unregisterContributions()`.** Add actual calls to `decoderRegistry.unregisterDecoder(name)` for each tracked decoder and `NodeFactory.unregister(type)` for each tracked node. Without this, deactivating a plugin leaks its decoders and nodes into the global registries permanently.
+
+3. **Implement cycle detection in `topologicalSort()`.** Add an `inProgress` Set to detect back-edges. Throw an error that names the cycle participants:
+   ```typescript
+   const inProgress = new Set<PluginId>();
+   const visit = (id: PluginId) => {
+     if (visited.has(id)) return;
+     if (inProgress.has(id)) throw new Error(`Circular plugin dependency detected involving: ${id}`);
+     inProgress.add(id);
+     // ... visit deps ...
+     inProgress.delete(id);
+     visited.add(id);
+     sorted.push(id);
+   };
+   ```
+
+4. **Remove `onEvent()` from V1 `PluginContext`.** Add it to the Phase 2 future enhancements list. A documented API method that silently does nothing is worse than not having it at all.
+
+5. **Eliminate `ExporterRegistry` duplication.** Make the standalone `ExporterRegistry` (Step 5) the single source of truth, and have `PluginRegistry.registerExporter()` delegate to it. This matches the delegation pattern already used for `decoderRegistry` and `NodeFactory`.
+
+6. **Guard against re-calling `init()` on re-activation.** In `activate()`, check `entry.state`: if it is `'inactive'`, skip `init()` and proceed directly to `activate()`. Only call `init()` when transitioning from `'registered'` state.
+
+7. **Bridge `PluginContext.registerTool()` to `PaintEngine`.** Instead of storing factories in a disconnected `PluginRegistry.toolRegistry` Map, have `registerTool()` delegate to `PaintEngine.registerAdvancedTool()`. The `PluginRegistry` should receive a `PaintEngine` reference via dependency injection (a `setPaintEngine()` method, similar to `setAPI()`).
+
+8. **Wire plugin blend modes into `blendChannel()`.** Add a fallback in the `default` case of `blendChannel()` in `src/composite/BlendModes.ts` to consult the plugin blend mode registry. The function signature should accept `BlendMode | string`. Import the plugin registry lazily to avoid circular dependencies.
+
+9. **Widen `FormatName` type.** Change from the closed union to `string | null` (or use the `FormatName | (string & {})` pattern to preserve autocomplete). Remove the `as FormatName` cast in `detectFormat()`.
+
+10. **Add manifest validation in `register()`.** Validate that `manifest.id` is a non-empty string, `manifest.name` is a non-empty string, `manifest.contributes` is a non-empty array, and `manifest.version` is a non-empty string. Throw a descriptive `Error` on validation failure.
+
+11. **Emit the `Initialized` state transition.** Add a `pluginStateChanged` emission after `init()` completes, before `activate()` runs. Currently only the final `'active'` state is emitted. Lifecycle listeners observing the full state machine will miss the `Registered -> Initialized` transition.
+
+12. **Retain disposed plugin entries in the Map.** Instead of `this.plugins.delete(id)` in `dispose()`, keep the entry with `state = 'disposed'`. This ensures `getState(id)` returns `'disposed'` rather than `undefined`, which is consistent with `PluginState.Disposed` existing as an enum value.
+
+13. **Refine `ExporterContribution` interface.** The current `Promise<Blob>` return type does not accommodate the existing `VideoExporter` (chunk-based `EncodedChunk[]`), `ReportExporter` (CSV/HTML strings), `EDLWriter` (EDL text), or `OTIOWriter` (OTIO JSON). Either: (a) introduce a discriminated union with separate interfaces for blob-based, chunk-based, and text-based export types, or (b) rename to `BlobExporterContribution` and add other export contribution types as needed in follow-up. Option (b) is simpler for V1.
+
+### Consolidated Nice-to-Haves
+
+These improve the design but can be deferred to a fast follow-up:
+
+1. **Decoder priority/ordering.** Add an optional `before?: string` parameter to `registerDecoder()` so plugins can insert decoders before a specific format in the detection chain. Important for ISOBMFF container detection order.
+
+2. **Create `PluginContext` once per plugin entry.** Instead of calling `createContext(entry)` on every lifecycle method, create it once at registration time and store on `PluginEntry`. Avoids confusion about context identity across lifecycle calls.
+
+3. **Concurrent activation guard.** Add a per-plugin `activating` flag to prevent double-activation if `activateAll()` is called while a previous invocation is resolving.
+
+4. **`engineVersion` enforcement.** Check `manifest.engineVersion` against `OpenRVAPI.version` in `register()` or `activate()` using semver comparison.
+
+5. **`@RegisterNode` coexistence documentation.** Add a convenience `registerNodeClass(type, ctor)` wrapper to `PluginContext`, or document that plugins must wrap their class: `context.registerNode('MyNode', () => new MyNodeClass())`.
+
+6. **Lazy imports for tree-shaking.** Make the plugin module a separate entry point or use dependency injection instead of static imports of `decoderRegistry`, `NodeFactory`, etc. to meet the "< 2KB gzipped addition" success metric.
+
+7. **`loadFromURL()` test strategy.** Specify that tests should mock `import()` using `vi.fn()` returning a fake module object, since Vitest's Node.js runtime cannot perform HTTP `import()`.
+
+8. **`PaintTool` widening and cursor handling.** Update the `default` case in `ViewerInputHandler.updateCursor()` to check `PaintEngine.isAdvancedTool()` and use `'crosshair'` for plugin tools rather than `'grab'`.
+
+9. **UIPanelContribution host integration.** Add a panel host component or hook that reads from the plugin registry and mounts registered panels. Without this, `registerUIPanel()` stores objects that nothing reads.
+
+10. **Reframe "Sandboxing" as "Trust Boundary."** Rename Step 10's heading and acknowledge that V1 provides origin-based trust, not process-level isolation.
+
+11. **Error recovery after partial `activateAll()`.** If plugin B (depending on A) fails during activation, document whether A should be rolled back. Consider a `safeActivateAll()` variant that rolls back all plugins on any failure.
+
+### Final Risk Rating: MEDIUM
+
+The architecture is additive and does not modify existing hot paths (rendering, compositing, frame extraction). The four correctness bugs are localized to new `PluginRegistry` code. The three integration gaps (BlendMode, PaintEngine tools, ExporterContribution) would produce non-functional extension points but would not break existing functionality. The `PaintTool` type widening has safe `default` cases in every existing switch statement (verified in `ViewerInputHandler.ts` lines 228-246 and 905-913). The `FormatName` widening is type-only with no runtime impact.
+
+Risk is MEDIUM (not LOW) because of the density of bugs in the implementation code as written, the number of integration wiring steps required, and the potential for test ordering issues when multiple test files interact with global singletons (`decoderRegistry`, `NodeFactory`).
+
+Risk is MEDIUM (not HIGH) because all issues are bounded, well-understood, and fixable without architectural changes. No existing tests or code paths are at risk.
+
+### Final Effort Estimate: 12-16 days
+
+The original plan estimates 10-15 days. The 13 required changes add approximately 2 days of implementation work and 1 day of additional testing. The revised breakdown:
+
+| Phase | Tasks | Effort |
+|-------|-------|--------|
+| Phase 1: Core interfaces + required fixes | `types.ts`, `PluginRegistry.ts` with all 13 required changes, `index.ts` | 4-5 days |
+| Phase 2: Registry modifications | `unregisterDecoder`, `unregister` (NodeFactory), PaintEngine bridge (`setPaintEngine` + `registerAdvancedTool`), `blendChannel` plugin fallback, `FormatName` widening | 2-3 days |
+| Phase 3: API integration | Wire into `OpenRVAPI`, bootstrap sequence, DI for PaintEngine reference | 1 day |
+| Phase 4: Tests | 40+ test cases across PluginRegistry (unit + integration), DecoderRegistry, NodeFactory, PaintEngine | 3-4 days |
+| Phase 5: Example migration | HDR decoder plugin, plugin authoring patterns | 1-2 days |
+| Phase 6: Trust boundary documentation | Reframe security narrative, URL allowlist, CSP guidance | 1 day |
+| **Total** | | **12-16 days** |
+
+### Implementation Readiness: NEEDS WORK
+
+The plan cannot be implemented as-written because of the 13 required changes listed above. However, all required changes are well-defined, bounded, and do not require architectural rethinking. The issues fall into three categories:
+
+1. **Correctness bugs** (items 1-3, 6, 11-12): Code-level fixes that are straightforward to apply. Approximately 30 minutes of plan revision each.
+
+2. **Missing integration wiring** (items 7-8): Require adding delegation code and modifying existing files (`blendChannel()`, `PaintEngine`). These are the largest changes but follow established patterns in the plan.
+
+3. **API design refinements** (items 4-5, 9-10, 13): Interface changes and type widening. Small in scope but important for correctness and consistency.
+
+Once these changes are incorporated into the plan document (estimated 2-3 hours of plan revision), the implementation can proceed. No additional spikes, prototypes, or codebase research are needed -- all the information necessary to make these corrections is already present in the Round 1 and Round 2 reviews.
+
+**The plan cannot be implemented as-is.** The following changes are required before implementation begins:
+
+**Must Fix (blocking):**
+
+1. Fix the `PluginContext.api` getter closure bug (both reviews agree).
+2. Complete `unregisterContributions()` to call `decoderRegistry.unregisterDecoder()` and `NodeFactory.unregister()` (both reviews agree).
+3. Implement cycle detection in `topologicalSort()` using a two-Set (visiting/visited) approach (both reviews agree).
+4. Add state guard in `activate()`: skip `init()` when `entry.state === 'inactive'` (both reviews agree).
+5. Remove `onEvent()` from V1 `PluginContext` interface (Expert review recommends; QA review concurs it is a non-functional stub).
+6. Bridge `PluginContext.registerTool()` to `PaintEngine.registerAdvancedTool()` instead of storing in a separate `PluginRegistry.toolRegistry` Map (Expert review).
+7. Resolve `ExporterRegistry` duplication: use standalone `ExporterRegistry` as source of truth, delegate from `PluginRegistry` (Expert review).
+8. Add basic manifest validation in `register()`: non-empty `id`, non-empty `contributes`, present `version` (QA review).
+
+**Should Fix (non-blocking but strongly recommended):**
+
+9. Wire `BlendModeContribution` into `blendChannel()` default case (Expert review).
+10. Widen `FormatName` type to `string | null` to accommodate plugin format names (QA review).
+11. Add decoder registration priority/ordering option for overlapping magic bytes (Expert review).
+12. Specify `loadFromURL()` test strategy for Vitest environment (Expert review).
+13. Retain disposed plugin entries in the Map with `Disposed` state instead of deleting (QA review).
+14. Rename `ExporterContribution` to reflect its video-only scope, or redesign to cover non-video exports (Expert review).
+15. Document that `PluginContext` is recreated per lifecycle call; plugins should not cache it (Expert review).
+16. Audit `ViewerInputHandler.updateCursor()` switch for plugin tool cursor behavior.
+
+Once items 1-8 are addressed in the plan document, implementation can proceed. The estimated effort of 10-15 days is reasonable given the scope, though the integration wiring for BlendMode, PaintEngine tools, and UIPanelContribution (which needs a host component) may push toward the upper end.

@@ -78,7 +78,7 @@ Phase 13:  Background pattern blend (checker/crosshatch/solid)
 
 ### Architecture: Multi-Pass Shader Pipeline with FBO Ping-Pong
 
-Break the monolithic shader into **10 composable stage shaders**, connected via a ping-pong FBO pair. Each stage reads from one FBO texture and writes to the other. Stages that are entirely disabled (all uniforms at identity/off) are **skipped entirely** -- no draw call, no uniform upload, no texture bind.
+Break the monolithic shader into **11 composable stage shaders**, connected via a ping-pong FBO pair. Each stage reads from one FBO texture and writes to the other. Stages that are entirely disabled (all uniforms at identity/off) are **skipped entirely** -- no draw call, no uniform upload, no texture bind.
 
 ### Stage Decomposition
 
@@ -106,16 +106,19 @@ Stage 4: SECONDARY_GRADE
   Rationale: Luminance-dependent adjustments and HSL conversions. Separating
              from primary grade allows users to reorder or disable independently.
 
-Stage 5: SPATIAL_EFFECTS
-  Phases: 5e (clarity), 7b (sharpen)
-  Uniforms: ~5 + u_texelSize
-  Rationale: These are the only phases that sample neighboring pixels (5x5 kernel
-             for clarity, Laplacian for sharpen). In multi-pass mode, they sample
-             the intermediate FBO texture -- the graded pixels -- fixing the
-             current architectural divergence from the CPU path.
+Stage 5: SPATIAL_EFFECTS (pre-tone-mapping: clarity only)
+  Phases: 5e (clarity)
+  Uniforms: ~3 + u_texelSize (from Global UBO)
+  Rationale: Clarity samples neighboring pixels (5x5 kernel) and is positioned
+             at phase 5e in the monolithic shader -- BEFORE color pipeline and
+             tone mapping. In multi-pass mode, it samples the intermediate FBO
+             texture (graded pixels), fixing the current architectural divergence
+             from the CPU path where clarity reads from u_texture (original image).
   NOTE: This is the stage that benefits MOST from multi-pass. Currently clarity
         (line 1121) does `texture(u_texture, v_texCoord)` on the ORIGINAL image.
         After multi-pass, it naturally reads the graded intermediate.
+  FILTERING: This stage requires BILINEAR (LINEAR) texture filtering on its
+             input FBO texture because it samples neighboring pixels.
 
 Stage 6: COLOR_PIPELINE
   Phases: 6a (color wheels), 6b (CDL), 6c (curves), 6d (3D LUT),
@@ -130,6 +133,19 @@ Stage 7: SCENE_ANALYSIS
   Uniforms: ~16
   Rationale: Scene-referred to display-referred transition. Tone mapping
              operators contain significant ALU work (log2, pow, exp, tanh).
+
+Stage 7b: SPATIAL_EFFECTS_POST (post-tone-mapping: sharpen only)
+  Phases: 7b (sharpen -- unsharp mask, Laplacian)
+  Uniforms: ~3 + u_texelSize (from Global UBO)
+  Rationale: In the monolithic shader, sharpen (phase 7b) runs AFTER tone mapping
+             (phase 7) and gamut mapping (phase 7a). To preserve this exact
+             processing order, sharpen is placed in its own stage after
+             SCENE_ANALYSIS, separate from clarity. This avoids a visible
+             behavioral regression where sharpen would otherwise operate on
+             pre-tone-mapped linear data instead of tone-mapped display-referred
+             data.
+  FILTERING: This stage requires BILINEAR (LINEAR) texture filtering on its
+             input FBO texture because it samples neighboring pixels.
 
 Stage 8: DISPLAY_OUTPUT
   Phases: 7c (output primaries), 8a-8d (display transfer/gamma/brightness),
@@ -162,10 +178,107 @@ Stage 10: COMPOSITING
 ```
 
 Key details:
-- **Two RGBA16F FBOs** (ping and pong), allocated at image resolution
-- For SDR-only content, **RGBA8 FBOs** can be used to halve memory
+- **Two FBOs** (ping and pong), allocated at **render target resolution** (image dimensions for display, reduced resolution for scopes)
+- **Default format: RGBA8** for SDR content. **Promoted to RGBA16F** only when `isHDRContent()` returns true (using the existing utility at Renderer.ts line 42). This halves VRAM cost and doubles bandwidth efficiency for the common case of 8-bit SDR JPEG/PNG viewing
+- **Default texture filtering: NEAREST** for non-spatial stages. Stages that sample neighboring pixels (SPATIAL_EFFECTS for clarity, SPATIAL_EFFECTS_POST for sharpen, INPUT_DECODE for perspective bicubic) override to LINEAR via a `needsBilinearInput` flag on the stage descriptor
 - The **last active stage** renders directly to the **backbuffer** (screen or HDR drawing buffer), avoiding one extra FBO read
 - When only 1 stage is active (common case: just PRIMARY_GRADE), the pipeline degenerates to the current single-pass behavior with **zero FBO overhead**
+
+### Global Uniforms UBO (Uniform Buffer Object)
+
+Several uniforms are consumed by multiple stages. Rather than duplicating them per-stage (which risks silent omission bugs), these are shared via a WebGL2 Uniform Buffer Object (UBO) bound once per frame.
+
+**UBO layout (`GlobalUniforms`, binding point 0):**
+
+```glsl
+// Declared identically in every stage fragment shader that needs cross-stage state.
+layout(std140) uniform GlobalUniforms {
+  float u_hdrHeadroom;    // Used by: SCENE_ANALYSIS (tone mapping), SECONDARY_GRADE (highlights/shadows)
+  int   u_channelMode;    // Used by: INPUT_DECODE (unpremultiply guard), DIAGNOSTICS, COMPOSITING (premultiply guard)
+  int   u_premult;        // Used by: INPUT_DECODE (unpremultiply), COMPOSITING (premultiply + background blend)
+  int   u_outputMode;     // Used by: COMPOSITING (SDR clamp), DISPLAY_OUTPUT (transform selection)
+  vec2  u_texelSize;      // Used by: SPATIAL_EFFECTS (clarity), SPATIAL_EFFECTS_POST (sharpen), INPUT_DECODE (deinterlace, perspective bicubic)
+  vec2  _padding;         // std140 alignment padding
+};
+```
+
+**Host-side management:**
+
+```typescript
+// In ShaderPipeline.ts
+private globalUBO: WebGLBuffer | null = null;
+private globalUBOData = new Float32Array(8); // matches std140 layout
+
+private updateGlobalUBO(gl: WebGL2RenderingContext, state: Readonly<InternalShaderState>): void {
+  if (!this.globalUBO) {
+    this.globalUBO = gl.createBuffer();
+    gl.bindBuffer(gl.UNIFORM_BUFFER, this.globalUBO);
+    gl.bufferData(gl.UNIFORM_BUFFER, this.globalUBOData.byteLength, gl.DYNAMIC_DRAW);
+  }
+
+  // Pack data into std140 layout
+  this.globalUBOData[0] = state.hdrHeadroom;
+  // int uniforms packed as float (reinterpret on GPU via floatBitsToInt or cast)
+  this.globalUBOData[1] = state.channelModeCode;
+  this.globalUBOData[2] = state.premultMode;
+  this.globalUBOData[3] = state.outputMode;
+  this.globalUBOData[4] = state.texelSize[0];
+  this.globalUBOData[5] = state.texelSize[1];
+
+  gl.bindBuffer(gl.UNIFORM_BUFFER, this.globalUBO);
+  gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.globalUBOData);
+  gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.globalUBO);
+}
+```
+
+Each stage program binds to the UBO at init time:
+```typescript
+const blockIndex = gl.getUniformBlockIndex(program, 'GlobalUniforms');
+if (blockIndex !== gl.INVALID_INDEX) {
+  gl.uniformBlockBinding(program, blockIndex, 0); // binding point 0
+}
+```
+
+### Vertex Shaders: Viewer vs. Passthrough
+
+The existing `viewer.vert.glsl` applies pan/zoom/rotation transforms (`u_offset`, `u_scale`, `u_texRotation`, `u_texFlipH`, `u_texFlipV`). In the multi-pass pipeline, these geometric transforms must only be applied when reading from the **source image texture**. Intermediate stages read from FBO textures that are already correctly positioned -- applying pan/zoom/rotation again would cause cumulative geometric transforms, producing incorrect output.
+
+**Solution: Two vertex shaders.**
+
+1. **`viewer.vert.glsl`** (existing) -- used ONLY for the first active stage, which reads from the source image texture and needs pan/zoom/rotation.
+
+2. **`passthrough.vert.glsl`** (new) -- used for ALL intermediate and final stages, which read from FBO textures.
+
+```glsl
+// src/render/shaders/passthrough.vert.glsl
+#version 300 es
+in vec2 a_position;
+in vec2 a_texCoord;
+out vec2 v_texCoord;
+void main() {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+  v_texCoord = a_texCoord;
+}
+```
+
+In `ShaderPipeline.ts`, the vertex shader is selected per-stage:
+
+```typescript
+import VIEWER_VERT_SOURCE from './shaders/viewer.vert.glsl?raw';
+import PASSTHROUGH_VERT_SOURCE from './shaders/passthrough.vert.glsl?raw';
+
+private ensureProgram(gl: WebGL2RenderingContext, stage: ShaderStageDescriptor, isFirstStage: boolean): void {
+  const vertexSource = isFirstStage ? VIEWER_VERT_SOURCE : PASSTHROUGH_VERT_SOURCE;
+  if (!stage.program) {
+    stage.program = new ShaderProgram(gl, vertexSource, stage.fragmentSource);
+    // Bind Global UBO
+    const blockIndex = gl.getUniformBlockIndex(stage.program.handle, 'GlobalUniforms');
+    if (blockIndex !== gl.INVALID_INDEX) {
+      gl.uniformBlockBinding(stage.program.handle, blockIndex, 0);
+    }
+  }
+}
+```
 
 ---
 
@@ -186,9 +299,10 @@ export type StageId =
   | 'linearize'
   | 'primaryGrade'
   | 'secondaryGrade'
-  | 'spatialEffects'
+  | 'spatialEffects'       // clarity (pre-tone-mapping)
   | 'colorPipeline'
   | 'sceneAnalysis'
+  | 'spatialEffectsPost'   // sharpen (post-tone-mapping)
   | 'displayOutput'
   | 'diagnostics'
   | 'compositing';
@@ -244,6 +358,15 @@ export interface ShaderStageDescriptor {
    * Default: false.
    */
   needsOriginalTexture?: boolean;
+
+  /**
+   * Whether this stage requires bilinear (LINEAR) texture filtering on its
+   * input FBO texture. Stages that sample neighboring pixels (clarity, sharpen,
+   * perspective bicubic) set this to true. All other stages use NEAREST
+   * filtering to prevent sub-texel blending artifacts across FBO passes.
+   * Default: false (NEAREST filtering).
+   */
+  needsBilinearInput?: boolean;
 }
 ```
 
@@ -272,7 +395,7 @@ export class FBOPingPong {
   private textures: [WebGLTexture | null, WebGLTexture | null] = [null, null];
   private width = 0;
   private height = 0;
-  private format: 'rgba16f' | 'rgba8' = 'rgba16f';
+  private format: 'rgba16f' | 'rgba8' = 'rgba8';
 
   /** Index of the FBO that will be WRITTEN TO in the next pass (0 or 1). */
   private writeIndex = 0;
@@ -315,8 +438,12 @@ export class FBOPingPong {
       const internalFormat = format === 'rgba16f' ? gl.RGBA16F : gl.RGBA8;
       const type = format === 'rgba16f' ? gl.FLOAT : gl.UNSIGNED_BYTE;
       gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, type, null);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      // NEAREST filtering by default to prevent sub-texel blending artifacts
+      // across non-spatial FBO passes. Stages that need bilinear sampling
+      // (SPATIAL_EFFECTS, SPATIAL_EFFECTS_POST, INPUT_DECODE with perspective)
+      // override to LINEAR via setFilteringMode() before their texture fetch.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
@@ -1303,3 +1430,263 @@ These should be added to the plan as explicit deliverables, ideally as Phase A p
 5. **No test for stage reordering correctness (Phase E).** `setStageOrder()` is a user-facing feature that changes the processing order. A test should verify that (a) applying exposure before tone mapping produces different output than the default order, and (b) both orderings produce valid (non-black, non-NaN) pixels. Without this, a reordering bug could silently produce correct-looking but semantically wrong results.
 
 6. **The `VERTEX_SOURCE` constant referenced in `ensureProgram()` (line 723) is not defined.** Each stage should share the existing `viewer.vert.glsl` vertex shader. The plan should state this explicitly and ensure the vertex shader source is imported once in `ShaderPipeline.ts`, not duplicated per stage. A test should verify that all stage programs use the same vertex shader source.
+
+---
+
+## Expert Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+This is a well-structured plan for a genuinely difficult GPU architecture refactor. The core idea -- decompose a monolithic 1,444-line shader into 10 composable stages with FBO ping-pong, identity-skip optimization, and a monolithic fallback -- is sound and addresses real correctness problems (clarity/sharpen sampling divergence) alongside legitimate maintainability concerns. Both the Round 1 Expert and QA reviews raised substantive issues. The plan can proceed to implementation once the required changes below are incorporated.
+
+### Round 1 Feedback Assessment
+
+**Valid and Critical (must address before implementation):**
+
+1. **Cross-stage uniform dependencies (Expert #1).** This is the most architecturally significant concern. Verified in the shader source: `u_hdrHeadroom` is read in 15 lines spanning tone mapping functions (SCENE_ANALYSIS), highlights/shadows math (SECONDARY_GRADE), and Drago parameters. `u_channelMode` crosses from DIAGNOSTICS into INPUT_DECODE (line 1000: unpremultiply guard) and COMPOSITING (line 1410: premultiply guard). `u_premult` similarly spans INPUT_DECODE and COMPOSITING. The UBO recommendation is the correct solution for WebGL2 and should be a Phase A deliverable, not deferred.
+
+2. **FBO resolution mismatch (Expert #3, QA #1).** Both reviews independently flagged this, confirming it is a real bug in the proposed `execute()` implementation. The code uses `gl.drawingBufferWidth/Height` but the signature accepts `imageWidth/imageHeight` parameters that are ignored. For scope rendering at 320x180, this would allocate 4K FBOs unnecessarily. Must be fixed.
+
+3. **Sharpen processing order change (Expert #6, QA #2).** Verified in the shader: sharpen (phase 7b, line 1297) currently runs AFTER tone mapping (phase 7, line 1289) and AFTER gamut mapping (phase 7a, line 1292). The plan merges clarity and sharpen into SPATIAL_EFFECTS placed between SECONDARY_GRADE and COLOR_PIPELINE, which moves sharpen 4 stages earlier -- before color wheels, CDL, curves, 3D LUT, tone mapping, and gamut mapping. This is not a subtle ordering change; it fundamentally alters what data sharpen operates on (linear graded vs. tone-mapped display-referred). The plan must either (a) split sharpen out of SPATIAL_EFFECTS and place it after SCENE_ANALYSIS, or (b) explicitly document this as an intentional behavioral change with visual regression tests quantifying the difference. Option (a) is strongly preferred because it preserves backward compatibility.
+
+4. **FBO texture filtering mode (QA #1 sub-risk).** The `FBOPingPong` code sets `TEXTURE_MIN_FILTER` to `LINEAR`. For per-pixel arithmetic stages (all stages except INPUT_DECODE and SPATIAL_EFFECTS), this introduces sub-texel blending when FBO dimensions do not perfectly match viewport dimensions. `NEAREST` filtering is correct for non-spatial stages. This can cause cumulative softening across 8+ passes that would be visible in A/B comparison. Must use `NEAREST` by default, with `LINEAR` only for stages that perform spatial sampling.
+
+5. **Pixel comparison infrastructure (QA Phase A prerequisites).** The QA review correctly identified that the codebase has zero pixel-level verification capability. The plan's testing strategy references PSNR thresholds and pixel-perfect validation that cannot be performed without new tooling. The RMSE/PSNR comparison utility and A/B rendering harness must be Phase A deliverables, gating Phase B.
+
+6. **`any` types in `execute()` signature (QA #3).** The `state` and `texCb` parameters are typed as `any`, which defeats TypeScript's refactoring safety during the most error-prone part of the migration (Phase C stage extraction). These must be properly typed from the start as `Readonly<InternalShaderState>` and `TextureCallbacks`.
+
+**Valid but Deferrable (can address during implementation):**
+
+7. **`gl.invalidateFramebuffer()` optimization (Expert missing consideration #2).** Valid performance optimization for tile-based mobile GPUs. Can be added in Phase C or D without affecting correctness. Low priority.
+
+8. **`#define`-based shader permutation alternative (Expert missing consideration #5).** This is a legitimate complementary technique (uber-shader permutations are industry standard in game engines). However, it adds combinatorial complexity (2^N variants for N features) and is orthogonal to the multi-pass architecture. Can be explored as a future optimization within individual stages (e.g., COLOR_PIPELINE with/without CDL, with/without 3D LUT). Should not block this plan.
+
+9. **GPU timer query integration (Expert #6, QA performance testing #11).** `EXT_disjoint_timer_query_webgl2` is the only way to get accurate per-stage GPU timing. Important for validating performance budgets but not a correctness blocker. Can be added in Phase D alongside the benchmarking infrastructure.
+
+10. **TransitionRenderer interaction (Expert missing consideration #1).** Valid concern about FBO count during transitions (4 FBOs needed simultaneously). The ping-pong FBOs can be reused sequentially (render frame A through pipeline, write to transition FBO A, then reuse ping-pong for frame B). This is a design detail for Phase D, not a Phase A blocker.
+
+11. **RGBA8 default for SDR content (Expert #6).** The `isHDRContent()` utility already exists at Renderer.ts line 42. Wiring it into FBO format selection is straightforward and should be part of Phase A's `FBOPingPong` implementation, but is not architecturally blocking.
+
+12. **Alpha invariant enforcement (QA #6).** Per-stage alpha passthrough tests are important for correctness but can be added incrementally during Phase C extractions. The example `primaryGrade.frag.glsl` already demonstrates the correct pattern (`fragColor = color` preserving alpha).
+
+**Conflicts Between Expert and QA Feedback:**
+
+There are no direct conflicts. Both reviews converge on the same critical issues (FBO resolution, sharpen ordering, cross-stage uniforms) and complement each other: the Expert review focuses on GPU architecture correctness while the QA review focuses on verification infrastructure gaps. The only difference in emphasis is that the QA review elevates the pixel comparison harness to a hard Phase A gate, which I agree with.
+
+One factual correction: the Expert review states "101 uniform declarations" and claims the plan overcounts at 125. I verified the actual count: `grep -c '^\s*uniform ' viewer.frag.glsl` returns **125**. The plan's number is correct; the Expert review's count of 101 was the error.
+
+### Consolidated Required Changes (before implementation)
+
+1. **Add a Global Uniforms UBO.** Define a `GlobalUniforms` uniform buffer containing `u_hdrHeadroom`, `u_texelSize`, `u_channelMode`, `u_premult`, and any other uniforms consumed by 2+ stages. Bind it once per frame via `gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, globalUBO)`. Each stage shader declares a matching `uniform GlobalUniforms { ... };` block. This eliminates redundant per-stage uploads and prevents silent omission bugs. Deliver in Phase A.
+
+2. **Fix FBO dimension logic in `execute()`.** Replace `gl.drawingBufferWidth/Height` with a `renderWidth/renderHeight` parameter derived from the actual render target (canvas for display, reduced resolution for scopes). The FBO must match the target, not the canvas. The `imageWidth/imageHeight` parameters already in the signature should be used or renamed to `renderWidth/renderHeight`.
+
+3. **Split sharpen out of SPATIAL_EFFECTS.** Create an 11th stage `POST_TONEMAP_SPATIAL` (or rename: `SHARPEN`) placed after SCENE_ANALYSIS in the pipeline order, containing only sharpen (phase 7b). Keep clarity in SPATIAL_EFFECTS between SECONDARY_GRADE and COLOR_PIPELINE (matching its current position at phase 5e). This preserves the monolithic shader's processing order exactly and avoids a visible behavioral regression. The pipeline order becomes: inputDecode, linearize, primaryGrade, secondaryGrade, clarity, colorPipeline, sceneAnalysis, sharpen, displayOutput, diagnostics, compositing (11 stages). The overhead of one additional potential FBO pass is negligible given that sharpen is rarely active alongside clarity.
+
+4. **Use `NEAREST` texture filtering on ping-pong FBOs.** Change `FBOPingPong.ensure()` to set `TEXTURE_MIN_FILTER` and `TEXTURE_MAG_FILTER` to `NEAREST` (not `LINEAR`). For stages that need bilinear sampling of the intermediate (SPATIAL_EFFECTS, INPUT_DECODE with perspective bicubic), the stage can override the filtering mode before its texture fetch, or the pipeline can set the filtering mode per-stage based on a `needsBilinearInput` flag on the `ShaderStageDescriptor`.
+
+5. **Build pixel comparison infrastructure in Phase A.** Deliver the following before any stage extraction:
+   - `pixelCompare.ts` utility with `computeRMSE()`, `computePSNR()`, `assertPixelParity()`.
+   - A/B rendering harness that renders a synthetic test pattern through both monolithic and multi-pass paths, reads pixels via `gl.readPixels`, and asserts RMSE below threshold.
+   - FBO ping-pong index correctness tests (3, 4, 5, 6 pass chains verifying read/write alternation).
+   - Draw-call count assertion utility (mock GL).
+   This is a hard gate: Phase B cannot merge without this infrastructure passing CI.
+
+6. **Properly type `execute()` parameters.** Replace `state: /* InternalShaderState */ any` with `state: Readonly<InternalShaderState>` and `texCb: /* TextureCallbacks */ any` with `texCb: TextureCallbacks`. Import the types from `ShaderStateManager.ts`.
+
+7. **Define `VERTEX_SOURCE` explicitly.** Import `viewer.vert.glsl?raw` in `ShaderPipeline.ts` (reusing the existing vertex shader) and assign it to a module-level constant. Add a comment stating all stages share this vertex shader.
+
+8. **Add monolithic fallback test.** Mock `gl.createFramebuffer` returning `null` and verify that the pipeline falls back to `renderMonolithic()` and produces output. This tests the RGBA16F -> RGBA8 -> monolithic fallback chain.
+
+### Consolidated Nice-to-Haves
+
+1. **`gl.invalidateFramebuffer()` in `beginPass()`.** Hint the driver that the write FBO's previous contents are stale. Significant bandwidth savings on tile-based mobile GPUs (iOS, Android). Easy to add, no correctness risk.
+
+2. **Automatic RGBA8/RGBA16F selection based on `isHDRContent()`.** Use RGBA8 FBOs for SDR content (halves VRAM and bandwidth). The utility already exists.
+
+3. **GPU timer query profiling.** Integrate `EXT_disjoint_timer_query_webgl2` into `PerfTrace` for accurate per-stage GPU cost measurement. Essential for validating performance budgets but not a correctness blocker.
+
+4. **`#define`-based feature elimination within stages.** For the heaviest stage (COLOR_PIPELINE, ~35 uniforms), compile shader variants with `#define CDL_ENABLED 0` etc. to let the GLSL compiler eliminate dead code. Complementary to multi-pass, not a replacement.
+
+5. **Runtime stage merging for adjacent ALU-only stages.** When two adjacent active stages are both pure per-pixel arithmetic (no spatial sampling, no texture lookups beyond `u_inputTexture`), concatenate their GLSL sources at runtime to avoid one FBO pass. Highly effective for the common primaryGrade + secondaryGrade combination.
+
+6. **EXT_color_buffer_float explicit check in `FBOPingPong.ensure()`.** Check for the extension before attempting RGBA16F allocation instead of relying on `checkFramebufferStatus` to catch the failure. Produces a clearer error path.
+
+7. **Scope rendering A/B parity test from Phase B.** Do not defer scope rendering coverage to Phase D. Scope output divergence would be user-visible (incorrect waveform/vectorscope/histogram).
+
+8. **Stage reordering correctness test.** Verify that `setStageOrder()` produces different (but valid) output when stages are reordered, and identical output when the default order is restored.
+
+9. **Per-stage alpha invariant test.** For every stage except INPUT_DECODE and COMPOSITING, assert `output.a === input.a` using a test image with varying alpha.
+
+10. **Document linearize-EOTF coupling.** Add a code comment to the LINEARIZE stage descriptor explaining that phases 0c and 0d must remain co-located due to the `linearizeActive` out-parameter dependency.
+
+### Final Risk Rating: MEDIUM
+
+The core architecture is sound, but the implementation has multiple precision-critical details (FBO filtering, sharpen ordering, cross-stage uniforms, alpha preservation) that can produce silent visual regressions if not caught by automated pixel comparison. The feature flag and monolithic fallback provide strong safety nets, keeping production risk low even if implementation stumbles. The MEDIUM rating reflects the risk during the migration itself (Phases B-C), not the risk to end users.
+
+### Final Effort Estimate: 35 working days (7 weeks)
+
+The plan estimates 30 days. The additions required by this review add approximately 5 days:
+- Phase A expansion (UBO infrastructure, pixel comparison harness, FBO filtering fix, type corrections): +3 days
+- Sharpen stage split (11th stage, additional GLSL file, additional tests): +1 day
+- Monolithic fallback test and scope parity test: +1 day
+
+The per-stage extraction timeline (Phase C, 12 days for 9 stages) is optimistic but achievable if the Phase A infrastructure is solid. The main schedule risk is Phase C: if pixel comparison reveals subtle divergences between monolithic and multi-pass output, debugging individual stage shaders against a 1,444-line reference will be time-consuming. Budget 2 days of "investigation buffer" within Phase C.
+
+### Implementation Readiness: READY
+
+The plan is ready for implementation once the 8 required changes above are incorporated into the design document. No fundamental architectural rework is needed. The changes are additive (UBO, sharpen stage split, filtering fix, test infrastructure) and do not invalidate the existing design. Phase A can begin immediately after the document is updated.
+
+---
+
+## QA Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+The plan, combined with the feedback from both Round 1 reviews and the Expert Round 2 consolidation, describes a viable and well-architected shader modularization. The core design -- 10 composable stages, FBO ping-pong with identity-skip, monolithic fallback -- is correct. The Round 2 Expert Review provides a thorough consolidation of required changes. This QA Round 2 focuses on the remaining testing gaps, the actionability of the required changes, and the minimum test gates that must be enforced at each phase boundary.
+
+### Round 1 Feedback Assessment
+
+**Agreement with Expert Round 2 consolidation:**
+
+I agree with all 8 "Consolidated Required Changes" from the Expert Round 2 review, with the following QA-specific commentary:
+
+1. **Global Uniforms UBO (Required Change #1):** Correct. I verified that `u_hdrHeadroom` is referenced at 17 locations in `viewer.frag.glsl` spanning tone mapping (SCENE_ANALYSIS) and highlights/shadows (SECONDARY_GRADE). `u_channelMode` appears at 3 sites across INPUT_DECODE, DIAGNOSTICS, and COMPOSITING. `u_premult` at 3 sites across INPUT_DECODE and COMPOSITING. `u_resolution` (used for zebra stripe computation, line 1371) is only in DIAGNOSTICS currently but could be needed if stages expand. The UBO must include at minimum: `u_hdrHeadroom`, `u_texelSize`, `u_channelMode`, `u_premult`. I would additionally include `u_outputMode` (used in the SDR clamp at line 1402, COMPOSITING stage, but also affects whether DISPLAY_OUTPUT applies certain transforms) to prevent future cross-stage bugs.
+
+2. **FBO dimension fix (Required Change #2):** Confirmed as the highest-priority bug fix. Without this, scope rendering would allocate FBOs at canvas resolution (e.g., 3840x2160) instead of scope resolution (320x180), wasting ~127 MB of GPU memory per scope update. This is not just a performance concern -- it would cause incorrect viewport dimensions in the intermediate passes, potentially rendering scope data at the wrong resolution.
+
+3. **Sharpen stage split (Required Change #3):** I agree with the Expert's recommendation to split sharpen into an 11th stage. However, I want to highlight that the QA test burden increases: 11 stages means 11 `isIdentity` test suites, 11 alpha invariant tests, and 11 A/B parity comparisons. The plan's Phase C estimate of "1-2 days each" must account for this additional stage. The split is correct because the alternative (accepting a behavioral change where sharpen operates on pre-tone-mapped data) would invalidate all existing visual reference comparisons users may have made. Backward compatibility must take priority.
+
+4. **NEAREST texture filtering (Required Change #4):** Confirmed critical. I verified in the `FBOPingPong` code (plan line 319) that it uses `gl.LINEAR` for both MIN and MAG filters. For the 8 non-spatial stages, `LINEAR` filtering causes bilinear interpolation of adjacent texels when the FBO texel grid does not perfectly align with the fragment center. In practice, even a single-pixel rounding difference between FBO size and viewport size triggers this. With 8+ non-spatial passes, the cumulative softening would be measurable: I estimate a PSNR drop of 5-10 dB compared to `NEAREST` for high-frequency content (text, sharp edges). This would cause the A/B pixel comparison to fail, so it must be fixed before any pixel comparison tests are meaningful.
+
+5. **Pixel comparison infrastructure (Required Change #5):** This is the gating deliverable for the entire project. Without `computeRMSE()` / `computePSNR()` / `assertPixelParity()`, every subsequent phase has no quantitative verification. I have verified that the codebase has:
+   - **Zero** unit-level pixel comparison utilities. The `e2e/fixtures.ts` `imagesAreDifferent` function (line 1458) is byte-level PNG equality, unsuitable for floating-point FBO readback.
+   - **Zero** RMSE/PSNR infrastructure anywhere in the codebase (searched all `.ts` files).
+   - **Zero** `gl.readPixels`-based verification in unit tests. All render tests use mock GL.
+   - The `sampleCanvasPixels` utility (e2e/fixtures.ts line 1249) reads individual pixels via `gl.readPixels` using `UNSIGNED_BYTE`, which is useful for e2e spot-checks but cannot perform bulk float comparison.
+
+6. **Type safety (Required Change #6):** Agreed. The `any` types are a migration hazard. During Phase C, when `InternalShaderState` fields may be renamed or restructured to support per-stage access patterns, TypeScript compile errors are the primary defense against silent breakage.
+
+7. **VERTEX_SOURCE definition (Required Change #7):** Verified that the existing `viewer.vert.glsl` (33 lines) contains vertex transforms (`u_offset`, `u_scale`, `u_texRotation`, `u_texFlipH`, `u_texFlipV`) that are NOT stage-specific -- they apply to the source image geometry. In the multi-pass pipeline, only the FIRST stage (or the passthrough source-to-FBO copy) should apply vertex transforms; intermediate stages should use a simple identity vertex shader (`gl_Position = vec4(a_position, 0.0, 1.0); v_texCoord = a_texCoord;`). If all stages share `viewer.vert.glsl`, then `u_offset`/`u_scale`/`u_texRotation` would be applied at every intermediate stage, causing cumulative geometric transforms. **This is a newly identified issue.** The plan must specify two vertex shaders: (a) `viewer.vert.glsl` for the first stage (source image with pan/zoom/rotation), and (b) a `passthrough.vert.glsl` for all intermediate and final stages (identity transform, fullscreen quad). Alternatively, the pipeline can set `u_offset=0,0`, `u_scale=1,1`, `u_texRotation=0`, `u_texFlipH=0`, `u_texFlipV=0` for intermediate stages, but a dedicated passthrough vertex shader is cleaner and avoids 5 unnecessary uniform uploads per intermediate pass.
+
+8. **Monolithic fallback test (Required Change #8):** Agreed. This is a straightforward mock-GL test.
+
+**Newly identified issue -- vertex shader for intermediate stages:**
+
+The Expert Round 2 review states "Import `viewer.vert.glsl?raw` in `ShaderPipeline.ts` (reusing the existing vertex shader)" but does not address the fact that `viewer.vert.glsl` applies pan/zoom/rotation transforms. If all 11 stage programs use this vertex shader, intermediate stages would apply cumulative geometric transforms to the FBO quad, producing incorrect output (the image would be offset, scaled, or rotated at each stage). This issue was not raised in any prior review.
+
+**Recommendation:** Create a `passthrough.vert.glsl` containing:
+```glsl
+#version 300 es
+in vec2 a_position;
+in vec2 a_texCoord;
+out vec2 v_texCoord;
+void main() {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+  v_texCoord = a_texCoord;
+}
+```
+Use `viewer.vert.glsl` for the first stage (which reads the source image with pan/zoom/rotation) and `passthrough.vert.glsl` for all subsequent stages (which read from FBO textures that are already correctly positioned). This is a MANDATORY addition -- without it, multi-pass rendering is geometrically incorrect.
+
+### Minimum Test Requirements (before merging each phase)
+
+**Phase A Gate (blocks Phase B):**
+
+| ID | Test Description | Type | Pass Criteria | Priority |
+|----|-----------------|------|--------------|----------|
+| A-1 | FBOPingPong allocates two FBOs at requested dimensions | Unit (mock GL) | `gl.createFramebuffer` called twice, `gl.texImage2D` called with correct width/height/format | MUST |
+| A-2 | FBOPingPong alternates read/write indices for 3, 4, 5, 6 passes | Unit (mock GL) | `readTexture` returns the texture written by the previous pass; `writeFBO` is the other FBO | MUST |
+| A-3 | FBOPingPong RGBA16F -> RGBA8 -> null fallback chain | Unit (mock GL) | When RGBA16F fails (`checkFramebufferStatus` returns incomplete), retries with RGBA8; when both fail, `ensure()` returns false | MUST |
+| A-4 | FBOPingPong `dispose()` deletes all textures and FBOs | Unit (mock GL) | `gl.deleteTexture` and `gl.deleteFramebuffer` called for all 4 resources | MUST |
+| A-5 | FBOPingPong uses `NEAREST` filtering by default | Unit (mock GL) | `gl.texParameteri` called with `gl.NEAREST` for both `TEXTURE_MIN_FILTER` and `TEXTURE_MAG_FILTER` | MUST |
+| A-6 | FBOPingPong calls `gl.invalidateFramebuffer` in `beginPass()` | Unit (mock GL) | `gl.invalidateFramebuffer(gl.FRAMEBUFFER, [gl.COLOR_ATTACHMENT0])` called before each write | SHOULD |
+| A-7 | ShaderPipeline: 0 active stages = passthrough (0 or 1 draw calls, no FBO) | Unit (mock GL) | `gl.drawArrays` called at most once; no `gl.bindFramebuffer(FRAMEBUFFER, non-null)` | MUST |
+| A-8 | ShaderPipeline: 1 active stage = 1 draw call, no FBO allocation | Unit (mock GL) | Exactly 1 `gl.drawArrays`; `FBOPingPong.ensure()` not called | MUST |
+| A-9 | ShaderPipeline: N active stages = N draw calls with correct FBO alternation | Unit (mock GL) | Draw call count matches N; `bindFramebuffer` alternates between FBO[0] and FBO[1] | MUST |
+| A-10 | ShaderPipeline: monolithic fallback when FBO allocation fails | Unit (mock GL) | `renderMonolithic()` invoked when `FBOPingPong.ensure()` returns false | MUST |
+| A-11 | ShaderPipeline: FBO dimensions match render target, not canvas | Unit (mock GL) | When `renderWidth=320, renderHeight=180`, FBOs allocated at 320x180 | MUST |
+| A-12 | Global Uniforms UBO: buffer created and bound with correct data | Unit (mock GL) | `gl.bufferSubData` called with `u_hdrHeadroom`, `u_texelSize`, `u_channelMode`, `u_premult` values | MUST |
+| A-13 | `computeRMSE()` returns 0 for identical arrays | Unit | `computeRMSE(a, a) === 0` for arbitrary Float32Array `a` | MUST |
+| A-14 | `computeRMSE()` returns correct value for known inputs | Unit | `computeRMSE([1,0,0,1], [0,0,0,1])` returns `0.5` (RMSE of [1,0,0,0] channel diffs) | MUST |
+| A-15 | `computePSNR(0)` returns `Infinity` | Unit | Edge case: zero RMSE means infinite PSNR | MUST |
+| A-16 | `assertPixelParity()` passes when RMSE below threshold, fails above | Unit | Threshold enforcement works in both directions | MUST |
+| A-17 | Passthrough vertex shader (`passthrough.vert.glsl`) does not apply transforms | Unit (mock GL) | No `u_offset`, `u_scale`, `u_texRotation` uniforms queried | MUST |
+| A-18 | First stage uses `viewer.vert.glsl`, intermediate stages use `passthrough.vert.glsl` | Unit (mock GL) | Shader programs compiled with correct vertex shader sources | MUST |
+
+**Phase B Gate (first extraction: compositing):**
+
+| ID | Test Description | Type | Pass Criteria | Priority |
+|----|-----------------|------|--------------|----------|
+| B-1 | Compositing `isIdentity()` true for default state | Unit | Returns true when `premultMode=0`, `backgroundPattern=0` | MUST |
+| B-2 | Compositing `isIdentity()` false for each non-default parameter | Unit | Separate assertion per parameter: premultMode!=0, backgroundPattern>0 | MUST |
+| B-3 | Compositing alpha passthrough when premult disabled | Unit | `output.a === input.a` for all test pixels | MUST |
+| B-4 | `multiPassEnabled=false` uses monolithic path exclusively | Unit (mock GL) | No `ShaderPipeline.execute()` call | MUST |
+| B-5 | Compositing texture unit 0 = `u_inputTexture`, no conflicts | Unit (mock GL) | No other sampler bound to unit 0 | MUST |
+| B-6 | `viewer.frag.glsl` remains byte-identical to pre-Phase-B baseline | CI | SHA-256 hash check | MUST |
+| B-7 | Draw call count: compositing only = 1 draw call | Unit (mock GL) | Exactly 1 `gl.drawArrays` when only compositing is active | MUST |
+
+**Phase C Gate (per stage extraction, repeated for each of the 10 remaining stages):**
+
+| ID | Test Description | Type | Pass Criteria | Priority |
+|----|-----------------|------|--------------|----------|
+| C-1 | `isIdentity()` true for all-default state | Unit | Stage skipped when nothing is changed | MUST |
+| C-2 | `isIdentity()` false for each adjustable parameter | Unit | One assertion per parameter confirming activation | MUST |
+| C-3 | Alpha invariant: `output.a === input.a` (non-premult stages only) | Unit | For all stages except INPUT_DECODE and COMPOSITING | MUST |
+| C-4 | Texture unit assignments: no collision with unit 0 | Unit (mock GL) | LUT/additional textures use units >= 1 | MUST |
+| C-5 | `applyUniforms` uploads only this stage's uniforms | Unit (mock GL) | No uniform names from other stages in mock call log | MUST |
+| C-6 | Intermediate stages use passthrough vertex shader | Unit (mock GL) | Programs for stages 2-N compiled with `passthrough.vert.glsl` | MUST |
+| C-7 | Sharpen stage (post-SCENE_ANALYSIS) preserves processing order | Unit | Sharpen `isIdentity` is independent of tone mapping state | MUST |
+
+**Phase D Gate (scope integration):**
+
+| ID | Test Description | Type | Pass Criteria | Priority |
+|----|-----------------|------|--------------|----------|
+| D-1 | Scope FBOs allocated at scope resolution | Unit (mock GL) | FBO dimensions = `targetWidth x targetHeight` | MUST |
+| D-2 | DISPLAY_OUTPUT identity with `SCOPE_DISPLAY_CONFIG` | Unit | Stage skipped when using neutral display config (`transferFunction=0, displayGamma=1, displayBrightness=1`) | MUST |
+| D-3 | Y-flip applied after pipeline execution | Unit | Readback rows are in top-to-bottom order | MUST |
+
+**Phase E Gate (stage reordering):**
+
+| ID | Test Description | Type | Pass Criteria | Priority |
+|----|-----------------|------|--------------|----------|
+| E-1 | `setStageOrder()` changes draw call sequence | Unit (mock GL) | `gl.useProgram` calls match reordered stage sequence | MUST |
+| E-2 | `setStageOrder()` with missing/extra stage IDs is rejected | Unit | Error logged, order unchanged | MUST |
+| E-3 | Restoring default order produces original behavior | Unit (mock GL) | Draw call sequence matches original after reset | SHOULD |
+
+### Final Risk Rating: MEDIUM
+
+The risk rating aligns with the Expert Round 2 assessment. The three primary risk factors are:
+
+1. **Test infrastructure dependency (HIGH sub-risk).** The entire verification strategy depends on Phase A delivering a working pixel comparison harness. If this is delayed or insufficient, all Phase C extractions proceed without quantitative quality gates. Mitigation: make the pixel comparison utility the first Phase A deliverable, validate it with synthetic test data before building the A/B rendering harness.
+
+2. **Vertex shader for intermediate stages (MEDIUM sub-risk, newly identified).** If intermediate stages use `viewer.vert.glsl` with pan/zoom/rotation uniforms, multi-pass output is geometrically incorrect (cumulative transforms). This was not caught in any prior review. Mitigation: create `passthrough.vert.glsl` in Phase A and test that intermediate stages use it.
+
+3. **Cumulative FBO filtering artifacts (MEDIUM sub-risk).** `LINEAR` filtering on non-spatial intermediate FBOs causes measurable softening. Mitigation: use `NEAREST` by default, add filtering mode tests in Phase A.
+
+4. **11-stage complexity vs. 10-stage plan (LOW sub-risk).** The sharpen split adds one stage, increasing the total stage count and Phase C duration by ~1 day. The overhead is minimal but the test matrix grows.
+
+The monolithic fallback and feature flag provide strong safety nets for production users. The MEDIUM rating reflects implementation-phase risk, not user-facing risk.
+
+### Implementation Readiness: NEEDS WORK
+
+The plan requires the following additions/corrections before Phase A implementation can begin:
+
+**Blocking (must be incorporated into the plan document):**
+
+1. **Create `passthrough.vert.glsl` for intermediate stages.** The existing `viewer.vert.glsl` applies pan/zoom/rotation transforms that are only correct for the first stage (source image). All subsequent stages render fullscreen FBO quads and must use an identity vertex shader. Without this, multi-pass rendering applies cumulative geometric transforms. This is the single most critical issue not yet addressed in any review.
+
+2. **Incorporate all 8 "Consolidated Required Changes" from Expert Round 2.** These are well-specified and actionable. The UBO, FBO dimension fix, sharpen split, NEAREST filtering, pixel comparison infrastructure, type safety, VERTEX_SOURCE definition, and monolithic fallback test are all necessary.
+
+3. **Adopt the minimum test gates defined above.** Each phase boundary must have explicitly named pass/fail criteria that can be verified in CI. The test IDs (A-1 through E-3) should be referenced in the plan's phase descriptions so implementors know what must pass before proceeding.
+
+**Non-blocking (can be addressed during implementation):**
+
+4. Add `u_outputMode` to the global uniforms UBO (used in COMPOSITING for SDR clamp, potentially relevant to DISPLAY_OUTPUT).
+
+5. Add the texture unit assignment table from Expert Review Round 1 recommendation 5.
+
+6. Document the linearize-EOTF coupling in the LINEARIZE stage descriptor.
+
+7. Specify the TransitionRenderer sequential reuse strategy for ping-pong FBOs during transitions.
+
+Once items 1-3 are incorporated into the plan document, Phase A can begin immediately. The plan's architecture is fundamentally sound and the phased migration strategy with feature flag and monolithic fallback provides appropriate safety margins for a refactor of this scope.

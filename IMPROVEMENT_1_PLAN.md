@@ -24,9 +24,11 @@
 | SessionEvents event types | 25 |
 | Internal managers wired in constructor | 8 |
 | Backward-compat proxy accessors | ~35 |
-| Files that import Session | 58 |
-| Files that access media source methods | 35 |
+| Files that import Session | 102 |
+| Files that access media source methods | 43 |
 | Files that access frame cache methods | 12 |
+| `(session as any)` casts in test files | ~71+ across ~23 files |
+| TestSession subclasses in test files | 6 |
 
 ## Current Architecture
 
@@ -206,6 +208,10 @@ export interface SessionMediaHost {
   /** A/B auto-assign callback */
   onSourceAdded(count: number): { currentSourceIndex: number; emitEvent: boolean };
   emitABChanged(idx: number): void;
+  /** Notify that a video was loaded and needs audio setup (called from 4 media loading paths) */
+  loadAudioFromVideo(video: HTMLVideoElement, volume: number, muted: boolean): void;
+  /** Clear stale graph data when new media is loaded (called from 7 media loading paths) */
+  clearGraphData(): void;
 }
 
 export class SessionMedia extends EventEmitter<SessionMediaEvents> {
@@ -433,7 +439,7 @@ export class Session extends EventEmitter<SessionEvents> {
       getSourceByIndex: (i) => this.media.getSourceByIndex(i),
     });
 
-    // SessionMedia needs playback state
+    // SessionMedia needs playback state + cross-service callbacks
     this.media.setHost({
       getFps: () => this.playback.engine.fps,
       getCurrentFrame: () => this.playback.currentFrame,
@@ -448,6 +454,9 @@ export class Session extends EventEmitter<SessionEvents> {
       initVideoPreservesPitch: (v) => this.playback.volumeManager.initVideoPreservesPitch(v),
       onSourceAdded: (c) => this.playback.abCompareManager.onSourceAdded(c),
       emitABChanged: (i) => this.playback.abCompareManager.emitChanged(i),
+      loadAudioFromVideo: (video, vol, muted) =>
+        this.playback.audioCoordinator.loadFromVideo(video, vol, muted),
+      clearGraphData: () => this.graph.clearData(),
     });
 
     // SessionGraph needs playback + annotations + media
@@ -460,16 +469,104 @@ export class Session extends EventEmitter<SessionEvents> {
       loadVideoSourcesFromGraph: (r) => this.media.loadVideoSourcesFromGraph(r),
     });
 
-    // Forward all sub-service events to Session EventEmitter
-    this.forwardEvents(this.playback);
-    this.forwardEvents(this.media);
-    this.forwardEvents(this.annotations);
-    this.forwardEvents(this.graph);
+    // Forward all sub-service events to Session EventEmitter.
+    // NOTE: EventEmitter has no wildcard support, so we must use explicit
+    // event enumeration per service (not a generic forwardEvents helper).
+    // Each array must be kept in sync with the corresponding events interface.
+    this.forwardEventsFrom(this.playback, [
+      'frameChanged', 'playbackChanged', 'playDirectionChanged',
+      'playbackSpeedChanged', 'preservesPitchChanged', 'loopModeChanged',
+      'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
+      'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
+      'volumeChanged', 'mutedChanged', 'abSourceChanged', 'audioError',
+    ] as const);
+    this.forwardEventsFrom(this.media, [
+      'sourceLoaded', 'durationChanged', 'unsupportedCodec',
+    ] as const);
+    this.forwardEventsFrom(this.annotations, [
+      'marksChanged', 'annotationsLoaded', 'paintEffectsLoaded',
+      'matteChanged', 'notesChanged', 'versionsChanged',
+      'statusChanged', 'statusesChanged',
+    ] as const);
+    this.forwardEventsFrom(this.graph, [
+      'graphLoaded', 'settingsLoaded', 'sessionLoaded',
+      'edlLoaded', 'metadataChanged',
+    ] as const);
   }
 
-  private forwardEvents(source: EventEmitter<any>): void {
-    // Use a generic event forwarding mechanism
-    // Each sub-service event is re-emitted on Session
+  private forwardEventsFrom<E extends EventMap>(
+    source: EventEmitter<E>,
+    events: readonly (keyof E)[],
+  ): void {
+    for (const event of events) {
+      source.on(event, (data: any) => this.emit(event as any, data));
+    }
+  }
+
+  // --- Composition-level methods (remain on Session, not delegated) ---
+  // These methods cross multiple sub-service domains and must be orchestrated
+  // at the composition root level.
+
+  /**
+   * Composition-level: crosses playback, annotations, and media domains.
+   * Returns a serializable snapshot of session state for SnapshotManager persistence.
+   * The output schema is frozen for backward compatibility with stored snapshots.
+   */
+  getPlaybackState(): PlaybackState {
+    return {
+      currentFrame: this.playback.currentFrame,
+      inPoint: this.playback.engine.inPoint,
+      outPoint: this.playback.engine.outPoint,
+      fps: this.playback.engine.fps,
+      loopMode: this.playback.engine.loopMode,
+      volume: this.playback.volumeManager.volume,
+      muted: this.playback.volumeManager.muted,
+      preservesPitch: this.playback.volumeManager.preservesPitch,
+      marks: this.annotations.markerManager.toArray(),
+      currentSourceIndex: this.media.currentSourceIndex,
+    };
+  }
+
+  /**
+   * Composition-level: restores state across playback, annotations, and media.
+   */
+  setPlaybackState(state: PlaybackState): void {
+    this.playback.engine.fps = state.fps;
+    this.playback.engine.setInPointInternal(state.inPoint);
+    this.playback.engine.setOutPointInternal(state.outPoint);
+    this.playback.engine.loopMode = state.loopMode;
+    this.playback.volumeManager.volume = state.volume;
+    this.playback.volumeManager.muted = state.muted;
+    this.playback.volumeManager.preservesPitch = state.preservesPitch;
+    this.annotations.markerManager.restoreFromArray(state.marks);
+    this.media.setCurrentSource(state.currentSourceIndex);
+    this.playback.currentFrame = state.currentFrame;
+  }
+
+  /**
+   * Composition-level: reads from annotations (marker query) and writes to
+   * playback (seek). Must remain on Session because it crosses both domains.
+   */
+  goToNextMarker(): void {
+    const frame = this.annotations.markerManager.findNextMarkerFrame(
+      this.playback.currentFrame,
+    );
+    if (frame !== undefined) {
+      this.playback.currentFrame = frame;
+    }
+  }
+
+  /**
+   * Composition-level: reads from annotations (marker query) and writes to
+   * playback (seek). Must remain on Session because it crosses both domains.
+   */
+  goToPreviousMarker(): void {
+    const frame = this.annotations.markerManager.findPreviousMarkerFrame(
+      this.playback.currentFrame,
+    );
+    if (frame !== undefined) {
+      this.playback.currentFrame = frame;
+    }
   }
 
   // --- Backward-compatible convenience accessors ---
@@ -487,6 +584,8 @@ export class Session extends EventEmitter<SessionEvents> {
   // ... minimal set of deprecation shims
 
   dispose(): void {
+    // Dispose audio before media to disconnect Web Audio nodes
+    // before releasing video elements.
     this.playback.dispose();
     this.media.dispose();
     this.annotations.dispose();
@@ -497,42 +596,59 @@ export class Session extends EventEmitter<SessionEvents> {
 
 ## Detailed Migration Steps
 
-### Phase 1: Extract SessionAnnotations (Low Risk, High Value)
+### Phase 1: Extract SessionAnnotations + Shared Types (Low Risk, High Value)
 
-**Why first:** Annotations (markers, notes, versions, statuses, paint) are the most self-contained domain. They have no bidirectional dependencies with playback or media loading. The existing managers already own their state.
+**Why first:** Annotations (markers, notes, versions, statuses, paint) are the most self-contained domain. They have no bidirectional dependencies with playback or media loading. The existing managers already own their state. Shared types must also be extracted here because `SessionAnnotationEvents` already needs `ParsedAnnotations` and `MatteSettings`, and later phases (`SessionPlaybackEvents`) need `AudioPlaybackError`.
 
 **Steps:**
 
-1. **Create `src/core/session/SessionAnnotations.ts`**
-   - Move MarkerManager, NoteManager, VersionManager, StatusManager, AnnotationStore instantiation and wiring
-   - Define `SessionAnnotationEvents` (subset of current SessionEvents)
-   - Wire manager callbacks to emit on SessionAnnotations
+1. **Create `src/core/session/types.ts`** (shared type definitions)
+   - Move `AudioPlaybackError`, `UnsupportedCodecInfo`, `MatteSettings`, `ParsedAnnotations`, `SessionMetadata`, `GTOViewSettings`, `GTOComponentDTO`, `PlaybackState` from `Session.ts`
+   - Keep re-exports in `Session.ts` for backward compatibility
+   - This must happen first because `SessionAnnotationEvents` (this phase) needs `ParsedAnnotations` and `MatteSettings`
 
-2. **Update Session.ts**
+2. **Create `src/core/session/SessionAnnotations.ts`**
+   - Move MarkerManager, NoteManager, VersionManager, StatusManager, AnnotationStore instantiation and wiring
+   - Define `SessionAnnotationEvents` (subset of current SessionEvents, importing types from `types.ts`)
+   - Wire manager callbacks to emit on SessionAnnotations
+   - MarkerManager must expose `findNextMarkerFrame(currentFrame)` and `findPreviousMarkerFrame(currentFrame)` query methods (used by Session-level `goToNextMarker()`/`goToPreviousMarker()`)
+
+3. **Update Session.ts**
    - Replace 5 individual manager fields with `_annotations = new SessionAnnotations()`
    - Replace ~30 marker delegation methods with `this._annotations.markerManager.xxx`
-   - Forward SessionAnnotationEvents to Session EventEmitter
+   - Forward SessionAnnotationEvents to Session EventEmitter (use explicit event enumeration)
    - Add `get annotations(): SessionAnnotations` accessor
+   - Keep `goToNextMarker()` / `goToPreviousMarker()` on Session (these cross annotation and playback domains)
 
-3. **Update consumers incrementally**
+4. **Update consumers incrementally**
    - `SessionSerializer.ts`: Change `session.noteManager` to `session.annotations.noteManager`
    - `SessionGTOExporter.ts`: Same pattern
    - `AppSessionBridge.ts`: Forward annotation events
    - Tests: Update `(session as any)._markerManager` to `session.annotations.markerManager`
 
-4. **Add deprecation JSDoc** on Session pass-through methods
+5. **Add deprecation JSDoc** on Session pass-through methods
 
 **Files to create:**
+- `src/core/session/types.ts` (~100 lines, shared type definitions)
 - `src/core/session/SessionAnnotations.ts` (~200 lines)
 
 **Files to modify:**
-- `src/core/session/Session.ts` (remove ~150 lines of delegation methods)
+- `src/core/session/Session.ts` (remove ~150 lines of delegation methods; add re-exports from types.ts)
 - `src/core/session/SessionSerializer.ts` (update 3 access paths)
 - `src/core/session/SessionGTOExporter.ts` (update access paths)
 - `src/core/session/SessionGTOStore.ts` (update access paths)
+- `src/core/session/SessionGTOExporter.test.ts` (update TestSession annotation access paths)
+- `src/core/session/SessionGTOStore.test.ts` (update access paths)
+- `src/core/session/CoordinateParsing.test.ts` (update TestSession if it accesses annotation fields)
 - `src/core/session/Session.state.test.ts` (update test access)
 
-**Estimated effort:** 1 day
+**Test gate criteria:**
+- New `SessionAnnotations.test.ts`: standalone construction without Session, event wiring (toggleMark triggers marksChanged), all 5 sub-manager accessors, dispose verification
+- Backward-compat: `session.toggleMark(5)` via deprecated shim works; `session.on('marksChanged', handler)` fires via event forwarding; `session.annotations.markerManager` accessible
+- All existing tests pass (`npx vitest run`); type check passes (`npx tsc --noEmit`)
+- No new `(session as any)` casts introduced
+
+**Estimated effort:** 1.5 days
 
 ### Phase 2: Extract SessionGraph (Medium Risk, High Value)
 
@@ -582,7 +698,7 @@ export class Session extends EventEmitter<SessionEvents> {
 **Steps:**
 
 1. **Create `src/core/session/SessionMedia.ts`**
-   - Absorb `MediaManager.ts` (or wrap it) -- the existing MediaManager is already well-structured
+   - Consolidate Session's inline media methods into SessionMedia and delete the orphaned `MediaManager.ts` (note: `MediaManager.ts` is not currently used by `Session.ts` -- Session has its own parallel implementation; only `MediaManager.test.ts` imports it)
    - Move all media loading methods from Session.ts (`loadFile`, `loadImage`, `loadVideo`, `loadVideoFile`, `loadImageFile`, `loadEXRFile`, `loadSequence`)
    - Move all frame cache access methods (`getVideoFrameCanvas`, `hasVideoFrameCached`, etc.)
    - Move `loadVideoSourcesFromGraph()`
@@ -590,15 +706,16 @@ export class Session extends EventEmitter<SessionEvents> {
    - Move `sources` array and `_currentSourceIndex`
    - Define `SessionMediaHost` interface
 
-2. **Unify Session/MediaManager duplication**
-   - Session's `loadVideoFile()` adds `this._gtoData = null` and `this._audioCoordinator.loadFromVideo()` -- these cross-cutting concerns become callbacks in the host interface
+2. **Handle cross-cutting concerns via host callbacks**
+   - Session's `loadVideoFile()` calls `this._gtoData = null` (7 occurrences) -- routed via `SessionMediaHost.clearGraphData()` callback
+   - Session's `loadVideoFile()` calls `this._audioCoordinator.loadFromVideo()` (4 occurrences) -- routed via `SessionMediaHost.loadAudioFromVideo()` callback
    - Session's `loadVideoSourcesFromGraph()` becomes a method on SessionMedia with graph result passed in
 
 3. **Update Session.ts**
    - Replace `sources`, `_currentSourceIndex`, and ~40 media methods with `_media = new SessionMedia()`
    - Add backward-compat accessors
 
-4. **Update consumers (35 files)**
+4. **Update consumers (43 files)**
    - Prioritize high-traffic consumers: `Viewer.ts`, `ViewerPrerender.ts`, `ViewerExport.ts`, `ThumbnailManager.ts`, `Timeline.ts`, `CacheIndicator.ts`
    - Use `session.media.currentSource` instead of `session.currentSource`
    - Incremental: Keep deprecated accessors on Session during migration
@@ -607,11 +724,21 @@ export class Session extends EventEmitter<SessionEvents> {
 - `src/core/session/SessionMedia.ts` (~600 lines)
 
 **Files to modify/remove:**
-- `src/core/session/MediaManager.ts` (may be absorbed into SessionMedia)
+- `src/core/session/MediaManager.ts` (delete -- orphaned code not used by Session.ts)
+- `src/core/session/MediaManager.test.ts` (delete or merge relevant tests into SessionMedia.test.ts)
 - `src/core/session/Session.ts` (remove ~500 lines)
-- 35 consumer files (incremental, one at a time)
+- `src/core/session/Session.media.test.ts` (update TestSession access to moved `sources` field)
+- `src/core/session/SnapshotManager.test.ts` (update source access patterns)
+- 43 consumer files (incremental, one at a time)
 
-**Estimated effort:** 3 days
+**Test gate criteria:**
+- New `SessionMedia.test.ts`: standalone construction, source management, host callback verification (`loadAudioFromVideo` invoked on video load, `clearGraphData` invoked on media load start)
+- Integration test: load video file -> verify audio coordinator receives `loadFromVideo` call
+- Integration test: load file after GTO session -> verify graph data is cleared
+- `npx vitest run` passes all existing tests; `npx tsc --noEmit` passes
+- No new `(session as any)` casts introduced
+
+**Estimated effort:** 4 days
 
 ### Phase 4: Extract SessionPlayback (High Risk, High Value)
 
@@ -625,8 +752,9 @@ export class Session extends EventEmitter<SessionEvents> {
    - Move `ABCompareManager` and A/B source methods (`toggleAB`, `setSourceA`, `setSourceB`, etc.)
    - Move `AudioCoordinator` ownership
    - Move `switchToSource()`
-   - Move `getPlaybackState()` and `setPlaybackState()`
    - Define `SessionPlaybackHost` interface
+   - NOTE: `getPlaybackState()` / `setPlaybackState()` remain on Session (composition-level, see below)
+   - NOTE: `goToNextMarker()` / `goToPreviousMarker()` remain on Session (cross-domain, see below)
 
 2. **Remove backward-compat proxy accessors**
    - The ~35 protected getters that proxy `_currentFrame`, `_inPoint`, etc. can be removed
@@ -980,3 +1108,240 @@ Given the corrected consumer counts (84 files importing Session, 43 accessing me
 | 4 | 3 days | 4 days | ~84 importing files; cross-service method placement |
 | 5 | 1 day | 1.5 days | Event forwarding completeness test; dispose ordering |
 | **Total** | **10 days** | **13.5 days** | |
+
+---
+
+## Expert Review — Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+### Round 1 Feedback Assessment
+
+The Expert Review -- Round 1 is the only Round 1 review present (no separate QA review was appended). It is comprehensive, well-researched, and independently verified against the codebase. My own verification confirms its findings. Here is the assessment of each concern:
+
+**Valid and Critical (must address before implementation):**
+
+1. **AudioCoordinator cross-service gap (Concern #1).** Verified: `_audioCoordinator.loadFromVideo()` is called 4 times from media loading methods (lines 1305, 1364, 1767, 1855). The proposed `SessionMediaHost` interface has no `loadAudioFromVideo` callback. This is a real design gap that would cause a compile error or silent audio regression during Phase 3. **Critical -- must be modeled in the host interface.**
+
+2. **`getPlaybackState()` / `setPlaybackState()` cross-service placement (Concern #2, Missing Consideration #9).** Verified: these methods at lines 2378-2433 span playback engine state, volume manager state, marker manager state, and source index. The SnapshotManager (567 lines) depends on the output format. The plan provides no placement for these methods. **Critical -- must specify that these remain on Session as composition-level methods.**
+
+3. **`goToNextMarker()` / `goToPreviousMarker()` cross-domain placement (Concern #3, Missing Consideration #10).** Verified at lines 1040-1056: these read from `_markerManager` (annotations) and write to `currentFrame` (playback). The plan implicitly puts them in SessionAnnotations as marker delegation methods, but they need playback write access. The Expert Review's recommendation to keep them on Session or split into `findNextMarkerFrame()` (pure query on annotations) + seek (on playback) is the correct approach. **Critical -- incorrect placement would create a circular dependency.**
+
+4. **`_gtoData = null` cross-cutting concern (Concern #4).** Verified: 7 occurrences across media loading methods. This is a SessionGraph state mutation triggered by SessionMedia operations. Without modeling it in the host interface, GTO data would go stale after media reloads. **Critical -- must be modeled as a callback or composition root hook.**
+
+5. **Consumer count underestimates (Concern #5).** Verified: 102 files import Session (not 58 or even 84 -- the grep shows 102 unique files with 133 total occurrences). The Expert Review's count of 84 was itself an undercount. Additionally, 173 occurrences of `(session as any)` across 23 test files each represent a potential breakage point. **Critical -- effort estimates must be recalibrated.**
+
+6. **TestSession subclass pattern breakage (Missing Consideration #11).** Verified: at least 6 distinct `TestSession extends Session` subclasses in test files (`CoordinateParsing.test.ts`, `SessionGTOExporter.test.ts`, `ViewerIntegration.test.ts`, `Session.media.test.ts`, `Session.playback.test.ts`, `Session.state.test.ts`). These subclasses directly manipulate protected fields like `this.sources`, `this._graph`, `this._metadata`. After refactoring, these fields move to sub-services, breaking every TestSession subclass. This is unmentioned migration work that affects Phase 1 onward. **Critical -- the plan must specify a TestSession migration strategy (e.g., provide a `TestSessionHelper` factory or expose protected setters on sub-services for testing).**
+
+7. **`buffering` event not in SessionEvents (Concern, Accuracy section).** Verified: `buffering` is forwarded on line 402 but absent from the `SessionEvents` interface at lines 165-203. It works only due to `EventMap`'s loose index signature. This is a pre-existing bug, but the refactor must not carry it forward. **Critical -- add `buffering: boolean` to `SessionPlaybackEvents`.**
+
+**Valid but Minor (can be addressed during implementation):**
+
+8. **`forwardEvents` generic approach (Concern #6).** The plan shows both a generic `forwardEvents(source)` sketch and an explicit event list approach. The explicit approach is correct and already shown. This is an implementation detail, not a design gap. **Minor -- just use the explicit approach.**
+
+9. **`AppSessionBridge` type compatibility with union events (Concern #7).** TypeScript interface extension handles this correctly. No event name collisions exist across the proposed sub-service event interfaces (I verified the event name sets are disjoint). **Minor -- no action needed, but worth a compile check during Phase 1.**
+
+10. **`safeVideoPlay()` placement (Concern #8).** This method is called from the PlaybackEngineHost callback (line 363) and touches volume, media, pause, and audioError events. It naturally belongs in SessionPlayback since it is invoked by the playback engine and primarily manages playback error recovery. The media access (`applyVolumeToVideo` accesses `currentSource`) can be routed through `SessionPlaybackHost.getCurrentSource()`. **Minor -- already solvable with the proposed host interface pattern.**
+
+11. **Session-adjacent managers not listed (Missing Consideration #1).** SnapshotManager, AutoSaveManager, PlaylistManager, TransitionManager, SessionURLManager accept Session as a parameter. They should be listed as secondary consumer files but are not blockers since they use the public Session API that will have deprecation shims. **Minor -- add to "Files to Modify" lists for completeness.**
+
+12. **`AppPlaybackWiring.ts` and `App.ts` not listed as files to modify (Missing Considerations #2, #3).** These subscribe to multiple session events and should be listed. Not blockers due to backward-compat shims but should be tracked. **Minor.**
+
+13. **UI component event subscribers not listed (Missing Consideration #4).** Timeline.ts, HeaderBar.ts, CacheIndicator.ts, etc. are not broken by shims but should be eventual migration targets. **Minor -- list as Phase 5 cleanup targets.**
+
+14. **`isSingleImage` property (Missing Consideration #6).** Verified at line 849. Accesses `currentSource`. Should become a deprecated shim delegating to `session.media.isSingleImage`. **Minor -- straightforward to handle.**
+
+15. **Dispose ordering (Missing Consideration #7).** Verified: current order is sources -> audio -> notes -> versions -> statuses. The new architecture must dispose audio before media. **Minor -- straightforward to specify in composition root.**
+
+16. **Circular type references in `import('./Session')` (Missing Consideration #8).** The `audioError` type in `SessionPlaybackEvents` references `import('./Session').AudioPlaybackError`. Moving shared types to `types.ts` (planned for Phase 2) resolves this, but Phase 4 needs it. **Minor -- pull shared type extraction into Phase 1.**
+
+17. **Metadata ownership (Missing Consideration #14).** Verified: `updateMetadata()` and `setDisplayName()` are called from `HeaderBar.ts` (UI) and `AppControlRegistry.ts` for user-facing operations unrelated to GTO. Placing metadata in SessionGraph is questionable. **Minor but worth reconsidering -- metadata could stay on Session or be a trivial standalone manager.**
+
+18. **Missing test file entries in "Files to Create" table (Missing Consideration #12).** `SessionMedia.test.ts` and `SessionPlayback.test.ts` are mentioned in the Testing Strategy but not in the Files to Create table. **Minor -- editorial fix.**
+
+**No conflicts between reviewers** since only one Round 1 review exists.
+
+### Consolidated Required Changes (before implementation)
+
+1. **Add `loadAudioFromVideo(video: HTMLVideoElement, volume: number, muted: boolean): void` to `SessionMediaHost` interface.** This is needed for the 4 `_audioCoordinator.loadFromVideo()` calls in media loading methods. The composition root wires this to `session.playback.audioCoordinator.loadFromVideo()`.
+
+2. **Add `clearGraphData(): void` to `SessionMediaHost` interface** (or add an `onMediaLoadStarted` hook at the composition root). This handles the 7 `this._gtoData = null` mutations during media loading.
+
+3. **Explicitly specify that `getPlaybackState()` / `setPlaybackState()` remain on Session as composition-level methods.** Show the post-refactor implementation in the plan that composes state from `this.playback`, `this.annotations.markerManager`, and `this.media`.
+
+4. **Explicitly specify that `goToNextMarker()` / `goToPreviousMarker()` remain on Session** (or are refactored into `annotations.markerManager.findNextMarkerFrame(currentFrame)` + `playback.currentFrame = frame` at the Session level). They must NOT be placed in SessionAnnotations.
+
+5. **Define a TestSession migration strategy.** Options: (a) Sub-services expose protected test helpers for setting internal state, (b) A `createTestSession()` factory function replaces TestSession subclasses, (c) Sub-services accept initial state in their constructors. The plan must pick one and show an example. This affects all 6 TestSession subclasses and approximately 173 `(session as any)` patterns across 23 test files.
+
+6. **Add `buffering: boolean` to `SessionPlaybackEvents`.** Fix the pre-existing gap where `buffering` is forwarded but undeclared in the events interface.
+
+7. **Correct consumer count estimates.** Update to 102 files importing Session (not 58), and acknowledge the 173 `(session as any)` occurrences across 23 test files as migration work. Adjust effort table accordingly.
+
+8. **Move shared type extraction (AudioPlaybackError, UnsupportedCodecInfo, MatteSettings, ParsedAnnotations, SessionMetadata, GTOViewSettings) to `types.ts` in Phase 1**, not Phase 2. These types are needed by `SessionPlaybackEvents` (Phase 4) and `SessionAnnotationEvents` (Phase 1), so they must be available from the start.
+
+### Consolidated Nice-to-Haves (can address during implementation)
+
+1. **List `AppPlaybackWiring.ts`, `App.ts`, `SnapshotManager.ts`, `AutoSaveManager.ts`, `PlaylistManager.ts`, `TransitionManager.ts`, `SessionURLManager.ts`, `SessionGTOSettings.test.ts` as secondary consumer files** in the Files to Modify tables for the relevant phases.
+
+2. **Reconsider metadata ownership.** `SessionMetadata` + `updateMetadata()` + `setDisplayName()` could stay on Session itself (they are 30 lines of trivial state) rather than being pushed into SessionGraph where they create an unintuitive coupling between user-facing metadata and GTO parsing. This is a design taste decision, not a blocker.
+
+3. **Add `SessionMedia.test.ts` and `SessionPlayback.test.ts` to the Files to Create table** for consistency with the Testing Strategy section.
+
+4. **Document dispose ordering requirements** in the plan: audio must be disposed before media (to disconnect Web Audio nodes before releasing video elements).
+
+5. **Use explicit event forwarding arrays** (as already shown in the "Event Forwarding Strategy" section) rather than the generic `forwardEvents(source: EventEmitter<any>)` sketch. Remove or replace the generic sketch to avoid confusion.
+
+6. **Add `isSingleImage` to the list of backward-compat shims** that Session retains during migration.
+
+7. **Acknowledge that MediaManager.ts is orphaned code** (not currently used by Session.ts) and reframe Phase 3 as "consolidate Session's inline media methods into SessionMedia and delete the orphaned MediaManager.ts."
+
+### Final Risk Rating: MEDIUM
+
+The plan is fundamentally sound -- the phased approach, host interface pattern, and deprecation shim strategy are all correct architectural choices proven in this codebase. The MEDIUM rating reflects: (a) the 8 required changes above represent real design gaps, not merely editorial issues; (b) the consumer migration surface is 75% larger than estimated (102 files vs. 58); (c) the TestSession subclass breakage is unplanned work that touches 6 test files and ~173 cast patterns. None of these are showstoppers, but they require design decisions before implementation begins.
+
+### Final Effort Estimate: 14 days
+
+Breakdown:
+
+| Phase | Adjusted Estimate | Rationale |
+|-------|-------------------|-----------|
+| 0 (prep) | 0.5 days | Extract shared types to `types.ts`, design TestSession migration strategy |
+| 1 | 1.5 days | SessionAnnotations extraction + proof-of-concept TestSession migration |
+| 2 | 2.5 days | SessionGraph extraction + metadata placement decision |
+| 3 | 4 days | SessionMedia extraction; 102 importing files (not 58); audio coordinator host callbacks |
+| 4 | 4 days | SessionPlayback extraction; cross-service method placement; heaviest consumer migration |
+| 5 | 1.5 days | Cleanup, dispose ordering, event forwarding completeness, final test sweep |
+| **Total** | **14 days** | |
+
+The Expert Review's 13.5-day estimate is reasonable. I add 0.5 days for the shared types / TestSession prep work that should happen before Phase 1.
+
+### Implementation Readiness: NEEDS WORK
+
+The plan's architecture and phasing are correct, but it cannot be implemented as-is due to 8 required changes that represent real design gaps (host interface completions, cross-service method placement, TestSession migration, type extraction timing). These are all solvable within the existing architectural framework -- none require rethinking the overall approach. Once the 8 required changes are incorporated into the plan document, this is READY for implementation.
+
+---
+
+## QA Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+### Round 1 Feedback Assessment
+
+Both Round 1 reviews (Expert Round 1 and the Expert Round 2, which also served as the consolidated review since no separate QA Round 1 was filed) are thorough and independently verified against the codebase. My own verification confirms their findings. Below is my assessment of which concerns are critical and which can be deferred.
+
+**Critical testing concerns (must resolve before implementation begins):**
+
+1. **AudioCoordinator host interface gap.** Both reviews correctly identify that `_audioCoordinator.loadFromVideo()` is called 4 times from media loading paths (Session.ts lines 1305, 1364, 1767, 1855) but `SessionMediaHost` has no callback for it. I verified this independently. Without this callback, Phase 3 produces a codebase where loading a video silently fails to set up Web Audio routing. This is not merely a design omission -- it is a functional regression that no existing test would catch because the audio coordinator tests (AC-WIRE-001 through AC-WIRE-010 in Session.state.test.ts lines 1646-1765) test wiring, not the load path. A new integration test must verify that `loadVideoFile()` triggers audio coordinator setup end-to-end.
+
+2. **TestSession subclass migration strategy is unspecified.** I verified 5 `class TestSession extends Session` subclasses across test files, plus 71 `(session as any)` casts in 7 session test files. The Expert Round 2 review counts 173 occurrences across 23 files (a broader search scope that includes non-session tests). Either count represents significant unplanned migration work. The plan must specify a concrete strategy before Phase 1 begins, because the strategy choice (factory functions vs. protected test helpers vs. constructor injection) affects the API design of every new sub-service class. Deferring this decision to implementation time risks inconsistent approaches across phases.
+
+3. **Cross-service method placement for `getPlaybackState()` / `setPlaybackState()`.** I verified these methods (Session.ts lines 2378-2433) aggregate state from 4 different domains. 15 files reference them, including `SnapshotManager.ts` which persists state to browser storage. The serialization format must remain stable or existing user snapshots break silently. Both reviews correctly recommend keeping these on Session. A frozen schema conformance test is mandatory.
+
+4. **`goToNextMarker()` / `goToPreviousMarker()` placement.** I verified (Session.ts lines 1040-1056) these cross annotations and playback. Both reviews agree they must not go into SessionAnnotations. The plan must be updated to explicitly keep them on Session or use the query+orchestration pattern.
+
+5. **`_gtoData = null` in 7 media loading methods.** I verified 7 occurrences (lines 1595, 1617, 1658, 1701, 1737, 1794, 1926). This cross-service state mutation between media and graph is unmodeled. Without a host callback or composition-root hook, loading new media after a GTO session leaves stale graph data that could produce incorrect property resolution results.
+
+6. **Shared type extraction timing.** The Expert Round 2 review correctly identifies that `AudioPlaybackError` (referenced in `SessionPlaybackEvents`) and `ParsedAnnotations`, `MatteSettings` (referenced in `SessionAnnotationEvents`) are currently defined in Session.ts. These types must be extracted to `types.ts` before Phase 1 -- not Phase 2 as the plan states -- because Phase 1's `SessionAnnotationEvents` needs `ParsedAnnotations` and `MatteSettings`. I verified these types are defined at Session.ts lines 128-163.
+
+**Concerns that can be deferred to implementation time:**
+
+- **`buffering` event not in SessionEvents:** Pre-existing latent bug. Fix opportunistically during Phase 4 by adding `buffering: boolean` to `SessionPlaybackEvents`. Does not block Phase 1-3.
+- **Consumer count corrections (94-102 files vs. 58):** Important for effort estimation accuracy but does not change the architectural approach. The deprecation shim strategy handles any count.
+- **Metadata ownership in SessionGraph:** A design taste question. SessionGraph is a defensible home since metadata is primarily populated during GTO parsing. Can be reconsidered during Phase 2 if it creates awkward test dependencies.
+- **Dispose ordering:** Straightforward to implement correctly at the composition root. Document it but no design decision needed.
+- **`forwardEvents` generic vs. explicit approach:** Implementation detail. The explicit approach shown in the plan is correct.
+- **Missing files in Files to Create/Modify tables:** Editorial fixes, not design gaps.
+- **`isSingleImage`, `safeVideoPlay()`, AppPlaybackWiring.ts, session-adjacent managers:** All handled by deprecation shims or straightforward host interface routing.
+
+### Minimum Test Requirements (before merging each phase)
+
+**Gate criteria for ALL phases:**
+- `npx vitest run` passes all 7,600+ existing tests (zero regressions)
+- `npx tsc --noEmit` passes (no type errors)
+- No new `(session as any)` casts introduced (only existing ones migrated or explicitly kept)
+
+**Phase 1 -- SessionAnnotations:**
+- New `SessionAnnotations.test.ts` with minimum coverage:
+  - Standalone construction without Session (validates the service is independently testable)
+  - Event wiring: `toggleMark()` on SessionAnnotations triggers `marksChanged` event
+  - All 5 sub-manager accessors return correct instances
+  - `dispose()` calls dispose on NoteManager, VersionManager, StatusManager
+- Backward-compat verification:
+  - `session.toggleMark(5)` via deprecated shim still works
+  - `session.on('marksChanged', handler)` fires via event forwarding
+  - `session.annotations.markerManager` is accessible
+- `Session.state.test.ts` (30 `(session as any)` usages): all pass, either by keeping shims or updating access paths
+- `SessionGTOExporter.test.ts` TestSession: compiles and passes after annotation access path changes
+
+**Phase 2 -- SessionGraph:**
+- New `SessionGraph.test.ts` with minimum coverage:
+  - Standalone construction without Session
+  - `loadEDL()` populates `edlEntries` and emits `edlLoaded`
+  - `resolveProperty()` returns correct values when graph is set
+  - `updateMetadata()` emits `metadataChanged`
+  - Host interface calls verified via mock host (setFps, setCurrentFrame called during load)
+- `SessionGTOExporter.test.ts` TestSession: updated for moved `_graph` field
+- `SessionGTOSettings.test.ts`: updated and passing
+- `Session.graph.test.ts` (3 `(session as any)` usages): updated
+
+**Phase 3 -- SessionMedia:**
+- New `SessionMedia.test.ts` with minimum coverage:
+  - Standalone construction without Session
+  - Source management: add source, get source by index, source count
+  - `setCurrentSource()` updates index correctly
+  - `setHDRResizeTier()` stores tier
+  - Host interface calls verified: `loadAudioFromVideo` callback invoked on video load
+  - Host interface calls verified: `clearGraphData` (or equivalent) invoked on media load start
+  - `dispose()` disposes all sources
+- Integration test: load video file -> verify audio coordinator receives `loadFromVideo` call (end-to-end through composition root)
+- Integration test: load file after GTO session -> verify `_gtoData` is cleared
+- `Session.media.test.ts` TestSession: updated for moved `sources` and `addSource()`
+- MediaManager.ts: verify zero remaining imports (safe to delete)
+
+**Phase 4 -- SessionPlayback:**
+- New `SessionPlayback.test.ts` with minimum coverage:
+  - Standalone construction without Session
+  - Play/pause/seek cycle
+  - Volume delegation: `volume`, `muted`, `preservesPitch` forward to VolumeManager
+  - A/B compare: `toggleAB()` forwards to ABCompareManager
+  - AudioCoordinator wiring: frameChanged, playbackChanged, speedChanged, directionChanged forwarding (mirrors AC-WIRE-001 through AC-WIRE-010)
+  - All 14+ events in `SessionPlaybackEvents` fire correctly (including `buffering`)
+  - Host interface calls verified: `getCurrentSource()`, `getSourceB()`, `getSourceCount()`
+- `getPlaybackState()` / `setPlaybackState()` on Session:
+  - Frozen schema conformance test: `getPlaybackState()` output has exactly `{ currentFrame, inPoint, outPoint, fps, loopMode, volume, muted, preservesPitch, marks, currentSourceIndex }`
+  - Round-trip idempotency: `setPlaybackState(getPlaybackState())` produces identical state
+- `goToNextMarker()` / `goToPreviousMarker()` on Session: existing behavior verified
+- `Session.playback.test.ts` (10 `(session as any)` usages): all updated
+- `Session.state.test.ts` AudioCoordinator wiring tests (AC-WIRE-001 through AC-WIRE-010): all pass
+
+**Phase 5 -- Cleanup:**
+- Event forwarding completeness test: for each of the 31+ event types in `SessionEvents`, verify that subscribing on `session.on(eventName, handler)` fires when the corresponding sub-service emits
+- Dispose ordering test: verify `playback.dispose()` is called before `media.dispose()` (mock dispose methods and check call order)
+- No remaining `@deprecated` methods with active non-test callers
+- Final full regression: `npx vitest run` passes all tests
+
+### Final Risk Rating: MEDIUM
+
+The architectural approach is sound and proven in this codebase. The MEDIUM rating reflects:
+- The 8 required design changes identified by both reviews represent real gaps, not editorial issues
+- The consumer migration surface is 60-75% larger than estimated (94-102 files vs. 58)
+- 5 TestSession subclasses and 71+ `(session as any)` casts create a fragile test migration path
+- Cross-service methods (`getPlaybackState`, `goToNextMarker`, audio coordinator wiring) require careful routing that is not yet specified in the plan
+- The deprecation shim strategy effectively mitigates runtime risk, keeping the blast radius of each phase manageable
+
+The risk is NOT HIGH because: (a) each phase is independently shippable, (b) backward-compat shims provide a safety net, (c) the full 7,600+ test suite catches most regressions, (d) the host interface pattern is already proven in this codebase.
+
+### Implementation Readiness: READY (after incorporating required changes)
+
+The plan is architecturally correct and the phasing is sound. It requires incorporating the 8 changes identified by the Expert Round 2 review (which I endorse fully) before implementation begins:
+
+1. Add `loadAudioFromVideo` callback to `SessionMediaHost`
+2. Add `clearGraphData` callback to `SessionMediaHost`
+3. Keep `getPlaybackState()` / `setPlaybackState()` on Session with frozen schema test
+4. Keep `goToNextMarker()` / `goToPreviousMarker()` on Session
+5. Define TestSession migration strategy (recommend: factory functions + protected test helpers on sub-services)
+6. Add `buffering: boolean` to `SessionPlaybackEvents`
+7. Correct consumer counts and adjust effort to ~14 days
+8. Move shared type extraction to Phase 1 (not Phase 2)
+
+Once these changes are incorporated into the plan document, **implementation can begin with Phase 1**. No fundamental rethinking of the architecture is needed.

@@ -34,7 +34,7 @@ The `App` class in `src/App.ts` (1,875 lines) acts as the **composition root** f
 
 1. **Constructor does too much**: The `App` constructor (lines 122-522, ~400 lines) creates the session, viewer, timeline, 71+ controls via `AppControlRegistry`, initializes keyboard managers, creates persistence/session/network bridges, wires DCC integration, registers contextual keyboard bindings, sets up all wiring modules, and wires timeline editor events. This is impossible to unit-test without standing up the entire application.
 
-2. **`getActionHandlers()` is a 300-line method**: Lines 1137-1451 define a monolithic map of ~80 keyboard action handlers that reference virtually every control via `this.controls.*`, `this.session`, `this.viewer`, `this.paintEngine`, `this.tabBar`, `this.activeContextManager`, etc. This method alone creates coupling to every subsystem.
+2. **`getActionHandlers()` is a 300-line method**: Lines 1137-1451 define a monolithic map of 117 keyboard action handler entries that reference virtually every control via `this.controls.*`, `this.session`, `this.viewer`, `this.paintEngine`, `this.tabBar`, `this.activeContextManager`, etc. This method alone creates coupling to every subsystem.
 
 3. **`createLayout()` is a 300-line method**: Lines 722-1033 builds the DOM tree, appends overlays to the viewer container, wires session announcements, configures accessibility, creates fullscreen manager, sets up image mode transitions, and binds session events. It mixes DOM construction with event wiring.
 
@@ -50,21 +50,21 @@ The `App` class in `src/App.ts` (1,875 lines) acts as the **composition root** f
 
 ## 2. Proposed Solution
 
-### Architecture: Composition Root with Service Modules
+### Architecture: Composition Root with Direct Composition
 
 Transform `App` from a god object into a thin **Composition Root** that only:
-1. Creates a **ServiceContainer** (DI container)
-2. Registers services in the container
-3. Calls `container.boot()` to initialize everything
-4. Delegates `dispose()` to the container
+1. Directly instantiates services via constructor arguments (no DI container)
+2. Passes dependencies explicitly between services
+3. Calls `mount()` to initialize layout and render loop
+4. Disposes services in explicit, hand-ordered sequence in `dispose()`
 
-All current logic moves into focused **service modules** that declare their dependencies via interfaces and receive them from the container.
+All current logic moves into focused **service modules** that declare their dependencies via typed interfaces and receive them as constructor parameters.
 
 ### Key Principles
 
-- **No framework DI library** -- use a simple typed service registry (Map-based) to avoid adding dependencies.
+- **No DI container or service locator** -- use direct composition in the App constructor. The codebase already has three proven dependency-passing patterns (`AppWiringContext`, `SessionBridgeContext`, `PersistenceManagerContext`); a service locator would be a pattern inconsistency with no concrete benefit.
 - **Interface-driven** -- every service depends on interfaces, never on concrete classes.
-- **Lazy initialization** -- services are created on first access, avoiding order-of-creation issues.
+- **Explicit initialization order** -- services are created in a deterministic sequence in the constructor, preserving the current ordering guarantees.
 - **Testable in isolation** -- each service can be instantiated with mock dependencies.
 - **Incremental migration** -- extract one service at a time; App delegates to it while tests are green.
 
@@ -72,148 +72,50 @@ All current logic moves into focused **service modules** that declare their depe
 
 ## 3. Detailed Steps
 
-### Phase 1: Extract the Service Container (Est. 2-3 days)
+### Phase 0: Baseline Unit Tests for Untested Dependencies (Est. 1-2 days)
 
-#### Step 1.1: Create `ServiceContainer`
+Before any refactoring begins, add unit test coverage for two critical modules that currently have zero direct tests but are deeply wired into the services being extracted.
 
-Create `/Users/lifeart/Repos/openrv-web/src/services/ServiceContainer.ts`:
+#### Step 0.1: Create `AppSessionBridge.test.ts`
 
-```typescript
-/**
- * Lightweight typed service container.
- * Services are registered as factory functions and lazily instantiated.
- */
-export class ServiceContainer {
-  private factories = new Map<string, () => unknown>();
-  private instances = new Map<string, unknown>();
-  private disposables: Array<{ dispose(): void }> = [];
+Create `/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.test.ts` with at least 10 tests covering:
+- `bindSessionEvents()` scope scheduling and throttling behavior
+- `updateInfoPanel()` data formatting for various source types
+- Histogram callback forwarding to the histogram control
+- `dispose()` cleanup -- all event listeners are unsubscribed
+- Event unsubscription tracking (no leaked listeners after dispose)
 
-  /**
-   * Register a factory for a named service.
-   * The factory receives the container so it can resolve dependencies.
-   */
-  register<T>(name: string, factory: (container: ServiceContainer) => T): void {
-    this.factories.set(name, () => factory(this));
-  }
+#### Step 0.2: Create `AppPersistenceManager.test.ts`
 
-  /**
-   * Resolve a service by name. Lazily creates it on first access.
-   */
-  get<T>(name: string): T {
-    if (this.instances.has(name)) {
-      return this.instances.get(name) as T;
-    }
-    const factory = this.factories.get(name);
-    if (!factory) {
-      throw new Error(`Service not registered: ${name}`);
-    }
-    const instance = factory() as T;
-    this.instances.set(name, instance);
+Create `/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.test.ts` with at least 8 tests covering:
+- `init()` auto-save timer setup
+- `syncGTOStore()` serialization of session state
+- `createQuickSnapshot()` snapshot creation and storage
+- `dispose()` timer cleanup (no leaked timers)
+- OPFS cache integration (mock OPFS API)
 
-    // Track disposables
-    if (instance && typeof (instance as any).dispose === 'function') {
-      this.disposables.push(instance as { dispose(): void });
-    }
-    return instance;
-  }
-
-  /**
-   * Dispose all services in reverse registration order.
-   */
-  dispose(): void {
-    for (let i = this.disposables.length - 1; i >= 0; i--) {
-      this.disposables[i]!.dispose();
-    }
-    this.disposables = [];
-    this.instances.clear();
-  }
-}
-```
-
-#### Step 1.2: Create typed service keys
-
-Create `/Users/lifeart/Repos/openrv-web/src/services/ServiceKeys.ts`:
-
-```typescript
-/**
- * Typed service key constants.
- * Using const strings avoids magic string coupling.
- */
-export const ServiceKeys = {
-  // Core
-  Session: 'core.session',
-  Viewer: 'core.viewer',
-  PaintEngine: 'core.paintEngine',
-  DisplayCapabilities: 'core.displayCapabilities',
-
-  // Orchestrators (new)
-  LayoutOrchestrator: 'orchestrator.layout',
-  PlaybackOrchestrator: 'orchestrator.playback',
-  KeyboardOrchestrator: 'orchestrator.keyboard',
-  NavigationOrchestrator: 'orchestrator.navigation',
-  AudioOrchestrator: 'orchestrator.audio',
-  A11yOrchestrator: 'orchestrator.a11y',
-  RenderLoopService: 'service.renderLoop',
-  URLBootstrapService: 'service.urlBootstrap',
-
-  // Existing bridges (moved)
-  SessionBridge: 'bridge.session',
-  NetworkBridge: 'bridge.network',
-  PersistenceManager: 'bridge.persistence',
-  DCCBridge: 'bridge.dcc',
-
-  // UI registries (split from AppControlRegistry)
-  ColorControls: 'controls.color',
-  ViewControls: 'controls.view',
-  EffectsControls: 'controls.effects',
-  TransformControls: 'controls.transform',
-  AnnotateControls: 'controls.annotate',
-  AnalysisControls: 'controls.analysis',
-  PlaybackControls: 'controls.playback',
-  NetworkControls: 'controls.network',
-
-  // Layout components
-  HeaderBar: 'layout.headerBar',
-  TabBar: 'layout.tabBar',
-  ContextToolbar: 'layout.contextToolbar',
-  Timeline: 'layout.timeline',
-  LayoutStore: 'layout.store',
-  LayoutManager: 'layout.manager',
-} as const;
-```
-
-#### Step 1.3: Create `ServiceContainer.test.ts`
-
-Create `/Users/lifeart/Repos/openrv-web/src/services/ServiceContainer.test.ts` with tests for:
-- Lazy instantiation
-- Singleton behavior (same instance on repeated `get()`)
-- Dispose in reverse order
-- Missing service throws
-- Circular dependency detection (optional)
+Record the exact test count after Phase 0 merges. This is the regression baseline for all subsequent phases.
 
 ---
 
-### Phase 2: Extract Focused Orchestrators from App (Est. 5-7 days)
+### Phase 1: Extract Focused Orchestrators from App (Est. 5-7 days)
 
-#### Step 2.1: Extract `PlaylistNavigationService`
+#### Step 1.1a: Extract `FrameNavigationService`
 
-**Source**: Lines 1462-1771 in `App.ts` (playlist/timeline/annotation navigation)
+**Source**: Lines 1462-1650 in `App.ts` (playlist/annotation frame navigation -- 9 methods)
 
-Create `/Users/lifeart/Repos/openrv-web/src/services/PlaylistNavigationService.ts`:
+Create `/Users/lifeart/Repos/openrv-web/src/services/FrameNavigationService.ts`:
 
 ```typescript
-export interface PlaylistNavigationDeps {
+export interface FrameNavigationDeps {
   session: Session;
   playlistManager: PlaylistManager;
   playlistPanel: PlaylistPanel;
   paintEngine: PaintEngine;
-  timelineEditor: TimelineEditor;
-  timeline: Timeline;
-  persistenceManager: AppPersistenceManager;
 }
 
-export class PlaylistNavigationService {
-  constructor(private deps: PlaylistNavigationDeps) {}
+export class FrameNavigationService {
+  constructor(private deps: FrameNavigationDeps) {}
 
   goToPlaylistStart(): void { /* move from App */ }
   goToPlaylistEnd(): void { /* move from App */ }
@@ -225,10 +127,40 @@ export class PlaylistNavigationService {
   goToPreviousAnnotation(): void { /* move from App */ }
   jumpToPlaylistGlobalFrame(globalFrame: number): void { /* move from App */ }
 
-  // Timeline editor logic
+  dispose(): void {}
+}
+```
+
+**Files to modify**:
+- `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~190 lines, delegate to service
+- Create `/Users/lifeart/Repos/openrv-web/src/services/FrameNavigationService.ts` (~190 lines)
+- Create `/Users/lifeart/Repos/openrv-web/src/services/FrameNavigationService.test.ts` (min 15 tests)
+
+#### Step 1.1b: Extract `TimelineEditorService`
+
+**Source**: Lines 1650-1771 in `App.ts` (timeline EDL/sequence integration -- 7 methods)
+
+Create `/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts`:
+
+```typescript
+export interface TimelineEditorServiceDeps {
+  session: Session;
+  playlistManager: PlaylistManager;
+  playlistPanel: PlaylistPanel;
+  timelineEditor: TimelineEditor;
+  timeline: Timeline;
+  persistenceManager: AppPersistenceManager;
+}
+
+export class TimelineEditorService {
+  constructor(private deps: TimelineEditorServiceDeps) {}
+
   handleTimelineEditorCutSelected(cutIndex: number): void { /* move from App */ }
   applyTimelineEditorEdits(): void { /* move from App */ }
+  applyTimelineEditorEditsToPlaylist(): void { /* move from App */ }
   syncTimelineEditorFromGraph(): void { /* move from App */ }
+  normalizeTimelineEditorEDL(): void { /* move from App */ }
+  buildFallbackTimelineEDLFromSources(): void { /* move from App */ }
 
   // Wire timeline editor events
   bindTimelineEditorEvents(): void { /* move from App constructor */ }
@@ -238,11 +170,11 @@ export class PlaylistNavigationService {
 ```
 
 **Files to modify**:
-- `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~310 lines, delegate to service
-- Create `/Users/lifeart/Repos/openrv-web/src/services/PlaylistNavigationService.ts` (~310 lines)
-- Create `/Users/lifeart/Repos/openrv-web/src/services/PlaylistNavigationService.test.ts`
+- `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~120 lines, delegate to service
+- Create `/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts` (~120 lines)
+- Create `/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.test.ts` (min 12 tests)
 
-#### Step 2.2: Extract `KeyboardActionMap`
+#### Step 1.2: Extract `KeyboardActionMap`
 
 **Source**: Lines 1137-1451 in `App.ts` (`getActionHandlers()`)
 
@@ -268,7 +200,7 @@ export interface KeyboardActionDeps {
   layoutStore: LayoutStore;
   externalPresentation: ExternalPresentation;
   headerBar: HeaderBar;
-  playlistNavigation: PlaylistNavigationService;
+  frameNavigation: FrameNavigationService;
 }
 
 export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, () => void> {
@@ -276,7 +208,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
   return {
     'playback.toggle': () => session.togglePlayback(),
     'playback.stepForward': () => session.stepForward(),
-    // ... all 80 handlers moved here
+    // ... all 117 handler entries moved here
   };
 }
 ```
@@ -284,9 +216,9 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
 **Files to modify**:
 - `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~315 lines
 - Create `/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts` (~320 lines)
-- Create `/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.test.ts`
+- Create `/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.test.ts` (min 20 tests)
 
-#### Step 2.3: Extract `LayoutOrchestrator`
+#### Step 1.3: Extract `LayoutOrchestrator`
 
 **Source**: Lines 722-1033 in `App.ts` (`createLayout()`)
 
@@ -1242,3 +1174,300 @@ The plan's factual claims were validated against the actual source code. Key fin
 5. **Open Question 3 should be answered definitively.** After Phase 3, `AppControlRegistry` becomes a thin facade over control groups with compatibility shims. The plan leaves it as an open question whether to eliminate it. The recommendation is: keep it as the single access point for controls, but refactor it to compose groups (as proposed in Phase 3.3). Eliminating it entirely would force every consumer to know which group holds which control, which is an unnecessary cognitive burden. The facade pattern is appropriate here.
 
 6. **Open Question 4 should also be answered definitively.** The `AppWiringContext` should NOT be replaced by the `ServiceContainer` (or by direct container access). The existing typed context pattern is superior for wiring modules. This is correctly identified in the plan's recommendation, but it should be promoted from "recommendation" to "decision" to prevent future debates.
+
+---
+
+## Expert Review — Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+This plan correctly identifies the core problem (App as a god object with 1,875 lines and a 400-line constructor), proposes a sound decomposition strategy, and sequences the work in a risk-minimizing order. The two Round 1 reviews are thorough and complement each other well -- the QA review identified concrete testing gaps and the Expert review challenged a fundamental architectural decision (ServiceContainer vs. direct composition). After reviewing the source code and both prior assessments, the plan is implementable but requires the changes outlined below to be production-ready.
+
+### Round 1 Feedback Assessment
+
+**QA Review -- Round 1:** High quality. Identified real, verified testing gaps (AppSessionBridge, AppPersistenceManager, playlist navigation, action handlers all lack unit tests). The specific test recommendations (items 1-10) are actionable and correctly prioritized. The initialization order concern is the most critical risk flagged by either review. The test count discrepancy (15,018 claimed vs. 17,236+ actual) was correctly caught.
+
+**Expert Review -- Round 1:** Provided the strongest architectural insight of both reviews: the ServiceContainer is a service locator anti-pattern that adds indirection without a concrete use case for dynamic resolution. The recommendation to use direct composition instead is well-reasoned and aligns with the codebase's existing patterns (AppSessionBridge already uses a getter-function context interface; AppPersistenceManager uses a flat typed context). The cross-domain control access analysis (AppViewWiring touching View, Analysis, and Playback groups) is a genuine boundary-alignment problem that would surface during Phase 3.
+
+**Where the reviews agree (high-confidence findings):**
+1. The ServiceContainer's string-keyed lookup is a type-safety regression compared to the existing typed context pattern.
+2. AppSessionBridge and AppPersistenceManager need unit tests before they become service container dependencies.
+3. Dispose ordering must be explicit, not implicit via container reverse-order.
+4. The control group boundaries do not cleanly align with wiring module access patterns.
+5. The plan's test line estimates are optimistic.
+
+**Where the reviews diverge:**
+The QA review treats the ServiceContainer as a given and focuses on mitigating its risks (circular dependency detection, boot sequence tests). The Expert review questions whether the container should exist at all. I side with the Expert review on this point -- see Consolidated Required Changes below.
+
+### Consolidated Required Changes (before implementation)
+
+**1. Drop the ServiceContainer; use direct composition in the App constructor.**
+
+Both reviews note the type-safety problem. The Expert review's argument is decisive: the codebase already has three proven dependency-passing patterns (AppWiringContext for wiring modules, SessionBridgeContext for AppSessionBridge, PersistenceManagerContext for AppPersistenceManager), and none of them use a service locator. Introducing one is a pattern inconsistency that provides no concrete benefit.
+
+After the service extractions (Phase 2), the App constructor should read as a direct recipe:
+
+```typescript
+constructor() {
+  this.displayCapabilities = detectDisplayCapabilities();
+  this.session = new Session();
+  this.viewer = new Viewer({ session: this.session, ... });
+  this.renderLoop = new RenderLoopService({ session: this.session, viewer: this.viewer });
+  this.playlistNav = new PlaylistNavigationService({ session: this.session, ... });
+  this.layout = new LayoutOrchestrator({ ... });
+  // ... ~30 lines of service creation
+}
+```
+
+This eliminates Phase 1 entirely (saving 2-3 days) and removes the disposal-ordering risk. Disposal remains explicit and hand-ordered in `dispose()`, matching the current pattern. The total effort estimate drops accordingly.
+
+**2. Split PlaylistNavigationService into two modules.**
+
+The Expert review correctly identified that `PlaylistNavigationService` as proposed conflates two concerns with different dependency profiles:
+- **Frame navigation** (`goToPlaylistStart`, `goToPlaylistEnd`, `goToNextShot`, `goToPreviousShot`, `goToNextMarkOrBoundary`, `goToPreviousMarkOrBoundary`, `goToNextAnnotation`, `goToPreviousAnnotation`, `jumpToPlaylistGlobalFrame`): depends only on `session`, `playlistManager`, `playlistPanel`, and `paintEngine`.
+- **Timeline editor integration** (`handleTimelineEditorCutSelected`, `applyTimelineEditorEdits`, `syncTimelineEditorFromGraph`, `normalizeTimelineEditorEDL`, `buildFallbackTimelineEDLFromSources`, `applyTimelineEditorEditsToPlaylist`, `bindTimelineEditorEvents`): additionally depends on `timelineEditor`, `timeline`, `persistenceManager`, and `SequenceGroupNode` graph traversal.
+
+Splitting these yields smaller, more focused modules that are independently testable without over-broad mock surfaces.
+
+**3. Add baseline unit tests for AppSessionBridge and AppPersistenceManager before starting Phase 2.**
+
+Both reviews flag these as untested dependencies. The plan currently proposes no tests for them. Adding baseline coverage (even 50-100 lines each) before the refactoring begins ensures that any behavioral changes caused by the extraction are detected. This should be Phase 0, estimated at 1-2 days.
+
+**4. Add a "shim completeness" assertion to AppControlRegistry.test.ts during Phase 3.**
+
+The QA review's recommendation is critical. After the control group split, every property of the original flat API (`controls.colorControls`, `controls.cdlControl`, etc.) must still resolve to a non-undefined value through the compatibility shim. A dynamic check (`for (const key of Object.keys(originalRegistry)) { expect(newRegistry[key]).toBeDefined(); }`) is essential because TypeScript cannot catch a missing getter when the property name still exists on the type.
+
+**5. Resolve all four Open Questions in the plan before implementation begins.**
+
+- **OQ1 (Typed container?):** Moot if the container is dropped per Required Change 1.
+- **OQ2 (Wiring modules as service classes?):** Answer: No. The current pure-function pattern is already clean and testable. Both reviews agree.
+- **OQ3 (Eliminate AppControlRegistry?):** Answer: No. Keep it as a facade that composes groups. The Expert review's reasoning is sound -- eliminating it forces every consumer to know which group holds which control.
+- **OQ4 (Replace AppWiringContext with ServiceContainer?):** Answer: No. The typed context pattern is superior for wiring modules.
+
+These should be recorded as decisions, not open questions.
+
+**6. Address the control group boundary mismatch with wiring modules.**
+
+The Expert review's analysis shows that `AppViewWiring` accesses controls from at least View, Analysis, and Playback groups, while `AppPlaybackWiring` spans Panels, Playback, and Network groups. The plan's proposed group boundaries are organized by UI tab, but the wiring modules cut across tabs.
+
+Resolution: After the Phase 3 split, wiring modules should continue to receive the full `AppControlRegistry` facade (which composes all groups). The group split is an internal organization concern of the registry, not a change to the wiring module API. The compatibility shim must remain permanent (not "removed in Phase 4") for exactly this reason. The facade is not a migration artifact -- it is the correct abstraction.
+
+**7. Update the plan's test count references.**
+
+Replace "15,018 tests" and "359 files" with the verified current numbers (407 test files; run `npx vitest run` for exact test count before starting work).
+
+### Consolidated Nice-to-Haves
+
+1. **Extract contextual keyboard registration (lines 211-300) as a standalone function.** The Expert review suggests `registerContextualKeyBindings(contextualKeyboardManager, controls, session)`. This is a clean ~90-line extraction that further reduces the constructor. Low risk, high clarity improvement.
+
+2. **Extract ExternalPresentation wiring (lines 384-412) as a small wiring module.** Follows the existing `wireXxxControls()` pattern. ~30 lines. Makes the constructor more consistent.
+
+3. **Add a render loop invariant test.** Verify that `requestAnimationFrame` is called exactly once per tick and that `renderDirect()` is only invoked when the frame advances. Small effort, validates the performance-critical path.
+
+4. **Circular dependency detection in service creation.** Even without a ServiceContainer, if services are constructed inline in the App constructor, a circular construction dependency would manifest as a stack overflow or `undefined` reference. A comment documenting the dependency DAG (or a simple ASCII diagram) would help future maintainers avoid introducing cycles.
+
+5. **Address inline styles in setupTabContents.** The Expert review correctly notes that the per-tab split (Phase 3.4) does not address the underlying problem of hundreds of lines of inline CSS and imperative DOM construction. This is out of scope for this plan but should be flagged as a follow-up improvement.
+
+6. **Test the refactored App's mount/dispose lifecycle.** After Phase 4, create a minimal smoke test that calls `new App()`, `mount()`, and `dispose()` with mocked DOM, verifying no exceptions and that the dispose sequence completes without errors.
+
+### Final Risk Rating: MEDIUM
+
+The core service extractions (Phase 2) are well-bounded and individually low-risk. The control group split (Phase 3) carries the highest risk due to the shim completeness requirement and cross-cutting access patterns. Dropping the ServiceContainer reduces overall risk by eliminating the disposal ordering and type-safety concerns. The primary remaining risk is initialization order in the App constructor, which is already manually managed today and will remain so.
+
+### Final Effort Estimate: 14-18 days
+
+| Phase | Description | Days |
+|-------|-------------|------|
+| 0 (new) | Baseline tests for AppSessionBridge + AppPersistenceManager | 1-2 |
+| 2.1a | PlaylistNavigationService (frame navigation only) | 1.5 |
+| 2.1b | TimelineEditorService (EDL/sequence integration) | 1.5 |
+| 2.2 | KeyboardActionMap | 1 |
+| 2.3 | LayoutOrchestrator | 2-3 |
+| 2.4 | RenderLoopService | 0.5 |
+| 2.5 | SessionURLService | 1 |
+| 2.6 | AudioOrchestrator | 0.5 |
+| 3.1-3.2 | Control group interfaces + factories | 2 |
+| 3.3 | Refactor AppControlRegistry with permanent facade | 1.5 |
+| 3.4 | Extract tab builders | 2 |
+| 4 | Slim down App constructor (direct composition, no container) | 1 |
+| **Total** | | **15.5-17.5 days** |
+
+Note: Phase 1 (ServiceContainer) is eliminated entirely, saving 2-3 days. Phase 0 adds 1-2 days for baseline tests. Phase 4 is simplified from 2-3 days to 1 day because there is no container to wire -- it is just removing the now-delegated code from App. Net savings: ~2-3 days off the original estimate.
+
+### Implementation Readiness: READY
+
+The plan is ready for implementation once the Required Changes above are incorporated. The key decisions are:
+1. No ServiceContainer -- direct composition in App constructor.
+2. Split PlaylistNavigationService into two modules.
+3. Phase 0: baseline tests for AppSessionBridge and AppPersistenceManager.
+4. Control group facade (AppControlRegistry) is permanent, not a migration artifact.
+5. All four Open Questions answered as decisions.
+
+The existing test suite (407 files) provides strong regression coverage, TypeScript strict mode catches property access errors at compile time, and the incremental per-PR approach with full CI gates is the right execution strategy.
+
+---
+
+## QA Review -- Round 2 (Final)
+
+### Final Verdict: APPROVE WITH CHANGES
+
+The plan is well-structured, addresses a genuine maintainability problem, and has received thorough scrutiny from two independent Round 1 reviewers plus an Expert Round 2 consolidation. The fundamental extraction strategy (moving contiguous blocks of logic from a 1,875-line god object into focused service modules) is sound and well-sequenced. The Round 1 and Expert Round 2 feedback has converged on the correct set of required changes. This final QA assessment validates the consolidated recommendations and adds specific, measurable test gates that must be met before each phase can merge.
+
+### Round 1 Feedback Assessment
+
+**Both Round 1 reviews and the Expert Round 2 consolidation are high quality and mutually reinforcing.** The key conclusions are:
+
+1. **ServiceContainer removal (Expert Round 1 + Expert Round 2):** I concur. The string-keyed service locator is a type-safety regression with no compensating benefit. The codebase already has three typed dependency-passing patterns (`AppWiringContext`, `SessionBridgeContext`, `PersistenceManagerContext`). Direct composition in the App constructor preserves full type safety, keeps disposal ordering explicit, and eliminates the lazy-initialization ordering risk. The Expert Round 2's decision to drop Phase 1 entirely is correct.
+
+2. **PlaylistNavigationService split (Expert Round 1 + Expert Round 2):** I concur. The dependency profiles are genuinely different. Frame navigation needs `session` + `playlistManager` + `playlistPanel` + `paintEngine`. Timeline editor integration adds `timelineEditor`, `timeline`, `persistenceManager`, and graph traversal. Splitting produces smaller test surfaces and more focused modules.
+
+3. **Phase 0 prerequisite tests (QA Round 1 + Expert Round 2):** I concur and I am formalizing the specific test requirements below. The 764 combined lines of `AppSessionBridge` (323 lines) and `AppPersistenceManager` (441 lines) with zero direct test coverage represent the largest source of residual risk. Both modules are deeply wired into the refactored services. Without baseline tests, behavioral regressions introduced by the architectural change would be invisible.
+
+4. **Shim completeness test (QA Round 1 + Expert Round 2):** I concur. The Expert Round 2 goes further by recommending the facade be permanent rather than transitional. This is the correct decision -- the control groups are an internal organization concern, and the facade is the right abstraction layer for wiring modules.
+
+5. **Action handler count correction:** The plan states "~80 handlers," Expert Round 1 states "~90 distinct keys." I have verified the actual source code: there are **117 distinct action handler entries** in `getActionHandlers()` (lines 1137-1451). Within those, exactly 3 reference `this.activeContextManager.isContextActive('paint')` and 2 reference `this.tabBar.activeTab`. The 6 pairs of contextual keyboard registrations (R, O, L, Shift+R, Shift+B, Shift+N) are in the constructor at lines 211-300 via `contextualKeyboardManager.register()`, not inside `getActionHandlers()`. The QA Round 1 claim of "11 handlers with `isContextActive('paint')` guards" conflated these two locations. The plan and all reviews should be updated to use the correct count of 117.
+
+**One point where I diverge from the Expert Round 2:**
+
+The Expert Round 2 sets Implementation Readiness to "READY." I set it to **NEEDS WORK**. The reason: the required changes (drop ServiceContainer, split PlaylistNavigationService, add Phase 0, resolve open questions, update counts) have not yet been incorporated into the plan document itself. The reviews describe what needs to change, but the plan's Sections 3-9 still reference the ServiceContainer, still show `PlaylistNavigationService` as a single module, still list Phase 1 as ServiceContainer creation, and still carry the stale test counts. Until the plan document is updated to reflect the agreed-upon changes, the plan is not implementation-ready -- an implementer reading only Sections 1-9 would build the wrong thing.
+
+### Minimum Test Requirements (before merging each phase)
+
+All phases share a universal gate: `npx vitest run` (all tests pass, count >= baseline) and `npx tsc --noEmit` (zero type errors).
+
+**Phase 0 -- Prerequisite baseline tests (NEW, must be completed first):**
+
+| Test file | Min tests | Coverage scope |
+|-----------|-----------|---------------|
+| `AppSessionBridge.test.ts` | 10 | `bindSessionEvents()` scope scheduling, `updateInfoPanel()` data formatting, histogram callback forwarding, `dispose()` cleanup, event unsubscription |
+| `AppPersistenceManager.test.ts` | 8 | `init()` auto-save timer setup, `syncGTOStore()` serialization, `createQuickSnapshot()`, `dispose()` timer cleanup, OPFS cache integration |
+
+Record the exact test count after Phase 0 merges. This is the regression baseline for all subsequent phases.
+
+**Phase 2.1a -- PlaylistNavigationService (frame navigation):**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `PlaylistNavigationService.test.ts` | 15 | `goToPlaylistStart` with empty playlist; `goToPlaylistEnd` with single-clip playlist; `goToNextAnnotation` wrap-around when current frame > last annotated frame; `goToPreviousAnnotation` wrap-around when current frame < first annotated frame; `goToNextMarkOrBoundary` with no marks (falls through to playlist boundary); `goToPreviousMarkOrBoundary` at clip start vs mid-clip; `goToNextShot` / `goToPreviousShot` with playlist disabled (no-op); `jumpToPlaylistGlobalFrame` with out-of-range frame (mapping returns null); `jumpToPlaylistGlobalFrame` verifies source switch, in/out point set, panel highlight |
+
+**Phase 2.1b -- TimelineEditorService (EDL/sequence integration):**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `TimelineEditorService.test.ts` | 12 | `syncTimelineEditorFromGraph` with SequenceGroupNode present; same with SequenceGroupNode absent + playlist clips present; same with no clips + fallback from sources; same with empty source list; `handleTimelineEditorCutSelected` SequenceGroupNode path, playlist clip path, and EDL-entry path; `applyTimelineEditorEdits` single-cut (disables playlist, sets in/out on session), multi-cut (enables playlist), empty-cut (disables playlist); `normalizeTimelineEditorEDL` with unsorted entries, with non-finite source values, with overlapping entries; `buildFallbackTimelineEDLFromSources` with zero-duration source |
+
+**Phase 2.2 -- KeyboardActionMap:**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `KeyboardActionMap.test.ts` | 20 | All 3 `activeContextManager` guards: `playback.faster` in paint context -> `paintToolbar.handleKeyboard('l')`, `timeline.setOutPoint` in paint context -> `paintToolbar.handleKeyboard('o')`, `timeline.resetInOut` in paint context -> `paintToolbar.handleKeyboard('r')`; Both `tabBar.activeTab` guards: `view.zoom50` only fires when tab is 'view', `channel.luminance` redirects to `lutPipelinePanel.toggle()` when tab is 'color'; Playlist-enabled branching in `playback.goToStart` and `playback.goToEnd`; `panel.close` cascade: cheat sheet visible -> hides cheat sheet; presentation mode active -> toggles presentation; neither active -> closes individual panels; At least 1 representative test per category: playback (6 actions), timeline (8), view (15), panel (10), transform (4), export (2), edit (2), annotation (2), tab (6), paint (11), channel (7), stereo (3), layout (4), notes (3), focus (2), network (2), help (1), audio (1), display (1), color toggle (3) |
+
+**Phase 2.3 -- LayoutOrchestrator:**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `LayoutOrchestrator.test.ts` | 10 | DOM structure: header, tabs, context toolbar, viewer slot, timeline placed in correct parent elements; ARIA announcer instantiation and tab change announcement; 5 focus zones registered (headerBar, tabBar, contextToolbar, viewer, timeline); fullscreen manager created with correct container; image mode: `sourceLoaded` with `isSingleImage=true` hides timeline; image mode: `sourceLoaded` with `isSingleImage=false` shows timeline; presentation mode exit re-asserts image mode; 360 content auto-detection on `sourceLoaded`; overlay elements (histogram, waveform, vectorscope, gamut diagram, curves, history, info, markers, notes) appended to viewer container; `dispose()` cleans up fullscreen, focus, ARIA, shortcut cheat sheet |
+
+**Phase 2.4 -- RenderLoopService:**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `RenderLoopService.test.ts` | 6 | `start()` schedules `requestAnimationFrame`; `stop()` calls `cancelAnimationFrame`; `tick()` calls `session.update()` on every frame; `renderDirect()` called only when frame advances AND source is video AND session is playing; `renderDirect()` NOT called when frame does not advance (no-frame-advance path); `dispose()` stops the loop |
+
+**Phase 2.5 -- SessionURLService:**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `SessionURLService.test.ts` | 8 | Round-trip: `captureState()` -> `applyState()` restores frame, fps, inPoint, outPoint, sourceIndex, sourceA/B, currentAB, transform, wipeMode, wipePosition; `applyState` with partial state (missing optional fields like OCIO, sourceB); OCIO state capture and apply; `handleURLBootstrap` with `?room=ABC` sets join code; `handleURLBootstrap` with WebRTC offer token; `handleURLBootstrap` with answer token (shows info); `handleURLBootstrap` with `?room=ABC&pin=123` auto-joins; `handleURLBootstrap` with `#` hash shared state applies it |
+
+**Phase 2.6 -- AudioOrchestrator:**
+
+| Test file | Min tests | Must-cover scenarios |
+|-----------|-----------|---------------------|
+| `AudioOrchestrator.test.ts` | 6 | Playback start -> `audioMixer.play(frameTime)` with correct time; Playback stop -> `audioMixer.stop()`; `sourceLoaded` with video source triggers audio extraction (mock fetch); `sourceLoaded` with non-video source is ignored; Lazy AudioContext initialization respects `audioInitialized` flag; `dispose()` unsubscribes all event listeners and calls `audioMixer.dispose()` |
+
+**Phase 3.1-3.3 -- Control group split:**
+
+| Test | Min tests | Must-cover scenarios |
+|------|-----------|---------------------|
+| Shim completeness assertion | 1 (iterative) | Enumerate all 65 `readonly` properties of the pre-refactoring `AppControlRegistry`. After refactoring, verify each property name resolves to a non-undefined, non-null value through the compatibility facade |
+| Per-group factory tests (8 factories) | 8 (1 per factory) | Each `createXxxControls()` returns an object with all expected keys, all values are non-null instances |
+| Existing `AppControlRegistry.test.ts` | unchanged | All 502 lines of existing tests continue to pass |
+
+**Phase 3.4 -- Tab content builders:**
+
+| Test | Min tests | Must-cover scenarios |
+|------|-----------|---------------------|
+| Per-tab builder tests (6 builders) | 6 | Each `buildXxxTab()` returns an `HTMLElement` with the expected control elements attached |
+| Existing ACR-003 through ACR-011 tests | migrated or preserved | Tab content structure assertions from `AppControlRegistry.test.ts` must remain green |
+
+**Phase 4 -- Composition root rewire:**
+
+| Test | Min tests | Must-cover scenarios |
+|------|-----------|---------------------|
+| Boot sequence smoke test | 1 | Construct refactored `App`, call `mount()` on a DOM container, verify no exceptions |
+| Dispose smoke test | 1 | After `mount()`, call `dispose()`, verify no exceptions and no leaked timers/listeners |
+| `getAPIConfig()` shape test | 1 | Returned object has `session`, `viewer`, `colorControls`, `cdlControl`, `curvesControl` -- all non-undefined |
+| All 10 existing `App*.test.ts` files | unchanged | All existing wiring, control registry, and keyboard handler tests pass |
+| Test count assertion | 1 | Total test count >= Phase 0 baseline + sum of all new tests |
+
+**Summary of minimum new tests across all phases:**
+
+| Phase | New tests (minimum) |
+|-------|-------------------|
+| Phase 0 | 18 |
+| Phase 2.1a | 15 |
+| Phase 2.1b | 12 |
+| Phase 2.2 | 20 |
+| Phase 2.3 | 10 |
+| Phase 2.4 | 6 |
+| Phase 2.5 | 8 |
+| Phase 2.6 | 6 |
+| Phase 3.1-3.3 | 9 |
+| Phase 3.4 | 6 |
+| Phase 4 | 3 |
+| **Total** | **113** |
+
+This represents a net increase of at least 113 tests. The plan's original estimate of "~60 net new tests" was significantly undercount. The actual minimum to achieve adequate coverage is nearly double.
+
+### Final Risk Rating: MEDIUM
+
+**Rationale:**
+
+The service extraction phases (2.1-2.6) are individually LOW risk. Each extracts a contiguous block of code with well-defined boundaries. The functions/classes being created are pure delegations of existing logic -- no new behavior is being added, only relocated. TypeScript catches missing references at compile time, and the existing 407 test files provide strong regression coverage.
+
+The `AppControlRegistry` split (Phase 3) is MEDIUM-HIGH risk. There are 473 `controls.*` references across 12 source files (262 in `App.ts`, 211 across wiring modules and test files). Every reference must continue to resolve after the group split. The compatibility facade and shim completeness test mitigate this, but the surface area is large.
+
+Phase 4 (composition root rewire) is MEDIUM risk. The App constructor's implicit initialization ordering (400 lines, carefully sequenced) must be preserved in the new direct-composition form. The boot sequence smoke test is the primary safety net.
+
+The decision to drop the `ServiceContainer` eliminates what would have been the highest-risk element (lazy initialization ordering, disposal ordering, type-safety loss).
+
+**Residual risks not mitigated by the plan:**
+- `AppSessionBridge` (323 lines) and `AppPersistenceManager` (441 lines) have subtle timing dependencies (e.g., scope scheduling throttling, auto-save debouncing) that may behave differently when wired through new service modules. Phase 0 baseline tests reduce but do not eliminate this risk.
+- The 117 action handlers in `getActionHandlers()` reference virtually every subsystem. If the `buildActionHandlers()` pure function receives stale or incorrectly wired dependencies, the failure mode is a silent no-op on a keyboard shortcut, which is difficult to detect without explicit per-handler tests.
+
+### Implementation Readiness: NEEDS WORK
+
+The plan requires the following updates to its body (Sections 1-9) before an implementer can begin:
+
+1. **Remove Phase 1 (ServiceContainer) from Section 3, Section 4, Section 9.** Replace with the direct composition approach in Phase 4. Remove `ServiceContainer.ts`, `ServiceContainer.test.ts`, and `ServiceKeys.ts` from the new files table.
+
+2. **Split Phase 2.1 into 2.1a (PlaylistNavigationService) and 2.1b (TimelineEditorService)** in Section 3. Update the new files table in Section 4, the effort estimate in Section 9, and the migration order in Phase 5.
+
+3. **Add Phase 0 to Sections 3 and 9.** Define `AppSessionBridge.test.ts` and `AppPersistenceManager.test.ts` creation as a prerequisite phase.
+
+4. **Update Section 1 (Problem Statement):** Change "~80 keyboard action handlers" to "117 action handler entries."
+
+5. **Update Section 7 (Testing Strategy):** Replace "~60 net new tests" with ">= 113 net new tests" and incorporate the minimum test requirements table from this review.
+
+6. **Update Sections 6 and 8 (Risk Assessment and Success Metrics):** Replace "15,018 tests" with the actual current count. Update the success metrics table to show 113+ new tests, not ~60.
+
+7. **Resolve Open Questions 1-4 in Section 10** as definitive decisions, not open questions. Mark the section as "Resolved Decisions."
+
+8. **Update Phase 3 to make the facade permanent.** Remove language about "removing compatibility shims" in Phase 4. The `AppControlRegistry` facade over control groups is the intended final state, not a transitional artifact.
+
+9. **Add the `wirePlaybackControls` extra-deps wiring** to the Phase 4 code sample. The current Phase 4 sample omits the `{ getKeyboardHandler, getFullscreenManager, getAudioMixer }` second argument that `wirePlaybackControls` requires (confirmed at line 499-503 of `App.ts`).
+
+10. **Add consideration for `AppNetworkBridge` URL state deduplication** (flagged in Expert Round 1, Missing Consideration 2). After `SessionURLService` is extracted, `AppNetworkBridge` should delegate to it for `captureState`/`applyState` rather than maintaining parallel logic. This should be noted as a follow-up action item in Phase 2.5.
+
+Once these 10 updates are incorporated into the plan document, the plan will be fully implementation-ready.
