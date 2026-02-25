@@ -33,7 +33,7 @@ const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) 
 
 class TestSession extends Session {
   public setSources(s: MediaSource[]) {
-    this.sources = [];
+    (this as any)._media.resetSourcesInternal();
     s.forEach(src => {
         this.addSource(src);
         (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
@@ -62,9 +62,10 @@ describe('Session', () => {
 
   describe('file handling', () => {
     it('loadFile handles image and video', async () => {
-      // loadFile delegates to loadImageFile/loadVideoFile - mock those to avoid real I/O
-      const imgLoadSpy = vi.spyOn(session, 'loadImageFile').mockResolvedValue();
-      const vidLoadSpy = vi.spyOn(session, 'loadVideoFile').mockResolvedValue();
+      // loadFile delegates to _media.loadFile which calls _media.loadImageFile/loadVideoFile
+      const media = (session as any)._media;
+      const imgLoadSpy = vi.spyOn(media, 'loadImageFile').mockResolvedValue(undefined);
+      const vidLoadSpy = vi.spyOn(media, 'loadVideoFile').mockResolvedValue(undefined);
 
       await session.loadFile(new File([], 'test.png', { type: 'image/png' }));
       expect(imgLoadSpy).toHaveBeenCalled();
@@ -74,19 +75,20 @@ describe('Session', () => {
     });
 
     it('loadFile rethrows error and revokes URL', async () => {
-      vi.spyOn(session, 'loadImageFile').mockRejectedValue(new Error('fail'));
+      const media = (session as any)._media;
+      vi.spyOn(media, 'loadImageFile').mockRejectedValue(new Error('fail'));
       await expect(session.loadFile(new File([], 't.png', { type: 'image/png' }))).rejects.toThrow('fail');
     });
 
     it('getMediaType detects various types', () => {
-      const s = session as any;
-      expect(s.getMediaType(new File([], 't.mp4', { type: 'video/mp4' }))).toBe('video');
-      expect(s.getMediaType(new File([], 't.m4v', { type: '' }))).toBe('video');
-      expect(s.getMediaType(new File([], 't.mov', { type: '' }))).toBe('video');
-      expect(s.getMediaType(new File([], 't.qt', { type: '' }))).toBe('video');
-      expect(s.getMediaType(new File([], 't.ogv', { type: '' }))).toBe('video');
-      expect(s.getMediaType(new File([], 't.mkv', { type: 'video/x-matroska' }))).toBe('video');
-      expect(s.getMediaType(new File([], 't.jpg', { type: 'image/jpeg' }))).toBe('image');
+      const media = (session as any)._media;
+      expect(media.getMediaType(new File([], 't.mp4', { type: 'video/mp4' }))).toBe('video');
+      expect(media.getMediaType(new File([], 't.m4v', { type: '' }))).toBe('video');
+      expect(media.getMediaType(new File([], 't.mov', { type: '' }))).toBe('video');
+      expect(media.getMediaType(new File([], 't.qt', { type: '' }))).toBe('video');
+      expect(media.getMediaType(new File([], 't.ogv', { type: '' }))).toBe('video');
+      expect(media.getMediaType(new File([], 't.mkv', { type: 'video/x-matroska' }))).toBe('video');
+      expect(media.getMediaType(new File([], 't.jpg', { type: 'image/jpeg' }))).toBe('image');
     });
 
     it('loadImage succeeds', async () => {
@@ -241,7 +243,7 @@ describe('Session', () => {
         sessionInfo: { name: 'Test Session' },
       };
 
-      await (session as any).loadVideoSourcesFromGraph(mockResult);
+      await (session as any)._media.loadVideoSourcesFromGraph(mockResult);
 
       // Verify loadFile was called with the File object
       expect(loadFileSpy).toHaveBeenCalledWith(mockFile, session.fps);
@@ -289,7 +291,7 @@ describe('Session', () => {
         sessionInfo: { name: 'Test Session' },
       };
 
-      await (session as any).loadVideoSourcesFromGraph(mockResult);
+      await (session as any)._media.loadVideoSourcesFromGraph(mockResult);
 
       // Verify load was called with URL (not loadFile)
       expect(loadSpy).toHaveBeenCalledWith('https://example.com/video.mp4', 'Test Video', session.fps);
@@ -313,7 +315,7 @@ describe('Session', () => {
         sessionInfo: { name: 'Test Session' },
       };
 
-      await (session as any).loadVideoSourcesFromGraph(mockResult);
+      await (session as any)._media.loadVideoSourcesFromGraph(mockResult);
 
       // No sources should be added for non-video nodes
       const sources = (session as any).sources;
@@ -362,7 +364,7 @@ describe('Session', () => {
         sessionInfo: { name: 'Test Session' },
       };
 
-      await (session as any).loadVideoSourcesFromGraph(mockResult);
+      await (session as any)._media.loadVideoSourcesFromGraph(mockResult);
 
       expect(sourceLoadedSpy).toHaveBeenCalled();
       expect(durationChangedSpy).toHaveBeenCalledWith(100);

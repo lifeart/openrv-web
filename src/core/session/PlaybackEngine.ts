@@ -223,6 +223,16 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     this._frameIncrement = value;
   }
 
+  /** @internal Direct mutation for test/restore that bypasses play/pause logic */
+  setIsPlayingInternal(value: boolean): void {
+    this._isPlaying = value;
+  }
+
+  /** @internal Direct mutation for test/restore that bypasses event emission */
+  setPlayDirectionInternal(value: number): void {
+    this._playDirection = value;
+  }
+
   get frameCount(): number {
     return this._outPoint - this._inPoint + 1;
   }
@@ -341,6 +351,11 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   // Expose pending play promise for test access
   get pendingPlayPromise(): Promise<void> | null {
     return this._pendingPlayPromise;
+  }
+
+  /** @internal Expose pending fetch frame for backward-compat test access */
+  get pendingFetchFrame(): number | null {
+    return this._pendingFetchFrame;
   }
 
   // ---------------------------------------------------------------
@@ -933,5 +948,15 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     if (sourceB.videoSourceNode?.isUsingMediabunny()) {
       sourceB.videoSourceNode.stopPlaybackPreload();
     }
+  }
+
+  // ---------------------------------------------------------------
+  // Dispose
+  // ---------------------------------------------------------------
+
+  dispose(): void {
+    this.pause();
+    this._host = null;
+    this.removeAllListeners();
   }
 }

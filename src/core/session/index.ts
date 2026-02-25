@@ -5,6 +5,18 @@
 export { Session } from './Session';
 export type { SessionEvents, LoopMode, MediaType, MediaSource, ParsedAnnotations } from './Session';
 
+export { SessionAnnotations } from './SessionAnnotations';
+export type { SessionAnnotationEvents } from './SessionAnnotations';
+
+export { SessionGraph } from './SessionGraph';
+export type { SessionGraphEvents, SessionGraphHost } from './SessionGraph';
+
+export { SessionMedia } from './SessionMedia';
+export type { SessionMediaEvents, SessionMediaHost } from './SessionMedia';
+
+export { SessionPlayback } from './SessionPlayback';
+export type { SessionPlaybackEvents, SessionPlaybackHost } from './SessionPlayback';
+
 export { AnnotationStore } from './AnnotationStore';
 export type { AnnotationStoreCallbacks } from './AnnotationStore';
 export {

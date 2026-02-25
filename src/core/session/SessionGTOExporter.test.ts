@@ -13,10 +13,10 @@ import { LineJoin, LineCap, BrushType, StrokeMode, type PenStroke } from '../../
 
 class TestSession extends Session {
     public setMockGraph(g: Graph) {
-        this._graph = g;
+        (this as any)._sessionGraph._graph = g;
     }
     public setSources(s: MediaSource[]) {
-        this.sources = s;
+        (this as any)._media.resetSourcesInternal(s);
     }
     public setMatteSettingsForTest(matte: {
         show: boolean;
@@ -46,7 +46,7 @@ class TestSession extends Session {
         realtime?: number;
         bgColor?: [number, number, number, number];
     }) {
-        (this as any)._metadata = { realtime: 0, bgColor: [0.18, 0.18, 0.18, 1.0], ...metadata };
+        (this as any)._sessionGraph._metadata = { realtime: 0, bgColor: [0.18, 0.18, 0.18, 1.0], ...metadata };
     }
 }
 

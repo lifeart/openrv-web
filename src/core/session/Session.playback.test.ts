@@ -24,7 +24,7 @@ const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) 
 
 class TestSession extends Session {
   public setSources(s: MediaSource[]) {
-    this.sources = [];
+    (this as any)._media.resetSourcesInternal();
     s.forEach(src => {
         this.addSource(src);
         (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);

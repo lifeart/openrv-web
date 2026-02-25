@@ -34,7 +34,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
-| 1 | [Session God Object Refactoring](./IMPROVEMENT_1_PLAN.md) | **14 days** | MEDIUM | READY | All 8 changes incorporated |
+| 1 | ~~Session God Object Refactoring~~ | **14 days** | MEDIUM | **DONE** | Completed: Session decomposed into SessionAnnotations, SessionGraph, SessionMedia, SessionPlayback. Session.ts reduced from ~2450 to ~1210 lines. 2 rounds of code review + fixes. 17448 tests passing. |
 | 3 | [App Class Decomposition](./IMPROVEMENT_3_PLAN.md) | **14-18 days** | MEDIUM | READY | All 7 changes incorporated |
 | 2 | [Monolithic Shader Modularization](./IMPROVEMENT_2_PLAN.md) | **35 days** | MEDIUM | READY | All 11 changes incorporated (now 11 stages) |
 
@@ -89,3 +89,23 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 
 *Generated: 2026-02-25 by 3-expert architecture assessment panel*
 *Review status: 2 rounds complete (32 reviews total). All plans approved and updated. All 8 plans now READY.*
+
+---
+
+## Implementation Progress
+
+| # | Plan | Status | Date |
+|---|------|--------|------|
+| 1 | Session God Object Refactoring | **DONE** | 2026-02-25 |
+
+### Improvement 1 Summary
+
+Session.ts (~2450 lines) decomposed into 4 focused services via host interfaces:
+
+- **SessionAnnotations.ts** (96 lines) — markers, notes, versions, statuses, annotation store
+- **SessionGraph.ts** (498 lines) — GTO graph, metadata, EDL, property resolution
+- **SessionMedia.ts** (800 lines) — media sources, loading, frame cache
+- **SessionPlayback.ts** (482 lines) — playback engine, volume, A/B compare, audio coordinator
+- **Session.ts** (1210 lines) — composition root/facade, backward-compat proxies
+
+New test files: SessionAnnotations.test.ts (33), SessionGraph.test.ts (19), SessionMedia.test.ts (74), SessionPlayback.test.ts (63). Total: 411 test files, 17448 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
