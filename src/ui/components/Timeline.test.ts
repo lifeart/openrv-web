@@ -11,7 +11,7 @@ import type { Annotation } from '../../paint/types';
 
 class TestTimeline extends Timeline {
   public drawCount = 0;
-  
+
   public setSize(w: number, h: number) {
     this.width = w;
     this.height = h;
@@ -41,7 +41,28 @@ describe('Timeline', () => {
   let paintEngine: PaintEngine;
   let timeline: TestTimeline;
 
+  // rAF mock infrastructure for draw coalescing
+  let rafCallbacks: FrameRequestCallback[];
+  let nextRafId: number;
+
+  function flushRaf() {
+    const cbs = rafCallbacks.splice(0);
+    cbs.forEach(cb => cb(performance.now()));
+  }
+
   beforeEach(() => {
+    // Set up rAF mock
+    rafCallbacks = [];
+    nextRafId = 1;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      const id = nextRafId++;
+      rafCallbacks.push(cb);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (_id: number) => {
+      // Simple implementation; accurate cancel tested in TML-COAL-002
+    });
+
     // Clear persisted timeline display mode so each test starts fresh
     try { localStorage.removeItem('openrv.timeline.displayMode'); } catch { /* noop */ }
 
@@ -60,7 +81,7 @@ describe('Timeline', () => {
 
     paintEngine = new PaintEngine();
     timeline = new TestTimeline(session, paintEngine);
-    
+
     // Mock getBoundingClientRect
     const container = timeline.render();
     vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
@@ -74,12 +95,17 @@ describe('Timeline', () => {
       y: 0,
       toJSON: () => {},
     } as DOMRect);
-    
+
     timeline.setSize(1000, 100);
+
+    // Flush the initial render rAF so tests start with a clean slate
+    flushRaf();
+    timeline.drawCount = 0;
   });
 
   afterEach(() => {
     timeline.dispose();
+    vi.unstubAllGlobals();
   });
 
   describe('initialization', () => {
@@ -119,12 +145,14 @@ describe('Timeline', () => {
     it('TML-006: responds to frameChanged event', () => {
       timeline.drawCount = 0;
       session.currentFrame = 10;
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-007: responds to playbackChanged event', () => {
       timeline.drawCount = 0;
       session.play();
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
@@ -147,12 +175,14 @@ describe('Timeline', () => {
     it('TML-008: responds to durationChanged event', () => {
       timeline.drawCount = 0;
       session.emit('durationChanged', 100);
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-009: responds to inOutChanged event', () => {
       timeline.drawCount = 0;
       session.emit('inOutChanged', { inPoint: 5, outPoint: 50 });
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
@@ -169,6 +199,7 @@ describe('Timeline', () => {
     it('TML-031: redraws when theme changes', () => {
       timeline.drawCount = 0;
       getThemeManager().emit('themeChanged', 'light');
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
@@ -176,6 +207,7 @@ describe('Timeline', () => {
       timeline.drawCount = 0;
       timeline.dispose();
       getThemeManager().emit('themeChanged', 'light');
+      flushRaf();
       expect(timeline.drawCount).toBe(0);
     });
   });
@@ -299,18 +331,21 @@ describe('Timeline', () => {
     it('TML-026: setting display mode triggers redraw', () => {
       timeline.drawCount = 0;
       timeline.timecodeDisplayMode = 'timecode';
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-027: setting same display mode does not trigger redraw', () => {
       timeline.drawCount = 0;
       timeline.timecodeDisplayMode = 'frames'; // already 'frames'
+      flushRaf();
       expect(timeline.drawCount).toBe(0);
     });
 
     it('TML-028: toggle triggers redraw', () => {
       timeline.drawCount = 0;
       timeline.toggleTimecodeDisplay();
+      flushRaf();
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
   });
@@ -327,6 +362,7 @@ describe('Timeline', () => {
       });
 
       timeline.refresh();
+      flushRaf();
 
       expect(baselineByCall.length).toBeGreaterThanOrEqual(6);
       expect(baselineByCall.slice(-2)).toEqual(['alphabetic', 'alphabetic']);
@@ -344,6 +380,7 @@ describe('Timeline', () => {
       });
 
       timeline.refresh();
+      flushRaf();
 
       expect(measureFonts.length).toBeGreaterThan(0);
       expect(measureFonts).toContain('bold 13px -apple-system, BlinkMacSystemFont, monospace');
@@ -370,6 +407,7 @@ describe('Timeline', () => {
       });
 
       timeline.refresh();
+      flushRaf();
 
       expect(frameLabelY).not.toBeNull();
       expect(metadataY).toHaveLength(2);
@@ -392,6 +430,7 @@ describe('Timeline', () => {
       });
 
       timeline.refresh();
+      flushRaf();
 
       expect(yByCall.length).toBeGreaterThan(0);
       expect(yByCall.every(Number.isFinite)).toBe(true);
@@ -677,16 +716,19 @@ describe('Timeline', () => {
       it('should still trigger redraw on each playbackChanged event', () => {
         timeline.drawCount = 0;
 
-        // Each playback change should trigger draw
+        // Each playback change should trigger draw (coalesced via rAF)
         session.emit('playbackChanged', true);
+        flushRaf();
         const afterFirstToggle = timeline.drawCount;
         expect(afterFirstToggle).toBeGreaterThan(0);
 
         session.emit('playbackChanged', false);
+        flushRaf();
         const afterSecondToggle = timeline.drawCount;
         expect(afterSecondToggle).toBeGreaterThan(afterFirstToggle);
 
         session.emit('playbackChanged', true);
+        flushRaf();
         const afterThirdToggle = timeline.drawCount;
         expect(afterThirdToggle).toBeGreaterThan(afterSecondToggle);
       });
@@ -743,6 +785,155 @@ describe('Timeline', () => {
 
       expect(loadFromVideoSpy).toHaveBeenCalled();
       expect(loadFromBlobSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Task 1.1: rAF Draw Coalescing', () => {
+    it('TML-COAL-001: 5x scheduleDraw() results in exactly 1 draw() call', () => {
+      timeline.drawCount = 0;
+      for (let i = 0; i < 5; i++) {
+        (timeline as any).scheduleDraw();
+      }
+      // Before rAF flush: drawCount should be 0
+      expect(timeline.drawCount).toBe(0);
+      // Flush the single rAF callback
+      flushRaf();
+      expect(timeline.drawCount).toBe(1);
+    });
+
+    it('TML-COAL-002: dispose() cancels pending scheduled draw', () => {
+      const cancelSpy = vi.fn();
+      vi.stubGlobal('cancelAnimationFrame', cancelSpy);
+      timeline.drawCount = 0;
+      (timeline as any).scheduleDraw();
+      const rafId = (timeline as any).scheduledRafId;
+      expect(rafId).toBeGreaterThan(0);
+      timeline.dispose();
+      // Verify cancelAnimationFrame was called with the scheduled ID
+      expect(cancelSpy).toHaveBeenCalledWith(rafId);
+      flushRaf();
+      // draw should NOT have been called after dispose (guarded by disposed flag)
+      expect(timeline.drawCount).toBe(0);
+    });
+
+    it('TML-COAL-003: scheduleDraw() after dispose is a no-op', () => {
+      timeline.dispose();
+      timeline.drawCount = 0;
+      (timeline as any).scheduleDraw();
+      flushRaf();
+      expect(timeline.drawCount).toBe(0);
+    });
+
+    it('TML-COAL-004: Multiple session events in same tick produce 1 draw', () => {
+      timeline.drawCount = 0;
+      // Fire 4 different events synchronously
+      session.emit('frameChanged', 10);
+      session.emit('inOutChanged', { inPoint: 5, outPoint: 50 });
+      session.emit('marksChanged', session.marks);
+      session.emit('loopModeChanged', 'loop');
+      // Before flush: no draws
+      expect(timeline.drawCount).toBe(0);
+      flushRaf();
+      // Exactly 1 coalesced draw
+      expect(timeline.drawCount).toBe(1);
+    });
+
+    it('TML-COAL-005: refresh() uses scheduleDraw (not synchronous draw)', () => {
+      timeline.drawCount = 0;
+      timeline.refresh();
+      // Not drawn yet
+      expect(timeline.drawCount).toBe(0);
+      flushRaf();
+      expect(timeline.drawCount).toBe(1);
+    });
+
+    it('TML-COAL-006: draw is still called directly in render() initial rAF', () => {
+      const newTimeline = new TestTimeline(session, paintEngine);
+      newTimeline.setSize(1000, 100);
+      newTimeline.drawCount = 0;
+      const container = newTimeline.render();
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        width: 1000, height: 100, top: 0, left: 0,
+        bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+      } as DOMRect);
+      flushRaf();
+      expect(newTimeline.drawCount).toBeGreaterThanOrEqual(1);
+      newTimeline.dispose();
+    });
+  });
+
+  describe('Task 1.2: CSS Color Caching', () => {
+    it('TML-COLOR-001: getColors() returns ThemeManager-derived values', () => {
+      const colors = (timeline as any).getColors();
+      const theme = getThemeManager().getColors();
+      expect(colors.background).toBe(theme.bgSecondary);
+      expect(colors.playhead).toBe(theme.accentPrimary);
+      expect(colors.mark).toBe(theme.error);
+      expect(colors.annotation).toBe(theme.warning);
+      expect(colors.text).toBe(theme.textPrimary);
+      expect(colors.textDim).toBe(theme.textMuted);
+      expect(colors.border).toBe(theme.borderPrimary);
+      expect(colors.track).toBe(theme.bgHover);
+    });
+
+    it('TML-COLOR-002: second call returns same cached reference', () => {
+      const colors1 = (timeline as any).getColors();
+      const colors2 = (timeline as any).getColors();
+      expect(colors1).toBe(colors2); // referential equality = cached
+    });
+
+    it('TML-COLOR-003: themeChanged invalidates cache', () => {
+      const colors1 = (timeline as any).getColors();
+      getThemeManager().emit('themeChanged', 'light');
+      const colors2 = (timeline as any).getColors();
+      expect(colors2).not.toBe(colors1); // new object = cache was invalidated
+    });
+
+    it('TML-COLOR-004: getComputedStyle is NOT called during draw()', () => {
+      const spy = vi.spyOn(window, 'getComputedStyle');
+      timeline.drawCount = 0;
+      // Invalidate cache and draw
+      (timeline as any).cachedColors = null;
+      (timeline as any).draw();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('TML-COLOR-005: derived rgba values use accentPrimaryRgb', () => {
+      const colors = (timeline as any).getColors();
+      const rgb = getThemeManager().getColors().accentPrimaryRgb;
+      expect(colors.played).toBe(`rgba(${rgb}, 0.2)`);
+      expect(colors.playheadShadow).toBe(`rgba(${rgb}, 0.27)`);
+      expect(colors.inOutRange).toBe(`rgba(${rgb}, 0.13)`);
+      expect(colors.waveform).toBe(`rgba(${rgb}, 0.4)`);
+    });
+  });
+
+  describe('Task 1.3: Transparent Hit-Area Removal', () => {
+    it('TML-HIT-001: draw() does not set fillStyle to transparent rgba', () => {
+      const fillStyleValues: string[] = [];
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const origSet = ctx.fillStyle;
+      let lastValue: string | CanvasGradient | CanvasPattern = origSet;
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string | CanvasGradient | CanvasPattern) { lastValue = v; if (typeof v === 'string') fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      const transparentCalls = fillStyleValues.filter(
+        v => v === 'rgba(0, 0, 0, 0)'
+      );
+      expect(transparentCalls).toHaveLength(0);
+
+      // Restore by deleting the instance property (reveals prototype)
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-HIT-002: PLAYHEAD_HIT_AREA_WIDTH constant still exists', () => {
+      expect(Timeline.PLAYHEAD_HIT_AREA_WIDTH).toBe(20);
     });
   });
 });

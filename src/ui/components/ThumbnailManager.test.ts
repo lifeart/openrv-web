@@ -785,13 +785,8 @@ describe('ThumbnailManager', () => {
 
       const drawImageSpy = vi.fn();
       const mockCtx = {
-        save: vi.fn(),
-        restore: vi.fn(),
         drawImage: drawImageSpy,
         strokeRect: vi.fn(),
-        shadowColor: '',
-        shadowBlur: 0,
-        shadowOffsetY: 0,
         strokeStyle: '',
         lineWidth: 1,
       } as unknown as CanvasRenderingContext2D;
@@ -870,9 +865,8 @@ describe('ThumbnailManager', () => {
       const getSpy = vi.spyOn(cache, 'get');
 
       const mockCtx = {
-        save: vi.fn(), restore: vi.fn(), drawImage: vi.fn(),
-        strokeRect: vi.fn(), shadowColor: '', shadowBlur: 0,
-        shadowOffsetY: 0, strokeStyle: '', lineWidth: 1,
+        drawImage: vi.fn(),
+        strokeRect: vi.fn(), strokeStyle: '', lineWidth: 1,
       } as unknown as CanvasRenderingContext2D;
 
       manager.drawThumbnails(mockCtx);
@@ -1023,6 +1017,78 @@ describe('ThumbnailManager', () => {
       expect(result.canvas).not.toBe(badCanvas);
       expect(result.canvas.width).toBe(48);
       expect(result.canvas.height).toBe(27);
+    });
+  });
+
+  describe('Task 1.4: Thumbnail Shadow Removal', () => {
+    it('TM-PERF-001: drawThumbnails does not set shadowBlur or call save/restore', () => {
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 48;
+      mockCanvas.height = 27;
+
+      manager.calculateSlots(60, 0, 500, 42, 100, 1920, 1080);
+      const slots = manager.getSlots();
+      expect(slots.length).toBeGreaterThan(0);
+      const firstSlot = slots[0]!;
+      (manager as any).addToCache(firstSlot.frame, mockCanvas);
+
+      const ctx = document.createElement('canvas').getContext('2d')!;
+      const saveSpy = vi.spyOn(ctx, 'save');
+      const restoreSpy = vi.spyOn(ctx, 'restore');
+
+      // Track shadowBlur assignments via instance-level property descriptor
+      let shadowBlurSet = false;
+      Object.defineProperty(ctx, 'shadowBlur', {
+        set() { shadowBlurSet = true; },
+        get() { return 0; },
+        configurable: true,
+      });
+
+      manager.drawThumbnails(ctx);
+
+      expect(shadowBlurSet).toBe(false);
+      expect(saveSpy).not.toHaveBeenCalled();
+      expect(restoreSpy).not.toHaveBeenCalled();
+
+      // Restore by removing instance property
+      delete (ctx as any).shadowBlur;
+    });
+
+    it('TM-PERF-002: drawThumbnails still draws images and border strokes', () => {
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 48;
+      mockCanvas.height = 27;
+
+      manager.calculateSlots(60, 0, 500, 42, 100, 1920, 1080);
+      const slots = manager.getSlots();
+      const firstSlot = slots[0]!;
+      (manager as any).addToCache(firstSlot.frame, mockCanvas);
+
+      const ctx = document.createElement('canvas').getContext('2d')!;
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+      manager.drawThumbnails(ctx);
+
+      expect(drawImageSpy).toHaveBeenCalled();
+      expect(strokeRectSpy).toHaveBeenCalled();
+    });
+
+    it('TM-PERF-003: drawThumbnails sets stroke style for border', () => {
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 48;
+      mockCanvas.height = 27;
+
+      manager.calculateSlots(60, 0, 500, 42, 100, 1920, 1080);
+      const slots = manager.getSlots();
+      const firstSlot = slots[0]!;
+      (manager as any).addToCache(firstSlot.frame, mockCanvas);
+
+      const ctx = document.createElement('canvas').getContext('2d')!;
+      manager.drawThumbnails(ctx);
+
+      expect(ctx.strokeStyle).toBe('rgba(255, 255, 255, 0.2)');
+      expect(ctx.lineWidth).toBe(0.5);
     });
   });
 

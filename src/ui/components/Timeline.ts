@@ -37,26 +37,44 @@ export class Timeline {
   private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private initialRenderFrameId: number | null = null;
   private disposed = false;
+  private drawScheduled = false;
+  private scheduledRafId = 0;
   private noteOverlay: NoteOverlay | null = null;
+  private cachedColors: {
+    background: string;
+    track: string;
+    played: string;
+    playhead: string;
+    playheadShadow: string;
+    inOutRange: string;
+    mark: string;
+    annotation: string;
+    waveform: string;
+    text: string;
+    textDim: string;
+    border: string;
+  } | null = null;
 
-  // Colors are resolved at render time from CSS variables
+  // Colors are resolved from ThemeManager and cached until theme changes
   private getColors() {
-    const style = getComputedStyle(document.documentElement);
-    const accentRgb = style.getPropertyValue('--accent-primary-rgb').trim() || '74, 158, 255';
-    return {
-      background: style.getPropertyValue('--bg-secondary').trim() || '#252525',
-      track: style.getPropertyValue('--bg-hover').trim() || '#333',
+    if (this.cachedColors) return this.cachedColors;
+    const theme = getThemeManager().getColors();
+    const accentRgb = theme.accentPrimaryRgb;
+    this.cachedColors = {
+      background: theme.bgSecondary,
+      track: theme.bgHover,
       played: `rgba(${accentRgb}, 0.2)`,
-      playhead: style.getPropertyValue('--accent-primary').trim() || '#4a9eff',
+      playhead: theme.accentPrimary,
       playheadShadow: `rgba(${accentRgb}, 0.27)`,
       inOutRange: `rgba(${accentRgb}, 0.13)`,
-      mark: style.getPropertyValue('--error').trim() || '#ff6b6b',
-      annotation: style.getPropertyValue('--warning').trim() || '#ffcc00',
+      mark: theme.error,
+      annotation: theme.warning,
       waveform: `rgba(${accentRgb}, 0.4)`,
-      text: style.getPropertyValue('--text-primary').trim() || '#ccc',
-      textDim: style.getPropertyValue('--text-muted').trim() || '#666',
-      border: style.getPropertyValue('--border-primary').trim() || '#444',
+      text: theme.textPrimary,
+      textDim: theme.textMuted,
+      border: theme.borderPrimary,
     };
+    return this.cachedColors;
   }
 
   constructor(session: Session, paintEngine?: PaintEngine) {
@@ -67,7 +85,7 @@ export class Timeline {
 
     // Set up thumbnail ready callback to trigger redraw
     this.thumbnailManager.setOnThumbnailReady(() => {
-      this.draw();
+      this.scheduleDraw();
     });
 
     this.boundHandleResize = () => {
@@ -78,11 +96,14 @@ export class Timeline {
       this.resizeDebounceTimer = setTimeout(() => {
         this.resize();
         this.recalculateThumbnails();
-        this.draw();
+        this.scheduleDraw();
       }, 150);
     };
 
-    this.boundOnThemeChange = () => this.draw();
+    this.boundOnThemeChange = () => {
+      this.cachedColors = null;
+      this.scheduleDraw();
+    };
 
     // Restore persisted timecode display mode from localStorage
     try {
@@ -131,27 +152,27 @@ export class Timeline {
     this.canvas.addEventListener('pointerup', this.onPointerUp);
 
     // Listen to session changes
-    this.session.on('frameChanged', () => this.draw());
+    this.session.on('frameChanged', () => this.scheduleDraw());
     this.session.on('playbackChanged', (isPlaying) => {
       if (isPlaying) {
         this.thumbnailManager.pauseLoading();
       } else {
         this.thumbnailManager.resumeLoading();
       }
-      this.draw();
+      this.scheduleDraw();
     });
     this.session.on('durationChanged', () => {
       this.recalculateThumbnails();
-      this.draw();
+      this.scheduleDraw();
     });
     this.session.on('sourceLoaded', () => {
       this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
       this.loadThumbnails();
-      this.draw();
+      this.scheduleDraw();
     });
-    this.session.on('inOutChanged', () => this.draw());
-    this.session.on('loopModeChanged', () => this.draw());
-    this.session.on('marksChanged', () => this.draw());
+    this.session.on('inOutChanged', () => this.scheduleDraw());
+    this.session.on('loopModeChanged', () => this.scheduleDraw());
+    this.session.on('marksChanged', () => this.scheduleDraw());
 
     // Listen to theme changes so canvas redraws with new colors
     getThemeManager().on('themeChanged', this.boundOnThemeChange);
@@ -162,9 +183,9 @@ export class Timeline {
 
   private subscribeToPaintEngine(): void {
     if (this.paintEngineSubscribed || !this.paintEngine) return;
-    this.paintEngine.on('annotationsChanged', () => this.draw());
-    this.paintEngine.on('strokeAdded', () => this.draw());
-    this.paintEngine.on('strokeRemoved', () => this.draw());
+    this.paintEngine.on('annotationsChanged', () => this.scheduleDraw());
+    this.paintEngine.on('strokeAdded', () => this.scheduleDraw());
+    this.paintEngine.on('strokeRemoved', () => this.scheduleDraw());
     this.paintEngineSubscribed = true;
   }
 
@@ -174,7 +195,7 @@ export class Timeline {
   setPaintEngine(paintEngine: PaintEngine): void {
     this.paintEngine = paintEngine;
     this.subscribeToPaintEngine();
-    this.draw();
+    this.scheduleDraw();
   }
 
   /**
@@ -182,7 +203,7 @@ export class Timeline {
    */
   setNoteOverlay(overlay: NoteOverlay): void {
     this.noteOverlay = overlay;
-    overlay.setRedrawCallback(() => this.draw());
+    overlay.setRedrawCallback(() => this.scheduleDraw());
   }
 
   /**
@@ -213,7 +234,7 @@ export class Timeline {
 
     this.waveformLoaded = success;
     if (success) {
-      this.draw();
+      this.scheduleDraw();
     }
   }
 
@@ -273,7 +294,7 @@ export class Timeline {
     } else {
       this.thumbnailManager.clear();
     }
-    this.draw();
+    this.scheduleDraw();
   }
 
   /**
@@ -295,7 +316,7 @@ export class Timeline {
       } catch {
         // localStorage may be unavailable
       }
-      this.draw();
+      this.scheduleDraw();
     }
   }
 
@@ -411,6 +432,18 @@ export class Timeline {
     // Reset transform before applying new scale to prevent accumulation
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
+  }
+
+  protected scheduleDraw(): void {
+    if (this.disposed || this.drawScheduled) return;
+    this.drawScheduled = true;
+    this.scheduledRafId = requestAnimationFrame(() => {
+      this.drawScheduled = false;
+      this.scheduledRafId = 0;
+      if (!this.disposed) {
+        this.draw();
+      }
+    });
   }
 
   protected draw(): void {
@@ -585,11 +618,6 @@ export class Timeline {
     // Draw playhead
     const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
 
-    // Playhead hit area (invisible, for pointer interaction affordance)
-    // A transparent zone of at least 20px wide around the playhead
-    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
-    ctx.fillRect(playheadX - Timeline.PLAYHEAD_HIT_AREA_WIDTH / 2, trackY - 10, Timeline.PLAYHEAD_HIT_AREA_WIDTH, trackHeight + 20);
-
     // Playhead glow
     ctx.fillStyle = colors.playheadShadow;
     ctx.beginPath();
@@ -685,7 +713,7 @@ export class Timeline {
   }
 
   refresh(): void {
-    this.draw();
+    this.scheduleDraw();
   }
 
   dispose(): void {
@@ -695,6 +723,11 @@ export class Timeline {
       cancelAnimationFrame(this.initialRenderFrameId);
       this.initialRenderFrameId = null;
     }
+    if (this.scheduledRafId !== 0) {
+      cancelAnimationFrame(this.scheduledRafId);
+      this.scheduledRafId = 0;
+    }
+    this.drawScheduled = false;
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('resize', this.boundHandleResize);

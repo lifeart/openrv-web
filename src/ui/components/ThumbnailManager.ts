@@ -332,26 +332,11 @@ export class ThumbnailManager {
     for (const slot of this.slots) {
       const thumbnail = this.getThumbnail(slot.frame);
       if (thumbnail) {
-        // Draw thumbnail with slight border/shadow
-        ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 2;
-        ctx.shadowOffsetY = 1;
-
-        ctx.drawImage(
-          thumbnail,
-          slot.x,
-          slot.y,
-          slot.width,
-          slot.height
-        );
-
-        // Draw border
+        ctx.drawImage(thumbnail, slot.x, slot.y, slot.width, slot.height);
+        // Draw subtle border
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
         ctx.lineWidth = 0.5;
         ctx.strokeRect(slot.x, slot.y, slot.width, slot.height);
-
-        ctx.restore();
       }
     }
   }
