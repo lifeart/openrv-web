@@ -449,7 +449,7 @@ Each wraps the corresponding existing function:
 
 ---
 
-### Phase 3: GPU Effect Processor Strategy
+### Phase 4: GPU Effect Processor Strategy
 
 For effects that have both CPU and GPU implementations (sharpen, noise reduction, deinterlace, film emulation), introduce a `GPUEffectProcessor` pattern using the existing `NodeProcessor` interface.
 
