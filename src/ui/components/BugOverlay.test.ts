@@ -452,3 +452,52 @@ describe('BugOverlay', () => {
     });
   });
 });
+
+describe('Compositing: display:none for inactive overlay', () => {
+  it('BUG-DISP-001: canvas starts with display:none', () => {
+    const overlay = new BugOverlay();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('BUG-DISP-002: canvas remains hidden when enabled but no image', () => {
+    const overlay = new BugOverlay();
+    overlay.enable();
+    // isVisible() = enabled && bugImage !== null => false (no image)
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('BUG-DISP-003: canvas shown when enabled AND image loaded via setImage', () => {
+    const overlay = new BugOverlay();
+    const img = new Image();
+    Object.defineProperty(img, 'naturalWidth', { value: 100 });
+    Object.defineProperty(img, 'naturalHeight', { value: 50 });
+    overlay.setImage(img);
+    // setImage() sets enabled=true and calls updateCanvasDisplay()
+    expect(overlay.getElement().style.display).toBe('');
+    overlay.dispose();
+  });
+
+  it('BUG-DISP-004: canvas hidden after removeImage()', () => {
+    const overlay = new BugOverlay();
+    const img = new Image();
+    Object.defineProperty(img, 'naturalWidth', { value: 100 });
+    Object.defineProperty(img, 'naturalHeight', { value: 50 });
+    overlay.setImage(img);
+    overlay.removeImage();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('BUG-DISP-005: canvas hidden when disabled with image loaded', () => {
+    const overlay = new BugOverlay();
+    const img = new Image();
+    Object.defineProperty(img, 'naturalWidth', { value: 100 });
+    Object.defineProperty(img, 'naturalHeight', { value: 50 });
+    overlay.setImage(img);
+    overlay.disable();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+});

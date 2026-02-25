@@ -527,3 +527,34 @@ describe('SafeAreasOverlay', () => {
     });
   });
 });
+
+describe('Compositing: display:none for inactive overlay', () => {
+  it('SA-DISP-001: canvas starts with display:none', () => {
+    const overlay = new SafeAreasOverlay();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('SA-DISP-002: canvas shown when enabled', () => {
+    const overlay = new SafeAreasOverlay();
+    overlay.setState({ enabled: true });
+    expect(overlay.getElement().style.display).toBe('');
+    overlay.dispose();
+  });
+
+  it('SA-DISP-003: canvas hidden when disabled after being enabled', () => {
+    const overlay = new SafeAreasOverlay();
+    overlay.setState({ enabled: true });
+    overlay.setState({ enabled: false });
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('SA-DISP-004: canvas shown after setViewerDimensions when enabled', () => {
+    const overlay = new SafeAreasOverlay();
+    overlay.setState({ enabled: true });
+    overlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
+    expect(overlay.getElement().style.display).toBe('');
+    overlay.dispose();
+  });
+});

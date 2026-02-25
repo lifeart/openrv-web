@@ -183,6 +183,7 @@ describe('EXRWindowOverlay', () => {
   // ---------------------------------------------------------------------------
   describe('toggle / enable / disable', () => {
     it('EXR-040: enable sets enabled to true', () => {
+      overlay.setWindows(SAMPLE_DATA_WINDOW, SAMPLE_DISPLAY_WINDOW);
       overlay.enable();
       expect(overlay.isVisible()).toBe(true);
       expect(overlay.getState().enabled).toBe(true);
@@ -196,6 +197,7 @@ describe('EXRWindowOverlay', () => {
     });
 
     it('EXR-042: toggle switches enabled state', () => {
+      overlay.setWindows(SAMPLE_DATA_WINDOW, SAMPLE_DISPLAY_WINDOW);
       overlay.toggle();
       expect(overlay.isVisible()).toBe(true);
       overlay.toggle();
@@ -392,7 +394,8 @@ describe('EXRWindowOverlay', () => {
       expect(overlay.isVisible()).toBe(false);
     });
 
-    it('EXR-091: returns true after enable', () => {
+    it('EXR-091: returns true after enable with windows', () => {
+      overlay.setWindows(SAMPLE_DATA_WINDOW, SAMPLE_DISPLAY_WINDOW);
       overlay.enable();
       expect(overlay.isVisible()).toBe(true);
     });
@@ -431,5 +434,56 @@ describe('EXRWindowOverlay', () => {
       overlay.dispose();
       expect(() => overlay.dispose()).not.toThrow();
     });
+  });
+});
+
+describe('Compositing: display:none for inactive overlay', () => {
+  it('EXR-DISP-001: canvas starts with display:none', () => {
+    const overlay = new EXRWindowOverlay();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('EXR-DISP-002: canvas shown when enabled with windows set', () => {
+    const overlay = new EXRWindowOverlay();
+    overlay.setWindows(
+      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
+      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
+    );
+    overlay.enable();
+    expect(overlay.getElement().style.display).toBe('');
+    overlay.dispose();
+  });
+
+  it('EXR-DISP-003: canvas hidden after clearWindows()', () => {
+    const overlay = new EXRWindowOverlay();
+    overlay.setWindows(
+      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
+      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
+    );
+    overlay.enable();
+    overlay.clearWindows();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('EXR-DISP-004: canvas hidden when enabled but no windows', () => {
+    const overlay = new EXRWindowOverlay();
+    overlay.enable();
+    // isVisible() = enabled && dataWindow !== null && displayWindow !== null => false
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('EXR-DISP-005: canvas hidden after disable() with windows still set', () => {
+    const overlay = new EXRWindowOverlay();
+    overlay.setWindows(
+      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
+      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
+    );
+    overlay.enable();
+    overlay.disable();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
   });
 });

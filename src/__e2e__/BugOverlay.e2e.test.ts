@@ -337,20 +337,16 @@ describe('BugOverlay E2E Integration', () => {
     });
 
     it('BUG-E2E-041: [BUG] dispose does NOT remove event listeners (CanvasOverlay.dispose is a no-op)', () => {
-      // FINDING: CanvasOverlay.dispose() is essentially a no-op (base class says
-      // "subclasses may override"). BugOverlay.dispose() only nulls the image ref
-      // but does NOT call removeAllListeners(). Events still fire after dispose.
-      //
-      // This is a minor bug: dispose should call this.removeAllListeners() to
-      // prevent leaked event handlers from firing on zombie instances.
+      // CanvasOverlay.dispose() calls removeAllListeners() to prevent leaked
+      // event handlers from firing on zombie instances.
       const bugOverlay = viewer.getBugOverlay();
       const handler = vi.fn();
       bugOverlay.on('stateChanged', handler);
 
       bugOverlay.dispose();
       bugOverlay.enable();
-      // Events STILL fire after dispose -- this documents the actual behavior
-      expect(handler).toHaveBeenCalledTimes(1);
+      // Events do NOT fire after dispose -- listeners are cleaned up
+      expect(handler).toHaveBeenCalledTimes(0);
     });
 
     it('BUG-E2E-042: viewer.dispose() disposes bug overlay', () => {

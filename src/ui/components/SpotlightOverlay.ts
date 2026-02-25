@@ -282,6 +282,8 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
    */
   setState(state: Partial<SpotlightState>): void {
     this.state = { ...this.state, ...state };
+    this.canvas.style.pointerEvents = this.state.enabled ? 'auto' : 'none';
+    this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
   }
@@ -298,8 +300,6 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
    */
   toggle(): void {
     this.setState({ enabled: !this.state.enabled });
-    // Toggle pointer events based on enabled state
-    this.canvas.style.pointerEvents = this.state.enabled ? 'auto' : 'none';
   }
 
   /**
@@ -307,7 +307,6 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
    */
   enable(): void {
     this.setState({ enabled: true });
-    this.canvas.style.pointerEvents = 'auto';
   }
 
   /**
@@ -315,7 +314,6 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
    */
   disable(): void {
     this.setState({ enabled: false });
-    this.canvas.style.pointerEvents = 'none';
   }
 
   /**

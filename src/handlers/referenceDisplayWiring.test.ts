@@ -284,6 +284,12 @@ describe('EXR overlay toggle button pattern', () => {
     const overlay = new EXRWindowOverlay();
     expect(overlay.isVisible()).toBe(false);
 
+    // isVisible() requires both enabled AND windows to be set
+    overlay.setWindows(
+      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
+      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
+    );
+
     overlay.toggle();
     expect(overlay.isVisible()).toBe(true);
 

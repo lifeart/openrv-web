@@ -49,6 +49,9 @@ export abstract class CanvasOverlay<E extends EventMap = EventMap>
       z-index: ${zIndex};
     `;
 
+    // Start hidden; subclasses will show via updateCanvasDisplay() when they become visible
+    this.canvas.style.display = 'none';
+
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error(`Failed to get 2D context for ${className}`);
     this.ctx = ctx;
@@ -88,6 +91,8 @@ export abstract class CanvasOverlay<E extends EventMap = EventMap>
         console.error(`${this.constructor.name} render failed:`, err);
       }
     }
+
+    this.updateCanvasDisplay();
   }
 
   /**
@@ -101,6 +106,14 @@ export abstract class CanvasOverlay<E extends EventMap = EventMap>
   abstract isVisible(): boolean;
 
   /**
+   * Update canvas display property based on visibility.
+   * Shows the canvas when the overlay is visible, hides it to remove from compositor when not.
+   */
+  protected updateCanvasDisplay(): void {
+    this.canvas.style.display = this.isVisible() ? '' : 'none';
+  }
+
+  /**
    * Get the canvas element for mounting in the DOM.
    */
   getElement(): HTMLCanvasElement {
@@ -111,6 +124,7 @@ export abstract class CanvasOverlay<E extends EventMap = EventMap>
    * Clean up resources. Subclasses should call super.dispose() if they override.
    */
   dispose(): void {
-    // Base class has no cleanup needed; subclasses may override.
+    this.removeAllListeners();
+    this.canvas.remove();
   }
 }

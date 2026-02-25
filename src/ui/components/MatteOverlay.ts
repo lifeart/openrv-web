@@ -57,6 +57,7 @@ export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
    */
   setSettings(settings: Partial<MatteSettings>): void {
     this.settings = { ...this.settings, ...settings };
+    this.updateCanvasDisplay();
     this.render();
     this.emit('settingsChanged', { ...this.settings });
   }

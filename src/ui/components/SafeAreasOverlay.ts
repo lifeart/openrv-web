@@ -78,6 +78,7 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    */
   setState(state: Partial<SafeAreasState>): void {
     this.state = { ...this.state, ...state };
+    this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
   }

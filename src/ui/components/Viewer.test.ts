@@ -70,12 +70,21 @@ interface TestableViewer {
     renderAnnotations: (annotations: unknown[], options: Record<string, unknown>) => void;
     getCanvas: () => HTMLCanvasElement;
   };
+  paintEngine: PaintEngine;
+  paintCtx: CanvasRenderingContext2D;
+  paintHasContent: boolean;
   renderPaint(): void;
   watermarkOverlay: {
     render(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void;
     isEnabled(): boolean;
     hasImage(): boolean;
+    on(event: string, handler: (...args: unknown[]) => void): void;
+    emit(event: string, ...args: unknown[]): void;
   };
+  watermarkCanvas: HTMLCanvasElement;
+  watermarkCtx: CanvasRenderingContext2D;
+  watermarkDirty: boolean;
+  renderWatermarkOverlayCanvas(): void;
 
   // Canvas sizing
   setCanvasSize(width: number, height: number): void;
@@ -1402,6 +1411,127 @@ describe('Viewer', () => {
       renderSpy.mockRestore();
       hasImageSpy.mockRestore();
       enabledSpy.mockRestore();
+    });
+  });
+
+  describe('Compositing: Watermark dirty flag + display:none', () => {
+    it('VWR-WM-001: watermarkDirty starts as true', () => {
+      const t = testable(viewer);
+      expect(t.watermarkDirty).toBe(true);
+    });
+
+    it('VWR-WM-002: watermark canvas not cleared when watermarkDirty is false', () => {
+      const t = testable(viewer);
+      // First render clears the dirty flag
+      t.watermarkDirty = false;
+      const clearSpy = vi.spyOn(t.watermarkCtx, 'clearRect');
+      t.renderWatermarkOverlayCanvas();
+      expect(clearSpy).not.toHaveBeenCalled();
+      clearSpy.mockRestore();
+    });
+
+    it('VWR-WM-003: watermarkDirty set to true on stateChanged', () => {
+      const t = testable(viewer);
+      t.watermarkDirty = false;
+      t.watermarkOverlay.emit('stateChanged', {});
+      expect(t.watermarkDirty).toBe(true);
+    });
+
+    it('VWR-WM-004: watermarkDirty set to true after canvas resize', () => {
+      const t = testable(viewer);
+      t.watermarkDirty = false;
+      t.setCanvasSize(800, 600);
+      expect(t.watermarkDirty).toBe(true);
+    });
+
+    it('VWR-WM-005: watermark canvas display:none when watermark disabled', () => {
+      const t = testable(viewer);
+      vi.spyOn(t.watermarkOverlay, 'isEnabled').mockReturnValue(false);
+      t.watermarkDirty = true;
+      t.renderWatermarkOverlayCanvas();
+      expect(t.watermarkCanvas.style.display).toBe('none');
+    });
+
+    it('VWR-WM-006: watermark canvas shown when GL active and watermark enabled with image', () => {
+      const t = testable(viewer);
+      t.glRendererManager._sdrWebGLRenderActive = true;
+      vi.spyOn(t.watermarkOverlay, 'isEnabled').mockReturnValue(true);
+      vi.spyOn(t.watermarkOverlay, 'hasImage').mockReturnValue(true);
+      t.watermarkDirty = true;
+      t.renderWatermarkOverlayCanvas();
+      expect(t.watermarkCanvas.style.display).toBe('');
+    });
+
+    it('VWR-WM-007: watermark canvas starts with display:none', () => {
+      const t = testable(viewer);
+      expect(t.watermarkCanvas.style.display).toBe('none');
+    });
+
+    it('VWR-WM-008: watermark re-evaluated when GL state changes', () => {
+      const t = testable(viewer);
+      // Simulate initial render to clear dirty flag
+      t.watermarkDirty = false;
+      // Now change GL state - this should force dirty recalculation
+      t.glRendererManager._sdrWebGLRenderActive = true;
+      vi.spyOn(t.watermarkOverlay, 'isEnabled').mockReturnValue(true);
+      vi.spyOn(t.watermarkOverlay, 'hasImage').mockReturnValue(true);
+      const renderSpy = vi.spyOn(t.watermarkOverlay, 'render');
+      t.renderWatermarkOverlayCanvas();
+      // Should have rendered because GL state changed
+      expect(renderSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('Compositing: Paint skip clear + display:none', () => {
+    it('VWR-PT-001: paintHasContent starts as false', () => {
+      const t = testable(viewer);
+      expect(t.paintHasContent).toBe(false);
+    });
+
+    it('VWR-PT-002: paint canvas not cleared when no annotations and no prior content', () => {
+      const t = testable(viewer);
+      t.displayWidth = 800;
+      t.displayHeight = 600;
+      t.paintHasContent = false;
+      const clearSpy = vi.spyOn(t.paintCtx, 'clearRect');
+      vi.spyOn(t.paintEngine, 'getAnnotationsWithGhost').mockReturnValue([]);
+      t.renderPaint();
+      expect(clearSpy).not.toHaveBeenCalled();
+      clearSpy.mockRestore();
+    });
+
+    it('VWR-PT-003: paint canvas cleared when switching from annotations to no annotations', () => {
+      const t = testable(viewer);
+      t.displayWidth = 800;
+      t.displayHeight = 600;
+      t.paintHasContent = true;
+      t.paintCanvas.style.display = '';
+      const clearSpy = vi.spyOn(t.paintCtx, 'clearRect');
+      vi.spyOn(t.paintEngine, 'getAnnotationsWithGhost').mockReturnValue([]);
+      t.renderPaint();
+      expect(clearSpy).toHaveBeenCalled();
+      expect(t.paintHasContent).toBe(false);
+      expect(t.paintCanvas.style.display).toBe('none');
+      clearSpy.mockRestore();
+    });
+
+    it('VWR-PT-004: paint canvas starts with display:none', () => {
+      const t = testable(viewer);
+      expect(t.paintCanvas.style.display).toBe('none');
+    });
+
+    it('VWR-PT-005: paint canvas shown during live stroke', () => {
+      const t = testable(viewer);
+      t.paintCanvas.style.display = 'none';
+      // Simulate live drawing state using defineProperty since drawing is a getter
+      const inputHandler = (t as unknown as { inputHandler: Record<string, unknown> }).inputHandler;
+      Object.defineProperty(inputHandler, 'drawing', { value: true, configurable: true });
+      Object.defineProperty(inputHandler, 'currentLivePoints', { value: [{ x: 0, y: 0 }], configurable: true });
+      Object.defineProperty(inputHandler, 'drawingShape', { value: false, configurable: true });
+      Object.defineProperty(inputHandler, 'advancedDrawing', { value: false, configurable: true });
+      vi.spyOn(inputHandler as { renderLiveStroke: () => void }, 'renderLiveStroke').mockImplementation(() => {});
+      viewer.render();
+      expect(t.paintCanvas.style.display).toBe('');
     });
   });
 

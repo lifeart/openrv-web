@@ -76,6 +76,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   setWindows(dataWindow: EXRBox2i, displayWindow: EXRBox2i): void {
     this.dataWindow = { ...dataWindow };
     this.displayWindow = { ...displayWindow };
+    this.updateCanvasDisplay();
     this.render();
   }
 
@@ -85,6 +86,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   clearWindows(): void {
     this.dataWindow = null;
     this.displayWindow = null;
+    this.updateCanvasDisplay();
     this.render();
   }
 
@@ -119,6 +121,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
 
   setState(partial: Partial<EXRWindowOverlayState>): void {
     this.state = { ...this.state, ...partial };
+    this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
   }
@@ -278,6 +281,6 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   // -------------------------------------------------------------------------
 
   isVisible(): boolean {
-    return this.state.enabled;
+    return this.state.enabled && this.dataWindow !== null && this.displayWindow !== null;
   }
 }

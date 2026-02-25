@@ -152,6 +152,9 @@ export class Viewer {
   private imageCtx: CanvasRenderingContext2D;
   private watermarkCtx: CanvasRenderingContext2D;
   private paintCtx: CanvasRenderingContext2D;
+  private watermarkDirty = true;
+  private lastWatermarkGLActive = false;
+  private paintHasContent = false;
   private session: Session;
 
   // Paint system
@@ -518,6 +521,7 @@ export class Viewer {
       top: 0;
       left: 0;
       pointer-events: none;
+      display: none;
     `;
     this.canvasContainer.appendChild(this.watermarkCanvas);
 
@@ -529,6 +533,7 @@ export class Viewer {
       top: 0;
       left: 0;
       pointer-events: none;
+      display: none;
     `;
     this.canvasContainer.appendChild(this.paintCanvas);
 
@@ -558,6 +563,7 @@ export class Viewer {
 
     // Re-render when watermark settings change
     this.watermarkOverlay.on('stateChanged', () => {
+      this.watermarkDirty = true;
       this.scheduleRender();
     });
 
@@ -774,6 +780,7 @@ export class Viewer {
     resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
     // Watermark overlay canvas matches image canvas logical dimensions.
     resetCanvasFromHiDPI(this.watermarkCanvas, this.watermarkCtx, width, height);
+    this.watermarkDirty = true;
 
     // Paint canvas at PHYSICAL resolution with CSS logical sizing for retina annotations
     const containerRect = this.getContainerRect();
@@ -1195,8 +1202,10 @@ export class Viewer {
     // If actively drawing, render with live stroke/shape; otherwise just paint
     PerfTrace.begin('paint+crop');
     if (this.inputHandler.drawing && this.inputHandler.currentLivePoints.length > 0) {
+      this.paintCanvas.style.display = '';
       this.inputHandler.renderLiveStroke();
     } else if (this.inputHandler.drawingShape && this.inputHandler.currentShapeStart && this.inputHandler.currentShapeCurrent) {
+      this.paintCanvas.style.display = '';
       this.inputHandler.renderLiveShape();
     } else if (!this.inputHandler.advancedDrawing) {
       // Skip renderPaint during advanced tool strokes so annotations overlay
@@ -2117,6 +2126,23 @@ export class Viewer {
   private renderPaint(): void {
     if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
+    // Get annotations with ghost effect, filtering by current A/B version
+    const version = this.paintEngine.annotationVersion;
+    const versionFilter = (version === 'all') ? undefined : version;
+    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter);
+
+    if (annotations.length === 0) {
+      // Only clear if we previously had content
+      if (this.paintHasContent) {
+        const ctx = this.paintCtx;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
+        this.paintHasContent = false;
+        this.paintCanvas.style.display = 'none';
+      }
+      return;
+    }
+
     // Keep paint surface in sync with current viewport and pan offset so
     // off-image annotations remain visible around the image area.
     const containerRect = this.getContainerRect();
@@ -2126,13 +2152,6 @@ export class Viewer {
     // Clear at physical resolution (no DPR scale on paint canvas context)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
-
-    // Get annotations with ghost effect, filtering by current A/B version
-    const version = this.paintEngine.annotationVersion;
-    const versionFilter = (version === 'all') ? undefined : version;
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter);
-
-    if (annotations.length === 0) return;
 
     const dpr = window.devicePixelRatio || 1;
 
@@ -2149,6 +2168,8 @@ export class Viewer {
 
     // Copy physical-resolution PaintRenderer canvas to physical-resolution paint canvas
     ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
+    this.paintHasContent = true;
+    this.paintCanvas.style.display = '';
   }
 
   /**
@@ -2156,13 +2177,21 @@ export class Viewer {
    * In the 2D path, watermark is drawn directly into imageCanvas at the end of renderImage().
    */
   private renderWatermarkOverlayCanvas(): void {
+    const isWebGLActive = this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive;
+    if (isWebGLActive !== this.lastWatermarkGLActive) {
+      this.watermarkDirty = true;
+      this.lastWatermarkGLActive = isWebGLActive;
+    }
+
+    if (!this.watermarkDirty) return;
+    this.watermarkDirty = false;
+    const shouldRender = isWebGLActive && this.watermarkOverlay.isEnabled() && this.watermarkOverlay.hasImage();
+    this.watermarkCanvas.style.display = shouldRender ? '' : 'none';
+
+    if (!shouldRender) return;
+
     this.watermarkCtx.setTransform(1, 0, 0, 1, 0, 0);
     this.watermarkCtx.clearRect(0, 0, this.watermarkCanvas.width, this.watermarkCanvas.height);
-
-    const isWebGLActive = this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive;
-    if (!isWebGLActive) return;
-    if (!this.watermarkOverlay.isEnabled() || !this.watermarkOverlay.hasImage()) return;
-
     this.watermarkOverlay.render(this.watermarkCtx, this.displayWidth, this.displayHeight);
   }
 

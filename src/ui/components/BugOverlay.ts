@@ -83,6 +83,7 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
         this.imageHeight = img.naturalHeight;
         this.state.imageUrl = url;
         this.state.enabled = true;
+        this.updateCanvasDisplay();
         this.render();
         this.emit('imageLoaded', { width: this.imageWidth, height: this.imageHeight });
         this.emit('stateChanged', { ...this.state });
@@ -106,6 +107,7 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
     this.imageWidth = img.naturalWidth || img.width;
     this.imageHeight = img.naturalHeight || img.height;
     this.state.enabled = true;
+    this.updateCanvasDisplay();
     this.render();
     this.emit('imageLoaded', { width: this.imageWidth, height: this.imageHeight });
     this.emit('stateChanged', { ...this.state });
@@ -120,6 +122,7 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
     this.imageHeight = 0;
     this.state.imageUrl = null;
     this.state.enabled = false;
+    this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
   }
@@ -146,6 +149,7 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
     if (validated.opacity !== undefined) validated.opacity = clamp(validated.opacity, 0, 1);
     if (validated.margin !== undefined) validated.margin = clamp(validated.margin, 0, 100);
     this.state = { ...this.state, ...validated };
+    this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
   }

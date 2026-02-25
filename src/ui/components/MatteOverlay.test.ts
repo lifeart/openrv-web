@@ -397,3 +397,26 @@ describe('MatteOverlay', () => {
     });
   });
 });
+
+describe('Compositing: display:none for inactive overlay', () => {
+  it('MATTE-DISP-001: canvas starts with display:none', () => {
+    const overlay = new MatteOverlay();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('MATTE-DISP-002: canvas shown when show is true', () => {
+    const overlay = new MatteOverlay();
+    overlay.setSettings({ show: true });
+    expect(overlay.getElement().style.display).toBe('');
+    overlay.dispose();
+  });
+
+  it('MATTE-DISP-003: canvas hidden when show set to false', () => {
+    const overlay = new MatteOverlay();
+    overlay.setSettings({ show: true });
+    overlay.setSettings({ show: false });
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+});

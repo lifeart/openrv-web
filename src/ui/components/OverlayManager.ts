@@ -7,6 +7,10 @@
  * canvas container, handles dimension updates on resize, and disposes them
  * on teardown.
  *
+ * DOM-based overlays (SafeAreas, Matte, Timecode, Spotlight, Bug, EXRWindow)
+ * are lazily created on first access to reduce startup overhead and avoid
+ * unnecessary GPU compositing layers.
+ *
  * Pixel-level overlay *application* (FalseColor.apply, ZebraStripes.apply, etc.)
  * remains in the Viewer rendering pipeline — the manager simply provides
  * typed accessors so the Viewer (and external consumers) can reach each overlay.
@@ -37,13 +41,13 @@ export interface OverlayManagerCallbacks {
 }
 
 export class OverlayManager {
-  // DOM-based overlays (append their own canvas/element to the container)
-  private readonly safeAreasOverlay: SafeAreasOverlay;
-  private readonly matteOverlay: MatteOverlay;
-  private readonly timecodeOverlay: TimecodeOverlay;
-  private readonly spotlightOverlay: SpotlightOverlay;
-  private readonly bugOverlay: BugOverlay;
-  private readonly exrWindowOverlay: EXRWindowOverlay;
+  // DOM-based overlays — lazily created on first access
+  private _safeAreasOverlay: SafeAreasOverlay | null = null;
+  private _matteOverlay: MatteOverlay | null = null;
+  private _timecodeOverlay: TimecodeOverlay | null = null;
+  private _spotlightOverlay: SpotlightOverlay | null = null;
+  private _bugOverlay: BugOverlay | null = null;
+  private _exrWindowOverlay: EXRWindowOverlay | null = null;
 
   // Non-DOM overlays (pixel probe has its own floating panel)
   private readonly pixelProbe: PixelProbe;
@@ -54,36 +58,19 @@ export class OverlayManager {
   private readonly zebraStripes: ZebraStripes;
   private readonly clippingOverlay: ClippingOverlay;
 
+  // Stored for lazy overlay creation
+  private readonly canvasContainer: HTMLElement;
+  private readonly session: Session;
+  private lastWidth = 0;
+  private lastHeight = 0;
+
   constructor(
     canvasContainer: HTMLElement,
     session: Session,
     callbacks: OverlayManagerCallbacks,
   ) {
-    // --- DOM-based overlays ---
-
-    // Safe areas overlay
-    this.safeAreasOverlay = new SafeAreasOverlay();
-    canvasContainer.appendChild(this.safeAreasOverlay.getElement());
-
-    // Matte overlay (below safe areas, z-index 40)
-    this.matteOverlay = new MatteOverlay();
-    canvasContainer.appendChild(this.matteOverlay.getElement());
-
-    // Timecode overlay
-    this.timecodeOverlay = new TimecodeOverlay(session);
-    canvasContainer.appendChild(this.timecodeOverlay.getElement());
-
-    // Spotlight overlay
-    this.spotlightOverlay = new SpotlightOverlay();
-    canvasContainer.appendChild(this.spotlightOverlay.getElement());
-
-    // Bug overlay (corner logo/watermark)
-    this.bugOverlay = new BugOverlay();
-    canvasContainer.appendChild(this.bugOverlay.getElement());
-
-    // EXR window overlay (data/display window boundaries)
-    this.exrWindowOverlay = new EXRWindowOverlay();
-    canvasContainer.appendChild(this.exrWindowOverlay.getElement());
+    this.canvasContainer = canvasContainer;
+    this.session = session;
 
     // --- Non-DOM overlays ---
 
@@ -123,6 +110,16 @@ export class OverlayManager {
   }
 
   // ---------------------------------------------------------------------------
+  // Lazy overlay creation helpers
+  // ---------------------------------------------------------------------------
+
+  private applyStoredDimensions(overlay: { setViewerDimensions: (w: number, h: number, ox: number, oy: number, dw: number, dh: number) => void }): void {
+    if (this.lastWidth > 0 || this.lastHeight > 0) {
+      overlay.setViewerDimensions(this.lastWidth, this.lastHeight, 0, 0, this.lastWidth, this.lastHeight);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Dimension management
   // ---------------------------------------------------------------------------
 
@@ -131,56 +128,80 @@ export class OverlayManager {
    * Called whenever the canvas resizes.
    */
   updateDimensions(width: number, height: number): void {
-    // Update safe areas overlay dimensions
-    try {
-      this.safeAreasOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-    } catch (err) {
-      console.error('SafeAreasOverlay setViewerDimensions failed:', err);
+    this.lastWidth = width;
+    this.lastHeight = height;
+
+    // Only update already-created overlays; uncreated ones will receive
+    // stored dimensions when lazily created.
+    if (this._safeAreasOverlay) {
+      try {
+        this._safeAreasOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+      } catch (err) {
+        console.error('SafeAreasOverlay setViewerDimensions failed:', err);
+      }
     }
 
-    // Update matte overlay dimensions
-    try {
-      this.matteOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-    } catch (err) {
-      console.error('MatteOverlay setViewerDimensions failed:', err);
+    if (this._matteOverlay) {
+      try {
+        this._matteOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+      } catch (err) {
+        console.error('MatteOverlay setViewerDimensions failed:', err);
+      }
     }
 
-    // Update spotlight overlay dimensions
-    try {
-      this.spotlightOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-    } catch (err) {
-      console.error('SpotlightOverlay setViewerDimensions failed:', err);
+    if (this._spotlightOverlay) {
+      try {
+        this._spotlightOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+      } catch (err) {
+        console.error('SpotlightOverlay setViewerDimensions failed:', err);
+      }
     }
 
-    // Update bug overlay dimensions
-    try {
-      this.bugOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-    } catch (err) {
-      console.error('BugOverlay setViewerDimensions failed:', err);
+    if (this._bugOverlay) {
+      try {
+        this._bugOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+      } catch (err) {
+        console.error('BugOverlay setViewerDimensions failed:', err);
+      }
     }
 
-    // Update EXR window overlay dimensions
-    try {
-      this.exrWindowOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-    } catch (err) {
-      console.error('EXRWindowOverlay setViewerDimensions failed:', err);
+    if (this._exrWindowOverlay) {
+      try {
+        this._exrWindowOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+      } catch (err) {
+        console.error('EXRWindowOverlay setViewerDimensions failed:', err);
+      }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Typed accessors
+  // Typed accessors (lazy creation on first access)
   // ---------------------------------------------------------------------------
 
   getSafeAreasOverlay(): SafeAreasOverlay {
-    return this.safeAreasOverlay;
+    if (!this._safeAreasOverlay) {
+      this._safeAreasOverlay = new SafeAreasOverlay();
+      this.canvasContainer.appendChild(this._safeAreasOverlay.getElement());
+      this.applyStoredDimensions(this._safeAreasOverlay);
+    }
+    return this._safeAreasOverlay;
   }
 
   getMatteOverlay(): MatteOverlay {
-    return this.matteOverlay;
+    if (!this._matteOverlay) {
+      this._matteOverlay = new MatteOverlay();
+      this.canvasContainer.appendChild(this._matteOverlay.getElement());
+      this.applyStoredDimensions(this._matteOverlay);
+    }
+    return this._matteOverlay;
   }
 
   getTimecodeOverlay(): TimecodeOverlay {
-    return this.timecodeOverlay;
+    if (!this._timecodeOverlay) {
+      this._timecodeOverlay = new TimecodeOverlay(this.session);
+      this.canvasContainer.appendChild(this._timecodeOverlay.getElement());
+    }
+    return this._timecodeOverlay;
   }
 
   getPixelProbe(): PixelProbe {
@@ -204,15 +225,30 @@ export class OverlayManager {
   }
 
   getSpotlightOverlay(): SpotlightOverlay {
-    return this.spotlightOverlay;
+    if (!this._spotlightOverlay) {
+      this._spotlightOverlay = new SpotlightOverlay();
+      this.canvasContainer.appendChild(this._spotlightOverlay.getElement());
+      this.applyStoredDimensions(this._spotlightOverlay);
+    }
+    return this._spotlightOverlay;
   }
 
   getBugOverlay(): BugOverlay {
-    return this.bugOverlay;
+    if (!this._bugOverlay) {
+      this._bugOverlay = new BugOverlay();
+      this.canvasContainer.appendChild(this._bugOverlay.getElement());
+      this.applyStoredDimensions(this._bugOverlay);
+    }
+    return this._bugOverlay;
   }
 
   getEXRWindowOverlay(): EXRWindowOverlay {
-    return this.exrWindowOverlay;
+    if (!this._exrWindowOverlay) {
+      this._exrWindowOverlay = new EXRWindowOverlay();
+      this.canvasContainer.appendChild(this._exrWindowOverlay.getElement());
+      this.applyStoredDimensions(this._exrWindowOverlay);
+    }
+    return this._exrWindowOverlay;
   }
 
   // ---------------------------------------------------------------------------
@@ -227,8 +263,12 @@ export class OverlayManager {
     this.luminanceVisualization.dispose();
     this.falseColor.dispose();
     this.zebraStripes.dispose();
-    this.spotlightOverlay.dispose();
-    this.bugOverlay.dispose();
-    this.exrWindowOverlay.dispose();
+    this.pixelProbe.dispose();
+    this._safeAreasOverlay?.dispose();
+    this._matteOverlay?.dispose();
+    this._timecodeOverlay?.dispose();
+    this._spotlightOverlay?.dispose();
+    this._bugOverlay?.dispose();
+    this._exrWindowOverlay?.dispose();
   }
 }

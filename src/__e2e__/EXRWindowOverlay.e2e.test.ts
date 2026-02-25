@@ -307,6 +307,12 @@ describe('EXRWindowOverlay E2E Integration', () => {
     it('EXR-E2E-030: enable/disable/toggle cycle', () => {
       const overlay = viewer.getEXRWindowOverlay();
 
+      // isVisible() requires both enabled AND windows to be set
+      overlay.setWindows(
+        { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
+        { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
+      );
+
       overlay.enable();
       expect(overlay.isVisible()).toBe(true);
 
@@ -382,30 +388,27 @@ describe('EXRWindowOverlay E2E Integration', () => {
     });
 
     it('EXR-E2E-041: [BUG] dispose does NOT remove event listeners (CanvasOverlay.dispose is a no-op)', () => {
-      // FINDING: CanvasOverlay.dispose() is essentially a no-op.
-      // EXRWindowOverlay does not override dispose(), so it inherits the base no-op.
-      // Events still fire after dispose. This is a minor bug: dispose should call
-      // this.removeAllListeners() to prevent leaked handlers.
+      // CanvasOverlay.dispose() calls removeAllListeners() to prevent leaked handlers.
       const overlay = viewer.getEXRWindowOverlay();
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
 
       overlay.dispose();
       overlay.enable();
-      // Events STILL fire after dispose -- documents actual behavior
-      expect(handler).toHaveBeenCalledTimes(1);
+      // Events do NOT fire after dispose -- listeners are cleaned up
+      expect(handler).toHaveBeenCalledTimes(0);
     });
 
-    it('EXR-E2E-042: [BUG] viewer.dispose() does not remove EXR overlay event listeners', () => {
-      // Same root cause as EXR-E2E-041: dispose chain does not removeAllListeners
+    it('EXR-E2E-042: viewer.dispose() removes EXR overlay event listeners', () => {
+      // dispose chain calls removeAllListeners() via CanvasOverlay.dispose()
       const overlay = viewer.getEXRWindowOverlay();
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
 
       viewer.dispose();
       overlay.enable();
-      // Events STILL fire -- documents actual behavior
-      expect(handler).toHaveBeenCalledTimes(1);
+      // Events do NOT fire after dispose -- listeners are cleaned up
+      expect(handler).toHaveBeenCalledTimes(0);
     });
 
     it('EXR-E2E-043: dispose is idempotent', () => {

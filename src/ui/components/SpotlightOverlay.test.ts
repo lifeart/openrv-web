@@ -552,3 +552,28 @@ describe('SpotlightOverlay shapes', () => {
     });
   });
 });
+
+describe('Compositing: display:none for inactive overlay', () => {
+  it('SPOT-DISP-001: canvas starts with display:none', () => {
+    const overlay = new SpotlightOverlay();
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+
+  it('SPOT-DISP-002: canvas shown when enabled', () => {
+    const overlay = new SpotlightOverlay();
+    overlay.enable();
+    expect(overlay.getElement().style.display).toBe('');
+    overlay.dispose();
+  });
+
+  it('SPOT-DISP-003: pointer-events and display both managed on toggle', () => {
+    const overlay = new SpotlightOverlay();
+    overlay.toggle(); // enables
+    expect(overlay.getElement().style.display).toBe('');
+    expect(overlay.getElement().style.pointerEvents).toBe('auto');
+    overlay.toggle(); // disables
+    expect(overlay.getElement().style.display).toBe('none');
+    overlay.dispose();
+  });
+});
