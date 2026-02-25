@@ -188,6 +188,8 @@ openrv-web/
 │   │   └── index.ts             # Module exports
 │   │
 │   ├── audio/                   # Audio handling
+│   │   ├── AudioCoordinator.ts  # Audio coordination
+│   │   ├── AudioMixer.ts        # Multi-source audio mixing
 │   │   ├── AudioPlaybackManager.ts # Web Audio API playback
 │   │   └── WaveformRenderer.ts  # Audio waveform rendering
 │   │
@@ -214,15 +216,42 @@ openrv-web/
 │   │   ├── TetrahedralInterp.ts # Tetrahedral LUT interpolation
 │   │   ├── TransferFunctions.ts # EOTF/OETF transfer functions
 │   │   ├── WebGLLUT.ts          # GPU-accelerated LUT processing
-│   │   └── pipeline/            # LUT pipeline system
-│   │       ├── GPULUTChain.ts   # GPU LUT chain processing
-│   │       ├── LUTPipeline.ts   # LUT pipeline orchestration
-│   │       ├── LUTPipelineState.ts # Pipeline state management
-│   │       ├── LUTStage.ts      # Individual LUT stage
-│   │       └── PreCacheLUTStage.ts # Pre-cached LUT stage
+│   │   ├── AutoExposureController.ts # Auto exposure analysis
+│   │   ├── CIE1931Data.ts       # CIE 1931 color space data
+│   │   ├── ColorProcessingFacade.ts # Color processing orchestration
+│   │   ├── ICCProfile.ts        # ICC profile handling
+│   │   ├── LUTPresets.ts        # LUT preset library
+│   │   ├── OCIOPresets.ts       # OCIO preset library
+│   │   ├── PixelMath.ts         # Pixel-level math operations
+│   │   ├── SceneAnalysis.ts     # Scene analysis (exposure, etc.)
+│   │   ├── TemporalSmoother.ts  # Temporal filtering
+│   │   ├── pipeline/            # LUT pipeline system
+│   │   │   ├── GPULUTChain.ts   # GPU LUT chain processing
+│   │   │   ├── LUTPipeline.ts   # LUT pipeline orchestration
+│   │   │   ├── LUTPipelineState.ts # Pipeline state management
+│   │   │   ├── LUTStage.ts      # Individual LUT stage
+│   │   │   └── PreCacheLUTStage.ts # Pre-cached LUT stage
+│   │   └── wasm/                # WebAssembly OCIO processing
+│   │       ├── OCIOShaderTranslator.ts
+│   │       ├── OCIOVirtualFS.ts
+│   │       ├── OCIOWasmBridge.ts
+│   │       ├── OCIOWasmModule.ts
+│   │       └── OCIOWasmPipeline.ts
+│   │
+│   ├── cache/                   # Media caching system
+│   │   ├── MediaCacheKey.ts     # Cache key generation
+│   │   └── MediaCacheManager.ts # Cache management with policies
 │   │
 │   ├── composite/               # Compositing operations
 │   │   └── BlendModes.ts        # Blend mode implementations
+│   │
+│   ├── config/                  # Application configuration
+│   │   ├── Config.ts            # Main configuration
+│   │   ├── ImageLimits.ts       # Image size/memory limits
+│   │   ├── PlaybackConfig.ts    # Playback settings
+│   │   ├── RenderConfig.ts      # Render settings
+│   │   ├── TimingConfig.ts      # Timing settings
+│   │   └── UIConfig.ts          # UI settings
 │   │
 │   ├── core/                    # Core infrastructure
 │   │   ├── graph/               # Node graph system
@@ -238,15 +267,45 @@ openrv-web/
 │   │       ├── SessionGTOStore.ts # GTO property storage/retrieval
 │   │       ├── SessionGTOExporter.ts # Export session to GTO format
 │   │       ├── GTOGraphLoader.ts # Node graph from GTO
+│   │       ├── ABCompareManager.ts # A/B comparison state
+│   │       ├── AnnotationStore.ts # Annotation storage
 │   │       ├── AutoSaveManager.ts # Auto-save to IndexedDB
-│   │       ├── SnapshotManager.ts # Session version snapshots
+│   │       ├── MarkerManager.ts  # Timeline marker management
+│   │       ├── MediaManager.ts   # Media management
+│   │       ├── NoteManager.ts    # Notes/annotations
+│   │       ├── PlaybackEngine.ts # Playback engine (core)
+│   │       ├── PlaybackTimingController.ts # Playback timing
 │   │       ├── PlaylistManager.ts # Multi-clip playlist management
+│   │       ├── PropertyResolver.ts # Property resolution
+│   │       ├── SessionURLManager.ts # URL state management
+│   │       ├── SnapshotManager.ts # Session version snapshots
+│   │       ├── StatusManager.ts  # Status management
+│   │       ├── TransitionManager.ts # Transition management
+│   │       ├── VersionManager.ts # Version tracking
+│   │       ├── VolumeManager.ts  # Volume/mix management
+│   │       ├── serializers/      # Session serializers
+│   │       │   ├── ColorSerializer.ts
+│   │       │   ├── FilterSerializer.ts
+│   │       │   ├── PaintSerializer.ts
+│   │       │   └── TransformSerializer.ts
 │   │       └── index.ts         # Module exports
 │   │
 │   ├── filters/                 # Image filter effects
 │   │   ├── NoiseReduction.ts    # Noise reduction filter
 │   │   ├── WebGLNoiseReduction.ts # GPU noise reduction
 │   │   └── WebGLSharpen.ts      # GPU unsharp mask sharpening
+│   │
+│   ├── effects/                 # Effect processing system
+│   │   ├── EffectRegistry.ts    # Effect registry
+│   │   ├── ImageEffect.ts       # Image effect interface
+│   │   └── adapters/            # Effect adapter implementations
+│   │
+│   ├── export/                  # Media export functionality
+│   │   ├── EDLWriter.ts         # Edit decision list export
+│   │   ├── MP4Muxer.ts          # MP4 video muxing
+│   │   ├── ReportExporter.ts    # Report generation
+│   │   ├── SlateRenderer.ts     # Slate rendering
+│   │   └── VideoExporter.ts     # Video export
 │   │
 │   ├── formats/                 # File format decoders
 │   │   ├── CineonDecoder.ts     # Cineon format decoder
@@ -258,6 +317,21 @@ openrv-web/
 │   │   ├── TIFFFloatDecoder.ts  # Float TIFF decoder
 │   │   └── index.ts             # Decoder registration + exports
 │   │
+│   ├── handlers/                # Event and state handlers
+│   │   ├── compareHandlers.ts   # A/B compare handlers
+│   │   ├── infoPanelHandlers.ts # Info panel handlers
+│   │   ├── persistenceHandlers.ts # Persistence handlers
+│   │   ├── scopeHandlers.ts     # Scope handlers
+│   │   ├── sourceLoadedHandlers.ts # Source loaded handlers
+│   │   ├── unsupportedCodecModal.ts # Unsupported codec UI
+│   │   └── referenceDisplayWiring.ts # Reference display wiring
+│   │
+│   ├── integrations/            # DCC and pipeline integrations
+│   │   ├── DCCBridge.ts         # DCC application bridge
+│   │   ├── ShotGridBridge.ts    # ShotGrid integration
+│   │   ├── ShotGridConfig.ts    # ShotGrid configuration
+│   │   └── ShotGridIntegrationBridge.ts # ShotGrid integration bridge
+│   │
 │   ├── network/                 # Network synchronization
 │   │   ├── MessageProtocol.ts   # Sync message protocol
 │   │   ├── NetworkSyncManager.ts # Network sync orchestration
@@ -266,12 +340,19 @@ openrv-web/
 │   │   └── types.ts             # Network type definitions
 │   │
 │   ├── nodes/                   # Processing nodes
+│   │   ├── CacheLUTNode.ts      # GPU-cached LUT node
 │   │   ├── base/                # Base node types
 │   │   │   ├── IPNode.ts        # Abstract base (inputs/outputs/properties)
-│   │   │   └── NodeFactory.ts   # Node registry + @RegisterNode decorator
+│   │   │   ├── NodeFactory.ts   # Node registry + @RegisterNode decorator
+│   │   │   └── NodeProcessor.ts # Node processing base
+│   │   ├── processors/          # Node processor implementations
+│   │   │   ├── LayoutProcessor.ts   # Layout processing
+│   │   │   ├── StackProcessor.ts    # Stack compositing
+│   │   │   └── SwitchProcessor.ts   # Input switching
 │   │   ├── sources/             # Source nodes
 │   │   │   ├── BaseSourceNode.ts    # Abstract source base
 │   │   │   ├── FileSourceNode.ts    # Single image (RVFileSource)
+│   │   │   ├── ProceduralSourceNode.ts # Procedural image generation
 │   │   │   ├── VideoSourceNode.ts   # Video file (RVVideoSource)
 │   │   │   ├── SequenceSourceNode.ts # Image sequence (RVSequenceSource)
 │   │   │   └── index.ts             # Registration + exports
@@ -291,12 +372,28 @@ openrv-web/
 │   │   └── types.ts             # Paint type definitions
 │   │
 │   ├── render/                  # WebGL/WebGPU rendering
+│   │   ├── Canvas2DHDRBlit.ts   # Canvas HDR blitting
+│   │   ├── Canvas2DTransitionRenderer.ts # Transition rendering
+│   │   ├── LuminanceAnalyzer.ts # Luminance analysis
 │   │   ├── Renderer.ts          # Main WebGL2 renderer (shader pipeline)
 │   │   ├── RendererBackend.ts   # Renderer backend abstraction
+│   │   ├── RenderState.ts       # Render state container
+│   │   ├── RenderWorkerProxy.ts # Off-thread rendering
 │   │   ├── ShaderProgram.ts     # WebGL shader compilation
+│   │   ├── ShaderStateManager.ts # Centralized shader state
+│   │   ├── SphericalProjection.ts # Spherical/360 projection
+│   │   ├── StateAccessor.ts     # State accessor interface
 │   │   ├── TextureCacheManager.ts # Texture cache management
+│   │   ├── TransitionRenderer.ts # Transition effects
 │   │   ├── WebGPUBackend.ts     # WebGPU rendering backend
-│   │   └── createRenderer.ts    # Renderer factory
+│   │   ├── WebGPUHDRBlit.ts     # WebGPU HDR blitting
+│   │   ├── createRenderer.ts    # Renderer factory
+│   │   └── shaders/             # GLSL shader files
+│   │       ├── viewer.vert.glsl # Main vertex shader
+│   │       ├── viewer.frag.glsl # Main fragment shader (all effects)
+│   │       ├── luminance.frag.glsl # Luminance calculation
+│   │       ├── transition.vert.glsl # Transition vertex shader
+│   │       └── transition.frag.glsl # Transition fragment shader
 │   │
 │   ├── scopes/                  # Video scopes (GPU-accelerated)
 │   │   └── WebGLScopes.ts       # WebGL histogram/waveform/vectorscope
@@ -385,6 +482,28 @@ openrv-web/
 │   │       ├── WatermarkControl.ts  # Watermark controls
 │   │       ├── ZebraStripes.ts      # Zebra stripe exposure overlay
 │   │       ├── ZebraControl.ts      # Zebra stripe controls
+│   │       ├── BugOverlay.ts        # Debug bug overlay
+│   │       ├── CacheManagementPanel.ts # Cache management UI
+│   │       ├── ConformPanel.ts      # Conforming workflow UI
+│   │       ├── ConvergenceMeasure.ts # Stereo convergence measurement
+│   │       ├── DeinterlaceControl.ts # Deinterlacing controls
+│   │       ├── ExternalPresentation.ts # External monitor presentation
+│   │       ├── FilmEmulationControl.ts # Film emulation presets
+│   │       ├── GamutDiagram.ts      # CIE gamut diagram
+│   │       ├── NoteOverlay.ts       # Notes on image overlay
+│   │       ├── NotePanel.ts         # Notes management panel
+│   │       ├── PerspectiveCorrectionControl.ts # Perspective controls
+│   │       ├── PixelProbe.ts        # Pixel sampling tool
+│   │       ├── PremultControl.ts    # Premultiplication controls
+│   │       ├── QuadView.ts          # 4-view layout
+│   │       ├── ShortcutEditor.ts    # Keyboard shortcut editor
+│   │       ├── ShotGridPanel.ts     # ShotGrid integration panel
+│   │       ├── SlateEditor.ts       # Slate editor UI
+│   │       ├── StabilizationControl.ts # Image stabilization
+│   │       ├── VideoExporter.ts     # Video export UI
+│   │       ├── ViewerGLRenderer.ts  # WebGL rendering for viewer
+│   │       ├── ViewerInputHandler.ts # Input event handling
+│   │       ├── ViewerIntegration.ts # Viewer integration layer
 │   │       ├── layout/              # Layout components
 │   │       │   ├── ContextToolbar.ts # Context-sensitive toolbar
 │   │       │   ├── HeaderBar.ts     # Application header bar
@@ -429,6 +548,20 @@ openrv-web/
 │   │   └── effectProcessor.worker.ts # Effect processing worker
 │   │
 │   ├── App.ts                   # Main application
+│   ├── AppColorWiring.ts        # Color system integration
+│   ├── AppControlRegistry.ts    # Control registration system
+│   ├── AppDCCWiring.ts          # DCC integration wiring
+│   ├── AppEffectsWiring.ts      # Effects pipeline integration
+│   ├── AppKeyboardHandler.ts    # Keyboard event handling
+│   ├── AppNetworkBridge.ts      # Network synchronization
+│   ├── AppPersistenceManager.ts # Session persistence
+│   ├── AppPlaybackWiring.ts     # Playback system integration
+│   ├── AppSessionBridge.ts      # Session management integration
+│   ├── AppStackWiring.ts        # Stack compositing integration
+│   ├── AppTransformWiring.ts    # Transform integration
+│   ├── AppViewWiring.ts         # View system integration
+│   ├── AppWiringContext.ts      # Wiring context setup
+│   ├── KeyboardWiring.ts        # Keyboard shortcut wiring
 │   ├── main.ts                  # Entry point
 │   ├── test-helper.ts           # Test utilities
 │   └── vite-env.d.ts            # Vite type declarations
@@ -511,35 +644,40 @@ openrv-web/
 | Frame Extraction | `src/utils/MediabunnyFrameExtractor.ts` | WebCodecs HDR frame extraction |
 | Worker Pool | `src/utils/WorkerPool.ts` | Web Worker parallelism |
 | Effect Worker | `src/workers/effectProcessor.worker.ts` | Off-thread effect processing |
+| Effect Registry | `src/effects/EffectRegistry.ts` | Effect registration system |
+| Media Cache | `src/cache/MediaCacheManager.ts` | Media caching with policies |
+| DCC Bridge | `src/integrations/DCCBridge.ts` | DCC application integration |
+| ShotGrid | `src/integrations/ShotGridBridge.ts` | ShotGrid pipeline integration |
+| EDL Export | `src/export/EDLWriter.ts` | Edit decision list export |
+| Video Export | `src/export/VideoExporter.ts` | MP4 video export |
+| Slate Render | `src/export/SlateRenderer.ts` | Slate metadata rendering |
+| OCIO WASM | `src/color/wasm/OCIOWasmBridge.ts` | WebAssembly OCIO processing |
+| ICC Profile | `src/color/ICCProfile.ts` | ICC color profile handling |
+| App Configuration | `src/config/Config.ts` | Centralized configuration |
 
-### Shader Mapping
+### Shader Implementation (Complete)
 
-Core shaders to port (priority order):
+All shaders are fully implemented in consolidated GPU shader programs:
 
-1. **Essential (Phase 1):**
-   - `SourceRGBA.glsl` → Basic image display
-   - `ColorSRGB.glsl` → sRGB conversion
-   - `Over.glsl` → Basic compositing
-   - `Premult.glsl` / `Unpremult.glsl` → Alpha handling
+**Main Viewer Fragment Shader** (`src/render/shaders/viewer.frag.glsl`):
+- Color Space: sRGB, Rec709 conversion (EOTF/OETF), HLG, PQ transfer functions
+- Color Correction: Exposure, gamma, saturation, contrast, temperature, tint, hue rotation
+- ASC CDL: Slope/offset/power/saturation
+- Curve Adjustments: Curves via LUT pre-computation
+- Compositing: Over, premult/unpremult alpha handling
+- 3D LUT: `applyLUT3D()` with trilinear interpolation
+- Tone Mapping: Reinhard, Filmic, ACES, AGX, PBRNeutral, GT, ACESHill operators
+- Dithering: Floyd-Steinberg for posterization prevention
+- Channel isolation, color inversion, false color, zebra stripes
 
-2. **Color Correction (Phase 2):**
-   - `ColorCDL.glsl` → ASC CDL
-   - `ColorExposure.glsl` → Exposure
-   - `ColorGamma.glsl` → Gamma
-   - `ColorCurve.glsl` → Curves
-   - `ColorSaturation.glsl` → Saturation
+**Additional Shaders**:
+- `viewer.vert.glsl` - Main vertex shader (quad geometry)
+- `luminance.frag.glsl` - Luminance calculation
+- `transition.vert.glsl`, `transition.frag.glsl` - Transition effects
 
-3. **Transforms (Phase 2):**
-   - `Transform2D.glsl` → Pan/zoom/rotate
-   - `Crop.glsl` → Cropping
-
-4. **Filters (Phase 3):**
-   - `GaussianBlur.glsl` → Blur
-   - `UnsharpMask.glsl` → Sharpen
-
-5. **Advanced (Phase 4):**
-   - `LUT3D.glsl` → 3D LUTs
-   - `LensWarp.glsl` → Lens correction
+**GPU Filters**:
+- `src/filters/WebGLSharpen.ts` - Unsharp mask sharpening
+- `src/filters/WebGLNoiseReduction.ts` - Spatial denoising
 
 ### Data Flow
 
@@ -665,3 +803,29 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Ghost frames / onion skin (configurable before/after frames, opacity falloff, color tinting)
 - [x] Session snapshots (IndexedDB storage, manual + auto-checkpoints, preview, export/import)
 - [x] Multi-clip playlist (add/remove/reorder clips, loop modes, EDL export)
+
+### Phase 8 (WASM Color & Advanced Cache)
+- [x] OCIO WASM integration (OCIOWasmBridge, OCIOWasmPipeline)
+- [x] ICC profile support
+- [x] Advanced cache management (MediaCacheManager with policies)
+- [x] Effect registry and adapter system
+
+### Phase 9 (Professional Export & DCC Integration)
+- [x] MP4 video muxing (H.264 codec support)
+- [x] Edit Decision List (EDL) export
+- [x] ShotGrid / DCC bridge integration
+- [x] Slate rendering with metadata
+- [x] Report generation and archival
+
+### Phase 10 (Advanced Viewing & Stabilization)
+- [x] Perspective correction & stabilization
+- [x] Film emulation presets
+- [x] Convergence measurement for stereo
+- [x] Deinterlacing filters
+- [x] Reference display management
+- [x] Premultiplication controls
+- [x] Shortcut editor & customization
+- [x] Notes/annotations system (NoteManager, NotePanel)
+- [x] Conforming workflow support
+- [x] External window presentation mode
+- [x] Spherical/360 projection
