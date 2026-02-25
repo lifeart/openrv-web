@@ -15,6 +15,7 @@ import { TransitionManager } from '../../core/session/TransitionManager';
 import { isTransitionType, DEFAULT_TRANSITION_DURATION, type TransitionType } from '../../core/types/transition';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { OPACITY } from './shared/theme';
 import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
 import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
@@ -147,11 +148,11 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       justify-content: center;
     `;
     closeBtn.addEventListener('click', () => this.hide());
-    closeBtn.addEventListener('mouseenter', () => {
+    closeBtn.addEventListener('pointerenter', () => {
       closeBtn.style.background = 'var(--bg-hover)';
       closeBtn.style.color = 'var(--text-primary)';
     });
-    closeBtn.addEventListener('mouseleave', () => {
+    closeBtn.addEventListener('pointerleave', () => {
       closeBtn.style.background = 'transparent';
       closeBtn.style.color = 'var(--text-muted)';
     });
@@ -190,10 +191,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       transition: all 0.12s ease;
     `;
     addBtn.addEventListener('click', () => this.emit('addCurrentSource', undefined));
-    addBtn.addEventListener('mouseenter', () => {
+    addBtn.addEventListener('pointerenter', () => {
       addBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
     });
-    addBtn.addEventListener('mouseleave', () => {
+    addBtn.addEventListener('pointerleave', () => {
       addBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
     });
     applyA11yFocus(addBtn);
@@ -271,10 +272,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       transition: all 0.12s ease;
     `;
     exportBtn.addEventListener('click', () => this.exportEDL());
-    exportBtn.addEventListener('mouseenter', () => {
+    exportBtn.addEventListener('pointerenter', () => {
       exportBtn.style.background = 'var(--bg-hover)';
     });
-    exportBtn.addEventListener('mouseleave', () => {
+    exportBtn.addEventListener('pointerleave', () => {
       exportBtn.style.background = 'transparent';
     });
     applyA11yFocus(exportBtn);
@@ -284,10 +285,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     otioBtn.title = 'Export as OTIO';
     otioBtn.style.cssText = exportBtn.style.cssText;
     otioBtn.addEventListener('click', () => this.exportOTIO());
-    otioBtn.addEventListener('mouseenter', () => {
+    otioBtn.addEventListener('pointerenter', () => {
       otioBtn.style.background = 'var(--bg-hover)';
     });
-    otioBtn.addEventListener('mouseleave', () => {
+    otioBtn.addEventListener('pointerleave', () => {
       otioBtn.style.background = 'transparent';
     });
     applyA11yFocus(otioBtn);
@@ -476,19 +477,19 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
       padding: 2px;
       border-radius: 3px;
       display: flex;
-      opacity: 0.6;
+      opacity: ${OPACITY.disabled};
       transition: opacity 0.12s ease;
     `;
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.playlistManager.removeClip(clip.id);
     });
-    deleteBtn.addEventListener('mouseenter', () => {
+    deleteBtn.addEventListener('pointerenter', () => {
       deleteBtn.style.opacity = '1';
       deleteBtn.style.color = 'var(--text-danger)';
     });
-    deleteBtn.addEventListener('mouseleave', () => {
-      deleteBtn.style.opacity = '0.6';
+    deleteBtn.addEventListener('pointerleave', () => {
+      deleteBtn.style.opacity = String(OPACITY.disabled);
       deleteBtn.style.color = 'var(--text-muted)';
     });
     headerRow.appendChild(deleteBtn);
@@ -597,13 +598,13 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     });
 
     // Hover effects
-    item.addEventListener('mouseenter', () => {
+    item.addEventListener('pointerenter', () => {
       if (!isActive) {
         item.style.borderColor = 'var(--border-hover)';
         item.style.background = 'var(--bg-hover)';
       }
     });
-    item.addEventListener('mouseleave', () => {
+    item.addEventListener('pointerleave', () => {
       if (!isActive) {
         item.style.borderColor = 'var(--border-primary)';
         item.style.background = 'var(--bg-primary)';

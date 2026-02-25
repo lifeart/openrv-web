@@ -10,6 +10,7 @@
 import { LUTPipeline, type LUT } from '../../color/ColorProcessingFacade';
 import { LUTStageControl } from './LUTStageControl';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { Z_INDEX } from './shared/theme';
 
 export interface LUTPipelinePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -454,7 +455,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
       border: 1px solid var(--border-primary, #444);
       border-radius: 6px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      z-index: 10000;
+      z-index: ${Z_INDEX.dropdown};
       width: 280px;
       font-size: 11px;
       color: var(--text-primary, #eee);

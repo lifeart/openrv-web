@@ -2,6 +2,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { type LUT3D, isLUT3D, parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 
 export type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
 export { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
@@ -70,14 +71,14 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       justify-content: center;
     `;
     this.toggleButton.addEventListener('click', () => this.toggle());
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.isExpanded) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.isExpanded) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -95,12 +96,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 280px;
+      min-width: ${PANEL_WIDTHS.standard};
       max-height: 80vh;
       overflow-y: auto;
       z-index: 9999;
       display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: ${SHADOWS.panel};
     `;
 
     this.createSliders();
@@ -165,7 +166,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     const title = document.createElement('span');
     title.textContent = 'Color Adjustments';
-    title.style.cssText = 'font-weight: 600; color: var(--text-primary); font-size: 13px;';
+    title.style.cssText = 'font-weight: 500; color: var(--text-primary); font-size: 13px;';
 
     const resetButton = document.createElement('button');
     resetButton.textContent = 'Reset';
@@ -180,8 +181,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       font-size: 11px;
     `;
     resetButton.addEventListener('click', () => this.reset());
-    resetButton.addEventListener('mouseenter', () => { resetButton.style.background = 'var(--text-muted)'; });
-    resetButton.addEventListener('mouseleave', () => { resetButton.style.background = 'var(--border-secondary)'; });
+    resetButton.addEventListener('pointerenter', () => { resetButton.style.background = 'var(--text-muted)'; });
+    resetButton.addEventListener('pointerleave', () => { resetButton.style.background = 'var(--border-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(resetButton);
@@ -249,8 +250,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     fileInput.addEventListener('change', (e) => this.handleLUTFile(e));
 
     lutLoadBtn.addEventListener('click', () => fileInput.click());
-    lutLoadBtn.addEventListener('mouseenter', () => { lutLoadBtn.style.background = 'var(--text-muted)'; });
-    lutLoadBtn.addEventListener('mouseleave', () => { lutLoadBtn.style.background = 'var(--border-secondary)'; });
+    lutLoadBtn.addEventListener('pointerenter', () => { lutLoadBtn.style.background = 'var(--text-muted)'; });
+    lutLoadBtn.addEventListener('pointerleave', () => { lutLoadBtn.style.background = 'var(--border-secondary)'; });
 
     lutHeader.appendChild(lutTitle);
     lutHeader.appendChild(lutLoadBtn);
@@ -287,7 +288,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     // Clear LUT button
     const clearBtn = document.createElement('button');
-    clearBtn.textContent = '✕';
+    clearBtn.innerHTML = getIconSvg('x', 'sm');
     clearBtn.title = 'Remove LUT';
     clearBtn.style.cssText = `
       background: transparent;
@@ -295,7 +296,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       color: var(--text-secondary);
       padding: 2px 6px;
       cursor: pointer;
-      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
       visibility: hidden;
     `;
     clearBtn.addEventListener('click', () => this.clearLUT());

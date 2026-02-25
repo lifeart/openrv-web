@@ -11,6 +11,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 
 // Configuration constants
 const FRAMES_MIN = 0;
@@ -57,12 +58,20 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.closeDropdown();
+      }
+    };
 
     this.container = document.createElement('div');
     this.container.className = 'ghost-frame-control';
@@ -79,6 +88,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.button.title = 'Ghost Frames / Onion Skin (Ctrl+G)';
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
+    this.button.setAttribute('aria-pressed', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -101,14 +111,14 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
       e.stopPropagation();
       this.toggleDropdown();
     });
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.isOpen && !this.state.enabled) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.isOpen && !this.state.enabled) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -133,8 +143,8 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
       z-index: 9999;
       display: none;
       flex-direction: column;
-      min-width: 200px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      min-width: ${PANEL_WIDTHS.narrow};
+      box-shadow: ${SHADOWS.dropdown};
       gap: 12px;
     `;
 
@@ -334,6 +344,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
   private updateButtonLabel(): void {
     const label = this.state.enabled ? 'Ghost On' : 'Ghost';
     this.button.innerHTML = `${getIconSvg('ghost', 'sm')}<span>${label}</span>`;
+    this.button.setAttribute('aria-pressed', String(this.state.enabled));
 
     if (this.state.enabled) {
       this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
@@ -384,6 +395,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.button.style.borderColor = 'var(--border-primary)';
 
     document.addEventListener('click', this.boundHandleOutsideClick);
+    document.addEventListener('keydown', this.boundHandleKeyDown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -395,6 +407,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     this.updateButtonLabel();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

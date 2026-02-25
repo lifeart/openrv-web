@@ -34,6 +34,7 @@ import {
   isValidPinCode,
 } from './network/PinEncryption';
 import { createThrottle, type Throttled } from './utils/throttle';
+import { showConfirm } from './ui/components/shared/Modal';
 
 const MEDIA_CHUNK_SIZE_BYTES = 48 * 1024;
 
@@ -758,11 +759,9 @@ export class AppNetworkBridge {
       }
     }
 
-    if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
-
     const fileLabel = fileCount === 1 ? 'file' : 'files';
     const sizeLabel = this.formatByteSize(totalBytes);
-    return window.confirm(`Accept media sync?\n\nIncoming: ${fileCount} ${fileLabel} (${sizeLabel}).`);
+    return await showConfirm(`Accept media sync?\n\nIncoming: ${fileCount} ${fileLabel} (${sizeLabel}).`);
   }
 
   private async captureLocalMediaBundle(): Promise<PreparedMediaBundle> {

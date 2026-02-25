@@ -108,15 +108,15 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
         cursor: pointer;
         font-size: 11px;
         font-weight: 500;
-        transition: all 0.15s ease;
+        transition: all 0.12s ease;
       `;
       btn.addEventListener('click', () => this.setActiveChannel(channel));
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (channel !== this.activeChannel) {
           btn.style.background = 'var(--bg-hover)';
         }
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (channel !== this.activeChannel) {
           btn.style.background = 'transparent';
         }

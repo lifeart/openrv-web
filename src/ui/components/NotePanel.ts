@@ -18,6 +18,7 @@ import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
+import { showAlert } from './shared/Modal';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -716,10 +717,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     el.addEventListener('click', () => this.goToNote(note));
 
     // Hover effects
-    el.addEventListener('mouseenter', () => {
+    el.addEventListener('pointerenter', () => {
       if (!isInRange) el.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))';
     });
-    el.addEventListener('mouseleave', () => {
+    el.addEventListener('pointerleave', () => {
       el.style.background = isInRange ? 'rgba(var(--accent-primary-rgb), 0.15)' : '';
     });
 
@@ -849,16 +850,16 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       const file = input.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result as string);
           if (!data || !Array.isArray(data.notes)) {
-            window.alert('Invalid notes file. Expected { version, notes: [...] } format.');
+            await showAlert('Invalid notes file. Expected { version, notes: [...] } format.');
             return;
           }
           this.session.noteManager.fromSerializable(data.notes);
         } catch {
-          window.alert('Invalid JSON file. Could not parse note data.');
+          await showAlert('Invalid JSON file. Could not parse note data.');
         }
       };
       reader.readAsText(file);

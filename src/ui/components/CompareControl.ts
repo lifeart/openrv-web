@@ -53,6 +53,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -62,6 +63,13 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.closeDropdown();
+      }
+    };
 
     this.container = document.createElement('div');
     this.container.className = 'compare-control';
@@ -100,14 +108,14 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       e.stopPropagation();
       this.toggleDropdown();
     });
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.isOpen && !this.manager.isActive()) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.isOpen && !this.manager.isActive()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -218,10 +226,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       `;
       option.innerHTML = `${getIconSvg(icon, 'sm')}<span>${label}</span>`;
 
-      option.addEventListener('mouseenter', () => {
+      option.addEventListener('pointerenter', () => {
         option.style.background = 'var(--bg-hover)';
       });
-      option.addEventListener('mouseleave', () => {
+      option.addEventListener('pointerleave', () => {
         this.updateWipeOptionStyle(option, mode);
       });
       option.addEventListener('click', (e) => {
@@ -355,10 +363,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       gap: 6px;
     `;
     diffToggle.innerHTML = `${getIconSvg('eye', 'sm')}<span>Show Difference</span>`;
-    diffToggle.addEventListener('mouseenter', () => {
+    diffToggle.addEventListener('pointerenter', () => {
       diffToggle.style.background = 'var(--bg-hover)';
     });
-    diffToggle.addEventListener('mouseleave', () => {
+    diffToggle.addEventListener('pointerleave', () => {
       this.updateDiffToggleStyle(diffToggle);
     });
     diffToggle.addEventListener('click', (e) => {
@@ -419,10 +427,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       gap: 6px;
     `;
     heatmapToggle.innerHTML = `${getIconSvg('palette', 'sm')}<span>Heatmap Mode</span>`;
-    heatmapToggle.addEventListener('mouseenter', () => {
+    heatmapToggle.addEventListener('pointerenter', () => {
       heatmapToggle.style.background = 'var(--bg-hover)';
     });
-    heatmapToggle.addEventListener('mouseleave', () => {
+    heatmapToggle.addEventListener('pointerleave', () => {
       this.updateHeatmapToggleStyle(heatmapToggle);
     });
     heatmapToggle.addEventListener('click', (e) => {
@@ -588,10 +596,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       gap: 6px;
     `;
     quadToggle.innerHTML = `${getIconSvg('columns', 'sm')}<span>Enable Quad View</span>`;
-    quadToggle.addEventListener('mouseenter', () => {
+    quadToggle.addEventListener('pointerenter', () => {
       quadToggle.style.background = 'var(--bg-hover)';
     });
-    quadToggle.addEventListener('mouseleave', () => {
+    quadToggle.addEventListener('pointerleave', () => {
       this.updateQuadToggleStyle(quadToggle);
     });
     quadToggle.addEventListener('click', (e) => {
@@ -676,10 +684,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       gap: 6px;
     `;
     button.innerHTML = `${getIconSvg(icon, 'sm')}<span>${label}</span>`;
-    button.addEventListener('mouseenter', () => {
+    button.addEventListener('pointerenter', () => {
       button.style.background = 'var(--bg-hover)';
     });
-    button.addEventListener('mouseleave', () => {
+    button.addEventListener('pointerleave', () => {
       this.updateBlendModeButtonStyle(button, mode);
     });
     button.addEventListener('click', (e) => {
@@ -980,6 +988,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.button.style.borderColor = 'var(--border-primary)';
 
     document.addEventListener('click', this.boundHandleOutsideClick);
+    document.addEventListener('keydown', this.boundHandleKeyDown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -991,6 +1000,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.updateButtonLabel();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

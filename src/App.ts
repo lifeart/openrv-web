@@ -1267,6 +1267,9 @@ export class App {
           return;
         }
         // Close all transient floating panels/dropdowns
+        // Each hide() is a no-op when already closed, so this is safe.
+        // Individual controls with their own Escape handlers will have
+        // already closed themselves before this cascade runs.
         if (this.controls.colorControls) {
           this.controls.colorControls.hide();
         }

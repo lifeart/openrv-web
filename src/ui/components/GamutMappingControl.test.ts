@@ -457,13 +457,13 @@ describe('GamutMappingControl', () => {
 
       const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
 
-      // Simulate mouseenter (applies hover styling)
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
+      // Simulate pointerenter (applies hover styling)
+      btn.dispatchEvent(new MouseEvent('pointerenter'));
       expect(btn.style.background).toBe('var(--bg-hover)');
       expect(btn.style.color).toBe('var(--text-primary)');
 
-      // Simulate mouseleave (should restore active styling, not stay on hover)
-      btn.dispatchEvent(new MouseEvent('mouseleave'));
+      // Simulate pointerleave (should restore active styling, not stay on hover)
+      btn.dispatchEvent(new MouseEvent('pointerleave'));
       expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
       expect(btn.style.borderColor).toBe('var(--accent-primary)');
       expect(btn.style.color).toBe('var(--accent-primary)');
@@ -602,8 +602,8 @@ describe('GamutMappingControl', () => {
     it('GM-M16c: mouse focus (click) should not apply focus ring', () => {
       const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
 
-      // Simulate mouse click: mousedown then focus
-      btn.dispatchEvent(new Event('mousedown'));
+      // Simulate mouse click: pointerdown then focus
+      btn.dispatchEvent(new Event('pointerdown'));
       btn.dispatchEvent(new Event('focus'));
       expect(btn.style.outline).not.toBe('2px solid var(--accent-primary)');
     });

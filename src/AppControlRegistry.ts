@@ -712,10 +712,10 @@ export class AppControlRegistry {
         opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
         opt.style.color = 'var(--accent-primary)';
       }
-      opt.addEventListener('mouseenter', () => {
+      opt.addEventListener('pointerenter', () => {
         opt.style.background = 'var(--bg-hover)';
       });
-      opt.addEventListener('mouseleave', () => {
+      opt.addEventListener('pointerleave', () => {
         if (mode.value !== currentMissingMode) {
           opt.style.background = 'transparent';
         }
@@ -736,14 +736,14 @@ export class AppControlRegistry {
       if (isMissingDropdownOpen) closeMissingDropdown();
       else openMissingDropdown();
     });
-    missingButton.addEventListener('mouseenter', () => {
+    missingButton.addEventListener('pointerenter', () => {
       if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
         missingButton.style.background = 'var(--bg-hover)';
         missingButton.style.borderColor = 'var(--border-primary)';
         missingButton.style.color = 'var(--text-primary)';
       }
     });
-    missingButton.addEventListener('mouseleave', () => {
+    missingButton.addEventListener('pointerleave', () => {
       if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
         missingButton.style.background = 'transparent';
         missingButton.style.borderColor = 'transparent';

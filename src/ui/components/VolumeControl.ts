@@ -24,6 +24,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   private _previousVolume = 0.7;
   private _sliderExpanded = false;
   private _boundDocumentClick: (e: MouseEvent) => void;
+  private _cleanupA11yFocus: (() => void) | null = null;
 
   constructor() {
     super();
@@ -62,19 +63,19 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       this.toggleMute();
       this.toggleSliderExpanded();
     });
-    this.muteButton.addEventListener('mouseenter', () => {
+    this.muteButton.addEventListener('pointerenter', () => {
       this.muteButton.style.background = 'var(--bg-hover)';
       this.muteButton.style.borderColor = 'var(--border-primary)';
       this.muteButton.style.color = 'var(--text-primary)';
     });
-    this.muteButton.addEventListener('mouseleave', () => {
+    this.muteButton.addEventListener('pointerleave', () => {
       this.muteButton.style.background = 'transparent';
       this.muteButton.style.borderColor = 'transparent';
       this.muteButton.style.color = 'var(--text-muted)';
     });
 
     // Apply A11Y focus handling
-    applyA11yFocus(this.muteButton);
+    this._cleanupA11yFocus = applyA11yFocus(this.muteButton);
 
     // Create volume slider container (shows on hover)
     this.volumeContainer = document.createElement('div');
@@ -109,11 +110,11 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.volumeContainer.appendChild(this.volumeSlider);
 
     // Show slider on hover (but don't collapse if pinned open via click)
-    this.container.addEventListener('mouseenter', () => {
+    this.container.addEventListener('pointerenter', () => {
       this.volumeContainer.style.width = '96px';
     });
 
-    this.container.addEventListener('mouseleave', () => {
+    this.container.addEventListener('pointerleave', () => {
       if (!this._sliderExpanded) {
         this.volumeContainer.style.width = '0';
       }
@@ -245,5 +246,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
 
   dispose(): void {
     document.removeEventListener('click', this._boundDocumentClick);
+    this._cleanupA11yFocus?.();
+    this._cleanupA11yFocus = null;
   }
 }

@@ -224,7 +224,7 @@ describe('ContextToolbar', () => {
       expect(btn.style.background).toBe('var(--bg-hover)');
     });
 
-    it('CTX-U068: inactive button restores on mouseleave', () => {
+    it('CTX-U068: inactive button restores on pointerleave', () => {
       const btn = ContextToolbar.createButton('Test', () => {}, { active: false });
 
       btn.dispatchEvent(new PointerEvent('pointerenter'));

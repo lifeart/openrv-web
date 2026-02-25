@@ -15,6 +15,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { formatTimecode } from '../../utils/media/Timecode';
+import { Z_INDEX, OPACITY } from './shared/theme';
 import type { Session } from '../../core/session/Session';
 import type { SequenceGroupNode, EDLEntry } from '../../nodes/groups/SequenceGroupNode';
 
@@ -849,10 +850,10 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     `;
 
     // Remove filter on hover for full vibrancy
-    el.addEventListener('mouseenter', () => {
+    el.addEventListener('pointerenter', () => {
       el.style.filter = '';
     });
-    el.addEventListener('mouseleave', () => {
+    el.addEventListener('pointerleave', () => {
       if (cut.index !== this.selectedCutIndex) {
         el.style.filter = 'saturate(0.75) brightness(0.85)';
       }
@@ -880,7 +881,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       const metaRow = document.createElement('span');
       metaRow.textContent = `${inTC}\u2013${outTC} | ${duration}f`;
       metaRow.style.cssText = `
-        font-size: 9px;
+        font-size: 10px;
         color: white;
         opacity: 0.7;
         pointer-events: none;
@@ -936,18 +937,18 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       height: 100%;
       cursor: ew-resize;
       background: rgba(255,255,255,0.3);
-      opacity: 0.25;
+      opacity: ${OPACITY.disabled};
       transition: opacity 0.1s, background 0.1s;
       ${gripBorder}
     `;
 
-    handle.addEventListener('mouseenter', () => {
+    handle.addEventListener('pointerenter', () => {
       handle.style.opacity = '1';
       handle.style.background = 'rgba(255,255,255,0.5)';
     });
-    handle.addEventListener('mouseleave', () => {
+    handle.addEventListener('pointerleave', () => {
       if (!this.isDragging) {
-        handle.style.opacity = '0.25';
+        handle.style.opacity = String(OPACITY.disabled);
         handle.style.background = 'rgba(255,255,255,0.3)';
       }
     });
@@ -1083,7 +1084,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      z-index: 10000;
+      z-index: ${Z_INDEX.dropdown};
       min-width: 180px;
     `;
 
@@ -1153,10 +1154,10 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     item.appendChild(labelSpan);
     item.appendChild(shortcutSpan);
 
-    item.addEventListener('mouseenter', () => {
+    item.addEventListener('pointerenter', () => {
       item.style.background = 'var(--bg-hover)';
     });
-    item.addEventListener('mouseleave', () => {
+    item.addEventListener('pointerleave', () => {
       item.style.background = 'transparent';
     });
     item.addEventListener('click', onClick);

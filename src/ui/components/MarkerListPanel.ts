@@ -13,6 +13,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session, Marker, MARKER_COLORS } from '../../core/session/Session';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { showAlert, showConfirm } from './shared/Modal';
 import type { ExclusivePanelRef } from './NotePanel';
 
 /**
@@ -99,7 +100,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     const title = document.createElement('span');
     title.textContent = 'Markers';
-    title.style.cssText = 'font-weight: 600; font-size: 13px;';
+    title.style.cssText = 'font-weight: 500; font-size: 13px;';
 
     const headerButtons = document.createElement('div');
     headerButtons.style.cssText = 'display: flex; gap: 8px;';
@@ -283,12 +284,12 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   /**
    * Clear all markers with confirmation
    */
-  private clearAllMarkers(): void {
+  private async clearAllMarkers(): Promise<void> {
     const markerCount = this.session.marks.size;
     if (markerCount === 0) return;
 
     // Confirmation dialog for destructive action
-    const confirmed = window.confirm(
+    const confirmed = await showConfirm(
       `Are you sure you want to delete all ${markerCount} marker${markerCount > 1 ? 's' : ''}? This cannot be undone.`
     );
     if (confirmed) {
@@ -333,12 +334,12 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       const file = input.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result as string);
           this.applyImportedMarkers(data, mode);
         } catch {
-          window.alert('Invalid JSON file. Could not parse marker data.');
+          await showAlert('Invalid JSON file. Could not parse marker data.');
         }
       };
       reader.readAsText(file);
@@ -351,9 +352,9 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   /**
    * Validate and apply imported marker data
    */
-  private applyImportedMarkers(data: unknown, mode: 'replace' | 'merge'): void {
+  private async applyImportedMarkers(data: unknown, mode: 'replace' | 'merge'): Promise<void> {
     if (!this.validateImportData(data)) {
-      window.alert('Invalid marker file. Expected { version, markers: [...] } format.');
+      await showAlert('Invalid marker file. Expected { version, markers: [...] } format.');
       return;
     }
     const validMarkers = (data as MarkerExportData).markers.filter(
@@ -756,13 +757,13 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     el.appendChild(noteRow);
 
     // Hover effect - use dynamic check for current frame
-    el.addEventListener('mouseenter', () => {
+    el.addEventListener('pointerenter', () => {
       const isNowCurrentFrame = marker.frame === this.session.currentFrame;
       if (!isNowCurrentFrame) {
         el.style.background = 'var(--bg-hover)';
       }
     });
-    el.addEventListener('mouseleave', () => {
+    el.addEventListener('pointerleave', () => {
       const isNowCurrentFrame = marker.frame === this.session.currentFrame;
       el.style.background = isNowCurrentFrame ? 'rgba(var(--accent-primary-rgb), 0.15)' : '';
     });

@@ -59,7 +59,7 @@ export class HSLQualifierControl {
       color: var(--text-muted);
       font-size: 11px;
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
     `;
 
     this.toggleButton.addEventListener('click', (e) => {
@@ -67,14 +67,14 @@ export class HSLQualifierControl {
       this.toggleDropdown();
     });
 
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.hslQualifier.isEnabled()) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
 
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.hslQualifier.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.color = 'var(--text-muted)';
@@ -191,8 +191,8 @@ export class HSLQualifierControl {
       cursor: pointer;
     `;
     resetBtn.addEventListener('click', () => this.hslQualifier.reset());
-    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--border-primary)'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--bg-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--border-primary)'; });
+    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--bg-secondary)'; });
 
     header.appendChild(leftSide);
     header.appendChild(resetBtn);

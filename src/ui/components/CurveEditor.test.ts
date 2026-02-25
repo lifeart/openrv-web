@@ -716,7 +716,7 @@ describe('CurveEditor pointer events (H-03)', () => {
     newEditor.dispose();
 
     const removedEventTypes = removeSpy.mock.calls.map((call) => call[0]);
-    expect(removedEventTypes).not.toContain('mouseleave');
+    expect(removedEventTypes).not.toContain('pointerleave');
 
     removeSpy.mockRestore();
   });

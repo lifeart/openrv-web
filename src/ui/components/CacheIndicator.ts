@@ -132,16 +132,16 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       border: 1px solid var(--border-secondary);
       color: var(--text-muted);
       padding: 1px 6px;
-      font-size: 9px;
+      font-size: 10px;
       border-radius: 3px;
       cursor: pointer;
       transition: all 0.12s ease;
     `;
-    this.clearButton.addEventListener('mouseenter', () => {
+    this.clearButton.addEventListener('pointerenter', () => {
       this.clearButton.style.background = 'var(--bg-hover)';
       this.clearButton.style.color = 'var(--text-primary)';
     });
-    this.clearButton.addEventListener('mouseleave', () => {
+    this.clearButton.addEventListener('pointerleave', () => {
       this.clearButton.style.background = 'transparent';
       this.clearButton.style.color = 'var(--text-muted)';
     });

@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 
 export type { FilterSettings } from '../../core/types/filter';
 export { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
@@ -57,14 +58,14 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     `;
 
     this.filterButton.addEventListener('click', () => this.toggle());
-    this.filterButton.addEventListener('mouseenter', () => {
+    this.filterButton.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen) {
         this.filterButton.style.background = 'var(--bg-hover)';
         this.filterButton.style.borderColor = 'var(--border-primary)';
         this.filterButton.style.color = 'var(--text-primary)';
       }
     });
-    this.filterButton.addEventListener('mouseleave', () => {
+    this.filterButton.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen) {
         const hasFilters = this.settings.blur > 0 || this.settings.sharpen > 0;
         if (!hasFilters) {
@@ -86,10 +87,10 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       z-index: 9999;
       display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: ${SHADOWS.panel};
     `;
 
     this.createPanelContent();
@@ -145,10 +146,10 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('mouseenter', () => {
+    resetBtn.addEventListener('pointerenter', () => {
       resetBtn.style.background = 'var(--text-muted)';
     });
-    resetBtn.addEventListener('mouseleave', () => {
+    resetBtn.addEventListener('pointerleave', () => {
       resetBtn.style.background = 'var(--border-secondary)';
     });
 

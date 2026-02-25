@@ -11,6 +11,8 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { HistoryManager, HistoryEntry } from '../../utils/HistoryManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getIconSvg } from './shared/Icons';
+import { OPACITY } from './shared/theme';
 
 export interface HistoryPanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -66,7 +68,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
 
     const title = document.createElement('span');
     title.textContent = 'History';
-    title.style.cssText = 'font-weight: 600; font-size: 13px;';
+    title.style.cssText = 'font-weight: 500; font-size: 13px;';
 
     const headerButtons = document.createElement('div');
     headerButtons.style.cssText = 'display: flex; gap: 8px;';
@@ -87,16 +89,16 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     clearBtn.addEventListener('click', () => this.clearHistory());
 
     const closeBtn = document.createElement('button');
-    closeBtn.textContent = '×';
+    closeBtn.innerHTML = getIconSvg('x', 'sm');
     closeBtn.title = 'Close';
     closeBtn.style.cssText = `
       background: none;
       border: none;
       color: var(--text-muted);
-      font-size: 18px;
       cursor: pointer;
       padding: 0 4px;
-      line-height: 1;
+      display: inline-flex;
+      align-items: center;
     `;
     closeBtn.addEventListener('click', () => this.hide());
 
@@ -230,16 +232,16 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       gap: 8px;
       transition: background 0.15s;
       ${isCurrent ? 'background: rgba(var(--accent-primary-rgb), 0.2);' : ''}
-      ${isFuture ? 'opacity: 0.4;' : ''}
+      ${isFuture ? `opacity: ${OPACITY.disabled};` : ''}
     `;
 
-    el.addEventListener('mouseenter', () => {
+    el.addEventListener('pointerenter', () => {
       if (!isCurrent) {
         el.style.background = 'var(--bg-hover)';
       }
     });
 
-    el.addEventListener('mouseleave', () => {
+    el.addEventListener('pointerleave', () => {
       el.style.background = isCurrent ? 'rgba(var(--accent-primary-rgb), 0.2)' : '';
     });
 

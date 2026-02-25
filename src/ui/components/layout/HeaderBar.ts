@@ -16,6 +16,7 @@ import { ThemeControl } from '../ThemeControl';
 import { showAlert, showPrompt } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
+import { Z_INDEX, SHADOWS } from '../shared/theme';
 import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 
@@ -386,7 +387,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private createIconButton(icon: string, label: string, onClick: () => void, title?: string): HTMLButtonElement {
-    const iconSvg = this.getIcon(icon);
+    const iconSvg = getIconSvg(icon as IconName, 'sm');
     if (label) {
       return sharedCreateButton(label, onClick, {
         variant: 'icon',
@@ -411,26 +412,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     });
   }
 
-  private getIcon(name: string): string {
-    const icons: Record<string, string> = {
-      'folder': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
-      'folder-open': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1M3 13h18l-2 7H5l-2-7z"/></svg>',
-      'save': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
-      'skip-back': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
-      'step-back': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/></svg>',
-      'play': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
-      'pause': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
-      'step-forward': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/></svg>',
-      'skip-forward': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
-      'help': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-      'keyboard': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
-      'maximize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
-      'minimize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
-      'monitor': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
-      'external-link': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
-    };
-    return icons[name] || '';
-  }
 
   private createSessionNameDisplay(): HTMLElement {
     const container = document.createElement('button');
@@ -618,11 +599,21 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     return button;
   }
 
-  private showSpeedMenu(anchor: HTMLElement): void {
-    // Remove any existing speed menu via tracked cleanup
+  private closeAllHeaderMenus(): void {
     if (this._activeSpeedMenuCleanup) {
       this._activeSpeedMenuCleanup();
     }
+    if (this._activeHelpMenuCleanup) {
+      this._activeHelpMenuCleanup();
+    }
+    if (this._activeLayoutMenuCleanup) {
+      this._activeLayoutMenuCleanup();
+    }
+  }
+
+  private showSpeedMenu(anchor: HTMLElement): void {
+    // Close any other open header menus
+    this.closeAllHeaderMenus();
     const existingMenu = document.getElementById('speed-preset-menu');
     if (existingMenu) {
       existingMenu.remove();
@@ -636,9 +627,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
-      z-index: 10000;
+      z-index: ${Z_INDEX.dropdown};
       min-width: 80px;
     `;
 
@@ -672,13 +663,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         outline: none;
       `;
 
-      item.addEventListener('mouseenter', () => {
+      item.addEventListener('pointerenter', () => {
         if (preset !== currentSpeed) {
           item.style.background = 'var(--bg-hover)';
         }
       });
 
-      item.addEventListener('mouseleave', () => {
+      item.addEventListener('pointerleave', () => {
         if (preset !== currentSpeed) {
           item.style.background = 'transparent';
         }
@@ -734,11 +725,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       outline: none;
     `;
 
-    pitchItem.addEventListener('mouseenter', () => {
+    pitchItem.addEventListener('pointerenter', () => {
       pitchItem.style.background = 'var(--bg-hover)';
     });
 
-    pitchItem.addEventListener('mouseleave', () => {
+    pitchItem.addEventListener('pointerleave', () => {
       pitchItem.style.background = 'transparent';
     });
 
@@ -828,10 +819,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private showHelpMenu(anchor: HTMLElement): void {
-    // Remove any existing help menu
-    if (this._activeHelpMenuCleanup) {
-      this._activeHelpMenuCleanup();
-    }
+    // Close any other open header menus
+    this.closeAllHeaderMenus();
 
     const menu = document.createElement('div');
     menu.id = 'help-menu';
@@ -842,9 +831,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
-      z-index: 10000;
+      z-index: ${Z_INDEX.dropdown};
       min-width: 180px;
     `;
 
@@ -874,7 +863,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       `;
 
       const iconEl = document.createElement('span');
-      iconEl.innerHTML = this.getIcon(icon);
+      iconEl.innerHTML = getIconSvg(icon as IconName, 'sm');
       iconEl.style.cssText = 'display: flex; align-items: center;';
       item.appendChild(iconEl);
 
@@ -882,8 +871,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       labelEl.textContent = label;
       item.appendChild(labelEl);
 
-      item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg-hover)'; });
-      item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+      item.addEventListener('pointerenter', () => { item.style.background = 'var(--bg-hover)'; });
+      item.addEventListener('pointerleave', () => { item.style.background = 'transparent'; });
       item.addEventListener('focus', () => { item.style.background = 'var(--bg-hover)'; });
       item.addEventListener('blur', () => { item.style.background = 'transparent'; });
       item.addEventListener('click', () => {
@@ -959,9 +948,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       return;
     }
 
-    if (this._activeLayoutMenuCleanup) {
-      this._activeLayoutMenuCleanup();
-    }
+    // Close any other open header menus
+    this.closeAllHeaderMenus();
 
     const existingMenu = document.getElementById('layout-preset-menu');
     if (existingMenu) {
@@ -977,9 +965,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: ${SHADOWS.dropdown};
       padding: 4px 0;
-      z-index: 10000;
+      z-index: ${Z_INDEX.dropdown};
       min-width: 140px;
     `;
 
@@ -1010,12 +998,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         activeItem = item;
       }
 
-      item.addEventListener('mouseenter', () => {
+      item.addEventListener('pointerenter', () => {
         if (!isActive) {
           item.style.background = 'var(--bg-hover)';
         }
       });
-      item.addEventListener('mouseleave', () => {
+      item.addEventListener('pointerleave', () => {
         if (!isActive) {
           item.style.background = 'transparent';
         }
@@ -1190,7 +1178,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   private updatePlayButton(): void {
     const icon = this.session.isPlaying ? 'pause' : 'play';
-    this.playButton.innerHTML = this.getIcon(icon);
+    this.playButton.innerHTML = getIconSvg(icon as IconName, 'sm');
     this.playButton.setAttribute('aria-pressed', this.session.isPlaying ? 'true' : 'false');
   }
 
@@ -1472,7 +1460,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   setFullscreenState(isFullscreen: boolean): void {
     const icon = isFullscreen ? 'minimize' : 'maximize';
     const tooltip = isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen (F11)';
-    this.fullscreenButton.innerHTML = this.getIcon(icon);
+    this.fullscreenButton.innerHTML = getIconSvg(icon as IconName, 'sm');
     this.fullscreenButton.title = tooltip;
   }
 

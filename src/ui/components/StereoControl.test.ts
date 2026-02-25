@@ -365,8 +365,8 @@ describe('StereoControl', () => {
       const el = control.render();
       const swapBtn = el.querySelector('[data-testid="stereo-eye-swap"]') as HTMLButtonElement;
 
-      // Simulate mouse click: mousedown then focus
-      swapBtn.dispatchEvent(new Event('mousedown'));
+      // Simulate mouse click: pointerdown then focus
+      swapBtn.dispatchEvent(new Event('pointerdown'));
       swapBtn.dispatchEvent(new Event('focus'));
       expect(swapBtn.style.outline).not.toBe('2px solid var(--accent-primary)');
     });

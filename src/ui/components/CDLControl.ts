@@ -51,14 +51,14 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     `;
 
     this.cdlButton.addEventListener('click', () => this.togglePanel());
-    this.cdlButton.addEventListener('mouseenter', () => {
+    this.cdlButton.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen) {
         this.cdlButton.style.background = 'var(--bg-hover)';
         this.cdlButton.style.borderColor = 'var(--border-primary)';
         this.cdlButton.style.color = 'var(--text-primary)';
       }
     });
-    this.cdlButton.addEventListener('mouseleave', () => {
+    this.cdlButton.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen && isDefaultCDL(this.cdl)) {
         this.cdlButton.style.background = 'transparent';
         this.cdlButton.style.borderColor = 'transparent';
@@ -168,8 +168,8 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       e.stopPropagation();
       onClick();
     });
-    btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--text-muted)'; });
-    btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--border-secondary)'; });
+    btn.addEventListener('pointerenter', () => { btn.style.background = 'var(--text-muted)'; });
+    btn.addEventListener('pointerleave', () => { btn.style.background = 'var(--border-secondary)'; });
     return btn;
   }
 

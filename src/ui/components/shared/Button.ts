@@ -5,6 +5,8 @@
  * Includes proper A11Y focus styles for keyboard navigation.
  */
 
+import { COLORS } from './theme';
+
 export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'icon' | 'overlay';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
@@ -38,14 +40,14 @@ const VARIANT_STYLES: Record<ButtonVariant, {
     active: { background: 'rgba(var(--accent-primary-rgb), 0.15)', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' },
   },
   primary: {
-    base: { background: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', color: '#fff' },
-    hover: { background: 'var(--accent-hover)', borderColor: 'var(--accent-hover)', color: '#fff' },
-    active: { background: 'var(--accent-active)', borderColor: 'var(--accent-active)', color: '#fff' },
+    base: { background: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', color: COLORS.textBright },
+    hover: { background: 'var(--accent-hover)', borderColor: 'var(--accent-hover)', color: COLORS.textBright },
+    active: { background: 'var(--accent-active)', borderColor: 'var(--accent-active)', color: COLORS.textBright },
   },
   danger: {
-    base: { background: 'var(--error)', border: '1px solid var(--error)', color: '#fff' },
-    hover: { background: 'var(--error)', borderColor: 'var(--error)', color: '#fff', filter: 'brightness(1.1)' },
-    active: { background: 'var(--error)', borderColor: 'var(--error)', color: '#fff', filter: 'brightness(0.9)' },
+    base: { background: 'var(--error)', border: '1px solid var(--error)', color: COLORS.textBright },
+    hover: { background: 'var(--error)', borderColor: 'var(--error)', color: COLORS.textBright, filter: 'brightness(1.1)' },
+    active: { background: 'var(--error)', borderColor: 'var(--error)', color: COLORS.textBright, filter: 'brightness(0.9)' },
   },
   ghost: {
     base: { background: 'transparent', border: '1px solid transparent', color: 'var(--text-secondary)' },
@@ -66,7 +68,7 @@ const VARIANT_STYLES: Record<ButtonVariant, {
 
 const SIZE_STYLES: Record<ButtonSize, string> = {
   /** xs is intended only for compact overlay controls */
-  xs: 'padding: 2px 6px; font-size: 9px; height: 20px; min-width: 20px;',
+  xs: 'padding: 2px 6px; font-size: 10px; height: 20px; min-width: 20px;',
   sm: 'padding: 4px 8px; font-size: 11px; height: 24px; min-width: 24px;',
   md: 'padding: 6px 12px; font-size: 12px; height: 28px; min-width: 28px;',
   lg: 'padding: 8px 16px; font-size: 13px; height: 32px; min-width: 32px;',
@@ -253,7 +255,7 @@ export function createIconButton(
 export function applyA11yFocus(button: HTMLButtonElement): () => void {
   let focusFromKeyboard = true;
 
-  const handleMouseDown = () => {
+  const handlePointerDown = () => {
     focusFromKeyboard = false;
   };
 
@@ -269,13 +271,13 @@ export function applyA11yFocus(button: HTMLButtonElement): () => void {
     focusFromKeyboard = true;
   };
 
-  button.addEventListener('mousedown', handleMouseDown);
+  button.addEventListener('pointerdown', handlePointerDown);
   button.addEventListener('focus', handleFocus);
   button.addEventListener('blur', handleBlur);
 
   // Return cleanup function
   return () => {
-    button.removeEventListener('mousedown', handleMouseDown);
+    button.removeEventListener('pointerdown', handlePointerDown);
     button.removeEventListener('focus', handleFocus);
     button.removeEventListener('blur', handleBlur);
   };

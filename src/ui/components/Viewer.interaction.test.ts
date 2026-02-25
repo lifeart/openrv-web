@@ -523,7 +523,7 @@ describe('Viewer', () => {
       viewer.onCursorColorChange(cursorCallback);
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      container.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
 
       expect(cursorCallback).toHaveBeenCalledWith(null, null);
     });
@@ -545,7 +545,8 @@ describe('Viewer', () => {
       const pointerleaveRemoves = removeSpy.mock.calls.filter(
         (call) => call[0] === 'pointerleave'
       );
-      expect(pointerleaveRemoves.length).toBe(1);
+      // 2 pointerleave removals: one from ViewerInputHandler.unbindEvents(), one from pixelSamplingManager
+      expect(pointerleaveRemoves.length).toBe(2);
 
       // cursorColorCallback should be cleared
       expect(testable(viewer).pixelSamplingManager.cursorColorCallback).toBeNull();

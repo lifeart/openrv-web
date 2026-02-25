@@ -47,28 +47,45 @@ describe('Modal showAlert', () => {
     showAlert('Info message');
 
     const container = document.getElementById('modal-container');
-    expect(container?.textContent).toContain('ℹ️');
+    // The icon is inside a span (not the close button's inline SVG)
+    const iconSpan = container?.querySelector('span[style*="inline-flex"]');
+    const svg = iconSpan?.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // Info icon: circle + 2 lines with y1="16" (unique to info)
+    expect(svg?.innerHTML).toContain('y1="16"');
   });
 
   it('MODAL-U006: showAlert success type shows checkmark', () => {
     showAlert('Success!', { type: 'success' });
 
     const container = document.getElementById('modal-container');
-    expect(container?.textContent).toContain('✅');
+    const iconSpan = container?.querySelector('span[style*="inline-flex"]');
+    const svg = iconSpan?.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // Check-circle icon: has "polyline" element with points (unique)
+    expect(svg?.innerHTML).toContain('points=');
   });
 
   it('MODAL-U007: showAlert warning type shows warning icon', () => {
     showAlert('Warning!', { type: 'warning' });
 
     const container = document.getElementById('modal-container');
-    expect(container?.textContent).toContain('⚠️');
+    const iconSpan = container?.querySelector('span[style*="inline-flex"]');
+    const svg = iconSpan?.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // Warning icon: triangle path with "3.86" (unique to warning)
+    expect(svg?.innerHTML).toContain('3.86');
   });
 
   it('MODAL-U008: showAlert error type shows X icon', () => {
     showAlert('Error!', { type: 'error' });
 
     const container = document.getElementById('modal-container');
-    expect(container?.textContent).toContain('❌');
+    const iconSpan = container?.querySelector('span[style*="inline-flex"]');
+    const svg = iconSpan?.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // Error icon: crossed lines with x1="15" (unique X pattern, not close button)
+    expect(svg?.innerHTML).toContain('x1="15"');
   });
 
   it('MODAL-U009: showAlert resolves when OK clicked', async () => {

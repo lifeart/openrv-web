@@ -189,10 +189,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   }
 
   private bindOverlayInteractionEvents(): void {
-    this.overlay.addEventListener('mouseenter', () => {
+    this.overlay.addEventListener('pointerenter', () => {
       this.overlayInteractionActive = true;
     });
-    this.overlay.addEventListener('mouseleave', () => {
+    this.overlay.addEventListener('pointerleave', () => {
       this.overlayInteractionActive = false;
     });
     this.overlay.addEventListener('focusin', () => {
@@ -220,7 +220,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     const title = document.createElement('span');
     title.textContent = 'Pixel Probe';
-    title.style.cssText = 'font-weight: 600; color: var(--text-primary);';
+    title.style.cssText = 'font-weight: 500; color: var(--text-primary);';
 
     this.lockIndicator = document.createElement('span');
     this.lockIndicator.innerHTML = getIconSvg('lock', 'sm');
@@ -308,12 +308,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       padding: 3px 6px;
       border-radius: 3px;
       cursor: pointer;
-      transition: background 0.1s ease;
+      transition: background 0.12s ease;
     `;
-    nitsRow.addEventListener('mouseenter', () => {
+    nitsRow.addEventListener('pointerenter', () => {
       nitsRow.style.background = 'var(--bg-hover)';
     });
-    nitsRow.addEventListener('mouseleave', () => {
+    nitsRow.addEventListener('pointerleave', () => {
       nitsRow.style.background = 'transparent';
     });
     nitsRow.addEventListener('click', () => this.copyValue('nits'));
@@ -378,12 +378,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         cursor: pointer;
       `;
       btn.addEventListener('click', () => this.setFormat(fmt.key));
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.state.format !== fmt.key) {
           btn.style.background = 'var(--border-primary)';
         }
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.state.format !== fmt.key) {
           btn.style.background = 'var(--bg-secondary)';
         }
@@ -410,10 +410,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     precisionBtn.addEventListener('click', () => {
       this.setFloatPrecision(this.floatPrecision === 3 ? 6 : 3);
     });
-    precisionBtn.addEventListener('mouseenter', () => {
+    precisionBtn.addEventListener('pointerenter', () => {
       precisionBtn.style.background = 'var(--border-primary)';
     });
-    precisionBtn.addEventListener('mouseleave', () => {
+    precisionBtn.addEventListener('pointerleave', () => {
       this.updatePrecisionButton();
     });
     this.precisionButton = precisionBtn;
@@ -483,12 +483,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         cursor: pointer;
       `;
       btn.addEventListener('click', () => this.setSampleSize(size));
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.state.sampleSize !== size) {
           btn.style.background = 'var(--border-primary)';
         }
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.state.sampleSize !== size) {
           btn.style.background = 'var(--bg-secondary)';
         }
@@ -551,12 +551,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         cursor: pointer;
       `;
       btn.addEventListener('click', () => this.setSourceMode(mode));
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.state.sourceMode !== mode) {
           btn.style.background = 'var(--border-primary)';
         }
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.state.sourceMode !== mode) {
           btn.style.background = 'var(--bg-secondary)';
         }
@@ -587,12 +587,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       border-radius: 3px;
       border: 1px solid transparent;
       cursor: pointer;
-      transition: background 0.1s ease;
+      transition: background 0.12s ease;
     `;
-    row.addEventListener('mouseenter', () => {
+    row.addEventListener('pointerenter', () => {
       this.applyValueRowStyle(copyKey, row, true);
     });
-    row.addEventListener('mouseleave', () => {
+    row.addEventListener('pointerleave', () => {
       this.applyValueRowStyle(copyKey, row, false);
     });
     row.addEventListener('click', () => this.copyValue(copyKey));

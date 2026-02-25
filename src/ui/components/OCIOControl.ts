@@ -25,6 +25,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
 import { DropdownMenu } from './shared/DropdownMenu';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import { OCIOStateManager } from './OCIOStateManager';
 
 /**
@@ -111,14 +112,14 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       outline: none;
     `;
     this.toggleButton.addEventListener('click', () => this.toggle());
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.isExpanded) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.isExpanded) {
         this.updateButtonStyle();
       }
@@ -138,12 +139,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 340px;
+      min-width: ${PANEL_WIDTHS.wide};
       max-height: 80vh;
       overflow-y: auto;
       z-index: 9999;
       display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: ${SHADOWS.panel};
     `;
 
     // Initialize dropdowns
@@ -237,10 +238,10 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       display: inline-flex;
       align-items: center;
     `;
-    loadConfigButton.addEventListener('mouseenter', () => {
+    loadConfigButton.addEventListener('pointerenter', () => {
       loadConfigButton.style.background = 'var(--bg-hover)';
     });
-    loadConfigButton.addEventListener('mouseleave', () => {
+    loadConfigButton.addEventListener('pointerleave', () => {
       loadConfigButton.style.background = 'var(--bg-tertiary)';
     });
     loadConfigButton.addEventListener('click', () => this.handleLoadConfig());
@@ -259,7 +260,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       font-size: 10px;
       color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
     `;
     dropZone.textContent = 'Drop .ocio file here';
 
@@ -396,11 +397,11 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       justify-content: center;
     `;
     closeButton.addEventListener('click', () => this.hide());
-    closeButton.addEventListener('mouseenter', () => {
+    closeButton.addEventListener('pointerenter', () => {
       closeButton.style.background = 'var(--bg-hover)';
       closeButton.style.color = 'var(--text-primary)';
     });
-    closeButton.addEventListener('mouseleave', () => {
+    closeButton.addEventListener('pointerleave', () => {
       closeButton.style.background = 'transparent';
       closeButton.style.color = 'var(--text-secondary)';
     });
@@ -501,10 +502,10 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     // Store button reference on label for dropdown handling
     (valueLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button = selectButton;
 
-    selectButton.addEventListener('mouseenter', () => {
+    selectButton.addEventListener('pointerenter', () => {
       selectButton.style.borderColor = 'var(--accent-primary)';
     });
-    selectButton.addEventListener('mouseleave', () => {
+    selectButton.addEventListener('pointerleave', () => {
       selectButton.style.borderColor = 'var(--border-primary)';
     });
 
@@ -543,10 +544,10 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       font-size: 12px;
     `;
     resetButton.addEventListener('click', () => this.reset());
-    resetButton.addEventListener('mouseenter', () => {
+    resetButton.addEventListener('pointerenter', () => {
       resetButton.style.background = 'var(--bg-hover)';
     });
-    resetButton.addEventListener('mouseleave', () => {
+    resetButton.addEventListener('pointerleave', () => {
       resetButton.style.background = 'var(--bg-tertiary)';
     });
 
@@ -677,11 +678,11 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
           overflow: hidden;
           text-overflow: ellipsis;
         `;
-        btn.addEventListener('mouseenter', () => {
+        btn.addEventListener('pointerenter', () => {
           btn.style.background = 'var(--bg-hover)';
           btn.style.borderColor = 'var(--accent-primary)';
         });
-        btn.addEventListener('mouseleave', () => {
+        btn.addEventListener('pointerleave', () => {
           btn.style.background = 'var(--bg-tertiary)';
           btn.style.borderColor = 'var(--border-primary)';
         });

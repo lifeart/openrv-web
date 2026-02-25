@@ -1,6 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { SHADOWS } from './shared/theme';
 import {
   StereoMode,
   StereoState,
@@ -37,6 +38,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
   private isDropdownOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -44,6 +46,13 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     // Bind event handlers for cleanup
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isDropdownOpen) {
+        this.closeDropdown();
+      }
+    };
 
     // Create container
     this.container = document.createElement('div');
@@ -83,14 +92,14 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       e.stopPropagation();
       this.toggleDropdown();
     });
-    this.modeButton.addEventListener('mouseenter', () => {
+    this.modeButton.addEventListener('pointerenter', () => {
       if (this.state.mode === 'off' && !this.isDropdownOpen) {
         this.modeButton.style.background = 'var(--bg-hover)';
         this.modeButton.style.borderColor = 'var(--border-primary)';
         this.modeButton.style.color = 'var(--text-primary)';
       }
     });
-    this.modeButton.addEventListener('mouseleave', () => {
+    this.modeButton.addEventListener('pointerleave', () => {
       if (this.state.mode === 'off' && !this.isDropdownOpen) {
         this.modeButton.style.background = 'transparent';
         this.modeButton.style.borderColor = 'transparent';
@@ -115,7 +124,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       display: none;
       flex-direction: column;
       min-width: 140px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: ${SHADOWS.dropdown};
     `;
 
     // Populate dropdown with mode options
@@ -134,10 +143,10 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
         border-radius: 3px;
         transition: background 0.12s ease;
       `;
-      option.addEventListener('mouseenter', () => {
+      option.addEventListener('pointerenter', () => {
         option.style.background = 'var(--bg-hover)';
       });
-      option.addEventListener('mouseleave', () => {
+      option.addEventListener('pointerleave', () => {
         if (this.state.mode !== mode) {
           option.style.background = 'transparent';
         }
@@ -167,13 +176,13 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       display: none;
     `;
     this.eyeSwapButton.addEventListener('click', () => this.toggleEyeSwap());
-    this.eyeSwapButton.addEventListener('mouseenter', () => {
+    this.eyeSwapButton.addEventListener('pointerenter', () => {
       if (!this.state.eyeSwap) {
         this.eyeSwapButton.style.background = 'var(--bg-hover)';
         this.eyeSwapButton.style.borderColor = 'var(--border-primary)';
       }
     });
-    this.eyeSwapButton.addEventListener('mouseleave', () => {
+    this.eyeSwapButton.addEventListener('pointerleave', () => {
       if (!this.state.eyeSwap) {
         this.eyeSwapButton.style.background = 'transparent';
         this.eyeSwapButton.style.borderColor = 'transparent';
@@ -260,7 +269,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
 
   private updateModeButtonLabel(): void {
     const label = this.state.mode === 'off' ? 'Stereo' : getStereoModeLabel(this.state.mode);
-    this.modeButton.innerHTML = `${getIconSvg('eye', 'sm')}<span style="margin-left: 4px;">${label}</span><span style="margin-left: 4px; font-size: 8px;">&#9660;</span>`;
+    this.modeButton.innerHTML = `${getIconSvg('eye', 'sm')}<span style="margin-left: 4px;">${label}</span><span style="margin-left: 4px;">${getIconSvg('chevron-down', 'sm')}</span>`;
 
     // Update button style based on active state
     if (this.state.mode !== 'off') {
@@ -339,6 +348,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
 
     // Add listeners
     document.addEventListener('click', this.boundHandleOutsideClick);
+    document.addEventListener('keydown', this.boundHandleKeyDown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -350,6 +360,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
 
     // Remove listeners
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

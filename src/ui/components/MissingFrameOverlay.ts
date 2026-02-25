@@ -5,6 +5,8 @@
  * helping users identify gaps in their image sequences.
  */
 
+import { getIconSvg } from './shared/Icons';
+
 export interface MissingFrameOverlayState {
   visible: boolean;
   frameNumber: number | null;
@@ -41,10 +43,11 @@ export class MissingFrameOverlay {
     // Warning icon
     const warningIcon = document.createElement('div');
     warningIcon.className = 'warning-icon';
-    warningIcon.textContent = '⚠️';
+    warningIcon.innerHTML = getIconSvg('warning', 'lg');
     warningIcon.style.cssText = `
-      font-size: 48px;
       margin-bottom: 16px;
+      color: #ff6b6b;
+      transform: scale(2.4);
     `;
 
     // Main message
@@ -53,7 +56,7 @@ export class MissingFrameOverlay {
     this.messageElement.textContent = 'MISSING FRAME';
     this.messageElement.style.cssText = `
       font-size: 24px;
-      font-weight: bold;
+      font-weight: 500;
       color: #ff6b6b;
       text-transform: uppercase;
       letter-spacing: 2px;

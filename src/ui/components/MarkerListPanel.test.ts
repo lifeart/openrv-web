@@ -8,6 +8,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MarkerListPanel, MarkerExportData } from './MarkerListPanel';
 import { Session, MARKER_COLORS } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import * as Modal from './shared/Modal';
+
+vi.mock('./shared/Modal', async (importOriginal) => {
+  const original = await importOriginal<typeof Modal>();
+  return {
+    ...original,
+    showAlert: vi.fn().mockResolvedValue(undefined),
+    showConfirm: vi.fn().mockResolvedValue(true),
+  };
+});
 
 describe('MarkerListPanel', () => {
   let panel: MarkerListPanel;
@@ -310,57 +320,52 @@ describe('MarkerListPanel', () => {
   });
 
   describe('clear all button', () => {
-    it('MARK-U080: clear button removes all markers when confirmed', () => {
+    it('MARK-U080: clear button removes all markers when confirmed', async () => {
       session.setMarker(10, '', MARKER_COLORS[0]);
       session.setMarker(20, '', MARKER_COLORS[1]);
       session.setMarker(30, '', MARKER_COLORS[2]);
       panel.show();
       expect(session.marks.size).toBe(3);
 
-      // Mock window.confirm to return true
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      // Mock showConfirm to return true
+      const confirmMock = vi.mocked(Modal.showConfirm).mockResolvedValue(true);
 
       const clearBtn = panel.getElement().querySelector('[data-testid="marker-clear-btn"]') as HTMLElement;
       clearBtn.click();
+      await vi.waitFor(() => expect(session.marks.size).toBe(0));
 
-      expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('3 markers'));
-      expect(session.marks.size).toBe(0);
-
-      confirmSpy.mockRestore();
+      expect(confirmMock).toHaveBeenCalledWith(expect.stringContaining('3 markers'));
     });
 
-    it('MARK-U081: shows empty message after clearing', () => {
+    it('MARK-U081: shows empty message after clearing', async () => {
       session.setMarker(10, '', MARKER_COLORS[0]);
       panel.show();
 
-      // Mock window.confirm to return true
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      // Mock showConfirm to return true
+      vi.mocked(Modal.showConfirm).mockResolvedValue(true);
 
       const clearBtn = panel.getElement().querySelector('[data-testid="marker-clear-btn"]') as HTMLElement;
       clearBtn.click();
-
-      const entries = panel.getElement().querySelector('[data-testid="marker-entries"]');
-      expect(entries?.textContent).toContain('No markers yet');
-
-      confirmSpy.mockRestore();
+      await vi.waitFor(() => {
+        const entries = panel.getElement().querySelector('[data-testid="marker-entries"]');
+        expect(entries?.textContent).toContain('No markers yet');
+      });
     });
 
-    it('MARK-U082: clear button does not clear when cancelled', () => {
+    it('MARK-U082: clear button does not clear when cancelled', async () => {
       session.setMarker(10, '', MARKER_COLORS[0]);
       session.setMarker(20, '', MARKER_COLORS[1]);
       panel.show();
       expect(session.marks.size).toBe(2);
 
-      // Mock window.confirm to return false (user cancelled)
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      // Mock showConfirm to return false (user cancelled)
+      const confirmMock = vi.mocked(Modal.showConfirm).mockResolvedValue(false);
 
       const clearBtn = panel.getElement().querySelector('[data-testid="marker-clear-btn"]') as HTMLElement;
       clearBtn.click();
+      await vi.waitFor(() => expect(confirmMock).toHaveBeenCalled());
 
-      expect(confirmSpy).toHaveBeenCalled();
       expect(session.marks.size).toBe(2); // Markers should still exist
-
-      confirmSpy.mockRestore();
     });
 
     it('MARK-U083: clear button does nothing when no markers', () => {
@@ -646,16 +651,16 @@ describe('MarkerListPanel', () => {
 
   describe('marker import', () => {
     // Helper to simulate file import by calling applyImportedMarkers directly
-    function applyImport(
+    async function applyImport(
       panel: MarkerListPanel,
       data: unknown,
       mode: 'replace' | 'merge' = 'merge'
-    ): void {
+    ): Promise<void> {
       // Access private method via type assertion for testing
-      (panel as any).applyImportedMarkers(data, mode);
+      await (panel as any).applyImportedMarkers(data, mode);
     }
 
-    it('MARK-U140: import with valid JSON adds markers to session', () => {
+    it('MARK-U140: import with valid JSON adds markers to session', async () => {
       panel.show();
       const importData: MarkerExportData = {
         version: 1,
@@ -667,7 +672,7 @@ describe('MarkerListPanel', () => {
         ],
       };
 
-      applyImport(panel, importData);
+      await applyImport(panel, importData);
 
       expect(session.hasMarker(10)).toBe(true);
       expect(session.hasMarker(20)).toBe(true);
@@ -675,7 +680,7 @@ describe('MarkerListPanel', () => {
       expect(session.getMarker(20)?.note).toBe('Imported B');
     });
 
-    it('MARK-U141: import with merge mode preserves existing markers', () => {
+    it('MARK-U141: import with merge mode preserves existing markers', async () => {
       session.setMarker(10, 'Existing', MARKER_COLORS[0]);
       panel.show();
 
@@ -689,7 +694,7 @@ describe('MarkerListPanel', () => {
         ],
       };
 
-      applyImport(panel, importData, 'merge');
+      await applyImport(panel, importData, 'merge');
 
       // Existing marker at frame 10 should be preserved (not overwritten)
       expect(session.getMarker(10)?.note).toBe('Existing');
@@ -699,7 +704,7 @@ describe('MarkerListPanel', () => {
       expect(session.getMarker(30)?.note).toBe('New marker');
     });
 
-    it('MARK-U142: import with replace mode clears existing markers first', () => {
+    it('MARK-U142: import with replace mode clears existing markers first', async () => {
       session.setMarker(10, 'Old', MARKER_COLORS[0]);
       session.setMarker(20, 'Also old', MARKER_COLORS[1]);
       panel.show();
@@ -713,7 +718,7 @@ describe('MarkerListPanel', () => {
         ],
       };
 
-      applyImport(panel, importData, 'replace');
+      await applyImport(panel, importData, 'replace');
 
       expect(session.hasMarker(10)).toBe(false);
       expect(session.hasMarker(20)).toBe(false);
@@ -721,28 +726,28 @@ describe('MarkerListPanel', () => {
       expect(session.getMarker(50)?.note).toBe('Replaced');
     });
 
-    it('MARK-U143: import rejects invalid JSON (missing markers array)', () => {
+    it('MARK-U143: import rejects invalid JSON (missing markers array)', async () => {
       panel.show();
-      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+      const alertMock = vi.mocked(Modal.showAlert);
+      alertMock.mockClear();
 
-      applyImport(panel, { version: 1 });
+      await applyImport(panel, { version: 1 });
 
-      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid marker file'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('Invalid marker file'));
       expect(session.marks.size).toBe(0);
-      alertSpy.mockRestore();
     });
 
-    it('MARK-U144: import rejects data without version field', () => {
+    it('MARK-U144: import rejects data without version field', async () => {
       panel.show();
-      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+      const alertMock = vi.mocked(Modal.showAlert);
+      alertMock.mockClear();
 
-      applyImport(panel, { markers: [] });
+      await applyImport(panel, { markers: [] });
 
-      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid marker file'));
-      alertSpy.mockRestore();
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('Invalid marker file'));
     });
 
-    it('MARK-U145: import skips markers with invalid frames', () => {
+    it('MARK-U145: import skips markers with invalid frames', async () => {
       panel.show();
       const importData: MarkerExportData = {
         version: 1,
@@ -756,13 +761,13 @@ describe('MarkerListPanel', () => {
         ] as any,
       };
 
-      applyImport(panel, importData);
+      await applyImport(panel, importData);
 
       expect(session.hasMarker(10)).toBe(true);
       expect(session.marks.size).toBe(1);
     });
 
-    it('MARK-U146: import skips markers with bad types', () => {
+    it('MARK-U146: import skips markers with bad types', async () => {
       panel.show();
       const importData = {
         version: 1,
@@ -776,14 +781,14 @@ describe('MarkerListPanel', () => {
         ],
       };
 
-      applyImport(panel, importData);
+      await applyImport(panel, importData);
 
       // Only the fully valid marker should be added
       expect(session.hasMarker(30)).toBe(true);
       expect(session.marks.size).toBe(1);
     });
 
-    it('MARK-U147: import handles duration markers with endFrame', () => {
+    it('MARK-U147: import handles duration markers with endFrame', async () => {
       panel.show();
       const importData: MarkerExportData = {
         version: 1,
@@ -794,12 +799,12 @@ describe('MarkerListPanel', () => {
         ],
       };
 
-      applyImport(panel, importData);
+      await applyImport(panel, importData);
 
       expect(session.getMarker(10)?.endFrame).toBe(25);
     });
 
-    it('MARK-U148: round-trip export then import produces identical markers', () => {
+    it('MARK-U148: round-trip export then import produces identical markers', async () => {
       session.setMarker(10, 'First', MARKER_COLORS[0]);
       session.setMarker(30, 'Second', MARKER_COLORS[2], 50);
       session.setMarker(60, 'Third', MARKER_COLORS[4]);
@@ -826,7 +831,7 @@ describe('MarkerListPanel', () => {
       session.clearMarks();
       expect(session.marks.size).toBe(0);
 
-      applyImport(panel, exportData, 'replace');
+      await applyImport(panel, exportData, 'replace');
 
       expect(session.marks.size).toBe(3);
       expect(session.getMarker(10)?.note).toBe('First');
@@ -843,17 +848,16 @@ describe('MarkerListPanel', () => {
       expect(importBtn?.textContent).toBe('Import');
     });
 
-    it('MARK-U150: import rejects non-object data', () => {
+    it('MARK-U150: import rejects non-object data', async () => {
       panel.show();
-      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+      const alertMock = vi.mocked(Modal.showAlert);
+      alertMock.mockClear();
 
-      applyImport(panel, 'just a string');
-      expect(alertSpy).toHaveBeenCalled();
+      await applyImport(panel, 'just a string');
+      expect(alertMock).toHaveBeenCalled();
 
-      applyImport(panel, null);
-      expect(alertSpy).toHaveBeenCalledTimes(2);
-
-      alertSpy.mockRestore();
+      await applyImport(panel, null);
+      expect(alertMock).toHaveBeenCalledTimes(2);
     });
   });
 

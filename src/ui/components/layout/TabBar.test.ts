@@ -190,7 +190,7 @@ describe('TabBar', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="color"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
+      btn.dispatchEvent(new MouseEvent('pointerenter'));
 
       expect(btn.style.cssText).toContain('var(--text-secondary)');
     });
@@ -199,8 +199,8 @@ describe('TabBar', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="color"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      btn.dispatchEvent(new MouseEvent('mouseleave'));
+      btn.dispatchEvent(new MouseEvent('pointerenter'));
+      btn.dispatchEvent(new MouseEvent('pointerleave'));
 
       expect(btn.style.cssText).toContain('var(--text-muted)');
     });
@@ -209,7 +209,7 @@ describe('TabBar', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="view"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
+      btn.dispatchEvent(new MouseEvent('pointerenter'));
 
       // Active tab keeps primary color
       expect(btn.style.cssText).toContain('var(--text-primary)');

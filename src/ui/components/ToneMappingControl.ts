@@ -9,6 +9,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
 
 
@@ -36,6 +37,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private toggleButton: HTMLButtonElement;
   private operatorButtons: Map<ToneMappingOperator, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   private state: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
@@ -52,6 +54,13 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     super();
     this.capabilities = capabilities;
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isDropdownOpen) {
+        this.toggleDropdown();
+      }
+    };
 
     // Create container
     this.container = document.createElement('div');
@@ -71,6 +80,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     this.toggleButton.setAttribute('aria-label', 'Tone mapping options');
     this.toggleButton.setAttribute('aria-haspopup', 'menu');
     this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.toggleButton.setAttribute('aria-pressed', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -90,7 +100,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       this.toggleDropdown();
     });
 
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.state.enabled) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
@@ -98,7 +108,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       }
     });
 
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.state.enabled) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -120,10 +130,10 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 8px;
-      min-width: 200px;
+      min-width: ${PANEL_WIDTHS.narrow};
       z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: ${SHADOWS.dropdown};
     `;
 
     this.createDropdownContent();
@@ -201,7 +211,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
         color: var(--text-secondary);
         font-size: 11px;
         cursor: pointer;
-        transition: all 0.1s ease;
+        transition: all 0.12s ease;
         text-align: left;
       `;
 
@@ -211,7 +221,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
       const descSpan = document.createElement('span');
       descSpan.textContent = operator.description;
-      descSpan.style.cssText = 'font-size: 9px; color: var(--text-secondary); margin-top: 2px;';
+      descSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); margin-top: 2px;';
 
       btn.appendChild(labelSpan);
       btn.appendChild(descSpan);
@@ -220,13 +230,13 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
         this.setOperator(operator.key);
       });
 
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.state.operator !== operator.key) {
           btn.style.background = 'var(--border-primary)';
         }
       });
 
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.state.operator !== operator.key) {
           btn.style.background = 'var(--bg-secondary)';
         }
@@ -308,7 +318,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
         color: var(--text-secondary);
         font-size: 11px;
         cursor: pointer;
-        transition: all 0.1s ease;
+        transition: all 0.12s ease;
         text-align: left;
       `;
 
@@ -318,7 +328,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
       const descSpan = document.createElement('span');
       descSpan.textContent = mode.description;
-      descSpan.style.cssText = 'font-size: 9px; color: var(--text-secondary); margin-top: 2px;';
+      descSpan.style.cssText = 'font-size: 10px; color: var(--text-secondary); margin-top: 2px;';
 
       btn.appendChild(labelSpan);
       btn.appendChild(descSpan);
@@ -327,13 +337,13 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
         this.setHDROutputMode(mode.key);
       });
 
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.hdrOutputMode !== mode.key) {
           btn.style.background = 'var(--border-primary)';
         }
       });
 
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.hdrOutputMode !== mode.key) {
           btn.style.background = 'var(--bg-secondary)';
         }
@@ -572,6 +582,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
   private updateButtonState(): void {
     const enabled = this.state.enabled && this.state.operator !== 'off';
+    this.toggleButton.setAttribute('aria-pressed', String(enabled));
     if (enabled) {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
@@ -623,11 +634,13 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       this.dropdown.style.display = 'block';
       this.positionDropdown();
       document.addEventListener('click', this.handleOutsideClick);
+      document.addEventListener('keydown', this.boundHandleKeyDown);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
       document.removeEventListener('click', this.handleOutsideClick);
+      document.removeEventListener('keydown', this.boundHandleKeyDown);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -646,6 +659,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
         this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
         document.removeEventListener('click', this.handleOutsideClick);
+        document.removeEventListener('keydown', this.boundHandleKeyDown);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -786,6 +800,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
    */
   dispose(): void {
     document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

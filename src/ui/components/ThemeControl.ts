@@ -4,27 +4,26 @@
  * Features:
  * - Dropdown with Dark/Light/Auto options
  * - Shows current theme mode
- * - Cycles through modes on click
+ * - Keyboard navigation via shared DropdownMenu (ArrowUp/Down, Enter, Escape)
+ * - aria-haspopup/aria-expanded for accessibility
  */
 
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { DropdownMenu } from './shared/DropdownMenu';
 import { getThemeManager, ThemeMode } from '../../utils/ui/ThemeManager';
 
 export class ThemeControl {
   private container: HTMLElement;
   private button: HTMLButtonElement;
-  private dropdown: HTMLElement;
-  private isOpen = false;
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
+  private dropdownMenu: DropdownMenu;
   private boundOnModeChanged: () => void;
   private boundOnThemeChanged: () => void;
 
   constructor() {
     const themeManager = getThemeManager();
-    this.boundHandleOutsideClick = (e) => this.handleOutsideClick(e);
     this.boundOnModeChanged = () => this.updateButtonLabel();
-    this.boundOnThemeChanged = () => this.updateDropdownStates();
+    this.boundOnThemeChanged = () => this.updateSelectedValue();
 
     // Create container
     this.container = document.createElement('div');
@@ -35,6 +34,8 @@ export class ThemeControl {
     this.button = document.createElement('button');
     this.button.dataset.testid = 'theme-control-button';
     this.button.title = 'Theme settings';
+    this.button.setAttribute('aria-haspopup', 'listbox');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -51,12 +52,12 @@ export class ThemeControl {
     `;
     this.updateButtonLabel();
 
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       this.button.style.background = 'var(--bg-hover, #333)';
       this.button.style.borderColor = 'var(--border-primary, #555)';
     });
-    this.button.addEventListener('mouseleave', () => {
-      if (!this.isOpen) {
+    this.button.addEventListener('pointerleave', () => {
+      if (!this.dropdownMenu.isVisible()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
       }
@@ -66,20 +67,21 @@ export class ThemeControl {
     // Apply A11Y focus handling
     applyA11yFocus(this.button);
 
-    // Create dropdown (appended to document.body to escape stacking context)
-    this.dropdown = document.createElement('div');
-    this.dropdown.dataset.testid = 'theme-dropdown';
-    this.dropdown.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary, #252525);
-      border: 1px solid var(--border-primary, #444);
-      border-radius: 6px;
-      padding: 4px;
-      min-width: 120px;
-      z-index: 9999;
-      display: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    `;
+    // Create shared DropdownMenu
+    this.dropdownMenu = new DropdownMenu({
+      minWidth: '120px',
+      align: 'right',
+      closeOthers: true,
+      onSelect: (value) => {
+        getThemeManager().setMode(value as ThemeMode);
+      },
+      onClose: () => {
+        this.button.setAttribute('aria-expanded', 'false');
+        this.button.style.background = 'transparent';
+        this.button.style.borderColor = 'transparent';
+      },
+    });
+
     this.populateDropdown();
 
     this.container.appendChild(this.button);
@@ -137,170 +139,38 @@ export class ThemeControl {
    * Populate dropdown with theme options
    */
   private populateDropdown(): void {
-    this.dropdown.innerHTML = '';
-
     const modes: ThemeMode[] = ['auto', 'dark', 'light'];
-    const currentMode = getThemeManager().getMode();
 
-    modes.forEach(mode => {
-      const option = document.createElement('button');
-      option.dataset.testid = `theme-option-${mode}`;
-      option.dataset.themeMode = mode;
-      option.style.cssText = `
-        width: 100%;
-        background: transparent;
-        border: none;
-        color: var(--text-primary, #ccc);
-        padding: 8px 12px;
-        text-align: left;
-        cursor: pointer;
-        font-size: 12px;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transition: var(--theme-transition, background 0.12s ease);
-      `;
+    this.dropdownMenu.setItems(
+      modes.map(mode => ({
+        value: mode,
+        label: this.getModeLabel(mode),
+      }))
+    );
 
-      const isActive = mode === currentMode;
-      option.style.background = isActive ? 'var(--accent-primary, #4a9eff)22' : 'transparent';
-      option.style.color = isActive ? 'var(--accent-primary, #4a9eff)' : 'var(--text-primary, #ccc)';
-
-      option.innerHTML = `${this.getThemeIcon(mode)}<span>${this.getModeLabel(mode)}</span>`;
-
-      option.addEventListener('mouseenter', () => {
-        if (mode !== currentMode) {
-          option.style.background = 'var(--bg-hover, #333)';
-        }
-      });
-      option.addEventListener('mouseleave', () => {
-        const isNowActive = mode === getThemeManager().getMode();
-        option.style.background = isNowActive ? 'var(--accent-primary, #4a9eff)22' : 'transparent';
-      });
-      option.addEventListener('click', (e) => {
-        e.stopPropagation();
-        getThemeManager().setMode(mode);
-        this.closeDropdown();
-      });
-
-      this.dropdown.appendChild(option);
-    });
-
-    // Add divider
-    const divider = document.createElement('div');
-    divider.style.cssText = 'height: 1px; background: var(--border-secondary, #333); margin: 4px 0;';
-    this.dropdown.appendChild(divider);
-
-    // Add current resolved theme info
-    const info = document.createElement('div');
-    info.className = 'theme-info';
-    info.style.cssText = `
-      padding: 6px 12px;
-      font-size: 10px;
-      color: var(--text-muted, #666);
-    `;
-    this.updateThemeInfo(info);
-    this.dropdown.appendChild(info);
+    this.updateSelectedValue();
   }
 
   /**
-   * Update theme info display
+   * Update selected value after theme change
    */
-  private updateThemeInfo(info: HTMLElement): void {
-    const resolved = getThemeManager().getResolvedTheme();
-    info.textContent = `Current: ${resolved === 'dark' ? 'Dark' : 'Light'} theme`;
-  }
-
-  /**
-   * Update dropdown states after theme change
-   */
-  private updateDropdownStates(): void {
+  private updateSelectedValue(): void {
     const currentMode = getThemeManager().getMode();
-    const options = this.dropdown.querySelectorAll('[data-theme-mode]');
-
-    options.forEach(option => {
-      const mode = (option as HTMLElement).dataset.themeMode as ThemeMode;
-      const isActive = mode === currentMode;
-      (option as HTMLElement).style.background = isActive ? 'var(--accent-primary, #4a9eff)22' : 'transparent';
-      (option as HTMLElement).style.color = isActive ? 'var(--accent-primary, #4a9eff)' : 'var(--text-primary, #ccc)';
-    });
-
-    const info = this.dropdown.querySelector('.theme-info') as HTMLElement;
-    if (info) {
-      this.updateThemeInfo(info);
-    }
+    this.dropdownMenu.setSelectedValue(currentMode);
   }
 
   /**
    * Toggle dropdown visibility
    */
   private toggleDropdown(): void {
-    if (this.isOpen) {
-      this.closeDropdown();
+    if (this.dropdownMenu.isVisible()) {
+      this.dropdownMenu.close();
     } else {
-      this.openDropdown();
-    }
-  }
-
-  /**
-   * Open dropdown
-   */
-  private openDropdown(): void {
-    if (!document.body.contains(this.dropdown)) {
-      document.body.appendChild(this.dropdown);
-    }
-
-    this.isOpen = true;
-    this.dropdown.style.display = 'block';
-    this.button.style.background = 'var(--bg-hover, #333)';
-    this.button.style.borderColor = 'var(--border-primary, #555)';
-    this.positionDropdown();
-    this.updateDropdownStates();
-    document.addEventListener('mousedown', this.boundHandleOutsideClick);
-  }
-
-  /**
-   * Position dropdown below the button using fixed positioning
-   */
-  private positionDropdown(): void {
-    const rect = this.button.getBoundingClientRect();
-    const dropdownRect = this.dropdown.getBoundingClientRect();
-
-    let top = rect.bottom + 4;
-    let left = rect.right - dropdownRect.width;
-
-    // Ensure dropdown stays within viewport
-    if (top + dropdownRect.height > window.innerHeight) {
-      top = rect.top - dropdownRect.height - 4;
-    }
-    if (left < 8) {
-      left = 8;
-    }
-    if (left + dropdownRect.width > window.innerWidth) {
-      left = window.innerWidth - dropdownRect.width - 8;
-    }
-
-    this.dropdown.style.top = `${top}px`;
-    this.dropdown.style.left = `${left}px`;
-  }
-
-  /**
-   * Close dropdown
-   */
-  private closeDropdown(): void {
-    this.isOpen = false;
-    this.dropdown.style.display = 'none';
-    this.button.style.background = 'transparent';
-    this.button.style.borderColor = 'transparent';
-    document.removeEventListener('mousedown', this.boundHandleOutsideClick);
-  }
-
-  /**
-   * Handle outside click
-   */
-  private handleOutsideClick(e: MouseEvent): void {
-    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-      this.closeDropdown();
+      this.updateSelectedValue();
+      this.dropdownMenu.open(this.button);
+      this.button.setAttribute('aria-expanded', 'true');
+      this.button.style.background = 'var(--bg-hover, #333)';
+      this.button.style.borderColor = 'var(--border-primary, #555)';
     }
   }
 
@@ -308,17 +178,12 @@ export class ThemeControl {
    * Cleanup
    */
   dispose(): void {
-    document.removeEventListener('mousedown', this.boundHandleOutsideClick);
+    this.dropdownMenu.dispose();
 
     // Clean up theme change listeners
     const themeManager = getThemeManager();
     themeManager.off('modeChanged', this.boundOnModeChanged);
     themeManager.off('themeChanged', this.boundOnThemeChanged);
-
-    // Remove body-mounted dropdown if present
-    if (this.dropdown.parentNode) {
-      this.dropdown.parentNode.removeChild(this.dropdown);
-    }
 
     this.container.remove();
   }

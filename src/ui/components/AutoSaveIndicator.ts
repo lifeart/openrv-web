@@ -6,6 +6,7 @@
  */
 
 import { getIconSvg } from './shared/Icons';
+import { Z_INDEX, SHADOWS } from './shared/theme';
 import type { AutoSaveManager } from '../../core/session/AutoSaveManager';
 import type { AutoSaveConfig } from '../../core/session/AutoSaveManager';
 
@@ -236,8 +237,8 @@ export class AutoSaveIndicator {
       background: var(--bg-secondary, #2a2a2a);
       border: 1px solid var(--border-color, #444);
       border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      z-index: 10000;
+      box-shadow: ${SHADOWS.dropdown};
+      z-index: ${Z_INDEX.dropdown};
       min-width: 220px;
       max-width: calc(100vw - 16px);
       font-size: 12px;

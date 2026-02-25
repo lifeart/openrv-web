@@ -1,6 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/BlendModes';
 import { getIconSvg } from './shared/Icons';
+import { OPACITY } from './shared/theme';
 import type { StencilBox } from '../../core/types/wipe';
 
 export type { StencilBox };
@@ -75,14 +76,14 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
 
     this.stackButton.addEventListener('click', () => this.togglePanel());
-    this.stackButton.addEventListener('mouseenter', () => {
+    this.stackButton.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen) {
         this.stackButton.style.background = 'var(--bg-hover)';
         this.stackButton.style.borderColor = 'var(--border-primary)';
         this.stackButton.style.color = 'var(--text-primary)';
       }
     });
-    this.stackButton.addEventListener('mouseleave', () => {
+    this.stackButton.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen && this.layers.length <= 1) {
         this.stackButton.style.background = 'transparent';
         this.stackButton.style.borderColor = 'transparent';
@@ -151,8 +152,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       font-size: 11px;
     `;
     addBtn.addEventListener('click', () => this.addLayerFromCurrentSource());
-    addBtn.addEventListener('mouseenter', () => { addBtn.style.background = 'var(--accent-hover)'; });
-    addBtn.addEventListener('mouseleave', () => { addBtn.style.background = 'var(--accent-primary)'; });
+    addBtn.addEventListener('pointerenter', () => { addBtn.style.background = 'var(--accent-hover)'; });
+    addBtn.addEventListener('pointerleave', () => { addBtn.style.background = 'var(--accent-primary)'; });
 
     header.appendChild(title);
     header.appendChild(addBtn);
@@ -217,7 +218,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       border: 1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-primary)'};
       border-radius: 4px;
       margin-bottom: 6px;
-      transition: border-top 0.1s ease;
+      transition: border-top 0.12s ease;
     `;
 
     // Drag-and-drop support
@@ -281,10 +282,10 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       display: flex;
       align-items: center;
     `;
-    visBtn.addEventListener('mouseenter', () => {
+    visBtn.addEventListener('pointerenter', () => {
       visBtn.style.color = 'var(--text-primary)';
     });
-    visBtn.addEventListener('mouseleave', () => {
+    visBtn.addEventListener('pointerleave', () => {
       visBtn.style.color = layer.visible ? 'var(--text-muted)' : 'var(--border-secondary)';
     });
     visBtn.addEventListener('click', (e) => {
@@ -330,16 +331,16 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       align-items: center;
     `;
     moveUp.disabled = index === this.layers.length - 1;
-    moveUp.style.opacity = moveUp.disabled ? '0.3' : '1';
+    moveUp.style.opacity = moveUp.disabled ? String(OPACITY.disabled) : '1';
     moveUp.style.cursor = moveUp.disabled ? 'not-allowed' : 'pointer';
-    moveUp.addEventListener('mouseenter', () => {
+    moveUp.addEventListener('pointerenter', () => {
       if (!moveUp.disabled) {
         moveUp.style.background = 'var(--bg-hover)';
         moveUp.style.borderColor = 'var(--border-primary)';
         moveUp.style.color = 'var(--text-primary)';
       }
     });
-    moveUp.addEventListener('mouseleave', () => {
+    moveUp.addEventListener('pointerleave', () => {
       moveUp.style.background = 'transparent';
       moveUp.style.borderColor = 'transparent';
       moveUp.style.color = 'var(--text-muted)';
@@ -366,16 +367,16 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       align-items: center;
     `;
     moveDown.disabled = index === 0;
-    moveDown.style.opacity = moveDown.disabled ? '0.3' : '1';
+    moveDown.style.opacity = moveDown.disabled ? String(OPACITY.disabled) : '1';
     moveDown.style.cursor = moveDown.disabled ? 'not-allowed' : 'pointer';
-    moveDown.addEventListener('mouseenter', () => {
+    moveDown.addEventListener('pointerenter', () => {
       if (!moveDown.disabled) {
         moveDown.style.background = 'var(--bg-hover)';
         moveDown.style.borderColor = 'var(--border-primary)';
         moveDown.style.color = 'var(--text-primary)';
       }
     });
-    moveDown.addEventListener('mouseleave', () => {
+    moveDown.addEventListener('pointerleave', () => {
       moveDown.style.background = 'transparent';
       moveDown.style.borderColor = 'transparent';
       moveDown.style.color = 'var(--text-muted)';
@@ -402,11 +403,11 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       display: flex;
       align-items: center;
     `;
-    deleteBtn.addEventListener('mouseenter', () => {
+    deleteBtn.addEventListener('pointerenter', () => {
       deleteBtn.style.background = 'rgba(var(--error-rgb, 255, 100, 100), 0.15)';
       deleteBtn.style.borderColor = 'var(--error)';
     });
-    deleteBtn.addEventListener('mouseleave', () => {
+    deleteBtn.addEventListener('pointerleave', () => {
       deleteBtn.style.background = 'transparent';
       deleteBtn.style.borderColor = 'transparent';
     });

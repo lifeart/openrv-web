@@ -112,11 +112,11 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       justify-content: center;
     `;
     closeBtn.addEventListener('click', () => this.hide());
-    closeBtn.addEventListener('mouseenter', () => {
+    closeBtn.addEventListener('pointerenter', () => {
       closeBtn.style.background = 'var(--bg-hover)';
       closeBtn.style.color = 'var(--text-primary)';
     });
-    closeBtn.addEventListener('mouseleave', () => {
+    closeBtn.addEventListener('pointerleave', () => {
       closeBtn.style.background = 'transparent';
       closeBtn.style.color = 'var(--text-muted)';
     });
@@ -387,11 +387,11 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       background: var(--bg-primary);
       transition: all 0.12s ease;
     `;
-    row.addEventListener('mouseenter', () => {
+    row.addEventListener('pointerenter', () => {
       row.style.borderColor = 'var(--border-hover)';
       row.style.background = 'var(--bg-hover)';
     });
-    row.addEventListener('mouseleave', () => {
+    row.addEventListener('pointerleave', () => {
       row.style.borderColor = 'var(--border-primary)';
       row.style.background = 'var(--bg-primary)';
     });
@@ -533,10 +533,10 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       opacity: ${disabled ? '0.5' : '1'};
     `;
     if (!disabled) {
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         btn.style.background = 'var(--bg-hover)';
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         btn.style.background = 'transparent';
       });
     }

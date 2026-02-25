@@ -102,9 +102,9 @@ describe('LuminanceVisualizationControl', () => {
     it('LUM-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('pointerenter'));
       expect(button.style.borderColor).toBe('var(--border-primary)');
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new MouseEvent('pointerleave'));
       expect(button.style.borderColor).toBe('transparent');
     });
 
@@ -112,8 +112,8 @@ describe('LuminanceVisualizationControl', () => {
       const el = control.render();
       lumVis.setMode('hsv');
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new MouseEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('pointerleave'));
       expect(button.style.borderColor).toBe('var(--accent-primary)');
     });
   });
@@ -224,8 +224,8 @@ describe('LuminanceVisualizationControl', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="luminance-vis-selector"]') as HTMLButtonElement;
 
-      // Simulate mouse click: mousedown then focus
-      button.dispatchEvent(new Event('mousedown'));
+      // Simulate mouse click: pointerdown then focus
+      button.dispatchEvent(new Event('pointerdown'));
       button.dispatchEvent(new Event('focus'));
       expect(button.style.outline).not.toBe('2px solid var(--accent-primary)');
     });

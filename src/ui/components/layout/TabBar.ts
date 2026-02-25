@@ -109,7 +109,7 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -134,14 +134,14 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     button.appendChild(icon);
     button.appendChild(label);
 
-    button.addEventListener('mouseenter', () => {
+    button.addEventListener('pointerenter', () => {
       if (tab.id !== this._activeTab) {
         button.style.color = 'var(--text-secondary)';
         button.style.background = 'var(--bg-hover)';
       }
     });
 
-    button.addEventListener('mouseleave', () => {
+    button.addEventListener('pointerleave', () => {
       if (tab.id !== this._activeTab) {
         button.style.color = 'var(--text-muted)';
         button.style.background = 'transparent';

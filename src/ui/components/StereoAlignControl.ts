@@ -76,14 +76,14 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
       e.stopPropagation();
       this.toggleDropdown();
     });
-    this.alignButton.addEventListener('mouseenter', () => {
+    this.alignButton.addEventListener('pointerenter', () => {
       if (!this.isActive() && !this.isDropdownOpen) {
         this.alignButton.style.background = 'var(--bg-hover)';
         this.alignButton.style.borderColor = 'var(--border-primary)';
         this.alignButton.style.color = 'var(--text-primary)';
       }
     });
-    this.alignButton.addEventListener('mouseleave', () => {
+    this.alignButton.addEventListener('pointerleave', () => {
       if (!this.isActive() && !this.isDropdownOpen) {
         this.alignButton.style.background = 'transparent';
         this.alignButton.style.borderColor = 'transparent';
@@ -127,10 +127,10 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
         border-radius: 3px;
         transition: background 0.12s ease;
       `;
-      option.addEventListener('mouseenter', () => {
+      option.addEventListener('pointerenter', () => {
         option.style.background = 'var(--bg-hover)';
       });
-      option.addEventListener('mouseleave', () => {
+      option.addEventListener('pointerleave', () => {
         if (this.mode !== mode) {
           option.style.background = 'transparent';
         }

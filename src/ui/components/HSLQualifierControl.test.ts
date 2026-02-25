@@ -199,8 +199,8 @@ describe('HSLQualifierControl', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
 
-      // Simulate mouse click: mousedown then focus
-      button.dispatchEvent(new Event('mousedown'));
+      // Simulate mouse click: pointerdown then focus
+      button.dispatchEvent(new Event('pointerdown'));
       button.dispatchEvent(new Event('focus'));
       expect(button.style.outline).not.toBe('2px solid var(--accent-primary)');
     });
@@ -305,19 +305,19 @@ describe('HSLQualifierControl', () => {
   });
 
   describe('hardcoded color fix (M-33)', () => {
-    it('HSL-M33a: reset button mouseleave should set background to a CSS variable (not hardcoded hex)', () => {
+    it('HSL-M33a: reset button pointerleave should set background to a CSS variable (not hardcoded hex)', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
       button.click();
       const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
       const resetBtn = dropdown.querySelector('[data-testid="hsl-reset-button"]') as HTMLButtonElement;
 
-      resetBtn.dispatchEvent(new Event('mouseleave'));
+      resetBtn.dispatchEvent(new Event('pointerleave'));
       expect(resetBtn.style.background).toBe('var(--bg-secondary)');
       expect(resetBtn.style.background).not.toContain('#');
     });
 
-    it('HSL-M33b: eyedropper button mouseleave should set background to a CSS variable (not hardcoded hex)', () => {
+    it('HSL-M33b: eyedropper button pointerleave should set background to a CSS variable (not hardcoded hex)', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
       button.click();

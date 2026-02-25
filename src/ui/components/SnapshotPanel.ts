@@ -80,7 +80,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-weight: 600;
+      font-weight: 500;
       color: var(--text-primary);
     `;
     title.innerHTML = `${getIconSvg('history', 'sm')}<span>Snapshots</span>`;
@@ -101,11 +101,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       justify-content: center;
     `;
     closeBtn.addEventListener('click', () => this.hide());
-    closeBtn.addEventListener('mouseenter', () => {
+    closeBtn.addEventListener('pointerenter', () => {
       closeBtn.style.background = 'var(--bg-hover)';
       closeBtn.style.color = 'var(--text-primary)';
     });
-    closeBtn.addEventListener('mouseleave', () => {
+    closeBtn.addEventListener('pointerleave', () => {
       closeBtn.style.background = 'transparent';
       closeBtn.style.color = 'var(--text-muted)';
     });
@@ -204,10 +204,10 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       transition: all 0.12s ease;
     `;
     clearAllBtn.addEventListener('click', () => this.handleClearAll());
-    clearAllBtn.addEventListener('mouseenter', () => {
+    clearAllBtn.addEventListener('pointerenter', () => {
       clearAllBtn.style.background = 'rgba(var(--danger-rgb), 0.1)';
     });
-    clearAllBtn.addEventListener('mouseleave', () => {
+    clearAllBtn.addEventListener('pointerleave', () => {
       clearAllBtn.style.background = 'transparent';
     });
     applyA11yFocus(clearAllBtn);
@@ -413,11 +413,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     item.appendChild(actions);
 
     // Hover effects
-    item.addEventListener('mouseenter', () => {
+    item.addEventListener('pointerenter', () => {
       item.style.borderColor = 'var(--border-hover)';
       item.style.background = 'var(--bg-hover)';
     });
-    item.addEventListener('mouseleave', () => {
+    item.addEventListener('pointerleave', () => {
       item.style.borderColor = 'var(--border-primary)';
       item.style.background = 'var(--bg-primary)';
     });
@@ -490,11 +490,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       e.stopPropagation();
       onClick();
     });
-    btn.addEventListener('mouseenter', () => {
+    btn.addEventListener('pointerenter', () => {
       btn.style.background = 'var(--bg-hover)';
       btn.style.borderColor = 'var(--border-hover)';
     });
-    btn.addEventListener('mouseleave', () => {
+    btn.addEventListener('pointerleave', () => {
       btn.style.background = 'transparent';
       btn.style.borderColor = 'var(--border-primary)';
     });

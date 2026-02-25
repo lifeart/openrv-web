@@ -172,14 +172,14 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
       this.button.setAttribute('aria-expanded', String(this.dropdown.isVisible()));
       this.updateButtonStyle();
     });
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.dropdown.isVisible() && this.currentChannel === 'rgb') {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.dropdown.isVisible() && this.currentChannel === 'rgb') {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -196,7 +196,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
   private updateButtonLabel(): void {
     const label = this.currentChannel === 'rgb' ? 'Ch' : CHANNEL_SHORT_LABELS[this.currentChannel];
     const color = CHANNEL_COLORS[this.currentChannel];
-    this.button.innerHTML = `${getIconSvg('eye', 'sm')}<span style="color: ${this.currentChannel !== 'rgb' ? color : 'inherit'}">${label}</span><span style="font-size: 8px;">&#9660;</span>`;
+    this.button.innerHTML = `${getIconSvg('eye', 'sm')}<span style="color: ${this.currentChannel !== 'rgb' ? color : 'inherit'}">${label}</span>${getIconSvg('chevron-down', 'sm')}`;
 
     // Update button style based on active state
     if (this.currentChannel !== 'rgb') {
@@ -420,7 +420,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
       this.updateLayerButtonStyle();
     });
 
-    this.layerButton.addEventListener('mouseenter', () => {
+    this.layerButton.addEventListener('pointerenter', () => {
       if (!this.layerDropdown?.isVisible() && !this.exrLayerState.selectedLayer) {
         this.layerButton!.style.background = 'var(--bg-hover)';
         this.layerButton!.style.borderColor = 'var(--border-primary)';
@@ -428,7 +428,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
       }
     });
 
-    this.layerButton.addEventListener('mouseleave', () => {
+    this.layerButton.addEventListener('pointerleave', () => {
       if (!this.layerDropdown?.isVisible() && !this.exrLayerState.selectedLayer) {
         this.layerButton!.style.background = 'transparent';
         this.layerButton!.style.borderColor = 'transparent';
@@ -471,7 +471,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     const layerName = this.exrLayerState.selectedLayer ?? 'RGBA';
     const truncatedName = layerName.length > 10 ? layerName.substring(0, 9) + '...' : layerName;
 
-    this.layerButton.innerHTML = `${getIconSvg('layers', 'sm')}<span>${truncatedName}</span><span style="font-size: 8px;">&#9660;</span>`;
+    this.layerButton.innerHTML = `${getIconSvg('layers', 'sm')}<span>${truncatedName}</span>${getIconSvg('chevron-down', 'sm')}`;
 
     // Update button style based on active state
     if (this.exrLayerState.selectedLayer && this.exrLayerState.selectedLayer !== 'RGBA') {

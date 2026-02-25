@@ -78,14 +78,14 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
       this.button.setAttribute('aria-expanded', String(this.dropdown.isVisible()));
       this.updateButtonStyle();
     });
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.dropdown.isVisible()) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.dropdown.isVisible()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';

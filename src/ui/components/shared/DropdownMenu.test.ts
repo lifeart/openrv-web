@@ -484,18 +484,18 @@ describe('DropdownMenu', () => {
   });
 
   describe('selection/deselection - mouse', () => {
-    it('DM-080: mouseenter highlights item', () => {
+    it('DM-080: pointerenter highlights item', () => {
       dropdown.open(anchor);
       const buttons = dropdown.getElement().querySelectorAll('button');
 
       // Hover over second item
-      (buttons[1] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[1] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       expect((buttons[1] as HTMLButtonElement).getAttribute('aria-selected')).toBe('true');
       expect(dropdown.getHighlightedIndex()).toBe(1);
     });
 
-    it('DM-081: mouseenter deselects previous item', () => {
+    it('DM-081: pointerenter deselects previous item', () => {
       dropdown.open(anchor);
       const buttons = dropdown.getElement().querySelectorAll('button');
 
@@ -503,7 +503,7 @@ describe('DropdownMenu', () => {
       expect((buttons[0] as HTMLButtonElement).getAttribute('aria-selected')).toBe('true');
 
       // Hover over second item
-      (buttons[1] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[1] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       // First item should be deselected
       expect((buttons[0] as HTMLButtonElement).getAttribute('aria-selected')).toBe('false');
@@ -536,7 +536,7 @@ describe('DropdownMenu', () => {
 
       // Hover over each item
       for (let i = 0; i < buttons.length; i++) {
-        (buttons[i] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+        (buttons[i] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
         const selectedCount = Array.from(buttons).filter(
           (b) => b.getAttribute('aria-selected') === 'true'
@@ -546,7 +546,7 @@ describe('DropdownMenu', () => {
       }
     });
 
-    it('DM-084: disabled items do not respond to mouseenter', () => {
+    it('DM-084: disabled items do not respond to pointerenter', () => {
       dropdown.setItems([
         { value: 'item1', label: 'Item 1' },
         { value: 'item2', label: 'Item 2', disabled: true },
@@ -560,7 +560,7 @@ describe('DropdownMenu', () => {
       expect(dropdown.getHighlightedIndex()).toBe(0);
 
       // Hover over disabled item
-      (buttons[1] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[1] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       // Should still be on first item (disabled items don't respond)
       expect(dropdown.getHighlightedIndex()).toBe(0);
@@ -577,7 +577,7 @@ describe('DropdownMenu', () => {
       expect(dropdown.getHighlightedIndex()).toBe(1);
 
       // Hover over third item
-      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       // Mouse takes over
       expect(dropdown.getHighlightedIndex()).toBe(2);
@@ -590,7 +590,7 @@ describe('DropdownMenu', () => {
       const buttons = dropdown.getElement().querySelectorAll('button');
 
       // Hover over third item
-      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
       expect(dropdown.getHighlightedIndex()).toBe(2);
 
       // Navigate with keyboard up
@@ -615,7 +615,7 @@ describe('DropdownMenu', () => {
       const buttons = dropdownWithCallback.getElement().querySelectorAll('button');
 
       // Hover over third item
-      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       // Press Enter
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -633,7 +633,7 @@ describe('DropdownMenu', () => {
       expect(dropdown.getHighlightedIndex()).toBe(1);
 
       // Mouse: hover third item
-      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[2] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
       expect(dropdown.getHighlightedIndex()).toBe(2);
 
       // Keyboard: move up
@@ -641,7 +641,7 @@ describe('DropdownMenu', () => {
       expect(dropdown.getHighlightedIndex()).toBe(1);
 
       // Mouse: hover first item
-      (buttons[0] as HTMLButtonElement).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      (buttons[0] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
       expect(dropdown.getHighlightedIndex()).toBe(0);
 
       // Keyboard: move down

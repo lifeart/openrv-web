@@ -17,6 +17,7 @@ import {
 } from './SafeAreasOverlay';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { SHADOWS } from './shared/theme';
 
 export interface SafeAreasControlEvents extends EventMap {
   stateChanged: SafeAreasState;
@@ -71,7 +72,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     `;
     this.updateButtonLabel();
 
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.overlay.isVisible()) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
@@ -79,7 +80,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       }
     });
 
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.overlay.isVisible()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -122,7 +123,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       z-index: 9999;
       display: none;
       flex-direction: column;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: ${SHADOWS.dropdown};
     `;
 
     // Enable/Disable toggle
@@ -235,11 +236,11 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     item.appendChild(checkbox);
     item.appendChild(text);
 
-    item.addEventListener('mouseenter', () => {
+    item.addEventListener('pointerenter', () => {
       item.style.background = 'var(--bg-hover)';
     });
 
-    item.addEventListener('mouseleave', () => {
+    item.addEventListener('pointerleave', () => {
       item.style.background = 'transparent';
     });
 
@@ -320,7 +321,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       }
     }
 
-    this.button.innerHTML = `${getIconSvg('grid', 'sm')}<span>${label}</span><span style="font-size: 8px; margin-left: 2px;">&#9660;</span>`;
+    this.button.innerHTML = `${getIconSvg('grid', 'sm')}<span>${label}</span><span style="margin-left: 2px;">${getIconSvg('chevron-down', 'sm')}</span>`;
 
     // Update active styling
     if (isActive) {

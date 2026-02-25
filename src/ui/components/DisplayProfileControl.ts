@@ -68,14 +68,14 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     `;
 
     this.toggleButton.addEventListener('click', (e) => { e.stopPropagation(); this.toggleDropdown(); });
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!isDisplayStateActive(this.state)) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!isDisplayStateActive(this.state)) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -141,10 +141,10 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
       btn.appendChild(labelSpan);
 
       btn.addEventListener('click', () => this.setTransferFunction(profile));
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.state.transferFunction !== profile) btn.style.background = 'var(--border-primary)';
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.state.transferFunction !== profile) btn.style.background = 'var(--bg-secondary)';
       });
 

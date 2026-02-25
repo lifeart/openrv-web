@@ -38,12 +38,20 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.closeDropdown();
+      }
+    };
 
     this.container = document.createElement('div');
     this.container.className = 'scopes-control';
@@ -60,6 +68,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.button.title = 'Video scopes (H: histogram, w: waveform, y: vectorscope, G: CIE diagram)';
     this.button.setAttribute('aria-haspopup', 'menu');
     this.button.setAttribute('aria-expanded', 'false');
+    this.button.setAttribute('aria-pressed', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -82,14 +91,14 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
       e.stopPropagation();
       this.toggleDropdown();
     });
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.isOpen && !this.hasActiveScopes()) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.isOpen && !this.hasActiveScopes()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -156,10 +165,10 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
       option.appendChild(leftPart);
       option.appendChild(shortcutHint);
 
-      option.addEventListener('mouseenter', () => {
+      option.addEventListener('pointerenter', () => {
         option.style.background = 'var(--bg-hover)';
       });
-      option.addEventListener('mouseleave', () => {
+      option.addEventListener('pointerleave', () => {
         this.updateOptionStyle(option, type);
       });
       option.addEventListener('click', (e) => {
@@ -179,6 +188,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
       label = `Scopes (${activeCount})`;
     }
     this.button.innerHTML = `${getIconSvg('sliders', 'sm')}<span>${label}</span><span style="font-size: 8px;">&#9660;</span>`;
+    this.button.setAttribute('aria-pressed', String(this.hasActiveScopes()));
 
     // Update button style based on active state
     if (this.hasActiveScopes()) {
@@ -255,6 +265,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.button.style.borderColor = 'var(--border-primary)';
 
     document.addEventListener('click', this.boundHandleOutsideClick);
+    document.addEventListener('keydown', this.boundHandleKeyDown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -266,6 +277,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.updateButtonLabel();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }

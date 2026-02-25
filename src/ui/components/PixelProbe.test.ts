@@ -730,12 +730,12 @@ describe('PixelProbe', () => {
         toJSON: () => ({}),
       } as DOMRect);
 
-      overlay.dispatchEvent(new MouseEvent('mouseenter'));
+      overlay.dispatchEvent(new MouseEvent('pointerenter'));
       pixelProbe.setOverlayPosition(500, 400);
       expect(overlay.style.left).toBe('120px');
       expect(overlay.style.top).toBe('120px');
 
-      overlay.dispatchEvent(new MouseEvent('mouseleave'));
+      overlay.dispatchEvent(new MouseEvent('pointerleave'));
       pixelProbe.setOverlayPosition(500, 400);
       expect(overlay.style.left).toBe('520px');
       expect(overlay.style.top).toBe('420px');

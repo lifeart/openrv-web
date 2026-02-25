@@ -151,7 +151,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     this.scaleLabels.style.cssText = `
       display: flex;
       justify-content: space-between;
-      font-size: 9px;
+      font-size: 10px;
       color: var(--text-secondary);
     `;
     this.scaleLabels.innerHTML = `
@@ -169,7 +169,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 9px;
+      font-size: 10px;
       cursor: pointer;
     `;
     this.clippingIndicators.title = 'Click to toggle clipping overlay on viewer';

@@ -130,7 +130,7 @@ export class LeftPanelContent {
       color: var(--text-muted);
       padding: 2px 4px;
       cursor: pointer;
-      font-size: 9px;
+      font-size: 10px;
       margin-left: auto;
     `;
     clearBtn.addEventListener('click', (e) => {
@@ -239,7 +239,7 @@ export class LeftPanelContent {
     valueLabel.textContent = config.format(DEFAULT_COLOR_ADJUSTMENTS[config.key]);
     valueLabel.style.cssText = `
       color: var(--text-muted);
-      font-size: 9px;
+      font-size: 10px;
       width: 40px;
       text-align: right;
       font-family: monospace;
@@ -316,7 +316,7 @@ export class LeftPanelContent {
 
       const time = document.createElement('span');
       time.textContent = this.formatTimeSince(entry.timestamp);
-      time.style.cssText = 'color: var(--text-muted); font-size: 9px; flex-shrink: 0; margin-left: 4px;';
+      time.style.cssText = 'color: var(--text-muted); font-size: 10px; flex-shrink: 0; margin-left: 4px;';
 
       item.appendChild(desc);
       item.appendChild(time);

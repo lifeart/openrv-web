@@ -9,6 +9,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { SHADOWS } from './shared/theme';
 
 export type { BackgroundPatternType, BackgroundPatternState } from '../../core/types/background';
 export { DEFAULT_BACKGROUND_PATTERN_STATE, PATTERN_COLORS } from '../../core/types/background';
@@ -79,7 +80,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       this.toggleDropdown();
     });
 
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.isOpen && !this.isActive()) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
@@ -87,7 +88,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       }
     });
 
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.isOpen && !this.isActive()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -110,7 +111,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: ${SHADOWS.dropdown};
       z-index: 9999;
       min-width: 220px;
       padding: 6px 0;
@@ -180,7 +181,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
         font-size: 10px;
         cursor: pointer;
         outline: none;
-        transition: all 0.1s ease;
+        transition: all 0.12s ease;
       `;
       sizeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -300,7 +301,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       color: ${isSelected ? 'var(--accent-primary)' : 'var(--text-secondary)'};
       background: ${isSelected ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
       cursor: pointer;
-      transition: background 0.1s ease;
+      transition: background 0.12s ease;
     `;
 
     // Radio indicator
@@ -355,13 +356,13 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     labelSpan.textContent = label;
     item.appendChild(labelSpan);
 
-    item.addEventListener('mouseenter', () => {
+    item.addEventListener('pointerenter', () => {
       if (this.state.pattern !== type) {
         item.style.background = 'var(--bg-hover)';
       }
     });
 
-    item.addEventListener('mouseleave', () => {
+    item.addEventListener('pointerleave', () => {
       if (this.state.pattern !== type) {
         item.style.background = 'transparent';
         item.style.color = 'var(--text-secondary)';

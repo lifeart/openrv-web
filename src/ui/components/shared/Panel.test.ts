@@ -236,6 +236,68 @@ describe('createPanel', () => {
       expect(panel.element.style.top).not.toBe('');
     });
   });
+
+  describe('escape key handling', () => {
+    let anchor: HTMLElement;
+
+    beforeEach(() => {
+      anchor = document.createElement('button');
+      document.body.appendChild(anchor);
+    });
+
+    afterEach(() => {
+      if (document.body.contains(anchor)) {
+        document.body.removeChild(anchor);
+      }
+    });
+
+    it('PANEL-U053: pressing Escape closes an open panel', () => {
+      panel = createPanel();
+      panel.show(anchor);
+      expect(panel.isVisible()).toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(panel.isVisible()).toBe(false);
+      expect(panel.element.style.display).toBe('none');
+    });
+
+    it('PANEL-U054: keydown listener is removed when panel is hidden', () => {
+      panel = createPanel();
+      panel.show(anchor);
+
+      // Close via Escape
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(panel.isVisible()).toBe(false);
+
+      // Show and hide manually to confirm no stale listener interference
+      panel.show(anchor);
+      expect(panel.isVisible()).toBe(true);
+
+      // Hide manually
+      panel.hide();
+      expect(panel.isVisible()).toBe(false);
+
+      // Subsequent Escape should not cause errors or change state
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(panel.isVisible()).toBe(false);
+    });
+
+    it('PANEL-U055: Escape calls stopPropagation to prevent double-close', () => {
+      panel = createPanel();
+      panel.show(anchor);
+
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      const stopPropagationSpy = vi.spyOn(event, 'stopPropagation');
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+
+      document.dispatchEvent(event);
+
+      expect(stopPropagationSpy).toHaveBeenCalled();
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(panel.isVisible()).toBe(false);
+    });
+  });
 });
 
 describe('createPanelHeader', () => {
@@ -275,10 +337,10 @@ describe('createPanelHeader', () => {
     expect(closeBtn).toBeNull();
   });
 
-  it('PANEL-U066: close button has X content', () => {
+  it('PANEL-U066: close button has X icon', () => {
     const header = createPanelHeader('Title', () => {});
     const closeBtn = header.querySelector('button');
-    expect(closeBtn?.innerHTML).toContain('\u2715');
+    expect(closeBtn?.querySelector('svg')).not.toBeNull();
   });
 
   it('PANEL-U067: close button has Close title', () => {

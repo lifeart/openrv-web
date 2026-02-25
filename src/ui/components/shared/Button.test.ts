@@ -200,9 +200,9 @@ describe('createButton', () => {
       expect(btn.style.height).toBe('20px');
     });
 
-    it('BTN-U067: xs size has 9px font', () => {
+    it('BTN-U067: xs size has 10px font', () => {
       const btn = createButton('Click', () => {}, { size: 'xs' });
-      expect(btn.style.fontSize).toBe('9px');
+      expect(btn.style.fontSize).toBe('10px');
     });
   });
 

@@ -271,11 +271,11 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       `;
 
     // Visual indicator on hover
-    handle.addEventListener('mouseenter', () => {
+    handle.addEventListener('pointerenter', () => {
       handle.style.background = 'var(--accent-primary)';
       handle.style.opacity = '0.5';
     });
-    handle.addEventListener('mouseleave', () => {
+    handle.addEventListener('pointerleave', () => {
       if (!this._dragging) {
         handle.style.background = 'var(--border-primary)';
         handle.style.opacity = '0.2';

@@ -46,14 +46,40 @@ export class LUTStageControl {
   private intensityValue: HTMLSpanElement;
   private clearButton: HTMLButtonElement;
   private fileInput: HTMLInputElement;
+  private loadButton: HTMLButtonElement | null = null;
   private sourceSelect: HTMLSelectElement | null = null;
 
   private config: LUTStageControlConfig;
   private callbacks: LUTStageControlCallbacks;
 
+  // Stored event handlers for cleanup
+  private handleToggleChange: () => void;
+  private handleFileInputChange: (e: Event) => void;
+  private handleLoadClick: () => void;
+  private handleClearClick: () => void;
+  private handleIntensityInput: () => void;
+  private handleSourceChange: (() => void) | null = null;
+
   constructor(config: LUTStageControlConfig, callbacks: LUTStageControlCallbacks) {
     this.config = config;
     this.callbacks = callbacks;
+
+    // Bind event handlers for cleanup
+    this.handleToggleChange = () => {
+      this.callbacks.onEnabledChanged(this.toggleCheckbox.checked);
+    };
+    this.handleFileInputChange = (e: Event) => this.handleFileLoad(e);
+    this.handleLoadClick = () => this.fileInput.click();
+    this.handleClearClick = () => {
+      this.setLUTName(null);
+      this.callbacks.onLUTCleared();
+    };
+    this.handleIntensityInput = () => {
+      const val = parseFloat(this.intensitySlider.value);
+      this.intensityValue.textContent = `${Math.round(val * 100)}%`;
+      this.callbacks.onIntensityChanged(val);
+    };
+
     this.element = document.createElement('div');
     this.element.dataset.testid = `lut-${config.stageId}-section`;
     this.element.style.cssText = `
@@ -90,9 +116,7 @@ export class LUTStageControl {
       accent-color: var(--accent-primary);
       cursor: pointer;
     `;
-    this.toggleCheckbox.addEventListener('change', () => {
-      this.callbacks.onEnabledChanged(this.toggleCheckbox.checked);
-    });
+    this.toggleCheckbox.addEventListener('change', this.handleToggleChange);
 
     headerRow.appendChild(titleLabel);
     headerRow.appendChild(this.toggleCheckbox);
@@ -156,8 +180,9 @@ export class LUTStageControl {
     this.fileInput.accept = '.cube,.3dl,.csp,.itx,.look,.lut,.nk,.mga';
     this.fileInput.style.display = 'none';
     this.fileInput.dataset.testid = `lut-${config.stageId}-file-input`;
-    this.fileInput.addEventListener('change', (e) => this.handleFileLoad(e));
-    loadButton.addEventListener('click', () => this.fileInput.click());
+    this.fileInput.addEventListener('change', this.handleFileInputChange);
+    loadButton.addEventListener('click', this.handleLoadClick);
+    this.loadButton = loadButton;
 
     this.clearButton = document.createElement('button');
     this.clearButton.textContent = 'Clear';
@@ -172,10 +197,7 @@ export class LUTStageControl {
       font-size: 10px;
       visibility: hidden;
     `;
-    this.clearButton.addEventListener('click', () => {
-      this.setLUTName(null);
-      this.callbacks.onLUTCleared();
-    });
+    this.clearButton.addEventListener('click', this.handleClearClick);
 
     fileRow.appendChild(lutLabel);
     fileRow.appendChild(this.lutNameSpan);
@@ -225,11 +247,7 @@ export class LUTStageControl {
       font-family: monospace;
     `;
 
-    this.intensitySlider.addEventListener('input', () => {
-      const val = parseFloat(this.intensitySlider.value);
-      this.intensityValue.textContent = `${Math.round(val * 100)}%`;
-      this.callbacks.onIntensityChanged(val);
-    });
+    this.intensitySlider.addEventListener('input', this.handleIntensityInput);
 
     intensityRow.appendChild(intensityLabel);
     intensityRow.appendChild(this.intensitySlider);
@@ -274,9 +292,10 @@ export class LUTStageControl {
       optOcio.textContent = 'OCIO';
       this.sourceSelect.appendChild(optManual);
       this.sourceSelect.appendChild(optOcio);
-      this.sourceSelect.addEventListener('change', () => {
+      this.handleSourceChange = () => {
         this.callbacks.onSourceChanged?.(this.sourceSelect!.value as 'manual' | 'ocio');
-      });
+      };
+      this.sourceSelect.addEventListener('change', this.handleSourceChange);
 
       sourceRow.appendChild(sourceLabel);
       sourceRow.appendChild(this.sourceSelect);
@@ -323,6 +342,18 @@ export class LUTStageControl {
   setSource(source: 'manual' | 'ocio'): void {
     if (this.sourceSelect) {
       this.sourceSelect.value = source;
+    }
+  }
+
+  /** Clean up all event listeners */
+  dispose(): void {
+    this.toggleCheckbox.removeEventListener('change', this.handleToggleChange);
+    this.fileInput.removeEventListener('change', this.handleFileInputChange);
+    this.loadButton?.removeEventListener('click', this.handleLoadClick);
+    this.clearButton.removeEventListener('click', this.handleClearClick);
+    this.intensitySlider.removeEventListener('input', this.handleIntensityInput);
+    if (this.sourceSelect && this.handleSourceChange) {
+      this.sourceSelect.removeEventListener('change', this.handleSourceChange);
     }
   }
 

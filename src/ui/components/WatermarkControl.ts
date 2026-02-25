@@ -112,10 +112,10 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
       transition: all 0.12s ease;
     `;
     this.loadButton.addEventListener('click', () => this.fileInput.click());
-    this.loadButton.addEventListener('mouseenter', () => {
+    this.loadButton.addEventListener('pointerenter', () => {
       this.loadButton.style.background = 'var(--bg-hover)';
     });
-    this.loadButton.addEventListener('mouseleave', () => {
+    this.loadButton.addEventListener('pointerleave', () => {
       this.loadButton.style.background = 'transparent';
     });
 
@@ -136,11 +136,11 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
       transition: all 0.12s ease;
     `;
     this.removeButton.addEventListener('click', () => this.removeImage());
-    this.removeButton.addEventListener('mouseenter', () => {
+    this.removeButton.addEventListener('pointerenter', () => {
       this.removeButton.style.background = 'rgba(255, 100, 100, 0.1)';
       this.removeButton.style.color = 'var(--text-primary)';
     });
-    this.removeButton.addEventListener('mouseleave', () => {
+    this.removeButton.addEventListener('pointerleave', () => {
       this.removeButton.style.background = 'transparent';
       this.removeButton.style.color = 'var(--text-muted)';
     });
@@ -220,12 +220,12 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
         transition: all 0.12s ease;
       `;
       btn.addEventListener('click', () => this.setPosition(pos));
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.overlay.getPosition() !== pos) {
           btn.style.background = 'var(--bg-hover)';
         }
       });
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         this.updatePositionButton(btn, pos);
       });
       this.positionGrid.appendChild(btn);

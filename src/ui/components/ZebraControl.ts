@@ -10,6 +10,7 @@
 import { ZebraStripes } from './ZebraStripes';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 
 export class ZebraControl {
   private container: HTMLElement;
@@ -18,6 +19,7 @@ export class ZebraControl {
   private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private highCheckbox!: HTMLInputElement;
   private lowCheckbox!: HTMLInputElement;
   private highSlider!: HTMLInputElement;
@@ -29,6 +31,13 @@ export class ZebraControl {
   constructor(zebraStripes: ZebraStripes) {
     this.zebraStripes = zebraStripes;
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isDropdownOpen) {
+        this.toggleDropdown();
+      }
+    };
 
     // Create container
     this.container = document.createElement('div');
@@ -47,6 +56,7 @@ export class ZebraControl {
     this.toggleButton.title = 'Zebra stripes exposure warnings (Shift+Alt+Z)';
     this.toggleButton.setAttribute('aria-haspopup', 'dialog');
     this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.toggleButton.setAttribute('aria-pressed', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -66,7 +76,7 @@ export class ZebraControl {
       this.toggleDropdown();
     });
 
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.zebraStripes.isEnabled()) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
@@ -74,7 +84,7 @@ export class ZebraControl {
       }
     });
 
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.zebraStripes.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -98,10 +108,10 @@ export class ZebraControl {
       border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 8px;
-      min-width: 220px;
+      min-width: ${PANEL_WIDTHS.narrow};
       z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: ${SHADOWS.dropdown};
     `;
 
     this.createDropdownContent();
@@ -234,7 +244,7 @@ export class ZebraControl {
     descText.textContent = description;
     descText.style.cssText = `
       color: var(--text-muted);
-      font-size: 9px;
+      font-size: 10px;
       margin-bottom: 8px;
       margin-left: 20px;
     `;
@@ -285,6 +295,7 @@ export class ZebraControl {
   private updateButtonState(): void {
     const state = this.zebraStripes.getState();
     const active = state.enabled && (state.highEnabled || state.lowEnabled);
+    this.toggleButton.setAttribute('aria-pressed', String(active));
     if (active) {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
@@ -316,11 +327,13 @@ export class ZebraControl {
       this.dropdown.style.display = 'block';
       this.positionDropdown();
       document.addEventListener('click', this.handleOutsideClick);
+      document.addEventListener('keydown', this.boundHandleKeyDown);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
       document.removeEventListener('click', this.handleOutsideClick);
+      document.removeEventListener('keydown', this.boundHandleKeyDown);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -339,6 +352,7 @@ export class ZebraControl {
         this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
         document.removeEventListener('click', this.handleOutsideClick);
+        document.removeEventListener('keydown', this.boundHandleKeyDown);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -364,6 +378,7 @@ export class ZebraControl {
    */
   dispose(): void {
     document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

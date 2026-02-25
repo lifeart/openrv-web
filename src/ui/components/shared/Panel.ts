@@ -4,6 +4,9 @@
  * Creates dropdown panels that render at body level to avoid z-index issues.
  */
 
+import { getIconSvg } from './Icons';
+import { SHADOWS } from './theme';
+
 export interface PanelOptions {
   width?: string;
   maxHeight?: string;
@@ -35,16 +38,26 @@ export function createPanel(options: PanelOptions = {}): Panel {
     max-height: ${maxHeight};
     z-index: 9999;
     display: none;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    box-shadow: ${SHADOWS.panel};
     overflow-y: auto;
   `;
 
   let isVisible = false;
   let currentAnchor: HTMLElement | null = null;
+  let previouslyFocusedElement: HTMLElement | null = null;
 
   // Close on outside click
   const handleOutsideClick = (e: MouseEvent) => {
     if (isVisible && currentAnchor && !currentAnchor.contains(e.target as Node) && !panel.contains(e.target as Node)) {
+      hide();
+    }
+  };
+
+  // Close on Escape key
+  const handleKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && isVisible) {
+      e.stopPropagation();
+      e.preventDefault();
       hide();
     }
   };
@@ -74,6 +87,9 @@ export function createPanel(options: PanelOptions = {}): Panel {
       document.body.appendChild(panel);
     }
 
+    // Save previously focused element for restore on hide
+    previouslyFocusedElement = document.activeElement as HTMLElement | null;
+
     currentAnchor = anchor;
     positionPanel(anchor);
     panel.style.display = 'block';
@@ -81,8 +97,15 @@ export function createPanel(options: PanelOptions = {}): Panel {
 
     // Add listeners
     document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleKeydown);
     window.addEventListener('scroll', handleReposition, true);
     window.addEventListener('resize', handleReposition);
+
+    // Focus the panel
+    if (!panel.hasAttribute('tabindex')) {
+      panel.setAttribute('tabindex', '-1');
+    }
+    panel.focus();
   }
 
   function hide(): void {
@@ -92,8 +115,15 @@ export function createPanel(options: PanelOptions = {}): Panel {
 
     // Remove listeners
     document.removeEventListener('click', handleOutsideClick);
+    document.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('scroll', handleReposition, true);
     window.removeEventListener('resize', handleReposition);
+
+    // Restore focus to previously focused element
+    if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+      previouslyFocusedElement.focus();
+    }
+    previouslyFocusedElement = null;
   }
 
   function toggle(anchor: HTMLElement): void {
@@ -142,19 +172,20 @@ export function createPanelHeader(title: string, onClose?: () => void): HTMLElem
 
   if (onClose) {
     const closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '\u2715';
+    closeBtn.innerHTML = getIconSvg('x', 'sm');
     closeBtn.title = 'Close';
     closeBtn.style.cssText = `
       background: transparent;
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: 14px;
       padding: 2px 6px;
       border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
     `;
-    closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = 'var(--text-primary)'; });
-    closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = 'var(--text-muted)'; });
+    closeBtn.addEventListener('pointerenter', () => { closeBtn.style.color = 'var(--text-primary)'; });
+    closeBtn.addEventListener('pointerleave', () => { closeBtn.style.color = 'var(--text-muted)'; });
     closeBtn.addEventListener('click', onClose);
     header.appendChild(closeBtn);
   }

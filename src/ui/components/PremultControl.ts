@@ -49,8 +49,8 @@ export class PremultControl extends EventEmitter<PremultControlEvents> {
     this.button.setAttribute('aria-label', 'Alpha Premultiply Mode');
 
     this.button.addEventListener('click', this.handleClick);
-    this.button.addEventListener('mouseenter', this.handleMouseEnter);
-    this.button.addEventListener('mouseleave', this.handleMouseLeave);
+    this.button.addEventListener('pointerenter', this.handleMouseEnter);
+    this.button.addEventListener('pointerleave', this.handleMouseLeave);
 
     this.container.appendChild(this.button);
   }
@@ -116,8 +116,8 @@ export class PremultControl extends EventEmitter<PremultControlEvents> {
     if (this.disposed) return;
     this.disposed = true;
     this.button.removeEventListener('click', this.handleClick);
-    this.button.removeEventListener('mouseenter', this.handleMouseEnter);
-    this.button.removeEventListener('mouseleave', this.handleMouseLeave);
+    this.button.removeEventListener('pointerenter', this.handleMouseEnter);
+    this.button.removeEventListener('pointerleave', this.handleMouseLeave);
     this.removeAllListeners();
   }
 }

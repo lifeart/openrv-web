@@ -223,7 +223,7 @@ export class DropdownMenu {
     }
 
     if (!item.disabled) {
-      button.addEventListener('mouseenter', () => {
+      button.addEventListener('pointerenter', () => {
         this.setHighlightedIndex(index);
       });
       button.addEventListener('click', (e) => {

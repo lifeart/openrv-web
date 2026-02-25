@@ -61,14 +61,14 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
     `;
 
     this.toggleButton.addEventListener('click', () => this.cycleMode());
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (this.manager.getWipeMode() === 'off') {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (this.manager.getWipeMode() === 'off') {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';

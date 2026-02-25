@@ -19,7 +19,7 @@ export const COLORS = {
   textDefault: 'var(--text-primary)',
   textMuted: 'var(--text-muted)',
   textDisabled: 'var(--text-muted)',
-  textBright: 'var(--text-on-accent)',
+  textBright: 'var(--text-on-accent, #fff)',
 
   // Accent/Primary
   accent: 'var(--accent-primary)',
@@ -46,8 +46,22 @@ export const PANEL_WIDTHS = {
   wide: '340px',
 } as const;
 
+// Box-shadow tokens
+export const SHADOWS = {
+  dropdown: '0 4px 12px rgba(0,0,0,0.4)',
+  panel: '0 8px 24px rgba(0,0,0,0.5)',
+  modal: '0 8px 32px rgba(0,0,0,0.5)',
+} as const;
+
+// Disabled state opacity
+export const OPACITY = {
+  disabled: 0.5,
+} as const;
+
 // Z-index layers
 export const Z_INDEX = {
+  viewerOverlay: 50,
+  sidePanel: 1000,
   dropdown: 9999,
   modal: 10000,
   tooltip: 10001,

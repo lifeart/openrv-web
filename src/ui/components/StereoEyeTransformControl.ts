@@ -75,14 +75,14 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
       e.stopPropagation();
       this.togglePanel();
     });
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.isActive() && !this.isPanelOpen) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.isActive() && !this.isPanelOpen) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -224,11 +224,11 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
       transition: all 0.12s ease;
     `;
     btn.addEventListener('click', () => this.reset());
-    btn.addEventListener('mouseenter', () => {
+    btn.addEventListener('pointerenter', () => {
       btn.style.background = 'var(--bg-hover)';
       btn.style.borderColor = 'var(--border-primary)';
     });
-    btn.addEventListener('mouseleave', () => {
+    btn.addEventListener('pointerleave', () => {
       btn.style.background = 'transparent';
       btn.style.borderColor = 'transparent';
     });

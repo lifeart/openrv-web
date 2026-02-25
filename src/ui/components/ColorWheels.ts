@@ -72,7 +72,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
   private createUI(): void {
     // Add Link toggle to header controls (before close button)
     const linkLabel = document.createElement('label');
-    linkLabel.style.cssText = 'display: flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 9px; cursor: pointer;';
+    linkLabel.style.cssText = 'display: flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 10px; cursor: pointer;';
     const linkCheckbox = document.createElement('input');
     linkCheckbox.type = 'checkbox';
     linkCheckbox.checked = this.state.linked;
@@ -351,7 +351,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     numericRow.style.cssText = `
       display: flex;
       gap: 4px;
-      font-size: 9px;
+      font-size: 10px;
     `;
 
     for (const channel of ['R', 'G', 'B'] as const) {
@@ -368,7 +368,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
         border: 1px solid var(--border-primary);
         border-radius: 2px;
         color: ${channel === 'R' ? '#ff6666' : channel === 'G' ? '#66ff66' : '#6666ff'};
-        font-size: 9px;
+        font-size: 10px;
         font-family: monospace;
         text-align: center;
       `;
@@ -398,7 +398,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       border: 1px solid var(--border-primary);
       border-radius: 3px;
       color: var(--text-muted);
-      font-size: 9px;
+      font-size: 10px;
       cursor: pointer;
     `;
     resetBtn.addEventListener('click', () => this.resetWheel(key));

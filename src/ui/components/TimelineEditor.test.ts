@@ -564,9 +564,9 @@ describe('TimelineEditor', () => {
 
       const handles = container.querySelectorAll('.trim-handle') as NodeListOf<HTMLElement>;
       expect(handles.length).toBe(2);
-      // Base opacity 0.25 (not 0)
+      // Base opacity 0.5 (disabled state, not 0)
       for (const handle of handles) {
-        expect(handle.style.opacity).toBe('0.25');
+        expect(handle.style.opacity).toBe('0.5');
       }
     });
 

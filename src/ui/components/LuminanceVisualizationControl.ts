@@ -8,6 +8,7 @@
 import { LuminanceVisualization, LuminanceVisMode } from './LuminanceVisualization';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { SHADOWS } from './shared/theme';
 
 const MODE_LABELS: Record<LuminanceVisMode, string> = {
   'off': 'Off',
@@ -26,11 +27,19 @@ export class LuminanceVisualizationControl {
   private luminanceVis: LuminanceVisualization;
   private isDropdownOpen = false;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private unsubscribers: (() => void)[] = [];
 
   constructor(luminanceVis: LuminanceVisualization) {
     this.luminanceVis = luminanceVis;
     this.boundHandleReposition = () => this.positionDropdown();
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isDropdownOpen) {
+        this.toggleDropdown();
+      }
+    };
 
     // Create container
     this.container = document.createElement('div');
@@ -49,6 +58,7 @@ export class LuminanceVisualizationControl {
     this.toggleButton.title = 'Luminance Visualization (Shift+Alt+V)';
     this.toggleButton.setAttribute('aria-haspopup', 'dialog');
     this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.toggleButton.setAttribute('aria-pressed', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -68,7 +78,7 @@ export class LuminanceVisualizationControl {
       this.toggleDropdown();
     });
 
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (this.luminanceVis.getMode() === 'off') {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
@@ -76,7 +86,7 @@ export class LuminanceVisualizationControl {
       }
     });
 
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (this.luminanceVis.getMode() === 'off') {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -102,7 +112,7 @@ export class LuminanceVisualizationControl {
       min-width: 220px;
       z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: ${SHADOWS.dropdown};
     `;
 
     // Sub-controls container (inside dropdown, below mode buttons)
@@ -156,7 +166,7 @@ export class LuminanceVisualizationControl {
         font-size: 11px;
         cursor: pointer;
         text-align: left;
-        transition: all 0.1s ease;
+        transition: all 0.12s ease;
       `;
 
       if (this.luminanceVis.getMode() === mode) {
@@ -223,7 +233,7 @@ export class LuminanceVisualizationControl {
     legendLabel.style.cssText = `
       display: flex;
       justify-content: space-between;
-      font-size: 9px;
+      font-size: 10px;
       color: var(--text-secondary);
       margin-top: 2px;
     `;
@@ -381,6 +391,7 @@ export class LuminanceVisualizationControl {
 
   private updateButtonState(): void {
     const mode = this.luminanceVis.getMode();
+    this.toggleButton.setAttribute('aria-pressed', String(mode !== 'off'));
     if (mode !== 'off') {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
@@ -402,11 +413,13 @@ export class LuminanceVisualizationControl {
       this.dropdown.style.display = 'block';
       this.positionDropdown();
       document.addEventListener('click', this.handleOutsideClick);
+      document.addEventListener('keydown', this.boundHandleKeyDown);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
       document.removeEventListener('click', this.handleOutsideClick);
+      document.removeEventListener('keydown', this.boundHandleKeyDown);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -425,6 +438,7 @@ export class LuminanceVisualizationControl {
         this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
         document.removeEventListener('click', this.handleOutsideClick);
+        document.removeEventListener('keydown', this.boundHandleKeyDown);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -478,6 +492,7 @@ export class LuminanceVisualizationControl {
 
   dispose(): void {
     document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {

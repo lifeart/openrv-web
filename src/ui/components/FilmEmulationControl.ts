@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import type { FilmEmulationParams, FilmStockId } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS, FILM_STOCKS } from '../../filters/FilmEmulation';
 
@@ -60,14 +61,14 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     `;
 
     this.button.addEventListener('click', () => this.toggle());
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen) {
         if (!this.params.enabled) {
           this.button.style.background = 'transparent';
@@ -89,10 +90,10 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
-      min-width: 260px;
+      min-width: ${PANEL_WIDTHS.standard};
       z-index: 9999;
       display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: ${SHADOWS.panel};
     `;
 
     this.createPanelContent();
@@ -144,8 +145,8 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
+    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -356,10 +357,14 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   private updateButtonState(): void {
-    if (this.params.enabled || this.isPanelOpen) {
+    if (this.params.enabled) {
       this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.button.style.borderColor = 'var(--accent-primary)';
       this.button.style.color = 'var(--accent-primary)';
+    } else if (this.isPanelOpen) {
+      this.button.style.background = 'var(--bg-hover)';
+      this.button.style.borderColor = 'var(--border-primary)';
+      this.button.style.color = 'var(--text-primary)';
     } else {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';

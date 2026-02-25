@@ -68,14 +68,14 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     `;
 
     this.button.addEventListener('click', () => this.toggle());
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen) {
         if (!isPerspectiveActive(this.params)) {
           this.button.style.background = 'transparent';
@@ -151,8 +151,8 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
+    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(resetBtn);

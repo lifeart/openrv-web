@@ -814,7 +814,7 @@ describe('Waveform RGB Overlay Controls', () => {
 
       btn.click();
 
-      expect(btn.style.opacity).toBe('0.3');
+      expect(btn.style.opacity).toBe('0.5');
     });
   });
 

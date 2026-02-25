@@ -11,6 +11,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { OPACITY } from './shared/theme';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import {
   getSharedScopesProcessor,
@@ -222,7 +223,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       display: flex;
       justify-content: space-between;
       margin-top: 4px;
-      font-size: 9px;
+      font-size: 10px;
       color: var(--text-secondary);
     `;
     footer.innerHTML = `
@@ -633,7 +634,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     if (this.channelButtons) {
       const btn = this.channelButtons[channel];
       const enabled = this.enabledChannels[channel];
-      btn.style.opacity = enabled ? '1' : '0.3';
+      btn.style.opacity = enabled ? '1' : String(OPACITY.disabled);
       btn.setAttribute('aria-pressed', String(enabled));
     }
   }

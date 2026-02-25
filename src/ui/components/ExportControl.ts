@@ -40,6 +40,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private isDropdownOpen = false;
   private annotationsCheckbox: HTMLInputElement | null = null;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private _cleanupA11yFocus: (() => void) | null = null;
 
   constructor() {
     super();
@@ -78,14 +79,14 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     `;
 
     this.exportButton.addEventListener('click', () => this.toggleDropdown());
-    this.exportButton.addEventListener('mouseenter', () => {
+    this.exportButton.addEventListener('pointerenter', () => {
       if (!this.isDropdownOpen) {
         this.exportButton.style.background = 'var(--bg-hover)';
         this.exportButton.style.borderColor = 'var(--border-primary)';
         this.exportButton.style.color = 'var(--text-primary)';
       }
     });
-    this.exportButton.addEventListener('mouseleave', () => {
+    this.exportButton.addEventListener('pointerleave', () => {
       if (!this.isDropdownOpen) {
         this.exportButton.style.background = 'transparent';
         this.exportButton.style.borderColor = 'transparent';
@@ -94,7 +95,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     });
 
     // Apply A11Y focus handling
-    applyA11yFocus(this.exportButton);
+    this._cleanupA11yFocus = applyA11yFocus(this.exportButton);
 
     // Create dropdown menu (rendered at body level)
     this.dropdown = document.createElement('div');
@@ -234,7 +235,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       align-items: center;
       padding: 6px 12px;
       cursor: pointer;
-      transition: background 0.1s ease;
+      transition: background 0.12s ease;
       gap: 8px;
       color: var(--text-muted);
       background: transparent;
@@ -246,11 +247,11 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       outline: none;
     `;
 
-    row.addEventListener('mouseenter', () => {
+    row.addEventListener('pointerenter', () => {
       row.style.background = 'var(--bg-hover)';
       row.style.color = 'var(--text-primary)';
     });
-    row.addEventListener('mouseleave', () => {
+    row.addEventListener('pointerleave', () => {
       row.style.background = 'transparent';
       row.style.color = 'var(--text-muted)';
     });
@@ -477,6 +478,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   dispose(): void {
     document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
+    this._cleanupA11yFocus?.();
+    this._cleanupA11yFocus = null;
     // Remove body-mounted dropdown if present
     if (this.dropdown.parentNode) {
       this.dropdown.parentNode.removeChild(this.dropdown);

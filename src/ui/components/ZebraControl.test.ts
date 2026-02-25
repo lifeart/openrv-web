@@ -101,24 +101,24 @@ describe('ZebraControl', () => {
     it('ZEBRA-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('pointerenter'));
       expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
     it('ZEBRA-U024: button pointerleave restores background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new MouseEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('pointerleave'));
       expect(button.style.background).toBe('transparent');
     });
 
     it('ZEBRA-M20a: borderColor resets to transparent on pointerleave when inactive', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('pointerenter'));
       expect(button.style.borderColor).toBe('var(--border-primary)');
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new MouseEvent('pointerleave'));
       expect(button.style.borderColor).toBe('transparent');
     });
 
@@ -127,8 +127,8 @@ describe('ZebraControl', () => {
       zebraStripes.enable();
       zebraStripes.setState({ highEnabled: true });
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      button.dispatchEvent(new MouseEvent('mouseenter'));
-      button.dispatchEvent(new MouseEvent('mouseleave'));
+      button.dispatchEvent(new MouseEvent('pointerenter'));
+      button.dispatchEvent(new MouseEvent('pointerleave'));
       expect(button.style.borderColor).toBe('var(--accent-primary)');
     });
   });
@@ -678,8 +678,8 @@ describe('ZebraControl', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
 
-      // Simulate mouse click: mousedown then focus
-      button.dispatchEvent(new Event('mousedown'));
+      // Simulate mouse click: pointerdown then focus
+      button.dispatchEvent(new Event('pointerdown'));
       button.dispatchEvent(new Event('focus'));
       expect(button.style.outline).not.toBe('2px solid var(--accent-primary)');
     });

@@ -929,7 +929,7 @@ export class Viewer {
 
     // Pixel probe + cursor color events - single handler for both consumers
     this.container.addEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
-    this.container.addEventListener('mouseleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
+    this.container.addEventListener('pointerleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
     this.container.addEventListener('click', this.pixelSamplingManager.onClickForProbe);
 
     // Listen for DPR changes (window moved between displays).
@@ -4074,7 +4074,7 @@ export class Viewer {
     this.resizeObserver.disconnect();
     this.inputHandler.unbindEvents();
     this.container.removeEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
-    this.container.removeEventListener('mouseleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
+    this.container.removeEventListener('pointerleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
     this.container.removeEventListener('click', this.pixelSamplingManager.onClickForProbe);
 
     // Cleanup pixel sampling manager (clears cursor color callback and cached canvases)

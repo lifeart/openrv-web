@@ -51,14 +51,14 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     `;
 
     this.lensButton.addEventListener('click', () => this.togglePanel());
-    this.lensButton.addEventListener('mouseenter', () => {
+    this.lensButton.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen) {
         this.lensButton.style.background = 'var(--bg-hover)';
         this.lensButton.style.borderColor = 'var(--border-primary)';
         this.lensButton.style.color = 'var(--text-primary)';
       }
     });
-    this.lensButton.addEventListener('mouseleave', () => {
+    this.lensButton.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen && isDefaultLensParams(this.params)) {
         this.lensButton.style.background = 'transparent';
         this.lensButton.style.borderColor = 'transparent';
@@ -136,8 +136,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
+    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -240,8 +240,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
         this.updateSliderValue('k2', preset.k2);
         this.emitChange();
       });
-      btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--border-secondary)'; });
-      btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--border-primary)'; });
+      btn.addEventListener('pointerenter', () => { btn.style.background = 'var(--border-secondary)'; });
+      btn.addEventListener('pointerleave', () => { btn.style.background = 'var(--border-primary)'; });
       presetsRow.appendChild(btn);
     }
 

@@ -74,10 +74,10 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
       align-items: center;
       transition: color 0.12s ease;
     `;
-    resetButton.addEventListener('mouseenter', () => {
+    resetButton.addEventListener('pointerenter', () => {
       resetButton.style.color = 'var(--text-primary)';
     });
-    resetButton.addEventListener('mouseleave', () => {
+    resetButton.addEventListener('pointerleave', () => {
       resetButton.style.color = 'var(--text-muted)';
     });
     resetButton.addEventListener('click', () => this.reset());

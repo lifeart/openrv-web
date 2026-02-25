@@ -124,14 +124,14 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     `;
 
     this.cropButton.addEventListener('click', () => this.togglePanel());
-    this.cropButton.addEventListener('mouseenter', () => {
+    this.cropButton.addEventListener('pointerenter', () => {
       if (!this.isPanelOpen && !this.state.enabled) {
         this.cropButton.style.background = 'var(--bg-hover)';
         this.cropButton.style.borderColor = 'var(--border-primary)';
         this.cropButton.style.color = 'var(--text-primary)';
       }
     });
-    this.cropButton.addEventListener('mouseleave', () => {
+    this.cropButton.addEventListener('pointerleave', () => {
       if (!this.isPanelOpen && !this.state.enabled) {
         this.cropButton.style.background = 'transparent';
         this.cropButton.style.borderColor = 'transparent';
@@ -209,8 +209,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       line-height: 1;
     `;
     closeButton.addEventListener('click', () => this.hidePanel());
-    closeButton.addEventListener('mouseenter', () => { closeButton.style.color = 'var(--text-primary)'; });
-    closeButton.addEventListener('mouseleave', () => { closeButton.style.color = 'var(--text-secondary)'; });
+    closeButton.addEventListener('pointerenter', () => { closeButton.style.color = 'var(--text-primary)'; });
+    closeButton.addEventListener('pointerleave', () => { closeButton.style.color = 'var(--text-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(closeButton);
@@ -244,7 +244,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       cursor: pointer;
       font-size: 11px;
       min-width: 40px;
-      transition: background 0.15s ease;
+      transition: background 0.12s ease;
     `;
 
     toggleSwitch.addEventListener('click', () => {
@@ -315,10 +315,10 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       margin-top: 8px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('mouseenter', () => {
+    resetBtn.addEventListener('pointerenter', () => {
       resetBtn.style.background = 'var(--text-muted)';
     });
-    resetBtn.addEventListener('mouseleave', () => {
+    resetBtn.addEventListener('pointerleave', () => {
       resetBtn.style.background = 'var(--border-secondary)';
     });
 
@@ -396,7 +396,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       cursor: pointer;
       font-size: 11px;
       min-width: 40px;
-      transition: background 0.15s ease;
+      transition: background 0.12s ease;
     `;
     this.uncropToggleSwitch.addEventListener('click', () => {
       this.uncropState.enabled = !this.uncropState.enabled;
@@ -592,8 +592,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       font-size: 11px;
     `;
     resetUncropBtn.addEventListener('click', () => this.resetUncrop());
-    resetUncropBtn.addEventListener('mouseenter', () => { resetUncropBtn.style.background = 'var(--text-muted)'; });
-    resetUncropBtn.addEventListener('mouseleave', () => { resetUncropBtn.style.background = 'var(--border-secondary)'; });
+    resetUncropBtn.addEventListener('pointerenter', () => { resetUncropBtn.style.background = 'var(--text-muted)'; });
+    resetUncropBtn.addEventListener('pointerleave', () => { resetUncropBtn.style.background = 'var(--border-secondary)'; });
     this.panel.appendChild(resetUncropBtn);
 
     // Initial visibility sync

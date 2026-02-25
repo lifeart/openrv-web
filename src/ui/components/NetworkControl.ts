@@ -162,7 +162,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       right: -2px;
       background: var(--accent-primary);
       color: white;
-      font-size: 9px;
+      font-size: 10px;
       font-weight: bold;
       min-width: 14px;
       height: 14px;
@@ -176,14 +176,14 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.button.appendChild(this.badge);
 
     // Hover states
-    this.button.addEventListener('mouseenter', () => {
+    this.button.addEventListener('pointerenter', () => {
       if (this.state.connectionState !== 'connected') {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
-    this.button.addEventListener('mouseleave', () => {
+    this.button.addEventListener('pointerleave', () => {
       if (this.state.connectionState !== 'connected') {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
@@ -232,7 +232,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       border-bottom: 1px solid var(--border-secondary);
       background: var(--bg-tertiary);
     `;
-    header.innerHTML = `<span style="font-weight: 600; color: var(--text-primary);">Network Sync</span>`;
+    header.innerHTML = `<span style="font-weight: 500; color: var(--text-primary);">Network Sync</span>`;
 
     // Close button
     const closeBtn = document.createElement('button');
@@ -443,10 +443,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       font-weight: 500;
       transition: background 0.12s ease;
     `;
-    createBtn.addEventListener('mouseenter', () => {
+    createBtn.addEventListener('pointerenter', () => {
       createBtn.style.background = 'var(--accent-hover)';
     });
-    createBtn.addEventListener('mouseleave', () => {
+    createBtn.addEventListener('pointerleave', () => {
       createBtn.style.background = 'var(--accent-primary)';
     });
     createBtn.addEventListener('click', () => {
@@ -529,10 +529,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       font-size: 12px;
       transition: all 0.12s ease;
     `;
-    joinBtn.addEventListener('mouseenter', () => {
+    joinBtn.addEventListener('pointerenter', () => {
       joinBtn.style.background = 'var(--bg-hover)';
     });
-    joinBtn.addEventListener('mouseleave', () => {
+    joinBtn.addEventListener('pointerleave', () => {
       joinBtn.style.background = 'var(--bg-tertiary)';
     });
     joinBtn.addEventListener('click', () => this.handleJoinRoom());
@@ -868,10 +868,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       font-size: 11px;
       transition: all 0.12s ease;
     `;
-    leaveBtn.addEventListener('mouseenter', () => {
+    leaveBtn.addEventListener('pointerenter', () => {
       leaveBtn.style.background = 'rgba(248, 113, 113, 0.1)';
     });
-    leaveBtn.addEventListener('mouseleave', () => {
+    leaveBtn.addEventListener('pointerleave', () => {
       leaveBtn.style.background = 'transparent';
     });
     leaveBtn.addEventListener('click', () => {
@@ -1289,7 +1289,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       if (user.isHost) {
         const hostBadge = document.createElement('span');
         hostBadge.style.cssText = `
-          font-size: 9px;
+          font-size: 10px;
           color: var(--accent-primary);
           background: rgba(var(--accent-primary-rgb), 0.1);
           padding: 1px 6px;

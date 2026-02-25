@@ -5,6 +5,8 @@
  */
 
 import { createButton } from './Button';
+import { getIconSvg } from './Icons';
+import { SHADOWS } from './theme';
 import type { FocusManager } from '../../a11y/FocusManager';
 
 // Module-level focus manager setter to avoid circular deps
@@ -116,7 +118,7 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
     background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: ${SHADOWS.modal};
     max-width: 90vw;
     max-height: 90vh;
     width: ${width};
@@ -205,16 +207,16 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
     `;
 
     // Icon based on type
-    const icons = {
-      info: '\u2139\uFE0F',
-      success: '\u2705',
-      warning: '\u26A0\uFE0F',
-      error: '\u274C',
+    const iconNames = {
+      info: 'info',
+      success: 'check-circle',
+      warning: 'warning',
+      error: 'error',
     } as const;
 
     const iconSpan = document.createElement('span');
-    iconSpan.textContent = icons[type];
-    iconSpan.style.cssText = 'font-size: 18px; margin-right: 8px; vertical-align: middle;';
+    iconSpan.innerHTML = getIconSvg(iconNames[type], 'md');
+    iconSpan.style.cssText = 'margin-right: 8px; vertical-align: middle; display: inline-flex;';
 
     const messageSpan = document.createElement('span');
     messageSpan.textContent = message;

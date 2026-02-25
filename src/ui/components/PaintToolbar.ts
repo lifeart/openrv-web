@@ -102,10 +102,10 @@ export class PaintToolbar {
         transition: all 0.12s ease;
       `;
       preset.title = color;
-      preset.addEventListener('mouseenter', () => {
+      preset.addEventListener('pointerenter', () => {
         preset.style.borderColor = 'var(--border-secondary)';
       });
-      preset.addEventListener('mouseleave', () => {
+      preset.addEventListener('pointerleave', () => {
         preset.style.borderColor = 'var(--bg-hover)';
       });
       preset.addEventListener('click', () => {

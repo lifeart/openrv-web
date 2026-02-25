@@ -10,6 +10,7 @@
 import { FalseColor, FalseColorPreset } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { SHADOWS } from './shared/theme';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class FalseColorControl {
@@ -63,7 +64,7 @@ export class FalseColorControl {
       this.toggleDropdown();
     });
 
-    this.toggleButton.addEventListener('mouseenter', () => {
+    this.toggleButton.addEventListener('pointerenter', () => {
       if (!this.falseColor.isEnabled()) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
@@ -71,7 +72,7 @@ export class FalseColorControl {
       }
     });
 
-    this.toggleButton.addEventListener('mouseleave', () => {
+    this.toggleButton.addEventListener('pointerleave', () => {
       if (!this.falseColor.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
@@ -98,7 +99,7 @@ export class FalseColorControl {
       min-width: 200px;
       z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      box-shadow: ${SHADOWS.dropdown};
     `;
 
     this.createDropdownContent();
@@ -189,7 +190,7 @@ export class FalseColorControl {
         color: var(--text-secondary);
         font-size: 10px;
         cursor: pointer;
-        transition: all 0.1s ease;
+        transition: all 0.12s ease;
       `;
 
       btn.addEventListener('click', () => {
@@ -201,13 +202,13 @@ export class FalseColorControl {
         }
       });
 
-      btn.addEventListener('mouseenter', () => {
+      btn.addEventListener('pointerenter', () => {
         if (this.falseColor.getState().preset !== preset.key) {
           btn.style.background = 'var(--border-primary)';
         }
       });
 
-      btn.addEventListener('mouseleave', () => {
+      btn.addEventListener('pointerleave', () => {
         if (this.falseColor.getState().preset !== preset.key) {
           btn.style.background = 'var(--bg-secondary)';
         }
@@ -240,7 +241,7 @@ export class FalseColorControl {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 3px;
-      font-size: 9px;
+      font-size: 10px;
     `;
     legendSection.appendChild(legendContainer);
     this.dropdown.appendChild(legendSection);
