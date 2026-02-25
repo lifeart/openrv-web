@@ -12,7 +12,7 @@
 
 4. **Backward-compatibility shims pollute the class** -- ~70 lines of protected getters/setters exist solely to proxy `(session as any)._currentFrame` patterns in tests. Private delegate methods for `parseColorAdjustments`, `parsePenStroke`, etc. exist only because tests access them via `(session as any)`.
 
-5. **Event bus coupling** -- Session extends `EventEmitter<SessionEvents>` with 25+ event types. The constructor has ~80 lines of wiring that forward PlaybackEngine events to Session events and connect manager callbacks to Session emitters.
+5. **Event bus coupling** -- Session extends `EventEmitter<SessionEvents>` with 31+ event types (including the undeclared `buffering` event). The constructor has ~80 lines of wiring that forward PlaybackEngine events to Session events and connect manager callbacks to Session emitters.
 
 ### Quantitative Summary
 
@@ -21,7 +21,7 @@
 | Session.ts lines | 2,450 |
 | Total session directory (54 files) | ~40,800 lines |
 | Public/protected methods on Session | ~160 |
-| SessionEvents event types | 25 |
+| SessionEvents event types | 31 (+ 1 undeclared `buffering`) |
 | Internal managers wired in constructor | 8 |
 | Backward-compat proxy accessors | ~35 |
 | Files that import Session | 102 |
@@ -112,7 +112,7 @@ export interface SessionPlaybackEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
-  audioError: import('./Session').AudioPlaybackError;
+  audioError: import('./types').AudioPlaybackError;
 }
 
 export interface SessionPlaybackHost {
@@ -180,7 +180,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import type { MediaType } from '../types/session';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
-import type { UnsupportedCodecInfo } from './Session';
+import type { UnsupportedCodecInfo } from './types';
 
 export interface SessionMediaEvents extends EventMap {
   sourceLoaded: MediaSource;
@@ -274,7 +274,7 @@ import { VersionManager } from './VersionManager';
 import { StatusManager } from './StatusManager';
 import { AnnotationStore } from './AnnotationStore';
 import type { Marker } from './MarkerManager';
-import type { ParsedAnnotations, MatteSettings } from './Session';
+import type { ParsedAnnotations, MatteSettings } from './types';
 import type { PaintEffects } from '../../paint/types';
 
 export interface SessionAnnotationEvents extends EventMap {
@@ -340,7 +340,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Graph } from '../graph/Graph';
 import type { GTOData } from 'gto-js';
 import type { GTOParseResult } from './GTOGraphLoader';
-import type { GTOViewSettings, SessionMetadata } from './Session';
+import type { GTOViewSettings, SessionMetadata } from './types';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
 import type { UncropState } from '../../core/types/transform';
 
@@ -393,6 +393,12 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
   get uncropState(): UncropState | null { ... }
 
   updateMetadata(patch: Partial<SessionMetadata>): void { ... }
+
+  /** Clear stale graph data (called by SessionMediaHost.clearGraphData when new media is loaded) */
+  clearData(): void {
+    this._gtoData = null;
+    this._graphParseResult = null;
+  }
 
   dispose(): void { ... }
 }
@@ -768,8 +774,10 @@ export class Session extends EventEmitter<SessionEvents> {
 
 3. **Update Session.ts**
    - Replace playback-related fields with `_playback = new SessionPlayback()`
-   - Forward SessionPlaybackEvents
+   - Forward SessionPlaybackEvents (use explicit event enumeration)
    - Add backward-compat accessors (deprecated)
+   - `getPlaybackState()` / `setPlaybackState()` remain on Session as composition-level methods (they aggregate state from `this.playback`, `this.annotations.markerManager`, and `this.media`)
+   - `goToNextMarker()` / `goToPreviousMarker()` remain on Session (they read from annotations via `markerManager.findNextMarkerFrame()` and write to playback via `playback.currentFrame`)
 
 4. **Update consumers**
    - `AppPlaybackWiring.ts`: Use `session.playback.xxx`
@@ -783,20 +791,37 @@ export class Session extends EventEmitter<SessionEvents> {
 **Files to modify:**
 - `src/core/session/Session.ts` (reduce to ~400 lines)
 - `src/core/session/Session.playback.test.ts` (update test access patterns)
+- `src/core/session/Session.state.test.ts` (update AudioCoordinator wiring tests AC-WIRE-001 through AC-WIRE-010)
+- `src/core/session/PlaylistManager.test.ts` (update Session access patterns)
+- `src/core/session/TransitionManager.test.ts` (update Session access patterns)
 - ~20 consumer files
 
-**Estimated effort:** 3 days
+**Test gate criteria:**
+- New `SessionPlayback.test.ts`: standalone construction, play/pause/seek cycle, volume delegation, A/B compare, AudioCoordinator wiring (mirrors AC-WIRE-001 through AC-WIRE-010), all 16 events in `SessionPlaybackEvents` fire correctly (including `buffering`)
+- `getPlaybackState()` / `setPlaybackState()` on Session: frozen schema conformance test (output has exactly `{ currentFrame, inPoint, outPoint, fps, loopMode, volume, muted, preservesPitch, marks, currentSourceIndex }`); round-trip idempotency test
+- `goToNextMarker()` / `goToPreviousMarker()` on Session: existing behavior verified
+- `Session.playback.test.ts` TestSession: all `(session as any)` usages updated
+- `Session.state.test.ts` AudioCoordinator wiring tests: all pass
+- `npx vitest run` passes all existing tests; `npx tsc --noEmit` passes
+- No new `(session as any)` casts introduced
+
+**Estimated effort:** 4 days
 
 ### Phase 5: Cleanup and Finalization
 
 1. **Remove deprecated accessors** from Session.ts after all consumers are migrated
-2. **Remove MediaManager.ts** if fully absorbed into SessionMedia
-3. **Update `src/core/session/index.ts`** exports
-4. **Update `SessionEvents`** to be a union type of sub-service events
-5. **Update AppSessionBridge** to optionally subscribe to focused services
-6. **Run full test suite** and fix any remaining breaks
+2. **Update `src/core/session/index.ts`** exports
+3. **Update `SessionEvents`** to be a union type of sub-service events
+4. **Update AppSessionBridge** to optionally subscribe to focused services
+5. **Run full test suite** and fix any remaining breaks
 
-**Estimated effort:** 1 day
+**Test gate criteria:**
+- Event forwarding completeness test: for each of the 31+ event types in `SessionEvents`, verify that subscribing via `session.on(eventName, handler)` fires when the corresponding sub-service emits
+- Dispose ordering test: verify `playback.dispose()` is called before `media.dispose()` (mock dispose methods and check call order)
+- No remaining `@deprecated` methods with active non-test callers
+- Final full regression: `npx vitest run` passes all tests; `npx tsc --noEmit` passes
+
+**Estimated effort:** 1.5 days
 
 ## How to Maintain Backward Compatibility During Migration
 
@@ -839,20 +864,21 @@ This means **zero breaking changes** at each phase. Consumers can migrate at the
 To preserve backward compatibility of `session.on('frameChanged', ...)`:
 
 ```typescript
-// Session constructor
+// Session constructor -- explicit event enumeration (no wildcard support in EventEmitter)
 private wireEventForwarding(): void {
-  // Forward all playback events
+  // Forward all playback events (must match SessionPlaybackEvents interface)
   const playbackEvents: (keyof SessionPlaybackEvents)[] = [
     'frameChanged', 'playbackChanged', 'playDirectionChanged',
-    'playbackSpeedChanged', 'loopModeChanged', 'fpsChanged',
-    'volumeChanged', 'mutedChanged', 'abSourceChanged',
-    // ...
+    'playbackSpeedChanged', 'preservesPitchChanged', 'loopModeChanged',
+    'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
+    'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
+    'volumeChanged', 'mutedChanged', 'abSourceChanged', 'audioError',
   ];
   for (const event of playbackEvents) {
     this.playback.on(event, (data: any) => this.emit(event, data));
   }
 
-  // Forward all media events
+  // Forward all media events (must match SessionMediaEvents interface)
   const mediaEvents: (keyof SessionMediaEvents)[] = [
     'sourceLoaded', 'durationChanged', 'unsupportedCodec',
   ];
@@ -860,7 +886,24 @@ private wireEventForwarding(): void {
     this.media.on(event, (data: any) => this.emit(event, data));
   }
 
-  // ... same for annotations and graph
+  // Forward all annotation events (must match SessionAnnotationEvents interface)
+  const annotationEvents: (keyof SessionAnnotationEvents)[] = [
+    'marksChanged', 'annotationsLoaded', 'paintEffectsLoaded',
+    'matteChanged', 'notesChanged', 'versionsChanged',
+    'statusChanged', 'statusesChanged',
+  ];
+  for (const event of annotationEvents) {
+    this.annotations.on(event, (data: any) => this.emit(event, data));
+  }
+
+  // Forward all graph events (must match SessionGraphEvents interface)
+  const graphEvents: (keyof SessionGraphEvents)[] = [
+    'graphLoaded', 'settingsLoaded', 'sessionLoaded',
+    'edlLoaded', 'metadataChanged',
+  ];
+  for (const event of graphEvents) {
+    this.graph.on(event, (data: any) => this.emit(event, data));
+  }
 }
 ```
 
@@ -872,6 +915,97 @@ to:
 ```typescript
 session.playback.on('frameChanged', handler);
 ```
+
+**Implementation note:** The `EventEmitter` class has no wildcard support and no way to enumerate registered event names generically. Event forwarding must use explicit event name arrays per service (as shown above), not a generic `forwardEvents(source: EventEmitter<any>)` helper. Each array must be kept in sync with the corresponding `*Events` interface definition. This is a maintenance burden but ensures type safety and avoids silent event loss.
+
+## TestSession Migration Strategy
+
+There are 6 `TestSession extends Session` subclasses across test files and ~71+ `(session as any)` casts across ~23 test files. After refactoring, protected fields like `this.sources`, `this._graph`, `this._metadata` move to sub-services, breaking every TestSession subclass. This migration work must be planned upfront because the strategy choice affects the API design of every new sub-service class.
+
+### Recommended approach: Factory functions + protected test helpers on sub-services
+
+**Strategy:** Replace `TestSession extends Session` subclasses with factory functions that construct a real `Session` and configure its sub-services via protected test helper methods. Sub-services expose `protected` setters for internal state that are only used in tests.
+
+**Example (before -- current pattern):**
+
+```typescript
+class TestSession extends Session {
+  constructor() {
+    super();
+    // Directly manipulate protected fields
+    this.sources = [createMockSource()];
+    this._graph = createMockGraph();
+    this._metadata = { title: 'test' };
+  }
+}
+```
+
+**Example (after -- factory function pattern):**
+
+```typescript
+function createTestSession(options?: {
+  sources?: MediaSource[];
+  graph?: Graph;
+  metadata?: Partial<SessionMetadata>;
+}): Session {
+  const session = new Session();
+  if (options?.sources) {
+    for (const source of options.sources) {
+      session.media.addSourceForTest(source);  // protected test helper
+    }
+  }
+  if (options?.graph) {
+    session.graph.setGraphForTest(options.graph);  // protected test helper
+  }
+  if (options?.metadata) {
+    session.graph.updateMetadata(options.metadata);  // public method
+  }
+  return session;
+}
+```
+
+**Sub-service test helpers:** Each sub-service class exposes `protected` methods prefixed with `ForTest` for setting internal state:
+
+```typescript
+export class SessionMedia extends EventEmitter<SessionMediaEvents> {
+  // ... production methods ...
+
+  /** @internal Test helper -- adds a source without triggering load flow */
+  addSourceForTest(source: MediaSource): void {
+    this._sources.push(source);
+  }
+}
+
+export class SessionGraph extends EventEmitter<SessionGraphEvents> {
+  // ... production methods ...
+
+  /** @internal Test helper -- sets graph without triggering parse flow */
+  setGraphForTest(graph: Graph): void {
+    this._graph = graph;
+  }
+}
+```
+
+**Migration plan per phase:**
+- Phase 1: Migrate TestSession subclasses in `Session.state.test.ts` and `SessionGTOExporter.test.ts` as proof-of-concept. Validate the factory function approach works.
+- Phase 2: Migrate TestSession in `Session.graph.test.ts` and `CoordinateParsing.test.ts`.
+- Phase 3: Migrate TestSession in `Session.media.test.ts`. Batch-update `(session as any)` casts for media field access.
+- Phase 4: Migrate TestSession in `Session.playback.test.ts`. Batch-update remaining `(session as any)` casts.
+
+**Affected test files (6 TestSession subclasses):**
+- `src/core/session/Session.state.test.ts`
+- `src/core/session/Session.media.test.ts`
+- `src/core/session/Session.playback.test.ts`
+- `src/core/session/SessionGTOExporter.test.ts`
+- `src/core/session/CoordinateParsing.test.ts`
+- `src/core/session/ViewerIntegration.test.ts` (if it exists)
+
+**`(session as any)` patterns:** The ~71+ casts across test files should be incrementally replaced with either:
+1. Direct access to the sub-service (e.g., `session.media.currentSource` instead of `(session as any)._currentSource`)
+2. Test helper methods (e.g., `session.media.addSourceForTest(...)` instead of `(session as any).sources.push(...)`)
+3. Public API access where possible
+
+The goal is to reduce `(session as any)` casts to zero over the course of Phases 1-4, with no new casts introduced.
 
 ## Risk Assessment
 
@@ -932,12 +1066,14 @@ session.playback.on('frameChanged', handler);
 
 | Phase | Description | Effort | Risk |
 |-------|-------------|--------|------|
-| 1 | Extract SessionAnnotations | 1 day | Low |
-| 2 | Extract SessionGraph | 2 days | Medium |
-| 3 | Extract SessionMedia | 3 days | Medium |
-| 4 | Extract SessionPlayback | 3 days | High |
-| 5 | Cleanup and finalization | 1 day | Low |
-| **Total** | | **10 days** | |
+| 1 | Extract SessionAnnotations + shared types | 1.5 days | Low |
+| 2 | Extract SessionGraph | 2.5 days | Medium |
+| 3 | Extract SessionMedia | 4 days | Medium |
+| 4 | Extract SessionPlayback | 4 days | High |
+| 5 | Cleanup and finalization | 1.5 days | Low |
+| **Total** | | **~14 days** | |
+
+The effort increase from the original 10-day estimate reflects: corrected consumer counts (102 files importing Session, not 58), 43 files accessing media methods (not 35), ~71+ `(session as any)` casts requiring migration, 6 TestSession subclass migrations, shared type extraction moved to Phase 1, and the `loadAudioFromVideo`/`clearGraphData` host callback design work.
 
 Each phase is independently shippable and produces a working codebase. The phases can be delivered as separate PRs with focused review scope.
 
@@ -947,13 +1083,15 @@ Each phase is independently shippable and produces a working codebase. The phase
 
 | File | Lines (est.) | Phase |
 |------|-------------|-------|
+| `src/core/session/types.ts` | ~100 | 1 |
 | `src/core/session/SessionAnnotations.ts` | ~200 | 1 |
-| `src/core/session/SessionGraph.ts` | ~500 | 2 |
-| `src/core/session/types.ts` | ~100 | 2 |
-| `src/core/session/SessionMedia.ts` | ~600 | 3 |
-| `src/core/session/SessionPlayback.ts` | ~500 | 4 |
 | `src/core/session/SessionAnnotations.test.ts` | ~200 | 1 |
+| `src/core/session/SessionGraph.ts` | ~500 | 2 |
 | `src/core/session/SessionGraph.test.ts` | ~300 | 2 |
+| `src/core/session/SessionMedia.ts` | ~600 | 3 |
+| `src/core/session/SessionMedia.test.ts` | ~300 | 3 |
+| `src/core/session/SessionPlayback.ts` | ~500 | 4 |
+| `src/core/session/SessionPlayback.test.ts` | ~400 | 4 |
 
 ### Files to Modify (Primary)
 
@@ -964,17 +1102,23 @@ Each phase is independently shippable and produces a working codebase. The phase
 | `src/core/session/SessionSerializer.ts` | Update access paths | 1,2 |
 | `src/core/session/SessionGTOExporter.ts` | Update access paths | 1,2 |
 | `src/core/session/SessionGTOStore.ts` | Update access paths | 1,2 |
+| `src/core/session/SessionGTOExporter.test.ts` | Update TestSession, annotation access paths | 1,2 |
+| `src/core/session/SessionGTOStore.test.ts` | Update access paths | 1,2 |
+| `src/core/session/CoordinateParsing.test.ts` | Update TestSession | 1,2 |
 | `src/AppSessionBridge.ts` | Update event subscriptions | 1-4 |
-| `src/core/session/Session.playback.test.ts` | Update test access | 4 |
-| `src/core/session/Session.media.test.ts` | Update test access | 3 |
-| `src/core/session/Session.state.test.ts` | Update test access | 1,2 |
+| `src/core/session/Session.playback.test.ts` | Update TestSession, test access | 4 |
+| `src/core/session/Session.media.test.ts` | Update TestSession, test access | 3 |
+| `src/core/session/Session.state.test.ts` | Update test access, AC-WIRE tests | 1,2,4 |
 | `src/core/session/Session.graph.test.ts` | Update test access | 2 |
+| `src/core/session/PlaylistManager.test.ts` | Update Session access patterns | 4 |
+| `src/core/session/TransitionManager.test.ts` | Update Session access patterns | 4 |
+| `src/core/session/SnapshotManager.test.ts` | Update source access patterns | 3 |
 
 ### Files Potentially Removed
 
 | File | Reason | Phase |
 |------|--------|-------|
-| `src/core/session/MediaManager.ts` | Absorbed into SessionMedia | 3 |
+| `src/core/session/MediaManager.ts` | Orphaned code (not used by Session.ts); delete after consolidating into SessionMedia | 3 |
 | `src/core/session/MediaManager.test.ts` | Merged into SessionMedia tests | 3 |
 
 ---

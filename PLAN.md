@@ -34,16 +34,16 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
-| 1 | [Session God Object Refactoring](./IMPROVEMENT_1_PLAN.md) | **14 days** | MEDIUM | NEEDS WORK | 8 changes (audio callback, cross-service methods, consumer count fix) |
-| 3 | [App Class Decomposition](./IMPROVEMENT_3_PLAN.md) | **14-18 days** | MEDIUM | NEEDS WORK | 7 changes (drop ServiceContainer, split PlaylistNav, add Phase 0 tests) |
-| 2 | [Monolithic Shader Modularization](./IMPROVEMENT_2_PLAN.md) | **35 days** | MEDIUM | NEEDS WORK | 8 changes (UBO for cross-stage uniforms, passthrough vertex shader, pixel harness) |
+| 1 | [Session God Object Refactoring](./IMPROVEMENT_1_PLAN.md) | **14 days** | MEDIUM | READY | All 8 changes incorporated |
+| 3 | [App Class Decomposition](./IMPROVEMENT_3_PLAN.md) | **14-18 days** | MEDIUM | READY | All 7 changes incorporated |
+| 2 | [Monolithic Shader Modularization](./IMPROVEMENT_2_PLAN.md) | **35 days** | MEDIUM | READY | All 11 changes incorporated (now 11 stages) |
 
 ### P2 — Medium (Affects Extensibility)
 
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
-| 7 | [Plugin Architecture](./IMPROVEMENT_7_PLAN.md) | **12-16 days** | MEDIUM | NEEDS WORK | 13 changes (fix 3 bugs, wire integrations, add cycle detection) |
-| 8 | [Effect Nodes Implementation](./IMPROVEMENT_8_PLAN.md) | **4-5 weeks** | MEDIUM | NEEDS WORK | 7 changes (phase reorder, CDL precision, alpha handling, ping-pong buffers) |
+| 7 | [Plugin Architecture](./IMPROVEMENT_7_PLAN.md) | **12-16 days** | MEDIUM | READY | All 13 changes incorporated |
+| 8 | [Effect Nodes Implementation](./IMPROVEMENT_8_PLAN.md) | **4-5 weeks** | MEDIUM | READY | All 7 changes incorporated |
 
 ---
 
@@ -88,4 +88,4 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 ---
 
 *Generated: 2026-02-25 by 3-expert architecture assessment panel*
-*Review status: 2 rounds complete (32 reviews total). All plans approved with changes.*
+*Review status: 2 rounds complete (32 reviews total). All plans approved and updated. All 8 plans now READY.*

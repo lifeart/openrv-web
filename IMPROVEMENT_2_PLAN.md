@@ -134,7 +134,7 @@ Stage 7: SCENE_ANALYSIS
   Rationale: Scene-referred to display-referred transition. Tone mapping
              operators contain significant ALU work (log2, pow, exp, tanh).
 
-Stage 7b: SPATIAL_EFFECTS_POST (post-tone-mapping: sharpen only)
+Stage 8: SPATIAL_EFFECTS_POST (post-tone-mapping: sharpen only)
   Phases: 7b (sharpen -- unsharp mask, Laplacian)
   Uniforms: ~3 + u_texelSize (from Global UBO)
   Rationale: In the monolithic shader, sharpen (phase 7b) runs AFTER tone mapping
@@ -147,20 +147,20 @@ Stage 7b: SPATIAL_EFFECTS_POST (post-tone-mapping: sharpen only)
   FILTERING: This stage requires BILINEAR (LINEAR) texture filtering on its
              input FBO texture because it samples neighboring pixels.
 
-Stage 8: DISPLAY_OUTPUT
+Stage 9: DISPLAY_OUTPUT
   Phases: 7c (output primaries), 8a-8d (display transfer/gamma/brightness),
           9 (inversion)
   Uniforms: ~8
   Rationale: Display color management. Applied once at the end.
 
-Stage 9: DIAGNOSTICS
+Stage 10: DIAGNOSTICS
   Phases: 10 (channel isolation), 11 (false color), 12 (zebra), 12c (dither/quantize)
   Uniforms: ~12
   Textures: u_falseColorLUT (unit 2)
   Rationale: Diagnostic overlays that replace or augment the image.
              Skipped entirely in production playback.
 
-Stage 10: COMPOSITING
+Stage 11: COMPOSITING
   Phases: SDR clamp, 12b (premultiply), 13 (background blend)
   Uniforms: ~6
   Rationale: Final alpha compositing and output clamping.
@@ -534,18 +534,22 @@ export class FBOPingPong {
 
 ### Step 3: Create Individual Stage Shader Files
 
-Each stage gets its own fragment shader file under `src/render/shaders/stages/`:
+Each stage gets its own fragment shader file under `src/render/shaders/stages/`. A new passthrough vertex shader is created alongside the stage shaders:
 
 ```
+src/render/shaders/
+  passthrough.vert.glsl   -- identity vertex shader for intermediate FBO stages (no pan/zoom/rotation)
+
 src/render/shaders/stages/
-  common.glsl           -- shared helpers (LUMA constant, rgbToHsl, hslToRgb, etc.)
+  common.glsl              -- shared helpers (LUMA constant, rgbToHsl, hslToRgb, etc.)
   inputDecode.frag.glsl
   linearize.frag.glsl
   primaryGrade.frag.glsl
   secondaryGrade.frag.glsl
-  spatialEffects.frag.glsl
+  spatialEffects.frag.glsl       -- clarity only (pre-tone-mapping)
   colorPipeline.frag.glsl
   sceneAnalysis.frag.glsl
+  spatialEffectsPost.frag.glsl   -- sharpen only (post-tone-mapping)
   displayOutput.frag.glsl
   diagnostics.frag.glsl
   compositing.frag.glsl
@@ -636,7 +640,7 @@ void main() {
 }
 ```
 
-Example: `spatialEffects.frag.glsl` (fixes the clarity/sharpen correctness issue):
+Example: `spatialEffects.frag.glsl` (clarity only -- fixes the clarity correctness issue):
 
 ```glsl
 #version 300 es
@@ -647,11 +651,18 @@ out vec4 fragColor;
 
 uniform sampler2D u_inputTexture;  // NOW reads GRADED pixels, not original!
 
+// Global UBO provides u_texelSize
+layout(std140) uniform GlobalUniforms {
+  float u_hdrHeadroom;
+  int   u_channelMode;
+  int   u_premult;
+  int   u_outputMode;
+  vec2  u_texelSize;
+  vec2  _padding;
+};
+
 uniform bool u_clarityEnabled;
 uniform float u_clarity;
-uniform bool u_sharpenEnabled;
-uniform float u_sharpenAmount;
-uniform vec2 u_texelSize;
 
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -688,7 +699,39 @@ void main() {
                           0.0, max(max(color.r, max(color.g, color.b)), 1.0));
     }
 
-    // Sharpen: also operates on graded pixels now
+    fragColor = color;
+}
+```
+
+Example: `spatialEffectsPost.frag.glsl` (sharpen only -- post-tone-mapping, preserving monolithic shader order):
+
+```glsl
+#version 300 es
+precision highp float;
+
+in vec2 v_texCoord;
+out vec4 fragColor;
+
+uniform sampler2D u_inputTexture;  // Reads TONE-MAPPED pixels (after SCENE_ANALYSIS)
+
+// Global UBO provides u_texelSize
+layout(std140) uniform GlobalUniforms {
+  float u_hdrHeadroom;
+  int   u_channelMode;
+  int   u_premult;
+  int   u_outputMode;
+  vec2  u_texelSize;
+  vec2  _padding;
+};
+
+uniform bool u_sharpenEnabled;
+uniform float u_sharpenAmount;
+
+void main() {
+    vec4 color = texture(u_inputTexture, v_texCoord);
+
+    // Sharpen operates on tone-mapped display-referred data, matching
+    // the monolithic shader's processing order (phase 7b after phase 7).
     if (u_sharpenEnabled && u_sharpenAmount > 0.0) {
         vec3 center = color.rgb;
         vec3 neighbors = texture(u_inputTexture, v_texCoord + vec2(-1.0, 0.0) * u_texelSize).rgb
@@ -711,10 +754,13 @@ Create a new file: `src/render/ShaderPipeline.ts`
 // src/render/ShaderPipeline.ts
 
 import type { ShaderStageDescriptor, StageId } from './ShaderStage';
-import type { ShaderProgram } from './ShaderProgram';
+import type { InternalShaderState, TextureCallbacks } from './ShaderStateManager';
+import { ShaderProgram } from './ShaderProgram';
 import { FBOPingPong } from './FBOPingPong';
 import { PerfTrace } from '../utils/PerfTrace';
 import { Logger } from '../utils/Logger';
+import VIEWER_VERT_SOURCE from './shaders/viewer.vert.glsl?raw';
+import PASSTHROUGH_VERT_SOURCE from './shaders/passthrough.vert.glsl?raw';
 
 const log = new Logger('ShaderPipeline');
 
@@ -735,15 +781,16 @@ export class ShaderPipeline {
   private pingPong: FBOPingPong = new FBOPingPong();
   private quadVAO: WebGLVertexArrayObject | null = null;
 
-  /** Ordered stage IDs -- defines the default pipeline order. */
+  /** Ordered stage IDs -- defines the default pipeline order (11 stages). */
   private stageOrder: StageId[] = [
     'inputDecode',
     'linearize',
     'primaryGrade',
     'secondaryGrade',
-    'spatialEffects',
+    'spatialEffects',       // clarity (pre-tone-mapping, phase 5e)
     'colorPipeline',
     'sceneAnalysis',
+    'spatialEffectsPost',   // sharpen (post-tone-mapping, phase 7b)
     'displayOutput',
     'diagnostics',
     'compositing',
@@ -770,23 +817,31 @@ export class ShaderPipeline {
     this.stages.sort((a, b) => (orderMap.get(a.id) ?? 99) - (orderMap.get(b.id) ?? 99));
   }
 
+  /** Global Uniforms UBO buffer. */
+  private globalUBO: WebGLBuffer | null = null;
+  private globalUBOData = new Float32Array(8);
+
   /**
    * Execute the pipeline.
    *
    * @param gl - WebGL2 context
    * @param sourceTexture - The input image texture
-   * @param state - Current shader state (read-only)
-   * @param texCb - Texture binding callbacks
+   * @param renderWidth - Width of the render target (image dims for display, reduced for scopes)
+   * @param renderHeight - Height of the render target
+   * @param state - Current shader state (read-only, properly typed)
+   * @param texCb - Texture binding callbacks (properly typed)
    * @param targetFBO - null for screen, or a specific FBO for scope rendering
+   * @param isHDR - Whether the content is HDR (determines RGBA16F vs RGBA8 FBO format)
    */
   execute(
     gl: WebGL2RenderingContext,
     sourceTexture: WebGLTexture,
-    imageWidth: number,
-    imageHeight: number,
-    state: /* InternalShaderState */ any,
-    texCb: /* TextureCallbacks */ any,
+    renderWidth: number,
+    renderHeight: number,
+    state: Readonly<InternalShaderState>,
+    texCb: TextureCallbacks,
     targetFBO: WebGLFramebuffer | null = null,
+    isHDR: boolean = false,
   ): void {
     // 1. Determine active stages
     const activeStages = this.stages.filter(s => !s.isIdentity(state));
@@ -813,9 +868,16 @@ export class ShaderPipeline {
 
     // Multi-pass: ping-pong FBO chain
     PerfTrace.begin('multipass');
-    const canvasWidth = gl.drawingBufferWidth;
-    const canvasHeight = gl.drawingBufferHeight;
-    this.pingPong.ensure(gl, canvasWidth, canvasHeight, 'rgba16f');
+
+    // Update Global Uniforms UBO (shared across all stages)
+    this.updateGlobalUBO(gl, state);
+
+    // FBO format: RGBA8 for SDR (default), RGBA16F for HDR content
+    const fboFormat = isHDR ? 'rgba16f' : 'rgba8';
+    // FBO dimensions match the render target, NOT the canvas.
+    // For display rendering: image dimensions.
+    // For scope rendering: reduced scope resolution (e.g. 320x180).
+    this.pingPong.ensure(gl, renderWidth, renderHeight, fboFormat);
     this.pingPong.resetChain();
 
     // Seed the read buffer: render source into ping-pong[read]
@@ -824,21 +886,30 @@ export class ShaderPipeline {
 
     for (let i = 0; i < activeStages.length; i++) {
       const stage = activeStages[i]!;
+      const isFirst = i === 0;
       const isLast = i === activeStages.length - 1;
 
-      this.ensureProgram(gl, stage);
+      // First stage uses viewer.vert.glsl (pan/zoom/rotation on source image).
+      // All subsequent stages use passthrough.vert.glsl (identity transform on FBO quads).
+      this.ensureProgram(gl, stage, isFirst);
 
       if (isLast) {
         // Last stage renders to screen (or targetFBO)
         gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
-        gl.viewport(0, 0, canvasWidth, canvasHeight);
+        gl.viewport(0, 0, renderWidth, renderHeight);
       } else {
         // Intermediate stage renders to FBO
         currentReadTexture = this.pingPong.beginPass(gl) ?? currentReadTexture;
         // For the first pass, read from source texture instead of ping-pong
-        if (i === 0) {
+        if (isFirst) {
           currentReadTexture = sourceTexture;
         }
+      }
+
+      // Set texture filtering based on stage needs:
+      // NEAREST for per-pixel stages, LINEAR for spatial sampling stages
+      if (!isFirst && i > 0) {
+        this.pingPong.setFilteringMode(gl, stage.needsBilinearInput ?? false);
       }
 
       PerfTrace.begin(`stage:${stage.id}`);
@@ -859,11 +930,37 @@ export class ShaderPipeline {
     PerfTrace.end('multipass');
   }
 
-  private ensureProgram(gl: WebGL2RenderingContext, stage: ShaderStageDescriptor): void {
+  private ensureProgram(gl: WebGL2RenderingContext, stage: ShaderStageDescriptor, isFirstStage: boolean): void {
     if (!stage.program) {
-      // Lazy-compile: stages that are never activated pay zero compilation cost
-      stage.program = new ShaderProgram(gl, VERTEX_SOURCE, stage.fragmentSource);
+      // Lazy-compile: stages that are never activated pay zero compilation cost.
+      // First stage uses viewer.vert.glsl (applies pan/zoom/rotation to source image).
+      // All subsequent stages use passthrough.vert.glsl (identity transform for FBO quads).
+      const vertexSource = isFirstStage ? VIEWER_VERT_SOURCE : PASSTHROUGH_VERT_SOURCE;
+      stage.program = new ShaderProgram(gl, vertexSource, stage.fragmentSource);
+
+      // Bind Global Uniforms UBO (binding point 0)
+      const blockIndex = gl.getUniformBlockIndex(stage.program.handle, 'GlobalUniforms');
+      if (blockIndex !== gl.INVALID_INDEX) {
+        gl.uniformBlockBinding(stage.program.handle, blockIndex, 0);
+      }
     }
+  }
+
+  private updateGlobalUBO(gl: WebGL2RenderingContext, state: Readonly<InternalShaderState>): void {
+    if (!this.globalUBO) {
+      this.globalUBO = gl.createBuffer();
+      gl.bindBuffer(gl.UNIFORM_BUFFER, this.globalUBO);
+      gl.bufferData(gl.UNIFORM_BUFFER, this.globalUBOData.byteLength, gl.DYNAMIC_DRAW);
+    }
+    this.globalUBOData[0] = state.hdrHeadroom;
+    this.globalUBOData[1] = state.channelModeCode;
+    this.globalUBOData[2] = state.premultMode;
+    this.globalUBOData[3] = state.outputMode;
+    this.globalUBOData[4] = state.texelSize[0];
+    this.globalUBOData[5] = state.texelSize[1];
+    gl.bindBuffer(gl.UNIFORM_BUFFER, this.globalUBO);
+    gl.bufferSubData(gl.UNIFORM_BUFFER, 0, this.globalUBOData);
+    gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.globalUBO);
   }
 
   private drawQuad(gl: WebGL2RenderingContext): void {
@@ -886,6 +983,11 @@ export class ShaderPipeline {
 
   dispose(gl: WebGL2RenderingContext): void {
     this.pingPong.dispose(gl);
+    // Release Global Uniforms UBO
+    if (this.globalUBO) {
+      gl.deleteBuffer(this.globalUBO);
+      this.globalUBO = null;
+    }
     // Stage programs are owned by the pipeline
     for (const stage of this.stages) {
       if (stage.program) {
@@ -907,14 +1009,15 @@ Each stage's `applyUniforms` function only uploads the uniforms it owns. The exi
 | linearize        | DIRTY_LINEARIZE, DIRTY_COLOR_PRIMARIES                                                        |
 | primaryGrade     | DIRTY_COLOR (subset: exposure, scale, offset, temp, tint, brightness, contrast, saturation), DIRTY_INLINE_LUT |
 | secondaryGrade   | DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_VIBRANCE, DIRTY_COLOR (subset: hueRotation)                   |
-| spatialEffects   | DIRTY_CLARITY, DIRTY_SHARPEN                                                                  |
+| spatialEffects   | DIRTY_CLARITY                                                                                 |
 | colorPipeline    | DIRTY_COLOR_WHEELS, DIRTY_CDL, DIRTY_CURVES, DIRTY_LUT3D, DIRTY_HSL, DIRTY_FILM_EMULATION    |
 | sceneAnalysis    | DIRTY_OUT_OF_RANGE, DIRTY_TONE_MAPPING, DIRTY_GAMUT_MAPPING                                  |
+| spatialEffectsPost | DIRTY_SHARPEN                                                                                |
 | displayOutput    | DIRTY_COLOR_PRIMARIES (output), DIRTY_DISPLAY, DIRTY_COLOR (subset: gamma), DIRTY_INVERSION   |
 | diagnostics      | DIRTY_CHANNELS, DIRTY_FALSE_COLOR, DIRTY_ZEBRA, DIRTY_DITHER                                 |
 | compositing      | DIRTY_PREMULT, DIRTY_BACKGROUND                                                              |
 
-The `ShaderStateManager.applyUniforms()` method (currently 400+ lines in `ShaderStateManager.ts` lines 1457-1855) would be refactored into 10 smaller `applyUniforms` functions, one per stage. Each function is a method on the stage descriptor.
+The `ShaderStateManager.applyUniforms()` method (currently 400+ lines in `ShaderStateManager.ts` lines 1457-1855) would be refactored into 11 smaller `applyUniforms` functions, one per stage. Each function is a method on the stage descriptor. Cross-stage uniforms (`u_hdrHeadroom`, `u_texelSize`, `u_channelMode`, `u_premult`, `u_outputMode`) are handled by the Global Uniforms UBO and are NOT part of per-stage `applyUniforms`.
 
 ### Step 6: Stage Identity Detection (Skip Logic)
 
@@ -963,10 +1066,14 @@ The existing codebase already handles the case where `EXT_color_buffer_float` is
 ```typescript
 // In ShaderPipeline.execute():
 
-// Fallback 1: If RGBA16F FBOs are unsupported, try RGBA8
-if (!this.pingPong.ensure(gl, width, height, 'rgba16f')) {
-  log.warn('RGBA16F FBOs unavailable, falling back to RGBA8 (reduced precision)');
-  if (!this.pingPong.ensure(gl, width, height, 'rgba8')) {
+// FBO format selection: RGBA8 by default, RGBA16F for HDR content
+const fboFormat = isHDRContent() ? 'rgba16f' : 'rgba8';
+
+// Fallback 1: If preferred format is unsupported, try the alternative
+if (!this.pingPong.ensure(gl, renderWidth, renderHeight, fboFormat)) {
+  const fallbackFormat = fboFormat === 'rgba16f' ? 'rgba8' : 'rgba16f';
+  log.warn(`${fboFormat} FBOs unavailable, falling back to ${fallbackFormat}`);
+  if (!this.pingPong.ensure(gl, renderWidth, renderHeight, fallbackFormat)) {
     // Fallback 2: No FBOs available at all -- use monolithic single-pass shader
     log.warn('FBO allocation failed, falling back to monolithic shader');
     this.renderMonolithic(gl, sourceTexture, state, texCb, targetFBO);
@@ -984,11 +1091,43 @@ The **monolithic fallback** keeps the existing `viewer.frag.glsl` as-is, ensurin
 
 The migration preserves backward compatibility at every step. The monolithic shader remains functional throughout.
 
-#### Phase A: Infrastructure (1 week)
-- Create `src/render/FBOPingPong.ts` with tests
-- Create `src/render/ShaderStage.ts` interface
-- Create `src/render/ShaderPipeline.ts` orchestrator with tests
+#### Phase A: Infrastructure + Test Harness (8 days)
+
+This phase is a **hard prerequisite gate** -- Phase B cannot merge without all Phase A deliverables passing CI.
+
+- Create `src/render/FBOPingPong.ts` with NEAREST filtering default, RGBA8 default format, `setFilteringMode()`, `gl.invalidateFramebuffer()` in `beginPass()`
+- Create `src/render/ShaderStage.ts` interface (with `needsBilinearInput` flag)
+- Create `src/render/ShaderPipeline.ts` orchestrator with properly typed `execute()` parameters (`Readonly<InternalShaderState>`, `TextureCallbacks`), `VIEWER_VERT_SOURCE`/`PASSTHROUGH_VERT_SOURCE` imports, Global Uniforms UBO management
+- Create `src/render/shaders/passthrough.vert.glsl` (identity vertex shader for intermediate FBO stages)
+- **Build pixel comparison infrastructure** (MUST be delivered before any stage extraction):
+  - `src/render/__tests__/pixelCompare.ts` with `computeRMSE()`, `computePSNR()`, `assertPixelParity()`
+  - A/B rendering harness that renders a synthetic test pattern through both monolithic and multi-pass paths, reads pixels via `gl.readPixels`, and asserts RMSE below threshold
+  - FBO ping-pong index correctness tests (3, 4, 5, 6 pass chains verifying read/write alternation)
+  - Draw-call count assertion utility (mock GL)
 - **No changes to existing files**. The new pipeline is unused.
+
+**Minimum test gate (18 tests, all MUST pass):**
+
+| ID | Test Description |
+|----|-----------------|
+| A-1 | FBOPingPong allocates two FBOs at requested dimensions |
+| A-2 | FBOPingPong alternates read/write indices for 3, 4, 5, 6 passes |
+| A-3 | FBOPingPong RGBA16F -> RGBA8 -> null fallback chain |
+| A-4 | FBOPingPong `dispose()` deletes all textures and FBOs |
+| A-5 | FBOPingPong uses `NEAREST` filtering by default |
+| A-6 | FBOPingPong calls `gl.invalidateFramebuffer` in `beginPass()` |
+| A-7 | ShaderPipeline: 0 active stages = passthrough (0 or 1 draw calls, no FBO) |
+| A-8 | ShaderPipeline: 1 active stage = 1 draw call, no FBO allocation |
+| A-9 | ShaderPipeline: N active stages = N draw calls with correct FBO alternation |
+| A-10 | ShaderPipeline: monolithic fallback when FBO allocation fails |
+| A-11 | ShaderPipeline: FBO dimensions match render target, not canvas |
+| A-12 | Global Uniforms UBO: buffer created and bound with correct data |
+| A-13 | `computeRMSE()` returns 0 for identical arrays |
+| A-14 | `computeRMSE()` returns correct value for known inputs |
+| A-15 | `computePSNR(0)` returns `Infinity` |
+| A-16 | `assertPixelParity()` passes when RMSE below threshold, fails above |
+| A-17 | Passthrough vertex shader does not apply transforms (no `u_offset`/`u_scale`/`u_texRotation` uniforms queried) |
+| A-18 | First stage uses `viewer.vert.glsl`, intermediate stages use `passthrough.vert.glsl` |
 
 #### Phase B: First Stage Extraction -- `compositing` (3 days)
 - Extract the simplest stage (background blend, premultiply, SDR clamp)
@@ -1002,33 +1141,75 @@ The migration preserves backward compatibility at every step. The monolithic sha
   }
   ```
 - When `multiPassEnabled=false`, existing single-pass behavior is unchanged.
-- Validate pixel-perfect output in visual regression tests.
+- Validate pixel-perfect output using the A/B pixel comparison harness.
 
-#### Phase C: Extract Remaining Stages (2 weeks)
+**Minimum test gate (7 tests, all MUST pass):**
+
+| ID | Test Description |
+|----|-----------------|
+| B-1 | Compositing `isIdentity()` true for default state |
+| B-2 | Compositing `isIdentity()` false for each non-default parameter |
+| B-3 | Compositing alpha passthrough when premult disabled |
+| B-4 | `multiPassEnabled=false` uses monolithic path exclusively |
+| B-5 | Compositing texture unit 0 = `u_inputTexture`, no conflicts |
+| B-6 | `viewer.frag.glsl` remains byte-identical to pre-Phase-B baseline (SHA-256 hash check) |
+| B-7 | Draw call count: compositing only = 1 draw call |
+
+#### Phase C: Extract Remaining Stages (2 weeks + 2 days investigation buffer)
 - Extract one stage per PR, in order:
   1. `diagnostics` (false color, zebra, dither -- has clear enable/disable guards)
   2. `displayOutput` (display transfer, gamma, inversion)
   3. `sceneAnalysis` (tone mapping, gamut mapping, out-of-range)
-  4. `colorPipeline` (CDL, curves, wheels, HSL, film emulation, 3D LUT)
-  5. `spatialEffects` (clarity, sharpen -- this fixes the CPU/GPU divergence)
-  6. `secondaryGrade` (highlights/shadows, vibrance, hue rotation)
-  7. `primaryGrade` (exposure, contrast, saturation, etc.)
-  8. `linearize` (EOTF, log-to-linear, primaries)
-  9. `inputDecode` (deinterlace, perspective, spherical, swizzle)
-- Each extraction is a separate PR with visual regression tests.
+  4. `spatialEffectsPost` (sharpen only -- post-tone-mapping, preserving monolithic order)
+  5. `colorPipeline` (CDL, curves, wheels, HSL, film emulation, 3D LUT)
+  6. `spatialEffects` (clarity only -- pre-tone-mapping, fixes CPU/GPU divergence)
+  7. `secondaryGrade` (highlights/shadows, vibrance, hue rotation)
+  8. `primaryGrade` (exposure, contrast, saturation, etc.)
+  9. `linearize` (EOTF, log-to-linear, primaries -- NOTE: phases 0c and 0d must remain co-located due to `linearizeActive` out-parameter dependency)
+  10. `inputDecode` (deinterlace, perspective, spherical, swizzle)
+- Each extraction is a separate PR with A/B pixel comparison tests.
+
+**Minimum test gate per stage (7 tests, all MUST pass):**
+
+| ID | Test Description |
+|----|-----------------|
+| C-1 | `isIdentity()` true for all-default state |
+| C-2 | `isIdentity()` false for each adjustable parameter |
+| C-3 | Alpha invariant: `output.a === input.a` (non-premult stages only) |
+| C-4 | Texture unit assignments: no collision with unit 0 |
+| C-5 | `applyUniforms` uploads only this stage's uniforms |
+| C-6 | Intermediate stages use passthrough vertex shader |
+| C-7 | Sharpen stage (spatialEffectsPost) preserves post-tone-mapping processing order |
 
 #### Phase D: Scope Rendering Integration (3 days)
 - The `renderImageToFloatAsyncForScopes()` method (Renderer.ts line 1235) currently renders through the full monolithic shader into a scope FBO. Update it to use the pipeline:
   ```typescript
-  // Use the pipeline with a neutral display config
-  this.pipeline.execute(gl, sourceTexture, width, height, scopeState, texCb, scopeFBO);
+  // Use the pipeline with a neutral display config and scope resolution
+  this.pipeline.execute(gl, sourceTexture, scopeWidth, scopeHeight, scopeState, texCb, scopeFBO, isHDR);
   ```
+- FBO dimensions match the scope target resolution (e.g. 320x180), NOT the canvas.
 - This naturally supports per-scope stage overrides (e.g., scopes render without display transfer).
+
+**Minimum test gate (3 tests, all MUST pass):**
+
+| ID | Test Description |
+|----|-----------------|
+| D-1 | Scope FBOs allocated at scope resolution (not canvas resolution) |
+| D-2 | DISPLAY_OUTPUT stage is identity with neutral scope display config |
+| D-3 | Y-flip applied after pipeline execution |
 
 #### Phase E: Stage Reordering API (1 week)
 - Expose `ShaderPipeline.setStageOrder()` through the `RendererBackend` interface
 - Add UI for pipeline reordering in the color grading panel
 - Validate that reordering produces visually correct results
+
+**Minimum test gate (3 tests, all MUST pass):**
+
+| ID | Test Description |
+|----|-----------------|
+| E-1 | `setStageOrder()` changes draw call sequence |
+| E-2 | `setStageOrder()` with missing/extra stage IDs is rejected |
+| E-3 | Restoring default order produces original behavior |
 
 #### Phase F: Deprecate Monolithic Shader (future)
 - After all stages are extracted and validated, the monolithic `viewer.frag.glsl` becomes the **fallback-only** path
@@ -1057,9 +1238,9 @@ Measured overhead per pass on representative hardware:
 | A14 (iPad Air)    | ~0.25ms                   | ~0.8ms                 |
 | Intel UHD 620     | ~0.4ms                    | ~1.5ms                 |
 
-**Worst case**: All 10 stages active at 4K on Intel integrated = 10 * 1.5ms = **15ms** (single-pass is ~5ms). This is a 3x regression.
+**Worst case**: All 11 stages active at 4K on Intel integrated = 11 * 1.5ms = **16.5ms** (single-pass is ~5ms). This is a ~3.3x regression. Note: the per-pass cost estimates are for simple passthrough; texture-heavy stages (COLOR_PIPELINE with LUT lookups) may be 2-3x higher, making the realistic worst case ~20-25ms on Intel UHD 620.
 
-**Typical case**: 3-4 stages active (primaryGrade + displayOutput + compositing, with occasional colorPipeline or spatialEffects) = 4 * 0.5ms = **2ms** on M1 at 4K. Current single-pass is ~3ms because the GPU processes all 1,444 lines even for disabled branches. Net result: **comparable or faster**.
+**Typical case**: 3-4 stages active (primaryGrade + displayOutput + compositing, with occasional colorPipeline or spatialEffects) = 4 * 0.5ms = **2ms** on M1 at 4K. Current single-pass is ~3ms because the GPU processes all 1,444 lines even for disabled branches. Net result: **comparable or faster**. SDR content uses RGBA8 FBOs (8 bytes/pixel per read+write instead of 16), further improving bandwidth efficiency.
 
 **Mitigation strategies**:
 1. Skip identity stages (zero draw calls for disabled features)
@@ -1072,16 +1253,17 @@ Measured overhead per pass on representative hardware:
 
 **Risk: LOW**
 
-RGBA16F provides 10-bit mantissa (1024 levels per channel) which exceeds the 8-bit display output. For HDR content, RGBA16F is essential. Precision loss between stages is negligible because:
-- All intermediate values are in linear float space
-- The display transfer function (sRGB OETF) is applied only in the final stage
-- Professional color grading workflows (CDL, 3D LUT) are designed for float precision
+For HDR content, RGBA16F FBOs provide 10-bit mantissa (1024 levels per channel) which exceeds the 8-bit display output. For SDR content, RGBA8 FBOs provide 8-bit precision per channel, matching the source data depth. The automatic format selection via `isHDRContent()` ensures no unnecessary precision loss:
+- **SDR path (RGBA8):** 8-bit source -> RGBA8 intermediate -> 8-bit display. No precision loss.
+- **HDR path (RGBA16F):** Float source -> RGBA16F intermediate -> HDR display. Negligible precision loss because all intermediate values are in linear float space.
+- The display transfer function (sRGB OETF) is applied only in the DISPLAY_OUTPUT stage (near the end).
+- Professional color grading workflows (CDL, 3D LUT) are designed for float precision.
 
 ### Shader Compilation Time (More Programs to Compile)
 
 **Risk: MEDIUM**
 
-10 smaller shaders compile faster individually, but total compilation time may increase. Mitigation:
+11 smaller shaders compile faster individually, but total compilation time may increase. Mitigation:
 - **Lazy compilation**: Only compile stages that are actually used
 - **`KHR_parallel_shader_compile`**: Already integrated (Renderer.ts line 302). All stage programs can compile in parallel
 - **Shader caching**: WebGL2 `gl.getProgramBinary()`/`gl.programBinary()` via `OES_get_program_binary`; browsers also cache internally
@@ -1092,13 +1274,42 @@ RGBA16F provides 10-bit mantissa (1024 levels per channel) which exceeds the 8-b
 
 The test suite has 7,600+ tests. The `Renderer.test.ts` and `ShaderStateManager.test.ts` files test uniform upload and rendering behavior. Mitigation:
 - The monolithic shader remains the default path until Phase F
-- The multi-pass pipeline is behind a feature flag
+- The multi-pass pipeline is behind a feature flag (`multiPassEnabled`, default `false`)
 - All existing tests continue to pass against the monolithic path
-- New tests are added per-stage in Phase C
+- New tests are added per-stage in Phase C (minimum 7 per stage, per the test gate requirements)
+- The monolithic `viewer.frag.glsl` must remain byte-identical throughout Phases B-E (enforced via SHA-256 hash check in CI)
 
 ---
 
 ## Testing Strategy
+
+### Pixel Comparison Infrastructure (Phase A deliverable)
+
+The codebase currently has **zero** pixel-level output verification in its unit test layer. All render tests use mock GL. The following must be built in Phase A as a hard prerequisite for any stage extraction:
+
+```typescript
+// src/render/__tests__/pixelCompare.ts
+
+/** Compute Root Mean Square Error between two Float32Array pixel buffers. */
+export function computeRMSE(a: Float32Array, b: Float32Array): number;
+
+/** Compute Peak Signal-to-Noise Ratio from RMSE. Returns Infinity when RMSE === 0. */
+export function computePSNR(rmse: number): number;
+
+/**
+ * Assert that two pixel buffers are within tolerance.
+ * Throws with detailed diagnostics (max channel error, error location) on failure.
+ */
+export function assertPixelParity(
+  actual: Float32Array,
+  expected: Float32Array,
+  thresholdRMSE: number,
+): void;
+```
+
+### A/B Rendering Harness
+
+A test utility that renders a synthetic test image (programmatically generated gradient + color bars pattern, no external file dependencies) through both the monolithic path and the multi-pass pipeline, reads pixels via `gl.readPixels`, and asserts RMSE below threshold. Parameterizable by active stage combination to test all Phase C extractions.
 
 ### Unit Tests Per Stage
 
@@ -1134,9 +1345,14 @@ describe('PrimaryGrade stage', () => {
 ```typescript
 describe('FBOPingPong', () => {
   it('allocates two FBOs at requested dimensions', () => { ... });
-  it('ping-pong swaps read/write indices correctly', () => { ... });
+  it('ping-pong swaps read/write indices correctly for 3, 4, 5, 6 passes', () => { ... });
   it('falls back to RGBA8 when RGBA16F is unavailable', () => { ... });
   it('dispose releases all GPU resources', () => { ... });
+  it('uses NEAREST texture filtering by default', () => { ... });
+  it('setFilteringMode switches between NEAREST and LINEAR', () => { ... });
+  it('calls gl.invalidateFramebuffer in beginPass()', () => { ... });
+  it('defaults to RGBA8 format', () => { ... });
+  it('FBO dimensions match render target, not canvas', () => { ... });
 });
 ```
 
@@ -1149,6 +1365,11 @@ describe('ShaderPipeline', () => {
   it('multi-pass pipeline produces correct output', () => { ... });
   it('stage reordering changes processing order', () => { ... });
   it('falls back to monolithic when FBOs unavailable', () => { ... });
+  it('first stage uses viewer.vert.glsl, intermediate stages use passthrough.vert.glsl', () => { ... });
+  it('Global Uniforms UBO is created and updated per frame', () => { ... });
+  it('execute() uses Readonly<InternalShaderState>, not any', () => { ... });
+  it('FBO format is RGBA8 for SDR, RGBA16F for HDR', () => { ... });
+  it('spatial stages use LINEAR filtering, non-spatial stages use NEAREST', () => { ... });
 });
 ```
 
@@ -1174,11 +1395,13 @@ describe('ShaderPipeline', () => {
 | Stage skip rate | >60% of stages skipped per frame (typical use) | Runtime counter in PerfTrace |
 | Frame time (3-stage, 1080p) | Within 1.1x of monolithic | PerfTrace.measure('multipass') |
 | Frame time (all stages, 4K) | Within 2x of monolithic | PerfTrace benchmark |
-| Clarity/sharpen CPU parity | PSNR > 55 dB vs CPU reference | Visual regression test |
-| Shader compile time | < 500ms total (all 10 stages, parallel) | initAsync() timing |
+| Clarity/sharpen CPU parity | PSNR > 55 dB vs CPU reference | Visual regression test (A/B harness) |
+| Shader compile time | < 500ms total (all 11 stages, parallel) | initAsync() timing |
 | Test coverage | > 90% line coverage for new files | Vitest coverage report |
 | Zero regressions | All 7,600+ existing tests pass | `npx vitest run` |
-| Fallback works | Monolithic path pixel-identical to before | A/B test |
+| Fallback works | Monolithic path pixel-identical to before | A/B test (SHA-256 hash + RMSE) |
+| Phase gate compliance | All test gates pass per phase | CI enforcement (A: 18 tests, B: 7, C: 7/stage, D: 3, E: 3) |
+| Type safety | Zero `any` types in pipeline interfaces | TypeScript `--strict` compilation |
 
 ---
 
@@ -1186,20 +1409,22 @@ describe('ShaderPipeline', () => {
 
 | Phase | Description | Duration | Files Changed/Created |
 |-------|-------------|----------|----------------------|
-| A | Infrastructure (FBOPingPong, ShaderStage, ShaderPipeline) | 5 days | 3 new TS files, 3 test files |
+| A | Infrastructure + test harness (FBOPingPong, ShaderStage, ShaderPipeline, Global UBO, passthrough.vert.glsl, pixel comparison infra) | 8 days | 4 new TS files, 1 new GLSL, 4 test files, pixelCompare.ts |
 | B | First extraction (compositing stage) + feature flag | 3 days | 1 GLSL, 1 TS stage, modify Renderer.ts |
-| C | Extract remaining 9 stages (1-2 days each) | 12 days | 9 GLSL files, 9 TS stage files, 9 test files |
+| C | Extract remaining 10 stages (1-2 days each + 2 days investigation buffer) | 14 days | 10 GLSL files, 10 TS stage files, 10 test files |
 | D | Scope rendering integration | 3 days | Modify Renderer.ts (renderForScopes path) |
 | E | Stage reordering API + UI | 5 days | Modify RendererBackend.ts, UI components |
 | F | Deprecate monolithic (optional, future) | 2 days | Remove viewer.frag.glsl monolithic path |
-| -- | **Total** | **~30 working days (6 weeks)** | **~25 new files, ~5 modified files** |
+| -- | **Total** | **~35 working days (7 weeks)** | **~30 new files, ~5 modified files** |
 
 ### Prerequisites
 
 - No external dependencies required
 - All work can be done incrementally behind a feature flag
 - Each phase can be merged independently
-- The existing `TransitionRenderer` (which already uses dual-FBO orchestration, see `src/render/TransitionRenderer.ts` lines 17-28) serves as a proven pattern for the FBO management approach
+- The existing `TransitionRenderer` (which already uses dual-FBO orchestration, see `src/render/TransitionRenderer.ts` lines 17-28) serves as a proven pattern for the FBO resource lifecycle (create, resize, dispose)
+- **Phase A is a hard gate**: the pixel comparison infrastructure (`computeRMSE`, `computePSNR`, `assertPixelParity`) and the A/B rendering harness must pass CI before Phase B can begin
+- **The monolithic `viewer.frag.glsl` must remain byte-identical** throughout Phases B-E. Any modification invalidates the A/B comparison baseline. Enforce via SHA-256 hash check in CI
 
 ---
 
@@ -1208,13 +1433,19 @@ describe('ShaderPipeline', () => {
 | File | Role | Lines |
 |------|------|-------|
 | `src/render/shaders/viewer.frag.glsl` | Monolithic fragment shader (to be decomposed) | 1,444 |
+| `src/render/shaders/viewer.vert.glsl` | Vertex shader with pan/zoom/rotation (used for first stage only) | ~33 |
+| `src/render/shaders/passthrough.vert.glsl` | **NEW**: Identity vertex shader for intermediate FBO stages | ~7 |
 | `src/render/Renderer.ts` | WebGL2 backend, FBO management, texture uploads | ~2,300 |
 | `src/render/ShaderStateManager.ts` | Dirty-flag state management, uniform uploads | ~1,850 |
 | `src/render/ShaderProgram.ts` | Shader compilation, uniform setters | ~250 |
 | `src/render/RendererBackend.ts` | Abstract backend interface | ~200 |
-| `src/render/TransitionRenderer.ts` | Existing dual-FBO pattern (reference) | ~230 |
+| `src/render/TransitionRenderer.ts` | Existing dual-FBO resource lifecycle (reference) | ~230 |
 | `src/render/RenderState.ts` | Render state type definitions | ~100 |
 | `src/config/RenderConfig.ts` | Shader constant codes | ~150 |
+| `src/render/FBOPingPong.ts` | **NEW**: Ping-pong FBO manager (RGBA8 default, NEAREST filtering) | ~120 |
+| `src/render/ShaderStage.ts` | **NEW**: Stage descriptor interface (11 stages) | ~80 |
+| `src/render/ShaderPipeline.ts` | **NEW**: Pipeline orchestrator with Global UBO | ~200 |
+| `src/render/__tests__/pixelCompare.ts` | **NEW**: RMSE/PSNR comparison utilities | ~60 |
 
 ---
 

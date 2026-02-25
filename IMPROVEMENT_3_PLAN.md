@@ -407,15 +407,15 @@ export class AudioOrchestrator {
 **Files to modify**:
 - `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~60 lines
 - Create `/Users/lifeart/Repos/openrv-web/src/services/AudioOrchestrator.ts` (~80 lines)
-- Create `/Users/lifeart/Repos/openrv-web/src/services/AudioOrchestrator.test.ts`
+- Create `/Users/lifeart/Repos/openrv-web/src/services/AudioOrchestrator.test.ts` (min 6 tests)
 
 ---
 
-### Phase 3: Split `AppControlRegistry` (Est. 3-4 days)
+### Phase 2: Split `AppControlRegistry` (Est. 3-4 days)
 
-The 1,520-line `AppControlRegistry` with 71 readonly properties should be split into **domain-specific control groups**. Each group owns the controls for one tab/domain:
+The 1,520-line `AppControlRegistry` with 65 readonly properties should be split into **domain-specific control groups**. Each group owns the controls for one tab/domain. `AppControlRegistry` remains as a **permanent facade** over the groups -- wiring modules continue to access `controls.colorControls` etc. through compatibility getters. This facade is the intended final state, not a migration artifact, because the wiring modules cut across the proposed control groups and need a unified access point.
 
-#### Step 3.1: Define control group interfaces
+#### Step 2.1: Define control group interfaces
 
 Create `/Users/lifeart/Repos/openrv-web/src/services/controls/ControlGroups.ts`:
 
@@ -520,7 +520,7 @@ export interface PlaybackControlGroup {
 }
 ```
 
-#### Step 3.2: Create control group factory functions
+#### Step 2.2: Create control group factory functions
 
 Create one factory per group under `/Users/lifeart/Repos/openrv-web/src/services/controls/`:
 
@@ -556,7 +556,7 @@ export function createColorControls(deps: ControlRegistryDeps): ColorControlGrou
 }
 ```
 
-#### Step 3.3: Refactor `AppControlRegistry` to compose groups
+#### Step 2.3: Refactor `AppControlRegistry` to compose groups (permanent facade)
 
 ```typescript
 // Refactored AppControlRegistry
@@ -584,9 +584,9 @@ export class AppControlRegistry {
 }
 ```
 
-**Note**: This is a breaking change to `controls.colorControls` -> `controls.color.colorControls`. Use a compatibility shim during migration (see Phase 5).
+**Note**: The internal organization uses `controls.color.colorControls`, but `AppControlRegistry` provides **permanent compatibility getters** (`get colorControls() { return this.color.colorControls; }`) so that wiring modules continue using `controls.colorControls` unchanged. This facade is the intended final state -- wiring modules cut across the proposed control groups and need the unified access point. A "shim completeness" assertion must be added to `AppControlRegistry.test.ts` to verify that every original property name resolves to a non-undefined value through the facade (see Testing Strategy).
 
-#### Step 3.4: Extract `setupTabContents()` into per-tab builder functions
+#### Step 2.4: Extract `setupTabContents()` into per-tab builder functions
 
 The 1,000-line `setupTabContents()` method should be split into:
 
@@ -604,136 +604,216 @@ Each function takes the relevant control group + viewer + session and returns an
 
 ---
 
-### Phase 4: Rewire App as Thin Composition Root (Est. 2-3 days)
+### Phase 3: Slim Down App Constructor (Est. 1 day)
 
-After Phases 1-3, rewrite `App.ts` to be approximately:
+After Phases 0-2, rewrite `App.ts` to be a thin Composition Root using **direct composition** -- no DI container, no service locator. The App constructor directly instantiates services and passes them to each other via constructor arguments, preserving full type safety and explicit initialization/disposal ordering:
 
 ```typescript
 export class App {
-  private container: ServiceContainer;
+  private displayCapabilities: DisplayCapabilities;
+  private session: Session;
+  private viewer: Viewer;
+  private paintEngine: PaintEngine;
+  private controls: AppControlRegistry;
+  private renderLoop: RenderLoopService;
+  private frameNavigation: FrameNavigationService;
+  private timelineEditorService: TimelineEditorService;
+  private layout: LayoutOrchestrator;
+  private audio: AudioOrchestrator;
+  private sessionURL: SessionURLService;
+  private sessionBridge: AppSessionBridge;
+  private networkBridge: AppNetworkBridge;
+  private persistenceManager: AppPersistenceManager;
+  private keyboardHandler: AppKeyboardHandler;
 
   constructor() {
-    this.container = new ServiceContainer();
-    this.registerServices();
-  }
-
-  private registerServices(): void {
-    const c = this.container;
-
-    // Core
-    c.register(SK.DisplayCapabilities, () => detectDisplayCapabilities());
-    c.register(SK.Session, () => {
-      const session = new Session();
-      session.setHDRResizeTier(c.get<DisplayCapabilities>(SK.DisplayCapabilities).canvasHDRResizeTier);
-      return session;
+    // Core objects
+    this.displayCapabilities = detectDisplayCapabilities();
+    this.session = new Session();
+    this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
+    this.paintEngine = new PaintEngine();
+    this.viewer = new Viewer({
+      session: this.session,
+      paintEngine: this.paintEngine,
+      capabilities: this.displayCapabilities,
     });
-    c.register(SK.PaintEngine, () => new PaintEngine());
-    c.register(SK.Viewer, () => new Viewer({
-      session: c.get(SK.Session),
-      paintEngine: c.get(SK.PaintEngine),
-      capabilities: c.get(SK.DisplayCapabilities),
-    }));
 
-    // Controls (grouped)
-    c.register(SK.ColorControls, () => createColorControls({ ... }));
-    c.register(SK.ViewControls, () => createViewControls({ ... }));
-    // ... etc
+    // Controls (grouped internally, facade provides flat access)
+    this.controls = new AppControlRegistry({ ... });
 
-    // Orchestrators
-    c.register(SK.PlaybackOrchestrator, () => new PlaylistNavigationService({ ... }));
-    c.register(SK.KeyboardOrchestrator, (c) => new AppKeyboardHandler(
+    // Services with explicit dependencies
+    this.renderLoop = new RenderLoopService({
+      session: this.session,
+      viewer: this.viewer,
+    });
+    this.frameNavigation = new FrameNavigationService({
+      session: this.session,
+      playlistManager: this.controls.playlistManager,
+      playlistPanel: this.controls.playlistPanel,
+      paintEngine: this.paintEngine,
+    });
+    this.timelineEditorService = new TimelineEditorService({
+      session: this.session,
+      playlistManager: this.controls.playlistManager,
+      playlistPanel: this.controls.playlistPanel,
+      timelineEditor: this.controls.timelineEditor,
+      timeline: this.timeline,
+      persistenceManager: this.persistenceManager,
+    });
+    this.audio = new AudioOrchestrator({
+      session: this.session,
+      audioMixer: new AudioMixer(),
+    });
+    this.sessionURL = new SessionURLService({
+      session: this.session,
+      viewer: this.viewer,
+      controls: this.controls,
+    });
+
+    // Action handlers (pure function)
+    const actionHandlers = buildActionHandlers({
+      session: this.session,
+      viewer: this.viewer,
+      paintEngine: this.paintEngine,
+      controls: this.controls,
+      frameNavigation: this.frameNavigation,
+      // ... other deps
+    });
+
+    // Keyboard handler
+    this.keyboardHandler = new AppKeyboardHandler(
       new KeyboardManager(),
-      new CustomKeyBindingsManager(() => c.get<AppKeyboardHandler>(SK.KeyboardOrchestrator).refresh()),
-      { getActionHandlers: () => buildActionHandlers({ ... }) },
-    ));
-    c.register(SK.LayoutOrchestrator, () => new LayoutOrchestrator({ ... }));
-    c.register(SK.RenderLoopService, () => new RenderLoopService({ ... }));
-    c.register(SK.SessionBridge, () => new AppSessionBridge({ ... }));
-    c.register(SK.NetworkBridge, () => new AppNetworkBridge({ ... }));
-    c.register(SK.PersistenceManager, () => new AppPersistenceManager({ ... }));
+      new CustomKeyBindingsManager(() => this.keyboardHandler.refresh()),
+      { getActionHandlers: () => actionHandlers },
+    );
+
+    // Bridges (using existing typed context patterns)
+    this.sessionBridge = new AppSessionBridge({ ... });
+    this.networkBridge = new AppNetworkBridge({ ... });
+    this.persistenceManager = new AppPersistenceManager({ ... });
+
+    // Layout
+    this.layout = new LayoutOrchestrator({ ... });
+
+    // Wiring modules (unchanged -- receive AppWiringContext)
+    const ctx: AppWiringContext = {
+      session: this.session,
+      viewer: this.viewer,
+      paintEngine: this.paintEngine,
+      headerBar: this.headerBar,
+      tabBar: this.tabBar,
+      controls: this.controls,
+      sessionBridge: this.sessionBridge,
+      persistenceManager: this.persistenceManager,
+    };
+    wireColorControls(ctx);
+    wireViewControls(ctx);
+    wireEffectsControls(ctx);
+    wireTransformControls(ctx);
+    wireStackControls(ctx);
+    wirePlaybackControls(ctx, {
+      getKeyboardHandler: () => this.keyboardHandler,
+      getFullscreenManager: () => this.layout.getFullscreenManager(),
+      getAudioMixer: () => this.audio.getAudioMixer(),
+    });
+
+    // Timeline editor event binding
+    this.timelineEditorService.bindTimelineEditorEvents();
   }
 
   async mount(selector: string): Promise<void> {
     const container = document.querySelector(selector);
     if (!container) throw new Error(`Container not found: ${selector}`);
 
-    const layout = this.container.get<LayoutOrchestrator>(SK.LayoutOrchestrator);
-    layout.createLayout();
-
-    const renderLoop = this.container.get<RenderLoopService>(SK.RenderLoopService);
-    renderLoop.start();
-
-    // ... minimal bootstrap (audio lazy init, OCIO pipeline, URL bootstrap)
+    this.layout.createLayout();
+    this.renderLoop.start();
+    this.audio.setupLazyInit();
+    await this.sessionURL.handleURLBootstrap();
   }
 
   getAPIConfig(): OpenRVAPIConfig {
     return {
-      session: this.container.get(SK.Session),
-      viewer: this.container.get(SK.Viewer),
-      colorControls: this.container.get<ColorControlGroup>(SK.ColorControls).colorControls,
-      cdlControl: this.container.get<ColorControlGroup>(SK.ColorControls).cdlControl,
-      curvesControl: this.container.get<ColorControlGroup>(SK.ColorControls).curvesControl,
+      session: this.session,
+      viewer: this.viewer,
+      colorControls: this.controls.colorControls,
+      cdlControl: this.controls.cdlControl,
+      curvesControl: this.controls.curvesControl,
     };
   }
 
   dispose(): void {
-    this.container.dispose();
+    // Explicit, hand-ordered disposal (matching current App.dispose() semantics)
+    this.renderLoop.dispose();
+    this.audio.dispose();
+    this.networkBridge.dispose();
+    this.persistenceManager.dispose();
+    this.sessionBridge.dispose();
+    this.keyboardHandler.dispose();
+    this.layout.dispose();
+    this.timelineEditorService.dispose();
+    this.frameNavigation.dispose();
+    this.viewer.dispose();
+    this.controls.dispose();
+    this.session.dispose();
   }
 }
 ```
 
 **Target**: App.ts shrinks from ~1,875 lines to ~200 lines.
 
+**Note on `wirePlaybackControls`**: Unlike other wiring functions, `wirePlaybackControls(ctx, extraDeps)` takes an additional `{ getKeyboardHandler, getFullscreenManager, getAudioMixer }` parameter (confirmed at line 499-503 of `App.ts`). The Phase 3 code sample above explicitly wires these extra deps.
+
 ---
 
-### Phase 5: Migration Strategy (Incremental, Non-Breaking)
+### Phase 4: Migration Strategy (Incremental, Non-Breaking)
 
 The refactoring must be done incrementally because:
-- 15,018 tests must stay green at every step
-- The wiring modules (`AppColorWiring.ts`, `AppViewWiring.ts`, etc.) reference `controls.colorControls`, not `controls.color.colorControls`
-- Multiple files depend on the `AppWiringContext` interface
+- All existing tests must stay green at every step (run `npx vitest run` for exact baseline count before starting)
+- The wiring modules (`AppColorWiring.ts`, `AppViewWiring.ts`, etc.) reference `controls.colorControls` -- the permanent facade preserves this API
+- Multiple files depend on the `AppWiringContext` interface, which remains unchanged
 
 #### Migration Order
 
-1. **Phase 1** (ServiceContainer): No existing code changes. Purely additive.
-2. **Phase 2.1** (PlaylistNavigationService): Extract methods from App, delegate via thin wrappers. Remove wrappers once all callers updated.
-3. **Phase 2.2** (KeyboardActionMap): Extract `getActionHandlers()` to pure function. App calls it.
-4. **Phase 2.3** (LayoutOrchestrator): Extract `createLayout()`. App calls it.
-5. **Phase 2.4** (RenderLoopService): Extract `tick()`. Smallest change.
-6. **Phase 2.5** (SessionURLService): Extract URL methods. App delegates.
-7. **Phase 2.6** (AudioOrchestrator): Extract audio wiring.
-8. **Phase 3.1-3.2** (Control groups): Create group interfaces and factories alongside existing registry.
-9. **Phase 3.3** (Refactor registry): Add compatibility getters that proxy `controls.colorControls` to `controls.color.colorControls` so existing wiring modules keep working:
+1. **Phase 0** (Baseline tests): Create `AppSessionBridge.test.ts` and `AppPersistenceManager.test.ts`. Purely additive.
+2. **Phase 1.1a** (FrameNavigationService): Extract frame navigation methods from App, delegate via thin wrappers. Remove wrappers once all callers updated.
+3. **Phase 1.1b** (TimelineEditorService): Extract timeline editor integration. App delegates.
+4. **Phase 1.2** (KeyboardActionMap): Extract `getActionHandlers()` to pure function. App calls it.
+5. **Phase 1.3** (LayoutOrchestrator): Extract `createLayout()`. App calls it.
+6. **Phase 1.4** (RenderLoopService): Extract `tick()`. Smallest change.
+7. **Phase 1.5** (SessionURLService): Extract URL methods. App delegates. Follow up with `AppNetworkBridge` deduplication.
+8. **Phase 1.6** (AudioOrchestrator): Extract audio wiring.
+9. **Phase 2.1-2.2** (Control groups): Create group interfaces and factories alongside existing registry.
+10. **Phase 2.3** (Refactor registry): Add permanent compatibility getters that proxy `controls.colorControls` to `controls.color.colorControls` so wiring modules work unchanged:
 
 ```typescript
-// Compatibility shim in AppControlRegistry during migration
+// Permanent facade getters in AppControlRegistry
 get colorControls(): ColorControls { return this.color.colorControls; }
 get cdlControl(): CDLControl { return this.color.cdlControl; }
-// ... etc
+// ... etc for all 65 properties
 ```
 
-10. **Phase 3.4** (Tab builders): Extract `setupTabContents()` sections.
-11. **Phase 4** (Composition root): Rewire App. Remove compatibility shims. Update `AppWiringContext` to reference control groups.
+11. **Phase 2.4** (Tab builders): Extract `setupTabContents()` sections.
+12. **Phase 3** (Composition root): Slim down App constructor using direct composition. Disposal remains explicit and hand-ordered.
 
 #### Compatibility Layer
 
-During migration, maintain backward compatibility:
+The `AppWiringContext` interface remains stable throughout the refactoring:
 
 ```typescript
-// AppWiringContext.ts -- expanded during migration
+// AppWiringContext.ts -- unchanged
 export interface AppWiringContext {
   session: Session;
   viewer: Viewer;
   paintEngine: PaintEngine;
   headerBar: HeaderBar;
   tabBar: TabBar;
-  controls: AppControlRegistry; // keeps working via proxy getters
+  controls: AppControlRegistry; // permanent facade with compatibility getters
   sessionBridge: AppSessionBridge;
   persistenceManager: AppPersistenceManager;
 }
 ```
 
-Wiring modules (`AppColorWiring.ts`, etc.) continue to reference `ctx.controls.colorControls` unchanged until the final phase when they are updated to `ctx.controls.color.colorControls`.
+Wiring modules (`AppColorWiring.ts`, etc.) continue to reference `ctx.controls.colorControls` unchanged permanently. The `AppControlRegistry` facade is the intended final state, not a migration artifact -- wiring modules cut across the proposed control groups and need the unified access point.
 
 ---
 
@@ -741,21 +821,22 @@ Wiring modules (`AppColorWiring.ts`, etc.) continue to reference `ctx.controls.c
 
 | File | Lines (est.) | Purpose |
 |------|-------------|---------|
-| `src/services/ServiceContainer.ts` | 60 | Typed DI container |
-| `src/services/ServiceContainer.test.ts` | 80 | Container tests |
-| `src/services/ServiceKeys.ts` | 40 | Typed service key constants |
-| `src/services/PlaylistNavigationService.ts` | 310 | Playlist/timeline logic from App |
-| `src/services/PlaylistNavigationService.test.ts` | 200 | Unit tests |
-| `src/services/KeyboardActionMap.ts` | 320 | Action handler map from App |
-| `src/services/KeyboardActionMap.test.ts` | 150 | Unit tests |
+| `src/AppSessionBridge.test.ts` | 150 | Phase 0: Baseline tests for AppSessionBridge (min 10 tests) |
+| `src/AppPersistenceManager.test.ts` | 120 | Phase 0: Baseline tests for AppPersistenceManager (min 8 tests) |
+| `src/services/FrameNavigationService.ts` | 190 | Frame/playlist/annotation navigation from App |
+| `src/services/FrameNavigationService.test.ts` | 300 | Unit tests (min 15 tests) |
+| `src/services/TimelineEditorService.ts` | 120 | Timeline EDL/sequence integration from App |
+| `src/services/TimelineEditorService.test.ts` | 250 | Unit tests (min 12 tests) |
+| `src/services/KeyboardActionMap.ts` | 320 | 117 action handler entries from App |
+| `src/services/KeyboardActionMap.test.ts` | 400 | Unit tests (min 20 tests) |
 | `src/services/LayoutOrchestrator.ts` | 330 | Layout/DOM/a11y from App |
-| `src/services/LayoutOrchestrator.test.ts` | 200 | Unit tests |
+| `src/services/LayoutOrchestrator.test.ts` | 250 | Unit tests (min 10 tests) |
 | `src/services/RenderLoopService.ts` | 60 | Render loop from App |
-| `src/services/RenderLoopService.test.ts` | 80 | Unit tests |
+| `src/services/RenderLoopService.test.ts` | 100 | Unit tests (min 6 tests) |
 | `src/services/SessionURLService.ts` | 150 | URL state capture/apply/bootstrap |
-| `src/services/SessionURLService.test.ts` | 120 | Unit tests |
+| `src/services/SessionURLService.test.ts` | 150 | Unit tests (min 8 tests) |
 | `src/services/AudioOrchestrator.ts` | 80 | Audio wiring from App |
-| `src/services/AudioOrchestrator.test.ts` | 80 | Unit tests |
+| `src/services/AudioOrchestrator.test.ts` | 100 | Unit tests (min 6 tests) |
 | `src/services/controls/ControlGroups.ts` | 120 | Control group interfaces |
 | `src/services/controls/createColorControls.ts` | 30 | Color factory |
 | `src/services/controls/createViewControls.ts` | 40 | View factory |
@@ -772,8 +853,8 @@ Wiring modules (`AppColorWiring.ts`, etc.) continue to reference `ctx.controls.c
 | `src/services/tabContent/buildAnnotateTab.ts` | 40 | Annotate tab DOM builder |
 | `src/services/tabContent/buildQCTab.ts` | 50 | QC tab DOM builder |
 
-**Total new files**: ~30
-**Total new lines**: ~3,300 (including tests)
+**Total new files**: ~31
+**Total new lines**: ~4,000 (including tests)
 
 ---
 
@@ -781,15 +862,17 @@ Wiring modules (`AppColorWiring.ts`, etc.) continue to reference `ctx.controls.c
 
 | File | Change |
 |------|--------|
-| `src/App.ts` | Shrinks from 1,875 to ~200 lines |
-| `src/AppControlRegistry.ts` | Refactored to compose control groups; shrinks from 1,520 to ~300 lines |
-| `src/AppWiringContext.ts` | May expand to reference control groups (final phase) |
-| `src/AppColorWiring.ts` | Updated references (final phase only) |
-| `src/AppViewWiring.ts` | Updated references (final phase only) |
-| `src/AppEffectsWiring.ts` | Updated references (final phase only) |
-| `src/AppTransformWiring.ts` | Updated references (final phase only) |
-| `src/AppPlaybackWiring.ts` | Updated references (final phase only) |
-| `src/AppStackWiring.ts` | Updated references (final phase only) |
+| `src/App.ts` | Shrinks from 1,875 to ~200 lines (direct composition, no container) |
+| `src/AppControlRegistry.ts` | Refactored to compose control groups with permanent facade; shrinks from 1,520 to ~300 lines |
+| `src/AppControlRegistry.test.ts` | Add shim completeness assertion (verify all 65 original properties resolve through facade) |
+| `src/AppWiringContext.ts` | Unchanged -- keeps typed contract as-is |
+| `src/AppColorWiring.ts` | Unchanged -- facade provides compatibility |
+| `src/AppViewWiring.ts` | Unchanged -- facade provides compatibility |
+| `src/AppEffectsWiring.ts` | Unchanged -- facade provides compatibility |
+| `src/AppTransformWiring.ts` | Unchanged -- facade provides compatibility |
+| `src/AppPlaybackWiring.ts` | Unchanged -- facade provides compatibility |
+| `src/AppStackWiring.ts` | Unchanged -- facade provides compatibility |
+| `src/AppNetworkBridge.ts` | Updated to delegate to `SessionURLService` for URL state (Phase 1.5 follow-up) |
 | `src/main.ts` | No change needed (App public API unchanged) |
 
 ---
@@ -797,38 +880,60 @@ Wiring modules (`AppColorWiring.ts`, etc.) continue to reference `ctx.controls.c
 ## 6. Risk Assessment
 
 ### Low Risk
-- **Phase 1 (ServiceContainer)**: Purely additive, no existing code modified.
-- **Phase 2.4 (RenderLoopService)**: Small, self-contained extraction (40 lines).
-- **Phase 2.6 (AudioOrchestrator)**: Isolated audio logic, no cross-cutting concerns.
+- **Phase 0 (Baseline tests)**: Purely additive, no existing code modified.
+- **Phase 1.4 (RenderLoopService)**: Small, self-contained extraction (40 lines).
+- **Phase 1.6 (AudioOrchestrator)**: Isolated audio logic, no cross-cutting concerns.
 
 ### Medium Risk
-- **Phase 2.1 (PlaylistNavigationService)**: 310 lines of interleaved logic; must carefully preserve the bidirectional interaction between `PlaylistManager`, `Session`, and `TimelineEditor`.
-- **Phase 2.2 (KeyboardActionMap)**: Pure function extraction, but many handlers contain context-sensitive logic (e.g., "if in paint context, do X instead of Y"). Must ensure `activeContextManager` state is correctly passed.
-- **Phase 2.3 (LayoutOrchestrator)**: DOM construction + event binding is fragile. Integration tests needed.
+- **Phase 1.1a (FrameNavigationService)**: ~190 lines of navigation logic; must carefully preserve the bidirectional interaction between `PlaylistManager` and `Session`.
+- **Phase 1.1b (TimelineEditorService)**: ~120 lines with broader dependencies including persistence and graph traversal. Must preserve `SequenceGroupNode` resolution and EDL normalization behavior.
+- **Phase 1.2 (KeyboardActionMap)**: Pure function extraction, but 117 handler entries contain context-sensitive logic (3 `activeContextManager` guards, 2 `tabBar.activeTab` checks). Must ensure `activeContextManager` state is correctly passed.
+- **Phase 1.3 (LayoutOrchestrator)**: DOM construction + event binding is fragile. Integration tests needed.
 
 ### Higher Risk
-- **Phase 3 (Control group split)**: The biggest risk is the transition from `controls.filterControl` to `controls.effects.filterControl`. The compatibility shim mitigates this, but there are ~12 files (wiring modules + bridges) that reference controls directly. A missed reference causes a runtime `undefined` error.
-- **Phase 4 (Composition root rewire)**: Final integration of all changes. Requires careful testing of initialization order, since the service container lazily creates instances.
+- **Phase 2 (Control group split)**: The biggest risk is the transition from `controls.filterControl` to `controls.effects.filterControl`. The permanent compatibility facade mitigates this, but there are ~12 files (wiring modules + bridges) that reference controls directly. The "shim completeness" assertion in `AppControlRegistry.test.ts` catches missing getters that would produce runtime `undefined` errors.
+- **Phase 3 (Composition root rewire)**: Final integration of all changes. The App constructor's implicit initialization ordering (400 lines, carefully sequenced) must be preserved in the new direct-composition form. The boot sequence smoke test is the primary safety net.
 
 ### Mitigations
 1. Each phase is a separate PR with full CI green.
-2. Compatibility shims in Phase 3 ensure zero breakage during transition.
+2. Permanent compatibility facade in Phase 2 ensures zero breakage for wiring modules.
 3. TypeScript compiler will catch missing/wrong property references.
-4. Existing test suite (15,018 tests, 359 files) provides strong regression coverage.
+4. Existing test suite (407 test files) provides strong regression coverage.
+5. Phase 0 baseline tests ensure `AppSessionBridge` and `AppPersistenceManager` behavior is captured before refactoring begins.
+6. Direct composition (no service locator) preserves full type safety and eliminates lazy-initialization ordering risk.
 
 ---
 
 ## 7. Testing Strategy
 
+### Minimum New Tests Per Phase
+
+A total of **>= 113 new tests** are required across all phases. This is the minimum to achieve adequate coverage of the extracted services.
+
+| Phase | New tests (minimum) | Test file |
+|-------|-------------------|-----------|
+| Phase 0 | 18 | `AppSessionBridge.test.ts` (10), `AppPersistenceManager.test.ts` (8) |
+| Phase 1.1a | 15 | `FrameNavigationService.test.ts` |
+| Phase 1.1b | 12 | `TimelineEditorService.test.ts` |
+| Phase 1.2 | 20 | `KeyboardActionMap.test.ts` |
+| Phase 1.3 | 10 | `LayoutOrchestrator.test.ts` |
+| Phase 1.4 | 6 | `RenderLoopService.test.ts` |
+| Phase 1.5 | 8 | `SessionURLService.test.ts` |
+| Phase 1.6 | 6 | `AudioOrchestrator.test.ts` |
+| Phase 2.1-2.3 | 9 | Shim completeness (1), per-group factory (8) |
+| Phase 2.4 | 6 | Per-tab builder tests (6) |
+| Phase 3 | 3 | Boot smoke (1), dispose smoke (1), `getAPIConfig()` shape (1) |
+| **Total** | **113** | |
+
 ### Unit Tests (per extracted service)
 Each new service gets its own `.test.ts` file. Mock dependencies via simple objects implementing the dependency interface. Example:
 
 ```typescript
-// PlaylistNavigationService.test.ts
+// FrameNavigationService.test.ts
 import { describe, it, expect, vi } from 'vitest';
-import { PlaylistNavigationService } from './PlaylistNavigationService';
+import { FrameNavigationService } from './FrameNavigationService';
 
-describe('PlaylistNavigationService', () => {
+describe('FrameNavigationService', () => {
   function createMockDeps() {
     return {
       session: {
@@ -859,12 +964,33 @@ describe('PlaylistNavigationService', () => {
       getAnnotatedFrames: vi.fn().mockReturnValue(new Set([5, 15, 25])),
     };
     deps.session.currentFrame = 30;
-    const service = new PlaylistNavigationService(deps as any);
+    const service = new FrameNavigationService(deps as any);
 
     service.goToNextAnnotation();
 
     expect(deps.session.goToFrame).toHaveBeenCalledWith(5);
   });
+});
+```
+
+### Shim Completeness Assertion (Phase 2.3)
+
+Add to `AppControlRegistry.test.ts` during Phase 2.3:
+
+```typescript
+it('all original readonly properties resolve through the facade', () => {
+  // Enumerate all 65 readonly properties from the pre-refactoring registry
+  const originalKeys = [
+    'colorControls', 'colorInversionToggle', 'premultControl', 'cdlControl',
+    'curvesControl', 'ocioControl', 'lutPipelinePanel', 'displayProfileControl',
+    // ... all 65 property names
+  ];
+
+  const registry = new AppControlRegistry(deps);
+  for (const key of originalKeys) {
+    expect((registry as any)[key], `Missing facade getter: ${key}`).toBeDefined();
+    expect((registry as any)[key], `Facade getter returns null: ${key}`).not.toBeNull();
+  }
 });
 ```
 
@@ -879,9 +1005,10 @@ describe('PlaylistNavigationService', () => {
   - `src/AppControlRegistry.test.ts` (502 lines)
   - `src/AppKeyboardHandler.test.ts` (134 lines)
   - `src/AppWiringFixes.test.ts` (603 lines)
+  - `src/AppStackWiring.test.ts` (118 lines)
 
 ### Regression Gate
-Every PR must pass: `npx vitest run` (all 15,018+ tests) and `npx tsc --noEmit` (zero type errors).
+Every PR must pass: `npx vitest run` (all tests, count >= Phase 0 baseline) and `npx tsc --noEmit` (zero type errors). Record the exact test count after Phase 0 merges and assert count >= baseline at every subsequent phase.
 
 ---
 
@@ -893,9 +1020,9 @@ Every PR must pass: `npx vitest run` (all 15,018+ tests) and `npx tsc --noEmit` 
 | `AppControlRegistry.ts` line count | 1,520 | ~300 | < 400 |
 | Largest method in App | ~400 (constructor) | ~30 | < 50 |
 | Number of `this.*` references in App | ~250 | ~20 | < 30 |
-| Services testable in isolation | 0 | 6+ | All new services |
-| New test files | 0 | 8+ | 1 per service |
-| Total test count | 15,018 | 15,018 + ~60 | Net positive |
+| Services testable in isolation | 0 | 7+ | All new services |
+| New test files | 0 | 10+ | 1 per service + Phase 0 baseline files |
+| Total new tests | 0 | >= 113 | Net positive |
 | TypeScript errors | 0 | 0 | 0 at every phase |
 
 ---
@@ -904,35 +1031,35 @@ Every PR must pass: `npx vitest run` (all 15,018+ tests) and `npx tsc --noEmit` 
 
 | Phase | Description | Estimated Days | PRs |
 |-------|-------------|---------------|-----|
-| 1 | ServiceContainer + keys | 2-3 | 1 |
-| 2.1 | PlaylistNavigationService | 2 | 1 |
-| 2.2 | KeyboardActionMap | 1 | 1 |
-| 2.3 | LayoutOrchestrator | 2-3 | 1 |
-| 2.4 | RenderLoopService | 0.5 | 1 |
-| 2.5 | SessionURLService | 1 | 1 |
-| 2.6 | AudioOrchestrator | 0.5 | 1 |
-| 3.1-3.2 | Control group interfaces + factories | 2 | 1 |
-| 3.3 | Refactor AppControlRegistry | 2 | 1 |
-| 3.4 | Extract tab builders | 2 | 1 |
-| 4 | Rewire App as composition root | 2-3 | 1 |
-| **Total** | | **17-22 days** | **10 PRs** |
+| 0 | Baseline tests for AppSessionBridge + AppPersistenceManager | 1-2 | 1 |
+| 1.1a | FrameNavigationService (frame navigation only) | 1.5 | 1 |
+| 1.1b | TimelineEditorService (EDL/sequence integration) | 1.5 | 1 |
+| 1.2 | KeyboardActionMap | 1 | 1 |
+| 1.3 | LayoutOrchestrator | 2-3 | 1 |
+| 1.4 | RenderLoopService | 0.5 | 1 |
+| 1.5 | SessionURLService | 1 | 1 |
+| 1.6 | AudioOrchestrator | 0.5 | 1 |
+| 2.1-2.2 | Control group interfaces + factories | 2 | 1 |
+| 2.3 | Refactor AppControlRegistry with permanent facade | 1.5 | 1 |
+| 2.4 | Extract tab builders | 2 | 1 |
+| 3 | Slim down App constructor (direct composition, no container) | 1 | 1 |
+| **Total** | | **14-18 days** | **12 PRs** |
+
+Note: The original Phase 1 (ServiceContainer) is eliminated entirely, saving 2-3 days. Phase 0 adds 1-2 days for baseline tests. Phase 3 is simplified from 2-3 days to 1 day because there is no container to wire -- it is just removing the now-delegated code from App and using direct composition. Net savings: ~3-4 days off the original estimate.
 
 ---
 
-## 10. Open Questions
+## 10. Resolved Decisions
 
-1. **Should we use a typed container with generics?** The proposed string-keyed container is simple but loses type safety at `get<T>()` call sites. An alternative is a `TypedServiceContainer` using branded keys:
-   ```typescript
-   const SessionKey = createKey<Session>('session');
-   container.get(SessionKey); // returns Session, no cast needed
-   ```
-   This adds ~20 lines of infrastructure but eliminates all `as` casts.
+The following were originally open questions. They are now resolved as firm decisions based on the Round 1 and Round 2 review feedback.
 
-2. **Should wiring modules be converted to service classes?** Currently `wireColorControls()` is a pure function. We could make it `ColorWiringService` with `bind()`/`dispose()` for consistent lifecycle management, but the current function pattern is already clean and testable.
+1. **No DI container -- use direct composition.** The ServiceContainer has been dropped entirely. The codebase already has three proven dependency-passing patterns (`AppWiringContext`, `SessionBridgeContext`, `PersistenceManagerContext`), and a string-keyed service locator would be a type-safety regression with no concrete benefit. The App constructor uses direct composition: explicitly instantiating services and passing them to each other via constructor arguments.
 
-3. **Should `AppControlRegistry` be eliminated entirely?** After Phase 3, it becomes a thin facade over control groups. We could remove it and have wiring modules reference groups directly from the container. This would eliminate one level of indirection but require updating all wiring module signatures.
+2. **Keep wiring modules as pure functions.** The current `wireColorControls(ctx)` function pattern is already clean and testable. Converting to service classes (`ColorWiringService` with `bind()`/`dispose()`) would add unnecessary ceremony without benefit. Both Round 1 reviews concur.
 
-4. **Should the `AppWiringContext` be replaced by the `ServiceContainer`?** Currently wiring modules receive a typed context. We could pass the container instead, but this would make wiring modules dependent on the container API and lose explicit typing of their dependencies. The recommendation is to keep `AppWiringContext` as the explicit contract.
+3. **Keep `AppControlRegistry` as a permanent facade.** After Phase 2, `AppControlRegistry` becomes a facade over control groups with permanent compatibility getters. It is NOT eliminated, because wiring modules cut across the proposed control groups (e.g., `AppViewWiring` accesses View, Analysis, and Playback groups; `AppPlaybackWiring` spans Panels, Playback, and Network groups). The facade provides the unified access point these modules need. The compatibility getters are the intended final state, not a migration artifact.
+
+4. **Keep `AppWiringContext` as a typed contract.** The `AppWiringContext` is NOT replaced by any container or passed-through service reference. The typed context pattern is superior for wiring modules because it provides explicit typing of dependencies and does not couple wiring modules to any infrastructure API.
 
 ---
 

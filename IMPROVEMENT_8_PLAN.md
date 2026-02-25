@@ -205,6 +205,7 @@ export abstract class EffectNode extends IPNode {
 ```typescript
 export { EffectNode } from './EffectNode';
 export type { EffectCategory } from './EffectNode';
+export { EffectChain } from './EffectChain';
 
 // Individual effect nodes (added as they are implemented)
 export { CDLNode } from './CDLNode';
@@ -503,7 +504,7 @@ This follows the existing `NodeProcessor` pattern already established by `StackP
 
 ---
 
-### Phase 4: EffectChain Helper
+### Phase 5: EffectChain Helper
 
 A convenience class for building linear effect chains without manually wiring nodes.
 
@@ -512,6 +513,7 @@ A convenience class for building linear effect chains without manually wiring no
 ```typescript
 import type { IPNode } from '../base/IPNode';
 import type { EffectNode } from './EffectNode';
+import { NodeFactory } from '../base/NodeFactory';
 import { Graph, type EvalContext } from '../../core/graph/Graph';
 
 /**
@@ -523,6 +525,22 @@ import { Graph, type EvalContext } from '../../core/graph/Graph';
  *   chain.append(new SharpenNode());
  *   chain.setSource(sourceNode);
  *   const result = chain.evaluate(context);
+ *
+ * Performance note (deepClone and buffer allocation):
+ *   The initial implementation uses deepClone() per active effect in
+ *   applyEffect(). For 4K float32 RGBA images (~127 MB per clone),
+ *   a chain of 5 active effects allocates ~635 MB of transient buffers.
+ *   This is acceptable for HD uint8 workflows (the majority use case).
+ *
+ *   For 4K float32 workflows, a ping-pong buffer strategy is planned
+ *   as a follow-up optimization: pre-allocate two IPImage buffers at
+ *   the source resolution, and alternate writing into them across
+ *   effect stages. This eliminates per-effect allocation regardless
+ *   of chain length. The applyEffect() signature would change to
+ *   applyEffect(context, input, output) where the base class provides
+ *   the pre-allocated output buffer. An intermediate step is a
+ *   `reuseBuffer` flag on EffectNode that lets the chain pass a
+ *   pre-allocated output buffer when available.
  */
 export class EffectChain {
   private effects: EffectNode[] = [];
@@ -568,8 +586,16 @@ export class EffectChain {
     return this.effects;
   }
 
-  evaluate(frame: number): IPImage | null {
-    return this.graph.evaluate(frame);
+  /**
+   * Evaluate the effect chain with a full EvalContext.
+   *
+   * Accepts a complete EvalContext rather than just a frame number,
+   * so that the actual image resolution, quality mode, and other
+   * context fields are correctly propagated to all effect nodes.
+   * This avoids the Graph's internal default of 1920x1080.
+   */
+  evaluate(context: EvalContext): IPImage | null {
+    return this.graph.evaluateWithContext(context);
   }
 
   private rebuildChain(): void {
@@ -603,6 +629,27 @@ export class EffectChain {
     };
   }
 
+  /**
+   * Deserialize a chain from a previously serialized JSON object.
+   *
+   * Uses NodeFactory.create(type) to reconstruct each effect node
+   * by its registered type string, then restores property values
+   * via node.properties.fromJSON(). This completes the serialization
+   * round-trip required for exportable effect pipelines.
+   *
+   * @param data - The output of toJSON()
+   * @returns A new EffectChain with restored effects and properties
+   */
+  static fromJSON(data: { effects: Array<{ type: string; properties: object }> }): EffectChain {
+    const chain = new EffectChain();
+    for (const entry of data.effects) {
+      const node = NodeFactory.create(entry.type) as EffectNode;
+      node.properties.fromJSON(entry.properties);
+      chain.append(node);
+    }
+    return chain;
+  }
+
   dispose(): void {
     for (const effect of this.effects) {
       effect.dispose();
@@ -615,11 +662,11 @@ export class EffectChain {
 
 ---
 
-### Phase 5: Integration with Existing Viewer/Renderer
+### Phase 6: Integration with Existing Viewer/Renderer
 
 This is the most delicate phase. The migration must be backward-compatible.
 
-#### Step 5a: Create a ViewerEffectChain adapter
+#### Step 6a: Create a ViewerEffectChain adapter
 
 **File:** `src/ui/components/ViewerEffectChain.ts`
 
@@ -659,45 +706,25 @@ export class ViewerEffectChain {
     this.sharpenNode.properties.setValue('amount', state.filterSettings.sharpen);
   }
 
-  evaluate(frame: number): IPImage | null {
-    return this.chain.evaluate(frame);
+  evaluate(context: EvalContext): IPImage | null {
+    return this.chain.evaluate(context);
   }
 }
 ```
 
-#### Step 5b: Gradual Renderer Integration
+#### Step 6b: Gradual Renderer Integration
 
 The existing GPU shader pipeline in `Renderer.renderImage()` will continue to handle effects that are implemented as GPU uniforms (exposure, contrast, saturation, etc. -- the core color adjustments). Effect nodes handle the higher-level composable effects (CDL, noise reduction, stabilization, film emulation, etc.) that currently live in `EffectProcessor`.
 
 The integration sequence:
 
-1. **Phase 5b-1:** EffectNodes produce CPU-processed `IPImage` results. The Viewer evaluates the node graph to get a final `IPImage`, then hands it to `Renderer.renderImage()` which applies the remaining GPU shader effects (exposure, gamma, tone mapping via the fragment shader). No change to the shader.
+1. **Phase 6b-1:** EffectNodes produce CPU-processed `IPImage` results. The Viewer evaluates the node graph to get a final `IPImage`, then hands it to `Renderer.renderImage()` which applies the remaining GPU shader effects (exposure, gamma, tone mapping via the fragment shader). No change to the shader.
 
-2. **Phase 5b-2:** Move GPU shader effects into EffectNodes one by one. For example, create an `ExposureNode` that sets the `u_exposureRGB` uniform on the Renderer before the final draw call, instead of the Viewer setting it directly. This is a gradual migration.
+2. **Phase 6b-2:** Move GPU shader effects into EffectNodes one by one. For example, create an `ExposureNode` that sets the `u_exposureRGB` uniform on the Renderer before the final draw call, instead of the Viewer setting it directly. This is a gradual migration.
 
-3. **Phase 5b-3:** Eventually, the Renderer becomes a thin "blit + display transform" layer, and all creative effects are managed by EffectNodes.
+3. **Phase 6b-3:** Eventually, the Renderer becomes a thin "blit + display transform" layer, and all creative effects are managed by EffectNodes.
 
 ---
-
-### Phase 6: IPImage CPU/GPU Interop
-
-Currently `IPImage` (`src/core/image/Image.ts`) stores pixel data as typed arrays. To support GPU effect nodes efficiently, add optional methods:
-
-```typescript
-// Additions to IPImage (src/core/image/Image.ts)
-
-/** Convert this image to an ImageData for CPU effect processing. */
-toImageData(): ImageData {
-  // Already possible via existing getTypedArray() + width/height
-}
-
-/** Update this image's pixel data from an ImageData. */
-fromImageData(imageData: ImageData): void {
-  // Copy ImageData.data into the internal typed array
-}
-```
-
-These methods are needed by EffectNode subclasses that delegate to the existing `applyNoiseReduction(imageData, ...)` style functions. If `IPImage` already has equivalent functionality (via `deepClone()` + `getTypedArray()`), these can be thin wrappers.
 
 ---
 
@@ -748,7 +775,8 @@ Existing files to modify:
 
 | File | Change |
 |---|---|
-| `src/core/image/Image.ts` | Add `toImageData()` and `fromImageData()` convenience methods if missing |
+| `src/core/image/Image.ts` | Add instance `toImageData()` and `fromImageData()` convenience methods (Phase 2) |
+| `src/core/graph/Graph.ts` | Add `evaluateWithContext(context: EvalContext)` method that accepts a caller-provided EvalContext instead of constructing one with hardcoded 1920x1080 |
 | `src/nodes/base/NodeFactory.ts` | No change needed (uses `@RegisterNode` decorator) |
 | `src/ui/components/Viewer.ts` | Gradually replace `EffectProcessor.applyEffects()` calls with `ViewerEffectChain.evaluate()` |
 | `src/utils/effects/EffectProcessor.ts` | Kept during migration; eventually deprecated |
@@ -813,10 +841,12 @@ In the future, these could become EffectNodes that modify `RenderState` rather t
 
 ### Stage 1: Create EffectNode infrastructure (no behavioral changes)
 
-- Implement `EffectNode` base class and all concrete node subclasses.
-- Write comprehensive tests for each node in isolation.
+- Implement `EffectNode` base class (Phase 1).
+- Add `toImageData()` and `fromImageData()` instance methods to IPImage (Phase 2).
+- Implement all concrete node subclasses (Phase 3).
+- Write comprehensive tests for each node in isolation (~185 unit tests).
 - Register all nodes in `NodeFactory`.
-- Duration: 1-2 weeks.
+- Duration: 2-3 weeks.
 
 ### Stage 2: EffectChain parallel path
 
@@ -827,12 +857,12 @@ In the future, these could become EffectNodes that modify `RenderState` rather t
 
 ### Stage 3: Switch to EffectNode path for CPU effects
 
-- Replace `EffectProcessor.applyEffects()` calls in `Viewer.ts` with `ViewerEffectChain.evaluate()`.
+- Replace `EffectProcessor.applyEffects()` calls in `Viewer.ts` with `ViewerEffectChain.evaluate(context)`.
 - Keep `EffectProcessor` available as fallback via feature flag.
 - Remove the `ImageEffect` adapter layer in `src/effects/adapters/` (its role is now filled by EffectNodes).
 - Duration: 1-2 weeks.
 
-### Stage 4: GPU processor upgrades
+### Stage 4: GPU processor upgrades (Phase 4)
 
 - Attach `GPUSharpenProcessor` and `GPUNoiseReductionProcessor` to their respective nodes.
 - Measure performance against the current standalone `WebGLSharpenProcessor` / `WebGLNoiseReductionProcessor`.
@@ -851,7 +881,7 @@ In the future, these could become EffectNodes that modify `RenderState` rather t
 
 | Risk | Impact | Likelihood | Mitigation |
 |---|---|---|---|
-| **Performance regression** from per-effect `deepClone()` | High | Medium | Use copy-on-write or shared backing buffers. Profile early. Skip clone when mix=1.0 and no downstream branching. |
+| **Performance regression** from per-effect `deepClone()` | High | Medium | Initial implementation uses `deepClone()` per active effect (~127 MB per clone at 4K float32 RGBA). Acceptable for HD uint8 workflows. For 4K float32, a planned ping-pong buffer optimization pre-allocates two buffers and alternates between them, reducing allocation to O(2) regardless of chain length. Identity/disabled effects return the input reference without allocation. Profile early. |
 | **Pixel-level differences** between old EffectProcessor and new EffectNodes | Medium | Medium | Automated pixel comparison tests during Stage 2. Accept sub-LSB differences from float rounding. |
 | **Memory increase** from caching intermediate images per node | Medium | Medium | Implement cache eviction policy. Only cache when node has multiple outputs or expensive computation. |
 | **GPU context overhead** for per-effect GPU processors | Medium | Low | Share WebGL contexts between GPU processors. Use a single offscreen canvas with FBO swapping. |
@@ -864,34 +894,77 @@ In the future, these could become EffectNodes that modify `RenderState` rather t
 
 ### Unit Tests (per-effect node)
 
-Each `*Node.test.ts` file tests:
+Each `*Node.test.ts` file tests 14 categories (15 for StabilizationNode):
 
-1. **Identity pass-through:** When parameters are at defaults, `isIdentity()` returns true and `process()` returns the input unchanged (same reference).
-2. **Enabled/disabled:** When `enabled=false`, effect is bypassed regardless of parameters.
-3. **Mix blending:** When `mix=0.5`, output is the midpoint between input and fully-effected image.
-4. **Parameter clamping:** Property min/max constraints are respected.
-5. **Dirty propagation:** Changing a property marks the node and its outputs dirty.
-6. **Cache validity:** Evaluating twice with the same frame and no changes returns the cached result.
-7. **Pixel correctness:** Compare output against directly calling the underlying function (e.g., `applyCDL()`).
+1. **Identity detection:** `isIdentity()` returns true at default parameter values.
+2. **Non-identity detection:** `isIdentity()` returns false when parameters deviate from defaults.
+3. **Enabled/disabled bypass:** When `enabled=false`, effect is bypassed regardless of parameters (returns input reference).
+4. **Mix blending:** When `mix=0.5`, output is the midpoint between input and fully-effected image.
+5. **Parameter clamping:** Property min/max constraints are respected. Note: `PropertyContainer` DOES enforce min/max via the `Property.value` setter (lines 67-72 of `src/core/graph/Property.ts`), which clamps numeric values with `Math.max(min, ...)` and `Math.min(max, ...)`. Tests verify this working behavior.
+6. **Dirty propagation:** Changing a property marks the node and its outputs dirty.
+7. **Cache validity:** Evaluating twice with the same frame and no changes returns the cached result (same reference).
+8. **Pixel correctness (uint8):** Compare output against directly calling the underlying function (e.g., `applyCDLToImageData()`) for uint8 input. Tolerance: 1 LSB.
+9. **Pixel correctness (float32):** Output values are within tolerance for float32 input. Tolerance: 1e-5 relative. Documents precision characteristics of the ImageData round-trip.
+10. **Alpha preservation:** Alpha channel unchanged after processing RGBA image. Effects that operate on RGB only must not corrupt alpha.
+11. **Channel count safety:** 1-channel and 3-channel inputs handled without out-of-bounds array access.
+12. **Edge-case sizes:** 1x1 single-pixel image processes without crash or NaN.
+13. **Mix=0.0 bypass:** `mix=0` with `enabled=true` produces output equivalent to unprocessed input (distinct from `enabled=false`).
+14. **Dispose idempotency:** `dispose()` nullifies cached state and does not throw on double-call.
+
+**StabilizationNode additional tests (3 extra, total 17):**
+- Sequential frame evaluation produces temporally consistent output.
+- Random-access frame jump (e.g., frame 50 to frame 2) handles missing motion history gracefully.
+- Cache invalidation when reference frame changes.
 
 ### Integration Tests (EffectChain)
 
 1. **Chain ordering:** CDL -> Sharpen produces different results than Sharpen -> CDL.
-2. **Chain serialization:** `toJSON()` / `fromJSON()` round-trip preserves parameters.
-3. **Cache efficiency:** Changing only the last effect in a 5-node chain re-evaluates only 1 node.
-4. **Node insertion/removal:** Dynamic chain modification correctly re-wires connections.
+2. **Chain serialization:** `toJSON()` output has correct structure (effect types, properties per node).
+3. **Chain deserialization round-trip:** `EffectChain.fromJSON(chain.toJSON())` produces a chain with identical parameters.
+4. **Cache efficiency:** Changing only the last effect in a 5-node chain re-evaluates only 1 node.
+5. **Node insertion/removal:** Dynamic chain modification correctly re-wires connections.
+6. **Empty chain evaluate:** No source, no effects returns null.
+7. **Source-only pass-through:** Source set, zero effects returns source image unchanged.
+8. **Duplicate node guard:** Adding same node instance twice is handled (error or no-op, not corruption).
+9. **Disabled effect skip:** Disabled node in mid-chain is transparent.
+10. **Identity effect skip:** Identity-parameterized node is transparent.
+11. **Large chain:** 10-node chain evaluates without stack overflow.
+12. **All effects disabled:** Returns source image unchanged.
+13. **Dispose chain:** `dispose()` disposes all child effect nodes.
+14. **Double dispose:** Chain `dispose()` called twice does not throw.
+15. **Source change:** `setSource()` with new source re-wires all connections.
+16. **`getEffects()` ordering:** Returns effects in current chain order.
+17. **Reorder effects:** `reorder(from, to)` updates evaluation order.
+18. **Insert at index:** `insert(0, effect)` correctly prepends.
+19. **Remove non-existent:** `remove(unknownEffect)` is a no-op.
+20. **EvalContext propagation:** `evaluate(context)` passes actual resolution through, not hardcoded 1920x1080.
 
 ### Regression Tests (Viewer migration)
 
-1. **Pixel parity:** During Stage 2, assert that `ViewerEffectChain.evaluate()` produces identical output to `EffectProcessor.applyEffects()` for a test matrix of effect combinations.
-2. **Performance benchmark:** Frame rendering time must not regress more than 10% vs the current monolithic pipeline.
+1. **Pixel parity (uint8):** During Stage 2, assert that `ViewerEffectChain.evaluate()` produces identical output to `EffectProcessor.applyEffects()` for a test matrix of effect combinations. Tolerance: 1 LSB for uint8.
+2. **Pixel parity (float32):** Same test for float32 input. Tolerance: 1e-5 relative.
+3. **Single-effect parity:** Each effect individually active, compare outputs between old and new paths.
+4. **Identity parity:** All effects at defaults, both paths produce identical pixels (zero tolerance).
+5. **Performance benchmark:** Frame rendering time must not regress more than 10% vs the current monolithic pipeline.
+
+### Pixel-Match Tolerances
+
+| Data Type | Tolerance | Notes |
+|---|---|---|
+| uint8 | 1 LSB (absolute) | Matches existing `assertPixelMatch()` in e2e tests |
+| uint16 | 1 (absolute) | Equivalent to 1 LSB in 16-bit space |
+| float32 | 1e-5 (relative) | Accounts for floating-point rounding across effect stages |
 
 ### Estimated Test Count
 
-- 13 effect nodes x ~8 tests each = ~104 unit tests
-- EffectChain: ~15 integration tests
-- Regression: ~10 pixel-parity tests
-- **Total: ~130 new tests**
+- 13 effect nodes x ~14-15 tests each = ~185 unit tests (including 3 extra for StabilizationNode)
+- EffectNode base class: ~8 tests
+- EffectChain: ~20 integration tests
+- GPU processors: ~8 tests
+- ViewerEffectChain bridge: ~15 tests
+- Regression/parity: ~10 tests
+- Rounding margin for discovered edge cases: ~12
+- **Total: ~233-245 new tests**
 
 ---
 
@@ -900,7 +973,7 @@ Each `*Node.test.ts` file tests:
 1. **Composability:** Users can reorder effects in the chain and see correct results. Verified by chain ordering integration tests.
 2. **Caching:** Changing one effect parameter only re-evaluates that node and downstream. Verified by cache efficiency tests.
 3. **Serialization:** An effect chain can be saved to JSON and restored with identical parameters. Verified by round-trip tests.
-4. **Pixel parity:** No visible difference between old and new pipelines for the same parameters. Verified by regression tests with per-pixel comparison (tolerance: 1 LSB for uint8).
+4. **Pixel parity:** No visible difference between old and new pipelines for the same parameters. Verified by regression tests with per-pixel comparison (tolerance: uint8 = 1 LSB, uint16 = 1, float32 = 1e-5 relative).
 5. **Performance:** Frame rendering time within 10% of current pipeline for standard effect combinations.
 6. **Code reduction:** `EffectProcessor.applyEffects()` (currently ~600 lines of merged pixel-processing) replaced by ~13 focused EffectNode subclasses averaging ~50 lines each.
 
@@ -911,14 +984,14 @@ Each `*Node.test.ts` file tests:
 | Phase | Duration | Dependencies |
 |---|---|---|
 | Phase 1: EffectNode base class | 2-3 days | None |
-| Phase 2: 13 concrete effect nodes + tests | 8-10 days | Phase 1 |
-| Phase 3: GPU processor strategies | 3-4 days | Phase 2 |
-| Phase 4: EffectChain helper | 2-3 days | Phase 1 |
-| Phase 5: Viewer integration + migration | 5-7 days | Phase 2, 4 |
-| Phase 6: IPImage interop methods | 1-2 days | Phase 1 |
-| **Total** | **3-4 weeks** | |
+| Phase 2: IPImage interop methods (`toImageData()`, `fromImageData()`) | 1-2 days | Phase 1 |
+| Phase 3: 13 concrete effect nodes + tests (~185 unit tests) | 8-10 days | Phase 1, Phase 2 |
+| Phase 4: GPU processor strategies | 3-4 days | Phase 3 |
+| Phase 5: EffectChain helper + `fromJSON()` deserialization (~20 integration tests) | 3-4 days | Phase 1 |
+| Phase 6: Viewer integration + migration (~25 bridge/regression tests) | 5-7 days | Phase 3, Phase 5 |
+| **Total** | **4-5 weeks** | |
 
-This estimate assumes a single developer working full-time. The work is highly parallelizable -- phases 2, 3, 4, and 6 can proceed concurrently after Phase 1 is complete.
+This estimate assumes a single developer working full-time. The additional week (vs the original 3-4 week estimate) accounts for: Phase 2 being a prerequisite for Phase 3 (adding dependency overhead), implementing `fromJSON()` deserialization and the expanded test count (~233-245 tests vs the original ~130), and integration testing during the parallel-evaluation migration which typically takes longer than planned due to subtle pixel-level discrepancies requiring investigation. Phases 4 and 5 can proceed concurrently after Phase 1 is complete. Phase 3 requires both Phase 1 and Phase 2.
 
 ---
 
