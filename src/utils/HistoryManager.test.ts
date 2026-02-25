@@ -4,10 +4,11 @@
  * Tests for the centralized undo/redo history tracking system.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   HistoryManager,
   getGlobalHistoryManager,
+  resetGlobalHistoryManager,
 } from './HistoryManager';
 
 describe('HistoryManager', () => {
@@ -539,6 +540,10 @@ describe('HistoryManager', () => {
   });
 
   describe('getGlobalHistoryManager', () => {
+    afterEach(() => {
+      resetGlobalHistoryManager();
+    });
+
     it('HM-U140: returns HistoryManager instance', () => {
       const globalManager = getGlobalHistoryManager();
       expect(globalManager).toBeInstanceOf(HistoryManager);
@@ -548,6 +553,29 @@ describe('HistoryManager', () => {
       const manager1 = getGlobalHistoryManager();
       const manager2 = getGlobalHistoryManager();
       expect(manager1).toBe(manager2);
+    });
+  });
+
+  describe('resetGlobalHistoryManager', () => {
+    afterEach(() => {
+      resetGlobalHistoryManager();
+    });
+
+    it('HM-U142: creates fresh instance after reset', () => {
+      const mgr1 = getGlobalHistoryManager();
+      mgr1.recordAction('test action', 'session', () => {});
+      expect(mgr1.getEntries().length).toBe(1);
+
+      resetGlobalHistoryManager();
+
+      const mgr2 = getGlobalHistoryManager();
+      expect(mgr2).not.toBe(mgr1);
+      expect(mgr2.getEntries().length).toBe(0);
+    });
+
+    it('HM-U143: is safe to call when no singleton exists', () => {
+      resetGlobalHistoryManager();
+      expect(() => resetGlobalHistoryManager()).not.toThrow();
     });
   });
 

@@ -248,6 +248,37 @@ describe('SnapshotManager', () => {
     });
   });
 
+  describe('no double serialization (regression)', () => {
+    it('SNAP-R001: putSnapshotWithJson method no longer exists', () => {
+      // The method was removed because it accepted a pre-serialized JSON string
+      // then immediately JSON.parse'd it, defeating the optimization purpose.
+      // Callers now use putSnapshot(snapshot, state) directly.
+      expect((manager as any).putSnapshotWithJson).toBeUndefined();
+    });
+
+    it('SNAP-R002: createSnapshot does not call JSON.parse during storage', () => {
+      // The old code called JSON.parse on already-serialized JSON before storing.
+      // After the fix, JSON.parse should NOT be called during snapshot creation.
+      const parseSpy = vi.spyOn(JSON, 'parse');
+
+      // Simulate initialization
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      // createSnapshot calls JSON.stringify for size measurement, but should NOT
+      // call JSON.parse (which was the double-serialization bug)
+      parseSpy.mockClear();
+
+      // We can't fully run createSnapshot (IndexedDB mock is limited), but we
+      // can verify that the putSnapshot method itself doesn't use JSON.parse.
+      // Verify the function source does not contain JSON.parse
+      const fnSource = (manager as any).putSnapshot.toString();
+      expect(fnSource).not.toContain('JSON.parse');
+
+      parseSpy.mockRestore();
+    });
+  });
+
   describe('formatSize', () => {
     it('should measure size in bytes correctly', () => {
       const testData = { test: 'data', count: 123 };

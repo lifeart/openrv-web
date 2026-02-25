@@ -1228,5 +1228,36 @@ describe('SequenceLoader', () => {
       expect(results[1]).toHaveProperty('status', 'rejected');
       expect(results[2]).toEqual({ status: 'fulfilled', value: 'ok-3' });
     });
+
+    it('SLD-R002: preloadFrames does not reject when one frame fails to decode', async () => {
+      const mockBitmap = { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap;
+
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1, file: new File(['ok'], 'frame_001.png', { type: 'image/png' }) },
+        { index: 1, frameNumber: 2, file: new File(['bad'], 'frame_002.png', { type: 'image/png' }) },
+        { index: 2, frameNumber: 3, file: new File(['ok'], 'frame_003.png', { type: 'image/png' }) },
+      ];
+
+      const origCreateImageBitmap = globalThis.createImageBitmap;
+      globalThis.createImageBitmap = vi.fn((blob: Blob) => {
+        if ((blob as File).name === 'frame_002.png') {
+          return Promise.reject(new Error('decode error'));
+        }
+        return Promise.resolve(mockBitmap);
+      }) as any;
+
+      try {
+        // preloadFrames should NOT reject even though frame_002 fails
+        await expect(preloadFrames(frames, 1, 5)).resolves.toBeUndefined();
+
+        // Frames 1 and 3 should have been loaded successfully
+        expect(frames[0]!.image).toBe(mockBitmap);
+        expect(frames[2]!.image).toBe(mockBitmap);
+        // Frame 2 should NOT have an image (it failed to decode)
+        expect(frames[1]!.image).toBeUndefined();
+      } finally {
+        globalThis.createImageBitmap = origCreateImageBitmap;
+      }
+    });
   });
 });

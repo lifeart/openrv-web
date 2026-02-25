@@ -254,3 +254,10 @@ export function getGlobalHistoryManager(): HistoryManager {
   }
   return globalHistoryManager;
 }
+
+export function resetGlobalHistoryManager(): void {
+  if (globalHistoryManager) {
+    globalHistoryManager.dispose();
+    globalHistoryManager = null;
+  }
+}

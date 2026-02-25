@@ -145,8 +145,8 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
       preview: this.createPreview(state),
     };
 
-    // Save to IndexedDB (pass serialized JSON to avoid re-serialization)
-    await this.putSnapshotWithJson(snapshot, stateJson);
+    // Save to IndexedDB
+    await this.putSnapshot(snapshot, state);
 
     // Prune old manual snapshots
     await this.pruneSnapshots(false, MAX_MANUAL_SNAPSHOTS);
@@ -184,8 +184,8 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
       preview: this.createPreview(state),
     };
 
-    // Save to IndexedDB (pass serialized JSON to avoid re-serialization)
-    await this.putSnapshotWithJson(snapshot, stateJson);
+    // Save to IndexedDB
+    await this.putSnapshot(snapshot, state);
 
     // Prune old auto-checkpoints
     await this.pruneSnapshots(true, MAX_AUTO_CHECKPOINTS);
@@ -233,30 +233,6 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const request = store.put({ ...snapshot, state });
-
-      tx.onerror = () => {
-        reject(new Error(`Transaction error: ${tx.error?.message || 'Unknown error'}`));
-      };
-      tx.onabort = () => {
-        reject(new Error(`Transaction aborted: ${tx.error?.message || 'Unknown reason'}`));
-      };
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  /**
-   * Put a snapshot in the database using pre-serialized JSON
-   * This avoids double serialization when size was already calculated
-   */
-  private putSnapshotWithJson(snapshot: Snapshot, stateJson: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      // Parse once to store as object (IndexedDB handles serialization internally)
-      const state = JSON.parse(stateJson) as SessionState;
       const request = store.put({ ...snapshot, state });
 
       tx.onerror = () => {
