@@ -277,7 +277,7 @@ import { EffectNode } from './EffectNode';
 import { RegisterNode } from '../base/NodeFactory';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
-import { applyCDL, isDefaultCDL, type CDLValues } from '../../color/CDL';
+import { applyCDLToImageData, isDefaultCDL, type CDLValues } from '../../color/CDL';
 
 @RegisterNode('CDL')
 export class CDLNode extends EffectNode {
@@ -328,37 +328,25 @@ export class CDLNode extends EffectNode {
   }
 
   protected applyEffect(_context: EvalContext, input: IPImage): IPImage {
+    // Delegate to applyCDLToImageData() via the ImageData pathway,
+    // exactly as the existing CDLEffect adapter does. This avoids
+    // manual pixel iteration and the 0-255 normalization round-trip
+    // that would destroy precision for high-bit-depth images.
+    //
+    // NOTE: CDL precision is limited to 8-bit when using the ImageData
+    // pathway, since ImageData uses Uint8ClampedArray. A future
+    // float-native CDL path (TODO) will address precision for
+    // scene-referred linear-light float32 workflows.
     const output = input.deepClone();
-    const cdl = this.getCDLValues();
-    const data = output.getTypedArray();
-    const channels = output.channels;
-    const pixelCount = output.width * output.height;
-
-    // Determine normalization based on data type
-    let maxVal: number;
-    switch (output.dataType) {
-      case 'uint8': maxVal = 255; break;
-      case 'uint16': maxVal = 65535; break;
-      case 'float32': default: maxVal = 1; break;
-    }
-
-    for (let i = 0; i < pixelCount; i++) {
-      const idx = i * channels;
-      const r = (data[idx] ?? 0) / maxVal * 255;
-      const g = (data[idx + 1] ?? 0) / maxVal * 255;
-      const b = (data[idx + 2] ?? 0) / maxVal * 255;
-      const result = applyCDL(r, g, b, cdl);
-      data[idx] = result.r / 255 * maxVal;
-      data[idx + 1] = result.g / 255 * maxVal;
-      data[idx + 2] = result.b / 255 * maxVal;
-    }
-
+    const imageData = output.toImageData();
+    applyCDLToImageData(imageData, this.getCDLValues());
+    output.fromImageData(imageData);
     return output;
   }
 }
 ```
 
-#### 2b. NoiseReductionNode
+#### 3b. NoiseReductionNode
 
 **File:** `src/nodes/effects/NoiseReductionNode.ts`
 
@@ -410,7 +398,7 @@ export class NoiseReductionNode extends EffectNode {
 }
 ```
 
-#### 2c. SharpenNode
+#### 3c. SharpenNode
 
 **File:** `src/nodes/effects/SharpenNode.ts`
 
@@ -442,7 +430,7 @@ export class SharpenNode extends EffectNode {
 }
 ```
 
-#### 2d. Additional Effect Nodes (same pattern)
+#### 3d. Additional Effect Nodes (same pattern)
 
 Each wraps the corresponding existing function:
 

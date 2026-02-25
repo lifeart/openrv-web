@@ -271,9 +271,9 @@ export class LayoutOrchestrator {
 **Files to modify**:
 - `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~310 lines from `createLayout()` + `applyClientModeRestrictions()`
 - Create `/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts` (~330 lines)
-- Create `/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.test.ts`
+- Create `/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.test.ts` (min 10 tests)
 
-#### Step 2.4: Extract `RenderLoopService`
+#### Step 1.4: Extract `RenderLoopService`
 
 **Source**: Lines 1773-1813 in `App.ts` (`start()` + `tick()`)
 
@@ -334,9 +334,9 @@ export class RenderLoopService {
 **Files to modify**:
 - `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~40 lines
 - Create `/Users/lifeart/Repos/openrv-web/src/services/RenderLoopService.ts` (~60 lines)
-- Create `/Users/lifeart/Repos/openrv-web/src/services/RenderLoopService.test.ts`
+- Create `/Users/lifeart/Repos/openrv-web/src/services/RenderLoopService.test.ts` (min 6 tests)
 
-#### Step 2.5: Extract `SessionURLService`
+#### Step 1.5: Extract `SessionURLService`
 
 **Source**: Lines 575-720 in `App.ts` (`captureSessionURLState`, `applySessionURLState`, `handleURLBootstrap`)
 

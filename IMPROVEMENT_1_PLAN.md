@@ -662,34 +662,40 @@ export class Session extends EventEmitter<SessionEvents> {
    - Move `updateMetadata()`, `setDisplayName()`
    - Move GTO value extraction helpers and settings parser delegations
    - Define `SessionGraphHost` interface for communicating with playback/annotations/media
+   - Add `clearData()` method (resets `_gtoData = null`, called via `SessionMediaHost.clearGraphData()` in Phase 3)
 
-2. **Move type definitions**
-   - Move `GTOViewSettings`, `MatteSettings`, `SessionMetadata`, `GTOComponentDTO`, `ParsedAnnotations` to `src/core/session/types.ts` (shared types file)
-   - Keep re-exports in `Session.ts` for backward compatibility
-
-3. **Update Session.ts**
+2. **Update Session.ts**
    - Replace graph-related fields with `_graph = new SessionGraph()`
    - Wire SessionGraphHost in constructor
-   - Forward SessionGraphEvents
+   - Forward SessionGraphEvents (use explicit event enumeration)
    - Add backward-compat accessors: `get graph()`, `get gtoData()`, etc.
+   - Note: shared types already extracted to `types.ts` in Phase 1
 
-4. **Update consumers**
+3. **Update consumers**
    - `SessionGTOStore.ts`: Accept `SessionGraph` or keep accessing via `Session`
    - `SessionGTOExporter.ts`: Same
    - `AppSessionBridge.ts`: Update event subscriptions
 
 **Files to create:**
 - `src/core/session/SessionGraph.ts` (~500 lines)
-- `src/core/session/types.ts` (~100 lines, shared type definitions)
 
 **Files to modify:**
 - `src/core/session/Session.ts` (remove ~400 lines)
 - `src/core/session/SessionGTOStore.ts`
 - `src/core/session/SessionGTOExporter.ts`
+- `src/core/session/SessionGTOExporter.test.ts` (update TestSession for moved `_graph` field)
+- `src/core/session/SessionGTOStore.test.ts` (update access paths)
 - `src/core/session/Session.graph.test.ts`
 - `src/core/session/Session.state.test.ts`
 
-**Estimated effort:** 2 days
+**Test gate criteria:**
+- New `SessionGraph.test.ts`: standalone construction without Session, `loadEDL()` populates entries and emits `edlLoaded`, `resolveProperty()` returns correct values, `updateMetadata()` emits `metadataChanged`, host interface calls verified via mock (`setFps`, `setCurrentFrame` called during load)
+- `SessionGTOExporter.test.ts` TestSession: compiles and passes after `_graph` field move
+- `SessionGTOSettings.test.ts`: updated and passing
+- All existing tests pass (`npx vitest run`); type check passes (`npx tsc --noEmit`)
+- No new `(session as any)` casts introduced
+
+**Estimated effort:** 2.5 days
 
 ### Phase 3: Extract SessionMedia (Medium Risk, Medium Value)
 
