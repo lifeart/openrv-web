@@ -179,6 +179,11 @@ describe('AppControlRegistry', () => {
     const registry = new AppControlRegistry(deps);
     installDisposeSpies(registry);
 
+    // Access lazy-created scopes so they are instantiated before dispose
+    void registry.histogram;
+    void registry.waveform;
+    void registry.vectorscope;
+
     registry.dispose();
 
     // Complete list of all controls/managers disposed in dispose() (source lines 545-592)
@@ -271,6 +276,72 @@ describe('AppControlRegistry', () => {
     // Verify it returned a promise (thenable)
     const result = autoSaveDispose.mock.results[0]!.value;
     expect(result).toBeInstanceOf(Promise);
+  });
+
+  describe('Lazy scope creation (histogram, waveform, vectorscope)', () => {
+    it('ACR-010: histogram is not created until first access via the getter', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      // The private _histogram field should be null before first access
+      expect((registry as any)._histogram).toBeNull();
+      // Access the getter to trigger creation
+      const instance = registry.histogram;
+      expect(instance).toBeDefined();
+      expect((registry as any)._histogram).not.toBeNull();
+    });
+
+    it('ACR-011: waveform is not created until first access via the getter', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      expect((registry as any)._waveform).toBeNull();
+      const instance = registry.waveform;
+      expect(instance).toBeDefined();
+      expect((registry as any)._waveform).not.toBeNull();
+    });
+
+    it('ACR-012: vectorscope is not created until first access via the getter', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      expect((registry as any)._vectorscope).toBeNull();
+      const instance = registry.vectorscope;
+      expect(instance).toBeDefined();
+      expect((registry as any)._vectorscope).not.toBeNull();
+    });
+
+    it('ACR-013: subsequent histogram accesses return the same instance', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const first = registry.histogram;
+      const second = registry.histogram;
+      expect(first).toBe(second);
+    });
+
+    it('ACR-014: subsequent waveform accesses return the same instance', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const first = registry.waveform;
+      const second = registry.waveform;
+      expect(first).toBe(second);
+    });
+
+    it('ACR-015: subsequent vectorscope accesses return the same instance', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const first = registry.vectorscope;
+      const second = registry.vectorscope;
+      expect(first).toBe(second);
+    });
+
+    it('ACR-016: dispose succeeds without ever accessing lazy scopes', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      // Never access histogram, waveform, or vectorscope
+      expect((registry as any)._histogram).toBeNull();
+      expect((registry as any)._waveform).toBeNull();
+      expect((registry as any)._vectorscope).toBeNull();
+      // dispose() should not throw when lazy scopes were never created
+      expect(() => registry.dispose()).not.toThrow();
+    });
   });
 
   describe('setupTabContents – panel toggle buttons in HeaderBar panels slot', () => {

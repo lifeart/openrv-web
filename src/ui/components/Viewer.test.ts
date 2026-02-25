@@ -73,6 +73,7 @@ interface TestableViewer {
   paintEngine: PaintEngine;
   paintCtx: CanvasRenderingContext2D;
   paintHasContent: boolean;
+  paintDirty: boolean;
   renderPaint(): void;
   watermarkOverlay: {
     render(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void;
@@ -1383,6 +1384,7 @@ describe('Viewer', () => {
       t.glRendererManager._hdrRenderActive = true;
 
       const renderSpy = vi.spyOn(t.paintRenderer, 'renderAnnotations');
+      t.paintDirty = true;
       t.renderPaint();
 
       expect(renderSpy).toHaveBeenCalled();
@@ -1532,6 +1534,68 @@ describe('Viewer', () => {
       vi.spyOn(inputHandler as { renderLiveStroke: () => void }, 'renderLiveStroke').mockImplementation(() => {});
       viewer.render();
       expect(t.paintCanvas.style.display).toBe('');
+    });
+  });
+
+  describe('Paint dirty flag optimization', () => {
+    it('VWR-PT-006: renderPaint skips redraw when paintDirty is false and paintHasContent is true', () => {
+      const t = testable(viewer);
+      t.displayWidth = 800;
+      t.displayHeight = 600;
+      // Simulate state where paint was already rendered and is not dirty
+      t.paintHasContent = true;
+      t.paintDirty = false;
+      // Return non-empty annotations so we reach the dirty check
+      const fakeAnnotation = { type: 'stroke', points: [] };
+      vi.spyOn(t.paintEngine, 'getAnnotationsWithGhost').mockReturnValue([fakeAnnotation as any]);
+      const clearSpy = vi.spyOn(t.paintCtx, 'clearRect');
+      const renderSpy = vi.spyOn(t.paintRenderer, 'renderAnnotations');
+      t.renderPaint();
+      // Should skip both clear and render since paintDirty is false
+      expect(clearSpy).not.toHaveBeenCalled();
+      expect(renderSpy).not.toHaveBeenCalled();
+      clearSpy.mockRestore();
+      renderSpy.mockRestore();
+    });
+
+    it('VWR-PT-007: annotationsChanged event sets paintDirty to true', () => {
+      const t = testable(viewer);
+      // Start clean
+      t.paintDirty = false;
+      // Mock renderPaint so the event handler's subsequent call to renderPaint()
+      // doesn't reset paintDirty back to false
+      const renderPaintSpy = vi.spyOn(t as any, 'renderPaint').mockImplementation(() => {});
+      // Emit annotationsChanged via the paint engine
+      t.paintEngine.emit('annotationsChanged', 0);
+      expect(t.paintDirty).toBe(true);
+      renderPaintSpy.mockRestore();
+    });
+
+    it('VWR-PT-008: frameChanged sets paintDirty to true', () => {
+      const t = testable(viewer);
+      // Start clean
+      t.paintDirty = false;
+      // Emit frameChanged via session - this also calls scheduleRender,
+      // but paintDirty should be set before any render happens
+      (t.session as any).emit('frameChanged');
+      // frameChanged handler sets paintDirty = true and then calls scheduleRender (async RAF),
+      // so paintDirty should still be true at this point
+      expect(t.paintDirty).toBe(true);
+    });
+
+    it('VWR-PT-009: after rendering with annotations, paintDirty is reset to false', () => {
+      const t = testable(viewer);
+      t.displayWidth = 800;
+      t.displayHeight = 600;
+      t.paintDirty = true;
+      t.paintHasContent = false;
+      const fakeAnnotation = { type: 'stroke', points: [] };
+      vi.spyOn(t.paintEngine, 'getAnnotationsWithGhost').mockReturnValue([fakeAnnotation as any]);
+      vi.spyOn(t.paintRenderer, 'renderAnnotations').mockImplementation(() => {});
+      vi.spyOn(t.paintRenderer, 'getCanvas').mockReturnValue(document.createElement('canvas'));
+      t.renderPaint();
+      expect(t.paintDirty).toBe(false);
+      expect(t.paintHasContent).toBe(true);
     });
   });
 

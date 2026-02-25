@@ -190,11 +190,32 @@ export class AppControlRegistry {
   readonly transformControl: TransformControl;
   readonly cropControl: CropControl;
 
-  // Analysis scopes
-  readonly histogram: Histogram;
-  readonly waveform: Waveform;
-  readonly vectorscope: Vectorscope;
+  // Analysis scopes (lazy-created on first access to avoid unnecessary GPU resource allocation)
+  private _histogram: Histogram | null = null;
+  private _waveform: Waveform | null = null;
+  private _vectorscope: Vectorscope | null = null;
   readonly gamutDiagram: GamutDiagram;
+
+  get histogram(): Histogram {
+    if (!this._histogram) {
+      this._histogram = new Histogram();
+    }
+    return this._histogram;
+  }
+
+  get waveform(): Waveform {
+    if (!this._waveform) {
+      this._waveform = new Waveform();
+    }
+    return this._waveform;
+  }
+
+  get vectorscope(): Vectorscope {
+    if (!this._vectorscope) {
+      this._vectorscope = new Vectorscope();
+    }
+    return this._vectorscope;
+  }
 
   // Panels
   readonly historyPanel: HistoryPanel;
@@ -329,9 +350,7 @@ export class AppControlRegistry {
     this.cropControl = new CropControl();
 
     // --- Analysis scopes ---
-    this.histogram = new Histogram();
-    this.waveform = new Waveform();
-    this.vectorscope = new Vectorscope();
+    // histogram, waveform, and vectorscope are lazy-created via getters on first access
     this.gamutDiagram = new GamutDiagram();
 
     // --- Panels ---
@@ -1470,9 +1489,9 @@ export class AppControlRegistry {
     this.stereoControl.dispose();
     this.stereoEyeTransformControl.dispose();
     this.stereoAlignControl.dispose();
-    this.histogram.dispose();
-    this.waveform.dispose();
-    this.vectorscope.dispose();
+    this._histogram?.dispose();
+    this._waveform?.dispose();
+    this._vectorscope?.dispose();
     this.gamutDiagram.dispose();
     this.textFormattingToolbar.dispose();
     this.autoSaveIndicator.dispose();

@@ -102,4 +102,96 @@ describe('ShaderProgram', () => {
       expect(gl.uniform1fv).toHaveBeenCalledWith(expect.anything(), arr);
     });
   });
+
+  describe('setUniform - pre-allocated matrix buffer reuse (GC pressure)', () => {
+    it('SP-009: number[] length 9 reuses the same Float32Array buffer across calls', () => {
+      const arr1 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      const arr2 = [2, 0, 0, 0, 2, 0, 0, 0, 2];
+      sp.setUniform('u_mat3a', arr1);
+      sp.setUniform('u_mat3b', arr2);
+      const call1 = (gl.uniformMatrix3fv as any).mock.calls[0];
+      const call2 = (gl.uniformMatrix3fv as any).mock.calls[1];
+      // Both calls should pass the exact same Float32Array instance (the pre-allocated mat3Buffer)
+      expect(call1[2]).toBe(call2[2]);
+    });
+
+    it('SP-010: number[] length 16 reuses the same Float32Array buffer across calls', () => {
+      const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      const scaled = [2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1];
+      sp.setUniform('u_mat4a', identity);
+      sp.setUniform('u_mat4b', scaled);
+      const call1 = (gl.uniformMatrix4fv as any).mock.calls[0];
+      const call2 = (gl.uniformMatrix4fv as any).mock.calls[1];
+      // Both calls should pass the exact same Float32Array instance (the pre-allocated mat4Buffer)
+      expect(call1[2]).toBe(call2[2]);
+    });
+
+    it('SP-011: Float32Array length 9 passes through without copying to pre-allocated buffer', () => {
+      const original = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+      sp.setUniform('u_mat3', original);
+      const call = (gl.uniformMatrix3fv as any).mock.calls[0];
+      // Should pass the original Float32Array directly, not the internal buffer
+      expect(call[2]).toBe(original);
+    });
+
+    it('SP-012: Float32Array length 16 passes through without copying to pre-allocated buffer', () => {
+      const original = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+      sp.setUniform('u_mat4', original);
+      const call = (gl.uniformMatrix4fv as any).mock.calls[0];
+      // Should pass the original Float32Array directly, not the internal buffer
+      expect(call[2]).toBe(original);
+    });
+  });
+
+  describe('setUniformMatrix3 - pre-allocated buffer reuse', () => {
+    it('SP-013: number[] uses the pre-allocated mat3Buffer', () => {
+      const arr = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      sp.setUniformMatrix3('u_mat3', arr);
+      const call = (gl.uniformMatrix3fv as any).mock.calls[0];
+      expect(call[2]).toBeInstanceOf(Float32Array);
+      // Verify it contains the correct values
+      expect(Array.from(call[2] as Float32Array)).toEqual(arr);
+    });
+
+    it('SP-014: number[] reuses the same buffer instance on repeated calls', () => {
+      sp.setUniformMatrix3('u_mat3', [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+      sp.setUniformMatrix3('u_mat3', [2, 0, 0, 0, 2, 0, 0, 0, 2]);
+      const call1 = (gl.uniformMatrix3fv as any).mock.calls[0];
+      const call2 = (gl.uniformMatrix3fv as any).mock.calls[1];
+      expect(call1[2]).toBe(call2[2]);
+    });
+
+    it('SP-015: Float32Array passes through without copying', () => {
+      const original = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+      sp.setUniformMatrix3('u_mat3', original);
+      const call = (gl.uniformMatrix3fv as any).mock.calls[0];
+      expect(call[2]).toBe(original);
+    });
+  });
+
+  describe('setUniformMatrix4 - pre-allocated buffer reuse', () => {
+    it('SP-016: number[] uses the pre-allocated mat4Buffer', () => {
+      const arr = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      sp.setUniformMatrix4('u_mat4', arr);
+      const call = (gl.uniformMatrix4fv as any).mock.calls[0];
+      expect(call[2]).toBeInstanceOf(Float32Array);
+      // Verify it contains the correct values
+      expect(Array.from(call[2] as Float32Array)).toEqual(arr);
+    });
+
+    it('SP-017: number[] reuses the same buffer instance on repeated calls', () => {
+      sp.setUniformMatrix4('u_mat4', [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+      sp.setUniformMatrix4('u_mat4', [2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
+      const call1 = (gl.uniformMatrix4fv as any).mock.calls[0];
+      const call2 = (gl.uniformMatrix4fv as any).mock.calls[1];
+      expect(call1[2]).toBe(call2[2]);
+    });
+
+    it('SP-018: Float32Array passes through without copying', () => {
+      const original = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+      sp.setUniformMatrix4('u_mat4', original);
+      const call = (gl.uniformMatrix4fv as any).mock.calls[0];
+      expect(call[2]).toBe(original);
+    });
+  });
 });

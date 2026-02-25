@@ -155,6 +155,7 @@ export class Viewer {
   private watermarkDirty = true;
   private lastWatermarkGLActive = false;
   private paintHasContent = false;
+  private paintDirty = true;
   private session: Session;
 
   // Paint system
@@ -856,6 +857,8 @@ export class Viewer {
     this.paintCanvas.style.left = `${-leftPad}px`;
     this.paintCanvas.style.top = `${-topPad}px`;
     this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
+    // Canvas resize clears content; force repaint on next renderPaint()
+    this.paintDirty = true;
   }
 
   /**
@@ -912,11 +915,16 @@ export class Viewer {
         }
       }
 
+      // Annotations are per-frame, so the paint canvas must be redrawn
+      this.paintDirty = true;
       this.scheduleRender();
     });
 
     // Paint events
-    this.paintEngine.on('annotationsChanged', () => this.renderPaint());
+    this.paintEngine.on('annotationsChanged', () => {
+      this.paintDirty = true;
+      this.renderPaint();
+    });
     this.paintEngine.on('toolChanged', (tool) => this.inputHandler.updateCursor(tool));
 
     // Pixel probe + cursor color events - single handler for both consumers
@@ -2140,8 +2148,12 @@ export class Viewer {
         this.paintHasContent = false;
         this.paintCanvas.style.display = 'none';
       }
+      this.paintDirty = false;
       return;
     }
+
+    // Skip expensive clear+redraw when annotations haven't changed since last paint
+    if (!this.paintDirty && this.paintHasContent) return;
 
     // Keep paint surface in sync with current viewport and pan offset so
     // off-image annotations remain visible around the image area.
@@ -2169,6 +2181,7 @@ export class Viewer {
     // Copy physical-resolution PaintRenderer canvas to physical-resolution paint canvas
     ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
     this.paintHasContent = true;
+    this.paintDirty = false;
     this.paintCanvas.style.display = '';
   }
 

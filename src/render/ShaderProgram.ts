@@ -22,6 +22,8 @@ export class ShaderProgram {
   private program: WebGLProgram;
   private uniformLocations = new Map<string, WebGLUniformLocation | null>();
   private attributeLocations = new Map<string, number>();
+  private readonly mat3Buffer = new Float32Array(9);
+  private readonly mat4Buffer = new Float32Array(16);
 
   /**
    * Whether shader compilation and linking has fully completed.
@@ -295,10 +297,12 @@ export class ShaderProgram {
           gl.uniform4fv(location, value);
           break;
         case 9:
-          gl.uniformMatrix3fv(location, false, new Float32Array(value));
+          this.mat3Buffer.set(value);
+          gl.uniformMatrix3fv(location, false, this.mat3Buffer);
           break;
         case 16:
-          gl.uniformMatrix4fv(location, false, new Float32Array(value));
+          this.mat4Buffer.set(value);
+          gl.uniformMatrix4fv(location, false, this.mat4Buffer);
           break;
         default:
           console.warn(`Unsupported uniform array length: ${value.length}`);
@@ -333,16 +337,24 @@ export class ShaderProgram {
   setUniformMatrix4(name: string, value: Float32Array | number[]): void {
     const location = this.getUniformLocation(name);
     if (location !== null) {
-      const arr = value instanceof Float32Array ? value : new Float32Array(value);
-      this.gl.uniformMatrix4fv(location, false, arr);
+      if (value instanceof Float32Array) {
+        this.gl.uniformMatrix4fv(location, false, value);
+      } else {
+        this.mat4Buffer.set(value);
+        this.gl.uniformMatrix4fv(location, false, this.mat4Buffer);
+      }
     }
   }
 
   setUniformMatrix3(name: string, value: Float32Array | number[]): void {
     const location = this.getUniformLocation(name);
     if (location !== null) {
-      const arr = value instanceof Float32Array ? value : new Float32Array(value);
-      this.gl.uniformMatrix3fv(location, false, arr);
+      if (value instanceof Float32Array) {
+        this.gl.uniformMatrix3fv(location, false, value);
+      } else {
+        this.mat3Buffer.set(value);
+        this.gl.uniformMatrix3fv(location, false, this.mat3Buffer);
+      }
     }
   }
 
