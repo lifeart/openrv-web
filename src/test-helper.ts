@@ -37,6 +37,9 @@ declare global {
       getPresentationState: () => PresentationTestState;
       getNetworkSyncState: () => NetworkSyncState;
       getLuminanceVisState: () => LuminanceVisTestState;
+      getPlaylistState: () => PlaylistTestState;
+      getTransitionState: () => TransitionTestState;
+      getCacheManagerState: () => Promise<CacheManagerTestState>;
       getDiagnostics: () => TestHelperDiagnostics;
       clearDiagnostics: () => void;
       setStrictMode: (enabled: boolean) => void;
@@ -113,6 +116,13 @@ export interface TestMutations {
   setMatteOpacity(opacity: number): void;
   setMatteCenterPoint(x: number, y: number): void;
   getMatteSettings(): any;
+  // Cache Manager
+  getCacheManager(): any;
+  clearCache(): Promise<void>;
+  // Playlist / Transitions
+  getTransitionManager(): any;
+  setTransition(gapIndex: number, type: string, durationFrames: number): void;
+  clearTransitions(): void;
   // Stable component accessors (for complex multi-step operations)
   getPaintEngine(): any;
   getPlaylistManager(): any;
@@ -420,6 +430,38 @@ export interface CacheIndicatorState {
   pendingCount: number;
   totalFrames: number;
   isUsingMediabunny: boolean;
+}
+
+export interface PlaylistTestState {
+  enabled: boolean;
+  clipCount: number;
+  loopMode: string;
+  totalDuration: number;
+  clips: Array<{
+    id: string;
+    sourceName: string;
+    sourceIndex: number;
+    inPoint: number;
+    outPoint: number;
+    duration: number;
+    globalStartFrame: number;
+  }>;
+  panelVisible: boolean;
+}
+
+export interface TransitionTestState {
+  transitions: Array<{
+    type: string;
+    durationFrames: number;
+  } | null>;
+  totalOverlap: number;
+}
+
+export interface CacheManagerTestState {
+  initialized: boolean;
+  entryCount: number;
+  totalSizeBytes: number;
+  maxSizeBytes: number;
 }
 
 export interface ThemeState {
@@ -1077,6 +1119,57 @@ export function exposeForTesting(app: App): void {
       };
     },
 
+    getCacheManagerState: async (): Promise<CacheManagerTestState> => {
+      const cm = appAny.cacheManager;
+      if (!cm) {
+        return { initialized: false, entryCount: 0, totalSizeBytes: 0, maxSizeBytes: 0 };
+      }
+      try {
+        const stats = await cm.getStats();
+        return {
+          initialized: true,
+          entryCount: stats.entryCount,
+          totalSizeBytes: stats.totalSizeBytes,
+          maxSizeBytes: stats.maxSizeBytes,
+        };
+      } catch {
+        return { initialized: false, entryCount: 0, totalSizeBytes: 0, maxSizeBytes: 0 };
+      }
+    },
+
+    getPlaylistState: (): PlaylistTestState => {
+      const pm = getControl('playlistManager');
+      const pp = getControl('playlistPanel');
+      const clips = pm?.getClips?.() ?? [];
+      return {
+        enabled: pm?.isEnabled?.() ?? false,
+        clipCount: clips.length,
+        loopMode: pm?.getLoopMode?.() ?? 'none',
+        totalDuration: pm?.getTotalDuration?.() ?? 0,
+        clips: clips.map((c: any) => ({
+          id: c.id,
+          sourceName: c.sourceName,
+          sourceIndex: c.sourceIndex,
+          inPoint: c.inPoint,
+          outPoint: c.outPoint,
+          duration: c.duration,
+          globalStartFrame: c.globalStartFrame,
+        })),
+        panelVisible: pp?.isOpen?.() ?? false,
+      };
+    },
+
+    getTransitionState: (): TransitionTestState => {
+      const tm = getControl('transitionManager');
+      const transitions = tm?.getTransitions?.() ?? [];
+      return {
+        transitions: transitions.map((t: any) =>
+          t ? { type: t.type, durationFrames: t.durationFrames } : null
+        ),
+        totalOverlap: tm?.getTotalOverlap?.() ?? 0,
+      };
+    },
+
     getDiagnostics: (): TestHelperDiagnostics => ({
       strictMode,
       missingPaths: Array.from(missingPaths),
@@ -1300,6 +1393,33 @@ export function exposeForTesting(app: App): void {
       },
       getMatteSettings() {
         return appAny.viewer?.getMatteOverlay?.()?.getSettings?.() ?? {};
+      },
+
+      // ── Cache Manager ──
+      getCacheManager() {
+        return appAny.cacheManager ?? null;
+      },
+      async clearCache() {
+        await appAny.cacheManager?.clearAll?.();
+      },
+
+      // ── Playlist / Transitions ──
+      getTransitionManager() {
+        return getControl('transitionManager') ?? null;
+      },
+      setTransition(gapIndex: number, type: string, durationFrames: number) {
+        const tm = getControl('transitionManager');
+        if (tm) {
+          if (type === 'cut') {
+            tm.setTransition(gapIndex, null);
+          } else {
+            tm.setTransition(gapIndex, { type, durationFrames });
+          }
+        }
+      },
+      clearTransitions() {
+        const tm = getControl('transitionManager');
+        tm?.clear?.();
       },
 
       // ── Stable component accessors ──

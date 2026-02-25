@@ -11,9 +11,11 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { PlaylistManager, PlaylistClip } from '../../core/session/PlaylistManager';
+import { TransitionManager } from '../../core/session/TransitionManager';
+import { isTransitionType, DEFAULT_TRANSITION_DURATION, type TransitionType } from '../../core/types/transition';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { downloadEDL, type EDLClip } from '../../export/EDLWriter';
+import { downloadEDL, type EDLClip, type EDLTransition } from '../../export/EDLWriter';
 import { exportOTIO, type OTIOExportClip } from '../../utils/media/OTIOWriter';
 
 export interface PlaylistPanelEvents extends EventMap {
@@ -33,11 +35,23 @@ export interface ExclusivePanel {
   hide(): void;
 }
 
+/** Human-readable labels for transition types */
+const TRANSITION_TYPE_LABELS: Record<TransitionType, string> = {
+  'cut': 'Cut',
+  'crossfade': 'Crossfade',
+  'dissolve': 'Dissolve',
+  'wipe-left': 'Wipe Left',
+  'wipe-right': 'Wipe Right',
+  'wipe-up': 'Wipe Up',
+  'wipe-down': 'Wipe Down',
+};
+
 export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private container: HTMLElement;
   private listContainer: HTMLElement;
   private footerInfo: HTMLElement;
   private playlistManager: PlaylistManager;
+  private transitionManager: TransitionManager | null = null;
   private isVisible = false;
   private draggedClipId: string | null = null;
   private exclusivePanel: ExclusivePanel | null = null;
@@ -356,6 +370,12 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     clips.forEach((clip, index) => {
       const item = this.createClipItem(clip, index);
       this.listContainer.appendChild(item);
+
+      // Add transition control between adjacent clips (not after the last clip)
+      if (index < clips.length - 1 && this.transitionManager) {
+        const transitionRow = this.createTransitionControl(index, clips);
+        this.listContainer.appendChild(transitionRow);
+      }
     });
   }
 
@@ -593,15 +613,184 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     return item;
   }
 
+  private createTransitionControl(gapIndex: number, clips: PlaylistClip[]): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'playlist-transition-row';
+    row.dataset.testid = `transition-control-${gapIndex}`;
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      margin-bottom: 6px;
+      border-left: 3px solid transparent;
+      font-size: 10px;
+      color: var(--text-muted);
+    `;
+
+    const tm = this.transitionManager!;
+    const currentTransition = tm.getTransition(gapIndex);
+    const currentType: TransitionType = currentTransition?.type ?? 'cut';
+    const currentDuration = currentTransition?.durationFrames ?? DEFAULT_TRANSITION_DURATION;
+
+    // Check if same source (same sourceIndex) for adjacent clips
+    const outgoing = clips[gapIndex];
+    const incoming = clips[gapIndex + 1];
+    const isSameSource = outgoing && incoming && outgoing.sourceIndex === incoming.sourceIndex;
+
+    // Transition icon
+    const icon = document.createElement('span');
+    icon.innerHTML = getIconSvg('layers', 'sm');
+    icon.style.cssText = 'flex-shrink: 0; opacity: 0.6;';
+    row.appendChild(icon);
+
+    // Type dropdown
+    const typeSelect = document.createElement('select');
+    typeSelect.dataset.testid = `transition-type-${gapIndex}`;
+    typeSelect.style.cssText = `
+      padding: 2px 4px;
+      border: 1px solid var(--border-primary);
+      border-radius: 3px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 10px;
+      cursor: pointer;
+      outline: none;
+      flex: 1;
+      min-width: 0;
+    `;
+
+    for (const [type, label] of Object.entries(TRANSITION_TYPE_LABELS)) {
+      const option = document.createElement('option');
+      option.value = type;
+      option.textContent = label;
+      typeSelect.appendChild(option);
+    }
+    typeSelect.value = currentType;
+
+    if (isSameSource) {
+      typeSelect.value = 'cut';
+      typeSelect.disabled = true;
+      typeSelect.title = 'Same source: transitions not supported';
+    }
+
+    row.appendChild(typeSelect);
+
+    // Duration input
+    const durationInput = document.createElement('input');
+    durationInput.type = 'number';
+    durationInput.min = '1';
+    durationInput.max = '120';
+    durationInput.step = '1';
+    durationInput.value = String(currentDuration);
+    durationInput.dataset.testid = `transition-duration-${gapIndex}`;
+    durationInput.title = 'Transition duration (frames)';
+    durationInput.style.cssText = `
+      width: 42px;
+      padding: 2px 4px;
+      border: 1px solid var(--border-primary);
+      border-radius: 3px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 10px;
+      text-align: center;
+    `;
+
+    // Hide duration input for cuts
+    const isCut = currentType === 'cut';
+    durationInput.style.display = isCut ? 'none' : 'inline-block';
+
+    if (isSameSource) {
+      durationInput.disabled = true;
+      durationInput.style.display = 'none';
+    }
+
+    row.appendChild(durationInput);
+
+    // Duration label showing seconds
+    const durationLabel = document.createElement('span');
+    durationLabel.dataset.testid = `transition-duration-label-${gapIndex}`;
+    durationLabel.style.cssText = 'white-space: nowrap; opacity: 0.7;';
+    const seconds = (currentDuration / this.fps).toFixed(1);
+    durationLabel.textContent = `${currentDuration}f (${seconds}s)`;
+    durationLabel.style.display = isCut || isSameSource ? 'none' : 'inline';
+    row.appendChild(durationLabel);
+
+    // Event handlers
+    const applyTransition = (): void => {
+      const selectedType = typeSelect.value;
+      if (!isTransitionType(selectedType)) return;
+
+      if (selectedType === 'cut') {
+        tm.setTransition(gapIndex, null);
+        durationInput.style.display = 'none';
+        durationLabel.style.display = 'none';
+      } else {
+        const frames = Math.max(1, Math.min(120, Number.parseInt(durationInput.value, 10) || DEFAULT_TRANSITION_DURATION));
+        const validated = tm.validateTransition(gapIndex, { type: selectedType, durationFrames: frames }, clips);
+        if (validated) {
+          tm.setTransition(gapIndex, validated);
+          durationInput.value = String(validated.durationFrames);
+          const secs = (validated.durationFrames / this.fps).toFixed(1);
+          durationLabel.textContent = `${validated.durationFrames}f (${secs}s)`;
+        } else {
+          // Can't apply transition, revert to cut
+          typeSelect.value = 'cut';
+          tm.setTransition(gapIndex, null);
+        }
+        durationInput.style.display = typeSelect.value === 'cut' ? 'none' : 'inline-block';
+        durationLabel.style.display = typeSelect.value === 'cut' ? 'none' : 'inline';
+      }
+    };
+
+    typeSelect.addEventListener('change', applyTransition);
+
+    const commitDuration = (): void => {
+      applyTransition();
+    };
+
+    durationInput.addEventListener('click', (e) => e.stopPropagation());
+    durationInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        commitDuration();
+      }
+    });
+    durationInput.addEventListener('change', commitDuration);
+    durationInput.addEventListener('blur', commitDuration);
+
+    return row;
+  }
+
   private exportEDL(): void {
     const clips = this.playlistManager.getClips();
-    const edlClips: EDLClip[] = clips.map((clip) => ({
-      sourceName: clip.sourceName,
-      sourceIn: clip.inPoint,
-      sourceOut: clip.outPoint + 1, // EDL uses exclusive out point
-      recordIn: clip.globalStartFrame,
-      recordOut: clip.globalStartFrame + clip.duration,
-    }));
+    // When transitions exist, use overlap-adjusted frames for accurate record timecodes
+    const adjustedClips = this.transitionManager
+      ? this.transitionManager.calculateOverlapAdjustedFrames(clips)
+      : clips;
+    const edlClips: EDLClip[] = adjustedClips.map((clip, index) => {
+      const edlClip: EDLClip = {
+        sourceName: clip.sourceName,
+        sourceIn: clip.inPoint,
+        sourceOut: clip.outPoint + 1, // EDL uses exclusive out point
+        recordIn: clip.globalStartFrame,
+        recordOut: clip.globalStartFrame + clip.duration,
+      };
+
+      // Add dissolve transition if configured (crossfade and dissolve map to EDL dissolve)
+      if (this.transitionManager && index > 0) {
+        const transition = this.transitionManager.getTransition(index - 1);
+        if (transition && (transition.type === 'crossfade' || transition.type === 'dissolve')) {
+          const edlTransition: EDLTransition = {
+            type: 'dissolve',
+            durationFrames: transition.durationFrames,
+          };
+          edlClip.transition = edlTransition;
+        }
+      }
+
+      return edlClip;
+    });
     downloadEDL(edlClips, 'playlist.edl', {
       title: 'OpenRV Playlist',
       fps: this.fps,
@@ -639,6 +828,17 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   /** Set the frames-per-second used for EDL/OTIO export timecodes */
   setFps(fps: number): void {
     this.fps = fps > 0 ? fps : 24;
+  }
+
+  /** Set the transition manager for configuring transitions between clips */
+  setTransitionManager(tm: TransitionManager): void {
+    this.transitionManager = tm;
+    tm.on('transitionChanged', () => {
+      if (this.isVisible) {
+        this.renderList();
+        this.updateFooterInfo();
+      }
+    });
   }
 
   setExclusiveWith(panel: ExclusivePanel): void {

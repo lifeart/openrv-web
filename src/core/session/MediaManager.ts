@@ -14,6 +14,8 @@ import type { GTOParseResult } from './GTOGraphLoader';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import { Logger } from '../../utils/Logger';
 import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
+import type { MediaCacheManager } from '../../cache/MediaCacheManager';
+import { computeCacheKey } from '../../cache/MediaCacheKey';
 
 const log = new Logger('MediaManager');
 
@@ -86,11 +88,21 @@ export class MediaManager implements ManagerBase {
   // Host reference
   private _host: MediaManagerHost | null = null;
 
+  // Optional OPFS cache manager
+  private _cacheManager: MediaCacheManager | null = null;
+
   /**
    * Set the host that provides playback state access and event emission.
    */
   setHost(host: MediaManagerHost): void {
     this._host = host;
+  }
+
+  /**
+   * Set the OPFS cache manager for background caching of loaded media.
+   */
+  setCacheManager(cache: MediaCacheManager): void {
+    this._cacheManager = cache;
   }
 
   // ---------------------------------------------------------------
@@ -297,6 +309,9 @@ export class MediaManager implements ManagerBase {
 
       this._host?.emitSourceLoaded(source);
       this._host?.emitDurationChanged(1);
+
+      // Background cache the file for fast reload
+      this.cacheFileInBackground(file, source);
     } catch (err) {
       // Fallback to simple HTMLImageElement loading
       log.warn(`FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
@@ -479,6 +494,9 @@ export class MediaManager implements ManagerBase {
 
     this._host?.emitSourceLoaded(source);
     this._host?.emitDurationChanged(duration);
+
+    // Background cache the file for fast reload
+    this.cacheFileInBackground(file, source);
   }
 
   /**
@@ -889,6 +907,39 @@ export class MediaManager implements ManagerBase {
     if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
       source.videoSourceNode.clearCache();
     }
+  }
+
+  // ---------------------------------------------------------------
+  // Background OPFS caching
+  // ---------------------------------------------------------------
+
+  /**
+   * Cache a loaded file's raw bytes in OPFS for fast reload across sessions.
+   * Runs in the background and never throws.
+   */
+  private cacheFileInBackground(file: File, source: MediaSource): void {
+    if (!this._cacheManager) return;
+
+    const cache = this._cacheManager;
+
+    computeCacheKey(file)
+      .then(async (cacheKey) => {
+        source.opfsCacheKey = cacheKey;
+
+        const buffer = await file.arrayBuffer();
+        await cache.put(cacheKey, buffer, {
+          fileName: file.name,
+          fileSize: file.size,
+          lastModified: file.lastModified,
+          mimeType: file.type || undefined,
+          width: source.width,
+          height: source.height,
+        });
+        log.debug(`Cached file in OPFS: ${file.name} (key=${cacheKey.slice(0, 8)}...)`);
+      })
+      .catch((err) => {
+        log.warn(`Background cache failed for ${file.name}:`, err);
+      });
   }
 
   // ---------------------------------------------------------------

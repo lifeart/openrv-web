@@ -11,6 +11,8 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { parseOTIO } from '../../utils/media/OTIOParser';
 import type { ManagerBase } from '../ManagerBase';
+import type { TransitionConfig, TransitionFrameInfo } from '../types/transition';
+import type { TransitionManager } from './TransitionManager';
 
 /** Represents a single clip in the playlist */
 export interface PlaylistClip {
@@ -48,6 +50,8 @@ export interface PlaylistState {
   currentFrame: number;
   /** Loop mode: none, single (current clip), all */
   loopMode: 'none' | 'single' | 'all';
+  /** Transitions between clips (optional, gap-indexed) */
+  transitions?: (TransitionConfig | null)[];
 }
 
 /** Default playlist state */
@@ -101,9 +105,26 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private nextClipId = 1;
   private _unresolvedClips: UnresolvedOTIOClip[] = [];
   private nextUnresolvedId = 1;
+  private transitionManager: TransitionManager | null = null;
 
   constructor() {
     super();
+  }
+
+  /**
+   * Set the transition manager for overlap-aware frame calculation.
+   */
+  setTransitionManager(tm: TransitionManager): void {
+    this.transitionManager = tm;
+  }
+
+  /**
+   * Get transition info at a global frame (delegates to TransitionManager).
+   * Returns null if no transition manager is set or frame is not in a transition.
+   */
+  getTransitionAtFrame(globalFrame: number): TransitionFrameInfo | null {
+    if (!this.transitionManager) return null;
+    return this.transitionManager.getTransitionAtFrame(globalFrame, this.clips);
   }
 
   /**
@@ -390,21 +411,34 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
-   * Recalculate global start frames after clip changes
+   * Recalculate global start frames after clip changes.
+   * When a transition manager is set, uses overlap-adjusted frames.
    */
   private recalculateGlobalFrames(): void {
-    let globalStart = 1;
-    for (const clip of this.clips) {
-      clip.globalStartFrame = globalStart;
-      globalStart += clip.duration;
+    if (this.transitionManager) {
+      const adjusted = this.transitionManager.calculateOverlapAdjustedFrames(this.clips);
+      for (let i = 0; i < this.clips.length; i++) {
+        this.clips[i]!.globalStartFrame = adjusted[i]!.globalStartFrame;
+      }
+    } else {
+      let globalStart = 1;
+      for (const clip of this.clips) {
+        clip.globalStartFrame = globalStart;
+        globalStart += clip.duration;
+      }
     }
   }
 
   /**
-   * Get total playlist duration in frames
+   * Get total playlist duration in frames.
+   * When a transition manager is set, subtracts transition overlaps.
    */
   getTotalDuration(): number {
-    return this.clips.reduce((sum, clip) => sum + clip.duration, 0);
+    const rawDuration = this.clips.reduce((sum, clip) => sum + clip.duration, 0);
+    if (this.transitionManager) {
+      return rawDuration - this.transitionManager.getTotalOverlap();
+    }
+    return rawDuration;
   }
 
   /**
@@ -496,12 +530,21 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Get state for serialization
    */
   getState(): PlaylistState {
-    return {
+    const state: PlaylistState = {
       clips: [...this.clips],
       enabled: this.enabled,
       currentFrame: this.currentFrame,
       loopMode: this.loopMode,
     };
+
+    if (this.transitionManager) {
+      const transitions = this.transitionManager.getState();
+      if (transitions.length > 0) {
+        state.transitions = transitions;
+      }
+    }
+
+    return state;
   }
 
   /**
@@ -530,6 +573,10 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
     if (state.loopMode !== undefined) {
       this.setLoopMode(state.loopMode);
+    }
+    // Restore transitions when transition manager is set
+    if (this.transitionManager && state.transitions) {
+      this.transitionManager.setState(state.transitions);
     }
   }
 

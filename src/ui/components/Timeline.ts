@@ -5,6 +5,8 @@ import { ThumbnailManager } from './ThumbnailManager';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { NoteOverlay } from './NoteOverlay';
+import type { PlaylistManager } from '../../core/session/PlaylistManager';
+import type { TransitionManager } from '../../core/session/TransitionManager';
 
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
@@ -40,6 +42,8 @@ export class Timeline {
   private drawScheduled = false;
   private scheduledRafId = 0;
   private noteOverlay: NoteOverlay | null = null;
+  private playlistManager: PlaylistManager | null = null;
+  private transitionManager: TransitionManager | null = null;
   private cachedColors: {
     background: string;
     track: string;
@@ -204,6 +208,18 @@ export class Timeline {
   setNoteOverlay(overlay: NoteOverlay): void {
     this.noteOverlay = overlay;
     overlay.setRedrawCallback(() => this.scheduleDraw());
+  }
+
+  /**
+   * Set playlist and transition managers for rendering transition overlays on the timeline.
+   */
+  setPlaylistManagers(playlistManager: PlaylistManager, transitionManager: TransitionManager): void {
+    this.playlistManager = playlistManager;
+    this.transitionManager = transitionManager;
+    transitionManager.on('transitionChanged', () => this.scheduleDraw());
+    transitionManager.on('transitionsReset', () => this.scheduleDraw());
+    playlistManager.on('clipsChanged', () => this.scheduleDraw());
+    playlistManager.on('enabledChanged', () => this.scheduleDraw());
   }
 
   /**
@@ -613,6 +629,56 @@ export class Timeline {
         ctx, trackWidth, duration, padding,
         this.session.currentSourceIndex, trackY, trackHeight,
       );
+    }
+
+    // Draw transition overlays (if playlist mode is active)
+    if (this.playlistManager?.isEnabled() && this.transitionManager) {
+      const clips = this.playlistManager.getClips();
+      const transitions = this.transitionManager.getTransitions();
+      const adjustedClips = this.transitionManager.calculateOverlapAdjustedFrames(clips);
+      const totalDuration = this.playlistManager.getTotalDuration();
+
+      if (totalDuration > 1) {
+        const transFrameToX = (frame: number) =>
+          padding + ((frame - 1) / Math.max(1, totalDuration - 1)) * trackWidth;
+
+        for (let i = 0; i < transitions.length; i++) {
+          const transition = transitions[i];
+          if (!transition || transition.type === 'cut') continue;
+
+          const incomingClip = adjustedClips[i + 1];
+          if (!incomingClip) continue;
+
+          const transStart = incomingClip.globalStartFrame;
+          const transEnd = transStart + transition.durationFrames - 1;
+          const x1 = transFrameToX(transStart);
+          const x2 = transFrameToX(transEnd);
+
+          // Semi-transparent orange overlay
+          ctx.fillStyle = 'rgba(255, 165, 0, 0.3)';
+          ctx.fillRect(x1, trackY, x2 - x1, trackHeight);
+
+          // Small label
+          const labelWidth = x2 - x1;
+          if (labelWidth > 30) {
+            const abbrev = transition.type === 'crossfade' ? 'CF' :
+              transition.type === 'dissolve' ? 'DS' :
+              transition.type === 'wipe-left' ? 'WL' :
+              transition.type === 'wipe-right' ? 'WR' :
+              transition.type === 'wipe-up' ? 'WU' :
+              'WD';
+            ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillStyle = 'rgba(255, 165, 0, 0.9)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              `${abbrev} ${transition.durationFrames}f`,
+              (x1 + x2) / 2,
+              trackY + trackHeight / 2,
+            );
+          }
+        }
+      }
     }
 
     // Draw playhead

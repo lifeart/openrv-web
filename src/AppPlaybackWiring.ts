@@ -744,6 +744,17 @@ function handlePlaylistBoundaryWrap(
 
   controls.playlistManager.setCurrentFrame(edgeGlobal);
 
+  // Check if we're within a transition region. If so, don't trigger
+  // the source switch — let the transition renderer handle blending.
+  // The source switch should only happen at the END of the transition (progress = 1.0).
+  const transitionInfo = controls.playlistManager.getTransitionAtFrame(edgeGlobal);
+  if (transitionInfo && transitionInfo.isInTransition && transitionInfo.progress < 1.0) {
+    // Still within transition: advance the global frame without switching sources
+    const nextGlobal = direction > 0 ? edgeGlobal + 1 : edgeGlobal - 1;
+    controls.playlistManager.setCurrentFrame(nextGlobal);
+    return;
+  }
+
   const loopMode = controls.playlistManager.getLoopMode();
   const atPlaylistEdge = direction > 0
     ? active.index === controls.playlistManager.getClipCount() - 1

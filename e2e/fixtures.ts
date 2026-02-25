@@ -327,6 +327,38 @@ export interface LuminanceVisState {
   contourLineColor: [number, number, number];
 }
 
+export interface PlaylistState {
+  enabled: boolean;
+  clipCount: number;
+  loopMode: string;
+  totalDuration: number;
+  clips: Array<{
+    id: string;
+    sourceName: string;
+    sourceIndex: number;
+    inPoint: number;
+    outPoint: number;
+    duration: number;
+    globalStartFrame: number;
+  }>;
+  panelVisible: boolean;
+}
+
+export interface TransitionState {
+  transitions: Array<{
+    type: string;
+    durationFrames: number;
+  } | null>;
+  totalOverlap: number;
+}
+
+export interface CacheManagerState {
+  initialized: boolean;
+  entryCount: number;
+  totalSizeBytes: number;
+  maxSizeBytes: number;
+}
+
 /**
  * Get session state from the app
  */
@@ -794,6 +826,48 @@ export async function getTransformState(page: Page): Promise<TransformState> {
       rotation: 0,
       flipH: false,
       flipV: false,
+    };
+  });
+}
+
+/**
+ * Get playlist state from the app
+ */
+export async function getPlaylistState(page: Page): Promise<PlaylistState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getPlaylistState() ?? {
+      enabled: false,
+      clipCount: 0,
+      loopMode: 'none',
+      totalDuration: 0,
+      clips: [],
+      panelVisible: false,
+    };
+  });
+}
+
+/**
+ * Get transition state from the app
+ */
+export async function getTransitionState(page: Page): Promise<TransitionState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getTransitionState() ?? {
+      transitions: [],
+      totalOverlap: 0,
+    };
+  });
+}
+
+/**
+ * Get cache manager state from the app
+ */
+export async function getCacheManagerState(page: Page): Promise<CacheManagerState> {
+  return page.evaluate(async () => {
+    return await window.__OPENRV_TEST__?.getCacheManagerState() ?? {
+      initialized: false,
+      entryCount: 0,
+      totalSizeBytes: 0,
+      maxSizeBytes: 0,
     };
   });
 }

@@ -222,6 +222,8 @@ export interface MediaSource {
   videoSourceNode?: VideoSourceNode;
   // File source node for EXR files (supports layer selection)
   fileSourceNode?: FileSourceNode;
+  // OPFS cache key (set after successful cache put)
+  opfsCacheKey?: string;
 }
 
 // Re-export for backward compatibility

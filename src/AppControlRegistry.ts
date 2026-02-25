@@ -67,6 +67,7 @@ import { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
 import { SnapshotManager } from './core/session/SnapshotManager';
 import { SnapshotPanel } from './ui/components/SnapshotPanel';
 import { PlaylistManager } from './core/session/PlaylistManager';
+import { TransitionManager } from './core/session/TransitionManager';
 import { PlaylistPanel } from './ui/components/PlaylistPanel';
 import { PresentationMode } from './utils/ui/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
@@ -236,6 +237,7 @@ export class AppControlRegistry {
   readonly snapshotManager: SnapshotManager;
   readonly snapshotPanel: SnapshotPanel;
   readonly playlistManager: PlaylistManager;
+  readonly transitionManager: TransitionManager;
   readonly playlistPanel: PlaylistPanel;
 
   // Presentation / Network
@@ -376,7 +378,10 @@ export class AppControlRegistry {
     this.snapshotManager = new SnapshotManager();
     this.snapshotPanel = new SnapshotPanel(this.snapshotManager);
     this.playlistManager = new PlaylistManager();
+    this.transitionManager = new TransitionManager();
+    this.playlistManager.setTransitionManager(this.transitionManager);
     this.playlistPanel = new PlaylistPanel(this.playlistManager);
+    this.playlistPanel.setTransitionManager(this.transitionManager);
 
     // Mutual exclusion: only one panel can be open at a time
     this.snapshotPanel.setExclusiveWith(this.playlistPanel);
@@ -1498,6 +1503,7 @@ export class AppControlRegistry {
     this.snapshotPanel.dispose();
     this.snapshotManager.dispose();
     this.playlistPanel.dispose();
+    this.transitionManager.dispose();
     this.playlistManager.dispose();
     this.presentationMode.dispose();
     this.networkSyncManager.dispose();

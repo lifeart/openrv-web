@@ -155,6 +155,7 @@ function createMockControls() {
     getClipAtFrame: vi.fn(() => null),
     getNextFrame: vi.fn(() => ({ frame: 1, clipChanged: false })),
     getPreviousFrame: vi.fn(() => ({ frame: 1, clipChanged: false })),
+    getTransitionAtFrame: vi.fn(() => null),
   });
 
   return {

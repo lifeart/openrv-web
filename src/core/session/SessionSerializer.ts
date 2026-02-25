@@ -28,6 +28,7 @@ import { DEFAULT_WATERMARK_STATE } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
+import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 
 /** Components needed for serialization */
 export interface SessionComponents {
@@ -35,6 +36,7 @@ export interface SessionComponents {
   paintEngine: PaintEngine;
   viewer: Viewer;
   playlistManager?: PlaylistManager;
+  cacheManager?: MediaCacheManager;
 }
 
 /**
@@ -73,7 +75,7 @@ export class SessionSerializer {
       createdAt: now,
       modifiedAt: now,
 
-      media: this.serializeMedia(session.allSources),
+      media: this.serializeMedia(session.allSources, components.cacheManager),
 
       playback: session.getPlaybackState(),
 
@@ -114,7 +116,7 @@ export class SessionSerializer {
    * and become invalid when the browser session ends. These are detected and marked
    * with `requiresReload: true` so the user can re-select the file on project load.
    */
-  private static serializeMedia(sources: MediaSource[]): MediaReference[] {
+  private static serializeMedia(sources: MediaSource[], cacheManager?: MediaCacheManager): MediaReference[] {
     return sources.map(source => {
       // Check if the URL is a blob URL (not portable across sessions)
       const isBlob = source.url.startsWith('blob:');
@@ -131,6 +133,11 @@ export class SessionSerializer {
         // Only set requiresReload when true to keep saved files cleaner
         ...(isBlob && { requiresReload: true }),
       };
+
+      // Include OPFS cache key when the cache entry is stable (write complete)
+      if (isBlob && source.opfsCacheKey && cacheManager?.isStable(source.opfsCacheKey)) {
+        ref.opfsCacheKey = source.opfsCacheKey;
+      }
 
       if (source.type === 'sequence' && source.sequenceInfo) {
         ref.sequencePattern = source.sequenceInfo.pattern;
@@ -163,6 +170,21 @@ export class SessionSerializer {
       try {
         // Handle files that require user to reload (originally blob URLs)
         if (ref.requiresReload) {
+          // Attempt to load from OPFS cache first
+          if (ref.opfsCacheKey && components.cacheManager) {
+            try {
+              const cached = await components.cacheManager.get(ref.opfsCacheKey);
+              if (cached) {
+                const cachedFile = new File([cached], ref.name, { type: ref.type === 'video' ? 'video/mp4' : 'image/png' });
+                await session.loadFile(cachedFile);
+                loadedMedia++;
+                continue;
+              }
+            } catch {
+              // Cache lookup failed – fall through to file picker
+            }
+          }
+
           const accept = ref.type === 'video' ? 'video/*' : 'image/*';
           const file = await showFileReloadPrompt(ref.name, {
             title: 'Reload File',
@@ -313,6 +335,8 @@ export class SessionSerializer {
         ...DEFAULT_PLAYLIST_STATE,
         ...migrated.playlist,
         clips: Array.isArray(migrated.playlist.clips) ? migrated.playlist.clips : [],
+        // Preserve transitions array if present
+        transitions: Array.isArray(migrated.playlist.transitions) ? migrated.playlist.transitions : undefined,
       };
     }
     migrated.paint = migrated.paint ?? {

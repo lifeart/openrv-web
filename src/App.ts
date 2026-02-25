@@ -61,6 +61,7 @@ import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManag
 import { AudioMixer } from './audio/AudioMixer';
 import { DCCBridge } from './integrations/DCCBridge';
 import { detect360Content } from './render/SphericalProjection';
+import { MediaCacheManager } from './cache/MediaCacheManager';
 
 // Layout
 import { LayoutStore } from './ui/layout/LayoutStore';
@@ -97,6 +98,7 @@ export class App {
   private clientMode: ClientMode;
   private externalPresentation: ExternalPresentation;
   private activeContextManager: ActiveContextManager;
+  private cacheManager: MediaCacheManager;
   private audioMixer: AudioMixer;
   private audioInitialized = false;
   private dccBridge: DCCBridge | null = null;
@@ -140,6 +142,9 @@ export class App {
     this.viewer = new Viewer({ session: this.session, paintEngine: this.paintEngine, capabilities: this.displayCapabilities });
     this.timeline = new Timeline(this.session, this.paintEngine);
 
+    // Create OPFS media cache manager
+    this.cacheManager = new MediaCacheManager();
+
     // Create all UI controls via the registry
     this.controls = new AppControlRegistry({
       session: this.session,
@@ -151,6 +156,7 @@ export class App {
     // Wire NoteOverlay into timeline for note visualization
     this.noteOverlay = new NoteOverlay(this.session);
     this.timeline.setNoteOverlay(this.noteOverlay);
+    this.timeline.setPlaylistManagers(this.controls.playlistManager, this.controls.transitionManager);
 
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
@@ -272,6 +278,7 @@ export class App {
       noiseReductionControl: this.controls.noiseReductionControl,
       watermarkControl: this.controls.watermarkControl,
       playlistManager: this.controls.playlistManager,
+      cacheManager: this.cacheManager,
     });
 
     // Initialize session bridge (session event handlers, scope updates, info panel)
@@ -504,6 +511,9 @@ export class App {
 
     // Initialize display profile from persisted state
     this.viewer.setDisplayColorState(this.controls.displayProfileControl.getState());
+
+    // Initialize OPFS media cache (fire-and-forget; no-op if unavailable)
+    this.cacheManager.initialize().catch(() => { /* OPFS unavailable */ });
 
     // Initialize persistence (auto-save and snapshots)
     await this.persistenceManager.init();
@@ -1796,6 +1806,7 @@ export class App {
     this.externalPresentation.dispose();
     this.audioMixer.dispose();
     this.dccBridge?.dispose();
+    this.cacheManager.dispose();
     this.persistenceManager.dispose();
     this.sessionBridge.dispose();
     this.keyboardHandler.dispose();

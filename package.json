@@ -36,6 +36,7 @@
   "devDependencies": {
     "@playwright/test": "^1.40.0",
     "@vitest/coverage-v8": "^1.2.0",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^24.0.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.7",

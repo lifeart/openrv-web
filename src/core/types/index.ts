@@ -37,4 +37,7 @@ export type { LoopMode, MediaType } from './session';
 export type { StereoMode, StereoInputFormat, StereoState } from './stereo';
 export { DEFAULT_STEREO_STATE } from './stereo';
 
+export type { TransitionType, TransitionConfig, TransitionFrameInfo } from './transition';
+export { TRANSITION_TYPE_CODES, DEFAULT_TRANSITION_DURATION, isTransitionType } from './transition';
+
 export { withDefaults } from './defaults';

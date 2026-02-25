@@ -10,6 +10,14 @@
 // Data Model
 // ---------------------------------------------------------------------------
 
+/** Transition type for EDL export */
+export interface EDLTransition {
+  /** Transition type: 'dissolve' covers crossfade/dissolve */
+  type: 'dissolve';
+  /** Duration in frames */
+  durationFrames: number;
+}
+
 /** A single edit event in the EDL */
 export interface EDLClip {
   /** Source/reel name */
@@ -24,6 +32,8 @@ export interface EDLClip {
   recordOut: number;
   /** Optional comment */
   comment?: string;
+  /** Optional transition into this clip (dissolve) */
+  transition?: EDLTransition;
 }
 
 /** EDL export configuration */
@@ -278,8 +288,14 @@ export function generateEDL(
     const recIn = framesToTimecode(clip.recordIn, fps, useDropFrame);
     const recOut = framesToTimecode(clip.recordOut, fps, useDropFrame);
 
+    // Determine transition type: 'C' for cut, 'D XXX' for dissolve
+    // Field is 9 characters wide: "C________" or "D_XXX____"
+    const transitionField = clip.transition
+      ? `D ${String(clip.transition.durationFrames).padStart(3, '0')}    `
+      : 'C        ';
+
     lines.push(
-      `${String(editNum).padStart(3, '0')}  ${reel} V     C        ${srcIn} ${srcOut} ${recIn} ${recOut}`,
+      `${String(editNum).padStart(3, '0')}  ${reel} V     ${transitionField}${srcIn} ${srcOut} ${recIn} ${recOut}`,
     );
 
     if (includeClipComments) {

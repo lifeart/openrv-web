@@ -49,6 +49,8 @@ export interface MediaReference {
   frameRange?: { start: number; end: number };
   /** True if original was a blob URL (requires user to reload file) */
   requiresReload?: boolean;
+  /** OPFS cache key for fast reload */
+  opfsCacheKey?: string;
 }
 
 /** Playback state */
