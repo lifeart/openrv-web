@@ -5,10 +5,11 @@
  * controls to the viewer, session bridge, and persistence manager.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { wireEffectsControls } from './AppEffectsWiring';
 import { EventEmitter } from './utils/EventEmitter';
 import type { AppWiringContext } from './AppWiringContext';
+import { effectRegistry } from './effects';
 
 // Helper to create a mock AppWiringContext with EventEmitter-based controls
 function createMockContext() {
@@ -109,8 +110,13 @@ describe('wireEffectsControls', () => {
   let mock: ReturnType<typeof createMockContext>;
 
   beforeEach(() => {
+    effectRegistry.unregister('noiseReduction');
     mock = createMockContext();
     wireEffectsControls(mock.ctx);
+  });
+
+  afterEach(() => {
+    effectRegistry.unregister('noiseReduction');
   });
 
   it('EW-001: filtersChanged calls viewer.setFilterSettings + scheduleUpdateScopes + syncGTOStore', () => {
@@ -269,5 +275,17 @@ describe('wireEffectsControls', () => {
   it('EW-016: initializes viewer noise/watermark state from control defaults', () => {
     expect(mock.viewer.setNoiseReductionParams).toHaveBeenCalledWith(mock.noiseReductionControl.getParams());
     expect(mock.viewer.setWatermarkState).toHaveBeenCalledWith(mock.watermarkControl.getState());
+  });
+
+  it('EW-017: registers noiseReductionEffect in singleton effectRegistry', () => {
+    const effect = effectRegistry.get('noiseReduction');
+    expect(effect).toBeDefined();
+    expect(effect!.name).toBe('noiseReduction');
+    expect(effect!.category).toBe('spatial');
+  });
+
+  it('EW-018: calling wireEffectsControls twice does not throw (guard prevents duplicate registration)', () => {
+    expect(() => wireEffectsControls(mock.ctx)).not.toThrow();
+    expect(effectRegistry.get('noiseReduction')).toBeDefined();
   });
 });

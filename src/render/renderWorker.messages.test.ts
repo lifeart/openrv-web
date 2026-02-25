@@ -347,6 +347,11 @@ describe('renderWorker.messages', () => {
         displayColorState: { transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2 },
         backgroundPattern: {} as any,
         hdrOutputMode: { mode: 'sdr', capabilities: {} as any },
+        gamutMapping: { mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' },
+        premultMode: 0,
+        ditherMode: 0,
+        quantizeBits: 0,
+        hdrHeadroom: 1.0,
       };
       expect(Object.keys(state).length).toBeGreaterThan(10);
     });

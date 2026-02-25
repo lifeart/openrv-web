@@ -10,7 +10,7 @@
  * to initial bundle cost.
  */
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
+export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -238,6 +238,17 @@ function isGainmapAVIF(buffer: ArrayBuffer): boolean {
     offset += boxSize;
   }
   return false;
+}
+
+// --- Plain AVIF detection ---
+
+function isPlainAVIF(buffer: ArrayBuffer): boolean {
+  // Check for AVIF file (ftyp box with AVIF brands)
+  if (buffer.byteLength < 12) return false;
+  const view = new DataView(buffer);
+  if (readBoxTypeAt(view, 4) !== 'ftyp') return false;
+  const brand = readBoxTypeAt(view, 8);
+  return brand === 'avif' || brand === 'avis' || brand === 'mif1';
 }
 
 // --- RAW Preview detection ---
@@ -709,6 +720,30 @@ const mxfDecoder: FormatDecoder = {
 };
 
 /**
+ * Plain AVIF format decoder adapter.
+ * Decodes standard AVIF files (non-gainmap) via browser's built-in decoder.
+ * Placed after avifGainmapDecoder in the chain so gainmap AVIFs are matched first.
+ */
+const avifDecoder: FormatDecoder = {
+  formatName: 'avif',
+  canDecode: isPlainAVIF,
+  async decode(buffer: ArrayBuffer) {
+    const { decodeAvif } = await import('./avif');
+    const result = await decodeAvif(buffer);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: 'srgb',
+      metadata: {
+        formatName: 'avif',
+      },
+    };
+  },
+};
+
+/**
  * Registry for image format decoders.
  * Detects format by magic number and dispatches to the appropriate decoder.
  */
@@ -718,7 +753,8 @@ export class DecoderRegistry {
   constructor() {
     // Register built-in decoders in detection order.
     // EXR first (most common in VFX), then DPX, Cineon, TIFF (float only),
-    // RAW preview (TIFF-based but non-float), JPEG Gainmap, HEIC/AVIF Gainmap, HDR, etc.
+    // RAW preview (TIFF-based but non-float), JPEG Gainmap, HEIC/AVIF Gainmap,
+    // plain AVIF (after gainmap), RAW, HDR, etc.
     this.decoders.push(exrDecoder);
     this.decoders.push(dpxDecoder);
     this.decoders.push(cineonDecoder);
@@ -727,6 +763,7 @@ export class DecoderRegistry {
     this.decoders.push(jpegGainmapDecoder);
     this.decoders.push(heicGainmapDecoder);
     this.decoders.push(avifGainmapDecoder);
+    this.decoders.push(avifDecoder);
     this.decoders.push(hdrDecoder);
     this.decoders.push(jxlDecoder);
     this.decoders.push(jp2Decoder);

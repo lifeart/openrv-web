@@ -262,15 +262,20 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   }
 
   /**
-   * Escape HTML to prevent XSS
+   * Create a text node
    */
-  private escapeHtml(unsafe: string): string {
-    return unsafe
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  private createTextNode(text: string): Text {
+    return document.createTextNode(text);
+  }
+
+  /**
+   * Create a styled span element with text content
+   */
+  private createStyledSpan(text: string, style: string): HTMLSpanElement {
+    const span = document.createElement('span');
+    span.style.cssText = style;
+    span.textContent = text;
+    return span;
   }
 
   /**
@@ -279,50 +284,64 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   private render(): void {
     if (!this.enabled) return;
 
-    const lines: string[] = [];
+    // Clear existing content
+    this.contentElement.textContent = '';
+
+    const lines: (HTMLElement | Text)[] = [];
 
     if (this.fields.filename && this.currentData.filename) {
-      const name = this.escapeHtml(this.truncateFilename(this.currentData.filename, 25));
-      lines.push(`<span style="color: var(--accent-primary);">${name}</span>`);
+      const name = this.truncateFilename(this.currentData.filename, 25);
+      lines.push(this.createStyledSpan(name, 'color: var(--accent-primary);'));
     }
 
     if (this.fields.resolution && this.currentData.width && this.currentData.height) {
-      lines.push(`${this.currentData.width} x ${this.currentData.height}`);
+      lines.push(this.createTextNode(`${this.currentData.width} x ${this.currentData.height}`));
     }
 
     if (this.fields.frameInfo && this.currentData.currentFrame !== undefined) {
       const total = this.currentData.totalFrames ?? '?';
-      lines.push(`Frame: ${this.currentData.currentFrame + 1} / ${total}`);
+      lines.push(this.createTextNode(`Frame: ${this.currentData.currentFrame + 1} / ${total}`));
     }
 
     if (this.fields.timecode && this.currentData.timecode) {
-      lines.push(`TC: ${this.escapeHtml(this.currentData.timecode)}`);
+      lines.push(this.createTextNode(`TC: ${this.currentData.timecode}`));
     }
 
     if (this.fields.duration && this.currentData.duration) {
-      lines.push(`Duration: ${this.escapeHtml(this.currentData.duration)}`);
+      lines.push(this.createTextNode(`Duration: ${this.currentData.duration}`));
     }
 
     if (this.fields.fps && this.currentData.fps) {
-      lines.push(`${this.currentData.fps} fps`);
+      lines.push(this.createTextNode(`${this.currentData.fps} fps`));
     }
 
     if (this.fields.colorAtCursor) {
       if (this.currentData.colorAtCursor) {
         const { r, g, b } = this.currentData.colorAtCursor;
         const hex = this.rgbToHex(r, g, b);
-        const swatch = `<span style="display:inline-block;width:12px;height:12px;background:${hex};border:1px solid var(--text-muted);vertical-align:middle;margin-right:4px;"></span>`;
-        lines.push(`${swatch}RGB: ${r}, ${g}, ${b}`);
+
+        const container = document.createElement('span');
+        const swatch = document.createElement('span');
+        swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${hex};border:1px solid var(--text-muted);vertical-align:middle;margin-right:4px;`;
+        container.appendChild(swatch);
+        container.appendChild(this.createTextNode(`RGB: ${r}, ${g}, ${b}`));
+        lines.push(container);
       } else {
-        lines.push(`<span style="color: var(--text-muted);">RGB: --</span>`);
+        lines.push(this.createStyledSpan('RGB: --', 'color: var(--text-muted);'));
       }
     }
 
     if (lines.length === 0) {
-      lines.push('<span style="color: var(--text-muted);">No data</span>');
+      lines.push(this.createStyledSpan('No data', 'color: var(--text-muted);'));
     }
 
-    this.contentElement.innerHTML = lines.join('<br>');
+    // Append all lines with <br> separators
+    lines.forEach((line, index) => {
+      if (index > 0) {
+        this.contentElement.appendChild(document.createElement('br'));
+      }
+      this.contentElement.appendChild(line);
+    });
   }
 
   /**

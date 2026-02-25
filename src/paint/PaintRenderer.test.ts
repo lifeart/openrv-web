@@ -502,6 +502,78 @@ describe('PaintRenderer', () => {
       expect(fillTextSpy).toHaveBeenCalled();
     });
 
+    it('RND-022c: resets letterSpacing to 0px when spacing is zero', () => {
+      const text: TextAnnotation = {
+        type: 'text',
+        id: 'zero-spacing',
+        frame: 1,
+        user: 'test',
+        text: 'No spacing',
+        position: { x: 0.5, y: 0.5 },
+        color: [1, 1, 1, 1],
+        size: 24,
+        font: 'sans-serif',
+        scale: 1,
+        origin: TextOrigin.Center,
+        rotation: 0,
+        spacing: 0,
+        startFrame: 1,
+        duration: 1,
+      };
+
+      renderer.resize(800, 600);
+
+      const internalCtx = (renderer as any).ctx as CanvasRenderingContext2D;
+
+      let capturedSpacing: string | undefined;
+      Object.defineProperty(internalCtx, 'letterSpacing', {
+        get() { return capturedSpacing; },
+        set(v: string) { capturedSpacing = v; },
+        configurable: true,
+      });
+
+      renderer.renderText(text, defaultOptions);
+
+      // When spacing is 0 (falsy), letterSpacing should be reset to '0px'
+      expect(capturedSpacing).toBe('0px');
+    });
+
+    it('RND-022d: applies negative letterSpacing for condensed text', () => {
+      const text: TextAnnotation = {
+        type: 'text',
+        id: 'negative-spacing',
+        frame: 1,
+        user: 'test',
+        text: 'Condensed',
+        position: { x: 0.5, y: 0.5 },
+        color: [1, 1, 1, 1],
+        size: 24,
+        font: 'sans-serif',
+        scale: 1,
+        origin: TextOrigin.Center,
+        rotation: 0,
+        spacing: -2,
+        startFrame: 1,
+        duration: 1,
+      };
+
+      renderer.resize(800, 600);
+
+      const internalCtx = (renderer as any).ctx as CanvasRenderingContext2D;
+
+      let capturedSpacing: string | undefined;
+      Object.defineProperty(internalCtx, 'letterSpacing', {
+        get() { return capturedSpacing; },
+        set(v: string) { capturedSpacing = v; },
+        configurable: true,
+      });
+
+      renderer.renderText(text, defaultOptions);
+
+      // Negative spacing should be applied (text.spacing is truthy since -2 !== 0)
+      expect(capturedSpacing).toBe('-2px');
+    });
+
     it('RND-023: handles different text origins', () => {
       const origins = [
         TextOrigin.TopLeft,

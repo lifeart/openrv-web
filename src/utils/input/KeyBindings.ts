@@ -671,6 +671,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Toggle keyboard shortcuts cheat sheet'
   },
+
+  // Audio mute toggle
+  'audio.toggleMute': {
+    code: 'KeyM',
+    shift: true,
+    description: 'Toggle audio mute'
+  },
 };
 /**
  * Get a human-readable description of a key combination

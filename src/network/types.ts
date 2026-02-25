@@ -402,9 +402,26 @@ export interface NetworkSyncConfig {
   userName: string;
 }
 
-export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {
-  serverUrl: 'wss://sync.openrv.local',
-  iceServers: [
+/**
+ * Create the default ICE server configuration.
+ *
+ * TURN credentials MUST be provided via environment variables
+ * (VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL) or through the
+ * `iceServers` field in a custom NetworkSyncConfig. The defaults
+ * below leave the credentials empty so that no secrets are
+ * hard-coded. For production deployments you should supply proper
+ * TURN credentials via the environment or a configuration object.
+ */
+export function createDefaultIceServers(config?: {
+  turnUsername?: string;
+  turnCredential?: string;
+}): RTCIceServer[] {
+  const turnUsername =
+    config?.turnUsername ?? (import.meta.env.VITE_TURN_USERNAME || '');
+  const turnCredential =
+    config?.turnCredential ?? (import.meta.env.VITE_TURN_CREDENTIAL || '');
+
+  return [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:openrelay.metered.ca:80' },
@@ -414,10 +431,15 @@ export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {
         'turn:openrelay.metered.ca:443',
         'turn:openrelay.metered.ca:443?transport=tcp',
       ],
-      username: import.meta.env.VITE_TURN_USERNAME || '',
-      credential: import.meta.env.VITE_TURN_CREDENTIAL || '',
+      username: turnUsername,
+      credential: turnCredential,
     },
-  ],
+  ];
+}
+
+export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {
+  serverUrl: 'wss://sync.openrv.local',
+  iceServers: createDefaultIceServers(),
   reconnectMaxAttempts: 10,
   reconnectBaseDelay: 1000,
   reconnectMaxDelay: 30000,

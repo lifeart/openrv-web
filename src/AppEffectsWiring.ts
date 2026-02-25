@@ -8,6 +8,7 @@
  */
 
 import type { AppWiringContext } from './AppWiringContext';
+import { effectRegistry, noiseReductionEffect } from './effects';
 
 /**
  * Wire all effect-related controls to the viewer and bridges.
@@ -99,6 +100,11 @@ export function wireEffectsControls(ctx: AppWiringContext): void {
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
   });
+
+  // Register noise reduction in the unified effect registry
+  if (!effectRegistry.get('noiseReduction')) {
+    effectRegistry.register(noiseReductionEffect);
+  }
 
   // Ensure viewer state matches control defaults on startup.
   viewer.setNoiseReductionParams(controls.noiseReductionControl.getParams());

@@ -189,6 +189,61 @@ describe('renderWorker', () => {
         state: { clarity: 50, sharpen: 25 },
       })).not.toThrow();
     });
+
+    it('RW-021: handles syncState with gamutMapping field', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: { gamutMapping: { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' } },
+      })).not.toThrow();
+    });
+
+    it('RW-022: handles syncState with premultMode field', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: { premultMode: 1 },
+      })).not.toThrow();
+    });
+
+    it('RW-023: handles syncState with ditherMode field', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: { ditherMode: 1 },
+      })).not.toThrow();
+    });
+
+    it('RW-024: handles syncState with quantizeBits field', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: { quantizeBits: 8 },
+      })).not.toThrow();
+    });
+
+    it('RW-025: handles syncState with hdrHeadroom field', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: { hdrHeadroom: 3.0 },
+      })).not.toThrow();
+    });
+
+    it('RW-026: handles syncState with all five new fields at once', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: {
+          gamutMapping: { mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' },
+          premultMode: 2,
+          ditherMode: 1,
+          quantizeBits: 10,
+          hdrHeadroom: 5.0,
+        },
+      })).not.toThrow();
+    });
+
+    it('RW-027: handles syncState with premultMode=0 (off) and ditherMode=0 (off)', () => {
+      expect(() => applySyncState({
+        type: 'syncState',
+        state: { premultMode: 0, ditherMode: 0, quantizeBits: 0 },
+      })).not.toThrow();
+    });
   });
 
   // ==========================================================================

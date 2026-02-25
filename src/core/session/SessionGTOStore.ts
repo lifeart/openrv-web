@@ -266,6 +266,8 @@ export class SessionGTOStore {
       'anaglyph-luminance': 'lumanaglyph',
       checkerboard: 'checker',
       scanline: 'scanline',
+      'left-only': 'left',
+      'right-only': 'right',
     };
 
     this.setProperty(component, 'type', 'string', 1, typeMap[stereo.mode] ?? 'off');

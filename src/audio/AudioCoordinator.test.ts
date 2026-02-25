@@ -525,6 +525,124 @@ describe('AudioCoordinator', () => {
       // (1-1)/24 = 0
       expect(mockSourceNode.start).toHaveBeenCalledWith(0, 0);
     });
+
+    it('AC-084: onPlaybackStarted stores fps/speed/direction for subsequent operations', async () => {
+      await loadWebAudio();
+
+      // Start at 2x with preservesPitch — Web Audio should NOT be active
+      coordinator.onPlaybackStarted(1, 30, 2, 1);
+      expect(coordinator.isWebAudioActive).toBe(false);
+
+      // Now toggle preservesPitch off — the stored speed=2 means Web Audio becomes active
+      coordinator.onPreservesPitchChanged(false);
+      expect(coordinator.isWebAudioActive).toBe(true);
+    });
+
+    it('AC-085: onFrameChanged updates fps for time calculations', async () => {
+      await loadWebAudio();
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+
+      // Simulate AudioBufferSourceNode.onended so manager.isPlaying is false
+      if (mockSourceNode.onended) {
+        mockSourceNode.onended();
+      }
+      vi.clearAllMocks();
+
+      // Frame changed with different fps — should use the new fps for time calculation
+      coordinator.onFrameChanged(31, 30, true);
+
+      // time = (31-1)/30 = 1.0s
+      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 1);
+    });
+
+    it('AC-086: onPreservesPitchChanged when not playing does not trigger activation', async () => {
+      await loadWebAudio();
+
+      // Not playing — change preservesPitch
+      coordinator.onPreservesPitchChanged(false);
+
+      expect(callbacks.onAudioPathChanged).not.toHaveBeenCalled();
+      expect(coordinator.isWebAudioActive).toBe(false);
+    });
+
+    it('AC-087: setCallbacks replaces previous callbacks', async () => {
+      await loadWebAudio();
+
+      const newCallbacks: AudioCoordinatorCallbacks = { onAudioPathChanged: vi.fn() };
+      coordinator.setCallbacks(newCallbacks);
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+
+      // Old callbacks should NOT be called
+      expect(callbacks.onAudioPathChanged).not.toHaveBeenCalled();
+      // New callbacks should be called
+      expect(newCallbacks.onAudioPathChanged).toHaveBeenCalled();
+    });
+
+    it('AC-088: activateAppropriateAudioPath is a no-op when Web Audio is already playing', async () => {
+      await loadWebAudio();
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.manager.isPlaying).toBe(true);
+
+      vi.clearAllMocks();
+
+      // Speed change to 1 (same speed) — Web Audio already playing, should not restart
+      coordinator.onSpeedChanged(1);
+
+      // manager.play() should NOT have been called again (source.start not called)
+      expect(mockSourceNode.start).not.toHaveBeenCalled();
+    });
+
+    it('AC-089: frame time calculation at various fps values', async () => {
+      await loadWebAudio();
+
+      // 30fps: frame 31 → time = (31-1)/30 = 1.0
+      coordinator.onPlaybackStarted(31, 30, 1, 1);
+      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 1);
+
+      coordinator.onPlaybackStopped();
+      vi.clearAllMocks();
+
+      // 60fps: frame 121 → time = (121-1)/60 = 2.0
+      coordinator.onPlaybackStarted(121, 60, 1, 1);
+      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 2);
+    });
+
+    it('AC-08A: loadFromVideo with no-src video falls back gracefully', async () => {
+      const video = document.createElement('video');
+      // No src set — triggers video fallback path
+
+      coordinator.loadFromVideo(video, 0.5, false);
+      await vi.waitFor(() => {
+        expect(coordinator.manager.state).toBe('ready');
+      });
+
+      // In video fallback mode, Web Audio should not be active
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(false);
+    });
+
+    it('AC-08B: applyToVideoElement with zero effectiveVolume and direction forward', () => {
+      const video = document.createElement('video');
+      coordinator.applyToVideoElement(video, 0, false, 1);
+
+      expect(video.volume).toBe(0);
+      expect(video.muted).toBe(false);
+    });
+
+    it('AC-08C: onSpeedChanged during playback at non-1x with preservesPitch off keeps Web Audio active', async () => {
+      await loadWebAudio();
+
+      coordinator.onPreservesPitchChanged(false);
+      coordinator.onPlaybackStarted(1, 24, 2, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      // Change speed to 3x — still no preservesPitch, so Web Audio stays active
+      coordinator.onSpeedChanged(3);
+      expect(coordinator.isWebAudioActive).toBe(true);
+    });
   });
 
   // ======================================================================

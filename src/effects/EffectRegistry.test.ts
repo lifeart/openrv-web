@@ -8,6 +8,7 @@ import {
   toneMappingEffect,
   deinterlaceEffect,
   filmEmulationEffect,
+  noiseReductionEffect,
 } from './index';
 import type { ImageEffect } from './ImageEffect';
 import { DEFAULT_CDL } from '../color/CDL';
@@ -693,6 +694,7 @@ describe('ImageEffect interface contract', () => {
     toneMappingEffect,
     deinterlaceEffect,
     filmEmulationEffect,
+    noiseReductionEffect,
   ];
 
   it('every adapter has a non-empty name', () => {

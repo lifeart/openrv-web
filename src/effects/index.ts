@@ -26,3 +26,4 @@ export { toneMappingEffect } from './adapters/ToneMappingEffect';
 export { deinterlaceEffect } from './adapters/DeinterlaceEffect';
 export { filmEmulationEffect } from './adapters/FilmEmulationEffect';
 export { stabilizationEffect } from './adapters/StabilizationEffect';
+export { noiseReductionEffect } from './adapters/NoiseReductionEffect';

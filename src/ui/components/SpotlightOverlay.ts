@@ -70,9 +70,10 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerUp);
-    // Also listen on window for moves/ups that happen outside the canvas during drag
+    // Also listen on window for moves/ups/cancels that happen outside the canvas during drag
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
   }
 
   private onPointerDown = (e: PointerEvent): void => {
@@ -538,7 +539,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
   }
 
   /**
-   * Dispose
+   * Dispose - removes all event listeners and cleans up resources
    */
   override dispose(): void {
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
@@ -547,6 +548,8 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
+    this.removeAllListeners();
     super.dispose();
   }
 }

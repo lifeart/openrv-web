@@ -196,6 +196,23 @@ describe('PaintEngine', () => {
 
       expect(text.color).toEqual([0, 0, 1, 1]);
     });
+
+    it('PAINT-006b: updateTextAnnotation applies spacing', () => {
+      const text = engine.addText(0, { x: 0.5, y: 0.5 }, 'Spaced text', 24);
+      expect(text.spacing).toBe(0);
+
+      const result = engine.updateTextAnnotation(0, text.id, { spacing: 5 });
+      expect(result).toBe(true);
+
+      const annotations = engine.getAnnotationsForFrame(0);
+      const updated = annotations[0] as import('./types').TextAnnotation;
+      expect(updated.spacing).toBe(5);
+    });
+
+    it('PAINT-006c: addText accepts spacing via options', () => {
+      const text = engine.addText(0, { x: 0.5, y: 0.5 }, 'Custom spacing', 24, { spacing: 3 });
+      expect(text.spacing).toBe(3);
+    });
   });
 
   describe('annotation management', () => {
@@ -543,6 +560,63 @@ describe('PaintEngine', () => {
       const redoResult = engine.redo();
       expect(redoResult).toBe(true);
       expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+    });
+
+    it('PAINT-012b2: clearFrame undo restores stroke data faithfully', () => {
+      // Draw strokes with distinct properties
+      engine.tool = 'pen';
+      engine.color = [1, 0, 0, 1];
+      engine.width = 5;
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      engine.color = [0, 1, 0, 1];
+      engine.width = 10;
+      engine.beginStroke(0, { x: 0.3, y: 0.3 });
+      engine.continueStroke({ x: 0.4, y: 0.4 });
+      engine.endStroke();
+
+      const beforeClear = engine.getAnnotationsForFrame(0);
+      expect(beforeClear).toHaveLength(2);
+      const ids = beforeClear.map(a => a.id);
+
+      // Clear and undo
+      engine.clearFrame(0);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+
+      engine.undo();
+      const restored = engine.getAnnotationsForFrame(0);
+      expect(restored).toHaveLength(2);
+
+      // Verify the restored annotations have matching IDs and data
+      expect(restored.map(a => a.id)).toEqual(ids);
+      const firstStroke = restored[0] as import('./types').PenStroke;
+      expect(firstStroke.color).toEqual([1, 0, 0, 1]);
+      expect(firstStroke.width).toBe(5);
+      const secondStroke = restored[1] as import('./types').PenStroke;
+      expect(secondStroke.color).toEqual([0, 1, 0, 1]);
+      expect(secondStroke.width).toBe(10);
+    });
+
+    it('PAINT-012b3: clearFrame redo re-clears the frame', () => {
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+      engine.beginStroke(0, { x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      // Clear, undo, redo
+      engine.clearFrame(0);
+      engine.undo();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
+
+      engine.redo();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(0);
+
+      // Undo again to verify round-trip
+      engine.undo();
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
     });
 
     it('PAINT-012c: redo clear preserves remote annotations added after undo', () => {

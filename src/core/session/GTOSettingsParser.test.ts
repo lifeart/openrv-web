@@ -15,6 +15,7 @@ import {
   parseLens,
   parseChannelSwizzle,
   channelNameToSwizzleIndex,
+  parseStereo,
 } from './GTOSettingsParser';
 import { SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { GTODTO } from 'gto-js';
@@ -1563,5 +1564,93 @@ describe('GTOSettingsParser.parseChannelSwizzle', () => {
 
     expect(result).not.toBeNull();
     expect(result).toEqual([SWIZZLE_ZERO, SWIZZLE_ONE, 0, 3]);
+  });
+});
+
+// =================================================================
+// parseStereo — left-only / right-only round-trip
+// =================================================================
+
+function createStereoMockDTO(stereoProps?: Record<string, unknown>): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (data: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'stereo') return mockComponent(data);
+      return mockComponent(undefined);
+    },
+    name: 'mockStereo',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVDisplayStereo' && stereoProps) {
+        const results = [mockNode(stereoProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseStereo', () => {
+  it('STEREO-GTO-001: parses "left" GTO value as left-only mode', () => {
+    const dto = createStereoMockDTO({ type: 'left', swap: 0, relativeOffset: 0 });
+    const result = parseStereo(dto);
+    expect(result).not.toBeNull();
+    expect(result!.mode).toBe('left-only');
+    expect(result!.eyeSwap).toBe(false);
+    expect(result!.offset).toBe(0);
+  });
+
+  it('STEREO-GTO-002: parses "right" GTO value as right-only mode', () => {
+    const dto = createStereoMockDTO({ type: 'right', swap: 0, relativeOffset: 0 });
+    const result = parseStereo(dto);
+    expect(result).not.toBeNull();
+    expect(result!.mode).toBe('right-only');
+  });
+
+  it('STEREO-GTO-003: left-only with eyeSwap and offset', () => {
+    const dto = createStereoMockDTO({ type: 'left', swap: 1, relativeOffset: 0.1 });
+    const result = parseStereo(dto);
+    expect(result).not.toBeNull();
+    expect(result!.mode).toBe('left-only');
+    expect(result!.eyeSwap).toBe(true);
+    expect(result!.offset).toBe(10);
+  });
+
+  it('STEREO-GTO-004: parses existing stereo modes correctly', () => {
+    const modes: Array<[string, string]> = [
+      ['off', 'off'],
+      ['pair', 'side-by-side'],
+      ['mirror', 'mirror'],
+      ['vsqueezed', 'over-under'],
+      ['anaglyph', 'anaglyph'],
+      ['lumanaglyph', 'anaglyph-luminance'],
+      ['checker', 'checkerboard'],
+      ['scanline', 'scanline'],
+    ];
+    for (const [gtoValue, expected] of modes) {
+      const dto = createStereoMockDTO({ type: gtoValue, swap: 0, relativeOffset: 0 });
+      const result = parseStereo(dto);
+      expect(result!.mode).toBe(expected);
+    }
+  });
+
+  it('STEREO-GTO-005: returns null when no RVDisplayStereo node', () => {
+    const dto = createStereoMockDTO();
+    const result = parseStereo(dto);
+    expect(result).toBeNull();
   });
 });

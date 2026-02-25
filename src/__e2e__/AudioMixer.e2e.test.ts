@@ -1,7 +1,8 @@
 /**
  * AudioMixer E2E Integration Tests
  *
- * Verifies the full wiring of the AudioMixer feature end-to-end:
+ * Verifies the wiring of the AudioMixer feature using a minimal stub
+ * that reproduces the playback-related wiring from App.ts:
  *   App constructor -> AudioMixer instantiation
  *   mount() -> lazy AudioContext init on first user interaction
  *   session.playbackChanged -> play(frameTime) / stop()
@@ -10,9 +11,14 @@
  * Also validates:
  * - Lazy init pattern correctness (browser AudioContext policy compliance)
  * - { once: true } + removeEventListener redundancy
- * - Missing audio track loading wiring (sourceLoaded gap)
- * - Missing volume control <-> AudioMixer wiring
- * - Missing waveform data -> Timeline wiring
+ * - AudioMixer standalone API safety
+ *
+ * Note on wiring coverage:
+ * - sourceLoaded -> addTrack/loadTrackBuffer wiring EXISTS in App.ts (lines 371-408)
+ *   but is not reproduced in this stub (requires fetch/decode mocking)
+ * - VolumeControl <-> AudioMixer wiring EXISTS in AppPlaybackWiring.ts (lines 72-88)
+ *   but is not reproduced in this stub
+ * - Waveform -> Timeline wiring does NOT exist yet
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -273,69 +279,74 @@ describe('AudioMixer E2E Integration', () => {
   });
 
   // =========================================================================
-  // 4. MISSING WIRING: audio track loading from sources
+  // 4. Audio track loading from sources
   // =========================================================================
-  describe('[GAP] audio track loading from sources', () => {
-    it('AUDIO-E2E-030: [DOCUMENTS GAP] no wiring exists for sourceLoaded -> audio track discovery', () => {
-      // The plan says: "on sourceLoaded, check for audio tracks, create mixer
-      // tracks, load buffers." This wiring does NOT exist in App.ts.
+  describe('audio track loading from sources', () => {
+    it('AUDIO-E2E-030: sourceLoaded wiring exists in App.ts but is not reproduced in this stub', () => {
+      // NOTE: App.ts (lines 371-408) DOES wire sourceLoaded -> addTrack/loadTrackBuffer.
+      // The wiring fetches audio from the video source URL, decodes it via
+      // AudioContext.decodeAudioData, and calls:
+      //   audioMixer.addTrack({ id: trackId, label: source.name })
+      //   audioMixer.loadTrackBuffer(trackId, audioBuffer)
       //
-      // Currently, no code calls:
-      //   audioMixer.addTrack(...)
-      //   audioMixer.loadTrackBuffer(...)
+      // This test's stub does NOT reproduce that wiring because it would require
+      // mocking fetch, AudioContext.decodeAudioData, and the source object shape.
+      // The stub only covers the playbackChanged -> play/stop path.
       //
-      // The AudioMixer is instantiated and wired for play/stop, but no audio
-      // data is ever loaded into it. This means audio playback is completely
-      // non-functional even though the infrastructure exists.
-      //
-      // Expected wiring in App.ts (not implemented):
-      //   session.on('sourceLoaded', () => {
-      //     const source = session.currentSource;
-      //     if (source?.audioTracks) {
-      //       for (const track of source.audioTracks) {
-      //         audioMixer.addTrack({ id: track.id, label: track.label });
-      //         audioMixer.loadTrackBuffer(track.id, track.buffer);
-      //       }
-      //     }
-      //   });
+      // Integration coverage for the sourceLoaded path belongs in a full App
+      // integration test, not this minimal wiring verification.
 
-      // Verify the gap: session.sourceLoaded does not interact with audioMixer
       const addTrackSpy = vi.spyOn(ctx.audioMixer, 'addTrack');
       const loadBufferSpy = vi.spyOn(ctx.audioMixer, 'loadTrackBuffer');
 
+      // The stub has no sourceLoaded wiring, so these are not called
       ctx.session.emit('sourceLoaded', undefined);
 
       expect(addTrackSpy).not.toHaveBeenCalled();
       expect(loadBufferSpy).not.toHaveBeenCalled();
     });
 
-    it('AUDIO-E2E-031: [DOCUMENTS GAP] AudioMixer has 0 tracks after source load', () => {
+    it('AUDIO-E2E-031: stub has 0 tracks (real App.ts loads tracks via sourceLoaded)', () => {
       ctx.initAudio();
       ctx.session.emit('sourceLoaded', undefined);
+      // The stub does not replicate the sourceLoaded -> fetch -> decode -> addTrack chain.
+      // In the real App.ts, tracks are loaded asynchronously when video sources are loaded.
       expect(ctx.audioMixer.getAllTracks()).toHaveLength(0);
     });
   });
 
   // =========================================================================
-  // 5. MISSING WIRING: VolumeControl <-> AudioMixer
+  // 5. VolumeControl <-> AudioMixer wiring
   // =========================================================================
-  describe('[GAP] VolumeControl <-> AudioMixer', () => {
-    it('AUDIO-E2E-040: [DOCUMENTS GAP] VolumeControl is wired to Session, not AudioMixer', () => {
-      // The AppPlaybackWiring module wires:
-      //   volumeControl.on('volumeChanged', (vol) => session.volume = vol)
-      //   volumeControl.on('mutedChanged', (muted) => session.muted = muted)
+  describe('VolumeControl <-> AudioMixer', () => {
+    it('AUDIO-E2E-040: AppPlaybackWiring wires volume control to both Session and AudioMixer', () => {
+      // AppPlaybackWiring.ts (lines 72-88) wires:
+      //   volumeControl.on('volumeChanged', (vol) => {
+      //     session.volume = vol;
+      //     deps.getAudioMixer?.()?.setMasterVolume(vol);
+      //   });
+      //   volumeControl.on('mutedChanged', (muted) => {
+      //     session.muted = muted;
+      //     deps.getAudioMixer?.()?.setMasterMuted(muted);
+      //   });
+      //   session.on('volumeChanged', (vol) => {
+      //     deps.getAudioMixer?.()?.setMasterVolume(vol);
+      //   });
+      //   session.on('mutedChanged', (muted) => {
+      //     deps.getAudioMixer?.()?.setMasterMuted(muted);
+      //   });
       //
-      // But there is NO wiring from:
-      //   volumeControl.on('volumeChanged', (vol) => audioMixer.setMasterVolume(vol))
-      //   volumeControl.on('mutedChanged', (muted) => audioMixer.setMasterMuted(muted))
-      //
-      // This means the AudioMixer master volume stays at 1.0 regardless of
-      // the user's volume slider position. When audio track loading is eventually
-      // implemented, the volume control will not affect AudioMixer output.
+      // This wiring was added to fix the gap originally documented here.
+      // The stub does not replicate wirePlaybackControls, so we verify
+      // the AudioMixer API is functional for when the real wiring calls it.
 
       expect(ctx.audioMixer.masterVolume).toBe(1);
+      ctx.audioMixer.setMasterVolume(0.5);
+      expect(ctx.audioMixer.masterVolume).toBe(0.5);
+
       expect(ctx.audioMixer.masterMuted).toBe(false);
-      // No mechanism exists in the current wiring to change these
+      ctx.audioMixer.setMasterMuted(true);
+      expect(ctx.audioMixer.masterMuted).toBe(true);
     });
   });
 

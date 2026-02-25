@@ -88,6 +88,10 @@ export function applyStereoMode(
       return renderCheckerboard(left, offsetRight);
     case 'scanline':
       return renderScanline(left, offsetRight);
+    case 'left-only':
+      return renderSingleEye(left, width, height);
+    case 'right-only':
+      return renderSingleEye(offsetRight, width, height);
     default:
       return sourceData;
   }
@@ -153,6 +157,12 @@ export function applyStereoModeWithEyeTransforms(
       break;
     case 'scanline':
       result = renderScanline(transformedLeft, transformedRight);
+      break;
+    case 'left-only':
+      result = renderSingleEye(transformedLeft, width, height);
+      break;
+    case 'right-only':
+      result = renderSingleEye(transformedRight, width, height);
       break;
     default:
       result = sourceData;
@@ -478,6 +488,23 @@ function renderScanline(left: ImageData, right: ImageData): ImageData {
 }
 
 /**
+ * Render a single eye (left-only or right-only) scaled to full output dimensions
+ */
+function renderSingleEye(
+  eye: ImageData,
+  outputWidth: number,
+  outputHeight: number
+): ImageData {
+  if (eye.width === outputWidth && eye.height === outputHeight) {
+    // Already the right size, return a copy
+    return new ImageData(new Uint8ClampedArray(eye.data), eye.width, eye.height);
+  }
+  const result = new ImageData(outputWidth, outputHeight);
+  scaleAndCopyToRegion(eye, result, 0, 0, outputWidth, outputHeight);
+  return result;
+}
+
+/**
  * Scale an image to new dimensions using bilinear interpolation
  */
 function scaleImage(source: ImageData, newWidth: number, newHeight: number): ImageData {
@@ -577,6 +604,8 @@ export function getStereoModeLabel(mode: StereoMode): string {
     'anaglyph-luminance': 'Anaglyph (Luma)',
     'checkerboard': 'Checkerboard',
     'scanline': 'Scanline',
+    'left-only': 'Left Only',
+    'right-only': 'Right Only',
   };
   return labels[mode];
 }
@@ -594,6 +623,8 @@ export function getStereoModeShortLabel(mode: StereoMode): string {
     'anaglyph-luminance': 'Ana-L',
     'checkerboard': 'Chk',
     'scanline': 'Scn',
+    'left-only': 'L',
+    'right-only': 'R',
   };
   return labels[mode];
 }

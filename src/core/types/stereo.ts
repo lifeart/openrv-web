@@ -6,7 +6,9 @@ export type StereoMode =
   | 'anaglyph'
   | 'anaglyph-luminance'
   | 'checkerboard'
-  | 'scanline';
+  | 'scanline'
+  | 'left-only'
+  | 'right-only';
 
 export type StereoInputFormat = 'side-by-side' | 'over-under' | 'separate';
 

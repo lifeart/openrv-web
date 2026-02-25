@@ -157,7 +157,7 @@ export class AppKeyboardHandler {
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
-      'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
+      'AUDIO (Video only)': ['audio.toggleMute'], // Also has special non-binding entries below
       'EXPORT': ['export.quickExport', 'export.copyFrame'],
       'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
       'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical'],
@@ -186,6 +186,36 @@ export class AppKeyboardHandler {
 
       // Special handling for audio category
       if (categoryName === 'AUDIO (Video only)') {
+        // Render regular key bindings first (e.g., audio.toggleMute)
+        for (const actionKey of actionKeys) {
+          const defaultBinding = DEFAULT_KEY_BINDINGS[actionKey as keyof typeof DEFAULT_KEY_BINDINGS];
+          if (!defaultBinding) continue;
+
+          const effectiveCombo = this.customKeyBindingsManager.getEffectiveCombo(actionKey);
+          const isCustom = this.customKeyBindingsManager.hasCustomBinding(actionKey);
+
+          const shortcutDiv = document.createElement('div');
+          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.setAttribute('data-shortcut-row', '');
+
+          const keyText = describeKeyCombo(effectiveCombo);
+          const keySpan = document.createElement('span');
+          keySpan.textContent = keyText;
+          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : 'color: var(--text-muted);'}`;
+
+          const descSpan = document.createElement('span');
+          descSpan.textContent = defaultBinding.description;
+          descSpan.style.cssText = 'color: var(--text-primary); flex: 1;';
+
+          shortcutDiv.setAttribute('data-shortcut-key', keyText.toLowerCase());
+          shortcutDiv.setAttribute('data-shortcut-desc', defaultBinding.description.toLowerCase());
+
+          shortcutDiv.appendChild(keySpan);
+          shortcutDiv.appendChild(descSpan);
+          categoryDiv.appendChild(shortcutDiv);
+        }
+
+        // Then render special non-binding audio shortcuts
         for (const shortcut of audioShortcuts) {
           const shortcutDiv = document.createElement('div');
           shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';

@@ -16,7 +16,7 @@
  */
 
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
@@ -263,6 +263,11 @@ export interface RendererSyncState {
   displayColorState: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number };
   backgroundPattern: BackgroundPatternState;
   hdrOutputMode: { mode: 'sdr' | 'hlg' | 'pq' | 'extended'; capabilities: DisplayCapabilities };
+  gamutMapping: GamutMappingState;
+  premultMode: number;
+  ditherMode: number;
+  quantizeBits: number;
+  hdrHeadroom: number;
 }
 
 /** Union of all main thread → worker messages. */

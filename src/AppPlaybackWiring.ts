@@ -30,6 +30,8 @@ import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert } from './ui/components/shared/Modal';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
+import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
+import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -113,6 +115,24 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   });
   exportControl.on('rvSessionExportRequested', ({ format }) => {
     persistenceManager.saveRvSession(format);
+  });
+  exportControl.on('annotationsJSONExportRequested', () => {
+    const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'annotations';
+    downloadAnnotationsJSON(ctx.paintEngine, sourceName);
+  });
+  exportControl.on('annotationsPDFExportRequested', () => {
+    void exportAnnotationsPDF(
+      ctx.paintEngine,
+      session,
+      async (frame: number) => {
+        const canvas = await viewer.renderFrameToCanvas(frame, true);
+        if (!canvas) {
+          throw new Error(`Failed to render frame ${frame}`);
+        }
+        return canvas;
+      },
+      { title: session.metadata?.displayName || 'Annotation Report' },
+    );
   });
   exportControl.on('reportExportRequested', ({ format }) => {
     generateReport(

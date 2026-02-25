@@ -302,6 +302,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     if (updates.rotation !== undefined) annotation.rotation = updates.rotation;
     if (updates.scale !== undefined) annotation.scale = updates.scale;
     if (updates.origin !== undefined) annotation.origin = updates.origin;
+    if (updates.spacing !== undefined) annotation.spacing = updates.spacing;
 
     this.emit('annotationsChanged', frame);
     return true;
@@ -566,12 +567,13 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const annotations = this.state.annotations.get(frame);
     if (!annotations || annotations.length === 0) return [];
 
+    // Capture the pre-clear snapshot BEFORE mutating state so undo can restore it
     const removed = [...annotations];
-    this.state.annotations.set(frame, []);
-
-    // Save to undo stack
     this.undoStack.push({ type: 'clear', frame, annotations: removed });
     this.redoStack = [];
+
+    // Now perform the actual clear
+    this.state.annotations.set(frame, []);
 
     this.emit('annotationsChanged', frame);
     return removed;

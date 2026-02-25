@@ -134,6 +134,8 @@ describe('StereoControl', () => {
         'anaglyph-luminance',
         'checkerboard',
         'scanline',
+        'left-only',
+        'right-only',
       ];
 
       for (let i = 0; i < expectedOrder.length; i++) {
@@ -331,6 +333,8 @@ describe('StereoControl', () => {
       'anaglyph-luminance',
       'checkerboard',
       'scanline',
+      'left-only',
+      'right-only',
     ];
 
     modes.forEach((mode) => {

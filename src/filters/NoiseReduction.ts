@@ -11,7 +11,7 @@ import { luminanceRec709 } from '../color/PixelMath';
 export interface NoiseReductionParams {
   strength: number;           // 0-100 (overall strength)
   luminanceStrength: number;  // 0-100 (defaults to strength)
-  chromaStrength: number;     // 0-100 (defaults to strength * 1.5) - Reserved for future YCbCr chroma-separated filtering
+  chromaStrength: number;     // 0-100 (defaults to strength * 1.5) - controls color noise reduction independently from luma
   radius: number;             // 1-5 (kernel size = radius * 2 + 1)
 }
 
@@ -33,18 +33,19 @@ function luminance(r: number, g: number, b: number): number {
  * Apply bilateral filter for edge-preserving noise reduction.
  * This is a CPU implementation for use when WebGL is not available.
  *
- * Note: Currently applies uniform filtering based on luminance.
- * The chromaStrength parameter is reserved for future implementation
- * of YCbCr color space separation where luma and chroma can be
- * filtered independently for better color preservation.
+ * Separates luma and chroma filtering:
+ * - luminanceStrength controls the range sigma for the luminance-based
+ *   bilateral weight (affects how aggressively flat-area luma noise is smoothed).
+ * - chromaStrength controls how much the filtered chroma (color) channels
+ *   are blended back, allowing stronger color noise reduction while
+ *   preserving luminance detail.
  */
 export function applyNoiseReduction(
   imageData: ImageData,
   params: NoiseReductionParams
 ): void {
   const { data, width, height } = imageData;
-  const { strength, luminanceStrength, radius } = params;
-  // Note: chromaStrength is intentionally unused - reserved for future YCbCr filtering
+  const { strength, luminanceStrength, chromaStrength, radius } = params;
 
   // Skip if no strength
   if (strength === 0) return;
@@ -71,6 +72,12 @@ export function applyNoiseReduction(
   }
 
   const rangeSigmaSq2 = 2 * rangeSigmaLuma * rangeSigmaLuma;
+
+  // Blend factors: overall strength gates everything, then luma/chroma
+  // control how much filtered result replaces original per-channel.
+  const overallBlend = strength / 100;
+  const lumaBlend = overallBlend; // luma controlled via rangeSigmaLuma
+  const chromaBlend = overallBlend * (chromaStrength / 100);
 
   // Process each pixel
   for (let y = 0; y < height; y++) {
@@ -122,16 +129,37 @@ export function applyNoiseReduction(
         }
       }
 
-      // Normalize and write result
-      // Blend between original and filtered based on overall strength
-      const blendFactor = strength / 100;
+      // Normalize filtered values
       const filteredR = sumR / sumWeight;
       const filteredG = sumG / sumWeight;
       const filteredB = sumB / sumWeight;
 
-      data[centerIdx] = Math.round(centerR * (1 - blendFactor) + filteredR * blendFactor);
-      data[centerIdx + 1] = Math.round(centerG * (1 - blendFactor) + filteredG * blendFactor);
-      data[centerIdx + 2] = Math.round(centerB * (1 - blendFactor) + filteredB * blendFactor);
+      // Separate luma and chroma blending:
+      // 1. Compute luminance of both original and filtered pixel
+      const origLuma = centerLuma;
+      const filtLuma = luminance(filteredR, filteredG, filteredB);
+
+      // 2. Blend luminance channel at lumaBlend rate
+      const outLuma = origLuma * (1 - lumaBlend) + filtLuma * lumaBlend;
+
+      // 3. Blend chroma (color difference) at chromaBlend rate
+      //    Chroma = RGB - luma contribution. We blend chroma independently.
+      const origChromaR = centerR - origLuma;
+      const origChromaG = centerG - origLuma;
+      const origChromaB = centerB - origLuma;
+
+      const filtChromaR = filteredR - filtLuma;
+      const filtChromaG = filteredG - filtLuma;
+      const filtChromaB = filteredB - filtLuma;
+
+      const outChromaR = origChromaR * (1 - chromaBlend) + filtChromaR * chromaBlend;
+      const outChromaG = origChromaG * (1 - chromaBlend) + filtChromaG * chromaBlend;
+      const outChromaB = origChromaB * (1 - chromaBlend) + filtChromaB * chromaBlend;
+
+      // 4. Recombine luma + chroma
+      data[centerIdx] = Math.round(clamp(outLuma + outChromaR, 0, 255));
+      data[centerIdx + 1] = Math.round(clamp(outLuma + outChromaG, 0, 255));
+      data[centerIdx + 2] = Math.round(clamp(outLuma + outChromaB, 0, 255));
       // Alpha unchanged
     }
   }

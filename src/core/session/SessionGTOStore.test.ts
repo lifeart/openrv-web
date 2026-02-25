@@ -588,4 +588,71 @@ describe('SessionGTOStore', () => {
       viewer.dispose();
     });
   });
+
+  describe('GTO Round-Trip — Stereo Modes', () => {
+    it('STEREO-RT-001: left-only mode serializes as "left" in GTO', () => {
+      const { session, paintEngine, viewer } = createViewer();
+
+      viewer.setStereoState({ mode: 'left-only', eyeSwap: false, offset: 0 });
+
+      const store = new SessionGTOStore(BASE_GTO);
+      store.updateFromState({ session, viewer, paintEngine });
+
+      const dto = new GTODTO(store.toGTOData());
+      const stereo = dto.byProtocol('RVDisplayStereo').first();
+      expect(stereo.exists()).toBe(true);
+      expect(stereo.prop('stereo', 'type')).toBe('left');
+
+      viewer.dispose();
+    });
+
+    it('STEREO-RT-002: right-only mode serializes as "right" in GTO', () => {
+      const { session, paintEngine, viewer } = createViewer();
+
+      viewer.setStereoState({ mode: 'right-only', eyeSwap: false, offset: 0 });
+
+      const store = new SessionGTOStore(BASE_GTO);
+      store.updateFromState({ session, viewer, paintEngine });
+
+      const dto = new GTODTO(store.toGTOData());
+      const stereo = dto.byProtocol('RVDisplayStereo').first();
+      expect(stereo.prop('stereo', 'type')).toBe('right');
+
+      viewer.dispose();
+    });
+
+    it('STEREO-RT-003: left-only with eyeSwap and offset survives round-trip', () => {
+      const { session, paintEngine, viewer } = createViewer();
+
+      viewer.setStereoState({ mode: 'left-only', eyeSwap: true, offset: 10 });
+
+      const store = new SessionGTOStore(BASE_GTO);
+      store.updateFromState({ session, viewer, paintEngine });
+
+      const dto = new GTODTO(store.toGTOData());
+      const stereo = dto.byProtocol('RVDisplayStereo').first();
+      expect(stereo.prop('stereo', 'type')).toBe('left');
+      expect(stereo.prop('stereo', 'swap')).toBe(1);
+      expect(stereo.prop('stereo', 'relativeOffset')).toBeCloseTo(0.1, 6);
+
+      viewer.dispose();
+    });
+
+    it('STEREO-RT-004: right-only with eyeSwap survives round-trip', () => {
+      const { session, paintEngine, viewer } = createViewer();
+
+      viewer.setStereoState({ mode: 'right-only', eyeSwap: true, offset: -5 });
+
+      const store = new SessionGTOStore(BASE_GTO);
+      store.updateFromState({ session, viewer, paintEngine });
+
+      const dto = new GTODTO(store.toGTOData());
+      const stereo = dto.byProtocol('RVDisplayStereo').first();
+      expect(stereo.prop('stereo', 'type')).toBe('right');
+      expect(stereo.prop('stereo', 'swap')).toBe(1);
+      expect(stereo.prop('stereo', 'relativeOffset')).toBeCloseTo(-0.05, 6);
+
+      viewer.dispose();
+    });
+  });
 });

@@ -25,6 +25,8 @@ const STEREO_MODES: StereoMode[] = [
   'anaglyph-luminance',
   'checkerboard',
   'scanline',
+  'left-only',
+  'right-only',
 ];
 
 export class StereoControl extends EventEmitter<StereoControlEvents> {

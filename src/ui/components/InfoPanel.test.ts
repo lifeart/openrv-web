@@ -380,6 +380,70 @@ describe('InfoPanel', () => {
       expect(content).not.toContain('<img');
       expect(content).toContain('&lt;img');
     });
+
+    it('INFO-U059: does not execute script tags in filename', () => {
+      panel.enable();
+      const malicious = '<script>window.__xss=1</script>.exr';
+      panel.update({ filename: malicious });
+
+      const el = panel.getElement();
+      // Script must not be parsed as an element
+      expect(el.querySelector('script')).toBeNull();
+      // The text should appear safely in textContent
+      expect(el.textContent).toContain('<script>');
+    });
+
+    it('INFO-U060b: does not create img elements from filename metadata', () => {
+      panel.enable();
+      panel.update({ filename: '<img src=x onerror=alert(1)>.exr' });
+
+      const el = panel.getElement();
+      expect(el.querySelector('img')).toBeNull();
+    });
+
+    it('INFO-U060c: handles nested HTML injection attempts in timecode', () => {
+      panel.enable();
+      panel.update({ timecode: '"><svg onload="alert(1)">' });
+
+      const el = panel.getElement();
+      expect(el.querySelector('svg')).toBeNull();
+      expect(el.textContent).toContain('"><svg onload="alert(1)">');
+    });
+
+    it('INFO-U060d: handles event handler injection in duration', () => {
+      panel.enable();
+      panel.setFields({ duration: true });
+      panel.update({ duration: '" onmouseover="alert(1)" data-x="' });
+
+      const el = panel.getElement();
+      // The injected string must NOT appear as an actual attribute on any element
+      const allElements = el.querySelectorAll('*');
+      allElements.forEach(child => {
+        expect(child.getAttribute('onmouseover')).toBeNull();
+      });
+      // The literal text should still be present in textContent
+      expect(el.textContent).toContain('onmouseover');
+    });
+
+    it('INFO-U060e: all user-provided strings are set via textContent, not innerHTML', () => {
+      panel.enable();
+      panel.setFields({ duration: true });
+      panel.update({
+        filename: '<b>bold</b>',
+        timecode: '<i>italic</i>',
+        duration: '<u>underline</u>',
+      });
+
+      const el = panel.getElement();
+      // None of these should create actual HTML elements
+      expect(el.querySelector('b')).toBeNull();
+      expect(el.querySelector('i')).toBeNull();
+      expect(el.querySelector('u')).toBeNull();
+      // The text should appear literally
+      expect(el.textContent).toContain('<b>bold</b>');
+      expect(el.textContent).toContain('<i>italic</i>');
+      expect(el.textContent).toContain('<u>underline</u>');
+    });
   });
 
   describe('theme changes', () => {

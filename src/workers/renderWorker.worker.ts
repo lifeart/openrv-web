@@ -104,6 +104,11 @@ function applySyncState(msg: RenderWorkerMessage): void {
   if (state.displayColorState) renderer.setDisplayColorState(state.displayColorState);
   if (state.backgroundPattern) renderer.setBackgroundPattern(state.backgroundPattern);
   if (state.hdrOutputMode) renderer.setHDROutputMode(state.hdrOutputMode.mode, state.hdrOutputMode.capabilities);
+  if (state.gamutMapping) renderer.setGamutMapping(state.gamutMapping);
+  if (state.premultMode !== undefined) renderer.setPremultMode(state.premultMode);
+  if (state.ditherMode !== undefined) renderer.setDitherMode(state.ditherMode);
+  if (state.quantizeBits !== undefined) renderer.setQuantizeBits(state.quantizeBits);
+  if (state.hdrHeadroom !== undefined) renderer.setHDRHeadroom(state.hdrHeadroom);
 }
 
 /**

@@ -251,6 +251,54 @@ export class App {
       'Select line tool',
     );
 
+    // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
+    this.contextualKeyboardManager.register(
+      'transform.rotateLeft',
+      { code: 'KeyR', shift: true },
+      () => this.controls.transformControl.rotateLeft(),
+      'global',
+      'Rotate left 90 degrees',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.red',
+      { code: 'KeyR', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('R', true),
+      'channel',
+      'Select red channel',
+    );
+
+    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (channel)
+    this.contextualKeyboardManager.register(
+      'view.cycleBackgroundPattern',
+      { code: 'KeyB', shift: true },
+      () => this.controls.backgroundPatternControl.cyclePattern(),
+      'global',
+      'Cycle background pattern',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.blue',
+      { code: 'KeyB', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('B', true),
+      'channel',
+      'Select blue channel',
+    );
+
+    // Shift+N: network.togglePanel (global) vs channel.none (channel)
+    this.contextualKeyboardManager.register(
+      'network.togglePanel',
+      { code: 'KeyN', shift: true },
+      () => this.controls.networkControl.togglePanel(),
+      'global',
+      'Toggle network sync panel',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.none',
+      { code: 'KeyN', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('N', true),
+      'channel',
+      'Select no channel',
+    );
+
     // Wire unified preferences facade with live subsystem references
     getCorePreferencesManager().setSubsystems({
       theme: getThemeManager(),
@@ -1398,6 +1446,7 @@ export class App {
       },
       'help.toggleCheatSheet': () => this.shortcutCheatSheet.toggle(),
       'view.openPresentationWindow': () => this.externalPresentation.openWindow(),
+      'audio.toggleMute': () => this.session.toggleMute(),
     };
   }
 

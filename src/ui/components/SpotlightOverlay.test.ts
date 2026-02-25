@@ -527,6 +527,94 @@ describe('SpotlightOverlay', () => {
         spotlight.dispose();
       }).not.toThrow();
     });
+
+    it('SPOT-U122: dispose removes window pointermove listener', () => {
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      spotlight.dispose();
+
+      const pointermoveCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'pointermove'
+      );
+      expect(pointermoveCalls.length).toBeGreaterThanOrEqual(1);
+      removeSpy.mockRestore();
+    });
+
+    it('SPOT-U123: dispose removes window pointerup listener', () => {
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      spotlight.dispose();
+
+      const pointerupCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'pointerup'
+      );
+      expect(pointerupCalls.length).toBeGreaterThanOrEqual(1);
+      removeSpy.mockRestore();
+    });
+
+    it('SPOT-U124: dispose removes window pointercancel listener', () => {
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      spotlight.dispose();
+
+      const pointercancelCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'pointercancel'
+      );
+      expect(pointercancelCalls.length).toBeGreaterThanOrEqual(1);
+      removeSpy.mockRestore();
+    });
+
+    it('SPOT-U125: dispose removes all canvas event listeners', () => {
+      const canvas = spotlight.getElement();
+      const removeSpy = vi.spyOn(canvas, 'removeEventListener');
+
+      spotlight.dispose();
+
+      const removedEvents = removeSpy.mock.calls.map(([event]) => event);
+      expect(removedEvents).toContain('pointerdown');
+      expect(removedEvents).toContain('pointermove');
+      expect(removedEvents).toContain('pointerup');
+      expect(removedEvents).toContain('pointercancel');
+      removeSpy.mockRestore();
+    });
+
+    it('SPOT-U126: dispose removes EventEmitter listeners', () => {
+      const callback = vi.fn();
+      spotlight.on('stateChanged', callback);
+
+      spotlight.dispose();
+
+      // After dispose, emitting should not call the callback
+      // (setState internally calls emit, but listeners are removed)
+      callback.mockClear();
+      spotlight.emit('stateChanged', spotlight.getState());
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('SPOT-U127: window listeners match between bind and dispose', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+      // Create a fresh instance so we capture the addEventListener calls
+      const fresh = new SpotlightOverlay();
+
+      const addedEvents = addSpy.mock.calls
+        .filter(([, handler]) => typeof handler === 'function')
+        .map(([event]) => event)
+        .sort();
+
+      fresh.dispose();
+
+      const removedEvents = removeSpy.mock.calls
+        .filter(([, handler]) => typeof handler === 'function')
+        .map(([event]) => event)
+        .sort();
+
+      expect(removedEvents).toEqual(addedEvents);
+
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
   });
 });
 

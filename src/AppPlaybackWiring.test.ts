@@ -19,6 +19,8 @@ const {
   mockDialogDispose,
   mockDialogUpdateProgress,
   mockDialogOnFn,
+  mockDownloadAnnotationsJSON,
+  mockExportAnnotationsPDF,
 } = vi.hoisted(() => ({
   mockEncodeFn: vi.fn(),
   mockCancelFn: vi.fn(),
@@ -28,6 +30,8 @@ const {
   mockDialogDispose: vi.fn(),
   mockDialogUpdateProgress: vi.fn(),
   mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
+  mockDownloadAnnotationsJSON: vi.fn(),
+  mockExportAnnotationsPDF: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./export/VideoExporter', () => {
@@ -64,6 +68,14 @@ vi.mock('./ui/components/ExportProgress', () => ({
     updateProgress: mockDialogUpdateProgress,
     on: mockDialogOnFn,
   })),
+}));
+
+vi.mock('./utils/export/AnnotationJSONExporter', () => ({
+  downloadAnnotationsJSON: mockDownloadAnnotationsJSON,
+}));
+
+vi.mock('./utils/export/AnnotationPDFExporter', () => ({
+  exportAnnotationsPDF: mockExportAnnotationsPDF,
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
@@ -105,6 +117,7 @@ function createMockSession() {
     outPoint: 100,
     loopMode: 'loop',
     playDirection: 1,
+    metadata: { displayName: 'Test Session' },
     setCurrentSource: vi.fn((index: number) => {
       session.currentSourceIndex = index;
       session.currentFrame = 1;
@@ -426,6 +439,37 @@ describe('wirePlaybackControls', () => {
 
     expect(session.pause).toHaveBeenCalled();
     expect(session.goToFrame).toHaveBeenCalledWith(10);
+  });
+
+  it('PW-013: annotationsJSONExportRequested calls downloadAnnotationsJSON with paint engine', () => {
+    session.currentSource = { name: 'shot_v001.mov' };
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONExportRequested', undefined);
+    expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(
+      expect.anything(), // paintEngine
+      'shot_v001',       // filename without extension
+    );
+  });
+
+  it('PW-014: annotationsJSONExportRequested uses fallback name when no source loaded', () => {
+    session.currentSource = null;
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONExportRequested', undefined);
+    expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(
+      expect.anything(),
+      'annotations',
+    );
+  });
+
+  it('PW-015: annotationsPDFExportRequested calls exportAnnotationsPDF', () => {
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsPDFExportRequested', undefined);
+    expect(mockExportAnnotationsPDF).toHaveBeenCalledWith(
+      expect.anything(), // paintEngine
+      expect.anything(), // session
+      expect.any(Function), // renderFrame callback
+      expect.objectContaining({ title: 'Test Session' }),
+    );
   });
 });
 

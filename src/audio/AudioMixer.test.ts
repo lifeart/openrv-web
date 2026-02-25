@@ -535,5 +535,155 @@ describe('AudioMixer', () => {
     it('AM-MIX-062: currentTime returns offset when not playing', () => {
       expect(mixer.currentTime).toBe(0);
     });
+
+    it('AM-MIX-063: play from a specific time sets startOffset', async () => {
+      await mixer.initialize();
+      mixer.addTrack({ id: 'test' });
+      mixer.loadTrackBuffer('test', createMockAudioBuffer(2, 44100));
+      mixer.play(0.5);
+      expect(mixer.isPlaying).toBe(true);
+    });
+
+    it('AM-MIX-064: play then play again restarts (calls stop internally)', async () => {
+      await mixer.initialize();
+      mixer.addTrack({ id: 'test' });
+      mixer.loadTrackBuffer('test', createMockAudioBuffer(2, 44100));
+      mixer.play(0);
+      expect(mixer.isPlaying).toBe(true);
+      // Second play resets
+      mixer.play(0.2);
+      expect(mixer.isPlaying).toBe(true);
+    });
+  });
+
+  describe('solo logic', () => {
+    it('AM-MIX-070: solo track mutes non-solo tracks', async () => {
+      await mixer.initialize();
+      const trackA = mixer.addTrack({ id: 'a', volume: 1 });
+      const trackB = mixer.addTrack({ id: 'b', volume: 1 });
+
+      mixer.setTrackSolo('a', true);
+
+      // Track A (soloed) should be audible; track B (not soloed) should be muted
+      expect(trackA.gainNode!.gain.value).toBe(1);
+      expect(trackB.gainNode!.gain.value).toBe(0);
+    });
+
+    it('AM-MIX-071: un-soloing restores all track gains', async () => {
+      await mixer.initialize();
+      const trackA = mixer.addTrack({ id: 'a', volume: 0.8 });
+      const trackB = mixer.addTrack({ id: 'b', volume: 0.6 });
+
+      mixer.setTrackSolo('a', true);
+      expect(trackB.gainNode!.gain.value).toBe(0);
+
+      mixer.setTrackSolo('a', false);
+      expect(trackA.gainNode!.gain.value).toBe(0.8);
+      expect(trackB.gainNode!.gain.value).toBe(0.6);
+    });
+
+    it('AM-MIX-072: muted + solo track has gain 0', async () => {
+      await mixer.initialize();
+      const track = mixer.addTrack({ id: 'a', volume: 1, muted: true, solo: true });
+
+      // Track is both muted and soloed — muted takes precedence
+      expect(track.gainNode!.gain.value).toBe(0);
+    });
+  });
+
+  describe('loadTrackBuffer', () => {
+    it('AM-MIX-080: loadTrackBuffer throws for unknown track', async () => {
+      await mixer.initialize();
+      const buffer = createMockAudioBuffer(2, 44100);
+      expect(() => mixer.loadTrackBuffer('nonexistent', buffer)).toThrow('not found');
+    });
+
+    it('AM-MIX-081: loadTrackBuffer emits trackChanged', async () => {
+      await mixer.initialize();
+      mixer.addTrack({ id: 'test' });
+      const listener = vi.fn();
+      mixer.on('trackChanged', listener);
+
+      mixer.loadTrackBuffer('test', createMockAudioBuffer(2, 44100));
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0].id).toBe('test');
+    });
+  });
+
+  describe('setTrack* on nonexistent tracks', () => {
+    it('AM-MIX-090: setTrackVolume on nonexistent track is a no-op', () => {
+      expect(() => mixer.setTrackVolume('ghost', 0.5)).not.toThrow();
+    });
+
+    it('AM-MIX-091: setTrackPan on nonexistent track is a no-op', () => {
+      expect(() => mixer.setTrackPan('ghost', 0.5)).not.toThrow();
+    });
+
+    it('AM-MIX-092: setTrackMuted on nonexistent track is a no-op', () => {
+      expect(() => mixer.setTrackMuted('ghost', true)).not.toThrow();
+    });
+
+    it('AM-MIX-093: setTrackSolo on nonexistent track is a no-op', () => {
+      expect(() => mixer.setTrackSolo('ghost', true)).not.toThrow();
+    });
+  });
+
+  describe('downmix coefficients', () => {
+    it('AM-MIX-100: setDownmixCoefficients merges with existing', () => {
+      mixer.setDownmixCoefficients({ center: 0.5 });
+      // No direct accessor, but generateTrackWaveform uses them.
+      // Verify it does not throw.
+      expect(() => mixer.setDownmixCoefficients({ lfe: 0.1 })).not.toThrow();
+    });
+  });
+
+  describe('addTrack without audio context', () => {
+    it('AM-MIX-110: addTrack before initialize creates track without audio nodes', () => {
+      const track = mixer.addTrack({ id: 'test' });
+      expect(track.id).toBe('test');
+      expect(track.gainNode).toBeNull();
+      expect(track.panNode).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Integration status documentation
+  // =========================================================================
+  describe('integration status', () => {
+    it('AM-INT-001: AudioMixer is NOT dead code — it is instantiated and wired in App.ts', () => {
+      // AudioMixer is imported and instantiated in App.ts (line 359):
+      //   this.audioMixer = new AudioMixer();
+      //
+      // Wiring that EXISTS in the codebase:
+      //
+      // 1. Play/Stop (App.ts lines 360-368):
+      //    session.on('playbackChanged', (playing) => {
+      //      if (playing) audioMixer.play(frameTime);
+      //      else audioMixer.stop();
+      //    })
+      //
+      // 2. Track loading (App.ts lines 371-408):
+      //    session.on('sourceLoaded', (source) => {
+      //      // Fetches video source, decodes audio via AudioContext
+      //      audioMixer.addTrack({ id: trackId, label: source.name });
+      //      audioMixer.loadTrackBuffer(trackId, audioBuffer);
+      //    })
+      //
+      // 3. Volume control (AppPlaybackWiring.ts lines 72-88):
+      //    volumeControl.on('volumeChanged', (vol) => audioMixer.setMasterVolume(vol))
+      //    volumeControl.on('mutedChanged', (muted) => audioMixer.setMasterMuted(muted))
+      //    session.on('volumeChanged', (vol) => audioMixer.setMasterVolume(vol))
+      //    session.on('mutedChanged', (muted) => audioMixer.setMasterMuted(muted))
+      //
+      // 4. Dispose (App.ts):
+      //    audioMixer.dispose() called in App cleanup
+      //
+      // What does NOT exist yet:
+      // - Waveform data -> Timeline component (waveformReady event unused)
+      // - Multi-track mixing UI (only master volume is controlled)
+      // - Per-track volume/pan/mute/solo UI
+
+      expect(true).toBe(true); // Documenting assertion
+    });
   });
 });

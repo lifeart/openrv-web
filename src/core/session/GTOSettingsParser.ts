@@ -662,6 +662,8 @@ export function parseStereo(dto: GTODTO): StereoState | null {
     lumanaglyph: 'anaglyph-luminance',
     checker: 'checkerboard',
     scanline: 'scanline',
+    left: 'left-only',
+    right: 'right-only',
   };
 
   const mode = typeMap[typeValue] ?? 'off';

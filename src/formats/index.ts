@@ -126,3 +126,7 @@ export {
   type MXFDemuxResult,
   type KLVTriplet,
 } from './MXFDemuxer';
+export {
+  isAvifFile,
+  decodeAvif,
+} from './avif';

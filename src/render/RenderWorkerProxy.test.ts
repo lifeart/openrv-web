@@ -691,4 +691,284 @@ describe('RenderWorkerProxy', () => {
       }
     });
   });
+
+  // =============================================================================
+  // New state forwarding methods (gamutMapping, premultMode, ditherMode,
+  // quantizeBits, hdrHeadroom)
+  // =============================================================================
+
+  describe('Gamut mapping', () => {
+    it('RWP-GM-001: setGamutMapping batches into dirty state', () => {
+      proxy.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      // Not sent immediately
+      const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState');
+      expect(syncMessages.length).toBe(0);
+      expect(proxy.hasPendingStateChanges()).toBe(true);
+    });
+
+    it('RWP-GM-002: setGamutMapping is flushed in syncState before render', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setGamutMapping({ mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' });
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg).toBeTruthy();
+      expect(syncMsg!.state.gamutMapping).toEqual({ mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' });
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+
+    it('RWP-GM-003: setGamutMapping with highlightOutOfGamut is forwarded', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg!.state.gamutMapping).toEqual({
+        mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true,
+      });
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+  });
+
+  describe('Premult mode', () => {
+    it('RWP-PM-001: getPremultMode returns 0 initially', () => {
+      expect(proxy.getPremultMode()).toBe(0);
+    });
+
+    it('RWP-PM-002: setPremultMode stores state locally', () => {
+      proxy.setPremultMode(1);
+      expect(proxy.getPremultMode()).toBe(1);
+    });
+
+    it('RWP-PM-003: setPremultMode(2) stores unpremultiply mode', () => {
+      proxy.setPremultMode(2);
+      expect(proxy.getPremultMode()).toBe(2);
+    });
+
+    it('RWP-PM-004: setPremultMode batches into dirty state', () => {
+      proxy.setPremultMode(1);
+      const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState');
+      expect(syncMessages.length).toBe(0);
+      expect(proxy.hasPendingStateChanges()).toBe(true);
+    });
+
+    it('RWP-PM-005: setPremultMode is flushed in syncState before render', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setPremultMode(1);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg).toBeTruthy();
+      expect(syncMsg!.state.premultMode).toBe(1);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+  });
+
+  describe('Dither mode', () => {
+    it('RWP-DM-001: getDitherMode returns 0 initially', () => {
+      expect(proxy.getDitherMode()).toBe(0);
+    });
+
+    it('RWP-DM-002: setDitherMode stores state locally', () => {
+      proxy.setDitherMode(1);
+      expect(proxy.getDitherMode()).toBe(1);
+    });
+
+    it('RWP-DM-003: setDitherMode batches into dirty state', () => {
+      proxy.setDitherMode(2);
+      const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState');
+      expect(syncMessages.length).toBe(0);
+      expect(proxy.hasPendingStateChanges()).toBe(true);
+    });
+
+    it('RWP-DM-004: setDitherMode is flushed in syncState before render', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setDitherMode(1);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg).toBeTruthy();
+      expect(syncMsg!.state.ditherMode).toBe(1);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+  });
+
+  describe('Quantize bits', () => {
+    it('RWP-QB-001: getQuantizeBits returns 0 initially', () => {
+      expect(proxy.getQuantizeBits()).toBe(0);
+    });
+
+    it('RWP-QB-002: setQuantizeBits stores state locally', () => {
+      proxy.setQuantizeBits(8);
+      expect(proxy.getQuantizeBits()).toBe(8);
+    });
+
+    it('RWP-QB-003: setQuantizeBits batches into dirty state', () => {
+      proxy.setQuantizeBits(4);
+      const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState');
+      expect(syncMessages.length).toBe(0);
+      expect(proxy.hasPendingStateChanges()).toBe(true);
+    });
+
+    it('RWP-QB-004: setQuantizeBits is flushed in syncState before render', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setQuantizeBits(8);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg).toBeTruthy();
+      expect(syncMsg!.state.quantizeBits).toBe(8);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+  });
+
+  describe('HDR headroom', () => {
+    it('RWP-HH-001: setHDRHeadroom batches into dirty state', () => {
+      proxy.setHDRHeadroom(3.0);
+      const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState');
+      expect(syncMessages.length).toBe(0);
+      expect(proxy.hasPendingStateChanges()).toBe(true);
+    });
+
+    it('RWP-HH-002: setHDRHeadroom is flushed in syncState before render', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setHDRHeadroom(5.0);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg).toBeTruthy();
+      expect(syncMsg!.state.hdrHeadroom).toBe(5.0);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+
+    it('RWP-HH-003: setHDRHeadroom with default SDR value (1.0)', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setHDRHeadroom(1.0);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg!.state.hdrHeadroom).toBe(1.0);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+  });
+
+  describe('Combined new state methods in batch', () => {
+    it('RWP-COMBO-001: all five new methods batch into a single syncState', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+
+      proxy.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      proxy.setPremultMode(1);
+      proxy.setDitherMode(1);
+      proxy.setQuantizeBits(8);
+      proxy.setHDRHeadroom(3.0);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState') as SyncStateMessage[];
+      expect(syncMessages.length).toBe(1);
+
+      const state = syncMessages[0]!.state;
+      expect(state.gamutMapping).toEqual({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      expect(state.premultMode).toBe(1);
+      expect(state.ditherMode).toBe(1);
+      expect(state.quantizeBits).toBe(8);
+      expect(state.hdrHeadroom).toBe(3.0);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+
+    it('RWP-COMBO-002: applyRenderState forwards all new fields', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+
+      proxy.applyRenderState({
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversion: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        backgroundPattern: {} as any,
+        cdl: {} as any,
+        curvesLUT: null,
+        colorWheels: {} as any,
+        falseColor: { enabled: false, lut: null },
+        zebraStripes: {} as any,
+        channelMode: 'rgb',
+        lut: { data: null, size: 0, intensity: 0 },
+        displayColor: { transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2 },
+        highlightsShadows: { highlights: 0, shadows: 0, whites: 0, blacks: 0 },
+        vibrance: { amount: 0, skinProtection: false },
+        clarity: 0,
+        sharpen: 0,
+        hslQualifier: {} as any,
+        gamutMapping: { mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' },
+        premultMode: 2,
+        ditherMode: 1,
+        quantizeBits: 10,
+      });
+
+      expect(proxy.getPremultMode()).toBe(2);
+      expect(proxy.getDitherMode()).toBe(1);
+      expect(proxy.getQuantizeBits()).toBe(10);
+      expect(proxy.hasPendingStateChanges()).toBe(true);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      const syncMsg = mockWorker.messageHistory.find(m => m.type === 'syncState') as SyncStateMessage | undefined;
+      expect(syncMsg).toBeTruthy();
+      expect(syncMsg!.state.gamutMapping).toEqual({ mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' });
+      expect(syncMsg!.state.premultMode).toBe(2);
+      expect(syncMsg!.state.ditherMode).toBe(1);
+      expect(syncMsg!.state.quantizeBits).toBe(10);
+
+      const renderMsg = mockWorker.messageHistory.find(m => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+  });
 });

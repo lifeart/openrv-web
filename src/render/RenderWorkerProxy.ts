@@ -92,6 +92,9 @@ export class RenderWorkerProxy implements RendererBackend {
   private colorInversionEnabled = false;
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
   private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
+  private premultMode = 0;
+  private ditherMode = 0;
+  private quantizeBits = 0;
 
   // --- Batch state optimization ---
   private dirtyState: Partial<RendererSyncState> = {};
@@ -549,8 +552,9 @@ export class RenderWorkerProxy implements RendererBackend {
     return this.hdrOutputMode;
   }
 
-  setHDRHeadroom(_headroom: number): void {
-    // TODO: forward to worker when HDR headroom is supported in worker pipeline
+  setHDRHeadroom(headroom: number): void {
+    this.dirtyState.hdrHeadroom = headroom;
+    this.hasDirtyState = true;
   }
 
   // ==========================================================================
@@ -661,32 +665,39 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
-  setGamutMapping(_state: GamutMappingState): void {
-    // TODO: forward gamut mapping state to worker when supported
+  setGamutMapping(state: GamutMappingState): void {
+    this.dirtyState.gamutMapping = state;
+    this.hasDirtyState = true;
   }
 
-  setPremultMode(_mode: number): void {
-    // TODO: forward premult mode to worker when supported
+  setPremultMode(mode: number): void {
+    this.premultMode = mode;
+    this.dirtyState.premultMode = mode;
+    this.hasDirtyState = true;
   }
 
   getPremultMode(): number {
-    return 0;
+    return this.premultMode;
   }
 
-  setDitherMode(_mode: number): void {
-    // TODO: forward dither mode to worker when supported
+  setDitherMode(mode: number): void {
+    this.ditherMode = mode;
+    this.dirtyState.ditherMode = mode;
+    this.hasDirtyState = true;
   }
 
   getDitherMode(): number {
-    return 0;
+    return this.ditherMode;
   }
 
-  setQuantizeBits(_bits: number): void {
-    // TODO: forward quantize bits to worker when supported
+  setQuantizeBits(bits: number): void {
+    this.quantizeBits = bits;
+    this.dirtyState.quantizeBits = bits;
+    this.hasDirtyState = true;
   }
 
   getQuantizeBits(): number {
-    return 0;
+    return this.quantizeBits;
   }
 
   applyRenderState(state: RenderState): void {

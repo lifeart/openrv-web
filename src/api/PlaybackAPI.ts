@@ -101,15 +101,28 @@ export class PlaybackAPI {
     }
     const steps = Math.round(direction);
     if (steps === 0) return;
-    const count = Math.abs(steps);
-    if (steps > 0) {
-      for (let i = 0; i < count; i++) {
-        this.session.stepForward();
-      }
+
+    if (steps === 1) {
+      this.session.stepForward();
+    } else if (steps === -1) {
+      this.session.stepBackward();
     } else {
-      for (let i = 0; i < count; i++) {
-        this.session.stepBackward();
+      // O(1) multi-frame step: compute target frame directly
+      const currentFrame = this.session.currentFrame;
+      const totalFrames = this.session.currentSource?.duration ?? 0;
+      if (totalFrames <= 0) return;
+
+      let targetFrame = currentFrame + steps;
+
+      if (this.session.loopMode === 'loop') {
+        // Wrap around using modular arithmetic
+        targetFrame = ((targetFrame - 1) % totalFrames + totalFrames) % totalFrames + 1;
+      } else {
+        // Clamp to valid range [1, totalFrames]
+        targetFrame = Math.max(1, Math.min(totalFrames, targetFrame));
       }
+
+      this.session.goToFrame(targetFrame);
     }
   }
 
