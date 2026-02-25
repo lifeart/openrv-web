@@ -209,43 +209,55 @@ export class StackGroupNode extends BaseGroupNode {
    * inputs (right side).
    */
   protected override process(context: EvalContext, inputs: (IPImage | null)[]): IPImage | null {
-    // Filter to non-null inputs
-    const validInputs = inputs.filter((img): img is IPImage => img !== null);
-    if (validInputs.length === 0) {
+    // Filter to non-null inputs, preserving original indices for layer settings lookup
+    const validEntries: { image: IPImage; originalIndex: number }[] = [];
+    for (let i = 0; i < inputs.length; i++) {
+      if (inputs[i] !== null) {
+        validEntries.push({ image: inputs[i]!, originalIndex: i });
+      }
+    }
+    if (validEntries.length === 0) {
       return null;
     }
 
     // Single input: return as-is (no compositing needed)
-    if (validInputs.length === 1) {
-      return validInputs[0]!;
+    if (validEntries.length === 1) {
+      return validEntries[0]!.image;
     }
 
     const mode = this.properties.getValue('mode') as string;
 
     if (mode === 'wipe') {
-      return this.processWipe(context, validInputs);
+      return this.processWipe(context, validEntries);
     }
 
     // Non-wipe: composite all layers
-    return this.compositeLayers(validInputs);
+    return this.compositeLayers(validEntries);
   }
 
   /**
    * Composite all input layers bottom-to-top using per-layer settings.
    * Returns a new IPImage with the composited result.
+   *
+   * Note: This performs CPU-side per-pixel compositing. For large images
+   * (e.g., 1920x1080 with 3+ layers), this may be slow for real-time playback.
+   * GPU-accelerated compositing would be needed for production performance.
+   *
+   * @param entries - Array of {image, originalIndex} tuples preserving the original
+   *   input indices for correct layer settings lookup when null inputs are filtered.
    */
-  compositeLayers(validInputs: IPImage[]): IPImage | null {
-    if (validInputs.length === 0) return null;
-    if (validInputs.length === 1) return validInputs[0]!;
+  compositeLayers(entries: { image: IPImage; originalIndex: number }[]): IPImage | null {
+    if (entries.length === 0) return null;
+    if (entries.length === 1) return entries[0]!.image;
 
     // Use the dimensions of the first (bottom) input as the output size
-    const baseImage = validInputs[0]!;
-    const width = baseImage.width;
-    const height = baseImage.height;
+    const baseEntry = entries[0]!;
+    const width = baseEntry.image.width;
+    const height = baseEntry.image.height;
 
     // Convert the bottom layer to ImageData (our compositing canvas)
-    const baseSettings = this.getLayerSettings(0);
-    let result = StackGroupNode.ipImageToImageData(baseImage, width, height);
+    const baseSettings = this.getLayerSettings(baseEntry.originalIndex);
+    let result = StackGroupNode.ipImageToImageData(baseEntry.image, width, height);
 
     // Apply base layer opacity if not fully opaque
     if (baseSettings.visible && baseSettings.opacity < 1) {
@@ -259,16 +271,16 @@ export class StackGroupNode extends BaseGroupNode {
     const globalBlendMode = stackCompositeToBlendMode(this.getCompositeType());
 
     // Composite each subsequent layer on top
-    for (let i = 1; i < validInputs.length; i++) {
-      const layerSettings = this.getLayerSettings(i);
+    for (let i = 1; i < entries.length; i++) {
+      const entry = entries[i]!;
+      const layerSettings = this.getLayerSettings(entry.originalIndex);
 
       // Skip invisible layers or zero-opacity layers
       if (!layerSettings.visible || layerSettings.opacity === 0) {
         continue;
       }
 
-      const layerImage = validInputs[i]!;
-      const layerData = StackGroupNode.ipImageToImageData(layerImage, width, height);
+      const layerData = StackGroupNode.ipImageToImageData(entry.image, width, height);
 
       // Use per-layer blend mode if set, otherwise fall back to global
       const blendMode: BlendMode = layerSettings.blendMode !== 'normal'
@@ -286,25 +298,24 @@ export class StackGroupNode extends BaseGroupNode {
    * Process wipe mode: spatial reveal between input[0] and composited remaining inputs.
    * Left of the wipe line shows input[0], right shows the composited stack of inputs[1..n].
    */
-  private processWipe(_context: EvalContext, validInputs: IPImage[]): IPImage | null {
-    if (validInputs.length < 2) {
-      return validInputs[0] ?? null;
+  private processWipe(_context: EvalContext, entries: { image: IPImage; originalIndex: number }[]): IPImage | null {
+    if (entries.length < 2) {
+      return entries[0]?.image ?? null;
     }
 
     const wipeX = this.properties.getValue('wipeX') as number;
-    const baseImage = validInputs[0]!;
+    const baseImage = entries[0]!.image;
     const width = baseImage.width;
     const height = baseImage.height;
 
     // Composite all layers after the first (inputs[1..n])
     let rightImage: IPImage;
-    if (validInputs.length === 2) {
-      rightImage = validInputs[1]!;
+    if (entries.length === 2) {
+      rightImage = entries[1]!.image;
     } else {
-      // Create a sub-stack of inputs[1..n] and composite them
-      const rightInputs = validInputs.slice(1);
-      const composited = this.compositeLayersFromIndex(rightInputs, 1);
-      rightImage = composited ?? validInputs[1]!;
+      // Composite the right-side entries (indices 1..n)
+      const composited = this.compositeLayers(entries.slice(1));
+      rightImage = composited ?? entries[1]!.image;
     }
 
     // Convert both sides to ImageData
@@ -327,49 +338,6 @@ export class StackGroupNode extends BaseGroupNode {
     }
 
     return StackGroupNode.imageDataToIPImage(output);
-  }
-
-  /**
-   * Composite layers starting from a given layer index offset.
-   * Used for compositing the right side of a wipe (inputs[1..n]).
-   */
-  private compositeLayersFromIndex(layerInputs: IPImage[], startIndex: number): IPImage | null {
-    if (layerInputs.length === 0) return null;
-    if (layerInputs.length === 1) return layerInputs[0]!;
-
-    const baseImage = layerInputs[0]!;
-    const width = baseImage.width;
-    const height = baseImage.height;
-
-    let result = StackGroupNode.ipImageToImageData(baseImage, width, height);
-
-    const firstSettings = this.getLayerSettings(startIndex);
-    if (firstSettings.visible && firstSettings.opacity < 1) {
-      result = StackGroupNode.applyOpacityToImageData(result, firstSettings.opacity);
-    } else if (!firstSettings.visible) {
-      result = new ImageData(width, height);
-    }
-
-    const globalBlendMode = stackCompositeToBlendMode(this.getCompositeType());
-
-    for (let i = 1; i < layerInputs.length; i++) {
-      const layerSettings = this.getLayerSettings(startIndex + i);
-
-      if (!layerSettings.visible || layerSettings.opacity === 0) {
-        continue;
-      }
-
-      const layerImage = layerInputs[i]!;
-      const layerData = StackGroupNode.ipImageToImageData(layerImage, width, height);
-
-      const blendMode: BlendMode = layerSettings.blendMode !== 'normal'
-        ? layerSettings.blendMode
-        : globalBlendMode;
-
-      result = compositeImageData(result, layerData, blendMode, layerSettings.opacity);
-    }
-
-    return StackGroupNode.imageDataToIPImage(result);
   }
 
   /**
@@ -397,6 +365,10 @@ export class StackGroupNode extends BaseGroupNode {
         break;
       case 'float32':
         normalize = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+        break;
+      default:
+        // Fallback: treat unknown types as uint8
+        normalize = (v: number) => Math.round(Math.max(0, Math.min(255, v)));
         break;
     }
 

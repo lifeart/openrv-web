@@ -665,7 +665,7 @@ describe('Effect Processor Worker', () => {
       processEffects(data, width, height, state);
 
       // Expected luminance: 0.2126*200 + 0.7152*100 + 0.0722*50 = 42.52+71.52+3.61 = 117.65
-      const expectedLuma = Math.round(LUMA_R * 200 + LUMA_G * 100 + LUMA_B * 50);
+      const expectedLuma = Math.round(0.2126 * 200 + 0.7152 * 100 + 0.0722 * 50);
       expect(data[0]).toBeCloseTo(expectedLuma, -1);
       expect(data[1]).toBeCloseTo(expectedLuma, -1);
       expect(data[2]).toBeCloseTo(expectedLuma, -1);

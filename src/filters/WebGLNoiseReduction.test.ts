@@ -295,16 +295,16 @@ describe('WebGLNoiseReductionProcessor', () => {
       expect(mockGl.useProgram).toHaveBeenCalled();
     });
 
-    it('WGNR-022: draws full-screen quad with 6 vertices', () => {
+    it('WGNR-022: draws full-screen quad with 4 vertices (TRIANGLE_STRIP)', () => {
       const processor = new WebGLNoiseReductionProcessor(mockCanvas);
       const imageData = new ImageData(10, 10);
 
       processor.process(imageData, defaultParams);
 
-      // gl.TRIANGLES may be undefined in mock, so just check offset and count
+      // gl.TRIANGLE_STRIP may be undefined in mock, so just check offset and count
       const call = mockGl.drawArrays.mock.calls[0];
       expect(call[1]).toBe(0);  // offset
-      expect(call[2]).toBe(6);  // vertex count
+      expect(call[2]).toBe(4);  // vertex count
     });
   });
 

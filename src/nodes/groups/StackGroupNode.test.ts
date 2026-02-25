@@ -731,7 +731,7 @@ describe('StackGroupNode', () => {
     });
 
     describe('wipe mode compositing', () => {
-      it('wipe at 0 shows only left (input 0)', () => {
+      it('wipe at 0 shows only right (input 1)', () => {
         const red = new ColorInputNode('Red', { r: 255, g: 0, b: 0 });
         const green = new ColorInputNode('Green', { r: 0, g: 255, b: 0 });
         stackNode.connectInput(red);
@@ -972,7 +972,10 @@ describe('StackGroupNode', () => {
           ]).buffer,
         });
 
-        const result = stackNode.compositeLayers([img1, img2]);
+        const result = stackNode.compositeLayers([
+          { image: img1, originalIndex: 0 },
+          { image: img2, originalIndex: 1 },
+        ]);
         expect(result).not.toBeNull();
         expect(result!.width).toBe(2);
         expect(result!.height).toBe(2);

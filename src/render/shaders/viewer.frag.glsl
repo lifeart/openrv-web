@@ -1320,9 +1320,10 @@
             color.rgb = u_outputPrimariesMatrix * color.rgb;
         }
 
-        // 8. Display output: transfer function then creative gamma.
-        // Matches OpenRV ordering (DisplayIPNode.cpp): display transfer (sRGB/Rec.709)
-        // is applied FIRST, then creative gamma is applied AFTER:
+        // 8. Display output: display transfer function and creative gamma are
+        // INDEPENDENT stages.  Creative gamma is ALWAYS applied regardless of
+        // whether a display transfer (sRGB, Rec.709, etc.) is active.
+        // Matches OpenRV ordering (DisplayIPNode.cpp):
         //   if (linear2sRGB)   shaderExpr = newColorLinearToSRGB(shaderExpr);
         //   if (linear2Rec709) shaderExpr = newColorLinearToRec709(shaderExpr);
         //   if (displayGamma != 1.0) shaderExpr = newColorGamma(shaderExpr, 1.0/displayGamma);
@@ -1332,11 +1333,10 @@
           color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
         }
 
-        // 8b. Creative gamma (applied AFTER display transfer to match OpenRV ordering).
-        // When u_gammaRGB == vec3(1.0), pow() is identity so skip to avoid cost.
-        if (u_gammaRGB != vec3(1.0)) {
-          color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
-        }
+        // 8b. Creative per-channel gamma (always applied independently of display transfer).
+        // pow(x, 1.0) == x, so the identity case is a no-op but we apply it
+        // unconditionally to guarantee users never lose per-channel gamma control.
+        color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
 
         // 8c. Display gamma override
         if (u_displayGamma != 1.0) {

@@ -199,8 +199,6 @@ export class WebGLNoiseReductionProcessor {
         -1, -1,
          1, -1,
         -1,  1,
-        -1,  1,
-         1, -1,
          1,  1,
       ]),
       gl.STATIC_DRAW
@@ -218,8 +216,6 @@ export class WebGLNoiseReductionProcessor {
         0, 0,
         1, 0,
         0, 1,
-        0, 1,
-        1, 0,
         1, 1,
       ]),
       gl.STATIC_DRAW
@@ -299,7 +295,7 @@ export class WebGLNoiseReductionProcessor {
     this.setUpAttributesIfNeeded();
 
     // Draw
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // Read result
     const result = new Uint8ClampedArray(width * height * 4);

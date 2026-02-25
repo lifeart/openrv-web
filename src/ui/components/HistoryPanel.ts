@@ -267,6 +267,13 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       const isCurrent = entryIndex === currentIndex;
       const isFuture = entryIndex > currentIndex;
 
+      // Update data-current attribute for dynamic hover handlers
+      if (isCurrent) {
+        el.dataset.current = 'true';
+      } else {
+        delete el.dataset.current;
+      }
+
       // Update base style
       el.style.cssText = `
       display: flex;
@@ -276,7 +283,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       gap: 8px;
       transition: background 0.15s;
       ${isCurrent ? 'background: rgba(var(--accent-primary-rgb), 0.2);' : ''}
-      ${isFuture ? 'opacity: 0.4;' : ''}
+      ${isFuture ? `opacity: ${OPACITY.disabled};` : ''}
     `;
 
       // Update current indicator: look for an existing indicator or add/remove
@@ -322,14 +329,18 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       ${isFuture ? `opacity: ${OPACITY.disabled};` : ''}
     `;
 
+    if (isCurrent) {
+      el.dataset.current = 'true';
+    }
+
     el.addEventListener('pointerenter', () => {
-      if (!isCurrent) {
+      if (el.dataset.current !== 'true') {
         el.style.background = 'var(--bg-hover)';
       }
     });
 
     el.addEventListener('pointerleave', () => {
-      el.style.background = isCurrent ? 'rgba(var(--accent-primary-rgb), 0.2)' : '';
+      el.style.background = el.dataset.current === 'true' ? 'rgba(var(--accent-primary-rgb), 0.2)' : '';
     });
 
     el.addEventListener('click', () => {
