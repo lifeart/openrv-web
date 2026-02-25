@@ -418,7 +418,7 @@ export class FBOPingPong {
     gl: WebGL2RenderingContext,
     width: number,
     height: number,
-    format: 'rgba16f' | 'rgba8' = 'rgba16f',
+    format: 'rgba16f' | 'rgba8' = 'rgba8',
   ): boolean {
     if (
       this.fbos[0] && this.fbos[1] &&
@@ -488,11 +488,26 @@ export class FBOPingPong {
   }
 
   /**
-   * Begin a pass: bind the write FBO.
+   * Set texture filtering mode on the read texture.
+   * Called per-stage based on the stage's `needsBilinearInput` flag.
+   */
+  setFilteringMode(gl: WebGL2RenderingContext, bilinear: boolean): void {
+    const filter = bilinear ? gl.LINEAR : gl.NEAREST;
+    gl.bindTexture(gl.TEXTURE_2D, this.readTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /**
+   * Begin a pass: bind the write FBO, invalidate previous contents.
    * Returns the read texture (previous pass output or source image).
    */
   beginPass(gl: WebGL2RenderingContext): WebGLTexture | null {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.writeFBO);
+    // Hint the driver that previous FBO contents are stale (saves bandwidth
+    // on tile-based mobile GPUs: iOS, Android)
+    gl.invalidateFramebuffer(gl.FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
     gl.viewport(0, 0, this.width, this.height);
     return this.readTexture;
   }
