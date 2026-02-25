@@ -363,9 +363,11 @@ export class SessionURLService {
 **Files to modify**:
 - `/Users/lifeart/Repos/openrv-web/src/App.ts` -- remove ~145 lines
 - Create `/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts` (~150 lines)
-- Create `/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.test.ts`
+- Create `/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.test.ts` (min 8 tests)
 
-#### Step 2.6: Extract `AudioOrchestrator`
+**Note**: After `SessionURLService` is extracted, `AppNetworkBridge` should delegate to it for `captureState`/`applyState` rather than maintaining parallel URL state logic. This deduplication should be addressed as a follow-up within this phase.
+
+#### Step 1.6: Extract `AudioOrchestrator`
 
 **Source**: Lines 414-465 in `App.ts` (audio mixer wiring, audio track loading)
 
