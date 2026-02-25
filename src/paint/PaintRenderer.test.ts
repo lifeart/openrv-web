@@ -844,4 +844,121 @@ describe('PaintRenderer', () => {
       expect(r.getCanvas().width).toBe(100);
     });
   });
+
+  // ====================================================================
+  // Variable-width stroke splat rendering
+  // ====================================================================
+  describe('variable-width stroke rendering', () => {
+    const defaultOptions: RenderOptions = {
+      width: 800,
+      height: 600,
+    };
+
+    it('VW-001: uses filled circles (arc+fill) for variable-width strokes', () => {
+      const r = new PaintRenderer();
+      r.resize(800, 600);
+
+      const ctx = (r as any).ctx as CanvasRenderingContext2D;
+      const arcSpy = vi.spyOn(ctx, 'arc');
+      const fillSpy = vi.spyOn(ctx, 'fill');
+
+      const stroke: PenStroke = {
+        type: 'pen',
+        id: 'vw-splat',
+        frame: 1,
+        user: 'test',
+        color: [1, 0, 0, 1],
+        width: [2, 10, 2],
+        brush: BrushType.Circle,
+        points: [
+          { x: 0.2, y: 0.5, pressure: 0.3 },
+          { x: 0.5, y: 0.5, pressure: 1.0 },
+          { x: 0.8, y: 0.5, pressure: 0.3 },
+        ],
+        join: LineJoin.Round,
+        cap: LineCap.Round,
+        splat: false,
+        mode: StrokeMode.Draw,
+        startFrame: 1,
+        duration: 1,
+      };
+
+      r.renderStroke(stroke, defaultOptions);
+
+      // arc should be called many times (for sample points + interpolated splats)
+      expect(arcSpy).toHaveBeenCalled();
+      expect(fillSpy).toHaveBeenCalled();
+
+      // Should be called at least once per point (3 points)
+      expect(arcSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('VW-002: interpolates between points to fill gaps', () => {
+      const r = new PaintRenderer();
+      r.resize(800, 600);
+
+      const ctx = (r as any).ctx as CanvasRenderingContext2D;
+      const arcSpy = vi.spyOn(ctx, 'arc');
+
+      const stroke: PenStroke = {
+        type: 'pen',
+        id: 'vw-interp',
+        frame: 1,
+        user: 'test',
+        color: [0, 1, 0, 1],
+        width: [4, 8], // variable width
+        brush: BrushType.Circle,
+        points: [
+          { x: 0.0, y: 0.5, pressure: 0.5 },
+          { x: 1.0, y: 0.5, pressure: 1.0 }, // Far apart — many interpolated splats
+        ],
+        join: LineJoin.Round,
+        cap: LineCap.Round,
+        splat: false,
+        mode: StrokeMode.Draw,
+        startFrame: 1,
+        duration: 1,
+      };
+
+      r.renderStroke(stroke, defaultOptions);
+
+      // With two far-apart points, there should be many more arc calls
+      // than just 2 (the intermediate splats fill the gap)
+      expect(arcSpy.mock.calls.length).toBeGreaterThan(2);
+    });
+
+    it('VW-003: uniform-width strokes still use stroke() path rendering', () => {
+      const r = new PaintRenderer();
+      r.resize(800, 600);
+
+      const ctx = (r as any).ctx as CanvasRenderingContext2D;
+      const strokeSpy = vi.spyOn(ctx, 'stroke');
+
+      const stroke: PenStroke = {
+        type: 'pen',
+        id: 'uniform',
+        frame: 1,
+        user: 'test',
+        color: [0, 0, 1, 1],
+        width: 5, // uniform width (number, not array)
+        brush: BrushType.Circle,
+        points: [
+          { x: 0.2, y: 0.5, pressure: 1 },
+          { x: 0.5, y: 0.3, pressure: 1 },
+          { x: 0.8, y: 0.5, pressure: 1 },
+        ],
+        join: LineJoin.Round,
+        cap: LineCap.Round,
+        splat: false,
+        mode: StrokeMode.Draw,
+        startFrame: 1,
+        duration: 1,
+      };
+
+      r.renderStroke(stroke, defaultOptions);
+
+      // Uniform width should still use the stroke() path method
+      expect(strokeSpy).toHaveBeenCalled();
+    });
+  });
 });

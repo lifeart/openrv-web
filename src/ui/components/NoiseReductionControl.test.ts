@@ -331,5 +331,25 @@ describe('NoiseReductionControl', () => {
         control.dispose();
       }).not.toThrow();
     });
+
+    it('NRC-U082: dispose removes container from DOM', () => {
+      const el = control.render();
+      expect(document.body.contains(el)).toBe(true);
+
+      control.dispose();
+
+      expect(document.body.contains(el)).toBe(false);
+    });
+
+    it('NRC-U083: dispose removes EventEmitter listeners', () => {
+      const callback = vi.fn();
+      control.on('paramsChanged', callback);
+
+      control.dispose();
+
+      // Internally calling emitChange should not reach the callback
+      control.setStrength(50);
+      expect(callback).not.toHaveBeenCalled();
+    });
   });
 });

@@ -62,4 +62,14 @@ export {
   type TextLine,
 } from './SlateRenderer';
 
-// Note: OTIOWriter lives in src/utils/media/OTIOWriter.ts
+export {
+  exportOTIO,
+  exportOTIOMultiTrack,
+  buildExportClips,
+  type OTIOExportClip,
+  type OTIOExportTransition,
+  type OTIOExportTrack,
+  type OTIOExportOptions,
+  type OTIOMultiTrackExportOptions,
+  type OTIOSourceInfo,
+} from '../utils/media/OTIOWriter';

@@ -27,6 +27,10 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private headerElement: HTMLElement;
   private unsubscribers: (() => void)[] = [];
   private boundOnThemeChange: (() => void) | null = null;
+  /** Tracks the entry IDs currently rendered, in display order (newest first). */
+  private renderedEntryIds: number[] = [];
+  /** Tracks the currentIndex that was last rendered. */
+  private renderedCurrentIndex = -1;
 
   constructor(historyManager: HistoryManager) {
     super();
@@ -184,32 +188,115 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   }
 
   /**
-   * Render the history entries
+   * Render the history entries.
+   *
+   * Uses incremental DOM updates: existing entry nodes are reused when
+   * the entry list has not changed, and only style/content attributes
+   * that depend on `currentIndex` are patched.  Full rebuild only
+   * happens when the entry set itself changes (add/remove/clear).
    */
   private render(): void {
     const state = this.historyManager.getState();
-    this.entriesContainer.innerHTML = '';
 
+    // --- Empty state --------------------------------------------------
     if (state.entries.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.textContent = 'No history yet';
-      emptyMsg.style.cssText = `
-        color: var(--text-muted);
-        text-align: center;
-        padding: 20px;
-        font-style: italic;
-      `;
-      this.entriesContainer.appendChild(emptyMsg);
+      if (this.renderedEntryIds.length !== 0 || this.entriesContainer.children.length === 0) {
+        this.entriesContainer.innerHTML = '';
+        const emptyMsg = document.createElement('div');
+        emptyMsg.textContent = 'No history yet';
+        emptyMsg.style.cssText = `
+          color: var(--text-muted);
+          text-align: center;
+          padding: 20px;
+          font-style: italic;
+        `;
+        this.entriesContainer.appendChild(emptyMsg);
+        this.renderedEntryIds = [];
+        this.renderedCurrentIndex = -1;
+      }
       return;
     }
 
-    // Create entry elements in reverse order (newest first)
+    // Build the expected ID list in display order (newest first)
+    const expectedIds: number[] = [];
+    for (let i = state.entries.length - 1; i >= 0; i--) {
+      const entry = state.entries[i];
+      if (entry) expectedIds.push(entry.id);
+    }
+
+    // --- Fast path: only currentIndex changed, entry set is the same ---
+    const idsMatch =
+      expectedIds.length === this.renderedEntryIds.length &&
+      expectedIds.every((id, idx) => id === this.renderedEntryIds[idx]);
+
+    if (idsMatch && state.currentIndex !== this.renderedCurrentIndex) {
+      // Patch existing DOM nodes in-place
+      this.patchEntryStyles(state.entries, state.currentIndex);
+      this.renderedCurrentIndex = state.currentIndex;
+      return;
+    }
+
+    // --- Full rebuild (entries added/removed/reordered) ----------------
+    this.entriesContainer.innerHTML = '';
+
     for (let i = state.entries.length - 1; i >= 0; i--) {
       const entry = state.entries[i];
       if (!entry) continue;
 
       const entryEl = this.createEntryElement(entry, i, state.currentIndex);
       this.entriesContainer.appendChild(entryEl);
+    }
+
+    this.renderedEntryIds = expectedIds;
+    this.renderedCurrentIndex = state.currentIndex;
+  }
+
+  /**
+   * Patch only the style attributes of existing entry nodes without
+   * rebuilding the DOM.  Used when only `currentIndex` has changed.
+   */
+  private patchEntryStyles(entries: HistoryEntry[], currentIndex: number): void {
+    const children = this.entriesContainer.children;
+    // children are in reverse order (newest first)
+    for (let childIdx = 0; childIdx < children.length; childIdx++) {
+      const el = children[childIdx] as HTMLElement;
+      const entryIndex = entries.length - 1 - childIdx;
+      const entry = entries[entryIndex];
+      if (!entry) continue;
+
+      const isCurrent = entryIndex === currentIndex;
+      const isFuture = entryIndex > currentIndex;
+
+      // Update base style
+      el.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      cursor: pointer;
+      gap: 8px;
+      transition: background 0.15s;
+      ${isCurrent ? 'background: rgba(var(--accent-primary-rgb), 0.2);' : ''}
+      ${isFuture ? 'opacity: 0.4;' : ''}
+    `;
+
+      // Update current indicator: look for an existing indicator or add/remove
+      const existingIndicator = el.querySelector('[data-role="current-indicator"]');
+      if (isCurrent && !existingIndicator) {
+        const indicator = document.createElement('span');
+        indicator.dataset.role = 'current-indicator';
+        indicator.textContent = '\u25CF';
+        indicator.style.cssText = 'color: var(--accent-primary); font-size: 8px;';
+        // Insert before the icon (first child)
+        el.insertBefore(indicator, el.firstChild);
+      } else if (!isCurrent && existingIndicator) {
+        existingIndicator.remove();
+      }
+
+      // Update time text (may have changed since last render)
+      const timeEl = el.querySelector('[data-role="time"]') as HTMLElement | null;
+      if (timeEl) {
+        timeEl.textContent = HistoryManager.formatTimeSince(entry.timestamp);
+      }
     }
   }
 
@@ -268,6 +355,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     // Current indicator
     if (isCurrent) {
       const indicator = document.createElement('span');
+      indicator.dataset.role = 'current-indicator';
       indicator.textContent = '●';
       indicator.style.cssText = 'color: var(--accent-primary); font-size: 8px;';
       el.appendChild(indicator);
@@ -275,6 +363,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
 
     // Time
     const time = document.createElement('span');
+    time.dataset.role = 'time';
     time.textContent = HistoryManager.formatTimeSince(entry.timestamp);
     time.style.cssText = 'color: var(--text-muted); font-size: 10px; min-width: 50px; text-align: right;';
 

@@ -149,22 +149,53 @@ export class PaintRenderer {
         ctx.fill();
       } else {
         // Multiple points - draw path
-        ctx.lineWidth = getWidth(0);
-        ctx.beginPath();
-        ctx.moveTo(toCanvasX(points[0]!.x), toCanvasY(points[0]!.y));
+        if (Array.isArray(stroke.width)) {
+          // Variable width: draw overlapping filled circles at each sample
+          // point with lerped intermediate splats to prevent gaps at joints.
+          for (let i = 0; i < points.length; i++) {
+            const p = points[i]!;
+            const cx = toCanvasX(p.x);
+            const cy = toCanvasY(p.y);
+            const r = getWidth(i) / 2;
 
-        for (let i = 1; i < points.length; i++) {
-          const p = points[i]!;
-
-          // Variable width requires segment-by-segment drawing
-          if (Array.isArray(stroke.width)) {
-            ctx.lineWidth = getWidth(i);
-            ctx.lineTo(toCanvasX(p.x), toCanvasY(p.y));
-            ctx.stroke();
+            // Draw a filled circle at this sample point
             ctx.beginPath();
-            ctx.moveTo(toCanvasX(p.x), toCanvasY(p.y));
-          } else {
-            // Smooth curve using quadratic bezier
+            ctx.arc(cx, cy, Math.max(r, 0.5), 0, Math.PI * 2);
+            ctx.fill();
+
+            // Interpolate between this point and the next with intermediate
+            // splats so there are no visible gaps.
+            if (i < points.length - 1) {
+              const np = points[i + 1]!;
+              const nx = toCanvasX(np.x);
+              const ny = toCanvasY(np.y);
+              const nr = getWidth(i + 1) / 2;
+
+              const dist = Math.sqrt((nx - cx) ** 2 + (ny - cy) ** 2);
+              // Step size: half the smaller radius, clamped to at least 1px
+              const step = Math.max(1, Math.min(r, nr) * 0.5);
+              const steps = Math.ceil(dist / step);
+
+              for (let s = 1; s < steps; s++) {
+                const t = s / steps;
+                const ix = cx + (nx - cx) * t;
+                const iy = cy + (ny - cy) * t;
+                const ir = r + (nr - r) * t;
+                ctx.beginPath();
+                ctx.arc(ix, iy, Math.max(ir, 0.5), 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          }
+        } else {
+          // Uniform width: smooth curve using quadratic bezier
+          ctx.lineWidth = getWidth(0);
+          ctx.beginPath();
+          ctx.moveTo(toCanvasX(points[0]!.x), toCanvasY(points[0]!.y));
+
+          for (let i = 1; i < points.length; i++) {
+            const p = points[i]!;
+
             if (i < points.length - 1) {
               const nextP = points[i + 1]!;
               const midX = (p.x + nextP.x) / 2;
@@ -174,9 +205,7 @@ export class PaintRenderer {
               ctx.lineTo(toCanvasX(p.x), toCanvasY(p.y));
             }
           }
-        }
 
-        if (!Array.isArray(stroke.width)) {
           ctx.stroke();
         }
       }

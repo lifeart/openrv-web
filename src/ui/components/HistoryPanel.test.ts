@@ -307,4 +307,75 @@ describe('HistoryPanel', () => {
       expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // DOM diffing / incremental render
+  // ---------------------------------------------------------------------------
+  describe('incremental render', () => {
+    it('HP-050: reuses entry DOM nodes when only currentIndex changes', () => {
+      panel.show();
+      historyManager.recordAction('Action A', 'color', () => {});
+      historyManager.recordAction('Action B', 'paint', () => {});
+
+      const entriesEl = panel.getElement().querySelector('.history-entries')!;
+      // Record references to existing child nodes
+      const child0 = entriesEl.children[0]; // newest (Action B)
+      const child1 = entriesEl.children[1]; // older  (Action A)
+
+      // Jump to index 0 — only currentIndex changes, entry set stays the same
+      historyManager.jumpTo(0);
+
+      // The same DOM elements should still be in the container (reused)
+      expect(entriesEl.children[0]).toBe(child0);
+      expect(entriesEl.children[1]).toBe(child1);
+    });
+
+    it('HP-051: full rebuild when entries are added', () => {
+      panel.show();
+      historyManager.recordAction('Action A', 'color', () => {});
+
+      const entriesEl = panel.getElement().querySelector('.history-entries')!;
+      const oldChild = entriesEl.children[0]!;
+
+      // Adding a new entry triggers a full rebuild (entry set changed)
+      historyManager.recordAction('Action B', 'paint', () => {});
+
+      // After rebuild, old child should be detached from the container
+      expect(entriesEl.contains(oldChild)).toBe(false);
+      expect(entriesEl.children.length).toBe(2);
+      // The newest entry (Action B) is first
+      expect(entriesEl.children[0]!.textContent).toContain('Action B');
+    });
+
+    it('HP-052: empty state renders correctly after entries cleared', () => {
+      panel.show();
+      historyManager.recordAction('Action A', 'color', () => {});
+      historyManager.recordAction('Action B', 'paint', () => {});
+
+      panel.clearHistory();
+
+      expect(panel.getElement().textContent).toContain('No history yet');
+    });
+
+    it('HP-053: updates current indicator during incremental patch', () => {
+      panel.show();
+      historyManager.recordAction('Action A', 'color', () => {});
+      historyManager.recordAction('Action B', 'paint', () => {});
+
+      const entriesEl = panel.getElement().querySelector('.history-entries')!;
+
+      // Initially Action B (index 1) is current — first child (newest first)
+      let currentIndicators = entriesEl.querySelectorAll('[data-role="current-indicator"]');
+      expect(currentIndicators.length).toBe(1);
+
+      // Jump to Action A (index 0)
+      historyManager.jumpTo(0);
+
+      currentIndicators = entriesEl.querySelectorAll('[data-role="current-indicator"]');
+      expect(currentIndicators.length).toBe(1);
+      // The indicator should now be on Action A (second child, since newest first)
+      const actionAEntry = entriesEl.children[1] as HTMLElement;
+      expect(actionAEntry.querySelector('[data-role="current-indicator"]')).not.toBeNull();
+    });
+  });
 });
