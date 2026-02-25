@@ -990,6 +990,28 @@ describe('PaintEngine', () => {
       expect(tool1).toBe(tool2);
     });
 
+    it('PAINT-049: addText options spread order - explicit fields override user options', () => {
+      // Fix: addText spreads ...options FIRST so explicit fields (type, id, frame, user)
+      // take precedence over any conflicting user-provided options.
+      engine.tool = 'pen';
+      engine.user = 'correctUser';
+
+      const text = engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello', 24, {
+        // Try to override internal fields via options
+        type: 'text',
+        id: 'malicious-id',
+        frame: 999,
+        user: 'wrongUser',
+      } as any);
+
+      // The explicit assignments should win over spread options
+      expect(text.type).toBe('text');
+      expect(text.frame).toBe(0);
+      expect(text.user).toBe('correctUser');
+      // The id should be auto-generated, not the one from options
+      expect(text.id).not.toBe('malicious-id');
+    });
+
     it('PAINT-048: beginStroke correctly rejects advanced tool names', () => {
       // Advanced tools use PaintToolInterface, not PaintEngine.beginStroke
       engine.tool = 'dodge';

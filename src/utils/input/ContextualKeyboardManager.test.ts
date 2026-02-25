@@ -290,6 +290,15 @@ describe('ContextualKeyboardManager', () => {
     });
   });
 
+  describe('empty code guard', () => {
+    it('CKM-080: resolve throws when combo has empty/missing code', () => {
+      // Fix: comboToId() guards against empty code with:
+      //   if (!combo.code) throw new Error('KeyCombination must have a code property');
+      expect(() => keyManager.resolve({ code: '' })).toThrow('KeyCombination must have a code property');
+      expect(() => keyManager.resolve({} as any)).toThrow('KeyCombination must have a code property');
+    });
+  });
+
   describe('modifier key matching', () => {
     it('CKM-070: correctly distinguishes bindings with different modifiers', () => {
       const bareHandler = vi.fn();

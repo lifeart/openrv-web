@@ -135,8 +135,8 @@ const LOGC4_C = 0.0740718950408889;
 const LOGC4_S = 7.0;
 const LOGC4_T = 1.0;
 const LOGC4_CUT = 0.00937677;
-// Linear cut (compute from the encoding equation)
-const LOGC4_ENCODED_CUT = (LOGC4_CUT + LOGC4_T) / LOGC4_S;
+// Encoded cut point (value of the encoding function at LOGC4_CUT)
+const LOGC4_ENCODED_CUT = (LOGC4_CUT * LOGC4_S + LOGC4_T) / 14.0;
 
 /**
  * ARRI LogC4 OETF - linear to LogC4

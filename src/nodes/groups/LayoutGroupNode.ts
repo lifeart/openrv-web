@@ -192,9 +192,12 @@ export function computeTileViewports(
   const availableWidth = canvasWidth - totalHSpacing;
   const availableHeight = canvasHeight - totalVSpacing;
 
-  // Per-tile dimensions (floored to avoid sub-pixel issues)
-  const tileWidth = Math.floor(availableWidth / columns);
-  const tileHeight = Math.floor(availableHeight / rows);
+  // Guard against zero or negative dimensions
+  if (columns <= 0 || rows <= 0) return [];
+
+  // Per-tile dimensions (floored to avoid sub-pixel issues, clamped to zero min)
+  const tileWidth = Math.max(0, Math.floor(availableWidth / columns));
+  const tileHeight = Math.max(0, Math.floor(availableHeight / rows));
 
   const viewports: TileViewport[] = [];
 

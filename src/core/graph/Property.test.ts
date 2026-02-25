@@ -106,6 +106,36 @@ describe('Property', () => {
 
       expect(listener).not.toHaveBeenCalled();
     });
+
+    it('PRP-005: clamps before equality check - no spurious emit', () => {
+      // Fix: clamp is applied BEFORE the equality check (this._value === newValue).
+      // Setting value=150 when max=100 and current=100 should NOT emit a signal
+      // because after clamping 150 -> 100, the value equals the current value.
+      const prop = new Property<number>({
+        name: 'test',
+        defaultValue: 50,
+        min: 0,
+        max: 100,
+      });
+
+      prop.value = 100; // set to max
+
+      const listener = vi.fn();
+      prop.changed.connect(listener);
+
+      // Set to value above max - should clamp to 100, which equals current value
+      prop.value = 150;
+      expect(prop.value).toBe(100);
+      expect(listener).not.toHaveBeenCalled();
+
+      // Same for below min
+      prop.value = 0; // set to min
+      listener.mockClear();
+
+      prop.value = -50;
+      expect(prop.value).toBe(0);
+      expect(listener).not.toHaveBeenCalled();
+    });
   });
 
   describe('reset', () => {

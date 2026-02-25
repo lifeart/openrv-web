@@ -541,6 +541,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
       URL.revokeObjectURL(this.state.logoUrl);
     }
     this.logoImage = null;
+    this.removeAllListeners();
   }
 }
 

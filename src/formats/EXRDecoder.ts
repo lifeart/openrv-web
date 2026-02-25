@@ -1948,7 +1948,10 @@ async function decodeDeepScanlineImage(
             else if (ci === yIdx) { sR = value; sG = value; sB = value; }
           }
 
-          // Front-to-back Over compositing
+          // Clamp sample alpha to [0,1] to prevent incorrect compositing from non-conforming data
+          sA = Math.max(0, Math.min(1, sA));
+
+          // Front-to-back Over compositing (assumes pre-multiplied alpha)
           const oneMinusA = 1.0 - compA;
           compR += oneMinusA * sR;
           compG += oneMinusA * sG;

@@ -65,13 +65,13 @@ export class Property<T> {
   }
 
   set value(newValue: T) {
-    if (this._value === newValue) return;
-
-    // Clamp numeric values
-    if (typeof newValue === 'number' && typeof this._value === 'number') {
+    // Clamp numeric values before equality check
+    if (typeof newValue === 'number') {
       if (this.min !== undefined) newValue = Math.max(this.min, newValue as number) as T;
       if (this.max !== undefined) newValue = Math.min(this.max, newValue as number) as T;
     }
+
+    if (this._value === newValue) return;
 
     const oldValue = this._value;
     this._value = newValue;

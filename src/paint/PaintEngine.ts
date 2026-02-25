@@ -249,6 +249,8 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const defaultDuration = this.state.effects.hold ? -1 : 0;
 
     const annotation: TextAnnotation = {
+      // Spread options first so explicit fields below take precedence
+      ...options,
       type: 'text',
       id: this.generateAnnotationId(),
       frame,
@@ -259,20 +261,18 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       color: [...this._color],
       text,
       size,
-      scale: 1,
-      rotation: 0,
-      spacing: 0,
-      font: 'sans-serif',
-      origin: TextOrigin.Center,
+      scale: options?.scale ?? 1,
+      rotation: options?.rotation ?? 0,
+      spacing: options?.spacing ?? 0,
+      font: options?.font ?? 'sans-serif',
+      origin: options?.origin ?? TextOrigin.Center,
       startFrame: frame,
       duration: options?.duration ?? defaultDuration,
-      // Apply optional styling
       bold: options?.bold,
       italic: options?.italic,
       underline: options?.underline,
       backgroundColor: options?.backgroundColor,
       calloutPoint: options?.calloutPoint,
-      ...options,
     };
 
     this.addAnnotation(annotation);

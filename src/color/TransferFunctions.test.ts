@@ -204,6 +204,30 @@ describe('TransferFunctions', () => {
       expect(logC4Encode(Infinity)).toBe(1);
       expect(logC4Decode(Infinity)).toBe(1);
     });
+
+    it('LogC4 encode/decode roundtrip at ENCODED_CUT boundary', () => {
+      // The ENCODED_CUT must be computed as (CUT * S + T) / 14.0
+      // so that encode and decode use a consistent switch point.
+      // This ensures exact roundtrip at the CUT boundary.
+      const CUT = 0.00937677;
+
+      // Verify roundtrip near and at the cut point is accurate
+      const encoded = logC4Encode(CUT);
+      const decoded = logC4Decode(encoded);
+      expect(decoded).toBeCloseTo(CUT, 6);
+
+      // Values just below the cut point should also roundtrip correctly
+      const belowCut = CUT - 1e-6;
+      const encodedBelow = logC4Encode(belowCut);
+      const decodedBelow = logC4Decode(encodedBelow);
+      expect(decodedBelow).toBeCloseTo(belowCut, 6);
+
+      // Values just above the cut point should roundtrip through the log2 path
+      const aboveCut = CUT + 1e-4;
+      const encodedAbove = logC4Encode(aboveCut);
+      const decodedAbove = logC4Decode(encodedAbove);
+      expect(decodedAbove).toBeCloseTo(aboveCut, 4);
+    });
   });
 
   // ==========================================================================

@@ -78,6 +78,26 @@ describe('generatePresentationHTML', () => {
     expect(html).toContain('<canvas');
     expect(html).toContain('BroadcastChannel');
   });
+
+  it('EP-HTML-002: escapes XSS characters in windowId and channelName', () => {
+    // The fix added escapeJSString() and escapeHTML() to prevent script injection
+    const maliciousId = "test<script>alert('xss')</script>";
+    const maliciousChannel = "chan';</script><script>alert(1)//";
+    const html = generatePresentationHTML(maliciousId, maliciousChannel, 'session-1');
+
+    // Should NOT contain raw <script> tags from the input
+    expect(html).not.toContain("<script>alert('xss')</script>");
+    expect(html).not.toContain("chan';</script>");
+
+    // The JS string context should have escaped single quotes and < characters
+    expect(html).not.toMatch(/const WINDOW_ID = '.*<script>/);
+    // The HTML context should have escaped < and > characters
+    expect(html).not.toMatch(/Presentation: .*<script>/);
+
+    // Verify the output is still valid HTML structure
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('BroadcastChannel');
+  });
 });
 
 describe('ExternalPresentation', () => {

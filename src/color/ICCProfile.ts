@@ -241,7 +241,7 @@ function parseRenderingIntent(value: number): RenderingIntent {
 /**
  * Parse a 'curv' type TRC tag.
  */
-function parseCurvTag(view: DataView, offset: number, _size: number): ToneCurve {
+function parseCurvTag(view: DataView, offset: number, size: number): ToneCurve {
   const count = readU32(view, offset + 8);
 
   if (count === 0) {
@@ -255,9 +255,13 @@ function parseCurvTag(view: DataView, offset: number, _size: number): ToneCurve 
     return { type: 'gamma', gamma };
   }
 
+  // Validate that table data fits within the tag size
+  const maxCount = Math.floor((size - 12) / 2);
+  const safeCount = Math.min(count, maxCount > 0 ? maxCount : 0);
+
   // Table of values
-  const table = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
+  const table = new Float32Array(safeCount);
+  for (let i = 0; i < safeCount; i++) {
     table[i] = readU16(view, offset + 12 + i * 2) / 65535;
   }
   return { type: 'table', table };
@@ -273,12 +277,16 @@ function parseCurvTag(view: DataView, offset: number, _size: number): ToneCurve 
  * 3: Y = (aX + b)^g, X >= d; Y = cX, X < d
  * 4: Y = (aX + b)^g + e, X >= d; Y = cX + f, X < d
  */
-function parseParaTag(view: DataView, offset: number, _size: number): ToneCurve {
+function parseParaTag(view: DataView, offset: number, _size: number): ToneCurve | null {
   const funcType = readU16(view, offset + 8);
 
-  // Number of parameters for each function type
+  // Number of parameters for each function type (ICC spec types 0-4)
   const paramCounts = [1, 3, 4, 5, 7];
-  const numParams = paramCounts[funcType] ?? 1;
+  if (funcType >= paramCounts.length) {
+    // Unrecognized parametric curve type; fall back to gamma 1.0
+    return { type: 'gamma', gamma: 1.0 };
+  }
+  const numParams = paramCounts[funcType]!;
 
   const params: number[] = [];
   for (let i = 0; i < numParams; i++) {

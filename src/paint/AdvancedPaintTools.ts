@@ -227,7 +227,7 @@ export class BurnTool implements PaintToolInterface {
   apply(buffer: PixelBuffer, position: PixelPoint, brush: BrushParams): void {
     forEachBrushPixel(buffer, position, brush, (index, intensity) => {
       // Burn: factor < 1 decreases pixel brightness (darkens the image)
-      const factor = 1 - this.strength * intensity;
+      const factor = Math.max(0, 1 - this.strength * intensity);
 
       // Don't clamp upper bound so HDR values > 1.0 are preserved.
       // Only clamp lower bound to 0 to avoid negative values.

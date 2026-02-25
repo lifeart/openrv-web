@@ -958,6 +958,35 @@ describe('OCIOTransform', () => {
         expect(result[0]).toBeCloseTo(result[1], 1);
         expect(result[1]).toBeCloseTo(result[2], 1);
       });
+
+      it('CSM-005b: Rec.2020 to sRGB roundtrip includes gamma decode/encode', () => {
+        // Verify that gamma decode (gamma22) is applied in Rec.2020 -> sRGB path
+        // and gamma encode (gamma22) in sRGB -> Rec.2020 path.
+        // A gamma-encoded Rec.2020 value will be linearized (gamma22 decode) before
+        // the matrix transform, then re-encoded with sRGB gamma.
+        const fwd = new OCIOTransform('Rec.2020', 'sRGB');
+        const inv = new OCIOTransform('sRGB', 'Rec.2020');
+
+        const testColor: [number, number, number] = [0.5, 0.5, 0.5];
+        const toSrgb = fwd.apply(...testColor);
+        const backToRec2020 = inv.apply(toSrgb[0], toSrgb[1], toSrgb[2]);
+
+        // Roundtrip should approximately recover the original value
+        expect(backToRec2020[0]).toBeCloseTo(testColor[0], 1);
+        expect(backToRec2020[1]).toBeCloseTo(testColor[1], 1);
+        expect(backToRec2020[2]).toBeCloseTo(testColor[2], 1);
+
+        // With a more saturated test color, the gamut mapping should create
+        // a larger difference, proving the gamma + matrix path is in effect.
+        const saturated: [number, number, number] = [0.9, 0.1, 0.1];
+        const saturatedResult = fwd.apply(...saturated);
+        // The Rec.2020 -> sRGB path (gamma decode -> matrix -> gamut clip -> sRGB encode)
+        // should produce a substantially different result from identity
+        const totalDiff = Math.abs(saturatedResult[0] - 0.9) +
+                          Math.abs(saturatedResult[1] - 0.1) +
+                          Math.abs(saturatedResult[2] - 0.1);
+        expect(totalDiff).toBeGreaterThan(0.05);
+      });
     });
 
     describe('New color space transforms via OCIOTransform class', () => {

@@ -725,6 +725,29 @@ describe('SlateEditor', () => {
       expect(() => editor.dispose()).not.toThrow();
     });
 
+    it('SE-102b: dispose removes all event listeners', () => {
+      // Fix: dispose() now calls this.removeAllListeners()
+      const listener = vi.fn();
+      editor.on('stateChanged', listener);
+
+      // Verify listener works before dispose
+      editor.setMetadata({ showName: 'Test' });
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Dispose should remove all listeners
+      editor.dispose();
+      listener.mockClear();
+
+      // After dispose, events should not fire (listener was removed)
+      // We need to test that the listener list was cleared.
+      // The EventEmitter's removeAllListeners() clears internal Maps.
+      // Calling emit after dispose should not trigger the listener.
+      // Since dispose already happened, setMetadata will still mutate state
+      // but the event should not reach the listener.
+      editor.setMetadata({ showName: 'After Dispose' });
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('SE-102: dispose clears loaded logo', async () => {
       const origImage = globalThis.Image;
       globalThis.Image = class extends origImage {

@@ -168,6 +168,7 @@ export function rationalTimeToFrames(
   rt: OTIORationalTime,
   targetRate: number
 ): number {
+  if (rt.rate <= 0 || targetRate <= 0) return 0;
   if (rt.rate === targetRate) {
     return Math.round(rt.value);
   }
@@ -292,8 +293,11 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
       }
     } else if (item.OTIO_SCHEMA === 'Transition.1') {
       // Store the transition; it will be resolved when the next clip is encountered.
-      pendingTransition = item as OTIOTransition;
-      pendingTransitionOutgoingClipIndex = clips.length - 1; // index of last clip added
+      // Only valid if there is a preceding clip (outgoing side).
+      if (clips.length > 0) {
+        pendingTransition = item as OTIOTransition;
+        pendingTransitionOutgoingClipIndex = clips.length - 1;
+      }
     }
   }
 

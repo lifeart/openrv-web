@@ -2227,6 +2227,41 @@ describe('TIFFFloatDecoder', () => {
       expect(result.data[idx + 2]).toBeCloseTo(0.5, 4);
     });
 
+    it('TIFF-TILE-TRUNC: should not crash on truncated compressed tile data', async () => {
+      // Fix: compressed tile/strip paths validate buffer bounds:
+      //   if (tileOffset + tileByteCount > buffer.byteLength) continue; // Skip truncated tile
+      // Create a valid tiled TIFF, then truncate the buffer to corrupt tile data
+      const width = 4, height = 4, tileWidth = 2, tileHeight = 2;
+      const channels = 3;
+      const pixelValues: number[] = [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelValues.push(0.5, 0.5, 0.5);
+        }
+      }
+
+      const fullBuffer = await createTiledTIFF({
+        width, height, tileWidth, tileHeight, channels,
+        compression: 5, // LZW
+        pixelValues,
+      });
+
+      // Truncate the buffer to remove half of the tile data
+      const truncatedBuffer = (fullBuffer as ArrayBuffer).slice(0, Math.floor((fullBuffer as ArrayBuffer).byteLength * 0.7));
+
+      // Should either decode (with some missing tiles) or throw a specific error,
+      // but it must NOT crash with a RangeError or similar bounds error.
+      try {
+        const result = await decodeTIFFFloat(truncatedBuffer);
+        // If it succeeds, it should have the correct dimensions
+        expect(result.width).toBe(width);
+        expect(result.height).toBe(height);
+      } catch (e: any) {
+        // A graceful error message is acceptable, but not a RangeError from buffer access
+        expect(e.message).not.toMatch(/RangeError|offset is outside/i);
+      }
+    });
+
     it('TIFF-TILE012: should produce consistent results between strip and tile layout', async () => {
       // Decode the same pixel data as both strip and tiled, verify identical output
       const width = 4, height = 4, channels = 3;

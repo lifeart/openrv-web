@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LayoutGroupNode } from './LayoutGroupNode';
+import { LayoutGroupNode, computeTileViewports } from './LayoutGroupNode';
 import type { EvalContext } from '../../core/graph/Graph';
 import { IPNode } from '../base/IPNode';
 import { IPImage } from '../../core/image/Image';
@@ -87,5 +87,14 @@ describe('LayoutGroupNode', () => {
   it('LGN-006: getActiveInputIndex returns 0', () => {
     const node = new LayoutGroupNode();
     expect(node.getActiveInputIndex(context)).toBe(0);
+  });
+
+  it('LGN-007: computeTileViewports returns empty for zero/negative columns or rows', () => {
+    // Fix: computeTileViewports has guard: if (columns <= 0 || rows <= 0) return [];
+    expect(computeTileViewports(1920, 1080, 0, 2, 0)).toEqual([]);
+    expect(computeTileViewports(1920, 1080, 2, 0, 0)).toEqual([]);
+    expect(computeTileViewports(1920, 1080, -1, 2, 0)).toEqual([]);
+    expect(computeTileViewports(1920, 1080, 2, -1, 0)).toEqual([]);
+    expect(computeTileViewports(1920, 1080, 0, 0, 0)).toEqual([]);
   });
 });

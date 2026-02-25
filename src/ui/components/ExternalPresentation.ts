@@ -131,7 +131,21 @@ const DEFAULT_WINDOW_FEATURES = 'width=1280,height=720,resizable=yes,scrollbars=
  * Generate the HTML content for a presentation window.
  * This creates a minimal page with just a canvas element for rendering.
  */
+/** Escape a string for safe inclusion in a JS string literal. */
+function escapeJSString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '\\x3c');
+}
+
+/** Escape a string for safe inclusion in HTML content. */
+function escapeHTML(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export function generatePresentationHTML(windowId: string, channelName: string, sessionId: string): string {
+  const safeWindowId = escapeJSString(windowId);
+  const safeChannelName = escapeJSString(channelName);
+  const safeSessionId = escapeJSString(sessionId);
+  const htmlWindowId = escapeHTML(windowId);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -146,11 +160,11 @@ export function generatePresentationHTML(windowId: string, channelName: string, 
 </head>
 <body>
   <canvas id="viewer"></canvas>
-  <div class="info" id="info">Presentation: ${windowId}</div>
+  <div class="info" id="info">Presentation: ${htmlWindowId}</div>
   <script>
-    const WINDOW_ID = '${windowId}';
-    const SESSION_ID = '${sessionId}';
-    const channel = new BroadcastChannel('${channelName}');
+    const WINDOW_ID = '${safeWindowId}';
+    const SESSION_ID = '${safeSessionId}';
+    const channel = new BroadcastChannel('${safeChannelName}');
 
     // Notify main window that we're ready
     channel.postMessage({
@@ -293,8 +307,9 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
   dispose(): void {
     this.disposed = true;
 
-    // Close all presentation windows
-    for (const [id] of this.windows) {
+    // Close all presentation windows (collect IDs first to avoid Map mutation during iteration)
+    const windowIds = [...this.windows.keys()];
+    for (const id of windowIds) {
       this.closeWindow(id);
     }
     this.windows.clear();
@@ -476,7 +491,9 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
     // Ignore our own messages
     if (message.senderId === this.instanceId) return;
 
-    // Filter by session ID to prevent cross-tab interference
+    // Filter by session ID to prevent cross-tab interference.
+    // Accept messages without sessionId (e.g., from our child presentation windows),
+    // but reject messages from explicitly different sessions.
     if (message.sessionId && message.sessionId !== this.sessionId) return;
 
     // Update window activity timestamp

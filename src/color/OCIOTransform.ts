@@ -1023,8 +1023,9 @@ export class OCIOTransform {
       return;
     }
 
-    // Rec.2020 to sRGB
+    // Rec.2020 to sRGB (Rec.2020 uses BT.1886 gamma ~2.4, approximated as gamma22)
     if (input === 'Rec.2020' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'gamma22' });
       this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
       this.steps.push({ type: 'gamut_clip' });
@@ -1037,6 +1038,7 @@ export class OCIOTransform {
       this.steps.push({ type: 'gamma_decode', func: 'srgb' });
       this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_REC2020 });
+      this.steps.push({ type: 'gamma_encode', func: 'gamma22' });
       return;
     }
 
@@ -1237,33 +1239,37 @@ export class OCIOTransform {
     // Rec.2020 cross-space transforms
     // =========================================================================
 
-    // Rec.2020 to ACEScg
+    // Rec.2020 to ACEScg (decode Rec.2020 gamma first, ACEScg is linear)
     if (input === 'Rec.2020' && output === 'ACEScg') {
+      this.steps.push({ type: 'gamma_decode', func: 'gamma22' });
       this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: D65_TO_D60 });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_ACESCG });
       return;
     }
 
-    // ACEScg to Rec.2020
+    // ACEScg to Rec.2020 (encode Rec.2020 gamma on output)
     if (input === 'ACEScg' && output === 'Rec.2020') {
       this.steps.push({ type: 'matrix', matrix: ACESCG_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_REC2020 });
+      this.steps.push({ type: 'gamma_encode', func: 'gamma22' });
       return;
     }
 
-    // Rec.2020 to Linear sRGB
+    // Rec.2020 to Linear sRGB (decode Rec.2020 gamma first)
     if (input === 'Rec.2020' && output === 'Linear sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'gamma22' });
       this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
       return;
     }
 
-    // Linear sRGB to Rec.2020
+    // Linear sRGB to Rec.2020 (encode Rec.2020 gamma on output)
     if (input === 'Linear sRGB' && output === 'Rec.2020') {
       this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_REC2020 });
+      this.steps.push({ type: 'gamma_encode', func: 'gamma22' });
       return;
     }
 

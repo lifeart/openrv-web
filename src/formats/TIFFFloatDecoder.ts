@@ -695,7 +695,10 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
         }
       }
     } else {
-      // Compressed path
+      // Compressed path — validate buffer bounds
+      if (stripOffset + stripByteCount > buffer.byteLength) {
+        continue; // Skip truncated strip
+      }
       const compressedBytes = new Uint8Array(buffer, stripOffset, stripByteCount);
 
       let decompressed: Uint8Array;
@@ -838,7 +841,10 @@ async function decodeTiledTIFF(
           }
         }
       } else {
-        // Compressed tiles
+        // Compressed tiles — validate buffer bounds
+        if (tileOffset + tileByteCount > buffer.byteLength) {
+          continue; // Skip truncated tile
+        }
         const compressedBytes = new Uint8Array(buffer, tileOffset, tileByteCount);
 
         let decompressed: Uint8Array;

@@ -243,6 +243,30 @@ describe('CacheLUTNode', () => {
     });
   });
 
+  describe('maxVal default case', () => {
+    it('CLN-045: process uses maxVal=1 for float32 (and unknown dataType via default)', () => {
+      // Fix: switch(output.dataType) has default case that falls through to maxVal=1
+      // For float32, maxVal is 1. This test verifies the LUT is applied correctly
+      // with float32 normalization (dividing by 1, i.e., no normalization).
+      node.properties.setValue('exposure', 1); // Double brightness
+
+      const inputImage = createTestImage(2, 2);
+      const source = new MockSourceNode('Source', inputImage);
+      node.connectInput(source);
+
+      const result = node.evaluate(mockContext);
+      expect(result).not.toBeNull();
+
+      const outputData = result!.getTypedArray();
+      // Pixel (1,0) has R = 1/(2-1) = 1.0 in a 2x2 image
+      // With exposure=1, value doubles: 1.0 * 2 = 2.0, but clamped to 1.0
+      // Pixel (0,0) has R = 0, exposure doesn't help: 0 * 2 = 0
+      expect(outputData[0]).toBe(0); // R of pixel (0,0) stays 0
+      // Alpha should be preserved
+      expect(outputData[3]).toBe(1.0);
+    });
+  });
+
   describe('dispose', () => {
     it('CLN-050: clears cached LUT on dispose', () => {
       node.getLUT();

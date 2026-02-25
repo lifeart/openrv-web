@@ -213,6 +213,33 @@ describe('OTIOParser', () => {
       };
       expect(rationalTimeToFrames(rt, 30)).toBe(30);
     });
+
+    it('OTIO-U003e: returns 0 for rate=0 (division by zero guard)', () => {
+      // Fix: rationalTimeToFrames guards against rate <= 0 and targetRate <= 0
+      const rt: OTIORationalTime = {
+        OTIO_SCHEMA: 'RationalTime.1',
+        value: 48,
+        rate: 0,
+      };
+      expect(rationalTimeToFrames(rt, 24)).toBe(0);
+
+      // Also test negative rate
+      const rtNeg: OTIORationalTime = {
+        OTIO_SCHEMA: 'RationalTime.1',
+        value: 48,
+        rate: -24,
+      };
+      expect(rationalTimeToFrames(rtNeg, 24)).toBe(0);
+
+      // Also test targetRate=0
+      const rtValid: OTIORationalTime = {
+        OTIO_SCHEMA: 'RationalTime.1',
+        value: 48,
+        rate: 24,
+      };
+      expect(rationalTimeToFrames(rtValid, 0)).toBe(0);
+      expect(rationalTimeToFrames(rtValid, -30)).toBe(0);
+    });
   });
 
   describe('timeRangeDurationFrames', () => {

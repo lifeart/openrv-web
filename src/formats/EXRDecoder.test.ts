@@ -4758,6 +4758,39 @@ describe('EXR Tiled Image Support', () => {
       expect(result.data[3]).toBeCloseTo(1 - Math.pow(0.75, 5), 3);
     });
 
+    it('EXR-DEEP011: should clamp sample alpha > 1 to valid range', async () => {
+      // Fix: sA = Math.max(0, Math.min(1, sA)); clamps alpha to [0,1]
+      // Non-conforming data with alpha > 1 should be clamped before compositing.
+      const width = 1, height = 1;
+      // 2 samples: first with A=1.5 (invalid, should clamp to 1.0), second with A=0.5
+      const sampleCounts = [[2]];
+      // Channel order: A, B, G, R
+      const sampleData = [
+        [
+          [
+            [1.5, 0.0, 0.0, 1.0],  // front: A=1.5 (clamped to 1.0), B=0, G=0, R=1
+            [0.5, 1.0, 0.0, 0.0],  // back: A=0.5, B=1, G=0, R=0
+          ],
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // With alpha clamped to 1.0 for front sample:
+      // After front: compR=1.0, compG=0, compB=0, compA=1.0
+      // Since compA >= 1.0, early exit - back sample is ignored
+      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R
+      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G
+      expect(result.data[2]).toBeCloseTo(0.0, 4);  // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A (clamped from 1.5 to 1.0)
+    });
+
     it('EXR-DEEP010: should reject deeptile type', async () => {
       // Create a buffer that looks like a deeptile EXR
       const parts: Uint8Array[] = [];

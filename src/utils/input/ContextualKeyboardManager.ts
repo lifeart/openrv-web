@@ -142,6 +142,9 @@ export class ContextualKeyboardManager {
    * Convert a KeyCombination to a canonical string ID for comparison.
    */
   private comboToId(combo: KeyCombination): string {
+    if (!combo.code) {
+      throw new Error('KeyCombination must have a code property');
+    }
     const parts: string[] = [];
     if (combo.ctrl) parts.push('ctrl');
     if (combo.shift) parts.push('shift');

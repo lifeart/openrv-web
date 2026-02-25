@@ -365,7 +365,7 @@ export class CacheLUTNode extends IPNode {
     switch (output.dataType) {
       case 'uint8': maxVal = 255; break;
       case 'uint16': maxVal = 65535; break;
-      case 'float32': maxVal = 1; break;
+      case 'float32': default: maxVal = 1; break;
     }
 
     for (let i = 0; i < pixelCount; i++) {

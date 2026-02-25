@@ -320,6 +320,25 @@ describe('BurnTool', () => {
     expect(pixel2[0]).toBeLessThan(pixel1[0]);
   });
 
+  it('APT-BURN-005b: extreme strength does not produce negative pixel values (factor clamped)', () => {
+    // Fix: BurnTool factor is clamped: const factor = Math.max(0, 1 - this.strength * intensity);
+    // With strength > 1 and full intensity, factor could go negative without the clamp.
+    const buffer = createBuffer(20, 20, 0.8);
+    tool.strength = 2.0; // extreme strength
+
+    tool.apply(buffer, { x: 10, y: 10 }, defaultBrush({ size: 1, hardness: 1, pressure: 1, opacity: 1 }));
+
+    const pixel = getPixel(buffer, 10, 10);
+    // With clamped factor, pixel should be exactly 0 (factor = max(0, 1 - 2*1) = 0)
+    expect(pixel[0]).toBe(0);
+    expect(pixel[1]).toBe(0);
+    expect(pixel[2]).toBe(0);
+    // No negative values
+    expect(pixel[0]).toBeGreaterThanOrEqual(0);
+    expect(pixel[1]).toBeGreaterThanOrEqual(0);
+    expect(pixel[2]).toBeGreaterThanOrEqual(0);
+  });
+
   it('APT-BURN-005: dodge + burn is approximately inverse', () => {
     const buffer = createBuffer(20, 20, 0.5);
 
