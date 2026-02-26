@@ -324,12 +324,13 @@ test.describe('Tab Navigation', () => {
   test.describe('Tab Visual Feedback', () => {
     test('TAB-040: switching tabs should show appropriate controls', async ({ page }) => {
       // Define expected controls for each tab
-      const tabControls = {
+      const tabControls: Record<string, string> = {
         view: '[data-testid="zoom-control-button"]',
         color: '[data-testid="color-control-button"]',
         effects: '[data-testid="filter-control-button"]',
         transform: '[data-testid="transform-rotate-right"]',
         annotate: 'button[title*="Pen"], button[title*="pen"]',
+        qc: 'button:has-text("Scopes"), button:has-text("Guides"), button:has-text("Pixel Probe")',
       };
 
       const tabs = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'] as const;

@@ -77,6 +77,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       gap: 2px;
       padding: 2px 0;
       background: var(--bg-secondary);
+      flex: 0 0 auto;
     `;
 
     // Create bar container (holds canvas)
@@ -108,20 +109,35 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       align-items: center;
       font-size: 10px;
       color: var(--text-muted);
+      gap: 8px;
+      min-height: 14px;
+      white-space: nowrap;
+      overflow: hidden;
     `;
 
     const statsSpan = document.createElement('span');
     statsSpan.className = 'cache-stats';
     statsSpan.dataset.testid = 'cache-indicator-stats';
     statsSpan.textContent = 'Cache: 0 / 0 frames';
+    statsSpan.style.cssText = `
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
 
     // Create prerender stats span (for effects cache)
     this.prerenderStatsSpan = document.createElement('span');
     this.prerenderStatsSpan.className = 'prerender-stats';
     this.prerenderStatsSpan.dataset.testid = 'prerender-indicator-stats';
     this.prerenderStatsSpan.style.cssText = `
-      margin-left: 12px;
+      flex: 1 1 0;
+      min-width: 0;
       color: var(--accent-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     `;
     this.prerenderStatsSpan.textContent = '';
 
@@ -137,6 +153,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       border-radius: 3px;
       cursor: pointer;
       transition: all 0.12s ease;
+      flex-shrink: 0;
     `;
     this.clearButton.addEventListener('pointerenter', () => {
       this.clearButton.style.background = 'var(--bg-hover)';

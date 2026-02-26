@@ -660,6 +660,13 @@ describe('CacheIndicator theme changes', () => {
     expect(info.style.color).toBe('var(--text-muted)');
   });
 
+  it('CACHE-U106a: info container prevents multi-line wrapping', () => {
+    const el = indicator.getElement();
+    const info = el.querySelector('[data-testid="cache-indicator-info"]') as HTMLElement;
+    expect(info.style.whiteSpace).toBe('nowrap');
+    expect(info.style.overflow).toBe('hidden');
+  });
+
   it('CACHE-U107: clear button uses CSS variable for border (not hardcoded)', () => {
     const el = indicator.getElement();
     const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLElement;
@@ -676,6 +683,17 @@ describe('CacheIndicator theme changes', () => {
     const el = indicator.getElement();
     const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLElement;
     expect(prerenderStats.style.color).toBe('var(--accent-primary)');
+  });
+
+  it('CACHE-U109a: stats spans use ellipsis to keep timeline visible', () => {
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLElement;
+    const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLElement;
+
+    expect(stats.style.overflow).toBe('hidden');
+    expect(stats.style.textOverflow).toBe('ellipsis');
+    expect(prerenderStats.style.overflow).toBe('hidden');
+    expect(prerenderStats.style.textOverflow).toBe('ellipsis');
   });
 
   it('CACHE-U110: multiple rapid theme switches all trigger redraws', () => {
