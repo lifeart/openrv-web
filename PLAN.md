@@ -43,7 +43,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
 | 7 | ~~Plugin Architecture~~ | **12-16 days** | MEDIUM | **DONE** | Completed: PluginRegistry lifecycle orchestrator, ExporterRegistry, 6 contribution types (decoder/node/tool/exporter/blendMode/uiPanel), HDRDecoderPlugin example, loadFromURL with origin validation, built-in tool protection. 2 rounds of code review + fixes. 59 new tests, 17971 total passing. |
-| 8 | [Effect Nodes Implementation](./IMPROVEMENT_8_PLAN.md) | **4-5 weeks** | MEDIUM | READY | All 7 changes incorporated |
+| 8 | ~~Effect Nodes Implementation~~ | **4-5 weeks** | MEDIUM | **DONE** | Completed: EffectNode abstract base class, 13 concrete effect nodes (CDL, ColorInversion, HueRotation, NoiseReduction, Sharpen, ToneMapping, HighlightsShadows, Vibrance, Clarity, Deinterlace, FilmEmulation, Stabilization, ColorWheels), EffectChain linear pipeline with toJSON/fromJSON serialization, GPU processor stubs, IPImage toImageData/fromImageData interop. 2 rounds of code review + fixes. 214 new tests, 18185 total passing. |
 
 ---
 
@@ -103,6 +103,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 | 5 | VideoFrame VRAM Leak Prevention | **DONE** | 2026-02-26 |
 | 6 | Signal Connection Leak Fixes | **DONE** | 2026-02-26 |
 | 7 | Plugin Architecture | **DONE** | 2026-02-26 |
+| 8 | Effect Nodes Implementation | **DONE** | 2026-02-26 |
 
 ### Improvement 1 Summary
 
@@ -288,3 +289,35 @@ Key fixes from reviews:
 - loadFromURL tests exercise real origin validation (PREG-029/030/030b)
 - PluginContext.log test verifies plugin ID prefix (PREG-044)
 - getExporter/getExporters delegation tests (PREG-045/046)
+
+### Improvement 8 Summary — Effect Nodes Implementation
+
+EffectNode abstract base class with 13 concrete effect nodes, EffectChain pipeline, GPU processor stubs, and IPImage interop methods:
+
+**Core infrastructure:**
+- **EffectNode.ts** (~135 lines) — Abstract base extending IPNode with `enabled`/`mix` properties, `isIdentity()`/`applyEffect()` abstracts, `process()` handles disabled/identity bypass, `blendImages()` reuses result buffer with RGBA alpha preservation
+- **EffectChain.ts** (~153 lines) — Linear chain wrapper with internal Graph, `append/insert/remove/reorder`, `evaluate(context)` via `graph.evaluateWithContext()`, `toJSON/fromJSON` serialization round-trip with `NodeFactory.create()` + `instanceof EffectNode` validation, `dispose()` cleanup
+- **Graph.ts** — Added `evaluateWithContext(context: EvalContext)` to avoid hardcoded 1920x1080 defaults
+- **Image.ts** — Added instance `toImageData()` (handles uint8/uint16/float32, 1-channel grayscale replication) and `fromImageData()` (converts back to native data type)
+
+**13 concrete effect nodes** (all in `src/nodes/effects/`):
+- **Color category**: CDLNode (slope/offset/power/saturation), ColorInversionNode (RGB/luminance/per-channel), HueRotationNode (direct typed array HSL rotation), VibranceNode (selective saturation), FilmEmulationNode (preset-based), ColorWheelsNode (lift/gamma/gain with smoothstep/bellCurve)
+- **Tone category**: ToneMappingNode (Reinhard/filmic/ACES), HighlightsShadowsNode (highlights/shadows/midtoneBalance)
+- **Spatial category**: SharpenNode (unsharp mask), NoiseReductionNode (luminance/chroma), ClarityNode (micro-contrast), DeinterlaceNode (bob/weave/blend with alpha preservation), StabilizationNode (stateful motion history)
+
+**GPU processor stubs** (in `src/nodes/effects/processors/`):
+- **GPUSharpenProcessor.ts** — @experimental stub wrapping WebGLSharpenProcessor, hardcoded params with TODO
+- **GPUNoiseReductionProcessor.ts** — @experimental stub wrapping WebGLNoiseReductionProcessor, hardcoded params with TODO
+
+**Key fixes from reviews:**
+- blendImages reuses result buffer `b` instead of allocating third buffer
+- EffectChain.fromJSON validates `instanceof EffectNode` after NodeFactory.create()
+- VibranceNode category corrected from 'tone' to 'color'
+- toImageData handles 1-channel grayscale by replicating to R,G,B
+- DeinterlaceNode saves/restores alpha around applyDeinterlace call
+- ColorWheelsNode tests use per-pixel formula verification for lift/gamma/gain
+- GPU processors documented as @experimental stubs with TODO comments
+- Mix=0.5 tests strengthened with "between source and full-effect" assertions
+- Identity bypass tests verify reference identity with `toBe`
+
+New test files: EffectNode.test.ts (8), EffectChain.test.ts (21), CDLNode.test.ts (14), ColorInversionNode.test.ts (14), HueRotationNode.test.ts (14), NoiseReductionNode.test.ts (14), SharpenNode.test.ts (14), ToneMappingNode.test.ts (14), HighlightsShadowsNode.test.ts (14), VibranceNode.test.ts (14), ClarityNode.test.ts (14), DeinterlaceNode.test.ts (14), FilmEmulationNode.test.ts (14), StabilizationNode.test.ts (17), ColorWheelsNode.test.ts (14). Total: 448 test files, 18185 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
