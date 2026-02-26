@@ -42,6 +42,19 @@ export type { MarkerInfo } from './MarkersAPI';
 export { EventsAPI } from './EventsAPI';
 export type { OpenRVEventName, OpenRVEventData } from './EventsAPI';
 
+// Plugin system re-exports for external consumers
+export type {
+  Plugin,
+  PluginManifest,
+  PluginId,
+  PluginState,
+  PluginContext,
+  PluginContributionType,
+  ExporterContribution,
+  BlendModeContribution,
+  UIPanelContribution,
+} from '../plugin/types';
+
 // Type augmentation for window.openrv
 declare global {
   interface Window {

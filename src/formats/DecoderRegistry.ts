@@ -10,7 +10,10 @@
  * to initial bundle cost.
  */
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
+/** Built-in format names (autocomplete-friendly) */
+export type BuiltinFormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf';
+/** Format name type: includes built-in names plus any string for plugin formats */
+export type FormatName = BuiltinFormatName | (string & {}) | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -827,6 +830,19 @@ export class DecoderRegistry {
     } else {
       this.decoders.push(decoder);
     }
+  }
+
+  /**
+   * Unregister a format decoder by format name.
+   * Returns true if a decoder was found and removed.
+   */
+  unregisterDecoder(formatName: string): boolean {
+    const index = this.decoders.findIndex(d => d.formatName === formatName);
+    if (index >= 0) {
+      this.decoders.splice(index, 1);
+      return true;
+    }
+    return false;
   }
 }
 

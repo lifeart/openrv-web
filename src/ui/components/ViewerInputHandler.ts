@@ -242,7 +242,10 @@ export class ViewerInputHandler {
         container.style.cursor = 'text';
         break;
       default:
-        container.style.cursor = 'grab';
+        // Plugin advanced tools get crosshair cursor
+        container.style.cursor = this.ctx.getPaintEngine().isAdvancedTool(tool)
+          ? 'crosshair'
+          : 'grab';
     }
   }
 
@@ -951,7 +954,7 @@ export class ViewerInputHandler {
   // ======================================================================
 
   private isAdvancedTool(tool: PaintTool): boolean {
-    return tool === 'dodge' || tool === 'burn' || tool === 'clone' || tool === 'smudge';
+    return this.ctx.getPaintEngine().isAdvancedTool(tool);
   }
 
   /**

@@ -666,6 +666,13 @@ export class App {
     };
   }
 
+  /**
+   * Get the PaintEngine instance for plugin system bootstrap.
+   */
+  getPaintEngine(): PaintEngine {
+    return this.paintEngine;
+  }
+
   dispose(): void {
     // Dispose all wiring subscriptions first (before component disposal)
     this.wiringSubscriptions.dispose();

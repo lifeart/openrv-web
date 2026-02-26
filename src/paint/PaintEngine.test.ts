@@ -1022,5 +1022,52 @@ describe('PaintEngine', () => {
       engine.beginStroke(0, { x: 0.5, y: 0.5 });
       expect(engine.getCurrentStroke()).toBeNull();
     });
+
+    it('PAINT-050: registerAdvancedTool adds discoverable tool', () => {
+      const customTool = {
+        name: 'custom-paint-tool',
+        apply: vi.fn(),
+        beginStroke: vi.fn(),
+        endStroke: vi.fn(),
+        reset: vi.fn(),
+      };
+      engine.registerAdvancedTool('custom-paint-tool', customTool);
+      expect(engine.isAdvancedTool('custom-paint-tool')).toBe(true);
+      expect(engine.getAdvancedTool('custom-paint-tool')).toBe(customTool);
+      // Clean up
+      engine.unregisterAdvancedTool('custom-paint-tool');
+    });
+
+    it('PAINT-051: unregisterAdvancedTool removes tool', () => {
+      const customTool = {
+        name: 'temp-tool',
+        apply: vi.fn(),
+        beginStroke: vi.fn(),
+        endStroke: vi.fn(),
+        reset: vi.fn(),
+      };
+      engine.registerAdvancedTool('temp-tool', customTool);
+      expect(engine.isAdvancedTool('temp-tool')).toBe(true);
+      expect(engine.unregisterAdvancedTool('temp-tool')).toBe(true);
+      expect(engine.isAdvancedTool('temp-tool')).toBe(false);
+      expect(engine.getAdvancedTool('temp-tool')).toBeUndefined();
+    });
+
+    it('PAINT-052: unregisterAdvancedTool returns false for unknown tool', () => {
+      expect(engine.unregisterAdvancedTool('nonexistent-tool')).toBe(false);
+    });
+
+    it('PAINT-053: registerAdvancedTool throws when overwriting built-in tool', () => {
+      const customTool = {
+        name: 'dodge', apply: vi.fn(), beginStroke: vi.fn(), endStroke: vi.fn(), reset: vi.fn(),
+      };
+      expect(() => engine.registerAdvancedTool('dodge', customTool)).toThrow('Cannot overwrite built-in advanced tool');
+    });
+
+    it('PAINT-054: unregisterAdvancedTool returns false for built-in tool', () => {
+      expect(engine.unregisterAdvancedTool('dodge')).toBe(false);
+      // Built-in tool should still be available
+      expect(engine.isAdvancedTool('dodge')).toBe(true);
+    });
   });
 });

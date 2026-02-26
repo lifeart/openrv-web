@@ -480,6 +480,33 @@ describe('DecoderRegistry', () => {
       const buffer = new ArrayBuffer(4);
       new DataView(buffer).setUint32(0, 0xabcd1234, false);
       expect(decoderRegistry.detectFormat(buffer)).toBe('singleton-test');
+
+      // Clean up singleton state
+      decoderRegistry.unregisterDecoder('singleton-test');
+    });
+  });
+
+  describe('unregisterDecoder', () => {
+    it('DREG-UNREG-001: removes decoder by format name', () => {
+      const reg = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'unreg-test',
+        canDecode: () => true,
+        decode: async () => ({
+          width: 1, height: 1, data: new Float32Array(4),
+          channels: 4, colorSpace: 'linear', metadata: {},
+        }),
+      };
+      reg.registerDecoder(customDecoder);
+      expect(reg.detectFormat(new ArrayBuffer(4))).toBe('unreg-test');
+      expect(reg.unregisterDecoder('unreg-test')).toBe(true);
+      // After unregister, the first built-in decoder matches instead
+      expect(reg.detectFormat(new ArrayBuffer(4))).not.toBe('unreg-test');
+    });
+
+    it('DREG-UNREG-002: returns false for unknown format name', () => {
+      const reg = new DecoderRegistry();
+      expect(reg.unregisterDecoder('nonexistent-format')).toBe(false);
     });
   });
 });

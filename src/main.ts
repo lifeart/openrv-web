@@ -2,6 +2,7 @@ import { App } from './App';
 import { exposeForTesting } from './test-helper';
 import { OpenRVAPI } from './api/OpenRVAPI';
 import { installGlobalErrorHandler } from './utils/globalErrorHandler';
+import { pluginRegistry } from './plugin/PluginRegistry';
 
 // Register nodes with NodeFactory
 import './nodes/sources';
@@ -24,3 +25,7 @@ if (window.openrv) {
   window.openrv.dispose();
 }
 window.openrv = new OpenRVAPI(app.getAPIConfig());
+
+// Wire plugin registry dependencies
+pluginRegistry.setAPI(window.openrv);
+pluginRegistry.setPaintEngine(app.getPaintEngine());

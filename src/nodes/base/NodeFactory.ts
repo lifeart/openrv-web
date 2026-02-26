@@ -25,6 +25,10 @@ class NodeFactoryClass {
   isRegistered(type: string): boolean {
     return this.registry.has(type);
   }
+
+  unregister(type: string): boolean {
+    return this.registry.delete(type);
+  }
 }
 
 export const NodeFactory = new NodeFactoryClass();

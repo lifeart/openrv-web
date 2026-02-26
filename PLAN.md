@@ -42,7 +42,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
-| 7 | [Plugin Architecture](./IMPROVEMENT_7_PLAN.md) | **12-16 days** | MEDIUM | READY | All 13 changes incorporated |
+| 7 | ~~Plugin Architecture~~ | **12-16 days** | MEDIUM | **DONE** | Completed: PluginRegistry lifecycle orchestrator, ExporterRegistry, 6 contribution types (decoder/node/tool/exporter/blendMode/uiPanel), HDRDecoderPlugin example, loadFromURL with origin validation, built-in tool protection. 2 rounds of code review + fixes. 59 new tests, 17971 total passing. |
 | 8 | [Effect Nodes Implementation](./IMPROVEMENT_8_PLAN.md) | **4-5 weeks** | MEDIUM | READY | All 7 changes incorporated |
 
 ---
@@ -102,6 +102,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 | 4 | Silent Promise Failure Fixes | **DONE** | 2026-02-26 |
 | 5 | VideoFrame VRAM Leak Prevention | **DONE** | 2026-02-26 |
 | 6 | Signal Connection Leak Fixes | **DONE** | 2026-02-26 |
+| 7 | Plugin Architecture | **DONE** | 2026-02-26 |
 
 ### Improvement 1 Summary
 
@@ -240,3 +241,50 @@ Key fixes from reviews:
 - App.ts DOM listeners migrated from manual addEventListener/removeEventListener to `wiringSubscriptions.addDOMListener()`
 - IPNode test IPNODE-DISP-002 verifies `properties.propertyChanged.hasConnections === false` (not just `propertyChanged.disconnectAll()`)
 - CS-DISP-001 asserts `source.hasConnections === false` to verify actual dependency disconnection
+
+### Improvement 7 Summary — Plugin Architecture
+
+Extensible plugin system with PluginRegistry as central lifecycle orchestrator, 6 contribution types, and domain-specific registry delegation:
+
+**Core infrastructure:**
+- **types.ts** (~90 lines) — PluginManifest, PluginState (string union), PluginContext, Plugin interface, contribution types (ExporterContribution discriminated union, BlendModeContribution, UIPanelContribution), PluginContributionType union
+- **PluginRegistry.ts** (~490 lines) — Central lifecycle orchestrator: register/activate/deactivate/dispose/activateAll, topological sort with two-Set DFS cycle detection, PluginContext creation via closure pattern, unregisterContributions with per-item try/catch + console.warn logging + finally cleanup, loadFromURL with setAllowedOrigins URL origin validation, pluginStateChanged Signal for all state transitions
+- **ExporterRegistry.ts** (~45 lines) — Standalone singleton registry: register/unregister/get/getAll
+
+**6 contribution types supported:**
+1. **decoder** — Delegates to DecoderRegistry (registerDecoder/unregisterDecoder)
+2. **node** — Delegates to NodeFactory (register/unregister)
+3. **tool** — Delegates to PaintEngine (registerAdvancedTool/unregisterAdvancedTool) with built-in tool protection (BUILTIN_TOOLS ReadonlySet guards dodge/burn/clone/smudge)
+4. **exporter** — Delegates to ExporterRegistry
+5. **blendMode** — Stored in PluginRegistry's blendModeRegistry, integrated into BlendModes.ts default case with result clamping
+6. **uiPanel** — Stored in PluginRegistry's uiPanelRegistry with destroy() callback on deactivation
+
+**Integration points:**
+- **DecoderRegistry.ts** — Added `unregisterDecoder()`, widened FormatName with `(string & {})` idiom
+- **NodeFactory.ts** — Added `unregister()` method
+- **PaintEngine.ts** — Added `registerAdvancedTool()`/`unregisterAdvancedTool()` with built-in guard, widened PaintTool type, `isAdvancedTool()` returns boolean
+- **BlendModes.ts** — Plugin blend mode fallback in `blendChannel()` default case with clamping
+- **ViewerInputHandler.ts** — Delegates `isAdvancedTool()` to PaintEngine for plugin tool cursor support
+- **OpenRVAPI.ts** — `plugins` property with register/activate/deactivate/loadFromURL/getState/list
+- **main.ts** — Bootstrap wiring: `pluginRegistry.setAPI()` + `pluginRegistry.setPaintEngine()`
+- **App.ts** — Added `getPaintEngine()` public method
+
+**Example plugin:**
+- **HDRDecoderPlugin.ts** — Migrated built-in HDR decoder as plugin example with lazy import
+
+**Security:**
+- Trust-based V1 model: `setAllowedOrigins()` URL origin allowlist for `loadFromURL()`
+- Built-in tool overwrite protection via static BUILTIN_TOOLS ReadonlySet
+
+New test files: PluginRegistry.test.ts (49), PluginRegistry.integration.test.ts (4), ExporterRegistry.test.ts (4), HDRDecoderPlugin.test.ts (2). Total: 433 test files, 17971 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+Key fixes from reviews:
+- Built-in tool protection with BUILTIN_TOOLS ReadonlySet in registerAdvancedTool/unregisterAdvancedTool
+- Error-resilient unregisterContributions with per-item try/catch, console.warn logging, and finally for array reset
+- loadFromURL origin validation with setAllowedOrigins and URL parsing
+- dispose() catches plugin errors and still transitions to 'disposed' state
+- Blend mode result clamping (Math.max(0, Math.min(1, ...)))
+- Test singleton cleanup with afterEach blocks for DecoderRegistry, NodeFactory, ExporterRegistry
+- loadFromURL tests exercise real origin validation (PREG-029/030/030b)
+- PluginContext.log test verifies plugin ID prefix (PREG-044)
+- getExporter/getExporters delegation tests (PREG-045/046)
