@@ -7,6 +7,39 @@ import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { EXRChannelRemapping } from '../formats/EXRDecoder';
 import { setScopesHDRMode } from '../scopes/WebGLScopes';
 
+type HDRTransferPreset = 'hlg' | 'pq' | null;
+
+function normalizeHDRTransferPreset(value: string | undefined | null): HDRTransferPreset {
+  if (!value) return null;
+  const tf = value.toLowerCase();
+  if (tf === 'hlg' || tf === 'arib-std-b67') return 'hlg';
+  if (tf === 'pq' || tf === 'smpte2084' || tf === 'smpte-st-2084') return 'pq';
+  return null;
+}
+
+function detectHDRTransferPreset(source: ReturnType<SessionBridgeContext['getSession']>['currentSource']): HDRTransferPreset {
+  if (!source) return null;
+
+  // File HDR path: transfer function is persisted in the decoded IPImage metadata.
+  const fileSource = source.fileSourceNode as { getIPImage?: () => { metadata?: { transferFunction?: string } } | null } | undefined;
+  const fileTF = normalizeHDRTransferPreset(fileSource?.getIPImage?.()?.metadata?.transferFunction);
+  if (fileTF) return fileTF;
+
+  // Video HDR path: read transfer from track/frame color-space metadata.
+  const videoSource = source.videoSourceNode as {
+    getVideoColorSpace?: () => { transfer?: string } | null;
+    getCachedHDRIPImage?: (frame: number) => { metadata?: { transferFunction?: string } } | null;
+  } | undefined;
+
+  const videoTF = normalizeHDRTransferPreset(videoSource?.getVideoColorSpace?.()?.transfer);
+  if (videoTF) return videoTF;
+
+  const cachedTF = normalizeHDRTransferPreset(videoSource?.getCachedHDRIPImage?.(1)?.metadata?.transferFunction);
+  if (cachedTF) return cachedTF;
+
+  return null;
+}
+
 /**
  * Handle sourceLoaded event: update info panel, crop, OCIO, HDR auto-config,
  * GTO store, stack control, prerender buffer, EXR layers, and scopes.
@@ -57,13 +90,19 @@ export function handleSourceLoaded(
 
   if (isHDR) {
     const formatName = source?.fileSourceNode?.formatName ?? 'unknown';
+    const hdrTransferPreset = detectHDRTransferPreset(source);
 
     const isFileHDR = !!source?.fileSourceNode?.isHDR?.();
     if (isHDRDisplay) {
       const glRenderer = viewer.getGLRenderer?.();
       const headroom = glRenderer?.getHDRHeadroom?.() ?? 4.0;
 
-      if (isFileHDR) {
+      if (hdrTransferPreset === 'hlg' || hdrTransferPreset === 'pq') {
+        // HLG/PQ sources are already display-referred HDR presets.
+        // Keep default tone mapping OFF, but user can enable it manually.
+        console.log(`[HDR] ${hdrTransferPreset.toUpperCase()} preset on HDR display — defaulting tone mapping OFF`);
+        context.getToneMappingControl().setState({ enabled: false, operator: 'off' });
+      } else if (isFileHDR) {
         // HDR file (gainmap, EXR) on HDR display: linear float data has no
         // inherent dynamic-range compression. Content peaks (e.g. 20x SDR white)
         // often far exceed display headroom (3-6x). Without tone mapping,
@@ -71,9 +110,9 @@ export function handleSourceLoaded(
         console.log(`[HDR] HDR file (${formatName}) on HDR display — enabling ACES tone mapping`);
         context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
       } else {
-        // HDR video (HLG/PQ) on HDR display: the transfer function already
-        // encodes the dynamic range for the display. No tone mapping needed.
-        console.log(`[HDR] HDR video on HDR display — no tone mapping`);
+        // HDR video with unknown transfer metadata: keep tone mapping off by default.
+        console.log('[HDR] HDR video on HDR display (unknown transfer) — defaulting tone mapping OFF');
+        context.getToneMappingControl().setState({ enabled: false, operator: 'off' });
       }
 
       histogram.setHDRMode(true, Math.max(headroom, 4.0));

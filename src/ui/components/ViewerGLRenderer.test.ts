@@ -469,7 +469,7 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
 
-    it('VGLR-034: HDR native path disables tone mapping for HLG content', () => {
+    it('VGLR-034: HDR native path preserves tone mapping for HLG content', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
 
       // Spy buildRenderState to return state with tone mapping enabled
@@ -484,11 +484,11 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      // HLG content: tone mapping force-disabled (display handles HLG natively)
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
-    it('VGLR-035: HDR native path disables tone mapping for PQ content', () => {
+    it('VGLR-035: HDR native path preserves tone mapping for PQ content', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
 
       const stateWithTM = createDefaultRenderState();
@@ -502,8 +502,8 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      // PQ content: tone mapping force-disabled
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
     it('VGLR-036: HDR native path preserves tone mapping for linear/sRGB content (gainmap/EXR)', () => {
@@ -775,7 +775,7 @@ describe('ViewerGLRenderer', () => {
       };
     }
 
-    it('VGLR-070: Canvas2D blit path disables tone mapping for HLG content', () => {
+    it('VGLR-070: Canvas2D blit path preserves tone mapping for HLG content', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -789,10 +789,11 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
-    it('VGLR-071: Canvas2D blit path disables tone mapping for PQ content', () => {
+    it('VGLR-071: Canvas2D blit path preserves tone mapping for PQ content', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -806,7 +807,8 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('reinhard');
     });
 
     it('VGLR-072: Canvas2D blit path preserves tone mapping for sRGB/linear content', () => {
@@ -983,7 +985,7 @@ describe('ViewerGLRenderer', () => {
       };
     }
 
-    it('VGLR-080: WebGPU blit path disables tone mapping for HLG content', () => {
+    it('VGLR-080: WebGPU blit path preserves tone mapping for HLG content', () => {
       const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -997,10 +999,11 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
-    it('VGLR-081: WebGPU blit path disables tone mapping for PQ content', () => {
+    it('VGLR-081: WebGPU blit path preserves tone mapping for PQ content', () => {
       const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -1014,7 +1017,8 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('drago');
     });
 
     it('VGLR-082: WebGPU blit path preserves tone mapping for linear float content', () => {

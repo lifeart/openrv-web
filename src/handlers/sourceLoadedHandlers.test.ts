@@ -329,20 +329,20 @@ describe('handleSourceLoaded', () => {
     expect(headroom).toBeGreaterThanOrEqual(4.0);
   });
 
-  it('SLH-U019: HDR display + HDR video → no tone mapping, scopes HDR', () => {
+  it('SLH-U019: HDR display + HLG video preset → tone mapping OFF by default, scopes HDR', () => {
     const context = createMockContext({
       currentSource: {
         name: 'test.mov',
         width: 100,
         height: 100,
-        videoSourceNode: { isHDR: () => true },
+        videoSourceNode: { isHDR: () => true, getVideoColorSpace: () => ({ transfer: 'hlg' }) },
       },
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
   });
 
@@ -383,13 +383,13 @@ describe('handleSourceLoaded', () => {
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
   });
 
-  it('SLH-U021b: HDR display + HDR video (no fileSourceNode) → no tone mapping', () => {
+  it('SLH-U021b: HDR display + PQ video preset (no fileSourceNode) → tone mapping OFF by default', () => {
     const context = createMockContext({
       currentSource: {
         name: 'clip.mov',
         width: 3840,
         height: 2160,
-        videoSourceNode: { isHDR: () => true },
+        videoSourceNode: { isHDR: () => true, getVideoColorSpace: () => ({ transfer: 'pq' }) },
         // No fileSourceNode — video-only source
       },
     });
@@ -397,8 +397,28 @@ describe('handleSourceLoaded', () => {
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    // Video HDR: display handles HLG/PQ natively — no tone mapping
-    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+  });
+
+  it('SLH-U028: HDR display + PQ file preset → tone mapping OFF by default', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'photo.avif',
+        width: 4032,
+        height: 3024,
+        fileSourceNode: {
+          isHDR: () => true,
+          formatName: 'avif-hdr',
+          getIPImage: () => ({ metadata: { transferFunction: 'pq' } }),
+        },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
   });
 

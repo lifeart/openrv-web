@@ -558,13 +558,8 @@ export class ViewerGLRenderer {
       // since that path does not go through HLG/PQ compositing.
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
       state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
-      // Only disable tone mapping for HLG/PQ content — the transfer function
-      // already encodes dynamic range for the display. For linear float content
-      // (gainmap, EXR), preserve user's tone mapping to compress the range.
-      const tf = image.metadata?.transferFunction;
-      if (tf === 'hlg' || tf === 'pq') {
-        state.toneMappingState = { enabled: false, operator: 'off' };
-      }
+      // Preserve user tone mapping for all HDR sources (including HLG/PQ).
+      // Input transfer is decoded to linear in the shader before tone mapping.
     }
 
     // Scene luminance analysis: needed for Drago (always) and auto-exposure (when enabled)
@@ -769,12 +764,8 @@ export class ViewerGLRenderer {
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
     state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
 
-    // Disable tone mapping for HLG/PQ content — the transfer function already
-    // encodes dynamic range for the display.
-    const tf = image.metadata?.transferFunction;
-    if (tf === 'hlg' || tf === 'pq') {
-      state.toneMappingState = { enabled: false, operator: 'off' };
-    }
+    // Preserve user tone mapping for all HDR sources (including HLG/PQ).
+    // Input transfer is decoded to linear in the shader before tone mapping.
 
     // Gamut mapping: only auto-detect when user hasn't explicitly configured it
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
@@ -881,12 +872,8 @@ export class ViewerGLRenderer {
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
     state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
 
-    // Disable tone mapping for HLG/PQ content — the transfer function already
-    // encodes dynamic range for the display.
-    const tf = image.metadata?.transferFunction;
-    if (tf === 'hlg' || tf === 'pq') {
-      state.toneMappingState = { enabled: false, operator: 'off' };
-    }
+    // Preserve user tone mapping for all HDR sources (including HLG/PQ).
+    // Input transfer is decoded to linear in the shader before tone mapping.
 
     // Gamut mapping: only auto-detect when user hasn't explicitly configured it
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
