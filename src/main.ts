@@ -1,11 +1,14 @@
 import { App } from './App';
 import { exposeForTesting } from './test-helper';
 import { OpenRVAPI } from './api/OpenRVAPI';
+import { installGlobalErrorHandler } from './utils/globalErrorHandler';
 
 // Register nodes with NodeFactory
 import './nodes/sources';
 import './nodes/groups';
 import './nodes/CacheLUTNode';
+
+installGlobalErrorHandler();
 
 const app = new App();
 app.mount('#app');

@@ -4,6 +4,7 @@
  * Loads image sequences with frame-by-frame access and intelligent caching.
  */
 
+import { Logger } from '../../utils/Logger';
 import { BaseSourceNode } from './BaseSourceNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
@@ -16,6 +17,8 @@ import {
   disposeSequence,
 } from '../../utils/media/SequenceLoader';
 import { FramePreloadManager } from '../../utils/media/FramePreloadManager';
+
+const log = new Logger('SequenceSourceNode');
 
 @RegisterNode('RVSequenceSource')
 export class SequenceSourceNode extends BaseSourceNode {
@@ -91,7 +94,7 @@ export class SequenceSourceNode extends BaseSourceNode {
         }
       }
       if (data && typeof data.close === 'function') {
-        try { data.close(); } catch (e) {}
+        try { data.close(); } catch (e) { log.debug('Resource close failed:', e); }
       }
     };
 

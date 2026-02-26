@@ -836,7 +836,9 @@ export class Renderer implements RendererBackend {
           try {
             gl.unpackColorSpace = 'srgb';
             this._currentUnpackColorSpace = 'srgb';
-          } catch (e) {}
+          } catch (e) {
+            log.debug('gl.unpackColorSpace not supported:', e);
+          }
         }
 
         PerfTrace.begin('texImage2D(ImageBitmap)');
@@ -2096,7 +2098,7 @@ export class Renderer implements RendererBackend {
         gl.unpackColorSpace = 'srgb';
         this._currentUnpackColorSpace = 'srgb';
       } catch (e) {
-        // Shouldn't fail for 'srgb', but guard defensively
+        log.debug('gl.unpackColorSpace reset to srgb not supported:', e);
       }
     }
 

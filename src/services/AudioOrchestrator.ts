@@ -9,6 +9,9 @@
  */
 
 import { AudioMixer } from '../audio/AudioMixer';
+import { Logger } from '../utils/Logger';
+
+const log = new Logger('AudioOrchestrator');
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing - no need to import heavy classes)
@@ -102,10 +105,11 @@ export class AudioOrchestrator {
           if (!arrayBuffer) return;
           const audioCtx = new AudioContext();
           return audioCtx.decodeAudioData(arrayBuffer).then((audioBuffer) => {
-            audioCtx.close().catch(() => { /* ignore */ });
+            audioCtx.close().catch((err) => { log.debug('AudioContext close after decode:', err); });
             return audioBuffer;
-          }).catch(() => {
-            audioCtx.close().catch(() => { /* ignore */ });
+          }).catch((err) => {
+            log.debug('Audio decode failed (video may not contain audio):', err);
+            audioCtx.close().catch((closeErr) => { log.debug('AudioContext close after failed decode:', closeErr); });
             return undefined;
           });
         })
@@ -114,7 +118,7 @@ export class AudioOrchestrator {
           this.audioMixer.addTrack({ id: trackId, label: source.name });
           this.audioMixer.loadTrackBuffer(trackId, audioBuffer);
         })
-        .catch(() => { /* audio extraction failed - not all videos have audio */ });
+        .catch((err) => { log.debug('Audio extraction skipped (video may lack audio track):', err); });
     };
 
     const playbackHandler = onPlaybackChanged as (data: unknown) => void;
@@ -139,7 +143,7 @@ export class AudioOrchestrator {
     const initAudio = (): void => {
       if (this.audioInitialized) return;
       this.audioInitialized = true;
-      this.audioMixer.initialize().catch(() => { /* AudioContext may be unavailable */ });
+      this.audioMixer.initialize().catch((err) => { log.warn('AudioMixer initialization failed:', err); });
       document.removeEventListener('click', initAudio);
       document.removeEventListener('keydown', initAudio);
     };

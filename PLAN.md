@@ -26,7 +26,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
-| 4 | [Silent Promise Failure Fixes](./IMPROVEMENT_4_PLAN.md) | **4 hours** | LOW | READY | 5 changes (add 19th catch, idempotency guard, log level fix) |
+| 4 | ~~Silent Promise Failure Fixes~~ | **4 hours** | LOW | **DONE** | Completed: 19 silent `.catch(() => {})` replaced with Logger calls, global `unhandledrejection` handler installed, 4 new tests. 2 rounds of code review + fixes. 17831 tests passing. |
 | 6 | [Signal Connection Leak Fixes](./IMPROVEMENT_6_PLAN.md) | **15-17 hours** | LOW | READY | 12 changes (remove convenience methods, fix IPNode.dispose, add listenerCount) |
 | 5 | [VideoFrame VRAM Leak Prevention](./IMPROVEMENT_5_PLAN.md) | **5-6 days** | MEDIUM | READY | 11 changes (fix `__DEV__`, getter/setter migration, double-wrap guard) |
 
@@ -99,6 +99,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 | 1 | Session God Object Refactoring | **DONE** | 2026-02-25 |
 | 2 | Monolithic Shader Modularization — Phase A | **DONE** | 2026-02-25 |
 | 3 | App Class Decomposition | **DONE** | 2026-02-26 |
+| 4 | Silent Promise Failure Fixes | **DONE** | 2026-02-26 |
 
 ### Improvement 1 Summary
 
@@ -168,3 +169,14 @@ Key fixes from reviews:
 - AudioOrchestrator tests use public API (setupLazyInit + click event) instead of private field mutation
 - Redundant `?? undefined` removed from SessionURLService
 - ESC cascade tests expanded to cover filterControl/lutPipelinePanel conditional paths
+
+### Improvement 4 Summary — Silent Promise Failure Fixes
+
+19 silent `.catch(() => {})` patterns in production source files replaced with structured Logger calls, plus a global unhandled rejection handler:
+
+- **globalErrorHandler.ts** (18 lines) — `unhandledrejection` listener with idempotency guard, no `preventDefault()`
+- **13 production files modified** — Logger imports added to 8 files (App.ts, AudioOrchestrator.ts, AppDCCWiring.ts, AudioMixer.ts, NetworkSyncManager.ts, OCIOWasmBridge.ts, VideoSourceNode.ts, ViewerExport.ts, SequenceSourceNode.ts); 5 files already had Logger (Viewer.ts, Renderer.ts)
+- **Log levels**: 13 `debug` (fire-and-forget/expected failures), 4 `warn` (degraded functionality), 2 `error` (DCC bridge user content failures)
+- **Additional fixes from reviews**: 4 `console.warn` catches in Viewer.ts migrated to `log.warn`, 1 bare `catch {}` in VideoSourceNode.ts added logging, `const log` placement fixed in 3 files
+
+New test file: globalErrorHandler.test.ts (4 tests). Total: 425 test files, 17831 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.

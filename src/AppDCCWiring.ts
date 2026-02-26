@@ -11,6 +11,9 @@
 
 import type { DCCBridge, SyncColorMessage } from './integrations/DCCBridge';
 import type { ColorAdjustments } from './core/types/color';
+import { Logger } from './utils/Logger';
+
+const log = new Logger('AppDCCWiring');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,13 +96,13 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
         if (typeof msg.frame === 'number') {
           session.goToFrame(msg.frame);
         }
-      }).catch(() => { /* load error */ });
+      }).catch((err) => { log.error('Failed to load video from DCC:', err); });
     } else {
       session.loadImage(name, path).then(() => {
         if (typeof msg.frame === 'number') {
           session.goToFrame(msg.frame);
         }
-      }).catch(() => { /* load error */ });
+      }).catch((err) => { log.error('Failed to load image from DCC:', err); });
     }
   });
 

@@ -12,6 +12,9 @@
 import { EventEmitter, EventMap } from '../utils/EventEmitter';
 import { clamp } from '../utils/math';
 import type { ManagerBase } from '../core/ManagerBase';
+import { Logger } from '../utils/Logger';
+
+const log = new Logger('AudioMixer');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -393,7 +396,7 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
     }
 
     if (this.audioContext) {
-      this.audioContext.close().catch(() => { /* ignore */ });
+      this.audioContext.close().catch((err) => { log.debug('AudioContext close during dispose:', err); });
       this.audioContext = null;
     }
   }

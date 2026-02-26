@@ -58,6 +58,9 @@ import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManag
 import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
+import { Logger } from './utils/Logger';
+
+const log = new Logger('App');
 
 // Layout
 import { LayoutStore } from './ui/layout/LayoutStore';
@@ -532,7 +535,7 @@ export class App {
     this.viewer.setDisplayColorState(this.controls.displayProfileControl.getState());
 
     // Initialize OPFS media cache (fire-and-forget; no-op if unavailable)
-    this.cacheManager.initialize().catch(() => { /* OPFS unavailable */ });
+    this.cacheManager.initialize().catch((err) => { log.debug('OPFS cache unavailable:', err); });
 
     // Initialize persistence (auto-save and snapshots)
     await this.persistenceManager.init();

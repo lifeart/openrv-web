@@ -14,7 +14,10 @@ import { OCIOWasmModule, ConfigHandle, OCIOWasmFactory } from './OCIOWasmModule'
 import { OCIOVirtualFS, VFSLoadOptions } from './OCIOVirtualFS';
 import { translateOCIOShader, TranslatedShader, ShaderTranslateOptions } from './OCIOShaderTranslator';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { Logger } from '../../utils/Logger';
 import type { LUT3D } from '../LUTLoader';
+
+const log = new Logger('OCIOWasmBridge');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,7 +72,7 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
 
     if (config.autoInit && config.factory) {
       // Fire-and-forget init (errors emitted via event)
-      this.init().catch(() => {});
+      this.init().catch((err) => { log.warn('OCIO auto-init failed:', err); });
     }
   }
 

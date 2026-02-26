@@ -19,7 +19,10 @@ import { FramePreloadManager, type PreloadConfig } from '../../utils/media/Frame
 import type { CodecFamily, UnsupportedCodecError } from '../../utils/media/CodecUtils';
 import { HDRFrameResizer, type HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import { LRUCache } from '../../utils/LRUCache';
+import { Logger } from '../../utils/Logger';
 import { PerfTrace } from '../../utils/PerfTrace';
+
+const log = new Logger('VideoSourceNode');
 
 /** Frame extraction mode */
 export type FrameExtractionMode = 'mediabunny' | 'html-video' | 'auto';
@@ -742,7 +745,9 @@ export class VideoSourceNode extends BaseSourceNode {
       const rawBehind = this.playbackDirection >= 0 ? 2 : 8;
       const ahead = Math.min(rawAhead, maxWindow);
       const behind = Math.min(rawBehind, maxWindow - ahead);
-      this.preloadHDRFrames(currentFrame, ahead, behind).catch(() => {});
+      this.preloadHDRFrames(currentFrame, ahead, behind).catch((err) => {
+        log.debug('HDR frame preload error:', err);
+      });
       return;
     }
 
@@ -1062,7 +1067,8 @@ export class VideoSourceNode extends BaseSourceNode {
         // Store in LRU cache (eviction calls image.close() automatically)
         this.hdrFrameCache.set(frame, ipImage);
         return ipImage;
-      } catch {
+      } catch (e) {
+        log.debug('HDR frame decode/resize failed:', e);
         return null;
       }
     })();

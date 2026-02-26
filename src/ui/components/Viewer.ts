@@ -508,7 +508,10 @@ export class Viewer {
           } else {
             tryCanvas2DFallback();
           }
-        }).catch(() => { tryCanvas2DFallback(); });
+        }).catch((err) => {
+          log.warn('WebGPU HDR check failed, falling back to Canvas2D:', err);
+          tryCanvas2DFallback();
+        });
       } else {
         tryCanvas2DFallback();
       }
@@ -1300,7 +1303,7 @@ export class Viewer {
                 this.refresh();
               }
             })
-            .catch((err) => console.warn('Failed to load hold frame:', err));
+            .catch((err) => log.warn('Failed to load hold frame:', err));
           element = this.session.getSequenceFrameSync(currentFrame) ?? source.element;
         }
       } else {
@@ -1315,7 +1318,7 @@ export class Viewer {
                 this.refresh();
               }
             })
-            .catch((err) => console.warn('Failed to load sequence frame:', err));
+            .catch((err) => log.warn('Failed to load sequence frame:', err));
           // Use first frame as fallback if available
           element = source.element;
         }
@@ -1514,7 +1517,9 @@ export class Viewer {
         // Skip during playback — PlaybackEngine.update() already calls
         // updatePlaybackBuffer() which triggers preloadHDRFrames().
         if (!this.session.isPlaying) {
-          this.session.preloadVideoHDRFrames(currentFrame).catch(() => {});
+          this.session.preloadVideoHDRFrames(currentFrame).catch((err) => {
+            log.debug('HDR frame preload error:', err);
+          });
         }
         return; // HDR video path complete
       }
@@ -1522,7 +1527,7 @@ export class Viewer {
       if (!hdrIPImage) {
         this.session.fetchVideoHDRFrame(currentFrame)
           .then(() => this.refresh())
-          .catch((err) => console.warn('Failed to fetch HDR video frame:', err));
+          .catch((err) => log.warn('Failed to fetch HDR video frame:', err));
       }
       // Fall through to SDR while waiting (element was set by the video path above)
     } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
@@ -2574,7 +2579,7 @@ export class Viewer {
                 this.watermarkOverlay.setState({ ...nonImageState, enabled: desiredEnabled });
               })
               .catch((err) => {
-                console.warn('[Viewer] Failed to restore watermark image:', err);
+                log.warn('Failed to restore watermark image:', err);
                 this.watermarkOverlay.setState({ enabled: false });
               });
           }
