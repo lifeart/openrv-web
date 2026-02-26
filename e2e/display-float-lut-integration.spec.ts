@@ -36,9 +36,9 @@ const SAMPLE_LUT = 'sample/test_lut.cube';
 // Helpers
 // ======================================================================
 
-/** Navigate to the View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Navigate to the Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Open the display profile dropdown from the View tab */
@@ -115,7 +115,7 @@ test.describe('Display Color Management GPU Integration', () => {
     await page.goto('/');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    await goToViewTab(page);
+    await goToColorTab(page);
   });
 
   test('INT-E001: display profile change affects rendered output', async ({
@@ -662,7 +662,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     const lutOnlyScreenshot = await captureViewerScreenshot(page);
 
     // Now also change the display profile
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-linear"]');
     await page.waitForTimeout(300);
@@ -691,7 +691,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     const lutDefaultGammaScreenshot = await captureViewerScreenshot(page);
 
     // Adjust display gamma
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
@@ -713,7 +713,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     page,
   }) => {
     // Set a non-default display profile first
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-gamma2.2"]');
     await page.waitForTimeout(300);
@@ -770,7 +770,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     }
 
     // Change display profile
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-rec709"]');
     await page.waitForTimeout(300);

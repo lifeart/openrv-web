@@ -268,8 +268,8 @@ test.describe('Luminance Visualization - UI Controls', () => {
     await loadVideoFile(page);
   });
 
-  test('LV-E040: mode selector exists in View tab', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
+  test('LV-E040: mode selector exists in QC tab', async ({ page }) => {
+    await page.click('button[data-tab-id="qc"]');
 
     const selector = page.locator('[data-testid="luminance-vis-selector"]');
     await expect(selector).toBeVisible();
@@ -302,7 +302,7 @@ test.describe('Luminance Visualization - State Persistence', () => {
 
     // Switch tabs
     await page.click('button[data-tab-id="color"]');
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="qc"]');
 
     const state = await getLuminanceVisState(page);
     expect(state.mode).toBe('hsv');

@@ -47,7 +47,7 @@ async function waitForToneMappingState(
  * Returns after the dropdown is visible.
  */
 async function openToneMappingDropdown(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+  await page.click('button[data-tab-id="color"]');
   const control = page.locator('[data-testid="tone-mapping-control-button"]');
   await expect(control).toBeVisible();
   await control.click();

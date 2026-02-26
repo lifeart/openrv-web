@@ -22,9 +22,9 @@ import {
  * WebGPU-specific tests are skipped when the API is unavailable.
  */
 
-/** Helper: Navigate to View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Helper: Navigate to Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Helper: Open color controls panel and return Exposure slider. */
@@ -348,7 +348,7 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
     await loadVideoFile(page);
 
     // Enable tone mapping
-    await goToViewTab(page);
+    await goToColorTab(page);
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
     await control.click();
     const dropdown = page.locator('[data-testid="tone-mapping-dropdown"]');
@@ -485,7 +485,7 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
 
   test('HDR-P4-015: backend remains stable across display profile changes', async ({ page }) => {
     await loadVideoFile(page);
-    await goToViewTab(page);
+    await goToColorTab(page);
 
     // Open display profile and change settings
     const dpButton = page.locator('[data-testid="display-profile-button"]');

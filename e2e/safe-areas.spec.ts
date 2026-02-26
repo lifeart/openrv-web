@@ -184,9 +184,9 @@ test.describe('Safe Areas UI Controls', () => {
     await loadVideoFile(page);
   });
 
-  test('SA-E030: safe areas control exists in View tab', async ({ page }) => {
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+  test('SA-E030: safe areas control exists in QC tab', async ({ page }) => {
+    // Go to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     // Look for safe areas control

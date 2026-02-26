@@ -70,6 +70,8 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   // HDR mode state
   private hdrActive = false;
   private hdrHeadroom: number | null = null;
+  private hdrAutoFit = false;
+  private hdrEffectiveMax: number | null = null;
   private scaleLabels: HTMLElement | null = null;
 
   constructor() {
@@ -371,6 +373,25 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   setHDRMode(active: boolean, headroom?: number): void {
     this.hdrActive = active;
     this.hdrHeadroom = headroom ?? null;
+    if (!active) {
+      this.hdrEffectiveMax = null;
+    }
+    this.updateScaleLabels();
+    if (this.data) {
+      this.draw();
+    }
+  }
+
+  /**
+   * Enable/disable adaptive HDR auto-fit for float histogram data.
+   * When enabled, bins use the frame signal peak (clamped to headroom),
+   * which prevents SDR-range frames from collapsing into the left third.
+   */
+  setHDRAutoFit(enabled: boolean): void {
+    this.hdrAutoFit = enabled;
+    if (!enabled) {
+      this.hdrEffectiveMax = null;
+    }
     this.updateScaleLabels();
     if (this.data) {
       this.draw();
@@ -383,6 +404,28 @@ export class Histogram extends EventEmitter<HistogramEvents> {
    */
   getMaxValue(): number {
     return this.hdrActive ? (this.hdrHeadroom ?? 4.0) : 1.0;
+  }
+
+  private getDisplayMaxValue(): number {
+    if (!this.hdrActive) return 1.0;
+    if (this.hdrAutoFit && this.hdrEffectiveMax !== null) {
+      return this.hdrEffectiveMax;
+    }
+    return this.getMaxValue();
+  }
+
+  private measureHDRSignalPeak(floatData: ArrayLike<number>): number {
+    let peak = 0;
+    const len = floatData.length;
+    for (let i = 0; i < len; i += 4) {
+      const r = floatData[i] ?? 0;
+      const g = floatData[i + 1] ?? 0;
+      const b = floatData[i + 2] ?? 0;
+      if (Number.isFinite(r) && r > peak) peak = r;
+      if (Number.isFinite(g) && g > peak) peak = g;
+      if (Number.isFinite(b) && b > peak) peak = b;
+    }
+    return peak;
   }
 
   /**
@@ -413,7 +456,12 @@ export class Histogram extends EventEmitter<HistogramEvents> {
 
     const len = floatData.length;
     const pixelCount = len / 4;
-    const maxVal = this.getMaxValue();
+    const configuredMax = this.getMaxValue();
+    const measuredPeak = this.hdrAutoFit ? this.measureHDRSignalPeak(floatData) : configuredMax;
+    const maxVal = this.hdrAutoFit
+      ? Math.min(configuredMax, Math.max(1.0, measuredPeak))
+      : configuredMax;
+    this.hdrEffectiveMax = this.hdrAutoFit ? maxVal : null;
     const binScale = (HISTOGRAM_BINS - 1) / maxVal;
 
     for (let i = 0; i < len; i += 4) {
@@ -455,6 +503,9 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     };
 
     this.data = { red, green, blue, luminance, maxValue: maxBinValue, pixelCount, clipping };
+    if (this.hdrAutoFit) {
+      this.updateScaleLabels();
+    }
     return this.data;
   }
 
@@ -463,7 +514,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
    */
   private updateScaleLabels(): void {
     if (!this.scaleLabels) return;
-    const maxVal = this.getMaxValue();
+    const maxVal = this.getDisplayMaxValue();
     if (this.hdrActive) {
       this.scaleLabels.innerHTML = `
       <span>0</span>

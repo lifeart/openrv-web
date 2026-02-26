@@ -5,9 +5,27 @@
 
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { EXRChannelRemapping } from '../formats/EXRDecoder';
-import { setScopesHDRMode } from '../scopes/WebGLScopes';
+import { setScopesHDRAutoFit, setScopesHDRMode } from '../scopes/WebGLScopes';
+import { queryHDRHeadroom } from '../color/DisplayCapabilities';
 
 type HDRTransferPreset = 'hlg' | 'pq' | null;
+type AutoToneMappingPreset = { enabled: boolean; operator: 'off' | 'aces' };
+
+interface HDRAutoConfigState {
+  toneMappingAutoApplied: boolean;
+  toneMappingAutoPreset: AutoToneMappingPreset | null;
+  gammaAutoApplied: boolean;
+  gammaAutoValue: number | null;
+}
+
+const DEFAULT_HDR_AUTOCONFIG_STATE: HDRAutoConfigState = {
+  toneMappingAutoApplied: false,
+  toneMappingAutoPreset: null,
+  gammaAutoApplied: false,
+  gammaAutoValue: null,
+};
+
+const hdrAutoConfigStateByContext = new WeakMap<SessionBridgeContext, HDRAutoConfigState>();
 
 function normalizeHDRTransferPreset(value: string | undefined | null): HDRTransferPreset {
   if (!value) return null;
@@ -40,6 +58,91 @@ function detectHDRTransferPreset(source: ReturnType<SessionBridgeContext['getSes
   return null;
 }
 
+function getHDRAutoConfigState(context: SessionBridgeContext): HDRAutoConfigState {
+  const existing = hdrAutoConfigStateByContext.get(context);
+  if (existing) return existing;
+  const next = { ...DEFAULT_HDR_AUTOCONFIG_STATE };
+  hdrAutoConfigStateByContext.set(context, next);
+  return next;
+}
+
+function applyAutoToneMappingPreset(
+  context: SessionBridgeContext,
+  autoState: HDRAutoConfigState,
+  preset: AutoToneMappingPreset,
+): void {
+  context.getToneMappingControl().setState(preset);
+  autoState.toneMappingAutoApplied = true;
+  autoState.toneMappingAutoPreset = preset;
+}
+
+function applyAutoGamma(
+  context: SessionBridgeContext,
+  autoState: HDRAutoConfigState,
+  gamma: number,
+): void {
+  context.getColorControls().setAdjustments({ gamma });
+  autoState.gammaAutoApplied = true;
+  autoState.gammaAutoValue = gamma;
+}
+
+function maybeResetAutoHDROverridesForSDR(
+  context: SessionBridgeContext,
+  autoState: HDRAutoConfigState,
+): void {
+  if (autoState.toneMappingAutoApplied && autoState.toneMappingAutoPreset) {
+    const toneMappingControl = context.getToneMappingControl();
+    const toneMapping = toneMappingControl.getState();
+    const autoPreset = autoState.toneMappingAutoPreset;
+    // Reset only when the auto-applied value is still in place.
+    if (toneMapping.enabled === autoPreset.enabled && toneMapping.operator === autoPreset.operator) {
+      toneMappingControl.setState({ enabled: false, operator: 'off' });
+    }
+    autoState.toneMappingAutoApplied = false;
+    autoState.toneMappingAutoPreset = null;
+  }
+
+  if (autoState.gammaAutoApplied && autoState.gammaAutoValue !== null) {
+    const colorControls = context.getColorControls();
+    const currentGamma = colorControls.getAdjustments().gamma;
+    // Reset only when the auto-applied value is still in place.
+    if (currentGamma === autoState.gammaAutoValue && currentGamma !== 1) {
+      colorControls.setAdjustments({ gamma: 1 });
+    }
+    autoState.gammaAutoApplied = false;
+    autoState.gammaAutoValue = null;
+  }
+}
+
+function isGainMapHDRFormat(formatName: string | undefined): boolean {
+  return typeof formatName === 'string' && formatName.toLowerCase().includes('gainmap');
+}
+
+function syncScopesHeadroomAsync(
+  context: SessionBridgeContext,
+  sourceAtLoad: ReturnType<SessionBridgeContext['getSession']>['currentSource'],
+  histogram: ReturnType<SessionBridgeContext['getHistogram']>,
+): void {
+  void queryHDRHeadroom()
+    .then((headroom) => {
+      if (typeof headroom !== 'number' || !Number.isFinite(headroom) || headroom <= 0) return;
+
+      const session = context.getSession();
+      // Ignore stale async responses after source changes.
+      if (session.currentSource !== sourceAtLoad) return;
+
+      const safeHeadroom = Math.max(headroom, 4.0);
+      histogram.setHDRMode(true, safeHeadroom);
+      histogram.setHDRAutoFit(true);
+      setScopesHDRMode(true, safeHeadroom);
+      setScopesHDRAutoFit(true);
+      console.log(`[HDR] Applied async system headroom to scopes: ${safeHeadroom.toFixed(2)}x`);
+    })
+    .catch(() => {
+      // No-op: unavailable API or permission denied.
+    });
+}
+
 /**
  * Handle sourceLoaded event: update info panel, crop, OCIO, HDR auto-config,
  * GTO store, stack control, prerender buffer, EXR layers, and scopes.
@@ -55,6 +158,7 @@ export function handleSourceLoaded(
   updateGamutDiagram?: () => void
 ): void {
   const session = context.getSession();
+  const hdrAutoState = getHDRAutoConfigState(context);
 
   updateInfoPanel();
   // Update crop control with new source dimensions for correct aspect ratio computation
@@ -93,6 +197,7 @@ export function handleSourceLoaded(
     const hdrTransferPreset = detectHDRTransferPreset(source);
 
     const isFileHDR = !!source?.fileSourceNode?.isHDR?.();
+    const isGainMapHDR = isFileHDR && isGainMapHDRFormat(formatName);
     if (isHDRDisplay) {
       const glRenderer = viewer.getGLRenderer?.();
       const headroom = glRenderer?.getHDRHeadroom?.() ?? 4.0;
@@ -101,34 +206,50 @@ export function handleSourceLoaded(
         // HLG/PQ sources are already display-referred HDR presets.
         // Keep default tone mapping OFF, but user can enable it manually.
         console.log(`[HDR] ${hdrTransferPreset.toUpperCase()} preset on HDR display — defaulting tone mapping OFF`);
-        context.getToneMappingControl().setState({ enabled: false, operator: 'off' });
+        applyAutoToneMappingPreset(context, hdrAutoState, { enabled: false, operator: 'off' });
+      } else if (isGainMapHDR) {
+        // Adaptive HDR gainmap stills are already authored for headroom-aware
+        // display rendering. Keep tone mapping OFF by default to avoid applying
+        // a second global curve (e.g. ACES), which diverges from macOS Preview.
+        console.log(`[HDR] Gainmap HDR (${formatName}) on HDR display — defaulting tone mapping OFF`);
+        applyAutoToneMappingPreset(context, hdrAutoState, { enabled: false, operator: 'off' });
       } else if (isFileHDR) {
-        // HDR file (gainmap, EXR) on HDR display: linear float data has no
+        // Scene-linear HDR files (for example EXR) on HDR display have no
         // inherent dynamic-range compression. Content peaks (e.g. 20x SDR white)
         // often far exceed display headroom (3-6x). Without tone mapping,
         // mid-tones are crushed and highlights clip hard.
         console.log(`[HDR] HDR file (${formatName}) on HDR display — enabling ACES tone mapping`);
-        context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
+        applyAutoToneMappingPreset(context, hdrAutoState, { enabled: true, operator: 'aces' });
       } else {
         // HDR video with unknown transfer metadata: keep tone mapping off by default.
         console.log('[HDR] HDR video on HDR display (unknown transfer) — defaulting tone mapping OFF');
-        context.getToneMappingControl().setState({ enabled: false, operator: 'off' });
+        applyAutoToneMappingPreset(context, hdrAutoState, { enabled: false, operator: 'off' });
       }
 
       histogram.setHDRMode(true, Math.max(headroom, 4.0));
+      histogram.setHDRAutoFit(true);
       setScopesHDRMode(true, Math.max(headroom, 4.0));
+      setScopesHDRAutoFit(true);
+      syncScopesHeadroomAsync(context, source, histogram);
     } else {
       // SDR display: apply ACES tone mapping + gamma 2.2 to compress HDR to displayable range.
       // Scopes analyze the tone-mapped output which is SDR range (0-1.0).
       console.log(`[HDR] Detected HDR content (format: ${formatName}), SDR display — applying ACES + gamma 2.2`);
-      context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
-      context.getColorControls().setAdjustments({ gamma: 2.2 });
+      applyAutoToneMappingPreset(context, hdrAutoState, { enabled: true, operator: 'aces' });
+      applyAutoGamma(context, hdrAutoState, 2.2);
       histogram.setHDRMode(false);
+      histogram.setHDRAutoFit(false);
       setScopesHDRMode(false);
+      setScopesHDRAutoFit(false);
     }
   } else {
+    // Leaving HDR content: clear only auto-applied HDR overrides to avoid
+    // leaking them into SDR renders without clobbering manual user edits.
+    maybeResetAutoHDROverridesForSDR(context, hdrAutoState);
     histogram.setHDRMode(false);
+    histogram.setHDRAutoFit(false);
     setScopesHDRMode(false);
+    setScopesHDRAutoFit(false);
   }
 
   // GTO store and stack updates

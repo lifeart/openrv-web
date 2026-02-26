@@ -14,9 +14,9 @@ import { getCanvas, loadVideoFile, waitForTestHelper } from './fixtures';
  * - Display state persists across page reloads
  */
 
-/** Helper: Navigate to View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Helper: Navigate to Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Helper: Open the display profile dropdown */
@@ -46,7 +46,7 @@ test.describe('Display Color Management', () => {
     await page.goto('/');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    await goToViewTab(page);
+    await goToColorTab(page);
   });
 
   // ==================================================================

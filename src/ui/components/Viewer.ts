@@ -87,7 +87,7 @@ import { GhostFrameManager } from './GhostFrameManager';
 import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
 import type { GLRendererContext } from './ViewerGLRenderer';
-import { detectWebGPUHDR, isHDROutputAvailableWithLog } from '../../color/DisplayCapabilities';
+import { detectWebGPUHDR, isHDROutputAvailableWithLog, queryHDRHeadroom } from '../../color/DisplayCapabilities';
 import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { ToneMappingState } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/media/PixelAspectRatio';
@@ -518,6 +518,10 @@ export class Viewer {
       }
     }
 
+    // Query system HDR headroom asynchronously and propagate it to the renderer.
+    // This lets shader tone mapping scale to the actual display capability.
+    this.syncHDRHeadroomFromSystem();
+
     // Create watermark overlay canvas (between image/GL and paint annotations)
     this.watermarkCanvas = document.createElement('canvas');
     this.watermarkCanvas.dataset.testid = 'viewer-watermark-canvas';
@@ -886,6 +890,26 @@ export class Viewer {
     drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.transformManager.zoom);
   }
 
+  /**
+   * Query system HDR headroom and apply it to the GL renderer manager.
+   * Safe no-op when the API is unavailable or permission is denied.
+   */
+  private syncHDRHeadroomFromSystem(): void {
+    if (!this.capabilities?.displayHDR) return;
+
+    void queryHDRHeadroom()
+      .then((headroom) => {
+        if (typeof headroom !== 'number' || !Number.isFinite(headroom) || headroom <= 0) {
+          return;
+        }
+        this.glRendererManager.setHDRHeadroom(headroom);
+        log.info(`System HDR headroom detected: ${headroom.toFixed(2)}x`);
+      })
+      .catch((err) => {
+        log.debug('HDR headroom query unavailable:', err);
+      });
+  }
+
   private bindEvents(): void {
     // Pointer, wheel, drag-drop, and context menu events (delegated to input handler)
     this.inputHandler.bindEvents();
@@ -893,6 +917,7 @@ export class Viewer {
     // Session events
     this.subs.add(this.session.on('sourceLoaded', () => {
       this.frameFetchTracker.reset();
+      this.syncHDRHeadroomFromSystem();
       this.scheduleRender();
     }));
     this.subs.add(this.session.on('frameChanged', () => {
@@ -957,6 +982,7 @@ export class Viewer {
         this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight);
         const containerRect = this.getContainerRect();
         this.updatePaintCanvasSize(this.displayWidth, this.displayHeight, containerRect.width, containerRect.height);
+        this.syncHDRHeadroomFromSystem();
         this.scheduleRender();
       }
       // Re-register for the new DPR value

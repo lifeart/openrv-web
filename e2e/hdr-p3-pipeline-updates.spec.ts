@@ -22,9 +22,9 @@ import {
  * SDR paths work correctly when HDR is not available.
  */
 
-/** Helper: Navigate to View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Helper: Navigate to Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Helper: Check if the browser supports HDR */
@@ -137,7 +137,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
       await page.waitForTimeout(200);
 
       // Switch to HDR mode via tone mapping panel
-      await goToViewTab(page);
+      await goToColorTab(page);
       const control = page.locator('[data-testid="tone-mapping-control-button"]');
       await control.click();
       const dropdown = page.locator('[data-testid="tone-mapping-dropdown"]');
@@ -210,7 +210,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
       await page.waitForTimeout(200);
 
       // Switch to HDR mode
-      await goToViewTab(page);
+      await goToColorTab(page);
       const control = page.locator('[data-testid="tone-mapping-control-button"]');
       await control.click();
       const hlgButton = page.locator('[data-testid="hdr-mode-hlg"]');
@@ -259,7 +259,7 @@ test.describe('Phase 3: Pipeline Updates', () => {
       test.skip(!hasP3, 'Browser does not support Display P3');
 
       // Open display profile panel to verify P3-capable environments still expose export controls.
-      await goToViewTab(page);
+      await goToColorTab(page);
       const dpButton = page.locator('[data-testid="display-profile-button"]');
       await dpButton.click();
       const dropdown = page.locator('[data-testid="display-profile-dropdown"]');

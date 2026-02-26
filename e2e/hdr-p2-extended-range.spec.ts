@@ -20,9 +20,9 @@ import {
  * HDR support are skipped appropriately.
  */
 
-/** Helper: Navigate to View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Helper: Navigate to Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Helper: Open the tone mapping dropdown */
@@ -71,7 +71,7 @@ test.describe('Phase 2: HDR Extended Range Output', () => {
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    await goToViewTab(page);
+    await goToColorTab(page);
   });
 
   // ==========================================================================

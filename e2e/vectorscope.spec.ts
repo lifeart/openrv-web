@@ -58,9 +58,9 @@ test.describe('Vectorscope Display', () => {
     await expect(canvas).toBeVisible();
   });
 
-  test('VS-E005: clicking Vectorscope button in View tab toggles vectorscope', async ({ page }) => {
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+  test('VS-E005: clicking Vectorscope button in QC tab toggles vectorscope', async ({ page }) => {
+    // Go to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     // Open scopes dropdown then toggle the vectorscope option
@@ -311,8 +311,8 @@ test.describe('Vectorscope State Persistence', () => {
     state = await getViewerState(page);
     expect(state.vectorscopeVisible).toBe(true);
 
-    // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Switch back to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);

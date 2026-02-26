@@ -147,17 +147,17 @@ test.describe('False Color UI Controls', () => {
     await loadVideoFile(page);
   });
 
-  test('FC-E020: false color control button exists in View tab', async ({ page }) => {
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+  test('FC-E020: false color control button exists in QC tab', async ({ page }) => {
+    // Go to QC tab
+    await page.click('button[data-tab-id="qc"]');
 
     const control = page.locator('[data-testid="false-color-control-button"]');
     await expect(control).toBeVisible();
   });
 
   test('FC-E021: clicking false color control toggles feature', async ({ page }) => {
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Go to QC tab
+    await page.click('button[data-tab-id="qc"]');
 
     let state = await getFalseColorState(page);
     expect(state.enabled).toBe(false);
@@ -247,10 +247,10 @@ test.describe('False Color State Persistence', () => {
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
 
-    // Switch back to View tab
-    const viewTab = page.locator('button[data-tab-id="view"]');
-    await viewTab.click();
-    await expect(viewTab).toBeVisible();
+    // Switch back to QC tab
+    const qcTab = page.locator('button[data-tab-id="qc"]');
+    await qcTab.click();
+    await expect(qcTab).toBeVisible();
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);

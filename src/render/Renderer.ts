@@ -414,6 +414,19 @@ export class Renderer implements RendererBackend {
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   }
 
+  /**
+   * Ensure an image has an up-to-date GL texture and return it.
+   * Used by scene analysis paths that need to sample the source texture
+   * before the main draw call.
+   */
+  ensureImageTexture(image: IPImage): WebGLTexture | null {
+    if (!this.gl || !this.displayShader) return null;
+    if (image.textureNeedsUpdate || !image.texture) {
+      this.updateTexture(image);
+    }
+    return image.texture ?? null;
+  }
+
   renderImage(
     image: IPImage,
     offsetX = 0,

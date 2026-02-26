@@ -28,6 +28,7 @@ test.describe('HSL Qualifier', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.waitForTimeout(200);
+    await page.click('button[data-tab-id="qc"]');
   });
 
   test.describe('Basic Functionality', () => {

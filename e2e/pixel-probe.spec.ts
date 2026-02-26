@@ -242,8 +242,8 @@ test.describe('Pixel Probe State Persistence', () => {
     state = await getPixelProbeState(page);
     expect(state.enabled).toBe(true);
 
-    // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Switch back to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     state = await getPixelProbeState(page);
