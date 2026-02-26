@@ -11,6 +11,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { HistoryManager, HistoryEntry } from '../../utils/HistoryManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getIconSvg } from './shared/Icons';
 import { OPACITY } from './shared/theme';
 
@@ -25,8 +26,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private visible = false;
   private entriesContainer: HTMLElement;
   private headerElement: HTMLElement;
-  private unsubscribers: (() => void)[] = [];
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
   /** Tracks the entry IDs currently rendered, in display order (newest first). */
   private renderedEntryIds: number[] = [];
   /** Tracks the currentIndex that was last rendered. */
@@ -125,12 +125,11 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     this.container.appendChild(this.entriesContainer);
 
     // Listen to history changes
-    this.unsubscribers.push(this.historyManager.on('historyChanged', () => this.render()));
-    this.unsubscribers.push(this.historyManager.on('currentIndexChanged', () => this.render()));
+    this.subs.add(this.historyManager.on('historyChanged', () => this.render()));
+    this.subs.add(this.historyManager.on('currentIndexChanged', () => this.render()));
 
     // Listen for theme changes to re-render with new colors
-    this.boundOnThemeChange = () => this.render();
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.render()));
 
     // Initial render
     this.render();
@@ -389,14 +388,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
    * Dispose of resources
    */
   dispose(): void {
-    for (const unsubscribe of this.unsubscribers) {
-      unsubscribe();
-    }
-    this.unsubscribers = [];
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
     this.container.remove();
   }
 

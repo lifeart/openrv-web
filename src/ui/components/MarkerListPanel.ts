@@ -13,6 +13,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session, Marker, MARKER_COLORS } from '../../core/session/Session';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { showAlert, showConfirm } from './shared/Modal';
 import type { ExclusivePanelRef } from './NotePanel';
 
@@ -52,7 +53,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private boundOnMarksChanged: () => void;
   private boundOnFrameChanged: () => void;
   private boundOnKeyDown: (e: KeyboardEvent) => void;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   constructor(session: Session) {
     super();
@@ -210,8 +211,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     this.container.addEventListener('keydown', this.boundOnKeyDown);
 
     // Subscribe to theme changes so marker entries pick up new CSS variable values
-    this.boundOnThemeChange = () => this.render();
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.render()));
 
     // Initial render
     this.render();
@@ -916,10 +916,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     // Remove keyboard listener
     this.container.removeEventListener('keydown', this.boundOnKeyDown);
     // Remove theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
     this.removeAllListeners();
   }
 }

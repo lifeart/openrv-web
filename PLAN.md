@@ -27,7 +27,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
 | 4 | ~~Silent Promise Failure Fixes~~ | **4 hours** | LOW | **DONE** | Completed: 19 silent `.catch(() => {})` replaced with Logger calls, global `unhandledrejection` handler installed, 4 new tests. 2 rounds of code review + fixes. 17831 tests passing. |
-| 6 | [Signal Connection Leak Fixes](./IMPROVEMENT_6_PLAN.md) | **15-17 hours** | LOW | READY | 12 changes (remove convenience methods, fix IPNode.dispose, add listenerCount) |
+| 6 | ~~Signal Connection Leak Fixes~~ | **15-17 hours** | LOW | **DONE** | Completed: DisposableSubscriptionManager utility, ComputedSignal.dispose(), PropertyContainer.dispose(), IPNode.dispose() fix, EventEmitter.listenerCount(), 7 wiring modules refactored, App.ts wiringSubscriptions, 16 UI components migrated from boundOnThemeChange. 2 rounds of code review + fixes. 42 new tests, 17896 total passing. |
 | 5 | ~~VideoFrame VRAM Leak Prevention~~ | **5-6 days** | MEDIUM | **DONE** | Completed: ManagedVideoFrame ref-counted wrapper, IPImage getter/setter migration, try/catch guards at all 6 creation sites, Renderer fallback fix, probe path fix. 2 rounds of code review + fixes. 30 new tests, 17854 total passing. |
 
 ### P1 — High (Affects Maintainability)
@@ -101,6 +101,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 | 3 | App Class Decomposition | **DONE** | 2026-02-26 |
 | 4 | Silent Promise Failure Fixes | **DONE** | 2026-02-26 |
 | 5 | VideoFrame VRAM Leak Prevention | **DONE** | 2026-02-26 |
+| 6 | Signal Connection Leak Fixes | **DONE** | 2026-02-26 |
 
 ### Improvement 1 Summary
 
@@ -204,3 +205,38 @@ Key fixes from reviews:
 - `managedVideoFrame` field has `@internal` JSDoc documentation
 - All mock VideoFrames use proper `format` getter that returns null on close
 - Tests properly clean up with `image.close()` and `ManagedVideoFrame.resetForTesting()`
+
+### Improvement 6 Summary — Signal Connection Leak Fixes
+
+Systematic fix for ~120+ leaked event subscriptions across wiring modules, App.ts, and UI components. Introduces `DisposableSubscriptionManager` utility to standardize subscription lifecycle management.
+
+**Phase 1 — Foundation:**
+- **DisposableSubscriptionManager.ts** (113 lines) — Subscription tracking utility with `add()`, `addDOMListener()` (AbortController-based), `createChild()` parent-child hierarchy, idempotent `dispose()`, `options.signal` guard, child self-removal from parent
+- **Signal.ts** — `ComputedSignal.dispose()`: stores dep unsubscribers, sets `dirty=false` to freeze cached value, nulls compute closure for GC
+- **Property.ts** — `PropertyContainer`: tracks forwarding subscriptions in `propertyUnsubscribers` Map, guards duplicate `add()`, `dispose()` clears all subscriptions + property signals, `_disposed` idempotency guard
+- **IPNode.ts** — `dispose()` calls `this.properties.dispose()` before clearing own signals
+- **EventEmitter.ts** — Added `listenerCount(event?)` for test observability parity with `Signal.hasConnections`
+
+**Phase 2 — Wiring modules (7 modules, ~84 .on() calls wrapped):**
+- **AppColorWiring.ts** — 11 subscriptions tracked, `subscriptions` added to `ColorWiringState`
+- **AppViewWiring.ts** — 20 subscriptions tracked, returns `DisposableSubscriptionManager`, `addDOMListener` for mousemove
+- **AppEffectsWiring.ts** — 13 subscriptions tracked + `setOnCropRegionChanged(null)` cleanup, returns `DisposableSubscriptionManager`
+- **AppPlaybackWiring.ts** — 27 subscriptions tracked (including `wirePlaylistRuntime`), returns `DisposableSubscriptionManager`; `handleVideoExport` scoped listeners intentionally NOT migrated
+- **AppStackWiring.ts** — 5 subscriptions tracked, `subscriptions` added to `StackWiringState`
+- **AppDCCWiring.ts** — 5 subscriptions tracked, `subscriptions` added to `DCCWiringState`
+- **AppTransformWiring.ts** — 1 subscription tracked, `subscriptions` added to `TransformWiringState`
+- **App.ts** — `wiringSubscriptions` manager captures all wiring returns + 8 inline `.on()` calls + 2 DOM listeners via `addDOMListener()`, disposed first in `App.dispose()`
+
+**Phase 3 — Component standardization (16 files migrated):**
+- All `boundOnThemeChange` patterns replaced with `DisposableSubscriptionManager`
+- Components with both `boundOnThemeChange` AND `unsubscribers[]` (FalseColorControl, HSLQualifierControl) fully unified
+- Files: InfoPanel, CacheIndicator, HistoryPanel, CurveEditor, Waveform, MarkerListPanel, ColorWheels, Histogram, ThemeControl, Viewer, NotePanel, Timeline, Vectorscope, GamutDiagram, FalseColorControl, HSLQualifierControl
+
+New test files: DisposableSubscriptionManager.test.ts (13), IPNode.test.ts (2). Updated: Signal.test.ts (+5), Property.test.ts (+5), EventEmitter.test.ts (+3), 7 wiring test files (+2 each = 14). Total: 428 test files, 17896 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+Key fixes from reviews:
+- PropertyContainer.dispose() `_disposed` idempotency guard added
+- ComputedSignal.dispose() nulls compute closure (`this.compute = () => this.cachedValue`) for GC
+- App.ts DOM listeners migrated from manual addEventListener/removeEventListener to `wiringSubscriptions.addDOMListener()`
+- IPNode test IPNODE-DISP-002 verifies `properties.propertyChanged.hasConnections === false` (not just `propertyChanged.disconnectAll()`)
+- CS-DISP-001 asserts `source.hasConnections === false` to verify actual dependency disconnection

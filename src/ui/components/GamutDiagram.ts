@@ -13,6 +13,7 @@ import {
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import {
   CIE_1931_XY_LOCUS,
   getColorSpacePrimaries,
@@ -45,7 +46,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
   private lastFloatData: Float32Array | null = null;
   private lastFloatWidth = 0;
   private lastFloatHeight = 0;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   // Color spaces for gamut triangles
   private inputColorSpace = 'sRGB';
@@ -90,14 +91,13 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
     // Defer horseshoe computation until first show() — the diagram starts hidden
     // and the computation is expensive (~300K pixels at 2x DPR).
 
-    this.boundOnThemeChange = () => {
+    this.subs.add(getThemeManager().on('themeChanged', () => {
       // Horseshoe cache is theme-independent (transparent bg), no invalidation needed.
       // Only redraw graticule/triangles which use themed colors.
       if (this.visible) {
         this.drawFull();
       }
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    }));
   }
 
   // ===========================================================================
@@ -548,10 +548,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
   }
 
   dispose(): void {
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
-    this.boundOnThemeChange = null;
+    this.subs.dispose();
     this.horseshoeCanvas = null;
     this.lastImageData = null;
     this.lastFloatData = null;

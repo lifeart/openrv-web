@@ -397,4 +397,85 @@ describe('PropertyContainer', () => {
       );
     });
   });
+
+  describe('dispose', () => {
+    it('PC-DISP-001: after dispose(), setting property value does NOT emit on propertyChanged', () => {
+      container.add({ name: 'test', defaultValue: 0 });
+
+      const listener = vi.fn();
+      container.propertyChanged.connect(listener);
+
+      container.dispose();
+
+      container.setValue('test', 100);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('PC-DISP-002: propertyChanged.hasConnections returns false after dispose()', () => {
+      container.add({ name: 'test', defaultValue: 0 });
+
+      container.propertyChanged.connect(() => {});
+      expect(container.propertyChanged.hasConnections).toBe(true);
+
+      container.dispose();
+      expect(container.propertyChanged.hasConnections).toBe(false);
+    });
+
+    it('PC-DISP-003: dispose() is idempotent', () => {
+      container.add({ name: 'a', defaultValue: 1 });
+      container.add({ name: 'b', defaultValue: 2 });
+
+      expect(() => {
+        container.dispose();
+        container.dispose();
+      }).not.toThrow();
+    });
+
+    it('PC-DISP-004: individual Property.changed signals are cleared after container disposal', () => {
+      const prop = container.add<number>({ name: 'test', defaultValue: 0 });
+
+      // The forwarding subscription is connected to prop.changed
+      expect(prop.changed.hasConnections).toBe(true);
+
+      container.dispose();
+
+      // After disposal, prop.changed should have no connections
+      expect(prop.changed.hasConnections).toBe(false);
+    });
+
+    it('PC-DISP-005: add() after dispose() returns disconnected property (no leak)', () => {
+      container.dispose();
+
+      const prop = container.add<number>({ name: 'postDispose', defaultValue: 42 });
+
+      // Property is created and usable
+      expect(prop.value).toBe(42);
+      prop.value = 100;
+      expect(prop.value).toBe(100);
+
+      // But NOT registered in container (no forwarding subscription leak)
+      expect(container.has('postDispose')).toBe(false);
+      expect(container.propertyChanged.hasConnections).toBe(false);
+    });
+
+    it('PC-DISP-006: duplicate-name add() cleans old forwarding subscription', () => {
+      const prop1 = container.add<number>({ name: 'dup', defaultValue: 0 });
+      const prop2 = container.add<number>({ name: 'dup', defaultValue: 10 });
+
+      const listener = vi.fn();
+      container.propertyChanged.connect(listener);
+
+      // Changing the old property should NOT fire propertyChanged
+      // because the old forwarding subscription was cleaned up
+      prop1.value = 99;
+      expect(listener).not.toHaveBeenCalled();
+
+      // Changing the new property should fire propertyChanged
+      prop2.value = 20;
+      expect(listener).toHaveBeenCalledWith(
+        { name: 'dup', value: 20 },
+        { name: 'dup', value: 10 }
+      );
+    });
+  });
 });

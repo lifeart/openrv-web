@@ -19,6 +19,7 @@ import {
 } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 export type HistogramMode = 'rgb' | 'luminance' | 'separate';
@@ -64,7 +65,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   private clippingIndicators: HTMLElement | null = null;
   private shadowIndicator: HTMLElement | null = null;
   private highlightIndicator: HTMLElement | null = null;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   // HDR mode state
   private hdrActive = false;
@@ -108,13 +109,12 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     this.createFooter();
 
     // Listen for theme changes to redraw with new colors
-    this.boundOnThemeChange = () => {
+    this.subs.add(getThemeManager().on('themeChanged', () => {
       if (this.data) {
         this.draw();
         this.updateClippingDisplay();
       }
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    }));
   }
 
   private createControls(): void {
@@ -772,10 +772,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
 
   dispose(): void {
     // Clean up theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
-    this.boundOnThemeChange = null;
+    this.subs.dispose();
     this.data = null;
     this.modeButton = null;
     this.logButton = null;

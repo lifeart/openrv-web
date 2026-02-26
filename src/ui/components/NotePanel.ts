@@ -16,6 +16,7 @@ import { Session } from '../../core/session/Session';
 import { type Note, type NoteStatus } from '../../core/session/NoteManager';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
 import { showAlert } from './shared/Modal';
@@ -55,7 +56,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private boundOnNotesChanged: () => void;
   private boundOnFrameChanged: () => void;
   private boundOnKeyDown: (e: KeyboardEvent) => void;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
   private boundOnSourceLoaded: (() => void) | null = null;
 
   constructor(session: Session) {
@@ -230,8 +231,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.container.addEventListener('keydown', this.boundOnKeyDown);
 
     // Theme changes
-    this.boundOnThemeChange = () => this.render();
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.render()));
 
     // Initial render
     this.render();
@@ -973,9 +973,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       this.session.off('sourceLoaded', this.boundOnSourceLoaded);
     }
     this.container.removeEventListener('keydown', this.boundOnKeyDown);
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
+    this.subs.dispose();
     this.announcer.dispose();
     this.removeAllListeners();
   }

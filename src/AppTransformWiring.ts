@@ -9,12 +9,14 @@ import type { AppWiringContext } from './AppWiringContext';
 import type { TransformControl } from './ui/components/TransformControl';
 import { DEFAULT_TRANSFORM } from './ui/components/TransformControl';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 /**
  * Mutable state for transform history tracking.
  */
 export interface TransformWiringState {
   transformHistoryPrevious: ReturnType<TransformControl['getTransform']> | null;
+  subscriptions: DisposableSubscriptionManager;
 }
 
 /**
@@ -24,11 +26,14 @@ export interface TransformWiringState {
 export function wireTransformControls(ctx: AppWiringContext): TransformWiringState {
   const { viewer, controls, persistenceManager } = ctx;
 
+  const subs = new DisposableSubscriptionManager();
+
   const state: TransformWiringState = {
     transformHistoryPrevious: null,
+    subscriptions: subs,
   };
 
-  controls.transformControl.on('transformChanged', (transform) => {
+  subs.add(controls.transformControl.on('transformChanged', (transform) => {
     const previousTransform = state.transformHistoryPrevious ?? DEFAULT_TRANSFORM;
     const currentTransform = { ...transform };
 
@@ -74,7 +79,7 @@ export function wireTransformControls(ctx: AppWiringContext): TransformWiringSta
     }
 
     state.transformHistoryPrevious = currentTransform;
-  });
+  }));
 
   return state;
 }

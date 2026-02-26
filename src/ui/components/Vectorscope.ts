@@ -21,6 +21,7 @@ import {
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export interface VectorscopeEvents extends EventMap {
   visibilityChanged: boolean;
@@ -57,7 +58,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   private lastFloatFrame: { data: Float32Array; width: number; height: number } | null = null;
   private isPlaybackMode = false;
   private dpr = 1;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   constructor() {
     super();
@@ -97,14 +98,13 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     this.drawGraticule();
 
     // Listen for theme changes to redraw with new colors
-    this.boundOnThemeChange = () => {
+    this.subs.add(getThemeManager().on('themeChanged', () => {
       if (this.lastFloatFrame || this.lastImageData) {
         this.redrawLastFrame();
       } else {
         this.drawGraticule();
       }
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    }));
   }
 
   private createControls(): void {
@@ -547,11 +547,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   }
 
   dispose(): void {
-    // Clean up theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
-    this.boundOnThemeChange = null;
+    this.subs.dispose();
     this.zoomButton = null;
     this.draggableContainer.dispose();
   }

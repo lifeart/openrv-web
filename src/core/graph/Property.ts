@@ -227,15 +227,27 @@ export function interpolateKeyframes(prev: Keyframe, next: Keyframe, frame: numb
 
 export class PropertyContainer {
   private properties = new Map<string, Property<unknown>>();
+  private propertyUnsubscribers = new Map<string, () => void>();
+  private _disposed = false;
   readonly propertyChanged = new Signal<{ name: string; value: unknown }>();
 
   add<T>(info: PropertyInfo<T>): Property<T> {
+    // After dispose, return a disconnected property — no forwarding subscription created
+    if (this._disposed) {
+      return new Property(info);
+    }
+
+    // Clean up old forwarding subscription if re-adding same name
+    const existingUnsub = this.propertyUnsubscribers.get(info.name);
+    if (existingUnsub) existingUnsub();
+
     const prop = new Property(info);
     this.properties.set(info.name, prop as Property<unknown>);
 
-    prop.changed.connect((value, oldValue) => {
+    const unsub = prop.changed.connect((value, oldValue) => {
       this.propertyChanged.emit({ name: info.name, value }, { name: info.name, value: oldValue });
     });
+    this.propertyUnsubscribers.set(info.name, unsub);
 
     return prop;
   }
@@ -324,5 +336,23 @@ export class PropertyContainer {
     for (const [name, value] of Object.entries(data)) {
       this.setValue(name, value);
     }
+  }
+
+  /**
+   * Dispose all internal forwarding subscriptions and clear signals.
+   * After disposal, property value changes no longer forward to `propertyChanged`.
+   * Idempotent: calling dispose() multiple times is safe.
+   */
+  dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+    for (const unsub of this.propertyUnsubscribers.values()) {
+      unsub();
+    }
+    this.propertyUnsubscribers.clear();
+    for (const prop of this.properties.values()) {
+      prop.changed.disconnectAll();
+    }
+    this.propertyChanged.disconnectAll();
   }
 }

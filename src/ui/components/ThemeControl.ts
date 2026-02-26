@@ -12,18 +12,16 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
 import { getThemeManager, ThemeMode } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export class ThemeControl {
   private container: HTMLElement;
   private button: HTMLButtonElement;
   private dropdownMenu: DropdownMenu;
-  private boundOnModeChanged: () => void;
-  private boundOnThemeChanged: () => void;
+  private subs = new DisposableSubscriptionManager();
 
   constructor() {
     const themeManager = getThemeManager();
-    this.boundOnModeChanged = () => this.updateButtonLabel();
-    this.boundOnThemeChanged = () => this.updateSelectedValue();
 
     // Create container
     this.container = document.createElement('div');
@@ -87,8 +85,8 @@ export class ThemeControl {
     this.container.appendChild(this.button);
 
     // Subscribe to theme changes
-    themeManager.on('modeChanged', this.boundOnModeChanged);
-    themeManager.on('themeChanged', this.boundOnThemeChanged);
+    this.subs.add(themeManager.on('modeChanged', () => this.updateButtonLabel()));
+    this.subs.add(themeManager.on('themeChanged', () => this.updateSelectedValue()));
   }
 
   /**
@@ -179,12 +177,7 @@ export class ThemeControl {
    */
   dispose(): void {
     this.dropdownMenu.dispose();
-
-    // Clean up theme change listeners
-    const themeManager = getThemeManager();
-    themeManager.off('modeChanged', this.boundOnModeChanged);
-    themeManager.off('themeChanged', this.boundOnThemeChanged);
-
+    this.subs.dispose();
     this.container.remove();
   }
 }

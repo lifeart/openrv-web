@@ -227,6 +227,49 @@ describe('EventEmitter', () => {
     });
   });
 
+  describe('listenerCount', () => {
+    it('EVT-LC-001: listenerCount(event) returns correct count for specific event', () => {
+      expect(emitter.listenerCount('message')).toBe(0);
+
+      emitter.on('message', () => {});
+      expect(emitter.listenerCount('message')).toBe(1);
+
+      emitter.on('message', () => {});
+      expect(emitter.listenerCount('message')).toBe(2);
+
+      // Other events should not be counted
+      emitter.on('count', () => {});
+      expect(emitter.listenerCount('message')).toBe(2);
+    });
+
+    it('EVT-LC-002: listenerCount() with no args returns total across all events', () => {
+      expect(emitter.listenerCount()).toBe(0);
+
+      emitter.on('message', () => {});
+      emitter.on('count', () => {});
+      emitter.on('data', () => {});
+
+      expect(emitter.listenerCount()).toBe(3);
+
+      emitter.on('message', () => {});
+      expect(emitter.listenerCount()).toBe(4);
+    });
+
+    it('EVT-LC-003: listenerCount returns 0 after removeAllListeners', () => {
+      emitter.on('message', () => {});
+      emitter.on('count', () => {});
+      emitter.on('data', () => {});
+
+      expect(emitter.listenerCount()).toBe(3);
+
+      emitter.removeAllListeners();
+
+      expect(emitter.listenerCount()).toBe(0);
+      expect(emitter.listenerCount('message')).toBe(0);
+      expect(emitter.listenerCount('count')).toBe(0);
+    });
+  });
+
   describe('edge cases', () => {
     it('handles same listener added multiple times', () => {
       const listener = vi.fn();

@@ -59,6 +59,7 @@ import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
 import { Logger } from './utils/Logger';
+import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 const log = new Logger('App');
 
@@ -110,6 +111,7 @@ export class App {
 
   // Wiring state (managed by wiring modules, cleaned up on dispose)
   private colorWiringState!: ColorWiringState;
+  private wiringSubscriptions = new DisposableSubscriptionManager();
 
   constructor() {
     // Detect display capabilities at startup (P3, HDR, WebGPU)
@@ -165,12 +167,12 @@ export class App {
       this.layoutStore.getPresets().map(({ id, label }) => ({ id, label })),
       (presetId) => this.layoutStore.applyPreset(presetId),
     );
-    this.tabBar.on('tabChanged', (tabId: TabId) => {
+    this.wiringSubscriptions.add(this.tabBar.on('tabChanged', (tabId: TabId) => {
       this.contextToolbar.setActiveTab(tabId);
       // Update active context for key binding scoping
       const contextMap: Record<string, BindingContext> = { annotate: 'paint', transform: 'transform', view: 'viewer', qc: 'viewer' };
       this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
-    });
+    }));
 
     // Initialize keyboard manager
     this.keyboardManager = new KeyboardManager();
@@ -393,22 +395,22 @@ export class App {
     this.externalPresentation.initialize();
 
     // Wire HeaderBar external presentation button
-    this.headerBar.on('externalPresentation', () => this.externalPresentation.openWindow());
+    this.wiringSubscriptions.add(this.headerBar.on('externalPresentation', () => this.externalPresentation.openWindow()));
 
     // Wire session events to external presentation
-    this.session.on('frameChanged', () => {
+    this.wiringSubscriptions.add(this.session.on('frameChanged', () => {
       if (this.externalPresentation.hasOpenWindows) {
         this.externalPresentation.syncFrame(this.session.currentFrame, this.session.frameCount);
       }
-    });
-    this.session.on('playbackChanged', (playing: boolean) => {
+    }));
+    this.wiringSubscriptions.add(this.session.on('playbackChanged', (playing: boolean) => {
       if (this.externalPresentation.hasOpenWindows) {
         this.externalPresentation.syncPlayback(playing, this.session.playbackSpeed, this.session.currentFrame);
       }
-    });
+    }));
 
     // Wire color adjustment changes to external presentation windows
-    this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
+    this.wiringSubscriptions.add(this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
       if (this.externalPresentation.hasOpenWindows) {
         this.externalPresentation.syncColor({
           exposure: adjustments.exposure,
@@ -417,7 +419,7 @@ export class App {
           tint: adjustments.tint,
         });
       }
-    });
+    }));
 
     // Audio orchestrator (manages AudioMixer lifecycle and session wiring)
     this.audioOrchestrator = new AudioOrchestrator({ session: this.session });
@@ -447,12 +449,13 @@ export class App {
     if (dccUrl) {
       this.dccBridge = new DCCBridge({ url: dccUrl });
 
-      wireDCCBridge({
+      const dccState = wireDCCBridge({
         dccBridge: this.dccBridge,
         session: this.session,
         viewer: this.viewer,
         colorControls: this.controls.colorControls,
       });
+      this.wiringSubscriptions.add(() => dccState?.subscriptions?.dispose());
 
       this.dccBridge.connect();
     }
@@ -471,15 +474,26 @@ export class App {
 
     // Wire all control groups via focused wiring modules
     this.colorWiringState = wireColorControls(wiringCtx);
-    wireViewControls(wiringCtx);
-    wireEffectsControls(wiringCtx);
-    wireTransformControls(wiringCtx);
-    wirePlaybackControls(wiringCtx, {
+    this.wiringSubscriptions.add(() => this.colorWiringState?.subscriptions?.dispose());
+
+    const viewSubs = wireViewControls(wiringCtx);
+    this.wiringSubscriptions.add(() => viewSubs?.dispose());
+
+    const effectsSubs = wireEffectsControls(wiringCtx);
+    this.wiringSubscriptions.add(() => effectsSubs?.dispose());
+
+    const transformState = wireTransformControls(wiringCtx);
+    this.wiringSubscriptions.add(() => transformState?.subscriptions?.dispose());
+
+    const playbackSubs = wirePlaybackControls(wiringCtx, {
       getKeyboardHandler: () => this.keyboardHandler,
       getFullscreenManager: () => this.fullscreenManager ?? undefined,
       getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
     });
-    wireStackControls(wiringCtx);
+    this.wiringSubscriptions.add(() => playbackSubs?.dispose());
+
+    const stackState = wireStackControls(wiringCtx);
+    this.wiringSubscriptions.add(() => stackState?.subscriptions?.dispose());
 
     // Timeline editor wiring (EDL/SequenceGroup integration)
     this.timelineEditorService.bindEvents();
@@ -588,19 +602,19 @@ export class App {
 
   private bindEvents(): void {
     // Handle window resize
-    window.addEventListener('resize', this.boundHandleResize);
+    this.wiringSubscriptions.addDOMListener(window, 'resize', this.boundHandleResize);
 
     // Handle page visibility changes (pause playback when tab is hidden)
-    document.addEventListener('visibilitychange', this.boundHandleVisibilityChange);
+    this.wiringSubscriptions.addDOMListener(document, 'visibilitychange', this.boundHandleVisibilityChange);
 
     // Initialize keyboard shortcuts
     this.keyboardManager.attach();
 
-    this.paintEngine.on('annotationsChanged', () => this.persistenceManager.syncGTOStore());
-    this.paintEngine.on('effectsChanged', () => this.persistenceManager.syncGTOStore());
+    this.wiringSubscriptions.add(this.paintEngine.on('annotationsChanged', () => this.persistenceManager.syncGTOStore()));
+    this.wiringSubscriptions.add(this.paintEngine.on('effectsChanged', () => this.persistenceManager.syncGTOStore()));
 
     // Record paint actions in history
-    this.paintEngine.on('strokeAdded', (annotation) => {
+    this.wiringSubscriptions.add(this.paintEngine.on('strokeAdded', (annotation) => {
       const historyManager = getGlobalHistoryManager();
       const annotationType = annotation.type === 'pen' ? 'stroke' :
                              annotation.type === 'shape' ? (annotation as { shapeType?: string }).shapeType || 'shape' :
@@ -611,7 +625,7 @@ export class App {
         () => this.paintEngine.undo(),
         () => this.paintEngine.redo()
       );
-    });
+    }));
   }
 
   /**
@@ -653,6 +667,9 @@ export class App {
   }
 
   dispose(): void {
+    // Dispose all wiring subscriptions first (before component disposal)
+    this.wiringSubscriptions.dispose();
+
     if (this.colorWiringState.colorHistoryTimer) {
       clearTimeout(this.colorWiringState.colorHistoryTimer);
       this.colorWiringState.colorHistoryTimer = null;
@@ -662,10 +679,6 @@ export class App {
     this.layoutOrchestrator?.dispose();
 
     this.renderLoop.dispose();
-
-    // Remove global event listeners
-    window.removeEventListener('resize', this.boundHandleResize);
-    document.removeEventListener('visibilitychange', this.boundHandleVisibilityChange);
 
     this.viewer.dispose();
     this.noteOverlay.dispose();

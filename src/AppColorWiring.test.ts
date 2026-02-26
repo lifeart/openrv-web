@@ -365,6 +365,27 @@ describe('wireColorControls', () => {
     expect(state).toHaveProperty('colorHistoryPrevious');
   });
 
+  describe('disposal', () => {
+    it('CW-DISP-001: callbacks fire before dispose', () => {
+      const state = wireColorControls(ctx as any);
+
+      ctx._controls.colorInversionToggle.emit('inversionChanged', true);
+      expect(ctx._viewer.setColorInversion).toHaveBeenCalledWith(true);
+
+      // Sanity: state is not disposed yet
+      expect(state.subscriptions.isDisposed).toBe(false);
+    });
+
+    it('CW-DISP-002: callbacks do not fire after dispose', () => {
+      const state = wireColorControls(ctx as any);
+      state.subscriptions.dispose();
+
+      ctx._viewer.setColorInversion.mockClear();
+      ctx._controls.colorInversionToggle.emit('inversionChanged', false);
+      expect(ctx._viewer.setColorInversion).not.toHaveBeenCalled();
+    });
+  });
+
   describe('debounce behavior', () => {
     beforeEach(() => {
       vi.useFakeTimers();

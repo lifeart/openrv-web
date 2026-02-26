@@ -68,6 +68,7 @@ import { WatermarkOverlay, type WatermarkState } from './WatermarkOverlay';
 import { MissingFrameOverlay } from './MissingFrameOverlay';
 import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 
 // Extracted effect processing utilities
@@ -326,7 +327,7 @@ export class Viewer {
   private pixelSamplingManager!: PixelSamplingManager;
 
   // Theme change listener for runtime theme updates
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   // Reference image overlay (for A/B reference comparison)
   private _referenceCanvas: HTMLCanvasElement | null = null;
@@ -566,10 +567,10 @@ export class Viewer {
     this.canvasContainer.appendChild(this.missingFrameOverlay.render());
 
     // Re-render when watermark settings change
-    this.watermarkOverlay.on('stateChanged', () => {
+    this.subs.add(this.watermarkOverlay.on('stateChanged', () => {
       this.watermarkDirty = true;
       this.scheduleRender();
-    });
+    }));
 
     // Create pixel sampling manager (cursor color, probe mouse handlers, source image cache)
     this.pixelSamplingManager = new PixelSamplingManager({
@@ -594,17 +595,17 @@ export class Viewer {
 
     // Create color wheels
     this.colorWheels = new ColorWheels(this.container);
-    this.colorWheels.on('stateChanged', () => {
+    this.subs.add(this.colorWheels.on('stateChanged', () => {
       this.notifyEffectsChanged();
       this.refresh();
-    });
+    }));
 
     // Create HSL Qualifier (secondary color correction)
     this.hslQualifier = new HSLQualifier();
-    this.hslQualifier.on('stateChanged', () => {
+    this.subs.add(this.hslQualifier.on('stateChanged', () => {
       this.notifyEffectsChanged();
       this.refresh();
-    });
+    }));
 
     // Use willReadFrequently for better getImageData performance during effect processing
     // Use P3 color space when available for wider gamut output
@@ -662,12 +663,12 @@ export class Viewer {
     this.container.appendChild(this.abIndicator);
 
     // Listen for A/B changes
-    this.session.on('abSourceChanged', ({ current }) => {
+    this.subs.add(this.session.on('abSourceChanged', ({ current }) => {
       this.updateABIndicator(current);
       // Source switching during playback reuses stale frame-fetch state unless reset.
       this.frameFetchTracker.reset();
       this.scheduleRender();
-    });
+    }));
 
     // Create drop overlay
     this.dropOverlay = document.createElement('div');
@@ -731,10 +732,7 @@ export class Viewer {
     }
 
     // Listen for theme changes to redraw placeholders and overlays with updated colors
-    this.boundOnThemeChange = () => {
-      this.scheduleRender();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.scheduleRender()));
   }
 
   private initializeCanvas(): void {
@@ -893,11 +891,11 @@ export class Viewer {
     this.inputHandler.bindEvents();
 
     // Session events
-    this.session.on('sourceLoaded', () => {
+    this.subs.add(this.session.on('sourceLoaded', () => {
       this.frameFetchTracker.reset();
       this.scheduleRender();
-    });
-    this.session.on('frameChanged', () => {
+    }));
+    this.subs.add(this.session.on('frameChanged', () => {
       // Phase 2B: Proactively preload for the NEXT frame before it is rendered,
       // giving the worker pool a head start on processing upcoming frames
       if (this.session.isPlaying && this.prerenderBuffer) {
@@ -921,14 +919,14 @@ export class Viewer {
       // Annotations are per-frame, so the paint canvas must be redrawn
       this.paintDirty = true;
       this.scheduleRender();
-    });
+    }));
 
     // Paint events
-    this.paintEngine.on('annotationsChanged', () => {
+    this.subs.add(this.paintEngine.on('annotationsChanged', () => {
       this.paintDirty = true;
       this.renderPaint();
-    });
-    this.paintEngine.on('toolChanged', (tool) => this.inputHandler.updateCursor(tool));
+    }));
+    this.subs.add(this.paintEngine.on('toolChanged', (tool) => this.inputHandler.updateCursor(tool)));
 
     // Pixel probe + cursor color events - single handler for both consumers
     this.container.addEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
@@ -4086,10 +4084,7 @@ export class Viewer {
     this.pixelSamplingManager.dispose();
 
     // Cleanup theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
 
     // Cleanup frame interpolator
     this.frameInterpolator.dispose();
