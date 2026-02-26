@@ -89,6 +89,9 @@ export class ShaderProgram {
         this.checkShaderCompileStatus(fragShader);
         this.checkProgramLinkStatus();
         this._ready = true;
+      } catch (e) {
+        gl.deleteProgram(this.program);
+        throw e;
       } finally {
         // Clean up shaders regardless of success/failure
         gl.deleteShader(vertShader);
@@ -123,12 +126,12 @@ export class ShaderProgram {
 
   /**
    * Check program link status. Throws on failure.
+   * Does NOT delete the program — the caller is responsible for cleanup.
    */
   private checkProgramLinkStatus(): void {
     const gl = this.gl;
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
       const error = gl.getProgramInfoLog(this.program);
-      gl.deleteProgram(this.program);
       throw new RenderError(`Shader program link error: ${error}`);
     }
   }
@@ -184,6 +187,9 @@ export class ShaderProgram {
       this.checkProgramLinkStatus();
 
       log.info('Parallel shader compilation completed successfully');
+    } catch (e) {
+      gl.deleteProgram(this.program);
+      throw e;
     } finally {
       // Clean up shaders regardless of success/failure
       if (this.vertShader) {
@@ -356,6 +362,11 @@ export class ShaderProgram {
         this.gl.uniformMatrix3fv(location, false, this.mat3Buffer);
       }
     }
+  }
+
+  /** The underlying WebGLProgram handle (for UBO block binding etc.). */
+  get handle(): WebGLProgram {
+    return this.program;
   }
 
   dispose(): void {

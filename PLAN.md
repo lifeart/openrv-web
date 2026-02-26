@@ -36,7 +36,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 |---|------|--------|------|-----------|-----------------|
 | 1 | ~~Session God Object Refactoring~~ | **14 days** | MEDIUM | **DONE** | Completed: Session decomposed into SessionAnnotations, SessionGraph, SessionMedia, SessionPlayback. Session.ts reduced from ~2450 to ~1210 lines. 2 rounds of code review + fixes. 17448 tests passing. |
 | 3 | [App Class Decomposition](./IMPROVEMENT_3_PLAN.md) | **14-18 days** | MEDIUM | READY | All 7 changes incorporated |
-| 2 | [Monolithic Shader Modularization](./IMPROVEMENT_2_PLAN.md) | **35 days** | MEDIUM | READY | All 11 changes incorporated (now 11 stages) |
+| 2 | ~~Monolithic Shader Modularization~~ | **35 days** | MEDIUM | **PHASE A DONE** | Phase A infrastructure complete: FBOPingPong, ShaderPipeline, ShaderStage, passthrough.vert.glsl, pixelCompare utilities. 2 rounds of code review + fixes. 75 new tests, 17530 total passing. |
 
 ### P2 — Medium (Affects Extensibility)
 
@@ -97,6 +97,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 | # | Plan | Status | Date |
 |---|------|--------|------|
 | 1 | Session God Object Refactoring | **DONE** | 2026-02-25 |
+| 2 | Monolithic Shader Modularization — Phase A | **DONE** | 2026-02-25 |
 
 ### Improvement 1 Summary
 
@@ -109,3 +110,23 @@ Session.ts (~2450 lines) decomposed into 4 focused services via host interfaces:
 - **Session.ts** (1210 lines) — composition root/facade, backward-compat proxies
 
 New test files: SessionAnnotations.test.ts (33), SessionGraph.test.ts (19), SessionMedia.test.ts (74), SessionPlayback.test.ts (63). Total: 411 test files, 17448 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+### Improvement 2 Summary — Phase A: Infrastructure + Test Harness
+
+Multi-pass shader pipeline infrastructure for decomposing the monolithic viewer.frag.glsl (1,444 lines) into 11 composable stages:
+
+- **ShaderStage.ts** (79 lines) — StageId union type (11 stages), ShaderStageDescriptor interface
+- **FBOPingPong.ts** (170 lines) — Ping-pong FBO manager with NEAREST filtering default, RGBA8/RGBA16F format, gl.invalidateFramebuffer optimization
+- **ShaderPipeline.ts** (405 lines) — Pipeline orchestrator: 0 stages → passthrough, 1 stage → single-pass (no FBO), N stages → FBO ping-pong. Global Uniforms UBO (std140), stage ordering, program cache, fallback chain (RGBA16F → RGBA8 → monolithic)
+- **passthrough.vert.glsl** (10 lines) — Identity vertex shader for intermediate FBO stages
+- **pixelCompare.ts** (80 lines) — RMSE/PSNR pixel comparison utilities for visual regression testing
+- **ShaderProgram.ts** — Added `handle` getter for UBO block binding
+
+New test files: FBOPingPong.test.ts (26), ShaderPipeline.test.ts (34), pixelCompare.test.ts (16). Total: 414 test files, 17530 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+Key fixes from reviews:
+- gl.HALF_FLOAT for RGBA16F (not gl.FLOAT) for mobile GPU compatibility
+- UBO updated for both single-pass and multi-pass paths
+- SDR fallback goes straight to monolithic (no backwards RGBA16F attempt)
+- setStageOrder rejects duplicate entries
+- FBOPingPong.dispose resets _format to default
