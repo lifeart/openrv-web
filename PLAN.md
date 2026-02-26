@@ -35,7 +35,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 | # | Plan | Effort | Risk | Readiness | Required Changes |
 |---|------|--------|------|-----------|-----------------|
 | 1 | ~~Session God Object Refactoring~~ | **14 days** | MEDIUM | **DONE** | Completed: Session decomposed into SessionAnnotations, SessionGraph, SessionMedia, SessionPlayback. Session.ts reduced from ~2450 to ~1210 lines. 2 rounds of code review + fixes. 17448 tests passing. |
-| 3 | [App Class Decomposition](./IMPROVEMENT_3_PLAN.md) | **14-18 days** | MEDIUM | READY | All 7 changes incorporated |
+| 3 | ~~App Class Decomposition~~ | **14-18 days** | MEDIUM | **DONE** | Completed: App.ts reduced from 1875 to 694 lines, AppControlRegistry from 1520 to 736 lines. 7 services extracted, 8 control groups with permanent facade. 2 rounds of code review + fixes. 279 new tests, 17827 total passing. |
 | 2 | ~~Monolithic Shader Modularization~~ | **35 days** | MEDIUM | **PHASE A DONE** | Phase A infrastructure complete: FBOPingPong, ShaderPipeline, ShaderStage, passthrough.vert.glsl, pixelCompare utilities. 2 rounds of code review + fixes. 75 new tests, 17530 total passing. |
 
 ### P2 — Medium (Affects Extensibility)
@@ -98,6 +98,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 |---|------|--------|------|
 | 1 | Session God Object Refactoring | **DONE** | 2026-02-25 |
 | 2 | Monolithic Shader Modularization — Phase A | **DONE** | 2026-02-25 |
+| 3 | App Class Decomposition | **DONE** | 2026-02-26 |
 
 ### Improvement 1 Summary
 
@@ -130,3 +131,40 @@ Key fixes from reviews:
 - SDR fallback goes straight to monolithic (no backwards RGBA16F attempt)
 - setStageOrder rejects duplicate entries
 - FBOPingPong.dispose resets _format to default
+
+### Improvement 3 Summary — App Class Decomposition
+
+App.ts (1,875 lines) decomposed into 7 focused services + AppControlRegistry split into 8 control groups:
+
+**Phase 0 — Baseline tests:**
+- **AppSessionBridge.test.ts** (25 tests) — scope scheduling, info panel, histogram, EXR layer change, dispose cleanup
+- **AppPersistenceManager.test.ts** (31 tests) — GTO store, sync, snapshots, restore, save, dispose
+
+**Phase 1 — Service extractions:**
+- **RenderLoopService.ts** (74 lines) — tick/start/stop with PerfTrace integration, narrow structural interfaces
+- **AudioOrchestrator.ts** (172 lines) — AudioMixer lifecycle, lazy AudioContext init, source audio extraction
+- **FrameNavigationService.ts** (230 lines) — 9 playlist/annotation navigation methods
+- **SessionURLService.ts** (285 lines) — URL state capture/apply/bootstrap for sharing & network sync
+- **TimelineEditorService.ts** (385 lines) — timeline EDL/sequence integration, SequenceGroupNode resolution
+- **KeyboardActionMap.ts** (640 lines) — buildActionHandlers() pure function, 117+ action entries with context guards
+- **LayoutOrchestrator.ts** (599 lines) — DOM layout, a11y, fullscreen, focus, presentation mode, event tracking
+
+**Phase 2 — AppControlRegistry decomposition:**
+- 8 control group interfaces in `services/controls/ControlGroups.ts`
+- 8 factory functions (`createColorControls`, `createViewControls`, etc.)
+- Permanent compatibility facade with 65+ getters
+- 7 per-tab DOM builders in `services/tabContent/`
+- AppControlRegistry reduced from 1,520 to 736 lines
+
+**Phase 3 — Composition root:**
+- App.ts reduced from 1,875 to 694 lines
+- Thin composition root with direct dependency injection
+- Clean mount/dispose lifecycle
+
+New test files: RenderLoopService.test.ts (10), AudioOrchestrator.test.ts (20), FrameNavigationService.test.ts (30), SessionURLService.test.ts (22), TimelineEditorService.test.ts (36), KeyboardActionMap.test.ts (66), LayoutOrchestrator.test.ts (31), App.test.ts (5). Total: 424 test files, 17827 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+Key fixes from reviews:
+- Non-session event listeners tracked in LayoutOrchestrator `_unsubscribers` for dispose cleanup
+- AudioOrchestrator tests use public API (setupLazyInit + click event) instead of private field mutation
+- Redundant `?? undefined` removed from SessionURLService
+- ESC cascade tests expanded to cover filterControl/lutPipelinePanel conditional paths
