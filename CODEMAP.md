@@ -255,18 +255,24 @@ openrv-web/
 │   │
 │   ├── core/                    # Core infrastructure
 │   │   ├── graph/               # Node graph system
-│   │   │   ├── Graph.ts         # DAG graph management
-│   │   │   ├── Property.ts      # Property container
-│   │   │   └── Signal.ts        # Event/signal system
+│   │   │   ├── Graph.ts         # DAG graph management + evaluateWithContext()
+│   │   │   ├── Property.ts      # Property container (dispose, subscription tracking)
+│   │   │   └── Signal.ts        # Event/signal system (ComputedSignal.dispose)
 │   │   ├── image/               # Image handling
-│   │   │   └── Image.ts         # IPImage data structure (HDR VideoFrame support)
-│   │   └── session/             # Session management
-│   │       ├── Session.ts       # Session state + GTO loading
+│   │   │   ├── Image.ts         # IPImage data structure (HDR VideoFrame, toImageData/fromImageData)
+│   │   │   └── ManagedVideoFrame.ts # Ref-counted VideoFrame wrapper (VRAM leak prevention)
+│   │   └── session/             # Session management (decomposed from monolithic Session.ts)
+│   │       ├── Session.ts       # Composition root/facade (~1210 lines, down from ~2450)
+│   │       ├── SessionAnnotations.ts # Markers, notes, versions, statuses
+│   │       ├── SessionGraph.ts  # GTO graph, metadata, EDL, property resolution
+│   │       ├── SessionMedia.ts  # Media sources, loading, frame cache
+│   │       ├── SessionPlayback.ts # Playback engine, volume, A/B compare
 │   │       ├── SessionState.ts  # Serializable state types
 │   │       ├── SessionSerializer.ts # .orvproject save/load
 │   │       ├── SessionGTOStore.ts # GTO property storage/retrieval
 │   │       ├── SessionGTOExporter.ts # Export session to GTO format
 │   │       ├── GTOGraphLoader.ts # Node graph from GTO
+│   │       ├── GTOSettingsParser.ts # GTO settings parser
 │   │       ├── ABCompareManager.ts # A/B comparison state
 │   │       ├── AnnotationStore.ts # Annotation storage
 │   │       ├── AutoSaveManager.ts # Auto-save to IndexedDB
@@ -342,20 +348,40 @@ openrv-web/
 │   ├── nodes/                   # Processing nodes
 │   │   ├── CacheLUTNode.ts      # GPU-cached LUT node
 │   │   ├── base/                # Base node types
-│   │   │   ├── IPNode.ts        # Abstract base (inputs/outputs/properties)
-│   │   │   ├── NodeFactory.ts   # Node registry + @RegisterNode decorator
-│   │   │   └── NodeProcessor.ts # Node processing base
+│   │   │   ├── IPNode.ts        # Abstract base (inputs/outputs/properties/dispose)
+│   │   │   ├── NodeFactory.ts   # Node registry + @RegisterNode decorator + unregister()
+│   │   │   └── NodeProcessor.ts # Node processing strategy interface
 │   │   ├── processors/          # Node processor implementations
 │   │   │   ├── LayoutProcessor.ts   # Layout processing
 │   │   │   ├── StackProcessor.ts    # Stack compositing
 │   │   │   └── SwitchProcessor.ts   # Input switching
 │   │   ├── sources/             # Source nodes
 │   │   │   ├── BaseSourceNode.ts    # Abstract source base
-│   │   │   ├── FileSourceNode.ts    # Single image (RVFileSource)
+│   │   │   ├── FileSourceNode.ts    # Single image (RVFileSource, VRAM-safe)
 │   │   │   ├── ProceduralSourceNode.ts # Procedural image generation
-│   │   │   ├── VideoSourceNode.ts   # Video file (RVVideoSource)
+│   │   │   ├── VideoSourceNode.ts   # Video file (RVVideoSource, VRAM-safe)
 │   │   │   ├── SequenceSourceNode.ts # Image sequence (RVSequenceSource)
 │   │   │   └── index.ts             # Registration + exports
+│   │   ├── effects/             # Effect node system (EffectNode hierarchy)
+│   │   │   ├── EffectNode.ts        # Abstract base: enabled/mix/identity/blend
+│   │   │   ├── EffectChain.ts       # Linear chain with toJSON/fromJSON serialization
+│   │   │   ├── CDLNode.ts           # ASC CDL (slope/offset/power/saturation)
+│   │   │   ├── ColorInversionNode.ts # RGB/luminance/per-channel inversion
+│   │   │   ├── HueRotationNode.ts   # HSL hue rotation (typed array precision)
+│   │   │   ├── NoiseReductionNode.ts # Luminance/chroma noise reduction
+│   │   │   ├── SharpenNode.ts       # Unsharp mask sharpening
+│   │   │   ├── ToneMappingNode.ts   # Reinhard/filmic/ACES tone mapping
+│   │   │   ├── HighlightsShadowsNode.ts # Highlights/shadows/midtone balance
+│   │   │   ├── VibranceNode.ts      # Selective saturation
+│   │   │   ├── ClarityNode.ts       # Micro-contrast enhancement
+│   │   │   ├── DeinterlaceNode.ts   # Bob/weave/blend deinterlacing
+│   │   │   ├── FilmEmulationNode.ts # Film stock emulation presets
+│   │   │   ├── StabilizationNode.ts # Motion stabilization (stateful)
+│   │   │   ├── ColorWheelsNode.ts   # Lift/gamma/gain color correction
+│   │   │   ├── processors/          # GPU processor strategies
+│   │   │   │   ├── GPUSharpenProcessor.ts      # GPU sharpen stub
+│   │   │   │   └── GPUNoiseReductionProcessor.ts # GPU denoise stub
+│   │   │   └── index.ts             # Re-exports all effect nodes
 │   │   └── groups/              # Group/container nodes
 │   │       ├── BaseGroupNode.ts     # Abstract group base
 │   │       ├── SequenceGroupNode.ts # Play inputs in sequence
@@ -367,19 +393,30 @@ openrv-web/
 │   │       └── index.ts             # Registration + exports
 │   │
 │   ├── paint/                   # Annotation system
-│   │   ├── PaintEngine.ts       # Paint operations + stroke management
+│   │   ├── PaintEngine.ts       # Paint operations + stroke management + plugin tools
 │   │   ├── PaintRenderer.ts     # Paint rendering to canvas
 │   │   └── types.ts             # Paint type definitions
+│   │
+│   ├── plugin/                  # Plugin architecture
+│   │   ├── PluginRegistry.ts    # Lifecycle orchestrator (register/activate/deactivate/dispose)
+│   │   ├── ExporterRegistry.ts  # Exporter contribution registry
+│   │   ├── types.ts             # PluginManifest, PluginState, contribution types
+│   │   ├── builtins/            # Built-in plugin examples
+│   │   │   └── HDRDecoderPlugin.ts # HDR decoder as plugin example
+│   │   └── index.ts             # Module exports
 │   │
 │   ├── render/                  # WebGL/WebGPU rendering
 │   │   ├── Canvas2DHDRBlit.ts   # Canvas HDR blitting
 │   │   ├── Canvas2DTransitionRenderer.ts # Transition rendering
+│   │   ├── FBOPingPong.ts       # Ping-pong FBO manager (RGBA8/RGBA16F)
 │   │   ├── LuminanceAnalyzer.ts # Luminance analysis
 │   │   ├── Renderer.ts          # Main WebGL2 renderer (shader pipeline)
 │   │   ├── RendererBackend.ts   # Renderer backend abstraction
 │   │   ├── RenderState.ts       # Render state container
 │   │   ├── RenderWorkerProxy.ts # Off-thread rendering
-│   │   ├── ShaderProgram.ts     # WebGL shader compilation
+│   │   ├── ShaderPipeline.ts    # Multi-pass shader pipeline orchestrator
+│   │   ├── ShaderProgram.ts     # WebGL shader compilation + handle getter
+│   │   ├── ShaderStage.ts       # Stage descriptors (11 composable stages)
 │   │   ├── ShaderStateManager.ts # Centralized shader state
 │   │   ├── SphericalProjection.ts # Spherical/360 projection
 │   │   ├── StateAccessor.ts     # State accessor interface
@@ -391,6 +428,7 @@ openrv-web/
 │   │   └── shaders/             # GLSL shader files
 │   │       ├── viewer.vert.glsl # Main vertex shader
 │   │       ├── viewer.frag.glsl # Main fragment shader (all effects)
+│   │       ├── passthrough.vert.glsl # Identity vertex shader (FBO stages)
 │   │       ├── luminance.frag.glsl # Luminance calculation
 │   │       ├── transition.vert.glsl # Transition vertex shader
 │   │       └── transition.frag.glsl # Transition fragment shader
@@ -517,52 +555,101 @@ openrv-web/
 │   │           ├── Panel.ts         # Collapsible panel
 │   │           └── theme.ts         # Theme constants
 │   │
+│   ├── services/                # Extracted application services
+│   │   ├── RenderLoopService.ts     # Render tick/start/stop with PerfTrace
+│   │   ├── AudioOrchestrator.ts     # AudioMixer lifecycle, lazy AudioContext
+│   │   ├── FrameNavigationService.ts # 9 playlist/annotation navigation methods
+│   │   ├── SessionURLService.ts     # URL state capture/apply/bootstrap
+│   │   ├── TimelineEditorService.ts # Timeline EDL/sequence integration
+│   │   ├── KeyboardActionMap.ts     # 117+ action entries pure function
+│   │   ├── LayoutOrchestrator.ts    # DOM layout, a11y, fullscreen, focus
+│   │   ├── controls/                # Control group factories
+│   │   │   ├── ControlGroups.ts         # 8 control group interfaces
+│   │   │   ├── createColorControls.ts
+│   │   │   ├── createViewControls.ts
+│   │   │   ├── createPlaybackControls.ts
+│   │   │   ├── createEffectsControls.ts
+│   │   │   ├── createAnalysisControls.ts
+│   │   │   ├── createAnnotateControls.ts
+│   │   │   ├── createTransformControls.ts
+│   │   │   ├── createPanelControls.ts
+│   │   │   └── index.ts
+│   │   └── tabContent/              # Per-tab DOM builders
+│   │       ├── buildColorTab.ts
+│   │       ├── buildViewTab.ts
+│   │       ├── buildEffectsTab.ts
+│   │       ├── buildAnnotateTab.ts
+│   │       ├── buildTransformTab.ts
+│   │       ├── buildQCTab.ts
+│   │       ├── buildPanelToggles.ts
+│   │       └── index.ts
+│   │
 │   ├── utils/                   # Utilities
-│   │   ├── AnnotationJSONExporter.ts # Annotation JSON export
-│   │   ├── AnnotationPDFExporter.ts # Annotation PDF export
-│   │   ├── CodecUtils.ts        # Codec utility functions
-│   │   ├── CustomKeyBindingsManager.ts # Custom key binding management
-│   │   ├── EffectProcessor.ts   # CPU effect processing
-│   │   ├── effectProcessing.shared.ts # Shared effect processing logic
-│   │   ├── EventEmitter.ts      # Event emitter system
-│   │   ├── FrameExporter.ts     # Frame export utilities
-│   │   ├── FrameInterpolator.ts # Frame interpolation
-│   │   ├── FramePreloadManager.ts # Frame preload/cache management
-│   │   ├── FullscreenManager.ts # Fullscreen API manager
-│   │   ├── getCSSColor.ts       # CSS color utility
-│   │   ├── HiDPICanvas.ts       # HiDPI canvas scaling
+│   │   ├── DisposableSubscriptionManager.ts # Subscription lifecycle manager
+│   │   ├── EventEmitter.ts      # Event emitter system + listenerCount()
+│   │   ├── globalErrorHandler.ts # Unhandled rejection handler
 │   │   ├── HistoryManager.ts    # Undo/redo history manager
-│   │   ├── KeyBindings.ts       # Default key binding definitions
-│   │   ├── KeyboardManager.ts   # Keyboard input manager
-│   │   ├── MediabunnyFrameExtractor.ts # WebCodecs frame extraction (HDR)
-│   │   ├── PixelAspectRatio.ts  # Pixel aspect ratio utilities
-│   │   ├── PrerenderBufferManager.ts # Pre-render buffer management
-│   │   ├── PresentationMode.ts  # Presentation mode manager
-│   │   ├── SequenceExporter.ts  # Image sequence export
-│   │   ├── SequenceLoader.ts    # Image sequence loading
-│   │   ├── ThemeManager.ts      # UI theme manager
-│   │   ├── Timecode.ts          # Timecode conversion utilities
-│   │   └── WorkerPool.ts        # Web Worker pool manager
+│   │   ├── Logger.ts            # Structured logging
+│   │   ├── LRUCache.ts          # LRU cache utility
+│   │   ├── PerfTrace.ts         # Performance tracing
+│   │   ├── WorkerPool.ts        # Web Worker pool manager
+│   │   ├── math.ts              # Math utilities
+│   │   ├── throttle.ts          # Throttle utility
+│   │   ├── effects/             # Effect processing utilities
+│   │   │   ├── EffectProcessor.ts       # CPU effect processing
+│   │   │   ├── effectProcessing.shared.ts # Shared effect processing logic
+│   │   │   └── PrerenderBufferManager.ts # Pre-render buffer management
+│   │   ├── export/              # Export utilities
+│   │   │   ├── AnnotationJSONExporter.ts # Annotation JSON export
+│   │   │   ├── AnnotationPDFExporter.ts # Annotation PDF export
+│   │   │   ├── FrameExporter.ts     # Frame export utilities
+│   │   │   └── SequenceExporter.ts  # Image sequence export
+│   │   ├── input/               # Input handling utilities
+│   │   │   ├── ActiveContextManager.ts    # Active context tracking
+│   │   │   ├── ContextualKeyboardManager.ts # Contextual keyboard handling
+│   │   │   ├── CustomKeyBindingsManager.ts # Custom key bindings
+│   │   │   ├── KeyBindings.ts       # Default key binding definitions
+│   │   │   └── KeyboardManager.ts   # Keyboard input manager
+│   │   ├── media/               # Media handling utilities
+│   │   │   ├── CodecUtils.ts        # Codec utility functions
+│   │   │   ├── FrameInterpolator.ts # Frame interpolation
+│   │   │   ├── FramePreloadManager.ts # Frame preload/cache management
+│   │   │   ├── HDRFrameResizer.ts   # HDR frame resizing
+│   │   │   ├── MediabunnyFrameExtractor.ts # WebCodecs HDR frame extraction
+│   │   │   ├── OTIOParser.ts        # OpenTimelineIO parser
+│   │   │   ├── OTIOWriter.ts        # OpenTimelineIO writer
+│   │   │   ├── PixelAspectRatio.ts  # Pixel aspect ratio utilities
+│   │   │   ├── SequenceLoader.ts    # Image sequence loading
+│   │   │   ├── SupportedMediaFormats.ts # Supported format definitions
+│   │   │   └── Timecode.ts         # Timecode conversion utilities
+│   │   ├── preferences/         # Preferences management
+│   │   │   └── PreferencesManager.ts # User preferences storage
+│   │   └── ui/                  # UI utilities
+│   │       ├── FullscreenManager.ts # Fullscreen API manager
+│   │       ├── HiDPICanvas.ts   # HiDPI canvas scaling
+│   │       ├── PresentationMode.ts # Presentation mode manager
+│   │       ├── ThemeManager.ts  # UI theme manager
+│   │       └── getCSSColor.ts   # CSS color utility
 │   │
 │   ├── workers/                 # Web Workers
 │   │   └── effectProcessor.worker.ts # Effect processing worker
 │   │
-│   ├── App.ts                   # Main application
-│   ├── AppColorWiring.ts        # Color system integration
-│   ├── AppControlRegistry.ts    # Control registration system
-│   ├── AppDCCWiring.ts          # DCC integration wiring
-│   ├── AppEffectsWiring.ts      # Effects pipeline integration
+│   ├── App.ts                   # Composition root (~694 lines, down from ~1875)
+│   ├── AppControlRegistry.ts    # Control facade (~736 lines, down from ~1520)
+│   ├── AppColorWiring.ts        # Color system integration (subscription-tracked)
+│   ├── AppDCCWiring.ts          # DCC integration wiring (subscription-tracked)
+│   ├── AppEffectsWiring.ts      # Effects pipeline integration (subscription-tracked)
 │   ├── AppKeyboardHandler.ts    # Keyboard event handling
 │   ├── AppNetworkBridge.ts      # Network synchronization
 │   ├── AppPersistenceManager.ts # Session persistence
-│   ├── AppPlaybackWiring.ts     # Playback system integration
+│   ├── AppPlaybackWiring.ts     # Playback system integration (subscription-tracked)
 │   ├── AppSessionBridge.ts      # Session management integration
-│   ├── AppStackWiring.ts        # Stack compositing integration
-│   ├── AppTransformWiring.ts    # Transform integration
-│   ├── AppViewWiring.ts         # View system integration
+│   ├── AppStackWiring.ts        # Stack compositing integration (subscription-tracked)
+│   ├── AppTransformWiring.ts    # Transform integration (subscription-tracked)
+│   ├── AppViewWiring.ts         # View system integration (subscription-tracked)
 │   ├── AppWiringContext.ts      # Wiring context setup
 │   ├── KeyboardWiring.ts        # Keyboard shortcut wiring
-│   ├── main.ts                  # Entry point
+│   ├── main.ts                  # Entry point (plugin bootstrap wiring)
 │   ├── test-helper.ts           # Test utilities
 │   └── vite-env.d.ts            # Vite type declarations
 │
@@ -575,15 +662,20 @@ openrv-web/
 
 | OpenRV Component | Web Implementation | Notes |
 |-----------------|-------------------|-------|
-| `IPNode` | `src/nodes/base/IPNode.ts` | Abstract base with inputs/outputs/properties |
-| `IPGraph` | `src/core/graph/Graph.ts` | DAG management, evaluation |
-| `IPImage` | `src/core/image/Image.ts` | Image data + metadata, HDR VideoFrame support |
+| `IPNode` | `src/nodes/base/IPNode.ts` | Abstract base with inputs/outputs/properties/dispose |
+| `IPGraph` | `src/core/graph/Graph.ts` | DAG management, evaluation, evaluateWithContext |
+| `IPImage` | `src/core/image/Image.ts` | Image data + metadata, HDR VideoFrame, toImageData/fromImageData |
+| `ManagedVideoFrame` | `src/core/image/ManagedVideoFrame.ts` | Ref-counted VideoFrame wrapper (VRAM leak prevention) |
 | `ImageRenderer` | `src/render/Renderer.ts` | WebGL2 renderer with fragment shader pipeline |
 | `RendererBackend` | `src/render/RendererBackend.ts` | Renderer backend abstraction |
 | `WebGPURenderer` | `src/render/WebGPUBackend.ts` | WebGPU rendering backend |
 | `ShaderProgram` | `src/render/ShaderProgram.ts` | WebGL shader compilation |
 | `TextureCache` | `src/render/TextureCacheManager.ts` | Texture cache management |
-| `Session` | `src/core/session/Session.ts` | Session state management |
+| `Session` | `src/core/session/Session.ts` | Session facade (decomposed into 4 services) |
+| `SessionAnnotations` | `src/core/session/SessionAnnotations.ts` | Markers, notes, versions, statuses |
+| `SessionGraph` | `src/core/session/SessionGraph.ts` | GTO graph, metadata, EDL |
+| `SessionMedia` | `src/core/session/SessionMedia.ts` | Media sources, loading, frame cache |
+| `SessionPlayback` | `src/core/session/SessionPlayback.ts` | Playback engine, volume, A/B compare |
 | GTO I/O | `gto-js` library | Already implemented |
 | `GTOGraphLoader` | `src/core/session/GTOGraphLoader.ts` | Node graph from GTO files |
 | `SessionGTOStore` | `src/core/session/SessionGTOStore.ts` | GTO property storage/retrieval |
@@ -608,8 +700,29 @@ openrv-web/
 | `FilterGaussianIPNode` | `src/filters/WebGLSharpen.ts` | GPU sharpening filter |
 | `NoiseReductionIPNode` | `src/filters/NoiseReduction.ts` | Noise reduction filter |
 | `OverlayIPNode` | `src/composite/BlendModes.ts` | Blend mode implementations |
-| `PaintIPNode` | `src/paint/PaintEngine.ts` | Canvas-based annotations |
+| `PaintIPNode` | `src/paint/PaintEngine.ts` | Canvas-based annotations + plugin tool support |
 | `PaintRenderer` | `src/paint/PaintRenderer.ts` | Paint rendering to canvas |
+| EffectNode | `src/nodes/effects/EffectNode.ts` | Abstract effect base (enabled/mix/identity/blend) |
+| EffectChain | `src/nodes/effects/EffectChain.ts` | Linear chain pipeline with serialization |
+| CDLNode | `src/nodes/effects/CDLNode.ts` | ASC CDL color correction node |
+| ColorInversionNode | `src/nodes/effects/ColorInversionNode.ts` | Color inversion effect node |
+| HueRotationNode | `src/nodes/effects/HueRotationNode.ts` | Hue rotation effect node |
+| NoiseReductionNode | `src/nodes/effects/NoiseReductionNode.ts` | Noise reduction effect node |
+| SharpenNode | `src/nodes/effects/SharpenNode.ts` | Unsharp mask sharpen node |
+| ToneMappingNode | `src/nodes/effects/ToneMappingNode.ts` | Tone mapping effect node |
+| HighlightsShadowsNode | `src/nodes/effects/HighlightsShadowsNode.ts` | Highlights/shadows effect node |
+| VibranceNode | `src/nodes/effects/VibranceNode.ts` | Selective saturation node |
+| ClarityNode | `src/nodes/effects/ClarityNode.ts` | Micro-contrast effect node |
+| DeinterlaceNode | `src/nodes/effects/DeinterlaceNode.ts` | Deinterlace effect node |
+| FilmEmulationNode | `src/nodes/effects/FilmEmulationNode.ts` | Film stock emulation node |
+| StabilizationNode | `src/nodes/effects/StabilizationNode.ts` | Motion stabilization node |
+| ColorWheelsNode | `src/nodes/effects/ColorWheelsNode.ts` | Lift/gamma/gain color node |
+| PluginRegistry | `src/plugin/PluginRegistry.ts` | Plugin lifecycle orchestrator |
+| ExporterRegistry | `src/plugin/ExporterRegistry.ts` | Exporter contribution registry |
+| ShaderPipeline | `src/render/ShaderPipeline.ts` | Multi-pass shader pipeline orchestrator |
+| FBOPingPong | `src/render/FBOPingPong.ts` | Ping-pong FBO manager |
+| ShaderStage | `src/render/ShaderStage.ts` | 11 composable shader stage types |
+| DisposableSubscriptionManager | `src/utils/DisposableSubscriptionManager.ts` | Subscription lifecycle manager |
 | `StereoIPNode` | `src/stereo/StereoRenderer.ts` | 8 stereo viewing modes |
 | `StereoAlign` | `src/stereo/StereoAlignOverlay.ts` | Stereo alignment overlay |
 | `StereoEyeTransform` | `src/stereo/StereoEyeTransform.ts` | Per-eye transform controls |
@@ -639,11 +752,19 @@ openrv-web/
 | Playlist | `src/core/session/PlaylistManager.ts` | Multi-clip sequencing |
 | Network Sync | `src/network/NetworkSyncManager.ts` | Multi-client sync |
 | WebSocket | `src/network/WebSocketClient.ts` | WebSocket connection |
-| API Facade | `src/api/OpenRVAPI.ts` | Public API entry point |
-| Keyboard Shortcuts | `src/utils/KeyboardManager.ts` + `KeyBindings.ts` | Keyboard input handling |
-| Frame Extraction | `src/utils/MediabunnyFrameExtractor.ts` | WebCodecs HDR frame extraction |
+| API Facade | `src/api/OpenRVAPI.ts` | Public API entry point + plugin API |
+| RenderLoopService | `src/services/RenderLoopService.ts` | Render tick/start/stop |
+| AudioOrchestrator | `src/services/AudioOrchestrator.ts` | AudioMixer lifecycle |
+| FrameNavigationService | `src/services/FrameNavigationService.ts` | Playlist/annotation navigation |
+| SessionURLService | `src/services/SessionURLService.ts` | URL state management |
+| TimelineEditorService | `src/services/TimelineEditorService.ts` | Timeline EDL integration |
+| KeyboardActionMap | `src/services/KeyboardActionMap.ts` | Keyboard action bindings |
+| LayoutOrchestrator | `src/services/LayoutOrchestrator.ts` | DOM layout orchestration |
+| Keyboard Shortcuts | `src/utils/input/KeyboardManager.ts` + `KeyBindings.ts` | Keyboard input handling |
+| Frame Extraction | `src/utils/media/MediabunnyFrameExtractor.ts` | WebCodecs HDR frame extraction |
 | Worker Pool | `src/utils/WorkerPool.ts` | Web Worker parallelism |
 | Effect Worker | `src/workers/effectProcessor.worker.ts` | Off-thread effect processing |
+| EffectProcessor | `src/utils/effects/EffectProcessor.ts` | CPU effect processing |
 | Effect Registry | `src/effects/EffectRegistry.ts` | Effect registration system |
 | Media Cache | `src/cache/MediaCacheManager.ts` | Media caching with policies |
 | DCC Bridge | `src/integrations/DCCBridge.ts` | DCC application integration |
@@ -672,8 +793,14 @@ All shaders are fully implemented in consolidated GPU shader programs:
 
 **Additional Shaders**:
 - `viewer.vert.glsl` - Main vertex shader (quad geometry)
+- `passthrough.vert.glsl` - Identity vertex shader for FBO pipeline stages
 - `luminance.frag.glsl` - Luminance calculation
 - `transition.vert.glsl`, `transition.frag.glsl` - Transition effects
+
+**Multi-pass Pipeline** (Phase A infrastructure):
+- `ShaderPipeline.ts` - Pipeline orchestrator: 0 stages = passthrough, 1 stage = single-pass, N stages = FBO ping-pong
+- `FBOPingPong.ts` - Ping-pong framebuffer manager (RGBA8/RGBA16F, gl.invalidateFramebuffer)
+- `ShaderStage.ts` - 11 composable stage types (inputEOTF, exposure, temperature, brightness, contrast, saturation, hueRotation, toneMapping, gamma, inversion, outputMode)
 
 **GPU Filters**:
 - `src/filters/WebGLSharpen.ts` - Unsharp mask sharpening
@@ -829,3 +956,13 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Conforming workflow support
 - [x] External window presentation mode
 - [x] Spherical/360 projection
+
+### Phase 11 (Architecture Improvements)
+- [x] Session god object decomposed into 4 focused services (SessionAnnotations, SessionGraph, SessionMedia, SessionPlayback)
+- [x] Multi-pass shader pipeline infrastructure (FBOPingPong, ShaderPipeline, ShaderStage — Phase A)
+- [x] App class decomposed into 7 services + 8 control groups (App.ts 1875→694 lines)
+- [x] Silent promise failure fixes (19 `.catch(() => {})` → Logger calls, global unhandledrejection handler)
+- [x] VideoFrame VRAM leak prevention (ManagedVideoFrame ref-counted wrapper, try/catch at 6 creation sites)
+- [x] Signal connection leak fixes (DisposableSubscriptionManager, 7 wiring modules, 16 UI components migrated)
+- [x] Plugin architecture (PluginRegistry, 6 contribution types, ExporterRegistry, HDRDecoderPlugin example)
+- [x] Effect nodes (EffectNode base, 13 concrete nodes, EffectChain pipeline, GPU processor stubs)
