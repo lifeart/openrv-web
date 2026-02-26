@@ -28,7 +28,7 @@ This document links to 8 detailed improvement plans identified by a 3-expert arc
 |---|------|--------|------|-----------|-----------------|
 | 4 | ~~Silent Promise Failure Fixes~~ | **4 hours** | LOW | **DONE** | Completed: 19 silent `.catch(() => {})` replaced with Logger calls, global `unhandledrejection` handler installed, 4 new tests. 2 rounds of code review + fixes. 17831 tests passing. |
 | 6 | [Signal Connection Leak Fixes](./IMPROVEMENT_6_PLAN.md) | **15-17 hours** | LOW | READY | 12 changes (remove convenience methods, fix IPNode.dispose, add listenerCount) |
-| 5 | [VideoFrame VRAM Leak Prevention](./IMPROVEMENT_5_PLAN.md) | **5-6 days** | MEDIUM | READY | 11 changes (fix `__DEV__`, getter/setter migration, double-wrap guard) |
+| 5 | ~~VideoFrame VRAM Leak Prevention~~ | **5-6 days** | MEDIUM | **DONE** | Completed: ManagedVideoFrame ref-counted wrapper, IPImage getter/setter migration, try/catch guards at all 6 creation sites, Renderer fallback fix, probe path fix. 2 rounds of code review + fixes. 30 new tests, 17854 total passing. |
 
 ### P1 — High (Affects Maintainability)
 
@@ -100,6 +100,7 @@ Phase 5 (Weeks 15-17):#7 Plugin Architecture
 | 2 | Monolithic Shader Modularization — Phase A | **DONE** | 2026-02-25 |
 | 3 | App Class Decomposition | **DONE** | 2026-02-26 |
 | 4 | Silent Promise Failure Fixes | **DONE** | 2026-02-26 |
+| 5 | VideoFrame VRAM Leak Prevention | **DONE** | 2026-02-26 |
 
 ### Improvement 1 Summary
 
@@ -180,3 +181,26 @@ Key fixes from reviews:
 - **Additional fixes from reviews**: 4 `console.warn` catches in Viewer.ts migrated to `log.warn`, 1 bare `catch {}` in VideoSourceNode.ts added logging, `const log` placement fixed in 3 files
 
 New test file: globalErrorHandler.test.ts (4 tests). Total: 425 test files, 17831 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+### Improvement 5 Summary — VideoFrame VRAM Leak Prevention
+
+Reference-counted `ManagedVideoFrame` wrapper to prevent VideoFrame VRAM leaks, with try/catch guards at all 6 creation sites and the probe path:
+
+**Phase 1 — Core infrastructure:**
+- **ManagedVideoFrame.ts** (133 lines) — ref-counted wrapper with `wrap()`/`acquire()`/`release()`, `activeCount` tracking, `_wrappedFrames` WeakSet double-wrap guard, `frame.format === null` closed-frame guard, `FinalizationRegistry` leak detection (dev mode), `resetForTesting()` for test isolation, `import.meta.env.DEV` creation stack traces
+- **Image.ts** — `managedVideoFrame` field with `videoFrame` getter/setter pair. Getter returns `managedVideoFrame?.frame ?? null`. Setter auto-wraps raw VideoFrame via `ManagedVideoFrame.wrap()`, releases previous managed frame first. Constructor accepts both `videoFrame` (auto-wraps) and `managedVideoFrame` (direct). `close()` calls `managedVideoFrame.release()`
+
+**Phase 2 — Error path fixes:**
+- **VideoSourceNode.ts** — `hdrSampleToIPImage`: try/catch wrapping VideoFrame lifecycle, catch closes VideoFrame on error. `fetchHDRFrame`: catch block closes both `ipImage` and `sample` on error, null-after-transfer pattern
+- **FileSourceNode.ts** — `loadAVIFHDR`/`loadJXLHDR`/`loadHEICHDR`: `this.cachedIPImage?.close()` at top to fix overwrite leak, try/catch with `bitmapClosed` flag and VideoFrame cleanup on error
+- **MediabunnyFrameExtractor.ts** — probeFrame wrapped in try/finally for guaranteed close
+- **Renderer.ts** — texImage2D failure releases only `managedVideoFrame` (not entire IPImage), allows degraded rendering instead of VRAM leak
+
+New test files: ManagedVideoFrame.test.ts (16), updated Image.test.ts (+13), updated Renderer.renderForScopes.test.ts (+1). Total: 426 test files, 17854 tests passing. 2 rounds of code review (domain expert + QA) with all issues resolved.
+
+Key fixes from reviews:
+- FinalizationRegistry `register()` passes `this` as unregister token (3rd arg) so `unregister()` works
+- videoFrame setter nulls `managedVideoFrame` before `wrap()` to prevent stale reference on throw
+- `managedVideoFrame` field has `@internal` JSDoc documentation
+- All mock VideoFrames use proper `format` getter that returns null on close
+- Tests properly clean up with `image.close()` and `ManagedVideoFrame.resetForTesting()`

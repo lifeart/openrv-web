@@ -808,9 +808,16 @@ export class Renderer implements RendererBackend {
         // the next frame's IPImage must re-upload its own VideoFrame data.
         return;
       } catch (e) {
-        // VideoFrame texImage2D not supported - fall through to SDR path
-        log.warn('VideoFrame texImage2D failed, falling back to typed array upload:', e);
-        image.close();
+        // VideoFrame texImage2D not supported — release only the VideoFrame to free VRAM.
+        // The IPImage stays in cache but will skip the VideoFrame path on subsequent renders.
+        // For HDR VideoFrame-only IPImages the data buffer is a 4-byte placeholder,
+        // so the typed-array fallback will produce a blank frame. This is acceptable
+        // degradation — the alternative is a VRAM leak.
+        log.warn('VideoFrame texImage2D failed, releasing VideoFrame:', e);
+        if (image.managedVideoFrame) {
+          image.managedVideoFrame.release();
+          image.managedVideoFrame = null;
+        }
       }
     }
 

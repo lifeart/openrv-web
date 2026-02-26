@@ -2,9 +2,27 @@
  * IPImage Unit Tests
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { IPImage } from './Image';
 import type { DataType } from './Image';
+import { ManagedVideoFrame } from './ManagedVideoFrame';
+
+/** Create a mock VideoFrame with a working format property for ManagedVideoFrame compatibility */
+function createMockVideoFrame(overrides?: Partial<{ close: () => void }>): VideoFrame {
+  let closed = false;
+  const closeFn = overrides?.close ?? (() => { closed = true; });
+  return {
+    get format() { return closed ? null : 'RGBA'; },
+    close: closeFn,
+    displayWidth: 1920,
+    displayHeight: 1080,
+    codedWidth: 1920,
+    codedHeight: 1080,
+    timestamp: 0,
+    duration: null,
+    colorSpace: {},
+  } as unknown as VideoFrame;
+}
 
 describe('IPImage', () => {
   describe('constructor', () => {
@@ -420,11 +438,8 @@ describe('IPImage', () => {
     });
 
     it('does not copy videoFrame', () => {
-      const mockVideoFrame = {
-        displayWidth: 10,
-        displayHeight: 10,
-        close: () => {},
-      } as unknown as VideoFrame;
+      ManagedVideoFrame.resetForTesting();
+      const mockVideoFrame = createMockVideoFrame();
 
       const image = new IPImage({
         width: 10,
@@ -436,6 +451,8 @@ describe('IPImage', () => {
 
       const cloned = image.deepClone();
       expect(cloned.videoFrame).toBeNull();
+
+      image.close();
     });
   });
 
@@ -498,11 +515,8 @@ describe('IPImage', () => {
     });
 
     it('does not copy videoFrame', () => {
-      const mockVideoFrame = {
-        displayWidth: 1920,
-        displayHeight: 1080,
-        close: () => {},
-      } as unknown as VideoFrame;
+      ManagedVideoFrame.resetForTesting();
+      const mockVideoFrame = createMockVideoFrame();
 
       const image = new IPImage({
         width: 1920,
@@ -516,6 +530,8 @@ describe('IPImage', () => {
 
       expect(image.videoFrame).toBe(mockVideoFrame);
       expect(shallow.videoFrame).toBeNull();
+
+      image.close();
     });
 
     it('does not copy texture or textureNeedsUpdate', () => {
@@ -636,6 +652,10 @@ describe('IPImage', () => {
   });
 
   describe('videoFrame support', () => {
+    beforeEach(() => {
+      ManagedVideoFrame.resetForTesting();
+    });
+
     it('defaults videoFrame to null when not provided', () => {
       const image = new IPImage({
         width: 10,
@@ -645,15 +665,11 @@ describe('IPImage', () => {
       });
 
       expect(image.videoFrame).toBeNull();
+      expect(image.managedVideoFrame).toBeNull();
     });
 
-    it('stores videoFrame when provided', () => {
-      // Create a mock VideoFrame-like object
-      const mockVideoFrame = {
-        displayWidth: 1920,
-        displayHeight: 1080,
-        close: () => {},
-      } as unknown as VideoFrame;
+    it('stores videoFrame when provided (auto-wraps in ManagedVideoFrame)', () => {
+      const mockVideoFrame = createMockVideoFrame();
 
       const image = new IPImage({
         width: 1920,
@@ -664,15 +680,55 @@ describe('IPImage', () => {
       });
 
       expect(image.videoFrame).toBe(mockVideoFrame);
+      expect(image.managedVideoFrame).not.toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      image.close();
     });
 
-    it('close() releases videoFrame', () => {
-      let closeCalled = false;
-      const mockVideoFrame = {
-        displayWidth: 1920,
-        displayHeight: 1080,
-        close: () => { closeCalled = true; },
-      } as unknown as VideoFrame;
+    it('uses managedVideoFrame directly when provided', () => {
+      const mockVideoFrame = createMockVideoFrame();
+      const managed = ManagedVideoFrame.wrap(mockVideoFrame);
+
+      const image = new IPImage({
+        width: 1920,
+        height: 1080,
+        channels: 4,
+        dataType: 'float32',
+        managedVideoFrame: managed,
+      });
+
+      expect(image.videoFrame).toBe(mockVideoFrame);
+      expect(image.managedVideoFrame).toBe(managed);
+      // Should not double-wrap
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      image.close();
+    });
+
+    it('prefers managedVideoFrame over raw videoFrame', () => {
+      const rawFrame = createMockVideoFrame();
+      const managedFrame = createMockVideoFrame();
+      const managed = ManagedVideoFrame.wrap(managedFrame);
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: rawFrame,
+        managedVideoFrame: managed,
+      });
+
+      // managedVideoFrame takes priority
+      expect(image.videoFrame).toBe(managedFrame);
+      expect(image.managedVideoFrame).toBe(managed);
+
+      image.close();
+    });
+
+    it('close() releases managedVideoFrame', () => {
+      const mockVideoFrame = createMockVideoFrame();
 
       const image = new IPImage({
         width: 1920,
@@ -683,9 +739,13 @@ describe('IPImage', () => {
       });
 
       expect(image.videoFrame).not.toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
       image.close();
-      expect(closeCalled).toBe(true);
+
       expect(image.videoFrame).toBeNull();
+      expect(image.managedVideoFrame).toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
     });
 
     it('close() is safe to call when no videoFrame', () => {
@@ -702,11 +762,9 @@ describe('IPImage', () => {
     });
 
     it('close() handles already-closed videoFrame gracefully', () => {
-      const mockVideoFrame = {
-        displayWidth: 10,
-        displayHeight: 10,
+      const mockVideoFrame = createMockVideoFrame({
         close: () => { throw new Error('Already closed'); },
-      } as unknown as VideoFrame;
+      });
 
       const image = new IPImage({
         width: 10,
@@ -716,17 +774,13 @@ describe('IPImage', () => {
         videoFrame: mockVideoFrame,
       });
 
-      // Should not throw
+      // Should not throw (ManagedVideoFrame.release() catches the error)
       image.close();
       expect(image.videoFrame).toBeNull();
     });
 
     it('clone does not copy videoFrame (not cloneable)', () => {
-      const mockVideoFrame = {
-        displayWidth: 10,
-        displayHeight: 10,
-        close: () => {},
-      } as unknown as VideoFrame;
+      const mockVideoFrame = createMockVideoFrame();
 
       const image = new IPImage({
         width: 10,
@@ -739,6 +793,111 @@ describe('IPImage', () => {
       const cloned = image.clone();
       // Clone should not carry the VideoFrame (it's a GPU resource)
       expect(cloned.videoFrame).toBeNull();
+
+      image.close();
+    });
+
+    it('videoFrame setter auto-wraps raw VideoFrame', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.videoFrame).toBeNull();
+
+      const mockVideoFrame = createMockVideoFrame();
+      image.videoFrame = mockVideoFrame;
+
+      expect(image.videoFrame).toBe(mockVideoFrame);
+      expect(image.managedVideoFrame).not.toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      image.close();
+    });
+
+    it('videoFrame setter releases previous managed frame', () => {
+      const frame1 = createMockVideoFrame();
+      const frame2 = createMockVideoFrame();
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: frame1,
+      });
+
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      // Setting a new videoFrame should release the previous one
+      image.videoFrame = frame2;
+      expect(ManagedVideoFrame.activeCount).toBe(1); // old released, new created
+      expect(image.videoFrame).toBe(frame2);
+
+      image.close();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
+    });
+
+    it('videoFrame setter with null releases current frame', () => {
+      const mockVideoFrame = createMockVideoFrame();
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      image.videoFrame = null;
+      expect(image.videoFrame).toBeNull();
+      expect(image.managedVideoFrame).toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
+    });
+
+    it('double close is safe (idempotent)', () => {
+      const mockVideoFrame = createMockVideoFrame();
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      image.close();
+      image.close(); // second close should not throw
+      expect(image.videoFrame).toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
+    });
+
+    it('videoFrame setter leaves consistent state if wrap() throws (closed frame)', () => {
+      const frame1 = createMockVideoFrame();
+      const closedFrame = createMockVideoFrame();
+      closedFrame.close(); // make it closed so wrap() will throw
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: frame1,
+      });
+
+      expect(ManagedVideoFrame.activeCount).toBe(1);
+
+      // Setting a closed frame should throw but leave consistent state
+      expect(() => { image.videoFrame = closedFrame; }).toThrow('already-closed');
+
+      // The old frame was released, managedVideoFrame should be null
+      expect(image.managedVideoFrame).toBeNull();
+      expect(image.videoFrame).toBeNull();
+      expect(ManagedVideoFrame.activeCount).toBe(0);
     });
   });
 
@@ -846,11 +1005,8 @@ describe('IPImage', () => {
     });
 
     it('IMG-R002: clone does NOT copy videoFrame (GPU resource)', () => {
-      const mockFrame = {
-        codedWidth: 100,
-        codedHeight: 100,
-        close: () => {},
-      } as unknown as VideoFrame;
+      ManagedVideoFrame.resetForTesting();
+      const mockFrame = createMockVideoFrame();
 
       const original = new IPImage({
         width: 100,
@@ -862,6 +1018,8 @@ describe('IPImage', () => {
 
       const cloned = original.clone();
       expect(cloned.videoFrame).toBeNull();
+
+      original.close();
     });
   });
 });

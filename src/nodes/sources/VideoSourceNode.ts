@@ -882,73 +882,81 @@ export class VideoSourceNode extends BaseSourceNode {
   ): IPImage {
     let videoFrame = sample.toVideoFrame();
 
-    const frameColorSpace = videoFrame.colorSpace ? {
-      transfer: videoFrame.colorSpace.transfer ?? undefined,
-      primaries: videoFrame.colorSpace.primaries ?? undefined,
-      matrix: videoFrame.colorSpace.matrix ?? undefined,
-      fullRange: videoFrame.colorSpace.fullRange ?? undefined,
-    } : null;
+    try {
+      const frameColorSpace = videoFrame.colorSpace ? {
+        transfer: videoFrame.colorSpace.transfer ?? undefined,
+        primaries: videoFrame.colorSpace.primaries ?? undefined,
+        matrix: videoFrame.colorSpace.matrix ?? undefined,
+        fullRange: videoFrame.colorSpace.fullRange ?? undefined,
+      } : null;
 
-    let effectiveColorSpace = this.videoColorSpace;
-    const hasTrackColorInfo = !!(effectiveColorSpace?.transfer || effectiveColorSpace?.primaries);
-    const hasFrameColorInfo = !!(frameColorSpace?.transfer || frameColorSpace?.primaries);
-    if (!hasTrackColorInfo && hasFrameColorInfo) {
-      // Some HDR streams expose transfer/primaries only after decode.
-      // Persist the decoded frame metadata so subsequent frames use it.
-      this.videoColorSpace = frameColorSpace;
-      effectiveColorSpace = frameColorSpace;
-    }
+      let effectiveColorSpace = this.videoColorSpace;
+      const hasTrackColorInfo = !!(effectiveColorSpace?.transfer || effectiveColorSpace?.primaries);
+      const hasFrameColorInfo = !!(frameColorSpace?.transfer || frameColorSpace?.primaries);
+      if (!hasTrackColorInfo && hasFrameColorInfo) {
+        // Some HDR streams expose transfer/primaries only after decode.
+        // Persist the decoded frame metadata so subsequent frames use it.
+        this.videoColorSpace = frameColorSpace;
+        effectiveColorSpace = frameColorSpace;
+      }
 
-    let transferFunction = this.mapTransferFunction(effectiveColorSpace?.transfer ?? undefined);
-    let colorPrimaries = this.mapColorPrimaries(effectiveColorSpace?.primaries ?? undefined);
+      let transferFunction = this.mapTransferFunction(effectiveColorSpace?.transfer ?? undefined);
+      let colorPrimaries = this.mapColorPrimaries(effectiveColorSpace?.primaries ?? undefined);
 
-    // Use the track's display dimensions (which account for rotation) instead of
-    // the VideoFrame's raw dimensions (which are pre-rotation coded dimensions).
-    let width = this.metadata.width;
-    let height = this.metadata.height;
-    const rotation = this.frameExtractor?.getMetadata()?.rotation ?? 0;
+      // Use the track's display dimensions (which account for rotation) instead of
+      // the VideoFrame's raw dimensions (which are pre-rotation coded dimensions).
+      let width = this.metadata.width;
+      let height = this.metadata.height;
+      const rotation = this.frameExtractor?.getMetadata()?.rotation ?? 0;
 
-    // Resize via HDR OffscreenCanvas if target is smaller than source
-    if (targetSize && this.hdrResizer) {
-      const result = this.hdrResizer.resize(
+      // Resize via HDR OffscreenCanvas if target is smaller than source
+      if (targetSize && this.hdrResizer) {
+        const result = this.hdrResizer.resize(
+          videoFrame,
+          targetSize,
+          effectiveColorSpace ?? undefined,
+        );
+        videoFrame = result.videoFrame;
+        if (result.resized) {
+          width = result.width;
+          height = result.height;
+        }
+        if (result.metadataOverrides) {
+          transferFunction = result.metadataOverrides.transferFunction;
+          colorPrimaries = result.metadataOverrides.colorPrimaries;
+        }
+      }
+
+      // Create IPImage with VideoFrame attached (minimal data buffer)
+      // The VideoFrame is the actual pixel source; data is a placeholder
+      const ipImage = new IPImage({
+        width,
+        height,
+        channels: 4,
+        dataType: 'float32',
+        data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
         videoFrame,
-        targetSize,
-        effectiveColorSpace ?? undefined,
-      );
-      videoFrame = result.videoFrame;
-      if (result.resized) {
-        width = result.width;
-        height = result.height;
-      }
-      if (result.metadataOverrides) {
-        transferFunction = result.metadataOverrides.transferFunction;
-        colorPrimaries = result.metadataOverrides.colorPrimaries;
-      }
-    }
-
-    // Create IPImage with VideoFrame attached (minimal data buffer)
-    // The VideoFrame is the actual pixel source; data is a placeholder
-    return new IPImage({
-      width,
-      height,
-      channels: 4,
-      dataType: 'float32',
-      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
-      videoFrame,
-      metadata: {
-        sourcePath: this.url,
-        frameNumber: frame,
-        transferFunction,
-        colorPrimaries,
-        colorSpace: colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
-        attributes: {
-          hdr: true,
-          videoColorSpace: effectiveColorSpace,
-          // VideoFrame pixels are unrotated; store rotation so Renderer can apply it via shader
-          videoRotation: rotation,
+        metadata: {
+          sourcePath: this.url,
+          frameNumber: frame,
+          transferFunction,
+          colorPrimaries,
+          colorSpace: colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+          attributes: {
+            hdr: true,
+            videoColorSpace: effectiveColorSpace,
+            // VideoFrame pixels are unrotated; store rotation so Renderer can apply it via shader
+            videoRotation: rotation,
+          },
         },
-      },
-    });
+      });
+
+      return ipImage;
+    } catch (e) {
+      // Clean up VideoFrame on any error to prevent VRAM leak
+      try { videoFrame.close(); } catch { /* already closed */ }
+      throw e;
+    }
   }
 
   /**
@@ -1040,12 +1048,14 @@ export class VideoSourceNode extends BaseSourceNode {
 
     // Create the fetch promise and track it
     const fetchPromise = (async (): Promise<IPImage | null> => {
+      let sample: { toVideoFrame(): VideoFrame; close(): void } | null = null;
+      let ipImage: IPImage | null = null;
       try {
         // Guard: if dispose() was called before the async IIFE runs, bail out
         if (!this.frameExtractor) return null;
 
         PerfTrace.begin('getFrameHDR');
-        const sample = await this.frameExtractor.getFrameHDR(frame);
+        sample = await this.frameExtractor.getFrameHDR(frame);
         PerfTrace.end('getFrameHDR');
 
         // Guard: dispose() may have been called while awaiting getFrameHDR
@@ -1054,9 +1064,10 @@ export class VideoSourceNode extends BaseSourceNode {
         // Use stable HDR target size (actual display dims, not interaction-reduced)
         const targetSize = this.hdrTargetSize;
         PerfTrace.begin('hdrSampleToIPImage');
-        const ipImage = this.hdrSampleToIPImage(sample, frame, targetSize);
+        ipImage = this.hdrSampleToIPImage(sample, frame, targetSize);
         PerfTrace.end('hdrSampleToIPImage');
         sample.close();
+        sample = null; // prevent double-close in catch
 
         // Guard: dispose() may have been called during hdrSampleToIPImage/resize
         if (!this.frameExtractor) {
@@ -1066,8 +1077,11 @@ export class VideoSourceNode extends BaseSourceNode {
 
         // Store in LRU cache (eviction calls image.close() automatically)
         this.hdrFrameCache.set(frame, ipImage);
-        return ipImage;
+        ipImage = null; // ownership transferred to cache
+        return this.hdrFrameCache.get(frame)!;
       } catch (e) {
+        ipImage?.close();
+        try { sample?.close(); } catch { /* */ }
         log.debug('HDR frame decode/resize failed:', e);
         return null;
       }

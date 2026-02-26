@@ -1,3 +1,5 @@
+import { ManagedVideoFrame } from './ManagedVideoFrame';
+
 export type DataType = 'uint8' | 'uint16' | 'float32';
 
 export type TransferFunction = 'srgb' | 'hlg' | 'pq' | 'smpte240m';
@@ -21,6 +23,7 @@ export interface IPImageOptions {
   data?: ArrayBuffer;
   metadata?: ImageMetadata;
   videoFrame?: VideoFrame;
+  managedVideoFrame?: ManagedVideoFrame;
   imageBitmap?: ImageBitmap | null;
 }
 
@@ -32,8 +35,26 @@ export class IPImage {
   readonly data: ArrayBuffer;
   readonly metadata: ImageMetadata;
 
-  /** Browser VideoFrame for direct GPU upload (HDR video path) */
-  videoFrame: VideoFrame | null;
+  /**
+   * Managed VideoFrame for reference-counted VRAM cleanup.
+   * @internal Prefer using the `videoFrame` getter/setter. Direct access is
+   * allowed for performance-critical paths (e.g., Renderer texture upload)
+   * but callers must maintain ref-counting invariants.
+   */
+  managedVideoFrame: ManagedVideoFrame | null;
+
+  /** Raw VideoFrame accessor (reads from managed wrapper, setter auto-wraps) */
+  get videoFrame(): VideoFrame | null {
+    return this.managedVideoFrame?.frame ?? null;
+  }
+
+  set videoFrame(frame: VideoFrame | null) {
+    if (this.managedVideoFrame) {
+      this.managedVideoFrame.release();
+      this.managedVideoFrame = null;
+    }
+    this.managedVideoFrame = frame ? ManagedVideoFrame.wrap(frame) : null;
+  }
 
   /** Decoded ImageBitmap for zero-copy GPU upload (image sequences) */
   imageBitmap: ImageBitmap | null;
@@ -51,8 +72,16 @@ export class IPImage {
     this.channels = options.channels;
     this.dataType = options.dataType;
     this.metadata = options.metadata ?? {};
-    this.videoFrame = options.videoFrame ?? null;
     this.imageBitmap = options.imageBitmap ?? null;
+
+    if (options.managedVideoFrame) {
+      this.managedVideoFrame = options.managedVideoFrame;
+    } else if (options.videoFrame) {
+      // Legacy path: wrap raw VideoFrame automatically
+      this.managedVideoFrame = ManagedVideoFrame.wrap(options.videoFrame);
+    } else {
+      this.managedVideoFrame = null;
+    }
 
     if (options.data) {
       this.data = options.data;
@@ -155,13 +184,9 @@ export class IPImage {
    * ```
    */
   close(): void {
-    if (this.videoFrame) {
-      try {
-        this.videoFrame.close();
-      } catch {
-        // Already closed
-      }
-      this.videoFrame = null;
+    if (this.managedVideoFrame) {
+      this.managedVideoFrame.release();
+      this.managedVideoFrame = null;
     }
     if (this.imageBitmap) {
       try {
