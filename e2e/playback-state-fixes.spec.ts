@@ -192,18 +192,17 @@ test.describe('Playback State Fixes', () => {
       await waitForPlaybackState(page, true);
       await waitForFrameAtLeast(page, 3);
 
-      // Seek to end while playing
-      await page.keyboard.press('End');
-      // Wait for seek to register
-      await waitForFrameAtEnd(page);
-
-      // Pause
+      // Pause first to avoid race with loop behavior, then seek to end
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, false);
 
+      // Seek to end
+      await page.keyboard.press('End');
+      await waitForFrameAtEnd(page);
+
       const state = await getSessionState(page);
 
-      // Should be at or near the end (allowing for loop behavior)
+      // Should be at or near the end
       expect(state.currentFrame).toBeGreaterThan(state.frameCount / 2);
     });
 

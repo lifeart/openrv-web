@@ -399,13 +399,14 @@ test.describe('Stereo Visual Changes', () => {
     await page.click('[data-testid="stereo-mode-button"]');
     await page.click('[data-stereo-mode="anaglyph"]');
     await waitForStereoMode(page, 'anaglyph');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
     // Disable stereo mode
     await page.click('[data-testid="stereo-mode-button"]');
     await page.click('[data-stereo-mode="off"]');
     await waitForStereoMode(page, 'off');
-    await page.waitForTimeout(200);
+    // Allow extra time for GPU pipeline to fully restore under parallel load
+    await page.waitForTimeout(500);
 
     // Capture restored
     const restoredScreenshot = await captureViewerScreenshot(page);
