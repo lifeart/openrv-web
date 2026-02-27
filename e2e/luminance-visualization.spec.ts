@@ -172,6 +172,8 @@ test.describe('Luminance Visualization - Random Colorization Controls', () => {
 
   test('LV-E022: reseed produces different colors', async ({ page }) => {
     const before = await captureCanvasState(page);
+    // Navigate to QC tab where the luminance vis selector lives
+    await page.click('button[data-tab-id="qc"]');
     const selector = page.locator('[data-testid="luminance-vis-selector"]');
     await expect(selector).toBeVisible();
     await selector.click();

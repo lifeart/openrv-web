@@ -245,6 +245,12 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Redo last action'
   },
+  'edit.redo-alt': {
+    code: 'KeyZ',
+    ctrl: true,
+    shift: true,
+    description: 'Redo last action (alternate)'
+  },
 
   // Annotation navigation
   'annotation.previous': {

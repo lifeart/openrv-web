@@ -421,11 +421,17 @@ export function createDefaultIceServers(config?: {
   const turnCredential =
     config?.turnCredential ?? (import.meta.env.VITE_TURN_CREDENTIAL || '');
 
-  return [
+  const servers: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:openrelay.metered.ca:80' },
-    {
+  ];
+
+  // Only include the TURN server when credentials are provided.
+  // RTCPeerConnection construction will throw in Chromium if a TURN
+  // entry has empty username or credential.
+  if (turnUsername && turnCredential) {
+    servers.push({
       urls: [
         'turn:openrelay.metered.ca:80',
         'turn:openrelay.metered.ca:443',
@@ -433,8 +439,10 @@ export function createDefaultIceServers(config?: {
       ],
       username: turnUsername,
       credential: turnCredential,
-    },
-  ];
+    });
+  }
+
+  return servers;
 }
 
 export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {

@@ -107,6 +107,10 @@ export class OverlayManager {
     this.clippingOverlay.on('stateChanged', () => {
       callbacks.refresh();
     });
+
+    // Eagerly create matte overlay so its DOM element is always present
+    // (E2E tests and UI components expect it to be attached after init).
+    this.getMatteOverlay();
   }
 
   // ---------------------------------------------------------------------------

@@ -270,6 +270,12 @@ test.describe('Audio Playback', () => {
         let state = await getSessionState(page);
         expect(state.muted).toBe(true);
 
+        // Click canvas to move focus away from the mute button,
+        // otherwise Space will re-click the button instead of toggling playback
+        const canvas = page.locator(SELECTORS.CANVAS).first();
+        await canvas.click();
+        await page.waitForTimeout(TIMING.UI_UPDATE);
+
         // Start playback
         await page.keyboard.press('Space');
         await page.waitForTimeout(TIMING.PLAYBACK_SETTLE);

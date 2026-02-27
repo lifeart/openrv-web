@@ -524,6 +524,12 @@ export class App {
     });
     this.layoutOrchestrator.createLayout();
 
+    // Re-register keyboard shortcuts now that focusManager and other
+    // layout-dependent objects (fullscreenManager, shortcutCheatSheet) are
+    // available.  The initial registration happened during the constructor
+    // when these were still null.
+    this.keyboardHandler.refresh();
+
     this.bindEvents();
     this.renderLoop.start();
 

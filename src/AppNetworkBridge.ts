@@ -144,14 +144,20 @@ export class AppNetworkBridge {
           shareLink = buildShareURL(shareLink, state);
         }
 
+        const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
+
+        // Update the share link immediately with session state hash,
+        // before attempting WebRTC offer generation which may be slow or fail.
+        controlWithShare.setShareLink?.(shareLink);
+
         const managerWithServerless = networkSyncManager as unknown as {
           buildServerlessInviteShareURL?: (url: string) => Promise<string>;
         };
         if (networkSyncManager.isHost && typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
           shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
+          // Update again with the WebRTC offer token appended
+          controlWithShare.setShareLink?.(shareLink);
         }
-        const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
-        controlWithShare.setShareLink?.(shareLink);
         await navigator.clipboard.writeText(shareLink);
       } catch (error) {
         if (error instanceof Error && /clipboard/i.test(error.message)) {

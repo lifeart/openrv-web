@@ -530,7 +530,7 @@ test.describe('State Verification - Effects', () => {
     await page.waitForTimeout(200);
 
     // Click the Filters button to open panel
-    const filterButton = page.locator('button[title="Filter effects (G)"]');
+    const filterButton = page.locator('[data-testid="filter-control-button"]');
     await filterButton.click();
     await page.waitForTimeout(200);
 

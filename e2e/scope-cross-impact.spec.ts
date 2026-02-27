@@ -212,6 +212,14 @@ test.describe('Scope Cross-Impact: Channel Isolation', () => {
     await page.keyboard.press('w');
     await page.waitForTimeout(200);
 
+    // Cycle waveform to RGB mode so channel isolation is visually distinct.
+    // Default mode is Luma which renders a single-colour trace; the luminance
+    // difference after isolating a single channel can be too subtle for
+    // byte-level screenshot comparison.
+    const modeButton = page.locator('[data-testid="waveform-mode-button"]');
+    await modeButton.click();
+    await page.waitForTimeout(300);
+
     const waveformCanvas = page.locator('.waveform-container canvas');
     const beforeScreenshot = await waveformCanvas.screenshot();
 

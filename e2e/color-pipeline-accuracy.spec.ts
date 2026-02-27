@@ -118,11 +118,12 @@ test.describe('Color Pipeline Accuracy', () => {
     await waitForExposure(page, -2.0);
     await page.waitForTimeout(200);
 
-    // Reset
+    // Reset exposure back to 0 (instead of full reset, which would also
+    // revert auto-applied HDR gamma and change the baseline)
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.resetColor?.();
+      (window as any).__OPENRV_TEST__?.setExposure?.(0);
     });
-    await waitForColorReset(page);
+    await waitForExposure(page, 0);
     await page.waitForTimeout(200);
 
     const resetPixels = await sampleCanvasPixels(page, [{ x: centerX, y: centerY }]);

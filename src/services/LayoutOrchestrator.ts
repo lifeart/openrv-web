@@ -284,11 +284,23 @@ export class LayoutOrchestrator {
     });
     if (unsubViewerResized) this._unsubscribers.push(unsubViewerResized);
 
+    // Helper: filter elements to only those that are visible (no hidden ancestor)
+    const isVisible = (el: HTMLElement, root: HTMLElement): boolean => {
+      let node: HTMLElement | null = el;
+      while (node && node !== root) {
+        if (node.style.display === 'none' || node.hidden) return false;
+        node = node.parentElement;
+      }
+      return true;
+    };
+    const getVisibleButtons = (root: HTMLElement): HTMLElement[] =>
+      Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled])')).filter(el => isVisible(el, root));
+
     // Register focus zones (order defines F6 cycling order)
     this._focusManager.addZone({
       name: 'headerBar',
       container: headerBar.getContainer(),
-      getItems: () => Array.from(headerBar.getContainer().querySelectorAll<HTMLElement>('button:not([disabled])')),
+      getItems: () => getVisibleButtons(headerBar.getContainer()),
       orientation: 'horizontal',
     } as FocusZone);
     this._focusManager.addZone({
@@ -300,7 +312,7 @@ export class LayoutOrchestrator {
     this._focusManager.addZone({
       name: 'contextToolbar',
       container: contextToolbar.getContainer(),
-      getItems: () => Array.from(contextToolbar.getContainer().querySelectorAll<HTMLElement>('button:not([disabled])')),
+      getItems: () => getVisibleButtons(contextToolbar.getContainer()),
       orientation: 'horizontal',
     } as FocusZone);
     this._focusManager.addZone({
@@ -312,7 +324,7 @@ export class LayoutOrchestrator {
     this._focusManager.addZone({
       name: 'timeline',
       container: timelineEl,
-      getItems: () => Array.from(timelineEl.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]')),
+      getItems: () => Array.from(timelineEl.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]')).filter(el => isVisible(el, timelineEl)),
       orientation: 'horizontal',
     } as FocusZone);
 

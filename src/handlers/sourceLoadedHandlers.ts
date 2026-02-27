@@ -146,6 +146,12 @@ function syncScopesHeadroomAsync(
 /**
  * Handle sourceLoaded event: update info panel, crop, OCIO, HDR auto-config,
  * GTO store, stack control, prerender buffer, EXR layers, and scopes.
+ *
+ * @param loadedSource - The source that was just loaded (from the sourceLoaded event).
+ *   Falls back to session.currentSource for backward compatibility when undefined.
+ *   When A/B compare auto-assigns sources, session.currentSource may still point
+ *   to the *previous* source (A), so passing the loaded source from the event is
+ *   more accurate for HDR auto-config decisions.
  */
 export function handleSourceLoaded(
   context: SessionBridgeContext,
@@ -155,14 +161,16 @@ export function handleSourceLoaded(
   updateHistogram: () => void,
   updateWaveform: () => void,
   updateVectorscope: () => void,
-  updateGamutDiagram?: () => void
+  updateGamutDiagram?: () => void,
+  loadedSource?: ReturnType<SessionBridgeContext['getSession']>['currentSource']
 ): void {
   const session = context.getSession();
   const hdrAutoState = getHDRAutoConfigState(context);
 
   updateInfoPanel();
-  // Update crop control with new source dimensions for correct aspect ratio computation
-  const source = session.currentSource;
+  // Use the source from the event if provided; fall back to session.currentSource
+  // which may differ after A/B compare auto-assignment.
+  const source = loadedSource ?? session.currentSource;
   if (source) {
     context.getCropControl().setSourceDimensions(source.width, source.height);
 
@@ -233,14 +241,16 @@ export function handleSourceLoaded(
       syncScopesHeadroomAsync(context, source, histogram);
     } else {
       // SDR display: apply ACES tone mapping + gamma 2.2 to compress HDR to displayable range.
-      // Scopes analyze the tone-mapped output which is SDR range (0-1.0).
+      // Scopes still analyze HDR source data (float readback) to show full dynamic range.
       console.log(`[HDR] Detected HDR content (format: ${formatName}), SDR display — applying ACES + gamma 2.2`);
       applyAutoToneMappingPreset(context, hdrAutoState, { enabled: true, operator: 'aces' });
       applyAutoGamma(context, hdrAutoState, 2.2);
-      histogram.setHDRMode(false);
-      histogram.setHDRAutoFit(false);
-      setScopesHDRMode(false);
-      setScopesHDRAutoFit(false);
+      // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
+      const defaultHeadroom = 4.0;
+      histogram.setHDRMode(true, defaultHeadroom);
+      histogram.setHDRAutoFit(true);
+      setScopesHDRMode(true, defaultHeadroom);
+      setScopesHDRAutoFit(true);
     }
   } else {
     // Leaving HDR content: clear only auto-applied HDR overrides to avoid

@@ -148,8 +148,21 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       }
     });
 
+    // Track whether the click was initiated by a pointer (mouse/touch)
+    // so we can blur only for pointer clicks, preserving keyboard focus.
+    let pointerTriggered = false;
+    button.addEventListener('pointerdown', () => { pointerTriggered = true; });
+
     button.addEventListener('click', () => {
       this.setActiveTab(tab.id);
+      // Blur the button only for pointer (mouse/touch) clicks so that
+      // subsequent Space/Enter presses are handled by the global keyboard
+      // manager (e.g. playback toggle) instead of re-activating the tab.
+      // Keyboard-activated clicks (Enter/Space) preserve focus on the button.
+      if (pointerTriggered) {
+        button.blur();
+      }
+      pointerTriggered = false;
     });
 
     return button;

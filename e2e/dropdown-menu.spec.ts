@@ -483,7 +483,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Select 25%
     await page.keyboard.press('Enter');
-    await waitForZoomLevel(page, 0.25, 0.05);
+    await waitForZoomLevel(page, 0.25, 0.005);
 
     // Verify zoom is 0.25
     const state = await page.evaluate(() => {

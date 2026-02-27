@@ -67,8 +67,8 @@ test.describe('Custom Keybindings', () => {
     await rebindButton.click();
     await page.waitForTimeout(200);
 
-    // Bind to Shift+P
-    await page.keyboard.press('Shift+P');
+    // Bind to Shift+F8 (a key combo not used by any other action)
+    await page.keyboard.press('Shift+F8');
     await page.waitForTimeout(300);
 
     // Save / close dialog
@@ -86,7 +86,7 @@ test.describe('Custom Keybindings', () => {
     expect(state.isPlaying).toBe(false);
 
     // Press the newly bound key
-    await page.keyboard.press('Shift+P');
+    await page.keyboard.press('Shift+F8');
     await page.waitForTimeout(200);
 
     // Verify playback toggled
@@ -94,7 +94,7 @@ test.describe('Custom Keybindings', () => {
     expect(state.isPlaying).toBe(true);
 
     // Press again to pause
-    await page.keyboard.press('Shift+P');
+    await page.keyboard.press('Shift+F8');
     await page.waitForTimeout(200);
 
     state = await getSessionState(page);
@@ -120,10 +120,10 @@ test.describe('Custom Keybindings', () => {
     await firstRebind.click();
     await page.waitForTimeout(200);
 
-    // Type the key that is already used by the second action
-    // We need to simulate the exact key combo from secondRowKey
-    // For this test, we press Space (which is commonly bound to Play/Pause)
-    await page.keyboard.press('Space');
+    // Type the key that is already used by the second action (ArrowRight = Step Forward)
+    // The second action is "Step forward one frame" bound to ArrowRight,
+    // so pressing ArrowRight on the first row should trigger a conflict.
+    await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(300);
 
     // A conflict warning should appear

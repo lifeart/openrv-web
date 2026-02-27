@@ -366,15 +366,28 @@ test.describe('Playback Controls', () => {
 
       // Toggle to reverse while still playing
       await page.keyboard.press('ArrowUp');
-      await waitForFrameChange(page, frameAfterForward);
+      await waitForPlayDirection(page, -1);
+
+      // Record frame at the moment direction was confirmed reversed.
+      // The playback may have continued forward briefly before reversing,
+      // so use the current frame (which may be >= frameAfterForward) as
+      // the high-water mark and wait for the frame to drop below it.
+      state = await getSessionState(page);
+      const frameAtReversal = state.currentFrame;
+
+      // Wait for reverse playback to actually decrement frames
+      await waitForCondition(page, `(() => {
+        const s = window.__OPENRV_TEST__?.getSessionState();
+        return s?.currentFrame < ${frameAtReversal};
+      })()`);
 
       // Stop playback
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, false);
 
-      // Frame should have decreased from the forward position
+      // Frame should have decreased from the reversal point
       state = await getSessionState(page);
-      expect(state.currentFrame).toBeLessThan(frameAfterForward);
+      expect(state.currentFrame).toBeLessThan(frameAtReversal);
     });
   });
 

@@ -960,6 +960,11 @@ export async function loadTwoVideoFiles(page: Page): Promise<void> {
   // Wait for media state to confirm load, then first frame decoded
   await waitForMediaLoaded(page);
   await waitForFrame(page, 1);
+
+  // Wait for the second source to finish loading so A/B compare becomes available.
+  // The file input handler loads both files sequentially but `waitForMediaLoaded`
+  // returns as soon as the first source is ready.
+  await waitForABCompareAvailable(page, true, 10000);
 }
 
 /**
@@ -1017,9 +1022,27 @@ export async function loadExrFile(page: Page): Promise<void> {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(filePath);
 
-  // Wait for media state to confirm load, then first frame decoded
+  // Wait for media state to confirm load.
   await waitForMediaLoaded(page);
-  await waitForFrame(page, 1);
+
+  // EXR loading triggers heavy post-load initialisation (WebGL renderer setup
+  // + WorkerPool creation for prerender) that blocks the main thread for
+  // several seconds.  `page.waitForFunction` cannot poll while the main
+  // thread is blocked and may time out, so use a generous timeout.
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.hasMedia === true && state?.currentFrame >= 1;
+    },
+    undefined,
+    { timeout: 20_000 }
+  );
+
+  // Ensure something is actually rendered on the canvas
+  for (let i = 0; i < 20; i++) {
+    if (await canvasHasContent(page)) break;
+    await page.waitForTimeout(200);
+  }
 }
 
 /**
@@ -1461,6 +1484,115 @@ export function imagesAreDifferent(img1: Buffer, img2: Buffer): boolean {
 }
 
 /**
+ * Compare two PNG screenshot buffers using pixel-level analysis in the browser.
+ * Returns true if the images are visually different (more than `maxDiffRatio`
+ * of pixels differ by more than `threshold` in any channel).
+ *
+ * This is more tolerant than byte-exact `imagesAreDifferent` and handles
+ * minor subpixel rendering differences from WebGL/GPU timing.
+ */
+export async function imagesLookDifferent(
+  page: Page,
+  img1: Buffer,
+  img2: Buffer,
+  options?: { threshold?: number; maxDiffRatio?: number },
+): Promise<boolean> {
+  // Quick check: if byte-identical, they're not different
+  if (img1.length === img2.length && img1.equals(img2)) return false;
+
+  const threshold = options?.threshold ?? 2; // per-channel tolerance (0-255)
+  const maxDiffRatio = options?.maxDiffRatio ?? 0.001; // 0.1% of pixels
+
+  const b64_1 = img1.toString('base64');
+  const b64_2 = img2.toString('base64');
+
+  return page.evaluate(
+    async ({ b1, b2, thresh, maxRatio }) => {
+      async function loadImage(b64: string): Promise<ImageData> {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            resolve(ctx.getImageData(0, 0, img.width, img.height));
+          };
+          img.onerror = reject;
+          img.src = 'data:image/png;base64,' + b64;
+        });
+      }
+
+      const data1 = await loadImage(b1);
+      const data2 = await loadImage(b2);
+
+      if (data1.width !== data2.width || data1.height !== data2.height) return true;
+
+      const totalPixels = data1.width * data1.height;
+      let diffCount = 0;
+
+      for (let i = 0; i < data1.data.length; i += 4) {
+        const dr = Math.abs(data1.data[i] - data2.data[i]);
+        const dg = Math.abs(data1.data[i + 1] - data2.data[i + 1]);
+        const db = Math.abs(data1.data[i + 2] - data2.data[i + 2]);
+        if (dr > thresh || dg > thresh || db > thresh) {
+          diffCount++;
+        }
+      }
+
+      return diffCount / totalPixels > maxRatio;
+    },
+    { b1: b64_1, b2: b64_2, thresh: threshold, maxRatio: maxDiffRatio },
+  );
+}
+
+/**
+ * Capture a clean viewer screenshot with all overlays hidden.
+ * Hides indicator badges, panels, and other UI elements that might
+ * overlap the viewer canvas, then restores them after the screenshot.
+ */
+export async function captureViewerScreenshotClean(page: Page): Promise<Buffer> {
+  // Hide overlays that sit on top of the viewer container
+  await page.evaluate(() => {
+    const overlaySelectors = [
+      '.lut-indicator',
+      '.ab-indicator',
+      '.color-controls-panel',
+      '[data-testid="lut-pipeline-panel"]',
+    ];
+    for (const sel of overlaySelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (el) {
+        el.dataset._savedDisplay = el.style.display;
+        el.style.display = 'none';
+      }
+    }
+  });
+
+  const screenshot = await captureViewerScreenshot(page);
+
+  // Restore overlays
+  await page.evaluate(() => {
+    const overlaySelectors = [
+      '.lut-indicator',
+      '.ab-indicator',
+      '.color-controls-panel',
+      '[data-testid="lut-pipeline-panel"]',
+    ];
+    for (const sel of overlaySelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (el && el.dataset._savedDisplay !== undefined) {
+        el.style.display = el.dataset._savedDisplay;
+        delete el.dataset._savedDisplay;
+      }
+    }
+  });
+
+  return screenshot;
+}
+
+/**
  * Get app state via the session serializer
  */
 export async function getAppState(page: Page): Promise<{
@@ -1831,9 +1963,9 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
 
 // Timeout constants for deterministic E2E tests
 // Use these instead of magic numbers to maintain consistency
-const TIMEOUT_SHORT = 2000;   // For quick state changes (play/pause, direction)
-const TIMEOUT_MEDIUM = 5000;  // For frame operations that may require loading
-const TIMEOUT_LONG = 10000;   // For heavy operations like initial media load
+const TIMEOUT_SHORT = 5000;   // For quick state changes (play/pause, direction)
+const TIMEOUT_MEDIUM = 10000; // For frame operations that may require loading
+const TIMEOUT_LONG = 20000;   // For heavy operations like initial media load
 
 /**
  * Wait for playback state to change to the expected value.

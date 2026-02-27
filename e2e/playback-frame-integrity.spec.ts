@@ -149,9 +149,12 @@ test.describe('Playback Frame Integrity', () => {
     await page.keyboard.press('Home');
     await waitForFrame(page, 1);
 
-    // Set 2x speed
+    // Set 2x speed via the session object directly
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.setPlaybackSpeed?.(2);
+      const app = (window as any).__OPENRV_TEST__?.app;
+      if (app?.session) {
+        app.session.playbackSpeed = 2;
+      }
     });
     await waitForPlaybackSpeed(page, 2);
 

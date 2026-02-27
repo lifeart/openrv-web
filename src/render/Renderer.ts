@@ -185,6 +185,11 @@ export class Renderer implements RendererBackend {
   private _userFlipH = false;
   private _userFlipV = false;
 
+  /** Expose the underlying WebGL2 context for direct readback (e.g. scope canvas capture). */
+  getGL(): WebGL2RenderingContext | null {
+    return this.gl;
+  }
+
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.cachedTextureCallbacks = null;
     this.canvas = canvas;

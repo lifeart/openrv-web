@@ -27,7 +27,6 @@ export function injectA11yStyles(): void {
       z-index: 100000;
       text-decoration: none;
       font-size: 14px;
-      transition: top 0.2s;
     }
     .skip-link:focus {
       top: 0;

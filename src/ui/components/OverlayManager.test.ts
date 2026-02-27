@@ -33,11 +33,12 @@ describe('OverlayManager', () => {
   });
 
   describe('Lazy-Create DOM Overlay Canvases', () => {
-    it('OM-LAZY-001: DOM overlay canvases not created at construction time', () => {
+    it('OM-LAZY-001: only matte overlay canvas created at construction time', () => {
       const canvasChildren = Array.from(container.children).filter(
         (el) => el instanceof HTMLCanvasElement
       );
-      expect(canvasChildren.length).toBe(0);
+      // Matte overlay is eagerly created so its DOM element is always present
+      expect(canvasChildren.length).toBe(1);
     });
 
     it('OM-LAZY-002: safe areas overlay created on first access', () => {

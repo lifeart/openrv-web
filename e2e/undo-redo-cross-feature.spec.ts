@@ -8,14 +8,25 @@ import {
   getHistoryPanelState,
   waitForMediaLoaded,
   waitForFrame,
-  waitForExposure,
-  waitForRotation,
+  waitForExposure as _waitForExposure,
+  waitForRotation as _waitForRotation,
   waitForTool,
   waitForColorReset,
   waitForCondition,
   clickTab,
   drawStroke,
 } from './fixtures';
+import type { Page } from '@playwright/test';
+
+// Use longer timeouts for cross-feature tests since they are sensitive to
+// resource contention when multiple workers run in parallel.
+const CROSS_FEATURE_TIMEOUT = 15000;
+async function waitForExposure(page: Page, value: number): Promise<void> {
+  return _waitForExposure(page, value, 0.01, CROSS_FEATURE_TIMEOUT);
+}
+async function waitForRotation(page: Page, degrees: 0 | 90 | 180 | 270): Promise<void> {
+  return _waitForRotation(page, degrees, CROSS_FEATURE_TIMEOUT);
+}
 
 /**
  * Undo/Redo Cross-Feature Tests

@@ -1,11 +1,13 @@
 import { test as baseTest, expect, type Page } from '@playwright/test';
+import path from 'path';
 import {
   loadVideoFile,
   loadImageFile,
-  loadExrFile,
   waitForTestHelper,
+  waitForMediaLoaded,
   captureViewerScreenshot,
   imagesAreDifferent,
+  SAMPLE_EXR,
 } from './fixtures';
 
 /**
@@ -17,8 +19,28 @@ import {
  */
 
 /**
+ * Load an EXR file with a robust waiting strategy.
+ * The shared loadExrFile uses waitForFrame(page, 1) which can race when the
+ * frame is already at 1 before the polling starts. For single-frame EXR files,
+ * waitForMediaLoaded is sufficient as the frame is guaranteed to be 1.
+ */
+async function loadExrFileRobust(page: Page): Promise<void> {
+  const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+  await waitForMediaLoaded(page);
+  // For a single-frame EXR, the first frame render triggers on load.
+  // Give one animation frame for the GL pipeline to draw.
+  await page.waitForTimeout(200);
+}
+
+/**
  * Draw a diagonal stroke across the center of the viewer canvas.
  * Switches to annotate tab + pen tool, draws, then verifies the stroke was recorded.
+ *
+ * Uses the canvas container for coordinates because the paint canvas may be
+ * hidden (display: none) before any annotations are drawn, which causes
+ * boundingBox() to return null.
  */
 async function drawStrokeOnPage(page: Page): Promise<void> {
   await page.click('button[data-tab-id="annotate"]');
@@ -26,9 +48,11 @@ async function drawStrokeOnPage(page: Page): Promise<void> {
   await page.keyboard.press('p');
   await page.waitForTimeout(100);
 
-  const paintCanvas = page.locator('canvas[data-testid="viewer-paint-canvas"]');
-  const box = await paintCanvas.boundingBox();
-  if (!box) throw new Error('Paint canvas not found');
+  // Use the canvas container for bounding box since the paint canvas starts
+  // hidden and has pointer-events: none anyway.
+  const container = page.locator('[data-testid="viewer-canvas-container"]');
+  const box = await container.boundingBox();
+  if (!box) throw new Error('Canvas container not found');
 
   const startX = box.x + box.width * 0.25;
   const startY = box.y + box.height * 0.25;
@@ -60,6 +84,14 @@ async function getPaintCanvasInfo(page: Page) {
     if (!paintCanvas) return null;
 
     const paintRect = paintCanvas.getBoundingClientRect();
+    const isHidden = paintCanvas.style.display === 'none';
+
+    // When the paint canvas is hidden (display: none), getBoundingClientRect()
+    // returns 0. Derive logical dimensions from CSS style instead.
+    const cssW = parseFloat(paintCanvas.style.width) || 0;
+    const cssH = parseFloat(paintCanvas.style.height) || 0;
+    const logicalWidth = isHidden ? cssW : paintRect.width;
+    const logicalHeight = isHidden ? cssH : paintRect.height;
 
     // Pick the active render canvas by data-testid: prefer WebGPU blit > GL > image
     const renderCanvas = [blitCanvas, glCanvas, imageCanvas].find(
@@ -69,11 +101,14 @@ async function getPaintCanvasInfo(page: Page) {
 
     return {
       dpr,
+      isHidden,
       paint: {
         bufferWidth: paintCanvas.width,
         bufferHeight: paintCanvas.height,
         cssWidth: paintCanvas.style.width,
         cssHeight: paintCanvas.style.height,
+        logicalWidth,
+        logicalHeight,
         rectWidth: paintRect.width,
         rectHeight: paintRect.height,
       },
@@ -104,18 +139,22 @@ baseTest.describe('Paint Canvas Retina Support (DPR=1)', () => {
     expect(info!.paint.cssWidth).not.toBe('');
     expect(info!.paint.cssHeight).not.toBe('');
 
-    // At DPR=1: buffer dimensions should equal CSS dimensions
-    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.rectWidth, 0);
-    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.rectHeight, 0);
+    // At DPR=1: buffer dimensions should equal logical (CSS) dimensions.
+    // The paint canvas may be hidden (display: none) when no annotations exist,
+    // so use logicalWidth/Height derived from CSS style.
+    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.logicalWidth, 0);
+    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.logicalHeight, 0);
   });
 
-  baseTest('PAINT-RETINA-002: paint canvas visual area matches render canvas', async ({ page }) => {
+  baseTest('PAINT-RETINA-002: paint canvas visual area covers render canvas', async ({ page }) => {
     const info = await getPaintCanvasInfo(page);
     expect(info).not.toBeNull();
 
     if (info!.render) {
-      expect(Math.abs(info!.paint.rectWidth - info!.render.rectWidth)).toBeLessThanOrEqual(1);
-      expect(Math.abs(info!.paint.rectHeight - info!.render.rectHeight)).toBeLessThanOrEqual(1);
+      // The paint canvas includes overdraw padding and is at least as large
+      // as the render canvas so annotations can extend beyond the image area.
+      expect(info!.paint.logicalWidth).toBeGreaterThanOrEqual(info!.render.rectWidth);
+      expect(info!.paint.logicalHeight).toBeGreaterThanOrEqual(info!.render.rectHeight);
     }
   });
 
@@ -123,8 +162,10 @@ baseTest.describe('Paint Canvas Retina Support (DPR=1)', () => {
     const info = await getPaintCanvasInfo(page);
     expect(info).not.toBeNull();
 
-    const widthRatio = info!.paint.bufferWidth / info!.paint.rectWidth;
-    const heightRatio = info!.paint.bufferHeight / info!.paint.rectHeight;
+    // Use logicalWidth/Height (derived from CSS style) since the canvas
+    // may be hidden (display: none) before any annotations are drawn.
+    const widthRatio = info!.paint.bufferWidth / info!.paint.logicalWidth;
+    const heightRatio = info!.paint.bufferHeight / info!.paint.logicalHeight;
 
     expect(widthRatio).toBeCloseTo(info!.dpr, 0);
     expect(heightRatio).toBeCloseTo(info!.dpr, 0);
@@ -153,9 +194,10 @@ baseTest.describe('Paint Canvas Retina Support (DPR=2)', () => {
     expect(info).not.toBeNull();
     expect(info!.dpr).toBe(2);
 
-    // Buffer should be 2x the CSS rect
-    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.rectWidth * 2, 0);
-    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.rectHeight * 2, 0);
+    // Buffer should be 2x the logical (CSS) dimensions.
+    // Paint canvas may be hidden before annotations exist; use logicalWidth.
+    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.logicalWidth * 2, 0);
+    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.logicalHeight * 2, 0);
 
     // CSS dimensions must be set
     expect(info!.paint.cssWidth).not.toBe('');
@@ -169,9 +211,9 @@ baseTest.describe('Paint Canvas Retina Support (DPR=2)', () => {
     expect(info).not.toBeNull();
     expect(info!.dpr).toBe(2);
 
-    // Buffer should be 2x the CSS rect
-    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.rectWidth * 2, 0);
-    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.rectHeight * 2, 0);
+    // Buffer should be 2x the logical (CSS) dimensions
+    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.logicalWidth * 2, 0);
+    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.logicalHeight * 2, 0);
   });
 
   baseTest('PAINT-RETINA-012: paint canvas has 2x buffer after image load', async () => {
@@ -181,20 +223,21 @@ baseTest.describe('Paint Canvas Retina Support (DPR=2)', () => {
     expect(info).not.toBeNull();
     expect(info!.dpr).toBe(2);
 
-    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.rectWidth * 2, 0);
-    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.rectHeight * 2, 0);
+    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.logicalWidth * 2, 0);
+    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.logicalHeight * 2, 0);
   });
 
-  baseTest('PAINT-RETINA-013: paint canvas visual area matches render canvas at DPR=2', async () => {
+  baseTest('PAINT-RETINA-013: paint canvas visual area covers render canvas at DPR=2', async () => {
     await loadVideoFile(retinaPage);
 
     const info = await getPaintCanvasInfo(retinaPage);
     expect(info).not.toBeNull();
 
     if (info!.render) {
-      // Both canvases should cover the same visual area
-      expect(Math.abs(info!.paint.rectWidth - info!.render.rectWidth)).toBeLessThanOrEqual(1);
-      expect(Math.abs(info!.paint.rectHeight - info!.render.rectHeight)).toBeLessThanOrEqual(1);
+      // Paint canvas includes overdraw padding and must be at least as large
+      // as the render canvas so annotations can extend beyond the image area.
+      expect(info!.paint.logicalWidth).toBeGreaterThanOrEqual(info!.render.rectWidth);
+      expect(info!.paint.logicalHeight).toBeGreaterThanOrEqual(info!.render.rectHeight);
     }
   });
 
@@ -210,9 +253,10 @@ baseTest.describe('Paint Canvas Retina Support (DPR=2)', () => {
     // Capture before screenshot
     const before = await captureViewerScreenshot(retinaPage);
 
-    // Draw a stroke across the canvas
-    const paintCanvas = retinaPage.locator('canvas[data-testid="viewer-paint-canvas"]');
-    const box = await paintCanvas.boundingBox();
+    // Draw a stroke across the canvas (use canvas container since paint canvas
+    // may be hidden before first annotation)
+    const container = retinaPage.locator('[data-testid="viewer-canvas-container"]');
+    const box = await container.boundingBox();
     expect(box).not.toBeNull();
 
     if (box) {
@@ -243,8 +287,8 @@ baseTest.describe('Paint Canvas Retina Support (DPR=2)', () => {
     // Verify paint canvas still has correct retina dimensions after drawing
     const infoAfter = await getPaintCanvasInfo(retinaPage);
     expect(infoAfter).not.toBeNull();
-    expect(infoAfter!.paint.bufferWidth).toBeCloseTo(infoAfter!.paint.rectWidth * 2, 0);
-    expect(infoAfter!.paint.bufferHeight).toBeCloseTo(infoAfter!.paint.rectHeight * 2, 0);
+    expect(infoAfter!.paint.bufferWidth).toBeCloseTo(infoAfter!.paint.logicalWidth * 2, 0);
+    expect(infoAfter!.paint.bufferHeight).toBeCloseTo(infoAfter!.paint.logicalHeight * 2, 0);
   });
 });
 
@@ -257,7 +301,7 @@ baseTest.describe('Annotation Visibility on HDR Content', () => {
   });
 
   baseTest('PAINT-HDR-001: drawing on HDR EXR produces visible annotations', async ({ page }) => {
-    await loadExrFile(page);
+    await loadExrFileRobust(page);
 
     // Capture before drawing
     const before = await captureViewerScreenshot(page);
@@ -271,7 +315,7 @@ baseTest.describe('Annotation Visibility on HDR Content', () => {
   });
 
   baseTest('PAINT-HDR-002: paint canvas overlays render canvas for HDR content', async ({ page }) => {
-    await loadExrFile(page);
+    await loadExrFileRobust(page);
 
     // Verify the paint canvas is positioned on top of all render canvases
     const zOrder = await page.evaluate(() => {
@@ -332,7 +376,7 @@ baseTest.describe('Annotation Visibility on HDR Content', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
-    await loadExrFile(page);
+    await loadExrFileRobust(page);
 
     const before = await captureViewerScreenshot(page);
     await drawStrokeOnPage(page);
@@ -345,8 +389,8 @@ baseTest.describe('Annotation Visibility on HDR Content', () => {
     const info = await getPaintCanvasInfo(page);
     expect(info).not.toBeNull();
     expect(info!.dpr).toBe(2);
-    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.rectWidth * 2, 0);
-    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.rectHeight * 2, 0);
+    expect(info!.paint.bufferWidth).toBeCloseTo(info!.paint.logicalWidth * 2, 0);
+    expect(info!.paint.bufferHeight).toBeCloseTo(info!.paint.logicalHeight * 2, 0);
 
     await page.close();
   });

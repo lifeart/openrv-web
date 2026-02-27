@@ -161,6 +161,33 @@ describe('ExportProgressDialog', () => {
       expect(status).not.toBeNull();
     });
 
+    it('UI-A11Y-006a: status label is single-line with ellipsis', () => {
+      const { parent, dialog } = createDialog();
+      activeDialog = dialog;
+      activeParent = parent;
+
+      const status = parent.querySelector('[data-testid="export-progress-status"]') as HTMLElement;
+      expect(status.style.whiteSpace).toBe('nowrap');
+      expect(status.style.overflow).toBe('hidden');
+      expect(status.style.textOverflow).toBe('ellipsis');
+    });
+
+    it('UI-A11Y-006b: frame/time labels are compact overflow-safe', () => {
+      const { parent, dialog } = createDialog();
+      activeDialog = dialog;
+      activeParent = parent;
+
+      const frame = parent.querySelector('[data-testid="export-progress-frames"]') as HTMLElement;
+      const time = parent.querySelector('[data-testid="export-progress-time"]') as HTMLElement;
+
+      expect(frame.style.whiteSpace).toBe('nowrap');
+      expect(frame.style.overflow).toBe('hidden');
+      expect(frame.style.textOverflow).toBe('ellipsis');
+      expect(time.style.whiteSpace).toBe('nowrap');
+      expect(time.style.overflow).toBe('hidden');
+      expect(time.style.textOverflow).toBe('ellipsis');
+    });
+
     it('UI-A11Y-007: backdrop is present for modal behavior', () => {
       const { parent, dialog } = createDialog();
       activeDialog = dialog;

@@ -595,12 +595,16 @@ test.describe('Split Screen A/B Comparison', () => {
       // Go to start first
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
+      // Allow canvas to render the first frame
+      await page.waitForTimeout(150);
 
       const screenshotStart = await captureViewerScreenshot(page);
 
       // Seek to end
       await page.keyboard.press('End');
       await waitForFrameChange(page, 1);
+      // Allow canvas to render the last frame
+      await page.waitForTimeout(150);
 
       const screenshotEnd = await captureViewerScreenshot(page);
 
@@ -782,10 +786,14 @@ test.describe('Split Screen A/B Comparison', () => {
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
 
-      // Capture B side screenshots at multiple points during playback
+      // Wait for a few frames to advance before capturing
+      await waitForFrameAtLeast(page, 3);
+
+      // Capture B side screenshots at multiple points during playback.
+      // Use wider intervals to ensure frames have visibly advanced.
       const bSideScreenshots: Buffer[] = [];
       for (let i = 0; i < 5; i++) {
-        await page.waitForTimeout(150);
+        await page.waitForTimeout(250);
         bSideScreenshots.push(await captureBSideScreenshot(page));
       }
 
@@ -832,8 +840,12 @@ test.describe('Split Screen A/B Comparison', () => {
       const midPlaybackFull = await captureViewerScreenshot(page);
       const midPlaybackBSide = await captureBSideScreenshot(page);
 
-      // Continue playback for a bit more
-      await waitForFrameAtLeast(page, 10);
+      // Record current frame so we can wait for meaningful advancement
+      const midState = await getSessionState(page);
+      const midFrame = midState.currentFrame;
+
+      // Continue playback for a bit more - ensure at least 5 more frames advance
+      await waitForFrameAtLeast(page, midFrame + 5);
 
       // Capture late playback state
       const latePlaybackFull = await captureViewerScreenshot(page);

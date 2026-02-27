@@ -365,8 +365,8 @@ describe('handleSourceLoaded', () => {
     // SDR display: tone mapping enabled to compress HDR for display
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
-    // Scopes show SDR range (tone-mapped output)
-    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
+    // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
 
   it('SLH-U017: SDR content → scopes SDR, no tone mapping', () => {
@@ -543,7 +543,7 @@ describe('handleSourceLoaded', () => {
     autoFitSpy.mockRestore();
   });
 
-  it('SLH-U026: calls setScopesHDRMode(false) for HDR content on SDR display', () => {
+  it('SLH-U026: calls setScopesHDRMode(true) for HDR content on SDR display', () => {
     const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
     const autoFitSpy = vi.spyOn(WebGLScopes, 'setScopesHDRAutoFit');
     const context = createMockContext({
@@ -558,8 +558,9 @@ describe('handleSourceLoaded', () => {
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    expect(spy).toHaveBeenCalledWith(false);
-    expect(autoFitSpy).toHaveBeenCalledWith(false);
+    // HDR scope mode is enabled even on SDR displays so scopes can analyze source HDR values
+    expect(spy).toHaveBeenCalledWith(true, 4.0);
+    expect(autoFitSpy).toHaveBeenCalledWith(true);
     spy.mockRestore();
     autoFitSpy.mockRestore();
   });
@@ -600,7 +601,8 @@ describe('handleSourceLoaded', () => {
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
-    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
+    // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
 });
 

@@ -381,6 +381,12 @@ test.describe('Prerender Buffer', () => {
       expect(imagesAreDifferent(initialScreenshot, redChannelScreenshot)).toBe(true);
 
       // Playback should work in channel mode
+      // Press Escape to dismiss any open dropdown, then click the viewer area
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(100);
+      const viewerArea = page.locator('[role="main"], main').first();
+      await viewerArea.click({ position: { x: 50, y: 50 }, force: true });
+      await page.waitForTimeout(100);
       const beforePlayState = await getSessionState(page);
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);

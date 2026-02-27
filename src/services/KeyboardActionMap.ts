@@ -6,6 +6,7 @@
  */
 
 import { getThemeManager } from '../utils/ui/ThemeManager';
+import { getGlobalHistoryManager } from '../utils/HistoryManager';
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing)
@@ -495,8 +496,30 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'export.copyFrame': () => viewer.copyFrameToClipboard(true),
 
     // -- Edit / Paint ----------------------------------------------------
-    'edit.undo': () => paintEngine.undo(),
-    'edit.redo': () => paintEngine.redo(),
+    'edit.undo': () => {
+      const historyManager = getGlobalHistoryManager();
+      if (historyManager.canUndo()) {
+        historyManager.undo();
+      } else {
+        paintEngine.undo();
+      }
+    },
+    'edit.redo': () => {
+      const historyManager = getGlobalHistoryManager();
+      if (historyManager.canRedo()) {
+        historyManager.redo();
+      } else {
+        paintEngine.redo();
+      }
+    },
+    'edit.redo-alt': () => {
+      const historyManager = getGlobalHistoryManager();
+      if (historyManager.canRedo()) {
+        historyManager.redo();
+      } else {
+        paintEngine.redo();
+      }
+    },
     'paint.pan': () => controls.paintToolbar.handleKeyboard('v'),
     'paint.pen': () => controls.paintToolbar.handleKeyboard('p'),
     'paint.eraser': () => controls.paintToolbar.handleKeyboard('e'),

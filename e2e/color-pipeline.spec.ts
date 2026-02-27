@@ -555,7 +555,8 @@ test.describe('Color Pipeline End-to-End', () => {
     });
 
     test('CPIPE-032: all pipeline stages should be removable to restore original', async ({ page }) => {
-      // Capture original
+      // Capture original state (screenshot + brightness)
+      const screenshotOriginal = await captureViewerScreenshot(page);
       const brightnessOriginal = await getCanvasBrightness(page);
 
       // Enable OCIO
@@ -571,9 +572,11 @@ test.describe('Color Pipeline End-to-End', () => {
       await waitForExposure(page, 2.0);
       await waitForRender(page);
 
-      // Verify things changed
-      const brightnessModified = await getCanvasBrightness(page);
-      expect(Math.abs(brightnessModified - brightnessOriginal)).toBeGreaterThan(1);
+      // Verify things changed — use screenshot comparison because OCIO forces
+      // the 2D canvas path where exposure/saturation are CSS filters that are
+      // not reflected in raw canvas pixel reads (getCanvasBrightness).
+      const screenshotModified = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(screenshotOriginal, screenshotModified)).toBe(true);
 
       // Remove color adjustments
       await resetColor(page);
@@ -587,7 +590,9 @@ test.describe('Color Pipeline End-to-End', () => {
       await disableOCIO(page);
       await waitForRender(page);
 
-      // Brightness should return close to original
+      // Brightness should return close to original (OCIO disabled + color
+      // reset means we're back in the SDR WebGL path or 2D path without
+      // CSS filters, so pixel brightness should match again).
       const brightnessRestored = await getCanvasBrightness(page);
       expect(Math.abs(brightnessRestored - brightnessOriginal)).toBeLessThanOrEqual(5);
     });

@@ -117,10 +117,13 @@ test.describe('Marker Management', () => {
     let state = await getSessionState(page);
     expect(state.markers.length).toBe(2);
 
-    // Clear all
+    // Clear all (uses custom modal confirmation, not native dialog)
     const clearButton = page.locator('[data-testid="marker-clear-btn"]');
-    page.once('dialog', (dialog) => dialog.accept());
     await clearButton.click();
+    // Wait for the custom confirm modal to appear, then click OK
+    const confirmBtn = page.locator('#modal-container button:has-text("OK")');
+    await expect(confirmBtn).toBeVisible({ timeout: 3000 });
+    await confirmBtn.click();
     await page.waitForTimeout(100);
 
     state = await getSessionState(page);

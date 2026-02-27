@@ -272,7 +272,8 @@ describe('Keyboard Navigation Integration', () => {
     });
 
     it('KEY-005i: HeaderBar has role="banner"', () => {
-      expect(headerBar.getContainer().getAttribute('role')).toBe('banner');
+      // role="banner" is on the wrapper element returned by render(), not getContainer()
+      expect(headerBar.render().getAttribute('role')).toBe('banner');
     });
 
     it('KEY-005j: Active tab has aria-selected="true"', () => {
