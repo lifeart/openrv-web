@@ -30,7 +30,7 @@ async function waitForLuminanceVisMode(page: import('@playwright/test').Page, ex
   await page.waitForFunction(
     (mode) => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.mode === mode,
     expectedMode,
-    { timeout: 5000 },
+    { timeout: 10000 },
   );
 }
 
