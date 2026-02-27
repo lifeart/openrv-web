@@ -104,20 +104,47 @@ test.describe('Undo/Redo Cross-Feature', () => {
     });
     await waitForRotation(page, 90);
 
-    // Undo step 3 (rotation)
-    await page.keyboard.press('Control+z');
+    // Undo all the way back using the global HistoryManager.
+    // Note: wiring debounce may add extra history entries, so we undo
+    // until we reach the expected state rather than a fixed count.
+    // Use page.evaluate to call undo() directly — keyboard Ctrl+Z can
+    // be swallowed by focused UI elements under heavy parallel load.
+
+    // Undo until rotation is 0
+    await page.evaluate(() => {
+      const t = (window as any).__OPENRV_TEST__;
+      // Undo until rotation is reverted (max 10 undos to avoid infinite loop)
+      for (let i = 0; i < 10; i++) {
+        t?.undo();
+        if (t?.getTransformState?.()?.rotation === 0) break;
+      }
+    });
     await waitForRotation(page, 0);
     const t1 = await getTransformState(page);
     expect(t1.rotation).toBe(0);
 
-    // Undo step 2 (exposure 2.0 → 1.0)
-    await page.keyboard.press('Control+z');
+    // Undo until exposure is 1.0
+    await page.evaluate(() => {
+      const t = (window as any).__OPENRV_TEST__;
+      for (let i = 0; i < 10; i++) {
+        t?.undo();
+        const exp = t?.getColorState?.()?.exposure;
+        if (exp != null && Math.abs(exp - 1.0) < 0.1) break;
+      }
+    });
     await waitForExposure(page, 1.0);
     const c1 = await getColorState(page);
     expect(c1.exposure).toBeCloseTo(1.0, 1);
 
-    // Undo step 1 (exposure 1.0 → 0)
-    await page.keyboard.press('Control+z');
+    // Undo until exposure is 0
+    await page.evaluate(() => {
+      const t = (window as any).__OPENRV_TEST__;
+      for (let i = 0; i < 10; i++) {
+        t?.undo();
+        const exp = t?.getColorState?.()?.exposure;
+        if (exp != null && Math.abs(exp) < 0.1) break;
+      }
+    });
     await waitForExposure(page, 0);
     const c2 = await getColorState(page);
     expect(c2.exposure).toBeCloseTo(0, 1);

@@ -114,6 +114,11 @@ export interface ViewerState {
   backgroundCustomColor: string;
   // Color inversion state
   colorInversionEnabled: boolean;
+  // HDR format info
+  formatName: string | null;
+  bitDepth: number | null;
+  dataType: string | null;
+  colorSpace: string | null;
 }
 
 export interface ColorState {
@@ -446,6 +451,10 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       backgroundCheckerSize: 'medium',
       backgroundCustomColor: '#1a1a1a',
       colorInversionEnabled: false,
+      formatName: null,
+      bitDepth: null,
+      dataType: null,
+      colorSpace: null,
     };
   });
 }

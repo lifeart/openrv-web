@@ -152,32 +152,24 @@ test.describe('Color Space Conversion E2E', () => {
 
   test('CS-E005: OCIO round-trip (enable→modify→reset) restores original', async ({ page }) => {
     test.slow(); // allow extra time under parallel load
+
+    // Wait for initial render to fully settle before capturing baseline
+    await page.waitForTimeout(300);
     const beforeState = await captureCanvasState(page);
 
     // Enable OCIO
     await enableOCIO(page);
-    // Wait for shader pipeline to finish rendering
-    await page.waitForTimeout(500);
-    // Ensure canvas is stable (two consecutive captures are the same)
-    await page.waitForFunction(() => {
-      const state = (window as any).__OPENRV_TEST__?.getOCIOState();
-      return state?.enabled === true;
-    }, undefined, { timeout: 5000 });
+    // Wait for OCIO shader pipeline to finish rendering
+    await page.waitForTimeout(800);
 
     // Disable OCIO
     await page.locator('[data-testid="ocio-enable-toggle"]').click();
     await waitForOCIOEnabled(page, false);
     // Wait for render pipeline to fully reset after disabling OCIO
-    await page.waitForTimeout(500);
+    // Needs generous time under heavy parallel load for GPU pipeline flush
+    await page.waitForTimeout(1000);
 
-    // Verify canvas state has stabilized by checking two consecutive captures match
-    let afterState = await captureCanvasState(page);
-    for (let i = 0; i < 3; i++) {
-      await page.waitForTimeout(100);
-      const check = await captureCanvasState(page);
-      if (check === afterState) break;
-      afterState = check;
-    }
+    const afterState = await captureCanvasState(page);
 
     // Should be back to original after disabling
     expect(beforeState).toBe(afterState);

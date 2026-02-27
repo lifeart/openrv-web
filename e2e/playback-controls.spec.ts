@@ -567,14 +567,16 @@ test.describe('Playback Controls', () => {
       let state = await getSessionState(page);
       const initialOutPoint = state.outPoint;
 
-      // Go near end
+      // Go near end — wait for End to complete before stepping back
       await page.keyboard.press('End');
+      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()', 10000);
       await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(100);
       await page.keyboard.press('ArrowLeft');
       await waitForCondition(page, `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame < s?.frameCount;
-      })()`);
+      })()`, 10000);
 
       state = await getSessionState(page);
       const targetFrame = state.currentFrame;
@@ -594,6 +596,7 @@ test.describe('Playback Controls', () => {
     test('PLAY-042: bracket keys should also set in/out points', async ({ page }) => {
       // Set in point with [
       await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(50);
       await page.keyboard.press('ArrowRight');
       await waitForFrameAtLeast(page, 3);
 
@@ -604,18 +607,19 @@ test.describe('Playback Controls', () => {
       await waitForCondition(page, `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === ${inFrame};
-      })()`);
+      })()`, 10000);
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(inFrame);
 
       // Set out point with ]
       await page.keyboard.press('End');
+      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()', 10000);
       await page.keyboard.press('ArrowLeft');
       await waitForCondition(page, `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame < s?.frameCount;
-      })()`);
+      })()`, 10000);
 
       state = await getSessionState(page);
       const outFrame = state.currentFrame;
@@ -655,18 +659,27 @@ test.describe('Playback Controls', () => {
     });
 
     test('PLAY-044: should reset in/out points with R key', async ({ page }) => {
-      // Set in/out points first
+      const canvas = page.locator('canvas').first();
+      await canvas.click({ force: true }); // Ensure canvas has focus
+
+      // Set in/out points first - add waits for frame navigation
       await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
       await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
       await page.keyboard.press('i');
+      await page.waitForTimeout(100);
       await page.keyboard.press('End');
+      await page.waitForTimeout(200); // End key needs more time
       await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(100);
       await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(100);
       await page.keyboard.press('o');
       await waitForCondition(page, `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint > 1 && s?.outPoint < s?.frameCount;
-      })()`);
+      })()`, 10000);
 
       let state = await getSessionState(page);
       expect(state.inPoint).toBeGreaterThan(1);
@@ -677,7 +690,7 @@ test.describe('Playback Controls', () => {
       await waitForCondition(page, `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === 1 && s?.outPoint === s?.frameCount;
-      })()`);
+      })()`, 10000);
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(1);

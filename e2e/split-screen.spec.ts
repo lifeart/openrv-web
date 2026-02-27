@@ -592,6 +592,10 @@ test.describe('Split Screen A/B Comparison', () => {
       await page.keyboard.press('Shift+Alt+s');
       await waitForWipeMode(page, 'splitscreen-h');
 
+      // Click canvas to ensure keyboard focus
+      const canvas = page.locator('canvas').first();
+      await canvas.click({ force: true });
+
       // Go to start first
       await page.keyboard.press('Home');
       await waitForFrame(page, 1);
@@ -605,7 +609,7 @@ test.describe('Split Screen A/B Comparison', () => {
       const state = await getSessionState(page);
       await waitForFrame(page, state.frameCount);
       // Allow canvas to fully render the last frame (generous for parallel load)
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(800);
 
       const screenshotEnd = await captureViewerScreenshot(page);
 

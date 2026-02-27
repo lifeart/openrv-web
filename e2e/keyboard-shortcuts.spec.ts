@@ -282,9 +282,12 @@ test.describe('Keyboard Shortcuts', () => {
     });
 
     test('KEYS-031: O should set out point and update outPoint state', async ({ page }) => {
-      // Navigate to a frame near the end
+      // Navigate to a frame near the end — ensure canvas has focus first
+      const canvas = page.locator('canvas').first();
+      await canvas.click({ force: true });
       await page.keyboard.press('End');
       await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()', 10000);
+      await page.waitForTimeout(100);
       await page.keyboard.press('ArrowLeft');
       await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame < s.frameCount; })()', 10000);
 

@@ -32,7 +32,7 @@ async function waitForToneMappingState(
       return true;
     },
     expected,
-    { timeout: 5000 },
+    { timeout: 10000 },
   );
 }
 
@@ -60,6 +60,7 @@ async function selectOperatorViaUI(
 ) {
   await openToneMappingDropdown(page);
   await page.click(`[data-testid="tone-mapping-operator-${operator}"]`);
+  await page.waitForTimeout(200); // Wait for state update
   const expectedEnabled = operator !== 'off';
   await waitForToneMappingState(page, { enabled: expectedEnabled, operator });
 }

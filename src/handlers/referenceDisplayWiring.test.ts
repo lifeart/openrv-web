@@ -236,11 +236,11 @@ describe('EXR overlay receives window data on source load', () => {
         height: 1080,
         fileSourceNode: {
           isHDR: () => true,
-          formatName: 'dpx',
+          formatName: 'DPX',
           getEXRLayers: () => [],
           getIPImage: () => ({
             metadata: {
-              attributes: { formatName: 'dpx' },
+              attributes: { formatName: 'DPX' },
             },
           }),
         },

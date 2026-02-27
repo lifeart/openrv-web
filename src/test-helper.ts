@@ -54,6 +54,8 @@ declare global {
       setWipeMode: (mode: string) => void;
       setWipePosition: (position: number) => void;
       setDifferenceMatteEnabled: (enabled: boolean) => void;
+      undo: () => void;
+      redo: () => void;
       /** Stable mutation helpers – E2E specs should call these instead of reaching into app.* */
       mutations: TestMutations;
     };
@@ -137,6 +139,8 @@ export interface TestMutations {
   getPlaylistManager(): any;
   getSession(): any;
   getHistoryManager(): any;
+  undo(): void;
+  redo(): void;
   getLUTPipelinePanel(): any;
   setSessionFrame(frame: number): void;
   getSessionSourceCount(): number;
@@ -723,13 +727,13 @@ export function exposeForTesting(app: App): void {
         formatName: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           return fileSource?.formatName ?? null;
         })(),
         bitDepth: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           const ipImage = fileSource?.cachedIPImage;
           const attrs = ipImage?.metadata?.attributes;
           return (attrs?.bitDepth as number) ?? (attrs?.bitsPerSample as number) ?? null;
@@ -737,14 +741,14 @@ export function exposeForTesting(app: App): void {
         dataType: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           const ipImage = fileSource?.cachedIPImage;
           return ipImage?.dataType ?? null;
         })(),
         colorSpace: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           const ipImage = fileSource?.cachedIPImage;
           return ipImage?.metadata?.colorSpace ?? null;
         })(),
@@ -1321,6 +1325,14 @@ export function exposeForTesting(app: App): void {
       }
     },
 
+    // Undo/redo via global HistoryManager (top-level for direct access from tests)
+    undo(): void {
+      getGlobalHistoryManager().undo();
+    },
+    redo(): void {
+      getGlobalHistoryManager().redo();
+    },
+
     mutations: {
       // ── Viewer / Wipe ──
       setWipeMode(mode: string) {
@@ -1551,7 +1563,13 @@ export function exposeForTesting(app: App): void {
         return appAny.session ?? null;
       },
       getHistoryManager() {
-        return getControl('historyPanel')?.historyManager ?? null;
+        return getControl('historyPanel')?.historyManager ?? getGlobalHistoryManager();
+      },
+      undo() {
+        getGlobalHistoryManager().undo();
+      },
+      redo() {
+        getGlobalHistoryManager().redo();
       },
       getLUTPipelinePanel() {
         return getControl('lutPipelinePanel') ?? null;

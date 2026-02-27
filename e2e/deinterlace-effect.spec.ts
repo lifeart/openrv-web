@@ -232,15 +232,13 @@ test.describe('Deinterlace Effect E2E', () => {
   });
 
   test.describe('Visual Verification with Video', () => {
-    test('DEINT-E2E-010: deinterlace effect produces visible change on loaded video', async ({ page }) => {
+    test.fixme('DEINT-E2E-010: deinterlace effect produces visible change on loaded video', async ({ page }) => {
+      // Fixme: deinterlace is not wired to UI yet, and the canvas uses WebGL
+      // so 2d context manipulation doesn't work. Enable when deinterlace UI is implemented.
       await loadVideoFile(page);
 
-      // Capture before screenshot
       const before = await captureViewerScreenshot(page);
 
-      // Apply blend deinterlace via color adjustments mutation
-      // Since deinterlace isn't wired to UI yet, verify the pipeline
-      // would produce different output by applying via the canvas
       await page.evaluate(() => {
         const canvas = document.querySelector('canvas[data-testid="viewer-image-canvas"]') as HTMLCanvasElement;
         if (!canvas) return;
@@ -250,7 +248,6 @@ test.describe('Deinterlace Effect E2E', () => {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const { data, width, height } = imageData;
 
-        // Apply blend deinterlace in-place
         const original = new Uint8ClampedArray(data);
         const stride = width * 4;
         for (let y = 0; y < height; y++) {
@@ -266,7 +263,6 @@ test.describe('Deinterlace Effect E2E', () => {
 
       const after = await captureViewerScreenshot(page);
 
-      // Deinterlace should visually change the canvas
       expect(imagesAreDifferent(before, after)).toBe(true);
     });
   });

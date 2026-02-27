@@ -604,7 +604,7 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          if (decoderRegistry.detectFormat(buffer) === 'tiff') {
+          if (decoderRegistry.detectFormat(buffer) === 'TIFF') {
             await this.loadHDRFromBuffer(buffer, filename, url, originalUrl);
             return;
           }
@@ -1844,7 +1844,7 @@ export class FileSourceNode extends BaseSourceNode {
     // Check if this is a TIFF file - only use HDR path for float TIFFs
     if (isTIFFExtension(file.name)) {
       const buffer = await file.arrayBuffer();
-      if (decoderRegistry.detectFormat(buffer) === 'tiff') {
+      if (decoderRegistry.detectFormat(buffer) === 'TIFF') {
         const url = URL.createObjectURL(file);
         await this.loadHDRFromBuffer(buffer, file.name, url);
         return;
