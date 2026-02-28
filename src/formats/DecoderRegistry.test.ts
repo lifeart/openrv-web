@@ -177,29 +177,29 @@ describe('DecoderRegistry', () => {
 
     it('should detect DPX format (big-endian)', () => {
       const registry = new DecoderRegistry();
-      expect(registry.detectFormat(createDPXMagic(true))).toBe('dpx');
+      expect(registry.detectFormat(createDPXMagic(true))).toBe('DPX');
     });
 
     it('should detect DPX format (little-endian)', () => {
       const registry = new DecoderRegistry();
-      expect(registry.detectFormat(createDPXMagic(false))).toBe('dpx');
+      expect(registry.detectFormat(createDPXMagic(false))).toBe('DPX');
     });
 
     it('should detect Cineon format', () => {
       const registry = new DecoderRegistry();
-      expect(registry.detectFormat(createCineonMagic())).toBe('cineon');
+      expect(registry.detectFormat(createCineonMagic())).toBe('Cineon');
     });
 
     it('should detect float TIFF format', () => {
       const registry = new DecoderRegistry();
-      expect(registry.detectFormat(createFloatTIFFMagic())).toBe('tiff');
+      expect(registry.detectFormat(createFloatTIFFMagic())).toBe('TIFF');
     });
 
     it('should not detect non-float TIFF as float TIFF', () => {
       const registry = new DecoderRegistry();
       // Non-float TIFF should not be detected by the TIFF (float) decoder,
       // but will be matched by the RAW preview decoder (TIFF-based non-float)
-      expect(registry.detectFormat(createNonFloatTIFFMagic())).not.toBe('tiff');
+      expect(registry.detectFormat(createNonFloatTIFFMagic())).not.toBe('TIFF');
       expect(registry.detectFormat(createNonFloatTIFFMagic())).toBe('raw-preview');
     });
 
@@ -243,21 +243,21 @@ describe('DecoderRegistry', () => {
       const registry = new DecoderRegistry();
       const decoder = registry.getDecoder(createDPXMagic());
       expect(decoder).not.toBeNull();
-      expect(decoder!.formatName).toBe('dpx');
+      expect(decoder!.formatName).toBe('DPX');
     });
 
     it('should return Cineon decoder for Cineon data', () => {
       const registry = new DecoderRegistry();
       const decoder = registry.getDecoder(createCineonMagic());
       expect(decoder).not.toBeNull();
-      expect(decoder!.formatName).toBe('cineon');
+      expect(decoder!.formatName).toBe('Cineon');
     });
 
     it('should return TIFF decoder for float TIFF data', () => {
       const registry = new DecoderRegistry();
       const decoder = registry.getDecoder(createFloatTIFFMagic());
       expect(decoder).not.toBeNull();
-      expect(decoder!.formatName).toBe('tiff');
+      expect(decoder!.formatName).toBe('TIFF');
     });
 
     it('should return HDR decoder for HDR data', () => {
@@ -348,9 +348,9 @@ describe('DecoderRegistry', () => {
       const registry = new DecoderRegistry();
       // Test each format is detectable
       expect(registry.getDecoder(createEXRMagic())?.formatName).toBe('exr');
-      expect(registry.getDecoder(createDPXMagic())?.formatName).toBe('dpx');
-      expect(registry.getDecoder(createCineonMagic())?.formatName).toBe('cineon');
-      expect(registry.getDecoder(createFloatTIFFMagic())?.formatName).toBe('tiff');
+      expect(registry.getDecoder(createDPXMagic())?.formatName).toBe('DPX');
+      expect(registry.getDecoder(createCineonMagic())?.formatName).toBe('Cineon');
+      expect(registry.getDecoder(createFloatTIFFMagic())?.formatName).toBe('TIFF');
       expect(registry.getDecoder(createNonFloatTIFFMagic())?.formatName).toBe('raw-preview');
       expect(registry.getDecoder(createHDRMagic())?.formatName).toBe('hdr');
       expect(registry.getDecoder(createJXLCodestreamMagic())?.formatName).toBe('jxl');
@@ -451,9 +451,9 @@ describe('DecoderRegistry', () => {
       expect(decoderRegistry).toBeInstanceOf(DecoderRegistry);
       // Singleton should have all built-in decoders
       expect(decoderRegistry.detectFormat(createEXRMagic())).toBe('exr');
-      expect(decoderRegistry.detectFormat(createDPXMagic())).toBe('dpx');
-      expect(decoderRegistry.detectFormat(createCineonMagic())).toBe('cineon');
-      expect(decoderRegistry.detectFormat(createFloatTIFFMagic())).toBe('tiff');
+      expect(decoderRegistry.detectFormat(createDPXMagic())).toBe('DPX');
+      expect(decoderRegistry.detectFormat(createCineonMagic())).toBe('Cineon');
+      expect(decoderRegistry.detectFormat(createFloatTIFFMagic())).toBe('TIFF');
       expect(decoderRegistry.detectFormat(createHDRMagic())).toBe('hdr');
       expect(decoderRegistry.detectFormat(createJXLCodestreamMagic())).toBe('jxl');
     });
@@ -480,6 +480,33 @@ describe('DecoderRegistry', () => {
       const buffer = new ArrayBuffer(4);
       new DataView(buffer).setUint32(0, 0xabcd1234, false);
       expect(decoderRegistry.detectFormat(buffer)).toBe('singleton-test');
+
+      // Clean up singleton state
+      decoderRegistry.unregisterDecoder('singleton-test');
+    });
+  });
+
+  describe('unregisterDecoder', () => {
+    it('DREG-UNREG-001: removes decoder by format name', () => {
+      const reg = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'unreg-test',
+        canDecode: () => true,
+        decode: async () => ({
+          width: 1, height: 1, data: new Float32Array(4),
+          channels: 4, colorSpace: 'linear', metadata: {},
+        }),
+      };
+      reg.registerDecoder(customDecoder);
+      expect(reg.detectFormat(new ArrayBuffer(4))).toBe('unreg-test');
+      expect(reg.unregisterDecoder('unreg-test')).toBe(true);
+      // After unregister, the first built-in decoder matches instead
+      expect(reg.detectFormat(new ArrayBuffer(4))).not.toBe('unreg-test');
+    });
+
+    it('DREG-UNREG-002: returns false for unknown format name', () => {
+      const reg = new DecoderRegistry();
+      expect(reg.unregisterDecoder('nonexistent-format')).toBe(false);
     });
   });
 });

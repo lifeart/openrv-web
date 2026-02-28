@@ -15,6 +15,7 @@ import type { AppWiringContext } from './AppWiringContext';
 import type { ColorControls } from './ui/components/ColorControls';
 import type { OCIOState } from './color/OCIOConfig';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 export const DEFAULT_OCIO_BAKE_SIZE = 33;
 export const ACES_OCIO_BAKE_SIZE = 65;
@@ -44,6 +45,7 @@ export function resolveOCIOBakeSize(state: OCIOState): number {
 export interface ColorWiringState {
   colorHistoryTimer: ReturnType<typeof setTimeout> | null;
   colorHistoryPrevious: ReturnType<ColorControls['getAdjustments']> | null;
+  subscriptions: DisposableSubscriptionManager;
 }
 
 /**
@@ -53,25 +55,28 @@ export interface ColorWiringState {
 export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
   const { viewer, controls, sessionBridge, persistenceManager } = ctx;
 
+  const subs = new DisposableSubscriptionManager();
+
   const state: ColorWiringState = {
     colorHistoryTimer: null,
     colorHistoryPrevious: controls.colorControls.getAdjustments(),
+    subscriptions: subs,
   };
 
   // Color inversion toggle -> viewer
-  controls.colorInversionToggle.on('inversionChanged', (enabled) => {
+  subs.add(controls.colorInversionToggle.on('inversionChanged', (enabled) => {
     viewer.setColorInversion(enabled);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // Premult control -> viewer
-  controls.premultControl.on('premultChanged', (mode) => {
+  subs.add(controls.premultControl.on('premultChanged', (mode) => {
     viewer.setPremultMode(mode);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // Color controls adjustments -> viewer with debounced history recording
-  controls.colorControls.on('adjustmentsChanged', (adjustments) => {
+  subs.add(controls.colorControls.on('adjustmentsChanged', (adjustments) => {
     viewer.setColorAdjustments(adjustments);
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
@@ -120,32 +125,32 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
       state.colorHistoryPrevious = currentSnapshot;
       state.colorHistoryTimer = null;
     }, 500);
-  });
+  }));
 
   // LUT events -> viewer
-  controls.colorControls.on('lutLoaded', (lut) => {
+  subs.add(controls.colorControls.on('lutLoaded', (lut) => {
     viewer.setLUT(lut);
     sessionBridge.scheduleUpdateScopes();
-  });
-  controls.colorControls.on('lutIntensityChanged', (intensity) => {
+  }));
+  subs.add(controls.colorControls.on('lutIntensityChanged', (intensity) => {
     viewer.setLUTIntensity(intensity);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // CDL control -> viewer
-  controls.cdlControl.on('cdlChanged', (cdl) => {
+  subs.add(controls.cdlControl.on('cdlChanged', (cdl) => {
     viewer.setCDL(cdl);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // Curves control -> viewer
-  controls.curvesControl.on('curvesChanged', (curves) => {
+  subs.add(controls.curvesControl.on('curvesChanged', (curves) => {
     viewer.setCurves(curves);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // OCIO control -> viewer (baked 3D LUT)
-  controls.ocioControl.on('stateChanged', (state) => {
+  subs.add(controls.ocioControl.on('stateChanged', (state) => {
     updateOCIOPipeline(ctx, state);
     // Update gamut diagram triangles with current OCIO color spaces
     controls.gamutDiagram.setColorSpaces(
@@ -155,27 +160,27 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
     );
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
-  });
+  }));
 
   // Display profile control -> viewer
-  controls.displayProfileControl.on('stateChanged', (state) => {
+  subs.add(controls.displayProfileControl.on('stateChanged', (state) => {
     viewer.setDisplayColorState(state);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // Gamut mapping control -> viewer
-  controls.gamutMappingControl.on('gamutMappingChanged', (state) => {
+  subs.add(controls.gamutMappingControl.on('gamutMappingChanged', (state) => {
     viewer.setGamutMappingState(state);
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
-  });
+  }));
 
   // LUT pipeline panel -> viewer
-  controls.lutPipelinePanel.on('pipelineChanged', () => {
+  subs.add(controls.lutPipelinePanel.on('pipelineChanged', () => {
     viewer.syncLUTPipeline();
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
-  });
+  }));
 
   // Ensure GPU LUT chain state matches panel defaults at startup
   viewer.syncLUTPipeline();

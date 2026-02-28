@@ -58,9 +58,9 @@ test.describe('Waveform Display', () => {
     await expect(canvas).toBeVisible();
   });
 
-  test('WF-E005: clicking Waveform button in View tab toggles waveform', async ({ page }) => {
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+  test('WF-E005: clicking Waveform button in QC tab toggles waveform', async ({ page }) => {
+    // Go to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     // Open scopes dropdown then toggle waveform option
@@ -370,8 +370,8 @@ test.describe('Waveform State Persistence', () => {
     state = await getViewerState(page);
     expect(state.waveformVisible).toBe(true);
 
-    // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Switch back to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);

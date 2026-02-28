@@ -5,6 +5,7 @@ import {
   waitForTestHelper,
   getColorState,
   captureViewerScreenshot,
+  captureViewerScreenshotClean,
   imagesAreDifferent,
   captureCanvasState,
   verifyCanvasChanged,
@@ -30,10 +31,14 @@ const SAMPLE_LUT = 'sample/test_lut.cube';
 // Helpers
 // --------------------------------------------------------------------------
 
-/** Open the color controls panel via keyboard shortcut */
+/** Open the color controls panel via keyboard shortcut (idempotent) */
 async function openColorControlsPanel(page: import('@playwright/test').Page): Promise<void> {
+  const panel = page.locator('.color-controls-panel');
+  if (await panel.isVisible().catch(() => false)) {
+    return; // Already open
+  }
   await page.keyboard.press('c');
-  await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
+  await expect(panel).toBeVisible({ timeout: 5000 });
 }
 
 /** Load a LUT file through the Color Controls panel file input */
@@ -186,8 +191,8 @@ test.describe('LUT Loading', () => {
     });
 
     test('LUT-E021: LUT intensity at 0 should match no-LUT appearance', async ({ page }) => {
-      // Capture before loading any LUT
-      const screenshotNoLUT = await captureViewerScreenshot(page);
+      // Capture before loading any LUT (clean = no overlays)
+      const screenshotNoLUT = await captureViewerScreenshotClean(page);
 
       // Load LUT
       await loadLUTFile(page);
@@ -195,9 +200,9 @@ test.describe('LUT Loading', () => {
       let state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
 
-      // Verify LUT changes the image
+      // Verify LUT changes the image (overlay difference is fine here)
       await page.waitForTimeout(200);
-      const screenshotFullLUT = await captureViewerScreenshot(page);
+      const screenshotFullLUT = await captureViewerScreenshotClean(page);
       expect(imagesAreDifferent(screenshotNoLUT, screenshotFullLUT)).toBe(true);
 
       // Set intensity to 0 - should look like no LUT
@@ -208,7 +213,8 @@ test.describe('LUT Loading', () => {
       expect(state.hasLUT).toBe(true); // LUT is still loaded, just at 0%
 
       await page.waitForTimeout(200);
-      const screenshotZeroIntensity = await captureViewerScreenshot(page);
+      // Use clean screenshot to exclude LUT indicator badge from comparison
+      const screenshotZeroIntensity = await captureViewerScreenshotClean(page);
 
       // At 0% intensity, the image should match the no-LUT state
       expect(imagesAreDifferent(screenshotNoLUT, screenshotZeroIntensity)).toBe(false);
@@ -379,7 +385,7 @@ test.describe('LUT Loading', () => {
 
   test.describe('LUT Clear', () => {
     test('LUT-E050: clearing LUT should restore original appearance', async ({ page }) => {
-      // Capture original (no LUT)
+      // Capture original (no LUT, no panel overlay)
       const screenshotOriginal = await captureViewerScreenshot(page);
 
       // Load LUT
@@ -401,6 +407,9 @@ test.describe('LUT Loading', () => {
       state = await getColorState(page);
       expect(state.hasLUT).toBe(false);
 
+      // Close the panel before screenshot so it matches the original (no panel overlay)
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.color-controls-panel')).not.toBeVisible({ timeout: 3000 });
       await page.waitForTimeout(300);
       const screenshotCleared = await captureViewerScreenshot(page);
 

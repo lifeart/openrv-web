@@ -111,8 +111,10 @@ test.describe('Network Sync', () => {
     const copyButton = connectedPanel.locator('[data-testid="network-copy-link-button"]');
     await copyButton.click();
 
-    await expect(shareInput).toHaveValue(/#s=/);
-    await expect(shareInput).toHaveValue(/rtc=/);
+    // Session state hash should appear quickly after the click
+    await expect(shareInput).toHaveValue(/#s=/, { timeout: 5000 });
+    // WebRTC offer generation may take several seconds (ICE gathering up to 4s)
+    await expect(shareInput).toHaveValue(/rtc=/, { timeout: 15000 });
     const shareLinkWithState = await shareInput.inputValue();
     const sharedURL = new URL(shareLinkWithState);
     expect(sharedURL.searchParams.get('room')).toBe(roomCode);

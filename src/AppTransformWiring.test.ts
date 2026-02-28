@@ -60,7 +60,9 @@ describe('wireTransformControls', () => {
     const { ctx } = createMockContext();
     const state = wireTransformControls(ctx);
 
-    expect(state).toEqual({ transformHistoryPrevious: null });
+    expect(state.transformHistoryPrevious).toBeNull();
+    expect(state.subscriptions).toBeDefined();
+    expect(state.subscriptions.isDisposed).toBe(false);
   });
 
   it('TW-003: rotation change records history action via historyManager.recordAction', () => {
@@ -165,5 +167,27 @@ describe('wireTransformControls', () => {
       expect.any(Function),
       expect.any(Function),
     );
+  });
+
+  describe('disposal', () => {
+    it('TW-DISP-001: callbacks fire before dispose', () => {
+      const { ctx, viewer, transformControl } = createMockContext();
+      wireTransformControls(ctx);
+
+      const transform = { ...DEFAULT_TRANSFORM, rotation: 90 as const };
+      transformControl.emit('transformChanged', transform);
+      expect(viewer.setTransform).toHaveBeenCalledWith(transform);
+    });
+
+    it('TW-DISP-002: callbacks do not fire after dispose', () => {
+      const { ctx, viewer, transformControl } = createMockContext();
+      const state = wireTransformControls(ctx);
+      state.subscriptions.dispose();
+
+      viewer.setTransform.mockClear();
+      const transform = { ...DEFAULT_TRANSFORM, rotation: 180 as const };
+      transformControl.emit('transformChanged', transform);
+      expect(viewer.setTransform).not.toHaveBeenCalled();
+    });
   });
 });

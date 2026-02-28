@@ -319,11 +319,11 @@ test.describe('Session Metadata UI Integration', () => {
   });
 
   test('SI-E052: session name display updates when metadata changes via API', async ({ page }) => {
-    // Update metadata via session API
+    // Update metadata via session.updateMetadata() which updates internal state and emits metadataChanged
     await page.evaluate(() => {
       const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
-      if (session) {
-        (session as any)._metadata = {
+      if (session?.updateMetadata) {
+        session.updateMetadata({
           displayName: 'Test Session Name',
           comment: 'Test comment',
           version: 2,
@@ -331,8 +331,7 @@ test.describe('Session Metadata UI Integration', () => {
           creationContext: 0,
           clipboard: 0,
           membershipContains: [],
-        };
-        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
+        });
       }
     });
     await page.waitForTimeout(100);
@@ -342,11 +341,11 @@ test.describe('Session Metadata UI Integration', () => {
   });
 
   test('SI-E053: session name display tooltip shows comment', async ({ page }) => {
-    // Update metadata with comment
+    // Update metadata via session.updateMetadata() which updates internal state and emits metadataChanged
     await page.evaluate(() => {
       const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
-      if (session) {
-        (session as any)._metadata = {
+      if (session?.updateMetadata) {
+        session.updateMetadata({
           displayName: 'My Project',
           comment: 'This is a detailed comment about the session',
           version: 2,
@@ -354,8 +353,7 @@ test.describe('Session Metadata UI Integration', () => {
           creationContext: 0,
           clipboard: 0,
           membershipContains: [],
-        };
-        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
+        });
       }
     });
     await page.waitForTimeout(100);
@@ -368,11 +366,11 @@ test.describe('Session Metadata UI Integration', () => {
   });
 
   test('SI-E054: session name display tooltip shows external origin', async ({ page }) => {
-    // Update metadata with external origin
+    // Update metadata via session.updateMetadata() which updates internal state and emits metadataChanged
     await page.evaluate(() => {
       const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
-      if (session) {
-        (session as any)._metadata = {
+      if (session?.updateMetadata) {
+        session.updateMetadata({
           displayName: 'Imported Session',
           comment: '',
           version: 3,
@@ -380,8 +378,7 @@ test.describe('Session Metadata UI Integration', () => {
           creationContext: 1,
           clipboard: 0,
           membershipContains: [],
-        };
-        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
+        });
       }
     });
     await page.waitForTimeout(100);
@@ -394,11 +391,11 @@ test.describe('Session Metadata UI Integration', () => {
   });
 
   test('SI-E055: session metadata persists when changing frames', async ({ page }) => {
-    // Set metadata
+    // Set metadata via session.updateMetadata() which updates internal state and emits metadataChanged
     await page.evaluate(() => {
       const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
-      if (session) {
-        (session as any)._metadata = {
+      if (session?.updateMetadata) {
+        session.updateMetadata({
           displayName: 'Persistent Session',
           comment: 'Should persist',
           version: 4,
@@ -406,8 +403,7 @@ test.describe('Session Metadata UI Integration', () => {
           creationContext: 0,
           clipboard: 0,
           membershipContains: [],
-        };
-        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
+        });
       }
     });
     await page.waitForTimeout(100);

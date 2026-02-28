@@ -143,6 +143,14 @@ export class Graph {
     return this.outputNode.evaluate(context);
   }
 
+  evaluateWithContext(context: EvalContext): IPImage | null {
+    if (!this.outputNode) {
+      return null;
+    }
+
+    return this.outputNode.evaluate(context);
+  }
+
   clear(): void {
     this.nodes.clear();
     this.outputNode = null;

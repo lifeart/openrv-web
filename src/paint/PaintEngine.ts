@@ -37,7 +37,8 @@ export interface PaintEngineEvents extends EventMap {
   brushChanged: BrushType;
 }
 
-export type PaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'dodge' | 'burn' | 'clone' | 'smudge';
+export type BuiltinPaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'dodge' | 'burn' | 'clone' | 'smudge';
+export type PaintTool = BuiltinPaintTool | (string & {});
 
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private state: PaintState;
@@ -85,8 +86,33 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   /**
    * Check whether the given tool name is an advanced (pixel-destructive) tool.
    */
-  isAdvancedTool(tool: string): tool is AdvancedToolName {
+  isAdvancedTool(tool: string): boolean {
     return this.advancedTools.has(tool);
+  }
+
+  /** The four built-in advanced tool names that cannot be overwritten or removed by plugins */
+  private static readonly BUILTIN_TOOLS: ReadonlySet<string> = new Set(['dodge', 'burn', 'clone', 'smudge']);
+
+  /**
+   * Register a custom advanced paint tool.
+   * Plugins call this via PluginContext.registerTool(), which delegates here.
+   * Throws if trying to overwrite a built-in tool.
+   */
+  registerAdvancedTool(name: string, tool: PaintToolInterface): void {
+    if (PaintEngine.BUILTIN_TOOLS.has(name)) {
+      throw new Error(`Cannot overwrite built-in advanced tool: ${name}`);
+    }
+    this.advancedTools.set(name, tool);
+  }
+
+  /**
+   * Unregister a custom advanced paint tool.
+   * Called during plugin deactivation via unregisterContributions().
+   * Refuses to remove built-in tools.
+   */
+  unregisterAdvancedTool(name: string): boolean {
+    if (PaintEngine.BUILTIN_TOOLS.has(name)) return false;
+    return this.advancedTools.delete(name);
   }
 
   // Tool settings

@@ -16,24 +16,26 @@
 
 import type { AppWiringContext } from './AppWiringContext';
 import { detectFloatingWindowViolations } from './stereo/FloatingWindowDetector';
+import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 /**
  * Wire all view-related controls to the viewer and bridges.
  */
-export function wireViewControls(ctx: AppWiringContext): void {
+export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionManager {
   const { session, viewer, controls, sessionBridge, persistenceManager } = ctx;
+  const subs = new DisposableSubscriptionManager();
 
   // Zoom control -> viewer
-  controls.zoomControl.on('zoomChanged', (zoom) => {
+  subs.add(controls.zoomControl.on('zoomChanged', (zoom) => {
     if (zoom === 'fit') {
       viewer.smoothFitToWindow();
     } else {
       viewer.smoothSetZoom(zoom);
     }
-  });
+  }));
 
   // Scopes control (histogram/waveform/vectorscope visibility toggle)
-  controls.scopesControl.on('scopeToggled', ({ scope, visible }) => {
+  subs.add(controls.scopesControl.on('scopeToggled', ({ scope, visible }) => {
     if (scope === 'histogram') {
       if (visible) {
         controls.histogram.show();
@@ -64,83 +66,83 @@ export function wireViewControls(ctx: AppWiringContext): void {
       }
     }
     persistenceManager.syncGTOStore();
-  });
+  }));
 
   // Compare/wipe control -> viewer
-  controls.compareControl.on('wipeModeChanged', (mode) => {
+  subs.add(controls.compareControl.on('wipeModeChanged', (mode) => {
     viewer.setWipeState({
       mode,
       position: controls.compareControl.getWipePosition(),
       showOriginal: mode === 'horizontal' ? 'left' : 'top',
     });
-  });
-  controls.compareControl.on('wipePositionChanged', (position) => {
+  }));
+  subs.add(controls.compareControl.on('wipePositionChanged', (position) => {
     const mode = controls.compareControl.getWipeMode();
     viewer.setWipeState({
       mode,
       position,
       showOriginal: mode === 'horizontal' ? 'left' : 'top',
     });
-  });
-  controls.compareControl.on('abSourceChanged', (source) => {
+  }));
+  subs.add(controls.compareControl.on('abSourceChanged', (source) => {
     if (source === 'A' || source === 'B') {
       session.setCurrentAB(source);
     }
-  });
+  }));
   // Note: abToggled is fired after setABSource already emitted abSourceChanged,
   // so the toggle has already happened via session.setCurrentAB(). This event
   // is just for notification/analytics purposes - do not call session.toggleAB()
   // again or it will double-toggle.
-  controls.compareControl.on('abToggled', () => {
+  subs.add(controls.compareControl.on('abToggled', () => {
     // Toggle already handled via abSourceChanged -> session.setCurrentAB()
-  });
-  controls.compareControl.on('differenceMatteChanged', (state) => {
+  }));
+  subs.add(controls.compareControl.on('differenceMatteChanged', (state) => {
     viewer.setDifferenceMatteState(state);
-  });
-  controls.compareControl.on('blendModeChanged', (state) => {
+  }));
+  subs.add(controls.compareControl.on('blendModeChanged', (state) => {
     viewer.setBlendModeState({
       ...state,
       flickerFrame: controls.compareControl.getFlickerFrame(),
     });
-  });
+  }));
 
   // Tone mapping control -> viewer
-  controls.toneMappingControl.on('stateChanged', (state) => {
+  subs.add(controls.toneMappingControl.on('stateChanged', (state) => {
     viewer.setToneMappingState(state);
     sessionBridge.scheduleUpdateScopes();
-  });
-  controls.toneMappingControl.on('hdrModeChanged', (mode) => {
+  }));
+  subs.add(controls.toneMappingControl.on('hdrModeChanged', (mode) => {
     viewer.setHDROutputMode(mode);
-  });
+  }));
 
   // Ghost frame control -> viewer
-  controls.ghostFrameControl.on('stateChanged', (state) => {
+  subs.add(controls.ghostFrameControl.on('stateChanged', (state) => {
     viewer.setGhostFrameState(state);
-  });
+  }));
 
   // PAR control -> viewer
-  controls.parControl.on('stateChanged', (state) => {
+  subs.add(controls.parControl.on('stateChanged', (state) => {
     viewer.setPARState(state);
-  });
+  }));
 
   // Background pattern control -> viewer
-  controls.backgroundPatternControl.on('stateChanged', (state) => {
+  subs.add(controls.backgroundPatternControl.on('stateChanged', (state) => {
     viewer.setBackgroundPatternState(state);
-  });
+  }));
 
   // Channel select -> viewer
-  controls.channelSelect.on('channelChanged', (channel) => {
+  subs.add(controls.channelSelect.on('channelChanged', (channel) => {
     viewer.setChannelMode(channel);
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
-  });
-  controls.channelSelect.on('layerChanged', async (event) => {
+  }));
+  subs.add(controls.channelSelect.on('layerChanged', async (event) => {
     // Handle EXR layer change
     await sessionBridge.handleEXRLayerChange(event.layer, event.remapping);
-  });
+  }));
 
   // Stereo control -> viewer
-  controls.stereoControl.on('stateChanged', (state) => {
+  subs.add(controls.stereoControl.on('stateChanged', (state) => {
     viewer.setStereoState(state);
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
@@ -154,24 +156,25 @@ export function wireViewControls(ctx: AppWiringContext): void {
     }
     // Update visibility of per-eye controls
     controls.updateStereoEyeControlsVisibility();
-  });
+  }));
 
   // Stereo eye transform control -> viewer
-  controls.stereoEyeTransformControl.on('transformChanged', (state) => {
+  subs.add(controls.stereoEyeTransformControl.on('transformChanged', (state) => {
     viewer.setStereoEyeTransforms(state);
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
-  });
+  }));
 
   // Stereo alignment control -> viewer
-  controls.stereoAlignControl.on('alignModeChanged', (mode) => {
+  subs.add(controls.stereoAlignControl.on('alignModeChanged', (mode) => {
     viewer.setStereoAlignMode(mode);
     sessionBridge.scheduleUpdateScopes();
-  });
+  }));
 
   // Convergence measurement: wire viewer mousemove -> convergence cursor + disparity
   const viewerContainer = viewer.getContainer();
-  viewerContainer.addEventListener('mousemove', (e: MouseEvent) => {
+  subs.addDOMListener(viewerContainer, 'mousemove', (e: Event) => {
+    const mouseEvent = e as MouseEvent;
     if (!controls.convergenceMeasure.isEnabled()) return;
     const stereoState = viewer.getStereoState();
     if (stereoState.mode === 'off') return;
@@ -185,8 +188,8 @@ export function wireViewControls(ctx: AppWiringContext): void {
 
     const scaleX = imageData.width / canvas.clientWidth;
     const scaleY = imageData.height / canvas.clientHeight;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = (mouseEvent.clientX - rect.left) * scaleX;
+    const y = (mouseEvent.clientY - rect.top) * scaleY;
 
     controls.convergenceMeasure.setCursorPosition(x, y);
 
@@ -197,7 +200,7 @@ export function wireViewControls(ctx: AppWiringContext): void {
   });
 
   // Floating window detection: run on frame change when stereo is active
-  session.on('frameChanged', () => {
+  subs.add(session.on('frameChanged', () => {
     const stereoState = viewer.getStereoState();
     if (stereoState.mode === 'off') return;
 
@@ -206,10 +209,12 @@ export function wireViewControls(ctx: AppWiringContext): void {
 
     const result = detectFloatingWindowViolations(pair.left, pair.right);
     controls.convergenceMeasure.emit('floatingWindowViolation' as never, result as never);
-  });
+  }));
 
   // Presentation mode -> headerBar
-  controls.presentationMode.on('stateChanged', (state) => {
+  subs.add(controls.presentationMode.on('stateChanged', (state) => {
     ctx.headerBar.setPresentationState(state.enabled);
-  });
+  }));
+
+  return subs;
 }

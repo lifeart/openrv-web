@@ -368,8 +368,8 @@ test.describe('Histogram State Persistence', () => {
     state = await getViewerState(page);
     expect(state.histogramVisible).toBe(true);
 
-    // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Switch back to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);

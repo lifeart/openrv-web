@@ -282,30 +282,30 @@ describe('AppControlRegistry', () => {
     it('ACR-010: histogram is not created until first access via the getter', () => {
       const deps = createMockDeps();
       const registry = new AppControlRegistry(deps);
-      // The private _histogram field should be null before first access
-      expect((registry as any)._histogram).toBeNull();
+      // The lazy histogram should not exist before first access
+      expect(registry.analysis.isHistogramCreated()).toBe(false);
       // Access the getter to trigger creation
       const instance = registry.histogram;
       expect(instance).toBeDefined();
-      expect((registry as any)._histogram).not.toBeNull();
+      expect(registry.analysis.isHistogramCreated()).toBe(true);
     });
 
     it('ACR-011: waveform is not created until first access via the getter', () => {
       const deps = createMockDeps();
       const registry = new AppControlRegistry(deps);
-      expect((registry as any)._waveform).toBeNull();
+      expect(registry.analysis.isWaveformCreated()).toBe(false);
       const instance = registry.waveform;
       expect(instance).toBeDefined();
-      expect((registry as any)._waveform).not.toBeNull();
+      expect(registry.analysis.isWaveformCreated()).toBe(true);
     });
 
     it('ACR-012: vectorscope is not created until first access via the getter', () => {
       const deps = createMockDeps();
       const registry = new AppControlRegistry(deps);
-      expect((registry as any)._vectorscope).toBeNull();
+      expect(registry.analysis.isVectorscopeCreated()).toBe(false);
       const instance = registry.vectorscope;
       expect(instance).toBeDefined();
-      expect((registry as any)._vectorscope).not.toBeNull();
+      expect(registry.analysis.isVectorscopeCreated()).toBe(true);
     });
 
     it('ACR-013: subsequent histogram accesses return the same instance', () => {
@@ -336,9 +336,9 @@ describe('AppControlRegistry', () => {
       const deps = createMockDeps();
       const registry = new AppControlRegistry(deps);
       // Never access histogram, waveform, or vectorscope
-      expect((registry as any)._histogram).toBeNull();
-      expect((registry as any)._waveform).toBeNull();
-      expect((registry as any)._vectorscope).toBeNull();
+      expect(registry.analysis.isHistogramCreated()).toBe(false);
+      expect(registry.analysis.isWaveformCreated()).toBe(false);
+      expect(registry.analysis.isVectorscopeCreated()).toBe(false);
       // dispose() should not throw when lazy scopes were never created
       expect(() => registry.dispose()).not.toThrow();
     });
@@ -497,6 +497,133 @@ describe('AppControlRegistry', () => {
       expect(viewContent.querySelector('[data-testid="timeline-editor-toggle-button"]')).not.toBeNull();
       expect(effectsContent.querySelector('[data-testid="noise-reduction-toggle-button"]')).not.toBeNull();
       expect(effectsContent.querySelector('[data-testid="watermark-toggle-button"]')).not.toBeNull();
+    });
+  });
+
+  describe('Facade completeness – all original properties resolve through compatibility getters', () => {
+    /**
+     * Complete list of all original readonly properties that existed on AppControlRegistry
+     * before the control-group decomposition. Each must resolve to a non-undefined value
+     * through the permanent compatibility getters.
+     */
+    const ORIGINAL_PROPERTIES: string[] = [
+      // Annotate
+      'paintToolbar',
+      'textFormattingToolbar',
+      // Color
+      'colorControls',
+      'colorInversionToggle',
+      'premultControl',
+      'cdlControl',
+      'curvesControl',
+      'ocioControl',
+      'lutPipelinePanel',
+      // View
+      'zoomControl',
+      'channelSelect',
+      'compareControl',
+      'referenceManager',
+      'stereoControl',
+      'stereoEyeTransformControl',
+      'stereoAlignControl',
+      'ghostFrameControl',
+      'convergenceMeasure',
+      'floatingWindowControl',
+      'sphericalProjection',
+      'stackControl',
+      'parControl',
+      'backgroundPatternControl',
+      'displayProfileControl',
+      // Effects
+      'filterControl',
+      'slateEditor',
+      'lensControl',
+      'deinterlaceControl',
+      'filmEmulationControl',
+      'perspectiveCorrectionControl',
+      'stabilizationControl',
+      'noiseReductionControl',
+      'watermarkControl',
+      'timelineEditor',
+      // Transform
+      'transformControl',
+      'cropControl',
+      // Analysis
+      'scopesControl',
+      'safeAreasControl',
+      'falseColorControl',
+      'luminanceVisControl',
+      'toneMappingControl',
+      'zebraControl',
+      'hslQualifierControl',
+      'gamutMappingControl',
+      'gamutDiagram',
+      'histogram',
+      'waveform',
+      'vectorscope',
+      // Panels
+      'historyPanel',
+      'infoPanel',
+      'markerListPanel',
+      'notePanel',
+      'rightPanelContent',
+      'leftPanelContent',
+      'cacheIndicator',
+      'snapshotPanel',
+      'playlistPanel',
+      'shotGridConfig',
+      'shotGridPanel',
+      'conformPanel',
+      // Playback / Network
+      'autoSaveManager',
+      'autoSaveIndicator',
+      'snapshotManager',
+      'playlistManager',
+      'transitionManager',
+      'presentationMode',
+      'networkSyncManager',
+      'networkControl',
+    ];
+
+    it('ACR-020: every original property resolves to a non-undefined value via the facade getter', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      const undefinedProps: string[] = [];
+      for (const prop of ORIGINAL_PROPERTIES) {
+        const value = (registry as any)[prop];
+        if (value === undefined) {
+          undefinedProps.push(prop);
+        }
+      }
+
+      expect(undefinedProps, `These properties resolved to undefined: ${undefinedProps.join(', ')}`).toEqual([]);
+    });
+
+    it('ACR-021: control groups are exposed as readonly fields', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      const groupNames = ['color', 'view', 'effects', 'transform', 'annotate', 'analysis', 'panel', 'playback'];
+      for (const group of groupNames) {
+        expect((registry as any)[group], `registry.${group} should be defined`).toBeDefined();
+        expect(typeof (registry as any)[group], `registry.${group} should be an object`).toBe('object');
+      }
+    });
+
+    it('ACR-022: facade getter returns the same object as the group field', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      // Spot-check a sample from each group
+      expect(registry.colorControls).toBe(registry.color.colorControls);
+      expect(registry.zoomControl).toBe(registry.view.zoomControl);
+      expect(registry.filterControl).toBe(registry.effects.filterControl);
+      expect(registry.transformControl).toBe(registry.transform.transformControl);
+      expect(registry.paintToolbar).toBe(registry.annotate.paintToolbar);
+      expect(registry.scopesControl).toBe(registry.analysis.scopesControl);
+      expect(registry.historyPanel).toBe(registry.panel.historyPanel);
+      expect(registry.autoSaveManager).toBe(registry.playback.autoSaveManager);
     });
   });
 });

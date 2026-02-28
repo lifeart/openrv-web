@@ -260,7 +260,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     });
 
     test('PAINT-040: adjusting stroke width should update strokeWidth state', async ({ page }) => {
-      const widthSlider = page.locator('.paint-toolbar input[type="range"]').first();
+      const widthSlider = page.locator('[data-testid="paint-width-slider"]');
       if (await widthSlider.isVisible()) {
         await widthSlider.evaluate((el: HTMLInputElement) => {
           el.value = '20';

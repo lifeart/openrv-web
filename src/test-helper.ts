@@ -5,6 +5,7 @@
 
 import type { App } from './App';
 import { getThemeManager } from './utils/ui/ThemeManager';
+import { getGlobalHistoryManager } from './utils/HistoryManager';
 
 declare global {
   interface Window {
@@ -45,6 +46,16 @@ declare global {
       setStrictMode: (enabled: boolean) => void;
       simulateFullscreenEnter: () => void;
       simulateFullscreenExit: () => void;
+      /** Convenience setters for E2E tests */
+      setTool: (tool: string) => void;
+      setExposure: (value: number) => void;
+      setRotation: (degrees: number) => void;
+      setCurrentAB: (ab: 'A' | 'B') => void;
+      setWipeMode: (mode: string) => void;
+      setWipePosition: (position: number) => void;
+      setDifferenceMatteEnabled: (enabled: boolean) => void;
+      undo: () => void;
+      redo: () => void;
       /** Stable mutation helpers – E2E specs should call these instead of reaching into app.* */
       mutations: TestMutations;
     };
@@ -128,6 +139,8 @@ export interface TestMutations {
   getPlaylistManager(): any;
   getSession(): any;
   getHistoryManager(): any;
+  undo(): void;
+  redo(): void;
   getLUTPipelinePanel(): any;
   setSessionFrame(frame: number): void;
   getSessionSourceCount(): number;
@@ -714,13 +727,13 @@ export function exposeForTesting(app: App): void {
         formatName: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           return fileSource?.formatName ?? null;
         })(),
         bitDepth: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           const ipImage = fileSource?.cachedIPImage;
           const attrs = ipImage?.metadata?.attributes;
           return (attrs?.bitDepth as number) ?? (attrs?.bitsPerSample as number) ?? null;
@@ -728,14 +741,14 @@ export function exposeForTesting(app: App): void {
         dataType: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           const ipImage = fileSource?.cachedIPImage;
           return ipImage?.dataType ?? null;
         })(),
         colorSpace: (() => {
           const session = resolveComponent('app.session', () => appAny.session);
           const source = session?.currentSource;
-          const fileSource = source?.getFileSource?.() ?? source;
+          const fileSource = source?.fileSourceNode ?? source;
           const ipImage = fileSource?.cachedIPImage;
           return ipImage?.metadata?.colorSpace ?? null;
         })(),
@@ -1203,6 +1216,123 @@ export function exposeForTesting(app: App): void {
       }
     },
 
+    // Convenience setters used by E2E tests
+    setTool: (tool: string): void => {
+      const paintEngine = appAny.paintEngine;
+      if (paintEngine) {
+        paintEngine.tool = tool;
+      }
+    },
+
+    setExposure: (value: number): boolean => {
+      const colorControls = getControl('colorControls');
+      if (!colorControls) return false;
+      const viewer = appAny.viewer;
+      const previousAdjustments = colorControls.getAdjustments();
+
+      // Use the public setAdjustments API so internal state + UI sliders update.
+      // This also emits 'adjustmentsChanged' which starts the wiring's 500ms
+      // debounce timer, but we record our own history entry immediately below
+      // so tests don't have to wait for the debounce.
+      colorControls.setAdjustments({ exposure: value });
+
+      // Record history immediately for test reliability.
+      // The debounced wiring entry may also fire later but that won't break
+      // anything -- it will just add a redundant entry at worst.
+      const currentAdjustments = colorControls.getAdjustments();
+      const historyManager = getGlobalHistoryManager();
+      historyManager.recordAction(
+        'Adjust exposure',
+        'color',
+        () => {
+          colorControls.setAdjustments(previousAdjustments);
+          if (viewer?.setColorAdjustments) {
+            viewer.setColorAdjustments(previousAdjustments);
+          }
+        },
+        () => {
+          colorControls.setAdjustments(currentAdjustments);
+          if (viewer?.setColorAdjustments) {
+            viewer.setColorAdjustments(currentAdjustments);
+          }
+        }
+      );
+      return true;
+    },
+
+    setRotation: (degrees: number): void => {
+      const transformControl = getControl('transformControl');
+      if (!transformControl) return;
+      const viewer = appAny.viewer;
+      const previousTransform = { ...transformControl.getTransform?.() ?? {} };
+      const current = transformControl.getTransform?.() ?? {};
+      const newTransform = {
+        ...current,
+        rotation: degrees,
+        scale: current.scale ?? { x: 1, y: 1 },
+        translate: current.translate ?? { x: 0, y: 0 },
+      };
+
+      // setTransform updates internal state + UI but does NOT emit transformChanged,
+      // so the wiring won't double-record history.
+      transformControl.setTransform(newTransform);
+      if (viewer?.setTransform) {
+        viewer.setTransform(newTransform);
+      }
+
+      // Record history immediately for test reliability
+      const historyManager = getGlobalHistoryManager();
+      const applyTransform = (t: any) => {
+        transformControl.setTransform(t);
+        if (viewer?.setTransform) {
+          viewer.setTransform(t);
+        }
+      };
+      historyManager.recordAction(
+        `Rotation to ${degrees}\u00B0`,
+        'transform',
+        () => applyTransform(previousTransform),
+        () => applyTransform(newTransform)
+      );
+    },
+
+    // A/B Compare convenience setters (used by multi-source-comparison E2E tests)
+    setCurrentAB: (ab: 'A' | 'B'): void => {
+      const session = resolveComponent('app.session', () => appAny.session);
+      session?.setCurrentAB?.(ab);
+    },
+
+    // Wipe / Difference matte top-level convenience setters
+    setWipeMode: (mode: string): void => {
+      appAny.viewer?.setWipeMode?.(mode);
+    },
+
+    setWipePosition: (position: number): void => {
+      appAny.viewer?.setWipePosition?.(position);
+    },
+
+    setDifferenceMatteEnabled: (enabled: boolean): void => {
+      const compareControl = getControl('compareControl');
+      if (compareControl?.setDifferenceMatteEnabled) {
+        compareControl.setDifferenceMatteEnabled(enabled);
+      } else {
+        // Fallback: set state directly on the viewer
+        const viewer = appAny.viewer;
+        if (viewer?.setDifferenceMatteState) {
+          const current = viewer.getDifferenceMatteState?.() ?? { enabled: false, gain: 1, heatmap: false };
+          viewer.setDifferenceMatteState({ ...current, enabled });
+        }
+      }
+    },
+
+    // Undo/redo via global HistoryManager (top-level for direct access from tests)
+    undo(): void {
+      getGlobalHistoryManager().undo();
+    },
+    redo(): void {
+      getGlobalHistoryManager().redo();
+    },
+
     mutations: {
       // ── Viewer / Wipe ──
       setWipeMode(mode: string) {
@@ -1222,7 +1352,7 @@ export function exposeForTesting(app: App): void {
       },
       setViewerPan(x: number, y: number) {
         const viewer = appAny.viewer;
-        if (viewer) { viewer.panX = x; viewer.panY = y; }
+        if (viewer?.setPan) { viewer.setPan(x, y); }
       },
 
       // ── Spotlight ──
@@ -1433,7 +1563,13 @@ export function exposeForTesting(app: App): void {
         return appAny.session ?? null;
       },
       getHistoryManager() {
-        return getControl('historyPanel')?.historyManager ?? null;
+        return getControl('historyPanel')?.historyManager ?? getGlobalHistoryManager();
+      },
+      undo() {
+        getGlobalHistoryManager().undo();
+      },
+      redo() {
+        getGlobalHistoryManager().redo();
       },
       getLUTPipelinePanel() {
         return getControl('lutPipelinePanel') ?? null;

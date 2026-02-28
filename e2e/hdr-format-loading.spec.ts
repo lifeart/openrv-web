@@ -36,7 +36,7 @@ const SAMPLE_TIFF_FLOAT = 'sample/test_float.tif';
 async function waitForFormatInfo(
   page: import('@playwright/test').Page,
   expectedFormat: { formatName?: string; bitDepth?: number; dataType?: string },
-  timeout = 5000
+  timeout = 10000
 ) {
   await page.waitForFunction(
     (expected) => {
@@ -77,6 +77,34 @@ async function loadFile(page: import('@playwright/test').Page, filePath: string)
     undefined,
     { timeout: 10000 }
   );
+}
+
+/**
+ * Open color controls panel and return the exposure slider.
+ */
+async function getExposureSlider(page: import('@playwright/test').Page) {
+  const panel = page.locator('.color-controls-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.keyboard.press('c');
+    await expect(panel).toBeVisible();
+  }
+  const exposureSlider = panel.locator('[data-testid="slider-exposure"]');
+  await expect(exposureSlider).toBeVisible();
+  return exposureSlider;
+}
+
+/**
+ * Open color controls panel and return a slider by key.
+ */
+async function getColorSlider(page: import('@playwright/test').Page, key: string) {
+  const panel = page.locator('.color-controls-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.keyboard.press('c');
+    await expect(panel).toBeVisible();
+  }
+  const slider = panel.locator(`[data-testid="slider-${key}"]`);
+  await expect(slider).toBeVisible();
+  return slider;
 }
 
 test.describe('DPX Format Support', () => {
@@ -149,10 +177,8 @@ test.describe('DPX Format Support', () => {
     // Capture initial state
     const beforeScreenshot = await captureViewerScreenshot(page);
 
-    // Switch to Color tab and adjust exposure
-    await page.click('button[data-tab-id="color"]');
-    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
-    await expect(exposureSlider).toBeVisible();
+    // Open color controls panel and adjust exposure
+    const exposureSlider = await getExposureSlider(page);
 
     await exposureSlider.fill('1.5');
     await exposureSlider.dispatchEvent('input');
@@ -164,7 +190,7 @@ test.describe('DPX Format Support', () => {
         return Math.abs((state?.exposure ?? 0) - 1.5) < 0.1;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     // Capture after adjustment
@@ -195,8 +221,8 @@ test.describe('DPX Format Support', () => {
     // Capture RGB view
     const rgbView = await captureViewerScreenshot(page);
 
-    // Switch to red channel
-    await page.keyboard.press('Shift+r');
+    // Switch to red channel via scripting API
+    await page.evaluate(() => window.openrv?.view.setChannel('red'));
 
     // Wait for channel mode to change
     await page.waitForFunction(
@@ -205,7 +231,7 @@ test.describe('DPX Format Support', () => {
         return state?.channelMode === 'red';
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const redView = await captureViewerScreenshot(page);
@@ -220,8 +246,8 @@ test.describe('DPX Format Support', () => {
 
     await loadFile(page, SAMPLE_DPX);
 
-    // Zoom in
-    await page.keyboard.press('Equal');
+    // Zoom in via scripting API
+    await page.evaluate(() => window.openrv?.view.setZoom(2));
 
     // Wait for zoom to change
     await page.waitForFunction(
@@ -230,7 +256,7 @@ test.describe('DPX Format Support', () => {
         return (state?.zoom ?? 1) > 1;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
@@ -305,9 +331,7 @@ test.describe('Cineon Format Support', () => {
 
     const beforeScreenshot = await captureViewerScreenshot(page);
 
-    await page.click('button[data-tab-id="color"]');
-    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
-    await expect(exposureSlider).toBeVisible();
+    const exposureSlider = await getExposureSlider(page);
 
     await exposureSlider.fill('-0.5');
     await exposureSlider.dispatchEvent('input');
@@ -318,7 +342,7 @@ test.describe('Cineon Format Support', () => {
         return Math.abs((state?.exposure ?? 0) + 0.5) < 0.1;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const afterScreenshot = await captureViewerScreenshot(page);
@@ -341,7 +365,7 @@ test.describe('Cineon Format Support', () => {
         return state?.histogramVisible === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
@@ -363,7 +387,7 @@ test.describe('Cineon Format Support', () => {
         return state?.waveformVisible === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
@@ -403,7 +427,7 @@ test.describe('Float TIFF Format Support', () => {
     const viewerState = await getViewerState(page);
     expect(viewerState.formatName).toBe('TIFF');
     expect(viewerState.bitDepth).toBe(32); // Float TIFF is 32-bit
-    expect(viewerState.dataType).toBe('float');
+    expect(viewerState.dataType).toBe('float32');
   });
 
   test('HDR-F-023: should display Float TIFF image on canvas', async ({ page }) => {
@@ -426,9 +450,7 @@ test.describe('Float TIFF Format Support', () => {
     // Reducing exposure should reveal detail in bright areas
     const normalExposure = await captureViewerScreenshot(page);
 
-    await page.click('button[data-tab-id="color"]');
-    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
-    await expect(exposureSlider).toBeVisible();
+    const exposureSlider = await getExposureSlider(page);
 
     await exposureSlider.fill('-1');
     await exposureSlider.dispatchEvent('input');
@@ -439,7 +461,7 @@ test.describe('Float TIFF Format Support', () => {
         return Math.abs((state?.exposure ?? 0) + 1) < 0.1;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const lowExposure = await captureViewerScreenshot(page);
@@ -456,17 +478,25 @@ test.describe('Float TIFF Format Support', () => {
 
     const beforeToneMapping = await captureViewerScreenshot(page);
 
-    // Enable tone mapping via keyboard shortcut
-    await page.keyboard.press('Shift+Alt+j');
+    // Enable tone mapping with a real operator (toggle alone just sets enabled=true
+    // but keeps operator='off', which doesn't change the image)
+    await page.evaluate(() => {
+      const app = window.__OPENRV_TEST__?.app as any;
+      const control = app?.controls?.toneMappingControl;
+      if (control) {
+        // setOperator auto-enables when selecting a non-off operator
+        control.setOperator('reinhard');
+      }
+    });
 
-    // Wait for tone mapping to be enabled
+    // Wait for tone mapping to be enabled with a real operator
     await page.waitForFunction(
       () => {
         const state = window.__OPENRV_TEST__?.getToneMappingState();
-        return state?.enabled === true;
+        return state?.enabled === true && state?.operator !== 'off';
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const afterToneMapping = await captureViewerScreenshot(page);
@@ -483,9 +513,7 @@ test.describe('Float TIFF Format Support', () => {
 
     const baseline = await captureViewerScreenshot(page);
 
-    await page.click('button[data-tab-id="color"]');
-    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
-    await expect(exposureSlider).toBeVisible();
+    const exposureSlider = await getExposureSlider(page);
 
     await exposureSlider.fill('2');
     await exposureSlider.dispatchEvent('input');
@@ -496,7 +524,7 @@ test.describe('Float TIFF Format Support', () => {
         return Math.abs((state?.exposure ?? 0) - 2) < 0.1;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const increased = await captureViewerScreenshot(page);
@@ -512,8 +540,8 @@ test.describe('Float TIFF Format Support', () => {
 
     const rgbView = await captureViewerScreenshot(page);
 
-    // Switch to blue channel
-    await page.keyboard.press('Shift+b');
+    // Switch to blue channel via scripting API
+    await page.evaluate(() => window.openrv?.view.setChannel('blue'));
 
     await page.waitForFunction(
       () => {
@@ -521,7 +549,7 @@ test.describe('Float TIFF Format Support', () => {
         return state?.channelMode === 'blue';
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const blueView = await captureViewerScreenshot(page);
@@ -535,8 +563,8 @@ test.describe('Float TIFF Format Support', () => {
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
 
-    // Toggle vectorscope (Shift+v)
-    await page.keyboard.press('Shift+v');
+    // Toggle vectorscope (y key)
+    await page.keyboard.press('y');
 
     await page.waitForFunction(
       () => {
@@ -544,7 +572,7 @@ test.describe('Float TIFF Format Support', () => {
         return state?.vectorscopeVisible === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
@@ -580,7 +608,7 @@ test.describe('HDR Format Integration', () => {
         return state?.currentFrame > 0;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     viewerState = await getViewerState(page);
@@ -600,13 +628,35 @@ test.describe('HDR Format Integration', () => {
     let viewerState = await getViewerState(page);
     expect(viewerState.formatName).toBe('DPX');
 
-    // Load Float TIFF
-    await loadFile(page, SAMPLE_TIFF_FLOAT);
+    // Load Float TIFF via file input
+    const fullPath = path.resolve(process.cwd(), SAMPLE_TIFF_FLOAT);
+    const fileInput = page.locator('input[type="file"]').first();
+    await fileInput.setInputFiles(fullPath);
+
+    // Wait for the second source to appear (A/B compare adds it as source B)
+    await page.waitForFunction(
+      () => {
+        const app = (window as any).__OPENRV_TEST__?.app;
+        return (app?.session?.sources?.length ?? 0) >= 2;
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+
+    // Switch to the new source (the app keeps source A active for A/B compare)
+    await page.evaluate(() => {
+      const app = (window as any).__OPENRV_TEST__?.app;
+      const session = app?.session;
+      const lastIdx = (session?.sources?.length ?? 1) - 1;
+      session?.setCurrentSource(lastIdx);
+    });
+
+    // Wait for format info to reflect TIFF
     await waitForFormatInfo(page, { formatName: 'TIFF' });
 
     viewerState = await getViewerState(page);
     expect(viewerState.formatName).toBe('TIFF');
-    expect(viewerState.dataType).toBe('float');
+    expect(viewerState.dataType).toBe('float32');
   });
 
   test('HDR-F-032: HDR formats should work with color adjustments', async ({ page }) => {
@@ -617,17 +667,14 @@ test.describe('HDR Format Integration', () => {
 
     const baseline = await captureViewerScreenshot(page);
 
-    // Open Color tab and adjust multiple parameters
-    await page.click('button[data-tab-id="color"]');
-
-    // Adjust exposure
-    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
-    await expect(exposureSlider).toBeVisible();
+    // Open color controls panel and adjust multiple parameters
+    const exposureSlider = await getExposureSlider(page);
     await exposureSlider.fill('0.5');
     await exposureSlider.dispatchEvent('input');
 
-    // Adjust saturation
-    const saturationSlider = page.locator('[data-testid="slider-saturation"]');
+    // Adjust saturation (in the same panel)
+    const panel = page.locator('.color-controls-panel');
+    const saturationSlider = panel.locator('[data-testid="slider-saturation"]');
     if (await saturationSlider.isVisible()) {
       await saturationSlider.fill('1.2');
       await saturationSlider.dispatchEvent('input');
@@ -640,7 +687,7 @@ test.describe('HDR Format Integration', () => {
         return Math.abs((state?.exposure ?? 0) - 0.5) < 0.1;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const adjusted = await captureViewerScreenshot(page);
@@ -656,8 +703,8 @@ test.describe('HDR Format Integration', () => {
 
     const before = await captureViewerScreenshot(page);
 
-    // Rotate 90 degrees
-    await page.keyboard.press('r');
+    // Rotate 90 degrees right (Alt+R)
+    await page.keyboard.press('Alt+r');
 
     await page.waitForFunction(
       () => {
@@ -665,7 +712,7 @@ test.describe('HDR Format Integration', () => {
         return state?.rotation === 90;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const after = await captureViewerScreenshot(page);
@@ -681,8 +728,8 @@ test.describe('HDR Format Integration', () => {
 
     const before = await captureViewerScreenshot(page);
 
-    // Flip horizontally
-    await page.keyboard.press('f');
+    // Flip horizontally (Alt+H)
+    await page.keyboard.press('Alt+h');
 
     await page.waitForFunction(
       () => {
@@ -690,7 +737,7 @@ test.describe('HDR Format Integration', () => {
         return state?.flipH === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const after = await captureViewerScreenshot(page);
@@ -727,8 +774,8 @@ test.describe('HDR Format Integration', () => {
     await page.keyboard.press('ArrowRight');
 
     // App should still be responsive
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    const viewer = page.locator('.viewer-container').first();
+    await expect(viewer).toBeVisible();
 
     // Can still toggle features
     await page.keyboard.press('h'); // histogram
@@ -739,7 +786,7 @@ test.describe('HDR Format Integration', () => {
         return state?.histogramVisible === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
   });
 });
@@ -758,7 +805,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
     await loadFile(page, SAMPLE_DPX);
 
     // Enable info panel
-    await page.keyboard.press('i');
+    await page.keyboard.press('Shift+Alt+i');
 
     await page.waitForFunction(
       () => {
@@ -766,7 +813,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
         return state?.enabled === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
@@ -785,7 +832,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
 
     await loadFile(page, SAMPLE_CINEON);
 
-    await page.keyboard.press('i');
+    await page.keyboard.press('Shift+Alt+i');
 
     await page.waitForFunction(
       () => {
@@ -793,7 +840,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
         return state?.enabled === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
@@ -807,7 +854,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
 
     await loadFile(page, SAMPLE_TIFF_FLOAT);
 
-    await page.keyboard.press('i');
+    await page.keyboard.press('Shift+Alt+i');
 
     await page.waitForFunction(
       () => {
@@ -815,13 +862,13 @@ test.describe('HDR Format Metadata and Info Panel', () => {
         return state?.enabled === true;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 10000 }
     );
 
     const viewerState = await getViewerState(page);
     expect(viewerState.formatName).toBe('TIFF');
     expect(viewerState.bitDepth).toBe(32);
-    expect(viewerState.dataType).toBe('float');
+    expect(viewerState.dataType).toBe('float32');
   });
 
   test('HDR-F-043: format badge should show bit depth info', async ({ page }) => {

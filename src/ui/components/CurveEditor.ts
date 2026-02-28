@@ -16,6 +16,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 export type CurveChannelType = 'master' | 'red' | 'green' | 'blue';
@@ -53,7 +54,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
   private draggingPointIndex: number | null = null;
   private hoverPointIndex: number | null = null;
   private selectedPointIndex: number | null = null;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   // Bound event handlers for proper cleanup
   private boundHandlePointerDown: (e: PointerEvent) => void;
@@ -167,10 +168,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     this.render();
 
     // Listen for theme changes to redraw with new colors
-    this.boundOnThemeChange = () => {
-      this.render();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.render()));
   }
 
   private setActiveChannel(channel: CurveChannelType): void {
@@ -587,10 +585,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   dispose(): void {
     // Clean up theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
-    this.boundOnThemeChange = null;
+    this.subs.dispose();
 
     // Clean up canvas event listeners using stored bound handlers
     this.canvas.removeEventListener('pointerdown', this.boundHandlePointerDown);

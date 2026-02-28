@@ -12,6 +12,7 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export class FalseColorControl {
   private container: HTMLElement;
@@ -21,8 +22,7 @@ export class FalseColorControl {
   private toggleButton: HTMLButtonElement;
   private presetButtons: Map<FalseColorPreset, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
-  private boundOnThemeChange: (() => void) | null = null;
-  private unsubscribers: (() => void)[] = [];
+  private subs = new DisposableSubscriptionManager();
 
   constructor(falseColor: FalseColor) {
     this.falseColor = falseColor;
@@ -105,17 +105,16 @@ export class FalseColorControl {
     this.createDropdownContent();
 
     // Listen for state changes
-    this.unsubscribers.push(this.falseColor.on('stateChanged', () => {
+    this.subs.add(this.falseColor.on('stateChanged', () => {
       this.updateButtonState();
       this.updatePresetButtons();
       this.updateLegend();
     }));
 
     // Listen for theme changes
-    this.boundOnThemeChange = () => {
+    this.subs.add(getThemeManager().on('themeChanged', () => {
       this.updateLegend();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    }));
   }
 
   private createDropdownContent(): void {
@@ -144,7 +143,7 @@ export class FalseColorControl {
     });
 
     // Update checkbox when state changes
-    this.unsubscribers.push(this.falseColor.on('stateChanged', (state) => {
+    this.subs.add(this.falseColor.on('stateChanged', (state) => {
       enableCheckbox.checked = state.enabled;
     }));
 
@@ -384,11 +383,6 @@ export class FalseColorControl {
       document.body.removeChild(this.dropdown);
     }
     this.presetButtons.clear();
-    this.unsubscribers.forEach((unsub) => unsub());
-    this.unsubscribers = [];
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
   }
 }

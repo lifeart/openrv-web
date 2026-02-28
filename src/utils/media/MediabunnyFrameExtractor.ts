@@ -275,27 +275,30 @@ export class MediabunnyFrameExtractor {
           const probeSample = await probeSink.getSample(0);
           if (probeSample) {
             const probeFrame = probeSample.toVideoFrame();
-            const cs = probeFrame.colorSpace;
-            if (cs) {
-              const transfer = cs.transfer ?? undefined;
-              const primaries = cs.primaries ?? undefined;
-              const transferName = transfer as string | undefined;
-              const primariesName = primaries as string | undefined;
-              if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
-                videoColorSpace = {
-                  transfer,
-                  primaries,
-                  matrix: cs.matrix ?? undefined,
-                  fullRange: cs.fullRange ?? undefined,
-                };
+            try {
+              const cs = probeFrame.colorSpace;
+              if (cs) {
+                const transfer = cs.transfer ?? undefined;
+                const primaries = cs.primaries ?? undefined;
+                const transferName = transfer as string | undefined;
+                const primariesName = primaries as string | undefined;
+                if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
+                  videoColorSpace = {
+                    transfer,
+                    primaries,
+                    matrix: cs.matrix ?? undefined,
+                    fullRange: cs.fullRange ?? undefined,
+                  };
+                }
+                if (transferName === 'pq' || transferName === 'hlg' || transferName === 'smpte2084' || transferName === 'arib-std-b67' ||
+                    primariesName === 'bt2020' || primariesName === 'smpte432') {
+                  isHDR = true;
+                  log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
+                }
               }
-              if (transferName === 'pq' || transferName === 'hlg' || transferName === 'smpte2084' || transferName === 'arib-std-b67' ||
-                  primariesName === 'bt2020' || primariesName === 'smpte432') {
-                isHDR = true;
-                log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
-              }
+            } finally {
+              probeFrame.close();
             }
-            probeFrame.close();
             probeSample.close();
           }
         } catch (e) {

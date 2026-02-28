@@ -151,6 +151,10 @@ export class ViewerGLRenderer {
   private _logicalWidth = 0;
   private _logicalHeight = 0;
 
+  // Display HDR headroom (peak luminance / SDR white). Cached so it can be
+  // applied even when the renderer is created later (lazy init).
+  private _hdrHeadroom: number | null = null;
+
   private ctx: GLRendererContext;
 
   // Auto-exposure and scene analysis
@@ -249,6 +253,77 @@ export class ViewerGLRenderer {
     };
   }
 
+  private getInputTransferCode(image: IPImage): number {
+    const tf = image.metadata?.transferFunction;
+    return tf === 'hlg' ? 1 : tf === 'pq' ? 2 : 0;
+  }
+
+  private applyHDRDisplayOverrides(state: RenderState): void {
+    // HDR output/compositors expect linear-light scene values from the shader.
+    // Keep creative grading controls intact; only neutralize display-referred output transforms.
+    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+  }
+
+  private applySceneLuminanceAnalysis(renderer: Renderer, image: IPImage, state: RenderState): void {
+    const needsLuminance = this._autoExposureState.enabled || state.toneMappingState.operator === 'drago';
+    if (!needsLuminance) return;
+
+    const glAccessor = renderer as unknown as { getContext?: () => WebGL2RenderingContext | null };
+    if (typeof glAccessor.getContext !== 'function') return;
+    const gl = glAccessor.getContext();
+    if (!gl) return;
+
+    if (!this._luminanceAnalyzer) {
+      this._luminanceAnalyzer = new LuminanceAnalyzer(gl);
+    }
+
+    // Prefer explicit texture prep when available (sync Renderer), fallback to current binding.
+    const textureProvider = renderer as unknown as { ensureImageTexture?: (img: IPImage) => WebGLTexture | null };
+    const sourceTexture = typeof textureProvider.ensureImageTexture === 'function'
+      ? textureProvider.ensureImageTexture(image)
+      : (gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null);
+    if (!sourceTexture) return;
+
+    const inputTransfer = this.getInputTransferCode(image);
+    const stats = this._luminanceAnalyzer.computeLuminanceStats(sourceTexture, inputTransfer);
+
+    if (this._autoExposureState.enabled) {
+      this._autoExposureController.update(stats.avg, this._autoExposureState);
+      const finalExposure = this._autoExposureController.currentExposure + state.colorAdjustments.exposure;
+      state.colorAdjustments = { ...state.colorAdjustments, exposure: finalExposure };
+    }
+
+    // Drago requires scene luminance estimates; derive Lmax from linear average.
+    if (state.toneMappingState.operator === 'drago') {
+      const drMultiplier = inputTransfer === 2 ? 10 : inputTransfer === 1 ? 6 : 4;
+      state.toneMappingState = {
+        ...state.toneMappingState,
+        dragoLwa: stats.avg,
+        dragoLmax: stats.linearAvg * drMultiplier,
+      };
+    }
+  }
+
+  private applyAutomaticColorPrimaries(renderer: Renderer, image: IPImage): void {
+    // Skip when OCIO is active — OCIO handles its own color space transforms.
+    if (renderer.isOCIOWasmActive()) {
+      renderer.setColorPrimaries(undefined, 'srgb');
+      return;
+    }
+
+    // Determine output gamut from HDR output mode and display capabilities.
+    const hdrMode = renderer.getHDROutputMode();
+    let outputColorSpace: 'srgb' | 'display-p3' | 'rec2020' = 'srgb';
+    if (hdrMode === 'hlg' || hdrMode === 'pq') {
+      outputColorSpace = 'rec2020';
+    } else if (this._capabilities?.displayGamut === 'p3') {
+      outputColorSpace = 'display-p3';
+    } else if (this._capabilities?.displayGamut === 'rec2020') {
+      outputColorSpace = 'rec2020';
+    }
+    renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
+  }
+
   /**
    * Create the initial GL canvas element and append it to the canvas container.
    * Called once during Viewer construction.
@@ -314,6 +389,9 @@ export class ViewerGLRenderer {
           // For RendererBackend compatibility, create a facade Renderer that delegates.
           // For now, we use the proxy as a "renderer" by wrapping it.
           this._glRenderer = proxy as unknown as Renderer;
+          if (this._hdrHeadroom !== null) {
+            proxy.setHDRHeadroom(this._hdrHeadroom);
+          }
           return this._glRenderer;
         }
       } catch (e) {
@@ -333,6 +411,9 @@ export class ViewerGLRenderer {
       const hdrMode = renderer.getHDROutputMode();
       console.log(`[Viewer] WebGL renderer initialized (sync), HDR output: ${hdrMode}`);
       this._glRenderer = renderer;
+      if (this._hdrHeadroom !== null) {
+        renderer.setHDRHeadroom(this._hdrHeadroom);
+      }
       return renderer;
     } catch (e) {
       console.warn('[Viewer] WebGL renderer init failed:', e);
@@ -556,56 +637,13 @@ export class ViewerGLRenderer {
       // TODO: For 'extended' mode (SDR-range P3 drawing buffer), the user's
       // display transfer, displayGamma, and displayBrightness should be preserved
       // since that path does not go through HLG/PQ compositing.
-      state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-      state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
-      // Only disable tone mapping for HLG/PQ content — the transfer function
-      // already encodes dynamic range for the display. For linear float content
-      // (gainmap, EXR), preserve user's tone mapping to compress the range.
-      const tf = image.metadata?.transferFunction;
-      if (tf === 'hlg' || tf === 'pq') {
-        state.toneMappingState = { enabled: false, operator: 'off' };
-      }
+      this.applyHDRDisplayOverrides(state);
+      // Preserve user tone mapping for all HDR sources (including HLG/PQ).
+      // Input transfer is decoded to linear in the shader before tone mapping.
     }
 
-    // Scene luminance analysis: needed for Drago (always) and auto-exposure (when enabled)
-    const needsLuminance = !isHDROutput && (
-      this._autoExposureState.enabled ||
-      state.toneMappingState.operator === 'drago'
-    );
-    if (needsLuminance) {
-      const gl = renderer.getContext();
-      if (gl) {
-        if (!this._luminanceAnalyzer) {
-          this._luminanceAnalyzer = new LuminanceAnalyzer(gl);
-        }
-        const currentTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
-        if (currentTexture) {
-          const inputTransfer = image.metadata?.transferFunction === 'hlg' ? 1
-            : image.metadata?.transferFunction === 'pq' ? 2 : 0;
-          const stats = this._luminanceAnalyzer.computeLuminanceStats(currentTexture, inputTransfer);
-
-          // Auto-exposure: smooth and apply
-          if (this._autoExposureState.enabled) {
-            this._autoExposureController.update(stats.avg, this._autoExposureState);
-            const finalExposure = this._autoExposureController.currentExposure + state.colorAdjustments.exposure;
-            state.colorAdjustments = { ...state.colorAdjustments, exposure: finalExposure };
-          }
-
-          // Drago: feed scene luminance stats.
-          // Note: linearAvg is the mipmap-averaged luminance (arithmetic mean),
-          // NOT the scene maximum. Estimate Lmax using a content-aware multiplier
-          // since WebGL2 mipmaps can only average, not compute max.
-          if (state.toneMappingState.operator === 'drago') {
-            const drMultiplier = inputTransfer === 2 ? 10 : inputTransfer === 1 ? 6 : 4;
-            state.toneMappingState = {
-              ...state.toneMappingState,
-              dragoLwa: stats.avg,
-              dragoLmax: stats.linearAvg * drMultiplier,
-            };
-          }
-        }
-      }
-    }
+    // Scene luminance analysis: needed for Drago and auto-exposure.
+    this.applySceneLuminanceAnalysis(renderer, image, state);
 
     // Gamut mapping: only auto-detect when user hasn't explicitly configured it
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
@@ -613,22 +651,7 @@ export class ViewerGLRenderer {
     }
 
     // Automatic color primaries conversion (separate from creative gamut mapping)
-    // Skip when OCIO is active — OCIO handles its own color space transforms.
-    if (renderer.isOCIOWasmActive()) {
-      renderer.setColorPrimaries(undefined, 'srgb');
-    } else {
-      // Determine output gamut from HDR output mode and display capabilities
-      const hdrMode = renderer.getHDROutputMode();
-      let outputColorSpace: 'srgb' | 'display-p3' | 'rec2020' = 'srgb';
-      if (hdrMode === 'hlg' || hdrMode === 'pq') {
-        outputColorSpace = 'rec2020';
-      } else if (this._capabilities?.displayGamut === 'p3') {
-        outputColorSpace = 'display-p3';
-      } else if (this._capabilities?.displayGamut === 'rec2020') {
-        outputColorSpace = 'rec2020';
-      }
-      renderer.setColorPrimaries(image.metadata?.colorPrimaries, outputColorSpace);
-    }
+    this.applyAutomaticColorPrimaries(renderer, image);
 
     PerfTrace.end('buildRenderState');
 
@@ -718,6 +741,16 @@ export class ViewerGLRenderer {
     // Build render state
     PerfTrace.begin('buildRenderState');
     const state = this.buildRenderState();
+    const firstImage = tiles[0]!.image;
+    const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
+    if (isHDROutput) {
+      this.applyHDRDisplayOverrides(state);
+    }
+    this.applySceneLuminanceAnalysis(renderer, firstImage, state);
+    if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
+      state.gamutMapping = this.detectGamutMapping(firstImage);
+    }
+    this.applyAutomaticColorPrimaries(renderer, firstImage);
     PerfTrace.end('buildRenderState');
 
     PerfTrace.begin('applyRenderState');
@@ -766,15 +799,11 @@ export class ViewerGLRenderer {
     // compensating in the WebGPU upload step.
     PerfTrace.begin('blit.buildRenderState');
     const state = this.buildRenderState();
-    state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+    this.applyHDRDisplayOverrides(state);
 
-    // Disable tone mapping for HLG/PQ content — the transfer function already
-    // encodes dynamic range for the display.
-    const tf = image.metadata?.transferFunction;
-    if (tf === 'hlg' || tf === 'pq') {
-      state.toneMappingState = { enabled: false, operator: 'off' };
-    }
+    // Preserve user tone mapping for all HDR sources (including HLG/PQ).
+    // Input transfer is decoded to linear in the shader before tone mapping.
+    this.applySceneLuminanceAnalysis(renderer, image, state);
 
     // Gamut mapping: only auto-detect when user hasn't explicitly configured it
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
@@ -878,15 +907,11 @@ export class ViewerGLRenderer {
     // compensating in the Canvas2D upload step.
     PerfTrace.begin('canvas2dBlit.buildRenderState');
     const state = this.buildRenderState();
-    state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+    this.applyHDRDisplayOverrides(state);
 
-    // Disable tone mapping for HLG/PQ content — the transfer function already
-    // encodes dynamic range for the display.
-    const tf = image.metadata?.transferFunction;
-    if (tf === 'hlg' || tf === 'pq') {
-      state.toneMappingState = { enabled: false, operator: 'off' };
-    }
+    // Preserve user tone mapping for all HDR sources (including HLG/PQ).
+    // Input transfer is decoded to linear in the shader before tone mapping.
+    this.applySceneLuminanceAnalysis(renderer, image, state);
 
     // Gamut mapping: only auto-detect when user hasn't explicitly configured it
     if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
@@ -1344,6 +1369,12 @@ export class ViewerGLRenderer {
 
   setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void {
     this._glRenderer?.setDisplayColorState(state);
+  }
+
+  setHDRHeadroom(headroom: number): void {
+    if (!Number.isFinite(headroom) || headroom <= 0) return;
+    this._hdrHeadroom = headroom;
+    this._glRenderer?.setHDRHeadroom(headroom);
   }
 
   /**

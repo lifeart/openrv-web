@@ -89,6 +89,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Create wrapper (position: relative to anchor fade overlays)
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'header-bar';
+    this.wrapper.setAttribute('role', 'banner');
     this.wrapper.style.cssText = `
       position: relative;
       flex-shrink: 0;
@@ -97,7 +98,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Create scrollable container
     this.container = document.createElement('div');
     this.container.className = 'header-bar-scroll';
-    this.container.setAttribute('role', 'banner');
     this.container.style.cssText = `
       height: 40px;
       background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);

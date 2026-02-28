@@ -51,7 +51,7 @@ const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) 
 
 class TestSession extends Session {
   public setSources(s: MediaSource[]) {
-    this.sources = [];
+    (this as any)._media.resetSourcesInternal();
     s.forEach(src => {
         this.addSource(src);
         (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
@@ -453,6 +453,8 @@ describe('Session', () => {
       expect(session.marks.has(5)).toBe(true);
       expect(session.marks.has(10)).toBe(true);
       expect(listener).toHaveBeenCalledWith('pingpong');
+      // Regression: loopModeChanged must be emitted exactly once (not double-emitted)
+      expect(listener).toHaveBeenCalledTimes(1);
     });
 
     it('setPlaybackState() handles partial state', () => {
@@ -562,8 +564,7 @@ describe('Session', () => {
 
     it('AB-011: setCurrentAB ignores invalid B when not available', () => {
       const source1 = createMockSource('source1');
-      const sessionInternal = session as unknown as { sources: MediaSource[] };
-      sessionInternal.sources = [source1];
+      session.setSources([source1]);
 
       session.setCurrentAB('B');
       expect(session.currentAB).toBe('A'); // Unchanged
@@ -573,8 +574,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionInternal = session as unknown as { sources: MediaSource[] };
-      sessionInternal.sources = [source1, source2];
+      session.setSources([source1, source2]);
       session.setSourceB(1);
       session.toggleAB(); // Switch to B
 
@@ -590,8 +590,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionInternal = session as unknown as { sources: MediaSource[] };
-      sessionInternal.sources = [source1, source2];
+      session.setSources([source1, source2]);
 
       expect(session.sourceA).toBe(source1);
     });
@@ -600,8 +599,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionInternal = session as unknown as { sources: MediaSource[] };
-      sessionInternal.sources = [source1, source2];
+      session.setSources([source1, source2]);
       session.setSourceB(1);
 
       expect(session.sourceB).toBe(source2);
@@ -616,8 +614,7 @@ describe('Session', () => {
       const source2 = createMockSource('source2');
       const source3 = createMockSource('source3');
 
-      const sessionInternal = session as unknown as { sources: MediaSource[] };
-      sessionInternal.sources = [source1, source2, source3];
+      session.setSources([source1, source2, source3]);
 
       session.setSourceA(2);
       expect(session.sourceAIndex).toBe(2);
@@ -756,12 +753,12 @@ describe('Session', () => {
         }]);
 
         (session as any)._currentFrame = 25; // 1.0s + 1/24s
-        (session as any).syncVideoToFrame();
+        (session as any)._playback.syncVideoToFrame();
         // threshold is 0.1, (25-1)/24 = 1.0. diff is 0.
         expect(currentTime).toBe(1.0);
 
         (session as any)._currentFrame = 50;
-        (session as any).syncVideoToFrame();
+        (session as any)._playback.syncVideoToFrame();
         expect(currentTime).toBeCloseTo(49/24);
     });
   });
@@ -770,7 +767,7 @@ describe('Session', () => {
     it('dispose cleans up all sources', () => {
         const seqSource: MediaSource = { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] };
         session.setSources([seqSource]);
-        const disposeSpy = vi.spyOn(session as any, 'disposeSequenceSource');
+        const disposeSpy = vi.spyOn((session as any)._media, 'disposeSequenceSource');
 
         session.dispose();
         expect(disposeSpy).toHaveBeenCalled();
@@ -998,7 +995,7 @@ describe('Session', () => {
                 }
             }]
         });
-        (session as any).parseSession(dto);
+        (session as any)._sessionGraph.parseSession(dto);
         expect(session.currentFrame).toBe(15);
         expect(session.inPoint).toBe(5);
         expect(session.outPoint).toBe(25);
@@ -1009,7 +1006,7 @@ describe('Session', () => {
         const s = session as any;
         const testRange = (val: any) => {
             const dto = createMockDTO({ RVSession: [{ session: { range: val } }] });
-            s.parseSession(dto);
+            s._sessionGraph.parseSession(dto);
             return [session.inPoint, session.outPoint];
         };
 
@@ -1033,7 +1030,7 @@ describe('Session', () => {
         });
         const spy = vi.fn();
         session.on('settingsLoaded', spy);
-        (session as any).parseSession(dto);
+        (session as any)._sessionGraph.parseSession(dto);
         expect(spy).toHaveBeenCalled();
         const settings = spy.mock.calls[0][0];
         expect(settings.scopes.histogram).toBe(true);
@@ -1081,12 +1078,12 @@ describe('Session', () => {
         // frame 10 at 24fps -> target is (10-1)/24 = 0.375
         video.currentTime = 0.375 + 0.01; // diff = 0.01 < 0.02
         (session as any)._currentFrame = 10;
-        (session as any).syncVideoToFrame();
+        (session as any)._playback.syncVideoToFrame();
         expect(video.currentTime).toBe(0.385); // No change
 
         // When diff > threshold, it should sync
         video.currentTime = 0;
-        (session as any).syncVideoToFrame();
+        (session as any)._playback.syncVideoToFrame();
         expect(video.currentTime).toBeCloseTo(0.375, 5);
     });
 
@@ -1100,7 +1097,7 @@ describe('Session', () => {
 
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         await session.loadFromGTO('GTOa 1.0');
-        expect(warnSpy).toHaveBeenCalledWith('[Session]', expect.stringContaining('Failed to load node graph'), 'graph fail');
+        expect(warnSpy).toHaveBeenCalledWith('[SessionGraph]', expect.stringContaining('Failed to load node graph'), 'graph fail');
     });
 
     it('loadFromGTO handles success with graph info', async () => {
@@ -1452,7 +1449,7 @@ describe('Session', () => {
       const graph = createTestGraph([
         { type: 'RVColor', props: { exposure: 1.5 } },
       ]);
-      (session as any)._graph = graph;
+      (session as any)._sessionGraph._graph = graph;
 
       const results = session.resolveProperty('#RVColor.color.exposure');
       expect(results).not.toBeNull();
@@ -1465,7 +1462,7 @@ describe('Session', () => {
         { type: 'RVDisplayColor', name: 'display1' },
         { type: 'RVDisplayColor', name: 'display2' },
       ]);
-      (session as any)._graph = graph;
+      (session as any)._sessionGraph._graph = graph;
 
       const results = session.resolveProperty('@RVDisplayColor');
       expect(results).not.toBeNull();
@@ -1484,7 +1481,7 @@ describe('Session', () => {
           },
         },
       ]);
-      (session as any)._gtoData = gtoData;
+      (session as any)._sessionGraph._gtoData = gtoData;
 
       const results = session.resolveProperty('#RVColor.color.exposure');
       expect(results).not.toBeNull();
@@ -1498,7 +1495,7 @@ describe('Session', () => {
       const gtoData = createTestGTOData([
         { name: 'rvDisplay', protocol: 'RVDisplayColor' },
       ]);
-      (session as any)._gtoData = gtoData;
+      (session as any)._sessionGraph._gtoData = gtoData;
 
       const results = session.resolveProperty('@RVDisplayColor');
       expect(results).not.toBeNull();
@@ -1519,8 +1516,8 @@ describe('Session', () => {
           },
         },
       ]);
-      (session as any)._graph = graph;
-      (session as any)._gtoData = gtoData;
+      (session as any)._sessionGraph._graph = graph;
+      (session as any)._sessionGraph._gtoData = gtoData;
 
       const results = session.resolveProperty('#RVColor.color.exposure');
       expect(results).not.toBeNull();
@@ -1535,7 +1532,7 @@ describe('Session', () => {
       const gtoData = createTestGTOData([
         { name: 'rvColor', protocol: 'RVColor' },
       ]);
-      (session as any)._gtoData = gtoData;
+      (session as any)._sessionGraph._gtoData = gtoData;
 
       expect(session.resolveProperty('invalidFormat')).toBeNull();
     });
@@ -1544,7 +1541,7 @@ describe('Session', () => {
       const graph = createTestGraph([
         { type: 'RVColor', props: { exposure: 1.5 } },
       ]);
-      (session as any)._graph = graph;
+      (session as any)._sessionGraph._graph = graph;
 
       const results = session.resolveProperty('#RVNonExistent.color.exposure');
       expect(results).not.toBeNull();
@@ -1656,7 +1653,7 @@ describe('Session', () => {
 
     it('AC-WIRE-002: volume change forwards to AudioCoordinator', () => {
       // Access the internal coordinator
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onVolumeChanged');
 
       session.volume = 0.5;
@@ -1665,7 +1662,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-003: mute change forwards to AudioCoordinator', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onMutedChanged');
 
       session.muted = true;
@@ -1674,7 +1671,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-004: frameChanged event forwards to AudioCoordinator', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onFrameChanged');
 
       // Set up a source so frame changes are valid
@@ -1689,7 +1686,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-005: playbackChanged(true) calls AudioCoordinator.onPlaybackStarted', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const startSpy = vi.spyOn(coordinator, 'onPlaybackStarted');
 
       session.setSources([{
@@ -1708,7 +1705,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-006: playbackChanged(false) calls AudioCoordinator.onPlaybackStopped', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const stopSpy = vi.spyOn(coordinator, 'onPlaybackStopped');
 
       session.setSources([{
@@ -1723,7 +1720,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-007: playbackSpeedChanged forwards to AudioCoordinator.onSpeedChanged', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onSpeedChanged');
 
       session.playbackSpeed = 2;
@@ -1732,7 +1729,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-008: playDirectionChanged forwards to AudioCoordinator.onDirectionChanged', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onDirectionChanged');
 
       session.setSources([{
@@ -1746,7 +1743,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-009: dispose calls AudioCoordinator.dispose', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'dispose');
 
       session.dispose();
@@ -1755,7 +1752,7 @@ describe('Session', () => {
     });
 
     it('AC-WIRE-010: preservesPitch change forwards to AudioCoordinator.onPreservesPitchChanged', () => {
-      const coordinator = (session as any)._audioCoordinator;
+      const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onPreservesPitchChanged');
 
       session.preservesPitch = false;

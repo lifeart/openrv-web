@@ -115,4 +115,19 @@ describe('wireStackControls', () => {
     expect(layer2.name).toBe('Layer 2');
     expect(state.nextLayerNumber).toBe(3);
   });
+
+  describe('disposal', () => {
+    it('SW-DISP-001: callbacks fire before dispose', () => {
+      (stackControl as EventEmitter).emit('layerChanged', undefined);
+      expect(viewer.setStackLayers).toHaveBeenCalledOnce();
+    });
+
+    it('SW-DISP-002: callbacks do not fire after dispose', () => {
+      state.subscriptions.dispose();
+
+      viewer.setStackLayers.mockClear();
+      (stackControl as EventEmitter).emit('layerChanged', undefined);
+      expect(viewer.setStackLayers).not.toHaveBeenCalled();
+    });
+  });
 });

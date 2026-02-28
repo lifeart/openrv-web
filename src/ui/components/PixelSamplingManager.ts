@@ -344,8 +344,11 @@ export class PixelSamplingManager {
    */
   getImageData(): ImageData | null {
     const source = this.context.getSession().currentSource;
-    if (!source?.element) return null;
+    if (!source) return null;
 
+    // Sources loaded via FileSourceNode (e.g. PNG, EXR) may not have an
+    // `element` property but they still render to the 2D canvas.  Only
+    // bail out when there is genuinely no source at all.
     // Get the displayed dimensions
     const canvas = this.context.getImageCanvas();
     const displayWidth = canvas.width;
@@ -371,27 +374,59 @@ export class PixelSamplingManager {
 
     if (isWebGLActive && glRenderer) {
       const image = this.context.getLastRenderedImage();
-      if (!image) return null;
 
-      // Choose scope resolution based on playback state
-      const isPlaying = this.context.isPlaying();
-      const targetWidth = isPlaying ? SCOPE_PLAYBACK_WIDTH : SCOPE_PAUSED_WIDTH;
-      const targetHeight = isPlaying ? SCOPE_PLAYBACK_HEIGHT : SCOPE_PAUSED_HEIGHT;
+      if (image) {
+        // HDR path: re-render the IPImage at scope resolution via float FBO
+        // Choose scope resolution based on playback state
+        const isPlaying = this.context.isPlaying();
+        const targetWidth = isPlaying ? SCOPE_PLAYBACK_WIDTH : SCOPE_PAUSED_WIDTH;
+        const targetHeight = isPlaying ? SCOPE_PLAYBACK_HEIGHT : SCOPE_PAUSED_HEIGHT;
 
-      const result = glRenderer.renderForScopes(image, targetWidth, targetHeight);
-      if (!result) {
-        // WebGL scope readback failed (e.g. EXT_color_buffer_float unavailable).
-        // Fall through to 2D canvas path below.
-        const imageData = this.getImageData();
-        if (!imageData) return null;
-        return { imageData, floatData: null, width: imageData.width, height: imageData.height };
+        const result = glRenderer.renderForScopes(image, targetWidth, targetHeight);
+        if (!result) {
+          // WebGL scope readback failed (e.g. EXT_color_buffer_float unavailable).
+          // Fall through to GL canvas readback below.
+        } else {
+          // Convert float data to ImageData for SDR scope fallback paths
+          const { data: floatData, width, height } = result;
+          const imageData = floatRGBAToImageData(floatData, width, height);
+          return { imageData, floatData, width, height };
+        }
       }
 
-      // Convert float data to ImageData for SDR scope fallback paths
-      const { data: floatData, width, height } = result;
-      const imageData = floatRGBAToImageData(floatData, width, height);
+      // SDR WebGL path (or HDR scope readback failed): read pixels from the
+      // GL canvas directly.  This covers the case where SDR WebGL rendering
+      // is active (e.g. after a color adjustment) but there is no IPImage
+      // because the source was an HTMLVideoElement/HTMLImageElement rendered
+      // via renderSDRFrame().
+      const gl = glRenderer.getGL?.();
+      if (gl) {
+        const width = gl.drawingBufferWidth;
+        const height = gl.drawingBufferHeight;
+        if (width > 0 && height > 0) {
+          const pixels = new Uint8Array(width * height * 4);
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          // gl.readPixels returns bottom-to-top; flip to top-to-bottom
+          const rowSize = width * 4;
+          const halfH = height >> 1;
+          const tmp = new Uint8Array(rowSize);
+          for (let y = 0; y < halfH; y++) {
+            const topOffset = y * rowSize;
+            const bottomOffset = (height - 1 - y) * rowSize;
+            tmp.set(pixels.subarray(topOffset, topOffset + rowSize));
+            pixels.set(pixels.subarray(bottomOffset, bottomOffset + rowSize), topOffset);
+            pixels.set(tmp, bottomOffset);
+          }
+          const clamped = new Uint8ClampedArray(pixels.buffer);
+          const imageData = new ImageData(clamped, width, height);
+          return { imageData, floatData: null, width, height };
+        }
+      }
 
-      return { imageData, floatData, width, height };
+      // Last resort: try the 2D canvas (may be hidden but still usable)
+      const imageData = this.getImageData();
+      if (!imageData) return null;
+      return { imageData, floatData: null, width: imageData.width, height: imageData.height };
     }
 
     // 2D canvas path: read from the existing canvas context

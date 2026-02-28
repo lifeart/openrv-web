@@ -25,21 +25,21 @@ test.describe('HeaderBar Mobile Scroll', () => {
   });
 
   test('HDRSCROLL-001: header bar should be horizontally scrollable on narrow viewport', async ({ page }) => {
-    const headerBar = page.locator('.header-bar');
-    await expect(headerBar).toBeVisible();
+    const headerBarScroll = page.locator('.header-bar-scroll');
+    await expect(headerBarScroll).toBeVisible();
 
     // The header bar's scroll width should exceed its client width on narrow screens
-    const isScrollable = await headerBar.evaluate((el) => {
+    const isScrollable = await headerBarScroll.evaluate((el) => {
       return el.scrollWidth > el.clientWidth;
     });
     expect(isScrollable).toBe(true);
   });
 
   test('HDRSCROLL-002: header bar scrollbar should be hidden', async ({ page }) => {
-    const headerBar = page.locator('.header-bar');
+    const headerBarScroll = page.locator('.header-bar-scroll');
 
     // Verify CSS property that hides the scrollbar
-    const scrollbarWidth = await headerBar.evaluate((el) => {
+    const scrollbarWidth = await headerBarScroll.evaluate((el) => {
       const style = window.getComputedStyle(el);
       return style.scrollbarWidth;
     });

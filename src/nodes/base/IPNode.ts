@@ -155,6 +155,7 @@ export abstract class IPNode {
   // Cleanup
   dispose(): void {
     this.disconnectAllInputs();
+    this.properties.dispose();
     this.inputsChanged.disconnectAll();
     this.outputsChanged.disconnectAll();
     this.propertyChanged.disconnectAll();

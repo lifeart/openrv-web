@@ -17,6 +17,7 @@ import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { createDraggableContainer, createControlButton, DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export type { WheelValues, ColorWheelsState } from '../../core/types/color';
 export { DEFAULT_WHEEL_VALUES, DEFAULT_COLOR_WHEELS_STATE } from '../../core/types/color';
@@ -44,7 +45,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
   private undoStack: ColorWheelsState[] = [];
   private redoStack: ColorWheelsState[] = [];
   private maxUndoLevels = 50;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   constructor(parent: HTMLElement) {
     super();
@@ -63,10 +64,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     this.createUI();
 
     // Listen for theme changes to redraw with new colors
-    this.boundOnThemeChange = () => {
-      this.redrawAllWheels();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.redrawAllWheels()));
   }
 
   private createUI(): void {
@@ -832,10 +830,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
   dispose(): void {
     // Clean up theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
-    this.boundOnThemeChange = null;
+    this.subs.dispose();
     this.draggable.dispose();
     this.draggable.element.remove();
     this.wheels.clear();

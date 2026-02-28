@@ -127,6 +127,36 @@ describe('DCCBridge loadMedia wiring fix', () => {
 });
 
 // ---------------------------------------------------------------------------
+// DCCBridge disposal tests
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge disposal', () => {
+  it('DCC-DISP-001: callbacks fire before dispose', () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.currentFrame = 10;
+    session.frameCount = 200;
+
+    wireDCCBridge(deps);
+
+    session.emit('frameChanged', 10);
+    expect(dccBridge.sendFrameChanged).toHaveBeenCalledWith(10, 200);
+  });
+
+  it('DCC-DISP-002: callbacks do not fire after dispose', () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.currentFrame = 10;
+    session.frameCount = 200;
+
+    const state = wireDCCBridge(deps);
+    state.subscriptions.dispose();
+
+    dccBridge.sendFrameChanged.mockClear();
+    session.emit('frameChanged', 10);
+    expect(dccBridge.sendFrameChanged).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // DCCBridge syncColor wiring tests (via real wireDCCBridge)
 // ---------------------------------------------------------------------------
 

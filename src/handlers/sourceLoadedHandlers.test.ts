@@ -29,15 +29,33 @@ function createMockContext(overrides: {
     getSourceInputColorSpace: vi.fn(() => null),
   };
   const ocioControl = { getProcessor: () => ocioProcessor };
-  const toneMappingControl = { setState: vi.fn() };
-  const colorControls = { setAdjustments: vi.fn() };
+  const toneMappingState: { enabled: boolean; operator: 'off' | 'aces' | 'filmic' | 'reinhard' | 'drago' } = {
+    enabled: false,
+    operator: 'off',
+  };
+  const toneMappingControl = {
+    setState: vi.fn((state: { enabled?: boolean; operator?: string }) => {
+      if (state.enabled !== undefined) toneMappingState.enabled = state.enabled;
+      if (state.operator === 'off' || state.operator === 'aces' || state.operator === 'filmic' || state.operator === 'reinhard' || state.operator === 'drago') {
+        toneMappingState.operator = state.operator;
+      }
+    }),
+    getState: vi.fn(() => ({ ...toneMappingState })),
+  };
+  const colorAdjustments = { gamma: 1 };
+  const colorControls = {
+    setAdjustments: vi.fn((adj: { gamma?: number }) => {
+      if (adj.gamma !== undefined) colorAdjustments.gamma = adj.gamma;
+    }),
+    getAdjustments: vi.fn(() => ({ ...colorAdjustments })),
+  };
   const persistenceManager = { setGTOStore: vi.fn(), syncGTOStore: vi.fn() };
   const exrWindowOverlay = { setWindows: vi.fn(), clearWindows: vi.fn() };
   const viewer = { initPrerenderBuffer: vi.fn(), refresh: vi.fn(), getGLRenderer: vi.fn(() => null), isDisplayHDRCapable: vi.fn(() => false), getEXRWindowOverlay: vi.fn(() => exrWindowOverlay) };
   const stackControl = { setAvailableSources: vi.fn() };
   const channelSelect = { clearEXRLayers: vi.fn(), setEXRLayers: vi.fn() };
   const infoPanel = { update: vi.fn() };
-  const histogram = { setHDRMode: vi.fn() };
+  const histogram = { setHDRMode: vi.fn(), setHDRAutoFit: vi.fn() };
 
   const session = {
     currentSource: overrides.currentSource !== undefined ? overrides.currentSource : null,
@@ -218,6 +236,67 @@ describe('handleSourceLoaded', () => {
     expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
   });
 
+  it('SLH-U029: auto-applied HDR tone mapping/gamma are reset when switching back to SDR', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+
+    // First load: HDR on SDR display -> auto ACES + gamma 2.2
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
+    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+
+    // Switch to SDR source
+    (context.getSession() as any).currentSource = {
+      name: 'test.jpg',
+      width: 100,
+      height: 100,
+      fileSourceNode: { isHDR: () => false },
+    };
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(context.getToneMappingControl().setState).toHaveBeenLastCalledWith({ enabled: false, operator: 'off' });
+    expect(context.getColorControls().setAdjustments).toHaveBeenLastCalledWith({ gamma: 1 });
+  });
+
+  it('SLH-U030: manual tone mapping/gamma changes are preserved when switching to SDR', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+
+    // Auto HDR config first
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // User overrides after auto config
+    context.getToneMappingControl().setState({ enabled: true, operator: 'filmic' });
+    context.getColorControls().setAdjustments({ gamma: 1.8 });
+
+    const tmCallsBefore = (context.getToneMappingControl().setState as ReturnType<typeof vi.fn>).mock.calls.length;
+    const gammaCallsBefore = (context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    // Switch to SDR source
+    (context.getSession() as any).currentSource = {
+      name: 'test.jpg',
+      width: 100,
+      height: 100,
+      fileSourceNode: { isHDR: () => false },
+    };
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect((context.getToneMappingControl().setState as ReturnType<typeof vi.fn>).mock.calls.length).toBe(tmCallsBefore);
+    expect((context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mock.calls.length).toBe(gammaCallsBefore);
+  });
+
   it('SLH-U010: clears GTO store when session has no GTO data', () => {
     const context = createMockContext({ gtoData: null });
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
@@ -286,8 +365,8 @@ describe('handleSourceLoaded', () => {
     // SDR display: tone mapping enabled to compress HDR for display
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
-    // Scopes show SDR range (tone-mapped output)
-    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
+    // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
 
   it('SLH-U017: SDR content → scopes SDR, no tone mapping', () => {
@@ -329,20 +408,20 @@ describe('handleSourceLoaded', () => {
     expect(headroom).toBeGreaterThanOrEqual(4.0);
   });
 
-  it('SLH-U019: HDR display + HDR video → no tone mapping, scopes HDR', () => {
+  it('SLH-U019: HDR display + HLG video preset → tone mapping OFF by default, scopes HDR', () => {
     const context = createMockContext({
       currentSource: {
         name: 'test.mov',
         width: 100,
         height: 100,
-        videoSourceNode: { isHDR: () => true },
+        videoSourceNode: { isHDR: () => true, getVideoColorSpace: () => ({ transfer: 'hlg' }) },
       },
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
   });
 
@@ -365,7 +444,7 @@ describe('handleSourceLoaded', () => {
     expect(headroom).toBe(8.0);
   });
 
-  it('SLH-U021a: HDR display + JPEG gainmap file → ACES tone mapping', () => {
+  it('SLH-U021a: HDR display + JPEG gainmap file → tone mapping OFF by default', () => {
     const context = createMockContext({
       currentSource: {
         name: 'photo.jpg',
@@ -378,18 +457,17 @@ describe('handleSourceLoaded', () => {
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    // Gainmap is file HDR — tone mapping must compress linear float range
-    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
   });
 
-  it('SLH-U021b: HDR display + HDR video (no fileSourceNode) → no tone mapping', () => {
+  it('SLH-U021b: HDR display + PQ video preset (no fileSourceNode) → tone mapping OFF by default', () => {
     const context = createMockContext({
       currentSource: {
         name: 'clip.mov',
         width: 3840,
         height: 2160,
-        videoSourceNode: { isHDR: () => true },
+        videoSourceNode: { isHDR: () => true, getVideoColorSpace: () => ({ transfer: 'pq' }) },
         // No fileSourceNode — video-only source
       },
     });
@@ -397,13 +475,34 @@ describe('handleSourceLoaded', () => {
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    // Video HDR: display handles HLG/PQ natively — no tone mapping
-    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+  });
+
+  it('SLH-U028: HDR display + PQ file preset → tone mapping OFF by default', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'photo.avif',
+        width: 4032,
+        height: 3024,
+        fileSourceNode: {
+          isHDR: () => true,
+          formatName: 'avif-hdr',
+          getIPImage: () => ({ metadata: { transferFunction: 'pq' } }),
+        },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
   });
 
   it('SLH-U024: calls setScopesHDRMode(false) for SDR content', () => {
     const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const autoFitSpy = vi.spyOn(WebGLScopes, 'setScopesHDRAutoFit');
     const context = createMockContext({
       currentSource: {
         name: 'test.jpg',
@@ -416,11 +515,14 @@ describe('handleSourceLoaded', () => {
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
     expect(spy).toHaveBeenCalledWith(false);
+    expect(autoFitSpy).toHaveBeenCalledWith(false);
     spy.mockRestore();
+    autoFitSpy.mockRestore();
   });
 
   it('SLH-U025: calls setScopesHDRMode(true, headroom) for HDR on HDR display', () => {
     const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const autoFitSpy = vi.spyOn(WebGLScopes, 'setScopesHDRAutoFit');
     const context = createMockContext({
       currentSource: {
         name: 'test.exr',
@@ -434,13 +536,16 @@ describe('handleSourceLoaded', () => {
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
     expect(spy).toHaveBeenCalledWith(true, expect.any(Number));
+    expect(autoFitSpy).toHaveBeenCalledWith(true);
     const headroom = spy.mock.calls[0]![1];
     expect(headroom).toBeGreaterThanOrEqual(4.0);
     spy.mockRestore();
+    autoFitSpy.mockRestore();
   });
 
-  it('SLH-U026: calls setScopesHDRMode(false) for HDR content on SDR display', () => {
+  it('SLH-U026: calls setScopesHDRMode(true) for HDR content on SDR display', () => {
     const spy = vi.spyOn(WebGLScopes, 'setScopesHDRMode');
+    const autoFitSpy = vi.spyOn(WebGLScopes, 'setScopesHDRAutoFit');
     const context = createMockContext({
       currentSource: {
         name: 'test.exr',
@@ -453,8 +558,11 @@ describe('handleSourceLoaded', () => {
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    expect(spy).toHaveBeenCalledWith(false);
+    // HDR scope mode is enabled even on SDR displays so scopes can analyze source HDR values
+    expect(spy).toHaveBeenCalledWith(true, 4.0);
+    expect(autoFitSpy).toHaveBeenCalledWith(true);
     spy.mockRestore();
+    autoFitSpy.mockRestore();
   });
 
   it('SLH-U027: calls setScopesHDRMode instead of creating scopes processor directly', () => {
@@ -493,7 +601,8 @@ describe('handleSourceLoaded', () => {
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
-    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
+    // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
 });
 

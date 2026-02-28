@@ -3,86 +3,86 @@
  * and disposal from App.
  *
  * This class is responsible for:
- * 1. Creating all UI controls in the correct order
+ * 1. Creating all UI controls in the correct order (via control group factories)
  * 2. Setting up tab panel DOM content (setupTabContents)
  * 3. Disposing all controls
+ *
+ * Controls are organized into domain groups (color, view, effects, etc.).
+ * Permanent compatibility getters delegate to the groups so that all existing
+ * call sites continue to work without changes.
  *
  * Event wiring between controls remains in App (or AppSessionBridge).
  */
 
-import { PaintToolbar } from './ui/components/PaintToolbar';
-import { ColorControls } from './ui/components/ColorControls';
-import { TransformControl } from './ui/components/TransformControl';
-import { FilterControl } from './ui/components/FilterControl';
-import { CropControl } from './ui/components/CropControl';
-import { CDLControl } from './ui/components/CDLControl';
-import { CurvesControl } from './ui/components/CurvesControl';
-import { LensControl } from './ui/components/LensControl';
-import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
-import { GamutMappingControl } from './ui/components/GamutMappingControl';
-import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
-import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
-import { StabilizationControl } from './ui/components/StabilizationControl';
-import { NoiseReductionControl } from './ui/components/NoiseReductionControl';
-import { WatermarkControl } from './ui/components/WatermarkControl';
-import { StackControl } from './ui/components/StackControl';
-import { ChannelSelect } from './ui/components/ChannelSelect';
-import { StereoControl } from './ui/components/StereoControl';
-import { StereoEyeTransformControl } from './ui/components/StereoEyeTransformControl';
-import { StereoAlignControl } from './ui/components/StereoAlignControl';
-import { Histogram } from './ui/components/Histogram';
-import { Waveform } from './ui/components/Waveform';
-import { Vectorscope } from './ui/components/Vectorscope';
-import { GamutDiagram } from './ui/components/GamutDiagram';
-import { ZoomControl } from './ui/components/ZoomControl';
-import { ScopesControl } from './ui/components/ScopesControl';
-import { CompareControl } from './ui/components/CompareControl';
-import { SafeAreasControl } from './ui/components/SafeAreasControl';
-import { FalseColorControl } from './ui/components/FalseColorControl';
-import { LuminanceVisualizationControl } from './ui/components/LuminanceVisualizationControl';
-import { ToneMappingControl } from './ui/components/ToneMappingControl';
-import { ZebraControl } from './ui/components/ZebraControl';
-import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
-import { GhostFrameControl } from './ui/components/GhostFrameControl';
-import { PARControl } from './ui/components/PARControl';
-import { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
-import { OCIOControl } from './ui/components/OCIOControl';
-import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
-import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
-import { PremultControl } from './ui/components/PremultControl';
-import { ReferenceManager } from './ui/components/ReferenceManager';
-import { SlateEditor } from './ui/components/SlateEditor';
-import { ConvergenceMeasure } from './ui/components/ConvergenceMeasure';
-import { FloatingWindowControl } from './ui/components/FloatingWindowControl';
-import { SphericalProjection } from './render/SphericalProjection';
-import { LUTPipelinePanel } from './ui/components/LUTPipelinePanel';
-import { HistoryPanel } from './ui/components/HistoryPanel';
-import { InfoPanel } from './ui/components/InfoPanel';
-import { MarkerListPanel } from './ui/components/MarkerListPanel';
-import { NotePanel } from './ui/components/NotePanel';
-import { CacheIndicator } from './ui/components/CacheIndicator';
-import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
-import { AutoSaveManager } from './core/session/AutoSaveManager';
-import { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
-import { SnapshotManager } from './core/session/SnapshotManager';
-import { SnapshotPanel } from './ui/components/SnapshotPanel';
-import { PlaylistManager } from './core/session/PlaylistManager';
-import { TransitionManager } from './core/session/TransitionManager';
-import { PlaylistPanel } from './ui/components/PlaylistPanel';
-import { PresentationMode } from './utils/ui/PresentationMode';
-import { NetworkSyncManager } from './network/NetworkSyncManager';
-import { NetworkControl } from './ui/components/NetworkControl';
-import { ShotGridConfigUI } from './integrations/ShotGridConfig';
-import { ShotGridPanel } from './ui/components/ShotGridPanel';
-import { ConformPanel, type ConformPanelManager, type ConformSource, type UnresolvedClip, type ConformStatus } from './ui/components/ConformPanel';
-import type { NetworkSyncConfig } from './network/types';
-import { ContextToolbar } from './ui/components/layout/ContextToolbar';
-import { setButtonActive, applyA11yFocus } from './ui/components/shared/Button';
+import type { PaintToolbar } from './ui/components/PaintToolbar';
+import type { ColorControls } from './ui/components/ColorControls';
+import type { TransformControl } from './ui/components/TransformControl';
+import type { FilterControl } from './ui/components/FilterControl';
+import type { CropControl } from './ui/components/CropControl';
+import type { CDLControl } from './ui/components/CDLControl';
+import type { CurvesControl } from './ui/components/CurvesControl';
+import type { LensControl } from './ui/components/LensControl';
+import type { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import type { GamutMappingControl } from './ui/components/GamutMappingControl';
+import type { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
+import type { FilmEmulationControl } from './ui/components/FilmEmulationControl';
+import type { StabilizationControl } from './ui/components/StabilizationControl';
+import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
+import type { WatermarkControl } from './ui/components/WatermarkControl';
+import type { StackControl } from './ui/components/StackControl';
+import type { ChannelSelect } from './ui/components/ChannelSelect';
+import type { StereoControl } from './ui/components/StereoControl';
+import type { StereoEyeTransformControl } from './ui/components/StereoEyeTransformControl';
+import type { StereoAlignControl } from './ui/components/StereoAlignControl';
+import type { Histogram } from './ui/components/Histogram';
+import type { Waveform } from './ui/components/Waveform';
+import type { Vectorscope } from './ui/components/Vectorscope';
+import type { GamutDiagram } from './ui/components/GamutDiagram';
+import type { ZoomControl } from './ui/components/ZoomControl';
+import type { ScopesControl } from './ui/components/ScopesControl';
+import type { CompareControl } from './ui/components/CompareControl';
+import type { SafeAreasControl } from './ui/components/SafeAreasControl';
+import type { FalseColorControl } from './ui/components/FalseColorControl';
+import type { LuminanceVisualizationControl } from './ui/components/LuminanceVisualizationControl';
+import type { ToneMappingControl } from './ui/components/ToneMappingControl';
+import type { ZebraControl } from './ui/components/ZebraControl';
+import type { HSLQualifierControl } from './ui/components/HSLQualifierControl';
+import type { GhostFrameControl } from './ui/components/GhostFrameControl';
+import type { PARControl } from './ui/components/PARControl';
+import type { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
+import type { OCIOControl } from './ui/components/OCIOControl';
+import type { DisplayProfileControl } from './ui/components/DisplayProfileControl';
+import type { ColorInversionToggle } from './ui/components/ColorInversionToggle';
+import type { PremultControl } from './ui/components/PremultControl';
+import type { ReferenceManager } from './ui/components/ReferenceManager';
+import type { SlateEditor } from './ui/components/SlateEditor';
+import type { ConvergenceMeasure } from './ui/components/ConvergenceMeasure';
+import type { FloatingWindowControl } from './ui/components/FloatingWindowControl';
+import type { SphericalProjection } from './render/SphericalProjection';
+import type { LUTPipelinePanel } from './ui/components/LUTPipelinePanel';
+import type { HistoryPanel } from './ui/components/HistoryPanel';
+import type { InfoPanel } from './ui/components/InfoPanel';
+import type { MarkerListPanel } from './ui/components/MarkerListPanel';
+import type { NotePanel } from './ui/components/NotePanel';
+import type { CacheIndicator } from './ui/components/CacheIndicator';
+import type { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
+import type { AutoSaveManager } from './core/session/AutoSaveManager';
+import type { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
+import type { SnapshotManager } from './core/session/SnapshotManager';
+import type { SnapshotPanel } from './ui/components/SnapshotPanel';
+import type { PlaylistManager } from './core/session/PlaylistManager';
+import type { TransitionManager } from './core/session/TransitionManager';
+import type { PlaylistPanel } from './ui/components/PlaylistPanel';
+import type { PresentationMode } from './utils/ui/PresentationMode';
+import type { NetworkSyncManager } from './network/NetworkSyncManager';
+import type { NetworkControl } from './ui/components/NetworkControl';
+import type { ShotGridConfigUI } from './integrations/ShotGridConfig';
+import type { ShotGridPanel } from './ui/components/ShotGridPanel';
+import type { ConformPanel } from './ui/components/ConformPanel';
+import type { TimelineEditor } from './ui/components/TimelineEditor';
+
+import type { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { getIconSvg } from './ui/components/shared/Icons';
-import { getGlobalHistoryManager } from './utils/HistoryManager';
-import { RightPanelContent } from './ui/layout/panels/RightPanelContent';
-import { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
-import { TimelineEditor } from './ui/components/TimelineEditor';
 import { createPanel, createPanelHeader, type Panel } from './ui/components/shared/Panel';
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
@@ -91,32 +91,36 @@ import type { DisplayCapabilities } from './color/DisplayCapabilities';
 import type { AppSessionBridge } from './AppSessionBridge';
 import type { HeaderBar } from './ui/components/layout/HeaderBar';
 
-function parseSignalingServerList(raw: string | undefined): string[] {
-  if (!raw) return [];
-  const values = raw
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .filter((value) => /^wss?:\/\//i.test(value));
+import type { RightPanelContent } from './ui/layout/panels/RightPanelContent';
+import type { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
 
-  return Array.from(new Set(values));
-}
+import type {
+  ColorControlGroup,
+  ViewControlGroup,
+  EffectsControlGroup,
+  TransformControlGroup,
+  AnnotateControlGroup,
+  PlaybackControlGroup,
+} from './services/controls/ControlGroups';
+import type { AnalysisControlGroupInternal } from './services/controls/createAnalysisControls';
+import type { PanelControlGroupInternal } from './services/controls/createPanelControls';
 
-function resolveNetworkSyncConfigFromEnv(): Partial<NetworkSyncConfig> {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-  const raw =
-    env.VITE_NETWORK_SIGNALING_SERVERS ??
-    env.VITE_NETWORK_SIGNALING_URLS ??
-    env.VITE_NETWORK_SIGNALING_URL;
+import { createColorControls } from './services/controls/createColorControls';
+import { createViewControls } from './services/controls/createViewControls';
+import { createEffectsControls } from './services/controls/createEffectsControls';
+import { createTransformControls } from './services/controls/createTransformControls';
+import { createAnnotateControls } from './services/controls/createAnnotateControls';
+import { createAnalysisControls } from './services/controls/createAnalysisControls';
+import { createPanelControls } from './services/controls/createPanelControls';
+import { createPlaybackControls } from './services/controls/createPlaybackControls';
 
-  const signalingServers = parseSignalingServerList(raw);
-  if (signalingServers.length === 0) return {};
-
-  return {
-    serverUrl: signalingServers[0],
-    serverUrls: signalingServers,
-  };
-}
+import { buildViewTab } from './services/tabContent/buildViewTab';
+import { buildQCTab } from './services/tabContent/buildQCTab';
+import { buildColorTab } from './services/tabContent/buildColorTab';
+import { buildEffectsTab } from './services/tabContent/buildEffectsTab';
+import { buildTransformTab } from './services/tabContent/buildTransformTab';
+import { buildAnnotateTab } from './services/tabContent/buildAnnotateTab';
+import { buildPanelToggles } from './services/tabContent/buildPanelToggles';
 
 /**
  * Dependencies required by AppControlRegistry to create all controls.
@@ -129,128 +133,15 @@ export interface ControlRegistryDeps {
 }
 
 export class AppControlRegistry {
-  // Paint / Annotate
-  readonly paintToolbar: PaintToolbar;
-  readonly textFormattingToolbar: TextFormattingToolbar;
-
-  // Color tab
-  readonly colorControls: ColorControls;
-  readonly colorInversionToggle: ColorInversionToggle;
-  readonly premultControl: PremultControl;
-  readonly cdlControl: CDLControl;
-  readonly curvesControl: CurvesControl;
-  readonly ocioControl: OCIOControl;
-  readonly lutPipelinePanel: LUTPipelinePanel;
-
-  // View tab - Navigation
-  readonly zoomControl: ZoomControl;
-  readonly channelSelect: ChannelSelect;
-
-  // View tab - Comparison
-  readonly compareControl: CompareControl;
-  readonly referenceManager: ReferenceManager;
-  readonly stereoControl: StereoControl;
-  readonly stereoEyeTransformControl: StereoEyeTransformControl;
-  readonly stereoAlignControl: StereoAlignControl;
-  readonly ghostFrameControl: GhostFrameControl;
-  readonly convergenceMeasure: ConvergenceMeasure;
-  readonly floatingWindowControl: FloatingWindowControl;
-
-  // View tab - 360 projection
-  readonly sphericalProjection: SphericalProjection;
-
-  // View tab - Monitoring
-  readonly scopesControl: ScopesControl;
-  readonly stackControl: StackControl;
-
-  // View tab - Analysis
-  readonly safeAreasControl: SafeAreasControl;
-  readonly falseColorControl: FalseColorControl;
-  readonly luminanceVisControl: LuminanceVisualizationControl;
-  readonly toneMappingControl: ToneMappingControl;
-  readonly zebraControl: ZebraControl;
-  readonly hslQualifierControl: HSLQualifierControl;
-  readonly parControl: PARControl;
-  readonly backgroundPatternControl: BackgroundPatternControl;
-  readonly displayProfileControl: DisplayProfileControl;
-  readonly gamutMappingControl: GamutMappingControl;
-
-  // Effects tab
-  readonly filterControl: FilterControl;
-  readonly slateEditor: SlateEditor;
-  readonly lensControl: LensControl;
-  readonly deinterlaceControl: DeinterlaceControl;
-  readonly filmEmulationControl: FilmEmulationControl;
-  readonly perspectiveCorrectionControl: PerspectiveCorrectionControl;
-  readonly stabilizationControl: StabilizationControl;
-  readonly noiseReductionControl: NoiseReductionControl;
-  readonly watermarkControl: WatermarkControl;
-  readonly timelineEditor: TimelineEditor;
-
-  // Transform tab
-  readonly transformControl: TransformControl;
-  readonly cropControl: CropControl;
-
-  // Analysis scopes (lazy-created on first access to avoid unnecessary GPU resource allocation)
-  private _histogram: Histogram | null = null;
-  private _waveform: Waveform | null = null;
-  private _vectorscope: Vectorscope | null = null;
-  readonly gamutDiagram: GamutDiagram;
-
-  get histogram(): Histogram {
-    if (!this._histogram) {
-      this._histogram = new Histogram();
-    }
-    return this._histogram;
-  }
-
-  get waveform(): Waveform {
-    if (!this._waveform) {
-      this._waveform = new Waveform();
-    }
-    return this._waveform;
-  }
-
-  get vectorscope(): Vectorscope {
-    if (!this._vectorscope) {
-      this._vectorscope = new Vectorscope();
-    }
-    return this._vectorscope;
-  }
-
-  // Panels
-  readonly historyPanel: HistoryPanel;
-  readonly infoPanel: InfoPanel;
-  readonly markerListPanel: MarkerListPanel;
-  readonly notePanel: NotePanel;
-
-  // Layout panel content
-  readonly rightPanelContent: RightPanelContent;
-  readonly leftPanelContent: LeftPanelContent;
-
-  // Cache
-  readonly cacheIndicator: CacheIndicator;
-
-  // Auto-save / Snapshots / Playlists
-  readonly autoSaveManager: AutoSaveManager;
-  readonly autoSaveIndicator: AutoSaveIndicator;
-  readonly snapshotManager: SnapshotManager;
-  readonly snapshotPanel: SnapshotPanel;
-  readonly playlistManager: PlaylistManager;
-  readonly transitionManager: TransitionManager;
-  readonly playlistPanel: PlaylistPanel;
-
-  // Presentation / Network
-  readonly presentationMode: PresentationMode;
-  readonly networkSyncManager: NetworkSyncManager;
-  readonly networkControl: NetworkControl;
-
-  // ShotGrid integration
-  readonly shotGridConfig: ShotGridConfigUI;
-  readonly shotGridPanel: ShotGridPanel;
-
-  // Conform / Re-link
-  readonly conformPanel: ConformPanel;
+  // ── Control groups ──
+  readonly color: ColorControlGroup;
+  readonly view: ViewControlGroup;
+  readonly effects: EffectsControlGroup;
+  readonly transform: TransformControlGroup;
+  readonly annotate: AnnotateControlGroup;
+  readonly analysis: AnalysisControlGroupInternal;
+  readonly panel: PanelControlGroupInternal;
+  readonly playback: PlaybackControlGroup;
 
   /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
   private registryUnsubscribers: (() => void)[] = [];
@@ -258,80 +149,37 @@ export class AppControlRegistry {
   private readonly watermarkPanel: Panel;
   private readonly timelineEditorPanel: Panel;
   private readonly slateEditorPanel: Panel;
-  private readonly conformPanelContainer: HTMLElement;
-  private readonly conformPanelElement: Panel;
   private convergenceButton: HTMLButtonElement | null = null;
   private floatingWindowButton: HTMLButtonElement | null = null;
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
 
-    // --- Paint / Annotate ---
-    this.paintToolbar = new PaintToolbar(paintEngine);
-    this.textFormattingToolbar = new TextFormattingToolbar(
-      paintEngine,
-      () => session.currentFrame
-    );
+    // --- Create control groups via factories ---
+    this.annotate = createAnnotateControls({ paintEngine, session });
+    this.color = createColorControls({ viewer });
+    this.view = createViewControls();
 
-    // --- Color tab ---
-    this.colorControls = new ColorControls();
-    this.colorInversionToggle = new ColorInversionToggle();
-    this.premultControl = new PremultControl();
-    this.cdlControl = new CDLControl();
-    this.curvesControl = new CurvesControl();
-    this.ocioControl = new OCIOControl();
-    this.lutPipelinePanel = new LUTPipelinePanel(viewer.getLUTPipeline());
+    // Effects needs a host element for the timeline editor panel
+    this.timelineEditorPanel = createPanel({ width: 'clamp(400px, 60vw, 900px)', maxHeight: '70vh', align: 'right' });
+    this.timelineEditorPanel.element.appendChild(createPanelHeader('Timeline Editor'));
+    const timelineEditorHost = document.createElement('div');
+    timelineEditorHost.style.cssText = 'min-height: 220px;';
+    this.timelineEditorPanel.element.appendChild(timelineEditorHost);
 
-    // --- View tab - Navigation ---
-    this.zoomControl = new ZoomControl();
-    this.channelSelect = new ChannelSelect();
+    this.effects = createEffectsControls({ viewer, session, timelineEditorHost });
 
-    // --- View tab - Comparison ---
-    this.compareControl = new CompareControl();
-    this.referenceManager = new ReferenceManager();
-    this.stereoControl = new StereoControl();
-    this.stereoEyeTransformControl = new StereoEyeTransformControl();
-    this.stereoAlignControl = new StereoAlignControl();
-    this.ghostFrameControl = new GhostFrameControl();
-    this.convergenceMeasure = new ConvergenceMeasure();
-    this.floatingWindowControl = new FloatingWindowControl();
-    this.sphericalProjection = new SphericalProjection();
-
-    // --- View tab - Monitoring ---
-    this.scopesControl = new ScopesControl();
-    this.stackControl = new StackControl();
-
-    // --- View tab - Analysis ---
-    this.safeAreasControl = new SafeAreasControl(viewer.getSafeAreasOverlay());
-    this.falseColorControl = new FalseColorControl(viewer.getFalseColor());
-    this.luminanceVisControl = new LuminanceVisualizationControl(viewer.getLuminanceVisualization());
-    this.toneMappingControl = new ToneMappingControl(displayCapabilities);
-    this.zebraControl = new ZebraControl(viewer.getZebraStripes());
-    this.hslQualifierControl = new HSLQualifierControl(viewer.getHSLQualifier());
-    this.parControl = new PARControl();
-    this.backgroundPatternControl = new BackgroundPatternControl();
-    this.displayProfileControl = new DisplayProfileControl();
-    this.gamutMappingControl = new GamutMappingControl();
-
-    // --- Effects tab ---
-    this.filterControl = new FilterControl();
-    this.slateEditor = new SlateEditor();
-    this.lensControl = new LensControl();
-    this.deinterlaceControl = new DeinterlaceControl();
-    this.filmEmulationControl = new FilmEmulationControl();
-    this.perspectiveCorrectionControl = new PerspectiveCorrectionControl();
-    this.stabilizationControl = new StabilizationControl();
-    this.noiseReductionControl = new NoiseReductionControl();
-    this.watermarkControl = new WatermarkControl(viewer.getWatermarkOverlay());
-
+    // Noise reduction panel wrapper
     this.noiseReductionPanel = createPanel({ width: '320px', maxHeight: '70vh', align: 'right' });
     this.noiseReductionPanel.element.appendChild(createPanelHeader('Noise Reduction'));
-    this.noiseReductionPanel.element.appendChild(this.noiseReductionControl.render());
+    this.noiseReductionPanel.element.appendChild(this.effects.noiseReductionControl.render());
 
+    // Watermark panel wrapper
     this.watermarkPanel = createPanel({ width: '360px', maxHeight: '70vh', align: 'right' });
     this.watermarkPanel.element.appendChild(createPanelHeader('Watermark'));
-    this.watermarkPanel.element.appendChild(this.watermarkControl.render());
+    this.watermarkPanel.element.appendChild(this.effects.watermarkControl.render());
 
+    // Slate editor panel wrapper
     this.slateEditorPanel = createPanel({ width: '400px', maxHeight: '70vh', align: 'right' });
     this.slateEditorPanel.element.appendChild(createPanelHeader('Slate / Leader'));
     const slateEditorHost = document.createElement('div');
@@ -339,103 +187,111 @@ export class AppControlRegistry {
     this.slateEditorPanel.element.appendChild(slateEditorHost);
     this.buildSlateEditorForm(slateEditorHost);
 
-    this.timelineEditorPanel = createPanel({ width: 'clamp(400px, 60vw, 900px)', maxHeight: '70vh', align: 'right' });
-    this.timelineEditorPanel.element.appendChild(createPanelHeader('Timeline Editor'));
-    const timelineEditorHost = document.createElement('div');
-    timelineEditorHost.style.cssText = 'min-height: 220px;';
-    this.timelineEditorPanel.element.appendChild(timelineEditorHost);
-    this.timelineEditor = new TimelineEditor(timelineEditorHost, session);
-    this.timelineEditor.setTotalFrames(session.frameCount);
+    this.transform = createTransformControls();
+    this.analysis = createAnalysisControls({ viewer, displayCapabilities });
 
-    // --- Transform tab ---
-    this.transformControl = new TransformControl();
-    this.cropControl = new CropControl();
+    // Playback group (auto-save, snapshots, playlists, network, presentation)
+    this.playback = createPlaybackControls();
 
-    // --- Analysis scopes ---
-    // histogram, waveform, and vectorscope are lazy-created via getters on first access
-    this.gamutDiagram = new GamutDiagram();
-
-    // --- Panels ---
-    this.historyPanel = new HistoryPanel(getGlobalHistoryManager());
-    this.infoPanel = new InfoPanel();
-    this.markerListPanel = new MarkerListPanel(session);
-    this.notePanel = new NotePanel(session);
-
-    // Mutual exclusion: NotePanel and MarkerListPanel overlap in the same position (bidirectional)
-    this.notePanel.setExclusiveWith(this.markerListPanel);
-    this.markerListPanel.setExclusiveWith(this.notePanel);
-
-    // --- Layout panel content ---
-    this.rightPanelContent = new RightPanelContent(this.scopesControl);
-    this.leftPanelContent = new LeftPanelContent(this.colorControls, getGlobalHistoryManager());
-
-    // --- Cache ---
-    this.cacheIndicator = new CacheIndicator(session, viewer);
-
-    // --- Auto-save / Snapshots / Playlists ---
-    this.autoSaveManager = new AutoSaveManager();
-    this.autoSaveIndicator = new AutoSaveIndicator();
-    this.snapshotManager = new SnapshotManager();
-    this.snapshotPanel = new SnapshotPanel(this.snapshotManager);
-    this.playlistManager = new PlaylistManager();
-    this.transitionManager = new TransitionManager();
-    this.playlistManager.setTransitionManager(this.transitionManager);
-    this.playlistPanel = new PlaylistPanel(this.playlistManager);
-    this.playlistPanel.setTransitionManager(this.transitionManager);
-
-    // Mutual exclusion: only one panel can be open at a time
-    this.snapshotPanel.setExclusiveWith(this.playlistPanel);
-    this.playlistPanel.setExclusiveWith(this.snapshotPanel);
-
-    // --- Presentation / Network ---
-    this.presentationMode = new PresentationMode();
-    this.presentationMode.loadPreference();
-    this.networkSyncManager = new NetworkSyncManager(resolveNetworkSyncConfigFromEnv());
-    this.networkControl = new NetworkControl();
-
-    // --- ShotGrid integration ---
-    this.shotGridConfig = new ShotGridConfigUI();
-    this.shotGridPanel = new ShotGridPanel();
-    this.shotGridPanel.setConfigUI(this.shotGridConfig);
-
-    // --- Conform / Re-link panel ---
-    this.conformPanelElement = createPanel({ width: '500px', maxHeight: '70vh', align: 'right' });
-    this.conformPanelElement.element.appendChild(createPanelHeader('Conform / Re-link'));
-    this.conformPanelContainer = document.createElement('div');
-    this.conformPanelContainer.style.cssText = 'padding: 8px; overflow-y: auto; max-height: 60vh;';
-    this.conformPanelElement.element.appendChild(this.conformPanelContainer);
-
-    const conformManager: ConformPanelManager = {
-      getUnresolvedClips: (): UnresolvedClip[] =>
-        this.playlistManager.unresolvedClips.map(c => ({
-          id: c.id,
-          name: c.name,
-          originalUrl: c.sourceUrl,
-          inFrame: c.inFrame,
-          outFrame: c.outFrame,
-          timelineIn: c.timelineIn,
-          reason: 'not_found' as const,
-        })),
-      getAvailableSources: (): ConformSource[] =>
-        (session.allSources ?? []).map((s, i) => ({
-          index: i,
-          name: s.name,
-          url: s.url,
-          frameCount: s.duration,
-        })),
-      relinkClip: (clipId: string, sourceIndex: number): boolean => {
-        const source = session.getSourceByIndex(sourceIndex);
-        if (!source) return false;
-        return this.playlistManager.relinkUnresolvedClip(clipId, sourceIndex, source.name, source.duration);
-      },
-      getResolutionStatus: (): ConformStatus => {
-        const unresolved = this.playlistManager.unresolvedClips.length;
-        const total = this.playlistManager.getClips().length + unresolved;
-        return { resolved: total - unresolved, total };
-      },
-    };
-    this.conformPanel = new ConformPanel(this.conformPanelContainer, conformManager);
+    // Panel group needs references from other groups
+    this.panel = createPanelControls({
+      session,
+      viewer,
+      scopesControl: this.analysis.scopesControl,
+      colorControls: this.color.colorControls,
+      snapshotManager: this.playback.snapshotManager,
+      playlistManager: this.playback.playlistManager,
+      transitionManager: this.playback.transitionManager,
+    });
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Permanent compatibility getters — delegate to domain groups
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // --- Annotate ---
+  get paintToolbar(): PaintToolbar { return this.annotate.paintToolbar; }
+  get textFormattingToolbar(): TextFormattingToolbar { return this.annotate.textFormattingToolbar; }
+
+  // --- Color ---
+  get colorControls(): ColorControls { return this.color.colorControls; }
+  get colorInversionToggle(): ColorInversionToggle { return this.color.colorInversionToggle; }
+  get premultControl(): PremultControl { return this.color.premultControl; }
+  get cdlControl(): CDLControl { return this.color.cdlControl; }
+  get curvesControl(): CurvesControl { return this.color.curvesControl; }
+  get ocioControl(): OCIOControl { return this.color.ocioControl; }
+  get lutPipelinePanel(): LUTPipelinePanel { return this.color.lutPipelinePanel; }
+
+  // --- View ---
+  get zoomControl(): ZoomControl { return this.view.zoomControl; }
+  get channelSelect(): ChannelSelect { return this.view.channelSelect; }
+  get compareControl(): CompareControl { return this.view.compareControl; }
+  get referenceManager(): ReferenceManager { return this.view.referenceManager; }
+  get stereoControl(): StereoControl { return this.view.stereoControl; }
+  get stereoEyeTransformControl(): StereoEyeTransformControl { return this.view.stereoEyeTransformControl; }
+  get stereoAlignControl(): StereoAlignControl { return this.view.stereoAlignControl; }
+  get ghostFrameControl(): GhostFrameControl { return this.view.ghostFrameControl; }
+  get convergenceMeasure(): ConvergenceMeasure { return this.view.convergenceMeasure; }
+  get floatingWindowControl(): FloatingWindowControl { return this.view.floatingWindowControl; }
+  get sphericalProjection(): SphericalProjection { return this.view.sphericalProjection; }
+  get stackControl(): StackControl { return this.view.stackControl; }
+  get parControl(): PARControl { return this.view.parControl; }
+  get backgroundPatternControl(): BackgroundPatternControl { return this.view.backgroundPatternControl; }
+  get displayProfileControl(): DisplayProfileControl { return this.view.displayProfileControl; }
+
+  // --- Effects ---
+  get filterControl(): FilterControl { return this.effects.filterControl; }
+  get slateEditor(): SlateEditor { return this.effects.slateEditor; }
+  get lensControl(): LensControl { return this.effects.lensControl; }
+  get deinterlaceControl(): DeinterlaceControl { return this.effects.deinterlaceControl; }
+  get filmEmulationControl(): FilmEmulationControl { return this.effects.filmEmulationControl; }
+  get perspectiveCorrectionControl(): PerspectiveCorrectionControl { return this.effects.perspectiveCorrectionControl; }
+  get stabilizationControl(): StabilizationControl { return this.effects.stabilizationControl; }
+  get noiseReductionControl(): NoiseReductionControl { return this.effects.noiseReductionControl; }
+  get watermarkControl(): WatermarkControl { return this.effects.watermarkControl; }
+  get timelineEditor(): TimelineEditor { return this.effects.timelineEditor; }
+
+  // --- Transform ---
+  get transformControl(): TransformControl { return this.transform.transformControl; }
+  get cropControl(): CropControl { return this.transform.cropControl; }
+
+  // --- Analysis ---
+  get scopesControl(): ScopesControl { return this.analysis.scopesControl; }
+  get safeAreasControl(): SafeAreasControl { return this.analysis.safeAreasControl; }
+  get falseColorControl(): FalseColorControl { return this.analysis.falseColorControl; }
+  get luminanceVisControl(): LuminanceVisualizationControl { return this.analysis.luminanceVisControl; }
+  get toneMappingControl(): ToneMappingControl { return this.analysis.toneMappingControl; }
+  get zebraControl(): ZebraControl { return this.analysis.zebraControl; }
+  get hslQualifierControl(): HSLQualifierControl { return this.analysis.hslQualifierControl; }
+  get gamutMappingControl(): GamutMappingControl { return this.analysis.gamutMappingControl; }
+  get gamutDiagram(): GamutDiagram { return this.analysis.gamutDiagram; }
+  get histogram(): Histogram { return this.analysis.histogram; }
+  get waveform(): Waveform { return this.analysis.waveform; }
+  get vectorscope(): Vectorscope { return this.analysis.vectorscope; }
+
+  // --- Panels ---
+  get historyPanel(): HistoryPanel { return this.panel.historyPanel; }
+  get infoPanel(): InfoPanel { return this.panel.infoPanel; }
+  get markerListPanel(): MarkerListPanel { return this.panel.markerListPanel; }
+  get notePanel(): NotePanel { return this.panel.notePanel; }
+  get rightPanelContent(): RightPanelContent { return this.panel.rightPanelContent; }
+  get leftPanelContent(): LeftPanelContent { return this.panel.leftPanelContent; }
+  get cacheIndicator(): CacheIndicator { return this.panel.cacheIndicator; }
+  get snapshotPanel(): SnapshotPanel { return this.panel.snapshotPanel; }
+  get playlistPanel(): PlaylistPanel { return this.panel.playlistPanel; }
+  get shotGridConfig(): ShotGridConfigUI { return this.panel.shotGridConfig; }
+  get shotGridPanel(): ShotGridPanel { return this.panel.shotGridPanel; }
+  get conformPanel(): ConformPanel { return this.panel.conformPanel; }
+
+  // --- Playback ---
+  get autoSaveManager(): AutoSaveManager { return this.playback.autoSaveManager; }
+  get autoSaveIndicator(): AutoSaveIndicator { return this.playback.autoSaveIndicator; }
+  get snapshotManager(): SnapshotManager { return this.playback.snapshotManager; }
+  get playlistManager(): PlaylistManager { return this.playback.playlistManager; }
+  get transitionManager(): TransitionManager { return this.playback.transitionManager; }
+  get presentationMode(): PresentationMode { return this.playback.presentationMode; }
+  get networkSyncManager(): NetworkSyncManager { return this.playback.networkSyncManager; }
+  get networkControl(): NetworkControl { return this.playback.networkControl; }
 
   /**
    * Build tab panel DOM content for all tabs.
@@ -447,689 +303,51 @@ export class AppControlRegistry {
     sessionBridge: AppSessionBridge,
     headerBar: HeaderBar,
   ): void {
+    const addUnsubscriber = (unsub: () => void) => {
+      this.registryUnsubscribers.push(unsub);
+    };
+
     // === VIEW TAB ===
-    // Organized into 3 logical groups: Navigation | Comparison | Display
-    const viewContent = document.createElement('div');
-    viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
-
-    // --- GROUP 1: Navigation (Zoom + Channel) ---
-    viewContent.appendChild(this.zoomControl.render());
-    viewContent.appendChild(this.channelSelect.render());
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 2: Comparison (Compare + Stereo + Ghost) ---
-    viewContent.appendChild(this.compareControl.render());
-    viewContent.appendChild(this.stereoControl.render());
-    viewContent.appendChild(this.stereoEyeTransformControl.render());
-    viewContent.appendChild(this.stereoAlignControl.render());
-
-    // Convergence measurement button (stereo QC)
-    this.convergenceButton = ContextToolbar.createIconButton('crosshair', () => {
-      this.convergenceMeasure.setEnabled(!this.convergenceMeasure.isEnabled());
-    }, { title: 'Toggle convergence measurement' });
-    this.convergenceButton.dataset.testid = 'convergence-measure-btn';
-    viewContent.appendChild(this.convergenceButton);
-
-    this.registryUnsubscribers.push(this.convergenceMeasure.on('stateChanged', (state) => {
-      setButtonActive(this.convergenceButton!, state.enabled, 'icon');
-    }));
-
-    // Floating window violation detection button (stereo QC)
-    this.floatingWindowButton = ContextToolbar.createIconButton('maximize', () => {
-      const pair = viewer.getStereoPair();
-      if (pair) {
-        const result = this.floatingWindowControl.detect(pair.left, pair.right);
-        if (this.floatingWindowButton) {
-          this.floatingWindowButton.title = this.floatingWindowControl.formatResult(result);
-        }
-      }
-    }, { title: 'Detect floating window violations' });
-    this.floatingWindowButton.dataset.testid = 'floating-window-detect-btn';
-    viewContent.appendChild(this.floatingWindowButton);
-
-    this.registryUnsubscribers.push(this.floatingWindowControl.on('stateChanged', (state) => {
-      if (this.floatingWindowButton) {
-        const hasViolation = state.lastResult?.hasViolation ?? false;
-        setButtonActive(this.floatingWindowButton, hasViolation, 'icon');
-      }
-    }));
-
-    viewContent.appendChild(this.ghostFrameControl.render());
-
-    // Reference capture/toggle buttons
-    const captureRefButton = ContextToolbar.createIconButton('camera', () => {
-      const imageData = viewer.getImageData();
-      if (imageData) {
-        this.referenceManager.captureReference({
-          width: imageData.width,
-          height: imageData.height,
-          data: imageData.data,
-          channels: 4,
-        });
-        // Auto-enable reference mode after capture for better UX
-        this.referenceManager.enable();
-      }
-    }, { title: 'Capture reference frame (Alt+Shift+R)' });
-    captureRefButton.dataset.testid = 'capture-reference-btn';
-    viewContent.appendChild(captureRefButton);
-
-    const toggleRefButton = ContextToolbar.createIconButton('layers', () => {
-      this.referenceManager.toggle();
-    }, { title: 'Toggle reference comparison (Ctrl+Shift+R)' });
-    toggleRefButton.dataset.testid = 'toggle-reference-btn';
-    viewContent.appendChild(toggleRefButton);
-
-    this.registryUnsubscribers.push(this.referenceManager.on('stateChanged', (state) => {
-      setButtonActive(toggleRefButton, state.enabled, 'icon');
-
-      // Wire reference display to the viewer overlay
-      if (state.enabled && state.referenceImage) {
-        const ref = state.referenceImage;
-        // Build an ImageData from the stored reference pixel data
-        let refImageData: ImageData;
-        if (ref.data instanceof Uint8ClampedArray) {
-          refImageData = new ImageData(new Uint8ClampedArray(ref.data), ref.width, ref.height);
-        } else {
-          // Convert Float32Array to Uint8ClampedArray for ImageData
-          const u8 = new Uint8ClampedArray(ref.width * ref.height * 4);
-          for (let i = 0; i < ref.data.length; i++) {
-            u8[i] = Math.round(Math.max(0, Math.min(1, ref.data[i]!)) * 255);
-          }
-          refImageData = new ImageData(u8, ref.width, ref.height);
-        }
-        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity);
-      } else {
-        viewer.setReferenceImage(null, 'off', 0);
-      }
-    }));
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 3: Display (Stack, PAR, Background Pattern, Spotlight) ---
-    viewContent.appendChild(this.stackControl.render());
-    viewContent.appendChild(this.parControl.render());
-    viewContent.appendChild(this.backgroundPatternControl.render());
-
-    // 360 spherical projection toggle
-    const updateSphericalUniforms = () => {
-      const w = viewer.getDisplayWidth() || 1920;
-      const h = viewer.getDisplayHeight() || 1080;
-      const uniforms = this.sphericalProjection.getProjectionUniforms(w, h);
-      viewer.setSphericalProjection({
-        enabled: uniforms.u_sphericalEnabled === 1,
-        fov: uniforms.u_fov,
-        aspect: uniforms.u_aspect,
-        yaw: uniforms.u_yaw,
-        pitch: uniforms.u_pitch,
-      });
-    };
-
-    // Wire spherical projection to ViewerInputHandler so mouse drag
-    // controls yaw/pitch and mouse wheel controls FOV in 360 mode.
-    viewer.setSphericalProjectionRef(this.sphericalProjection, updateSphericalUniforms);
-
-    const sphericalButton = ContextToolbar.createIconButton('aperture', () => {
-      if (this.sphericalProjection.enabled) {
-        this.sphericalProjection.disable();
-      } else {
-        this.sphericalProjection.enable();
-      }
-      updateSphericalUniforms();
-      setButtonActive(sphericalButton, this.sphericalProjection.enabled, 'icon');
-    }, { title: '360 View' });
-    sphericalButton.dataset.testid = 'spherical-projection-btn';
-    viewContent.appendChild(sphericalButton);
-
-    // Missing-frame mode dropdown (matches stereo dropdown pattern)
-    const missingFrameContainer = document.createElement('div');
-    missingFrameContainer.dataset.testid = 'missing-frame-mode-select';
-    missingFrameContainer.style.cssText = `
-      display: flex; align-items: center; position: relative;
-    `;
-
-    type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
-    const missingModes: Array<{ label: string; value: MissingFrameMode }> = [
-      { label: 'Off', value: 'off' },
-      { label: 'Frame', value: 'show-frame' },
-      { label: 'Hold', value: 'hold' },
-      { label: 'Black', value: 'black' },
-    ];
-    let currentMissingMode: MissingFrameMode = viewer.getMissingFrameMode() as MissingFrameMode;
-    let isMissingDropdownOpen = false;
-
-    const missingButton = document.createElement('button');
-    missingButton.type = 'button';
-    missingButton.title = 'Missing frame mode';
-    missingButton.setAttribute('aria-haspopup', 'true');
-    missingButton.setAttribute('aria-expanded', 'false');
-    missingButton.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 80px;
-      gap: 4px;
-      outline: none;
-    `;
-
-    const updateMissingLabel = () => {
-      const current = missingModes.find(m => m.value === currentMissingMode);
-      missingButton.innerHTML = `${getIconSvg('image', 'sm')}<span style="margin-left: 4px;">Missing: ${current?.label ?? 'Off'}</span><span style="margin-left: 4px; font-size: 8px;">&#9660;</span>`;
-    };
-    updateMissingLabel();
-
-    const missingDropdown = document.createElement('div');
-    missingDropdown.dataset.testid = 'missing-frame-mode-dropdown';
-    missingDropdown.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      padding: 4px;
-      z-index: 9999;
-      display: none;
-      flex-direction: column;
-      min-width: 140px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    `;
-
-    const updateMissingOptionStyles = () => {
-      missingDropdown.querySelectorAll<HTMLButtonElement>('button').forEach(opt => {
-        if (opt.dataset.value === currentMissingMode) {
-          opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
-          opt.style.color = 'var(--accent-primary)';
-        } else {
-          opt.style.background = 'transparent';
-          opt.style.color = 'var(--text-primary)';
-        }
-      });
-    };
-
-    const positionMissingDropdown = () => {
-      if (!isMissingDropdownOpen) return;
-      const rect = missingButton.getBoundingClientRect();
-      missingDropdown.style.top = `${rect.bottom + 4}px`;
-      missingDropdown.style.left = `${rect.left}px`;
-    };
-
-    const closeMissingDropdown = () => {
-      isMissingDropdownOpen = false;
-      missingDropdown.style.display = 'none';
-      missingButton.setAttribute('aria-expanded', 'false');
-      missingButton.style.background = 'transparent';
-      missingButton.style.borderColor = 'transparent';
-      missingButton.style.color = 'var(--text-muted)';
-      document.removeEventListener('click', handleMissingOutsideClick);
-      window.removeEventListener('scroll', positionMissingDropdown, true);
-      window.removeEventListener('resize', positionMissingDropdown);
-    };
-
-    const openMissingDropdown = () => {
-      if (!document.body.contains(missingDropdown)) {
-        document.body.appendChild(missingDropdown);
-      }
-      isMissingDropdownOpen = true;
-      positionMissingDropdown();
-      missingDropdown.style.display = 'flex';
-      missingButton.setAttribute('aria-expanded', 'true');
-      missingButton.style.background = 'var(--bg-hover)';
-      missingButton.style.borderColor = 'var(--border-primary)';
-      document.addEventListener('click', handleMissingOutsideClick);
-      window.addEventListener('scroll', positionMissingDropdown, true);
-      window.addEventListener('resize', positionMissingDropdown);
-    };
-
-    const handleMissingOutsideClick = (e: MouseEvent) => {
-      if (!missingButton.contains(e.target as Node) && !missingDropdown.contains(e.target as Node)) {
-        closeMissingDropdown();
-      }
-    };
-
-    for (const mode of missingModes) {
-      const opt = document.createElement('button');
-      opt.type = 'button';
-      opt.dataset.value = mode.value;
-      opt.textContent = mode.label;
-      opt.style.cssText = `
-        background: transparent;
-        border: none;
-        color: var(--text-primary);
-        padding: 6px 10px;
-        text-align: left;
-        cursor: pointer;
-        font-size: 12px;
-        border-radius: 3px;
-        transition: background 0.12s ease;
-      `;
-      if (mode.value === currentMissingMode) {
-        opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
-        opt.style.color = 'var(--accent-primary)';
-      }
-      opt.addEventListener('pointerenter', () => {
-        opt.style.background = 'var(--bg-hover)';
-      });
-      opt.addEventListener('pointerleave', () => {
-        if (mode.value !== currentMissingMode) {
-          opt.style.background = 'transparent';
-        }
-      });
-      opt.addEventListener('click', (e) => {
-        e.stopPropagation();
-        currentMissingMode = mode.value;
-        viewer.setMissingFrameMode(mode.value);
-        updateMissingLabel();
-        updateMissingOptionStyles();
-        closeMissingDropdown();
-      });
-      missingDropdown.appendChild(opt);
-    }
-
-    missingButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (isMissingDropdownOpen) closeMissingDropdown();
-      else openMissingDropdown();
+    const viewResult = buildViewTab({
+      registry: this,
+      viewer,
+      timelineEditorPanel: this.timelineEditorPanel,
+      addUnsubscriber,
     });
-    missingButton.addEventListener('pointerenter', () => {
-      if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
-        missingButton.style.background = 'var(--bg-hover)';
-        missingButton.style.borderColor = 'var(--border-primary)';
-        missingButton.style.color = 'var(--text-primary)';
-      }
-    });
-    missingButton.addEventListener('pointerleave', () => {
-      if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
-        missingButton.style.background = 'transparent';
-        missingButton.style.borderColor = 'transparent';
-        missingButton.style.color = 'var(--text-muted)';
-      }
-    });
-    applyA11yFocus(missingButton);
-
-    missingFrameContainer.appendChild(missingButton);
-    viewContent.appendChild(missingFrameContainer);
-
-    // Timeline editor toggle button
-    const timelineEditorButton = ContextToolbar.createIconButton('edit', () => {
-      this.timelineEditorPanel.toggle(timelineEditorButton);
-      setButtonActive(timelineEditorButton, this.timelineEditorPanel.isVisible(), 'icon');
-    }, { title: 'Toggle visual timeline editor' });
-    timelineEditorButton.dataset.testid = 'timeline-editor-toggle-button';
-    viewContent.appendChild(timelineEditorButton);
-
-    // Spotlight Tool toggle button
-    const spotlightButton = ContextToolbar.createIconButton('sun', () => {
-      viewer.getSpotlightOverlay().toggle();
-    }, { title: 'Spotlight (Shift+Q)' });
-    spotlightButton.dataset.testid = 'spotlight-toggle-btn';
-    viewContent.appendChild(spotlightButton);
-
-    // Update spotlight button state when visibility changes
-    this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
-      setButtonActive(spotlightButton, state.enabled, 'icon');
-    }));
-
-    // EXR Window Overlay toggle button
-    const exrWindowButton = ContextToolbar.createIconButton('grid', () => {
-      viewer.getEXRWindowOverlay().toggle();
-    }, { title: 'Toggle EXR window overlay' });
-    exrWindowButton.dataset.testid = 'exr-window-overlay-toggle-btn';
-    viewContent.appendChild(exrWindowButton);
-
-    this.registryUnsubscribers.push(viewer.getEXRWindowOverlay().on('stateChanged', (state) => {
-      setButtonActive(exrWindowButton, state.enabled, 'icon');
-    }));
-
-    contextToolbar.setTabContent('view', viewContent);
+    this.convergenceButton = viewResult.convergenceButton;
+    this.floatingWindowButton = viewResult.floatingWindowButton;
+    contextToolbar.setTabContent('view', viewResult.element);
 
     // Initially hide per-eye controls (shown when stereo mode is activated)
     this.updateStereoEyeControlsVisibility();
 
     // === QC TAB ===
-    // Quality Control: analysis/measurement tools
-    const qcContent = document.createElement('div');
-    qcContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
-
-    // --- GROUP 1: Monitoring (Scopes) ---
-    qcContent.appendChild(this.scopesControl.render());
-    qcContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 2: Analysis (SafeAreas, FalseColor, Luminance, Zebra, HSL) ---
-    qcContent.appendChild(this.safeAreasControl.render());
-    qcContent.appendChild(this.falseColorControl.render());
-    qcContent.appendChild(this.luminanceVisControl.render());
-    qcContent.appendChild(this.zebraControl.render());
-    qcContent.appendChild(this.hslQualifierControl.render());
-    qcContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 3: Tools (Pixel Probe) ---
-    const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
-      viewer.getPixelProbe().toggle();
-    }, { title: 'Pixel Probe (Shift+I)' });
-    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
-    qcContent.appendChild(pixelProbeButton);
-
-    // Update pixel probe button state
-    this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
-      setButtonActive(pixelProbeButton, state.enabled, 'icon');
-    }));
-
-    // Trigger re-render when false color state changes
-    this.registryUnsubscribers.push(viewer.getFalseColor().on('stateChanged', () => {
-      viewer.refresh();
-    }));
-
-    // Add luminance visualization badge to canvas overlay
-    const lumVisBadge = this.luminanceVisControl.createBadge();
-    viewer.getCanvasContainer().appendChild(lumVisBadge);
-
-    // Setup eyedropper for color picking from viewer
-    let pendingEyedropperHandler: ((e: MouseEvent) => void) | null = null;
-    this.hslQualifierControl.setEyedropperCallback((active) => {
-      const viewerContainer = viewer.getContainer();
-      // Remove any existing pending handler before adding a new one
-      if (pendingEyedropperHandler) {
-        viewerContainer.removeEventListener('click', pendingEyedropperHandler);
-        pendingEyedropperHandler = null;
-      }
-      if (active) {
-        // Set cursor to crosshair when eyedropper is active
-        viewerContainer.style.cursor = 'crosshair';
-        // Add click handler for color picking
-        const clickHandler = (e: MouseEvent) => {
-          pendingEyedropperHandler = null;
-          const rect = viewerContainer.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const y = e.clientY - rect.top;
-          const imageData = viewer.getImageData();
-          if (imageData) {
-            const canvas = viewerContainer.querySelector('canvas');
-            if (canvas) {
-              const scaleX = imageData.width / canvas.clientWidth;
-              const scaleY = imageData.height / canvas.clientHeight;
-              const pixelX = Math.floor(x * scaleX);
-              const pixelY = Math.floor(y * scaleY);
-              if (pixelX >= 0 && pixelX < imageData.width && pixelY >= 0 && pixelY < imageData.height) {
-                const idx = (pixelY * imageData.width + pixelX) * 4;
-                const r = imageData.data[idx]!;
-                const g = imageData.data[idx + 1]!;
-                const b = imageData.data[idx + 2]!;
-                viewer.getHSLQualifier().pickColor(r, g, b);
-              }
-            }
-          }
-          // Deactivate eyedropper after picking
-          this.hslQualifierControl.deactivateEyedropper();
-          viewerContainer.style.cursor = '';
-        };
-        pendingEyedropperHandler = clickHandler;
-        viewerContainer.addEventListener('click', clickHandler, { once: true });
-      } else {
-        viewerContainer.style.cursor = '';
-      }
-    });
-
-    // Sync scope visibility with ScopesControl
-    this.registryUnsubscribers.push(this.histogram.on('visibilityChanged', (visible) => {
-      this.scopesControl.setScopeVisible('histogram', visible);
-    }));
-    this.registryUnsubscribers.push(this.waveform.on('visibilityChanged', (visible) => {
-      this.scopesControl.setScopeVisible('waveform', visible);
-    }));
-    this.registryUnsubscribers.push(this.vectorscope.on('visibilityChanged', (visible) => {
-      this.scopesControl.setScopeVisible('vectorscope', visible);
-    }));
-    this.registryUnsubscribers.push(this.gamutDiagram.on('visibilityChanged', (visible) => {
-      this.scopesControl.setScopeVisible('gamutDiagram', visible);
-    }));
-
-    // Sync histogram clipping overlay toggle with Viewer
-    this.registryUnsubscribers.push(this.histogram.on('clippingOverlayToggled', (enabled) => {
-      if (enabled) {
-        viewer.getClippingOverlay().enable();
-      } else {
-        viewer.getClippingOverlay().disable();
-      }
-    }));
-
-    contextToolbar.setTabContent('qc', qcContent);
+    contextToolbar.setTabContent('qc', buildQCTab({ registry: this, viewer, addUnsubscriber }));
 
     // === COLOR TAB ===
-    const colorContent = document.createElement('div');
-    colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
-    colorContent.appendChild(this.ocioControl.render());
-    colorContent.appendChild(ContextToolbar.createDivider());
-    // Display Pipeline: Display Profile, Gamut Mapping, Tone Mapping
-    colorContent.appendChild(this.displayProfileControl.render());
-    colorContent.appendChild(this.gamutMappingControl.render());
-    colorContent.appendChild(this.toneMappingControl.render());
-    colorContent.appendChild(ContextToolbar.createDivider());
-    colorContent.appendChild(this.colorControls.render());
-    colorContent.appendChild(ContextToolbar.createDivider());
-    colorContent.appendChild(this.cdlControl.render());
-    colorContent.appendChild(ContextToolbar.createDivider());
-    colorContent.appendChild(this.colorInversionToggle.render());
-    colorContent.appendChild(ContextToolbar.createDivider());
-    colorContent.appendChild(this.premultControl.render());
-    colorContent.appendChild(ContextToolbar.createDivider());
+    contextToolbar.setTabContent('color', buildColorTab({ registry: this, viewer, addUnsubscriber }));
 
-    // Curves toggle button
-    const curvesButton = ContextToolbar.createButton('Curves', () => {
-      this.curvesControl.toggle();
-    }, { title: 'Toggle color curves panel (U)', icon: 'curves' });
-    curvesButton.dataset.testid = 'curves-toggle-button';
-    colorContent.appendChild(curvesButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(this.curvesControl.on('visibilityChanged', (visible) => {
-      setButtonActive(curvesButton, visible, 'ghost');
+    // === PANEL TOGGLES -> HeaderBar utility area ===
+    headerBar.setPanelToggles(buildPanelToggles({
+      registry: this,
+      sessionBridge,
+      conformPanelElement: this.panel.conformPanelElement,
+      addUnsubscriber,
     }));
-
-    // Color Wheels toggle button
-    const colorWheels = viewer.getColorWheels();
-    const colorWheelsButton = ContextToolbar.createButton('Wheels', () => {
-      colorWheels.toggle();
-    }, { title: 'Toggle Lift/Gamma/Gain color wheels (Shift+Alt+W)', icon: 'palette' });
-    colorWheelsButton.dataset.testid = 'color-wheels-toggle-button';
-    colorContent.appendChild(colorWheelsButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(colorWheels.on('visibilityChanged', (visible) => {
-      setButtonActive(colorWheelsButton, visible, 'ghost');
-    }));
-
-    // LUT Pipeline toggle button
-    const lutPipelineButton = ContextToolbar.createButton('LUT Graph', () => {
-      this.lutPipelinePanel.toggle();
-    }, { title: 'Toggle LUT pipeline panel (Shift+L on Color tab)', icon: 'monitor' });
-    lutPipelineButton.dataset.testid = 'lut-pipeline-toggle-button';
-    colorContent.appendChild(lutPipelineButton);
-    this.registryUnsubscribers.push(this.lutPipelinePanel.on('visibilityChanged', (visible) => {
-      setButtonActive(lutPipelineButton, visible, 'ghost');
-    }));
-
-    contextToolbar.setTabContent('color', colorContent);
-
-    // === PANEL TOGGLES → HeaderBar utility area ===
-    // Info Panel, Snapshots, Playlist — accessible from any tab
-    const panelToggles = document.createElement('div');
-    panelToggles.style.cssText = 'display: flex; align-items: center; gap: 2px;';
-
-    // Info Panel toggle button
-    const infoPanelButton = ContextToolbar.createIconButton('info', () => {
-      this.infoPanel.toggle();
-      if (this.infoPanel.isEnabled()) {
-        sessionBridge.updateInfoPanel();
-      }
-    }, { title: 'Info Panel (Shift+Alt+I)' });
-    infoPanelButton.dataset.testid = 'info-panel-toggle';
-    panelToggles.appendChild(infoPanelButton);
-
-    this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
-      setButtonActive(infoPanelButton, visible, 'icon');
-    }));
-
-    // Snapshot Panel toggle button
-    const snapshotButton = ContextToolbar.createIconButton('camera', () => {
-      this.snapshotPanel.toggle();
-      updateSnapshotButtonStyle();
-    }, { title: 'Snapshots (Ctrl+Shift+Alt+S)' });
-    snapshotButton.dataset.testid = 'snapshot-panel-toggle';
-    panelToggles.appendChild(snapshotButton);
-
-    const updateSnapshotButtonStyle = () => {
-      setButtonActive(snapshotButton, this.snapshotPanel.isOpen(), 'icon');
-    };
-    this.registryUnsubscribers.push(this.snapshotPanel.on('visibilityChanged', () => {
-      updateSnapshotButtonStyle();
-    }));
-
-    // Playlist Panel toggle button
-    const playlistButton = ContextToolbar.createIconButton('film', () => {
-      this.playlistPanel.toggle();
-      updatePlaylistButtonStyle();
-    }, { title: 'Playlist (Shift+Alt+P)' });
-    playlistButton.dataset.testid = 'playlist-panel-toggle';
-    panelToggles.appendChild(playlistButton);
-
-    const updatePlaylistButtonStyle = () => {
-      setButtonActive(playlistButton, this.playlistPanel.isOpen(), 'icon');
-    };
-    this.registryUnsubscribers.push(this.playlistPanel.on('visibilityChanged', () => {
-      updatePlaylistButtonStyle();
-    }));
-
-    // Conform / Re-link panel toggle button
-    const conformButton = ContextToolbar.createIconButton('link', () => {
-      this.conformPanelElement.toggle(conformButton);
-      setButtonActive(conformButton, this.conformPanelElement.isVisible(), 'icon');
-      // Re-render panel when opened to reflect latest unresolved clips
-      if (this.conformPanelElement.isVisible()) {
-        this.conformPanel.render();
-      }
-    }, { title: 'Conform / Re-link' });
-    conformButton.dataset.testid = 'conform-panel-toggle';
-    panelToggles.appendChild(conformButton);
-
-    // ShotGrid Panel toggle button
-    const shotGridButton = ContextToolbar.createIconButton('cloud', () => {
-      this.shotGridPanel.toggle();
-      updateShotGridButtonStyle();
-    }, { title: 'ShotGrid' });
-    shotGridButton.dataset.testid = 'shotgrid-panel-toggle';
-    panelToggles.appendChild(shotGridButton);
-
-    const updateShotGridButtonStyle = () => {
-      setButtonActive(shotGridButton, this.shotGridPanel.isOpen(), 'icon');
-    };
-    this.registryUnsubscribers.push(this.shotGridPanel.on('visibilityChanged', () => {
-      updateShotGridButtonStyle();
-    }));
-
-    headerBar.setPanelToggles(panelToggles);
 
     // === EFFECTS TAB ===
-    const effectsContent = document.createElement('div');
-    effectsContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
-    effectsContent.appendChild(this.filterControl.render());
-    effectsContent.appendChild(ContextToolbar.createDivider());
-    effectsContent.appendChild(this.lensControl.render());
-    effectsContent.appendChild(ContextToolbar.createDivider());
-    effectsContent.appendChild(this.deinterlaceControl.render());
-    effectsContent.appendChild(ContextToolbar.createDivider());
-    effectsContent.appendChild(this.filmEmulationControl.render());
-    effectsContent.appendChild(ContextToolbar.createDivider());
-    effectsContent.appendChild(this.perspectiveCorrectionControl.render());
-    effectsContent.appendChild(ContextToolbar.createDivider());
-    effectsContent.appendChild(this.stabilizationControl.render());
-    effectsContent.appendChild(ContextToolbar.createDivider());
-
-    const noiseReductionButton = ContextToolbar.createButton('Denoise', () => {
-      this.noiseReductionPanel.toggle(noiseReductionButton);
-      setButtonActive(noiseReductionButton, this.noiseReductionPanel.isVisible(), 'ghost');
-    }, { title: 'Toggle noise reduction panel', icon: 'filter' });
-    noiseReductionButton.dataset.testid = 'noise-reduction-toggle-button';
-    effectsContent.appendChild(noiseReductionButton);
-
-    const watermarkButton = ContextToolbar.createButton('Watermark', () => {
-      this.watermarkPanel.toggle(watermarkButton);
-      setButtonActive(watermarkButton, this.watermarkPanel.isVisible(), 'ghost');
-    }, { title: 'Toggle watermark panel', icon: 'image' });
-    watermarkButton.dataset.testid = 'watermark-toggle-button';
-    effectsContent.appendChild(watermarkButton);
-
-    const slateButton = ContextToolbar.createButton('Slate', () => {
-      this.slateEditorPanel.toggle(slateButton);
-      setButtonActive(slateButton, this.slateEditorPanel.isVisible(), 'ghost');
-    }, { title: 'Toggle slate/leader editor', icon: 'film' });
-    slateButton.dataset.testid = 'slate-editor-toggle-button';
-    effectsContent.appendChild(slateButton);
-
-    contextToolbar.setTabContent('effects', effectsContent);
+    contextToolbar.setTabContent('effects', buildEffectsTab({
+      registry: this,
+      noiseReductionPanel: this.noiseReductionPanel,
+      watermarkPanel: this.watermarkPanel,
+      slateEditorPanel: this.slateEditorPanel,
+    }));
 
     // === TRANSFORM TAB ===
-    const transformContent = document.createElement('div');
-    transformContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
-    transformContent.appendChild(this.transformControl.render());
-    transformContent.appendChild(ContextToolbar.createDivider());
-    transformContent.appendChild(this.cropControl.render());
-    contextToolbar.setTabContent('transform', transformContent);
+    contextToolbar.setTabContent('transform', buildTransformTab(this));
 
     // === ANNOTATE TAB ===
-    const annotateContent = document.createElement('div');
-    annotateContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
-    annotateContent.appendChild(this.paintToolbar.render());
-
-    annotateContent.appendChild(ContextToolbar.createDivider());
-
-    // Text formatting toolbar (B/I/U buttons) - visible when text tool is selected
-    annotateContent.appendChild(this.textFormattingToolbar.render());
-
-    annotateContent.appendChild(ContextToolbar.createDivider());
-
-    // History panel toggle button
-    const historyButton = ContextToolbar.createButton('History', () => {
-      this.historyPanel.toggle();
-    }, { title: 'Toggle history panel (Shift+Alt+H)', icon: 'undo' });
-    historyButton.dataset.testid = 'history-toggle-button';
-    annotateContent.appendChild(historyButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(this.historyPanel.on('visibilityChanged', (visible) => {
-      setButtonActive(historyButton, visible, 'ghost');
-    }));
-
-    // Markers panel toggle button
-    const markersButton = ContextToolbar.createButton('Markers', () => {
-      this.markerListPanel.toggle();
-    }, { title: 'Toggle markers list panel (Shift+Alt+M)', icon: 'marker' });
-    markersButton.dataset.testid = 'markers-toggle-button';
-    annotateContent.appendChild(markersButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(this.markerListPanel.on('visibilityChanged', (visible) => {
-      setButtonActive(markersButton, visible, 'ghost');
-    }));
-
-    // Notes panel toggle button
-    const notesButton = ContextToolbar.createButton('Notes', () => {
-      this.notePanel.toggle();
-    }, { title: 'Toggle notes panel (Shift+Alt+N)', icon: 'note' });
-    notesButton.dataset.testid = 'notes-toggle-button';
-    annotateContent.appendChild(notesButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(this.notePanel.on('visibilityChanged', (visible) => {
-      setButtonActive(notesButton, visible, 'ghost');
-    }));
-
-    contextToolbar.setTabContent('annotate', annotateContent);
+    contextToolbar.setTabContent('annotate', buildAnnotateTab({ registry: this, addUnsubscriber }));
   }
 
   /**
@@ -1494,9 +712,7 @@ export class AppControlRegistry {
     this.stereoControl.dispose();
     this.stereoEyeTransformControl.dispose();
     this.stereoAlignControl.dispose();
-    this._histogram?.dispose();
-    this._waveform?.dispose();
-    this._vectorscope?.dispose();
+    this.analysis.disposeLazyScopes();
     this.gamutDiagram.dispose();
     this.textFormattingToolbar.dispose();
     this.autoSaveIndicator.dispose();
@@ -1511,7 +727,7 @@ export class AppControlRegistry {
     this.shotGridConfig.dispose();
     this.shotGridPanel.dispose();
     this.conformPanel.dispose();
-    this.conformPanelElement.dispose();
+    this.panel.conformPanelElement.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

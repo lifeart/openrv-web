@@ -58,6 +58,8 @@ export class ComputedSignal<T> {
   private cachedValue: T;
   private dirty = true;
   readonly changed = new Signal<T>();
+  private depUnsubscribers: (() => void)[] = [];
+  private _disposed = false;
 
   constructor(
     private compute: () => T,
@@ -67,12 +69,13 @@ export class ComputedSignal<T> {
 
     // Subscribe to dependencies
     for (const dep of dependencies) {
-      dep.connect(() => {
+      const unsub = dep.connect(() => {
         this.dirty = true;
         const oldValue = this.cachedValue;
         this.cachedValue = this.compute();
         this.changed.emit(this.cachedValue, oldValue);
       });
+      this.depUnsubscribers.push(unsub);
     }
   }
 
@@ -82,5 +85,22 @@ export class ComputedSignal<T> {
       this.dirty = false;
     }
     return this.cachedValue;
+  }
+
+  /**
+   * Disconnect all dependency subscriptions and clear downstream listeners.
+   * After disposal, `.value` returns the last cached value without recomputing.
+   * Idempotent: calling dispose() multiple times is safe.
+   */
+  dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+    this.dirty = false; // Freeze cached value — prevent recomputation on stale deps
+    for (const unsub of this.depUnsubscribers) {
+      unsub();
+    }
+    this.depUnsubscribers = [];
+    this.changed.disconnectAll();
+    this.compute = () => this.cachedValue; // Release original closure for GC
   }
 }

@@ -4,6 +4,7 @@ import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import type { NoteOverlay } from './NoteOverlay';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
@@ -34,7 +35,7 @@ export class Timeline {
 
   // Bound event handlers for proper cleanup
   private boundHandleResize: () => void;
-  private boundOnThemeChange: () => void;
+  private subs = new DisposableSubscriptionManager();
   private paintEngineSubscribed = false;
   private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private initialRenderFrameId: number | null = null;
@@ -104,10 +105,7 @@ export class Timeline {
       }, 150);
     };
 
-    this.boundOnThemeChange = () => {
-      this.cachedColors = null;
-      this.scheduleDraw();
-    };
+    // (theme change is handled via subs in bindEvents)
 
     // Restore persisted timecode display mode from localStorage
     try {
@@ -156,30 +154,33 @@ export class Timeline {
     this.canvas.addEventListener('pointerup', this.onPointerUp);
 
     // Listen to session changes
-    this.session.on('frameChanged', () => this.scheduleDraw());
-    this.session.on('playbackChanged', (isPlaying) => {
+    this.subs.add(this.session.on('frameChanged', () => this.scheduleDraw()));
+    this.subs.add(this.session.on('playbackChanged', (isPlaying) => {
       if (isPlaying) {
         this.thumbnailManager.pauseLoading();
       } else {
         this.thumbnailManager.resumeLoading();
       }
       this.scheduleDraw();
-    });
-    this.session.on('durationChanged', () => {
+    }));
+    this.subs.add(this.session.on('durationChanged', () => {
       this.recalculateThumbnails();
       this.scheduleDraw();
-    });
-    this.session.on('sourceLoaded', () => {
+    }));
+    this.subs.add(this.session.on('sourceLoaded', () => {
       this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
       this.loadThumbnails();
       this.scheduleDraw();
-    });
-    this.session.on('inOutChanged', () => this.scheduleDraw());
-    this.session.on('loopModeChanged', () => this.scheduleDraw());
-    this.session.on('marksChanged', () => this.scheduleDraw());
+    }));
+    this.subs.add(this.session.on('inOutChanged', () => this.scheduleDraw()));
+    this.subs.add(this.session.on('loopModeChanged', () => this.scheduleDraw()));
+    this.subs.add(this.session.on('marksChanged', () => this.scheduleDraw()));
 
     // Listen to theme changes so canvas redraws with new colors
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => {
+      this.cachedColors = null;
+      this.scheduleDraw();
+    }));
 
     // Listen to paint engine changes (only once)
     this.subscribeToPaintEngine();
@@ -187,9 +188,9 @@ export class Timeline {
 
   private subscribeToPaintEngine(): void {
     if (this.paintEngineSubscribed || !this.paintEngine) return;
-    this.paintEngine.on('annotationsChanged', () => this.scheduleDraw());
-    this.paintEngine.on('strokeAdded', () => this.scheduleDraw());
-    this.paintEngine.on('strokeRemoved', () => this.scheduleDraw());
+    this.subs.add(this.paintEngine.on('annotationsChanged', () => this.scheduleDraw()));
+    this.subs.add(this.paintEngine.on('strokeAdded', () => this.scheduleDraw()));
+    this.subs.add(this.paintEngine.on('strokeRemoved', () => this.scheduleDraw()));
     this.paintEngineSubscribed = true;
   }
 
@@ -216,10 +217,10 @@ export class Timeline {
   setPlaylistManagers(playlistManager: PlaylistManager, transitionManager: TransitionManager): void {
     this.playlistManager = playlistManager;
     this.transitionManager = transitionManager;
-    transitionManager.on('transitionChanged', () => this.scheduleDraw());
-    transitionManager.on('transitionsReset', () => this.scheduleDraw());
-    playlistManager.on('clipsChanged', () => this.scheduleDraw());
-    playlistManager.on('enabledChanged', () => this.scheduleDraw());
+    this.subs.add(transitionManager.on('transitionChanged', () => this.scheduleDraw()));
+    this.subs.add(transitionManager.on('transitionsReset', () => this.scheduleDraw()));
+    this.subs.add(playlistManager.on('clipsChanged', () => this.scheduleDraw()));
+    this.subs.add(playlistManager.on('enabledChanged', () => this.scheduleDraw()));
   }
 
   /**
@@ -800,7 +801,7 @@ export class Timeline {
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
     this.thumbnailManager.dispose();
-    getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    this.subs.dispose();
     if (this.resizeDebounceTimer) {
       clearTimeout(this.resizeDebounceTimer);
     }

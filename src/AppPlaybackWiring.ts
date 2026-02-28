@@ -32,6 +32,7 @@ import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
 import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
+import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -46,15 +47,16 @@ export interface PlaybackWiringDeps {
 /**
  * Wire all playback-related controls (headerbar, volume, export, snapshots, playlists).
  */
-export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiringDeps): void {
+export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiringDeps): DisposableSubscriptionManager {
   const { session, viewer, headerBar, controls, persistenceManager } = ctx;
+  const subs = new DisposableSubscriptionManager();
   let videoExportInProgress = false;
 
   // HeaderBar events
-  headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog());
-  headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog());
-  headerBar.on('saveProject', () => persistenceManager.saveProject());
-  headerBar.on('openProject', (file) => persistenceManager.openProject(file));
+  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
+  subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
+  subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
+  subs.add(headerBar.on('openProject', (file) => persistenceManager.openProject(file)));
 
   // AutoSave Indicator
   controls.autoSaveIndicator.connect(controls.autoSaveManager);
@@ -62,48 +64,48 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   headerBar.setAutoSaveIndicator(controls.autoSaveIndicator.render());
 
   // Wire up fullscreen and presentation toggle from HeaderBar
-  headerBar.on('fullscreenToggle', () => {
+  subs.add(headerBar.on('fullscreenToggle', () => {
     deps.getFullscreenManager()?.toggle();
-  });
-  headerBar.on('presentationToggle', () => {
+  }));
+  subs.add(headerBar.on('presentationToggle', () => {
     controls.presentationMode.toggle();
-  });
+  }));
 
   // Volume control (from HeaderBar) <-> session (bidirectional)
   const volumeControl = headerBar.getVolumeControl();
-  volumeControl.on('volumeChanged', (volume) => {
+  subs.add(volumeControl.on('volumeChanged', (volume) => {
     session.volume = volume;
     deps.getAudioMixer?.()?.setMasterVolume(volume);
-  });
-  volumeControl.on('mutedChanged', (muted) => {
+  }));
+  subs.add(volumeControl.on('mutedChanged', (muted) => {
     session.muted = muted;
     deps.getAudioMixer?.()?.setMasterMuted(muted);
-  });
+  }));
   // Sync back from Session to VolumeControl (for external changes)
-  session.on('volumeChanged', (volume) => {
+  subs.add(session.on('volumeChanged', (volume) => {
     volumeControl.syncVolume(volume);
     deps.getAudioMixer?.()?.setMasterVolume(volume);
-  });
-  session.on('mutedChanged', (muted) => {
+  }));
+  subs.add(session.on('mutedChanged', (muted) => {
     volumeControl.syncMuted(muted);
     deps.getAudioMixer?.()?.setMasterMuted(muted);
-  });
+  }));
 
   // Export control (from HeaderBar) -> viewer
   const exportControl = headerBar.getExportControl();
-  exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
+  subs.add(exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
     viewer.exportFrame(format, includeAnnotations, quality);
-  });
-  exportControl.on('sourceExportRequested', ({ format, quality }) => {
+  }));
+  subs.add(exportControl.on('sourceExportRequested', ({ format, quality }) => {
     viewer.exportSourceFrame(format, quality);
-  });
-  exportControl.on('copyRequested', () => {
+  }));
+  subs.add(exportControl.on('copyRequested', () => {
     viewer.copyFrameToClipboard(true);
-  });
-  exportControl.on('sequenceExportRequested', (request) => {
+  }));
+  subs.add(exportControl.on('sequenceExportRequested', (request) => {
     handleSequenceExport(session, viewer, request);
-  });
-  exportControl.on('videoExportRequested', (request) => {
+  }));
+  subs.add(exportControl.on('videoExportRequested', (request) => {
     if (videoExportInProgress) {
       showAlert('A video export is already in progress', { type: 'warning', title: 'Export Busy' });
       return;
@@ -112,15 +114,15 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     void handleVideoExport(session, viewer, request, controls).finally(() => {
       videoExportInProgress = false;
     });
-  });
-  exportControl.on('rvSessionExportRequested', ({ format }) => {
+  }));
+  subs.add(exportControl.on('rvSessionExportRequested', ({ format }) => {
     persistenceManager.saveRvSession(format);
-  });
-  exportControl.on('annotationsJSONExportRequested', () => {
+  }));
+  subs.add(exportControl.on('annotationsJSONExportRequested', () => {
     const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'annotations';
     downloadAnnotationsJSON(ctx.paintEngine, sourceName);
-  });
-  exportControl.on('annotationsPDFExportRequested', () => {
+  }));
+  subs.add(exportControl.on('annotationsPDFExportRequested', () => {
     void exportAnnotationsPDF(
       ctx.paintEngine,
       session,
@@ -133,8 +135,8 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
       },
       { title: session.metadata?.displayName || 'Annotation Report' },
     );
-  });
-  exportControl.on('reportExportRequested', ({ format }) => {
+  }));
+  subs.add(exportControl.on('reportExportRequested', ({ format }) => {
     generateReport(
       session,
       session.noteManager,
@@ -148,28 +150,30 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
         title: session.metadata.displayName || 'Dailies Report',
       }
     );
-  });
+  }));
 
   // Snapshot panel restore
-  controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id));
+  subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
 
   // Note panel events
-  controls.notePanel.on('noteSelected', ({ frame }) => {
+  subs.add(controls.notePanel.on('noteSelected', ({ frame }) => {
     session.goToFrame(frame);
-  });
+  }));
 
   // Playlist panel events
-  controls.playlistPanel.on('addCurrentSource', () => addCurrentSourceToPlaylist(session, controls));
-  controls.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {
+  subs.add(controls.playlistPanel.on('addCurrentSource', () => addCurrentSourceToPlaylist(session, controls)));
+  subs.add(controls.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {
     jumpToPlaylistClip(session, controls, sourceIndex, frame);
-  });
+  }));
 
   // Set initial fps and keep playlist panel in sync with session fps
   controls.playlistPanel.setFps(session.fps || 24);
-  session.on('fpsChanged', (fps) => controls.playlistPanel.setFps(fps));
+  subs.add(session.on('fpsChanged', (fps) => controls.playlistPanel.setFps(fps)));
 
   // Playlist runtime integration (playback/loop/source switching while enabled)
-  wirePlaylistRuntime(session, controls);
+  wirePlaylistRuntime(session, controls, subs);
+
+  return subs;
 }
 
 /**
@@ -633,6 +637,7 @@ interface PlaylistRuntimeState {
 function wirePlaylistRuntime(
   session: Session,
   controls: import('./AppControlRegistry').AppControlRegistry,
+  subs: DisposableSubscriptionManager,
 ): void {
   const runtime: PlaylistRuntimeState = {
     syncing: false,
@@ -642,7 +647,7 @@ function wirePlaylistRuntime(
     previousLoopMode: null,
   };
 
-  controls.playlistManager.on('enabledChanged', ({ enabled }) => {
+  subs.add(controls.playlistManager.on('enabledChanged', ({ enabled }) => {
     if (enabled) {
       if (controls.playlistManager.getClipCount() === 0) {
         controls.playlistManager.setEnabled(false);
@@ -686,9 +691,9 @@ function wirePlaylistRuntime(
 
     runtime.lastFrame = session.currentFrame;
     runtime.lastSourceIndex = session.currentSourceIndex;
-  });
+  }));
 
-  controls.playlistManager.on('clipsChanged', () => {
+  subs.add(controls.playlistManager.on('clipsChanged', () => {
     if (!controls.playlistManager.isEnabled()) return;
 
     if (controls.playlistManager.getClipCount() === 0) {
@@ -708,9 +713,9 @@ function wirePlaylistRuntime(
     runtime.syncing = false;
     runtime.lastFrame = session.currentFrame;
     runtime.lastSourceIndex = session.currentSourceIndex;
-  });
+  }));
 
-  session.on('frameChanged', (frame) => {
+  subs.add(session.on('frameChanged', (frame) => {
     if (!controls.playlistManager.isEnabled() || runtime.syncing) {
       runtime.lastFrame = frame;
       runtime.lastSourceIndex = session.currentSourceIndex;
@@ -747,7 +752,7 @@ function wirePlaylistRuntime(
 
     runtime.lastFrame = frame;
     runtime.lastSourceIndex = session.currentSourceIndex;
-  });
+  }));
 }
 
 function handlePlaylistBoundaryWrap(

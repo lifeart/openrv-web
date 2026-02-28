@@ -77,8 +77,16 @@ export class ExportProgressDialog extends EventEmitter<ExportProgressEvents> {
     this.container.appendChild(title);
 
     this.statusLabel = document.createElement('div');
+    this.statusLabel.dataset.testid = 'export-progress-status';
     this.statusLabel.setAttribute('aria-live', 'polite');
-    this.statusLabel.style.cssText = 'font-size: 12px; color: var(--text-secondary, #aaa); margin-bottom: 8px;';
+    this.statusLabel.style.cssText = `
+      font-size: 12px;
+      color: var(--text-secondary, #aaa);
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
     this.statusLabel.textContent = 'Encoding...';
     this.container.appendChild(this.statusLabel);
 
@@ -106,15 +114,44 @@ export class ExportProgressDialog extends EventEmitter<ExportProgressEvents> {
     this.container.appendChild(this.progressBar);
 
     const infoRow = document.createElement('div');
-    infoRow.style.cssText = 'display: flex; justify-content: space-between; margin-bottom: 16px;';
+    infoRow.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      min-width: 0;
+    `;
 
     this.frameLabel = document.createElement('div');
-    this.frameLabel.style.cssText = 'font-size: 12px; color: var(--text-secondary, #aaa);';
+    this.frameLabel.dataset.testid = 'export-progress-frames';
+    this.frameLabel.style.cssText = `
+      font-size: 12px;
+      color: var(--text-secondary, #aaa);
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `;
     this.frameLabel.textContent = '0 / 0 frames';
     infoRow.appendChild(this.frameLabel);
 
     this.timeLabel = document.createElement('div');
-    this.timeLabel.style.cssText = 'font-size: 12px; color: var(--text-secondary, #aaa);';
+    this.timeLabel.dataset.testid = 'export-progress-time';
+    this.timeLabel.style.cssText = `
+      font-size: 12px;
+      color: var(--text-secondary, #aaa);
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 55%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+    `;
     this.timeLabel.textContent = '';
     infoRow.appendChild(this.timeLabel);
 

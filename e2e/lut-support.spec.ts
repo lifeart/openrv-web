@@ -92,17 +92,11 @@ test.describe('3D LUT Support', () => {
 
       // Find the LUT load button
       const lutLoadButton = page.locator('[data-testid="lut-load-button"]');
-      if (!(await lutLoadButton.isVisible())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      await expect(lutLoadButton).toBeVisible({ timeout: 5000 });
 
       // Set up file input
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -119,11 +113,8 @@ test.describe('3D LUT Support', () => {
 
     test('LUT-E002: LUT name displayed in UI after loading', async ({ page }) => {
       // Find and use file input
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -137,11 +128,8 @@ test.describe('3D LUT Support', () => {
 
     test('LUT-E003: LUT intensity slider affects output (0-100%)', async ({ page }) => {
       // Load LUT first
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -189,11 +177,8 @@ test.describe('3D LUT Support', () => {
 
     test('LUT-E004: invalid LUT file shows error', async ({ page }) => {
       // Find file input
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const invalidLutPath = path.resolve(process.cwd(), INVALID_LUT);
       await fileInput.setInputFiles(invalidLutPath);
@@ -226,11 +211,8 @@ test.describe('3D LUT Support', () => {
       const screenshotOriginal = await captureViewerScreenshot(page);
 
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -270,11 +252,8 @@ test.describe('3D LUT Support', () => {
       const screenshotNoLUT = await captureViewerScreenshot(page);
 
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -289,11 +268,8 @@ test.describe('3D LUT Support', () => {
 
     test('LUT-E007: LUT intensity at 0% updates state correctly', async ({ page }) => {
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -329,11 +305,8 @@ test.describe('3D LUT Support', () => {
   test.describe('LUT with Color Adjustments', () => {
     test('LUT-E008: LUT works combined with exposure adjustment', async ({ page }) => {
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -360,11 +333,8 @@ test.describe('3D LUT Support', () => {
 
     test('LUT-E009: LUT works combined with saturation adjustment', async ({ page }) => {
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -393,11 +363,8 @@ test.describe('3D LUT Support', () => {
   test.describe('LUT State Management', () => {
     test('LUT-E010: LUT state persists when navigating frames', async ({ page }) => {
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -430,11 +397,8 @@ test.describe('3D LUT Support', () => {
 
     test('LUT-E011: LUT intensity state persists when closing/reopening panel', async ({ page }) => {
       // Load LUT
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: implement when feature is complete
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);

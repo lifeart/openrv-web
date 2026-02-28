@@ -11,6 +11,10 @@
 
 import type { DCCBridge, SyncColorMessage } from './integrations/DCCBridge';
 import type { ColorAdjustments } from './core/types/color';
+import { Logger } from './utils/Logger';
+import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+
+const log = new Logger('AppDCCWiring');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,6 +56,7 @@ export interface DCCWiringDeps {
 /** Mutable state owned by the DCC wiring (exposed for loop-protection tests). */
 export interface DCCWiringState {
   suppressFrameSync: boolean;
+  subscriptions: DisposableSubscriptionManager;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,20 +76,22 @@ export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
 export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   const { dccBridge, session, viewer, colorControls } = deps;
 
-  const state: DCCWiringState = { suppressFrameSync: false };
+  const subs = new DisposableSubscriptionManager();
+
+  const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs };
 
   // Inbound: syncFrame with loop protection
-  dccBridge.on('syncFrame', (msg) => {
+  subs.add(dccBridge.on('syncFrame', (msg) => {
     state.suppressFrameSync = true;
     try {
       session.goToFrame(msg.frame);
     } finally {
       state.suppressFrameSync = false;
     }
-  });
+  }));
 
   // Inbound: loadMedia - dispatch to image or video loader
-  dccBridge.on('loadMedia', (msg) => {
+  subs.add(dccBridge.on('loadMedia', (msg) => {
     const path = msg.path;
     const ext = path.split('.').pop()?.toLowerCase() ?? '';
     const name = path.split('/').pop() ?? path;
@@ -93,18 +100,18 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
         if (typeof msg.frame === 'number') {
           session.goToFrame(msg.frame);
         }
-      }).catch(() => { /* load error */ });
+      }).catch((err) => { log.error('Failed to load video from DCC:', err); });
     } else {
       session.loadImage(name, path).then(() => {
         if (typeof msg.frame === 'number') {
           session.goToFrame(msg.frame);
         }
-      }).catch(() => { /* load error */ });
+      }).catch((err) => { log.error('Failed to load image from DCC:', err); });
     }
-  });
+  }));
 
   // Inbound: syncColor - apply color settings to viewer via controls
-  dccBridge.on('syncColor', (msg: SyncColorMessage) => {
+  subs.add(dccBridge.on('syncColor', (msg: SyncColorMessage) => {
     const adjustments: Partial<ColorAdjustments> = {};
     if (typeof msg.exposure === 'number') adjustments.exposure = msg.exposure;
     if (typeof msg.gamma === 'number') adjustments.gamma = msg.gamma;
@@ -114,24 +121,24 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
       colorControls.setAdjustments(adjustments);
       viewer.setColorAdjustments(colorControls.getAdjustments());
     }
-  });
+  }));
 
   // Outbound: frameChanged (with loop protection)
-  session.on('frameChanged', () => {
+  subs.add(session.on('frameChanged', () => {
     if (!state.suppressFrameSync) {
       dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
     }
-  });
+  }));
 
   // Outbound: adjustmentsChanged -> send color to DCC bridge
-  colorControls.on('adjustmentsChanged', (adjustments: ColorAdjustments) => {
+  subs.add(colorControls.on('adjustmentsChanged', (adjustments: ColorAdjustments) => {
     dccBridge.sendColorChanged({
       exposure: adjustments.exposure,
       gamma: adjustments.gamma,
       temperature: adjustments.temperature,
       tint: adjustments.tint,
     });
-  });
+  }));
 
   return state;
 }

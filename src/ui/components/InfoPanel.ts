@@ -11,6 +11,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -65,7 +66,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   private position: InfoPanelPosition = 'top-left';
   private fields: InfoPanelFields = { ...DEFAULT_FIELDS };
   private currentData: InfoPanelData = {};
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   constructor() {
     super();
@@ -96,8 +97,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
 
     this.updatePosition();
 
-    this.boundOnThemeChange = () => this.render();
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.render()));
   }
 
   /**
@@ -379,10 +379,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
    * Clean up
    */
   dispose(): void {
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
     this.container.remove();
     this.removeAllListeners();
   }

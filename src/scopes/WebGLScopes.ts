@@ -297,6 +297,11 @@ export class WebGLScopesProcessor {
   // HDR mode state
   private hdrActive = false;
   private hdrHeadroom: number | null = null;
+  private hdrAutoFit = false;
+  private hdrSignalPeak = 1.0;
+  private hasFloatSignalStats = false;
+  private hdrChromaPeak = 0.5;
+  private hasFloatChromaStats = false;
 
   // Histogram bar rendering uniforms
   private histogramUniforms!: {
@@ -505,6 +510,27 @@ export class WebGLScopesProcessor {
   setHDRMode(active: boolean, headroom?: number): void {
     this.hdrActive = active;
     this.hdrHeadroom = headroom ?? null;
+    if (!active) {
+      this.hasFloatSignalStats = false;
+      this.hdrSignalPeak = 1.0;
+      this.hasFloatChromaStats = false;
+      this.hdrChromaPeak = 0.5;
+    }
+  }
+
+  /**
+   * Enable/disable HDR auto-fit scaling for waveform/vectorscope.
+   * When enabled, float scope frames are scaled to their measured signal peak
+   * (clamped to configured headroom) instead of always using full headroom.
+   */
+  setHDRAutoFit(enabled: boolean): void {
+    this.hdrAutoFit = enabled;
+    if (!enabled) {
+      this.hasFloatSignalStats = false;
+      this.hdrSignalPeak = 1.0;
+      this.hasFloatChromaStats = false;
+      this.hdrChromaPeak = 0.5;
+    }
   }
 
   /**
@@ -513,6 +539,56 @@ export class WebGLScopesProcessor {
    */
   getMaxValue(): number {
     return this.hdrActive ? (this.hdrHeadroom ?? 4.0) : 1.0;
+  }
+
+  private getRenderMaxValue(): number {
+    if (!this.hdrActive) return 1.0;
+    if (!this.hdrAutoFit || !this.hasFloatSignalStats) {
+      return this.getMaxValue();
+    }
+    return Math.min(this.getMaxValue(), Math.max(1.0, this.hdrSignalPeak));
+  }
+
+  /**
+   * Measure float frame stats for adaptive HDR scope scaling.
+   * - signalPeak is used by waveform auto-fit
+   * - chromaPeak is used by vectorscope auto-fit
+   */
+  private measureFloatStats(data: Float32Array): { signalPeak: number; chromaPeak: number } {
+    let signalPeak = 0;
+    let chromaPeak = 0.5;
+    const len = data.length;
+    for (let i = 0; i < len; i += 4) {
+      const r = data[i] ?? 0;
+      const g = data[i + 1] ?? 0;
+      const b = data[i + 2] ?? 0;
+      if (Number.isFinite(r) && r > signalPeak) signalPeak = r;
+      if (Number.isFinite(g) && g > signalPeak) signalPeak = g;
+      if (Number.isFinite(b) && b > signalPeak) signalPeak = b;
+
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+        const cb = -0.169 * r - 0.331 * g + 0.5 * b;
+        const cr = 0.5 * r - 0.419 * g - 0.081 * b;
+        const absCb = Math.abs(cb);
+        const absCr = Math.abs(cr);
+        if (absCb > chromaPeak) chromaPeak = absCb;
+        if (absCr > chromaPeak) chromaPeak = absCr;
+      }
+    }
+    return { signalPeak, chromaPeak };
+  }
+
+  private getVectorscopeSaturationScale(): number {
+    if (!this.hdrActive) return 1.0;
+
+    // Preserve legacy behavior unless auto-fit float stats are available.
+    if (!this.hdrAutoFit || !this.hasFloatChromaStats) {
+      return 1.0 / this.getRenderMaxValue();
+    }
+
+    // Keep chroma mostly within canonical vectorscope bounds [-0.5, 0.5].
+    // Never exceed 1.0 (avoid artificial saturation expansion).
+    return Math.min(1.0, 0.5 / Math.max(0.5, this.hdrChromaPeak));
   }
 
   private bindResources(): void {
@@ -542,6 +618,10 @@ export class WebGLScopesProcessor {
     this.analysisWidth = analysisData.width;
     this.analysisHeight = analysisData.height;
     this.vertexCount = this.analysisWidth * this.analysisHeight;
+    this.hasFloatSignalStats = false;
+    this.hdrSignalPeak = 1.0;
+    this.hasFloatChromaStats = false;
+    this.hdrChromaPeak = 0.5;
 
     // Upload (potentially downscaled) image to texture
     gl.activeTexture(gl.TEXTURE0);
@@ -593,6 +673,11 @@ export class WebGLScopesProcessor {
     this.analysisWidth = uploadWidth;
     this.analysisHeight = uploadHeight;
     this.vertexCount = this.analysisWidth * this.analysisHeight;
+    const stats = this.measureFloatStats(uploadData);
+    this.hdrSignalPeak = stats.signalPeak;
+    this.hasFloatSignalStats = true;
+    this.hdrChromaPeak = stats.chromaPeak;
+    this.hasFloatChromaStats = true;
 
     // Upload float data as RGBA16F texture
     gl.activeTexture(gl.TEXTURE0);
@@ -782,7 +867,7 @@ export class WebGLScopesProcessor {
     // Opacity tuned to match CPU rendering brightness
     gl.uniform1f(this.waveformUniforms.u_opacity!, mode === 'rgb' ? waveformOpacity : 0.08);
     // HDR: scale Y-axis to [0, maxValue] instead of [0, 1]
-    gl.uniform1f(this.waveformUniforms.u_waveformMaxValue!, this.getMaxValue());
+    gl.uniform1f(this.waveformUniforms.u_waveformMaxValue!, this.getRenderMaxValue());
 
     if (mode === 'luma') {
       gl.uniform1i(this.waveformUniforms.u_mode!, 0);
@@ -846,7 +931,7 @@ export class WebGLScopesProcessor {
     gl.uniform1f(this.vectorscopeUniforms.u_opacity!, 0.15);
     // HDR: adjust saturation scale for wider gamuts (P3/Rec.2020 have larger Cb/Cr extents)
     // In SDR mode (maxValue=1.0) this is 1.0 and has no effect
-    const saturationScale = this.hdrActive ? 1.0 / this.getMaxValue() : 1.0;
+    const saturationScale = this.getVectorscopeSaturationScale();
     gl.uniform1f(this.vectorscopeUniforms.u_saturationScale!, saturationScale);
 
     gl.drawArrays(gl.POINTS, 0, this.vertexCount);
@@ -911,6 +996,7 @@ let sharedProcessor: WebGLScopesProcessor | null = null;
 // getSharedScopesProcessor() first instantiates the processor.
 let cachedHDRActive: boolean = false;
 let cachedHDRHeadroom: number | null = null;
+let cachedHDRAutoFit: boolean = false;
 
 /**
  * Set HDR mode for the shared scopes processor.
@@ -926,6 +1012,16 @@ export function setScopesHDRMode(active: boolean, headroom?: number): void {
   }
 }
 
+/**
+ * Enable/disable adaptive HDR auto-fit scaling for waveform/vectorscope.
+ */
+export function setScopesHDRAutoFit(enabled: boolean): void {
+  cachedHDRAutoFit = enabled;
+  if (sharedProcessor) {
+    sharedProcessor.setHDRAutoFit(enabled);
+  }
+}
+
 export function getSharedScopesProcessor(): WebGLScopesProcessor | null {
   if (!sharedProcessor) {
     try {
@@ -937,6 +1033,7 @@ export function getSharedScopesProcessor(): WebGLScopesProcessor | null {
     // Apply cached HDR state to the newly created processor
     if (sharedProcessor) {
       sharedProcessor.setHDRMode(cachedHDRActive, cachedHDRHeadroom ?? undefined);
+      sharedProcessor.setHDRAutoFit(cachedHDRAutoFit);
     }
   }
   return sharedProcessor;

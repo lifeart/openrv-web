@@ -57,7 +57,7 @@ function createMockContext(overrides: {
   const stackControl = { setAvailableSources: vi.fn() };
   const channelSelect = { clearEXRLayers: vi.fn(), setEXRLayers: vi.fn() };
   const infoPanel = { update: vi.fn() };
-  const histogram = { setHDRMode: vi.fn() };
+  const histogram = { setHDRMode: vi.fn(), setHDRAutoFit: vi.fn() };
 
   const session = {
     currentSource: overrides.currentSource !== undefined ? overrides.currentSource : null,
@@ -236,11 +236,11 @@ describe('EXR overlay receives window data on source load', () => {
         height: 1080,
         fileSourceNode: {
           isHDR: () => true,
-          formatName: 'dpx',
+          formatName: 'DPX',
           getEXRLayers: () => [],
           getIPImage: () => ({
             metadata: {
-              attributes: { formatName: 'dpx' },
+              attributes: { formatName: 'DPX' },
             },
           }),
         },

@@ -137,7 +137,7 @@ export class AppSessionBridge {
 
     // --- Source loaded: update info panel, crop, OCIO, HDR auto-config, GTO, stack, prerender, EXR layers, scopes ---
 
-    this.on(session, 'sourceLoaded', () => {
+    this.on(session, 'sourceLoaded', (loadedSource) => {
       handleSourceLoaded(
         this.context,
         () => this.updateInfoPanel(),
@@ -146,7 +146,8 @@ export class AppSessionBridge {
         () => this.updateHistogram(),
         () => this.updateWaveform(),
         () => this.updateVectorscope(),
-        () => this.updateGamutDiagram()
+        () => this.updateGamutDiagram(),
+        loadedSource
       );
     });
 

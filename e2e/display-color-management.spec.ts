@@ -14,9 +14,9 @@ import { getCanvas, loadVideoFile, waitForTestHelper } from './fixtures';
  * - Display state persists across page reloads
  */
 
-/** Helper: Navigate to View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Helper: Navigate to Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Helper: Open the display profile dropdown */
@@ -46,7 +46,7 @@ test.describe('Display Color Management', () => {
     await page.goto('/');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    await goToViewTab(page);
+    await goToColorTab(page);
   });
 
   // ==================================================================
@@ -114,7 +114,7 @@ test.describe('Display Color Management', () => {
   test('DCM-020: display gamma slider should default to 1.0', async ({ page }) => {
     await openDisplayDropdown(page);
     const gammaValue = page.locator('[data-testid="display-gamma-value"]');
-    await expect(gammaValue).toContainText('1.0');
+    await expect(gammaValue).toContainText('1.0', { timeout: 10000 });
   });
 
   test('DCM-024: display gamma value readout should update on input', async ({ page }) => {

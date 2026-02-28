@@ -229,6 +229,7 @@ describe('wirePlaybackControls', () => {
   let controls: ReturnType<typeof createMockControls>;
   let deps: PlaybackWiringDeps;
   let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
+  let subs: ReturnType<typeof wirePlaybackControls>;
 
   beforeEach(() => {
     session = createMockSession();
@@ -249,7 +250,7 @@ describe('wirePlaybackControls', () => {
       sessionBridge: {},
     } as unknown as AppWiringContext;
 
-    wirePlaybackControls(ctx, deps);
+    subs = wirePlaybackControls(ctx, deps);
   });
 
   it('PW-001: volumeChanged on volumeControl sets session.volume', () => {
@@ -470,6 +471,23 @@ describe('wirePlaybackControls', () => {
       expect.any(Function), // renderFrame callback
       expect.objectContaining({ title: 'Test Session' }),
     );
+  });
+
+  describe('disposal', () => {
+    it('PW-DISP-001: callbacks fire before dispose', () => {
+      const volumeControl = headerBar.getVolumeControl();
+      volumeControl.emit('volumeChanged', 0.6);
+      expect(session.volume).toBe(0.6);
+    });
+
+    it('PW-DISP-002: callbacks do not fire after dispose', () => {
+      subs.dispose();
+
+      session.volume = 1; // reset
+      const volumeControl = headerBar.getVolumeControl();
+      volumeControl.emit('volumeChanged', 0.3);
+      expect(session.volume).toBe(1); // unchanged
+    });
   });
 });
 

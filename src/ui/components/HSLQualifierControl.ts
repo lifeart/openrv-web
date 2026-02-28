@@ -14,6 +14,7 @@ import { HSLQualifier, HSLQualifierState } from './HSLQualifier';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export class HSLQualifierControl {
   private container: HTMLElement;
@@ -22,10 +23,9 @@ export class HSLQualifierControl {
   private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
   private boundHandleReposition: () => void;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
   private eyedropperActive = false;
   private onEyedropperCallback: ((active: boolean) => void) | null = null;
-  private unsubscribers: (() => void)[] = [];
 
   constructor(hslQualifier: HSLQualifier) {
     this.hslQualifier = hslQualifier;
@@ -108,16 +108,15 @@ export class HSLQualifierControl {
     this.createDropdownContent();
 
     // Listen for state changes
-    this.unsubscribers.push(this.hslQualifier.on('stateChanged', () => {
+    this.subs.add(this.hslQualifier.on('stateChanged', () => {
       this.updateButtonState();
       this.updateSliders();
     }));
 
     // Listen for theme changes - CSS variables handle most updates automatically
-    this.boundOnThemeChange = () => {
+    this.subs.add(getThemeManager().on('themeChanged', () => {
       this.updateButtonState();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    }));
   }
 
   private createDropdownContent(): void {
@@ -166,7 +165,7 @@ export class HSLQualifierControl {
       this.hslQualifier.toggle();
     });
 
-    this.unsubscribers.push(this.hslQualifier.on('stateChanged', (state) => {
+    this.subs.add(this.hslQualifier.on('stateChanged', (state) => {
       enableCheckbox.checked = state.enabled;
     }));
 
@@ -544,7 +543,7 @@ export class HSLQualifierControl {
       this.hslQualifier.setInvert(invertCheckbox.checked);
     });
 
-    this.unsubscribers.push(this.hslQualifier.on('stateChanged', (state) => {
+    this.subs.add(this.hslQualifier.on('stateChanged', (state) => {
       invertCheckbox.checked = state.invert;
     }));
 
@@ -574,7 +573,7 @@ export class HSLQualifierControl {
       this.hslQualifier.setMattePreview(matteCheckbox.checked);
     });
 
-    this.unsubscribers.push(this.hslQualifier.on('stateChanged', (state) => {
+    this.subs.add(this.hslQualifier.on('stateChanged', (state) => {
       matteCheckbox.checked = state.mattePreview;
     }));
 
@@ -759,18 +758,12 @@ export class HSLQualifierControl {
    * Dispose
    */
   dispose(): void {
-    // Clean up theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     if (document.body.contains(this.dropdown)) {
       document.body.removeChild(this.dropdown);
     }
-    this.unsubscribers.forEach((unsub) => unsub());
-    this.unsubscribers = [];
   }
 }

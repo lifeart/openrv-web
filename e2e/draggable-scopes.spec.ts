@@ -658,8 +658,8 @@ test.describe('Multiple Scopes Dragging', () => {
     expect(Math.abs(afterTabSwitchBox!.x - afterDragBox!.x)).toBeLessThan(2);
     expect(Math.abs(afterTabSwitchBox!.y - afterDragBox!.y)).toBeLessThan(2);
 
-    // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Switch back to QC tab
+    await page.click('button[data-tab-id="qc"]');
     await page.waitForTimeout(100);
 
     // Position should still be preserved

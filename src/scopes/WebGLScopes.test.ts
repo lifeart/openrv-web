@@ -1003,6 +1003,81 @@ describe('WebGLScopesProcessor', () => {
       );
       expect(satScaleCall![1]).toBe(1.0);
     });
+
+    it('P3-029: HDR auto-fit scales waveform to signal peak for float frames', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setHDRAutoFit(true);
+      const floatData = new Float32Array([
+        1.0, 0.8, 0.6, 1.0,
+        1.0, 0.9, 0.7, 1.0,
+      ]);
+      processor.setFloatImage(floatData, 2, 1);
+      mockGl.uniform1f.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      const maxValueCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_waveformMaxValue'
+      );
+      expect(maxValueCall).toBeDefined();
+      // Peak is 1.0, so auto-fit should avoid compressing to headroom (4.0)
+      expect(maxValueCall![1]).toBe(1.0);
+    });
+
+    it('P3-030: HDR auto-fit keeps headroom clamp for extreme highlights', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setHDRAutoFit(true);
+      const floatData = new Float32Array([6.0, 0.0, 0.0, 1.0]);
+      processor.setFloatImage(floatData, 1, 1);
+      mockGl.uniform1f.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      const maxValueCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_waveformMaxValue'
+      );
+      expect(maxValueCall).toBeDefined();
+      // Peak is above configured headroom, so clamp to headroom
+      expect(maxValueCall![1]).toBe(4.0);
+    });
+
+    it('P3-031: vectorscope auto-fit avoids compression from neutral HDR highlights', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setHDRAutoFit(true);
+      const floatData = new Float32Array([4.0, 4.0, 4.0, 1.0]);
+      processor.setFloatImage(floatData, 1, 1);
+      mockGl.uniform1f.mockClear();
+
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+
+      const satScaleCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_saturationScale'
+      );
+      expect(satScaleCall).toBeDefined();
+      // Neutral highlights have no chroma; keep full vectorscope width.
+      expect(satScaleCall![1]).toBe(1.0);
+    });
+
+    it('P3-032: vectorscope auto-fit scales based on chroma extent', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setHDRAutoFit(true);
+      const floatData = new Float32Array([2.0, 0.0, 0.0, 1.0]);
+      processor.setFloatImage(floatData, 1, 1);
+      mockGl.uniform1f.mockClear();
+
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+
+      const satScaleCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_saturationScale'
+      );
+      expect(satScaleCall).toBeDefined();
+      // Pure red at 2.0 yields Cr ~= 1.0, so auto-fit scale should be 0.5.
+      expect(satScaleCall![1]).toBeCloseTo(0.5, 6);
+    });
   });
 
   // ====================================================================

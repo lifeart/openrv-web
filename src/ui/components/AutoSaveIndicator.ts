@@ -56,6 +56,9 @@ export class AutoSaveIndicator {
       border-radius: 4px;
       cursor: default;
       user-select: none;
+      max-width: 180px;
+      overflow: hidden;
+      flex-shrink: 0;
     `;
 
     this.iconElement = document.createElement('span');
@@ -66,6 +69,7 @@ export class AutoSaveIndicator {
       align-items: center;
       justify-content: center;
       transition: transform 0.3s ease;
+      flex-shrink: 0;
     `;
 
     this.textElement = document.createElement('span');
@@ -73,6 +77,9 @@ export class AutoSaveIndicator {
     this.textElement.dataset.testid = 'autosave-text';
     this.textElement.style.cssText = `
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
     `;
 
     this.container.appendChild(this.iconElement);
@@ -505,7 +512,7 @@ export class AutoSaveIndicator {
       default:
         this.iconElement.innerHTML = getIconSvg('cloud', 'sm');
         this.iconElement.style.animation = '';
-        this.container.style.cursor = 'pointer';
+        this.container.style.cursor = 'default';
 
         if (this.hasUnsavedChanges) {
           this.iconElement.style.color = 'var(--warning, #ffbb33)';

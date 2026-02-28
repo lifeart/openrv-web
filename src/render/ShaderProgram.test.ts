@@ -21,6 +21,7 @@ function createMockGL() {
     getProgramParameter: vi.fn(() => true),
     getProgramInfoLog: vi.fn(() => ''),
     deleteShader: vi.fn(),
+    deleteProgram: vi.fn(),
     useProgram: vi.fn(),
     getUniformLocation: vi.fn(() => 1), // Return non-null location
     getAttribLocation: vi.fn(() => 0),
@@ -192,6 +193,128 @@ describe('ShaderProgram', () => {
       sp.setUniformMatrix4('u_mat4', original);
       const call = (gl.uniformMatrix4fv as any).mock.calls[0];
       expect(call[2]).toBe(original);
+    });
+  });
+
+  describe('handle getter', () => {
+    it('SP-019: handle returns the underlying WebGLProgram', () => {
+      const program = gl.createProgram();
+      // The program returned by createMockGL is always the same object
+      expect(sp.handle).toBe(program);
+    });
+  });
+
+  describe('program cleanup on failure', () => {
+    it('SP-020: sync path deletes program on link failure', () => {
+      const failGL = createMockGL();
+      vi.mocked(failGL.getProgramParameter).mockReturnValue(false);
+      vi.mocked(failGL.getProgramInfoLog).mockReturnValue('link error');
+
+      expect(() => new ShaderProgram(failGL, 'void main(){}', 'void main(){}')).toThrow('Shader program link error');
+      expect(failGL.deleteProgram).toHaveBeenCalledTimes(1);
+    });
+
+    it('SP-021: sync path deletes program on compile failure', () => {
+      const failGL = createMockGL();
+      vi.mocked(failGL.getShaderParameter).mockReturnValue(false);
+      vi.mocked(failGL.getShaderInfoLog).mockReturnValue('compile error');
+
+      expect(() => new ShaderProgram(failGL, 'bad', 'bad')).toThrow('Shader compile error');
+      expect(failGL.deleteProgram).toHaveBeenCalledTimes(1);
+    });
+
+    it('SP-022: sync path cleans up shaders on link failure', () => {
+      const failGL = createMockGL();
+      vi.mocked(failGL.getProgramParameter).mockReturnValue(false);
+
+      expect(() => new ShaderProgram(failGL, 'void main(){}', 'void main(){}')).toThrow();
+      // 2 shaders created, both should be deleted in the finally block
+      expect(failGL.deleteShader).toHaveBeenCalledTimes(2);
+    });
+
+    it('SP-023: parallel path deletes program on link failure', () => {
+      const failGL = createMockGL();
+      const parallelExt = {};
+
+      // During construction: getShaderParameter returns true (for COMPILE_STATUS
+      // in createAndCompileShader — but parallel path doesn't query it).
+      // We need COMPLETION_STATUS_KHR to return false initially so isReady()
+      // correctly returns false on the first call.
+      vi.mocked(failGL.getShaderParameter).mockReturnValue(false);
+      vi.mocked(failGL.getProgramParameter).mockReturnValue(false);
+
+      const program = new ShaderProgram(failGL, 'void main(){}', 'void main(){}', parallelExt);
+      expect(program.isReady()).toBe(false);
+
+      // Now simulate compilation complete but link failure
+      vi.mocked(failGL.getShaderParameter).mockImplementation((_shader, pname) => {
+        if (pname === 0x91B1) return true;   // COMPLETION_STATUS_KHR
+        if (pname === 0x8B81) return true;    // COMPILE_STATUS → pass
+        return true;
+      });
+      vi.mocked(failGL.getProgramParameter).mockImplementation((_prog, pname) => {
+        if (pname === 0x91B1) return true;  // COMPLETION_STATUS_KHR
+        if (pname === 0x8B82) return false;  // LINK_STATUS → fail
+        return true;
+      });
+      vi.mocked(failGL.getProgramInfoLog).mockReturnValue('link error');
+
+      expect(() => program.isReady()).toThrow('Shader program link error');
+      expect(failGL.deleteProgram).toHaveBeenCalledTimes(1);
+    });
+
+    it('SP-024: parallel path deletes program on compile failure', () => {
+      const failGL = createMockGL();
+      const parallelExt = {};
+
+      // COMPLETION_STATUS_KHR returns false during construction
+      vi.mocked(failGL.getShaderParameter).mockReturnValue(false);
+      vi.mocked(failGL.getProgramParameter).mockReturnValue(false);
+
+      const program = new ShaderProgram(failGL, 'void main(){}', 'void main(){}', parallelExt);
+
+      // Now simulate compilation complete but vertex shader compile failure
+      vi.mocked(failGL.getShaderParameter).mockImplementation((_shader, pname) => {
+        if (pname === 0x91B1) return true;   // COMPLETION_STATUS_KHR
+        if (pname === 0x8B81) return false;   // COMPILE_STATUS → fail
+        return true;
+      });
+      vi.mocked(failGL.getProgramParameter).mockImplementation((_prog, pname) => {
+        if (pname === 0x91B1) return true;  // COMPLETION_STATUS_KHR
+        return true;
+      });
+      vi.mocked(failGL.getShaderInfoLog).mockReturnValue('compile error');
+
+      expect(() => program.isReady()).toThrow('Shader compile error');
+      expect(failGL.deleteProgram).toHaveBeenCalledTimes(1);
+    });
+
+    it('SP-025: parallel path cleans up shaders regardless of failure', () => {
+      const failGL = createMockGL();
+      const parallelExt = {};
+
+      // COMPLETION_STATUS_KHR returns false during construction
+      vi.mocked(failGL.getShaderParameter).mockReturnValue(false);
+      vi.mocked(failGL.getProgramParameter).mockReturnValue(false);
+
+      const program = new ShaderProgram(failGL, 'void main(){}', 'void main(){}', parallelExt);
+      failGL.deleteShader = vi.fn(); // reset after constructor
+
+      // Simulate completion with link failure
+      vi.mocked(failGL.getShaderParameter).mockImplementation((_shader, pname) => {
+        if (pname === 0x91B1) return true;   // COMPLETION_STATUS_KHR
+        if (pname === 0x8B81) return true;    // COMPILE_STATUS → pass
+        return true;
+      });
+      vi.mocked(failGL.getProgramParameter).mockImplementation((_prog, pname) => {
+        if (pname === 0x91B1) return true;
+        if (pname === 0x8B82) return false;
+        return true;
+      });
+
+      expect(() => program.isReady()).toThrow();
+      // Both shaders should be deleted in the finally block
+      expect(failGL.deleteShader).toHaveBeenCalledTimes(2);
     });
   });
 });

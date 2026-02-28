@@ -36,9 +36,9 @@ const SAMPLE_LUT = 'sample/test_lut.cube';
 // Helpers
 // ======================================================================
 
-/** Navigate to the View tab */
-async function goToViewTab(page: import('@playwright/test').Page) {
-  await page.click('button[data-tab-id="view"]');
+/** Navigate to the Color tab */
+async function goToColorTab(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
 }
 
 /** Open the display profile dropdown from the View tab */
@@ -95,15 +95,12 @@ async function waitForLUTCleared(page: import('@playwright/test').Page) {
 /** Load the sample .cube LUT file via the color panel file input */
 async function loadSampleLUT(page: import('@playwright/test').Page) {
   const fileInput = page
-    .locator('.color-controls-panel input[type="file"][accept=".cube"]')
+    .locator('.color-controls-panel input[type="file"]')
     .first();
-  if (!(await fileInput.count())) {
-    return false;
-  }
+  await expect(fileInput).toBeAttached({ timeout: 5000 });
   const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
   await fileInput.setInputFiles(lutPath);
   await waitForLUTLoaded(page);
-  return true;
 }
 
 // ======================================================================
@@ -115,7 +112,7 @@ test.describe('Display Color Management GPU Integration', () => {
     await page.goto('/');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    await goToViewTab(page);
+    await goToColorTab(page);
   });
 
   test('INT-E001: display profile change affects rendered output', async ({
@@ -343,11 +340,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     expect(state.hasLUT).toBe(false);
 
     // Load the LUT
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     // The GPU path is activated when hasLUT becomes true and the 3D LUT
     // texture is uploaded to the shader (u_lut3DEnabled = true).
@@ -361,11 +354,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   }) => {
     const beforeScreenshot = await captureViewerScreenshot(page);
 
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     // Wait a moment for the GPU to re-render with the LUT applied
     await page.waitForTimeout(300);
@@ -380,11 +369,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     // Capture the original (no-LUT) screenshot
     const originalScreenshot = await captureViewerScreenshot(page);
 
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     // Capture the full-intensity LUT screenshot
     await page.waitForTimeout(300);
@@ -431,11 +416,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   test('INT-L004: LUT intensity 1 produces full LUT effect', async ({
     page,
   }) => {
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     // Ensure intensity is at 1 (default)
     const state = await getColorState(page);
@@ -450,11 +431,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   test('INT-L005: LUT intensity 0.5 blends between original and LUT', async ({
     page,
   }) => {
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     // Capture full intensity screenshot
     await page.waitForTimeout(300);
@@ -491,11 +468,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
   test('INT-L006: clearing LUT disables the GPU LUT path', async ({
     page,
   }) => {
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
     const lutScreenshot = await captureViewerScreenshot(page);
@@ -527,11 +500,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     page,
   }) => {
     // Load, then clear, then re-load
-    let loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
     const firstLUTScreenshot = await captureViewerScreenshot(page);
@@ -542,10 +511,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
         '.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]',
       )
       .first();
-    if (!(await clearButton.isVisible())) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await expect(clearButton).toBeVisible({ timeout: 5000 });
     await clearButton.click();
     await waitForLUTCleared(page);
 
@@ -553,11 +519,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     const clearedScreenshot = await captureViewerScreenshot(page);
 
     // Re-load
-    loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
     const reloadedScreenshot = await captureViewerScreenshot(page);
@@ -652,17 +614,13 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     // Open color panel and load LUT
     await waitForColorPanel(page);
 
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
     const lutOnlyScreenshot = await captureViewerScreenshot(page);
 
     // Now also change the display profile
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-linear"]');
     await page.waitForTimeout(300);
@@ -681,17 +639,13 @@ test.describe('Display + LUT Combined GPU Integration', () => {
   }) => {
     await waitForColorPanel(page);
 
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
     const lutDefaultGammaScreenshot = await captureViewerScreenshot(page);
 
     // Adjust display gamma
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
@@ -713,7 +667,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     page,
   }) => {
     // Set a non-default display profile first
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-gamma2.2"]');
     await page.waitForTimeout(300);
@@ -721,11 +675,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
 
     // Load LUT
     await waitForColorPanel(page);
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
     const gamma22WithLUTScreenshot = await captureViewerScreenshot(page);
@@ -763,14 +713,10 @@ test.describe('Display + LUT Combined GPU Integration', () => {
   }) => {
     // Load LUT
     await waitForColorPanel(page);
-    const loaded = await loadSampleLUT(page);
-    if (!loaded) {
-      test.fixme(); // TODO: flaky - LUT file input not always available
-      return;
-    }
+    await loadSampleLUT(page);
 
     // Change display profile
-    await goToViewTab(page);
+    await goToColorTab(page);
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-rec709"]');
     await page.waitForTimeout(300);

@@ -11,6 +11,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import type { Viewer } from './Viewer';
 
 export interface CacheIndicatorState {
@@ -43,7 +44,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private inPoint = 1;
   private outPoint = 1;
   private prerenderStatsSpan: HTMLSpanElement | null = null;
-  private boundOnThemeChange: () => void;
+  private subs = new DisposableSubscriptionManager();
 
   // Colors for cache states - resolved from CSS variables at runtime
   private static getCachedColor(): string {
@@ -76,6 +77,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       gap: 2px;
       padding: 2px 0;
       background: var(--bg-secondary);
+      flex: 0 0 auto;
     `;
 
     // Create bar container (holds canvas)
@@ -107,20 +109,35 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       align-items: center;
       font-size: 10px;
       color: var(--text-muted);
+      gap: 8px;
+      min-height: 14px;
+      white-space: nowrap;
+      overflow: hidden;
     `;
 
     const statsSpan = document.createElement('span');
     statsSpan.className = 'cache-stats';
     statsSpan.dataset.testid = 'cache-indicator-stats';
     statsSpan.textContent = 'Cache: 0 / 0 frames';
+    statsSpan.style.cssText = `
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
 
     // Create prerender stats span (for effects cache)
     this.prerenderStatsSpan = document.createElement('span');
     this.prerenderStatsSpan.className = 'prerender-stats';
     this.prerenderStatsSpan.dataset.testid = 'prerender-indicator-stats';
     this.prerenderStatsSpan.style.cssText = `
-      margin-left: 12px;
+      flex: 1 1 0;
+      min-width: 0;
       color: var(--accent-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     `;
     this.prerenderStatsSpan.textContent = '';
 
@@ -136,6 +153,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       border-radius: 3px;
       cursor: pointer;
       transition: all 0.12s ease;
+      flex-shrink: 0;
     `;
     this.clearButton.addEventListener('pointerenter', () => {
       this.clearButton.style.background = 'var(--bg-hover)';
@@ -159,14 +177,13 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.container.appendChild(this.infoContainer);
 
     // Subscribe to session events
-    this.session.on('frameChanged', () => this.scheduleUpdate());
-    this.session.on('durationChanged', () => this.scheduleUpdate());
-    this.session.on('sourceLoaded', () => this.scheduleUpdate());
-    this.session.on('inOutChanged', () => this.scheduleUpdate());
+    this.subs.add(this.session.on('frameChanged', () => this.scheduleUpdate()));
+    this.subs.add(this.session.on('durationChanged', () => this.scheduleUpdate()));
+    this.subs.add(this.session.on('sourceLoaded', () => this.scheduleUpdate()));
+    this.subs.add(this.session.on('inOutChanged', () => this.scheduleUpdate()));
 
     // Subscribe to theme changes to redraw with updated colors
-    this.boundOnThemeChange = () => this.scheduleUpdate();
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.scheduleUpdate()));
 
     // Initial update
     this.scheduleUpdate();
@@ -425,7 +442,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     if (this.viewer) {
       this.viewer.setOnPrerenderCacheUpdate(null);
     }
-    getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    this.subs.dispose();
     this.container.remove();
     this.removeAllListeners();
   }

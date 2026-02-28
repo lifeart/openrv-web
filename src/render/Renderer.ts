@@ -185,6 +185,11 @@ export class Renderer implements RendererBackend {
   private _userFlipH = false;
   private _userFlipV = false;
 
+  /** Expose the underlying WebGL2 context for direct readback (e.g. scope canvas capture). */
+  getGL(): WebGL2RenderingContext | null {
+    return this.gl;
+  }
+
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.cachedTextureCallbacks = null;
     this.canvas = canvas;
@@ -412,6 +417,19 @@ export class Renderer implements RendererBackend {
 
     this.gl.clearColor(r, g, b, a);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+  }
+
+  /**
+   * Ensure an image has an up-to-date GL texture and return it.
+   * Used by scene analysis paths that need to sample the source texture
+   * before the main draw call.
+   */
+  ensureImageTexture(image: IPImage): WebGLTexture | null {
+    if (!this.gl || !this.displayShader) return null;
+    if (image.textureNeedsUpdate || !image.texture) {
+      this.updateTexture(image);
+    }
+    return image.texture ?? null;
   }
 
   renderImage(
@@ -808,9 +826,16 @@ export class Renderer implements RendererBackend {
         // the next frame's IPImage must re-upload its own VideoFrame data.
         return;
       } catch (e) {
-        // VideoFrame texImage2D not supported - fall through to SDR path
-        log.warn('VideoFrame texImage2D failed, falling back to typed array upload:', e);
-        image.close();
+        // VideoFrame texImage2D not supported — release only the VideoFrame to free VRAM.
+        // The IPImage stays in cache but will skip the VideoFrame path on subsequent renders.
+        // For HDR VideoFrame-only IPImages the data buffer is a 4-byte placeholder,
+        // so the typed-array fallback will produce a blank frame. This is acceptable
+        // degradation — the alternative is a VRAM leak.
+        log.warn('VideoFrame texImage2D failed, releasing VideoFrame:', e);
+        if (image.managedVideoFrame) {
+          image.managedVideoFrame.release();
+          image.managedVideoFrame = null;
+        }
       }
     }
 
@@ -836,7 +861,9 @@ export class Renderer implements RendererBackend {
           try {
             gl.unpackColorSpace = 'srgb';
             this._currentUnpackColorSpace = 'srgb';
-          } catch (e) {}
+          } catch (e) {
+            log.debug('gl.unpackColorSpace not supported:', e);
+          }
         }
 
         PerfTrace.begin('texImage2D(ImageBitmap)');
@@ -2096,7 +2123,7 @@ export class Renderer implements RendererBackend {
         gl.unpackColorSpace = 'srgb';
         this._currentUnpackColorSpace = 'srgb';
       } catch (e) {
-        // Shouldn't fail for 'srgb', but guard defensively
+        log.debug('gl.unpackColorSpace reset to srgb not supported:', e);
       }
     }
 

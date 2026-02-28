@@ -108,11 +108,12 @@ function createMockContext() {
 
 describe('wireEffectsControls', () => {
   let mock: ReturnType<typeof createMockContext>;
+  let subs: ReturnType<typeof wireEffectsControls>;
 
   beforeEach(() => {
     effectRegistry.unregister('noiseReduction');
     mock = createMockContext();
-    wireEffectsControls(mock.ctx);
+    subs = wireEffectsControls(mock.ctx);
   });
 
   afterEach(() => {
@@ -287,5 +288,21 @@ describe('wireEffectsControls', () => {
   it('EW-018: calling wireEffectsControls twice does not throw (guard prevents duplicate registration)', () => {
     expect(() => wireEffectsControls(mock.ctx)).not.toThrow();
     expect(effectRegistry.get('noiseReduction')).toBeDefined();
+  });
+
+  describe('disposal', () => {
+    it('EW-DISP-001: callbacks fire before dispose', () => {
+      const settings = { blur: 3, sharpen: 7 };
+      mock.filterControl.emit('filtersChanged', settings);
+      expect(mock.viewer.setFilterSettings).toHaveBeenCalledWith(settings);
+    });
+
+    it('EW-DISP-002: callbacks do not fire after dispose', () => {
+      subs.dispose();
+
+      mock.viewer.setFilterSettings.mockClear();
+      mock.filterControl.emit('filtersChanged', { blur: 1 });
+      expect(mock.viewer.setFilterSettings).not.toHaveBeenCalled();
+    });
   });
 });

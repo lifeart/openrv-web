@@ -137,11 +137,8 @@ test.describe('Float LUT Precision', () => {
       let state = await getColorState(page);
       expect(state.hasLUT).toBe(false);
 
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -154,11 +151,8 @@ test.describe('Float LUT Precision', () => {
     test('FLUT-E004: LUT application produces visual change', async ({ page }) => {
       const beforeScreenshot = await captureViewerScreenshot(page);
 
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -233,11 +227,8 @@ test.describe('Float LUT Precision', () => {
 
   test.describe('LUT Intensity with Float Pipeline', () => {
     test('FLUT-E006: LUT intensity at 0% shows no LUT effect', async ({ page }) => {
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -261,11 +252,8 @@ test.describe('Float LUT Precision', () => {
     });
 
     test('FLUT-E007: LUT intensity at 50% blends correctly', async ({ page }) => {
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -294,11 +282,8 @@ test.describe('Float LUT Precision', () => {
 
   test.describe('Float Pipeline Integration', () => {
     test('FLUT-E008: LUT works combined with exposure adjustment', async ({ page }) => {
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -326,11 +311,8 @@ test.describe('Float LUT Precision', () => {
     });
 
     test('FLUT-E009: LUT state persists across frame navigation', async ({ page }) => {
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
@@ -363,11 +345,8 @@ test.describe('Float LUT Precision', () => {
     test('FLUT-E010: Clear LUT restores original view', async ({ page }) => {
       const screenshotOriginal = await captureViewerScreenshot(page);
 
-      const fileInput = page.locator('.color-controls-panel input[type="file"][accept=".cube"]').first();
-      if (!(await fileInput.count())) {
-        test.fixme(); // TODO: flaky - file input not always available
-        return;
-      }
+      const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
+      await expect(fileInput).toBeAttached({ timeout: 5000 });
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);

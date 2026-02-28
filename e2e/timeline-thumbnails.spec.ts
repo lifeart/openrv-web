@@ -206,12 +206,12 @@ test.describe('Timeline Thumbnails', () => {
       // Capture timeline before playback
       const screenshotBefore = await timelineCanvas.screenshot();
 
-      // Start playback and let frames advance
-      await page.keyboard.press('l');
+      // Start playback (Space toggles play/pause) and let frames advance
+      await page.keyboard.press('Space');
       await page.waitForTimeout(500);
 
       // Stop playback
-      await page.keyboard.press('k');
+      await page.keyboard.press('Space');
       await page.waitForTimeout(100);
 
       // Timeline should still be visible and its playhead should have moved

@@ -86,8 +86,12 @@ test.describe('Scope Data with WebGL Active', () => {
     await page.keyboard.press('c');
     await page.waitForTimeout(200);
     const satSlider = await getSliderByLabel(page, 'Saturation');
-    await satSlider.fill('0');
-    await satSlider.dispatchEvent('input');
+    // Use evaluate() to set range input value and fire event.
+    // Playwright's fill() can fail silently on <input type="range">.
+    await satSlider.evaluate((el: HTMLInputElement) => {
+      el.value = '0';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await page.waitForTimeout(500);
 
     const afterH = await histogramCanvas.screenshot();
@@ -151,8 +155,10 @@ test.describe('Scope Data with HDR Content', () => {
     await page.keyboard.press('c');
     await page.waitForTimeout(200);
     const exposureSlider = await getSliderByLabel(page, 'Exposure');
-    await exposureSlider.fill('2.0');
-    await exposureSlider.dispatchEvent('input');
+    await exposureSlider.evaluate((el: HTMLInputElement) => {
+      el.value = '2.0';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await page.waitForTimeout(500);
 
     const afterScreenshot = await histogramCanvas.screenshot();
@@ -368,17 +374,24 @@ test.describe('Edge Cases', () => {
     await page.waitForTimeout(500);
 
     await page.keyboard.press('h');
-    await page.waitForTimeout(300);
-
-    const histogramCanvas = page.locator('.histogram-container canvas');
-    const hdrScreenshot = await histogramCanvas.screenshot();
+    await page.waitForTimeout(500);
 
     let state = await getViewerState(page);
     expect(state.histogramHDRActive).toBe(true);
 
-    // Load SDR video
+    const histogramCanvas = page.locator('.histogram-container canvas');
+    const hdrScreenshot = await histogramCanvas.screenshot();
+
+    // Load SDR video. With A/B compare, the second source is auto-assigned
+    // as source B while the viewer stays on source A (EXR). Toggle A/B
+    // (Backquote key) so the viewer switches to displaying the SDR source,
+    // then verify the histogram reflects SDR content.
     await loadVideoFile(page);
     await page.waitForTimeout(500);
+
+    // Toggle A/B to switch from source A (EXR) to source B (video)
+    await page.keyboard.press('`');
+    await page.waitForTimeout(1000);
 
     state = await getViewerState(page);
     expect(state.histogramHDRActive).toBe(false);

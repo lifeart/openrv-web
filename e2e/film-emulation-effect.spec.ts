@@ -347,21 +347,36 @@ test.describe('Film Emulation Effect E2E', () => {
 
       const before = await captureViewerScreenshot(page);
 
-      // Apply Kodak Portra 400 emulation directly to the canvas
-      await page.evaluate(() => {
+      // Apply Kodak Portra 400 emulation to the canvas.
+      // The viewer canvas uses WebGL2, so we read pixels via toDataURL + Image,
+      // draw onto a 2D overlay canvas with the film emulation applied.
+      await page.evaluate(async () => {
         const canvas = document.querySelector('canvas[data-testid="viewer-image-canvas"]') as HTMLCanvasElement;
         if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const d = imageData.data;
         const LUMA_R = 0.2126, LUMA_G = 0.7152, LUMA_B = 0.0722;
         const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
         const softS = (x: number) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
         const liftG = (x: number, lift: number, gamma: number) =>
           clamp01(lift + (1 - lift) * Math.pow(clamp01(x), gamma));
 
+        // Convert WebGL/2D canvas to 2D ImageData via toDataURL + Image
+        const dataUrl = canvas.toDataURL('image/png');
+        const img = new Image();
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.src = dataUrl;
+        });
+
+        const w = canvas.width, h = canvas.height;
+        const overlay = document.createElement('canvas');
+        overlay.width = w;
+        overlay.height = h;
+        const overlayCtx = overlay.getContext('2d')!;
+        overlayCtx.drawImage(img, 0, 0);
+
+        const imageData = overlayCtx.getImageData(0, 0, w, h);
+        const d = imageData.data;
         for (let i = 0; i < d.length; i += 4) {
           let r = d[i]! / 255, g = d[i + 1]! / 255, b = d[i + 2]! / 255;
           // Portra tone curve
@@ -377,7 +392,20 @@ test.describe('Film Emulation Effect E2E', () => {
           d[i + 1] = Math.round(clamp01(g) * 255);
           d[i + 2] = Math.round(clamp01(b) * 255);
         }
-        ctx.putImageData(imageData, 0, 0);
+        overlayCtx.putImageData(imageData, 0, 0);
+
+        // Position overlay on top of the original canvas
+        const rect = canvas.getBoundingClientRect();
+        overlay.style.cssText = `
+          position: fixed;
+          top: ${rect.top}px;
+          left: ${rect.left}px;
+          width: ${rect.width}px;
+          height: ${rect.height}px;
+          z-index: 99999;
+          pointer-events: none;
+        `;
+        document.body.appendChild(overlay);
       });
 
       const after = await captureViewerScreenshot(page);

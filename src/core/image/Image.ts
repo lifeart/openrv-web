@@ -1,3 +1,5 @@
+import { ManagedVideoFrame } from './ManagedVideoFrame';
+
 export type DataType = 'uint8' | 'uint16' | 'float32';
 
 export type TransferFunction = 'srgb' | 'hlg' | 'pq' | 'smpte240m';
@@ -21,6 +23,7 @@ export interface IPImageOptions {
   data?: ArrayBuffer;
   metadata?: ImageMetadata;
   videoFrame?: VideoFrame;
+  managedVideoFrame?: ManagedVideoFrame;
   imageBitmap?: ImageBitmap | null;
 }
 
@@ -32,8 +35,26 @@ export class IPImage {
   readonly data: ArrayBuffer;
   readonly metadata: ImageMetadata;
 
-  /** Browser VideoFrame for direct GPU upload (HDR video path) */
-  videoFrame: VideoFrame | null;
+  /**
+   * Managed VideoFrame for reference-counted VRAM cleanup.
+   * @internal Prefer using the `videoFrame` getter/setter. Direct access is
+   * allowed for performance-critical paths (e.g., Renderer texture upload)
+   * but callers must maintain ref-counting invariants.
+   */
+  managedVideoFrame: ManagedVideoFrame | null;
+
+  /** Raw VideoFrame accessor (reads from managed wrapper, setter auto-wraps) */
+  get videoFrame(): VideoFrame | null {
+    return this.managedVideoFrame?.frame ?? null;
+  }
+
+  set videoFrame(frame: VideoFrame | null) {
+    if (this.managedVideoFrame) {
+      this.managedVideoFrame.release();
+      this.managedVideoFrame = null;
+    }
+    this.managedVideoFrame = frame ? ManagedVideoFrame.wrap(frame) : null;
+  }
 
   /** Decoded ImageBitmap for zero-copy GPU upload (image sequences) */
   imageBitmap: ImageBitmap | null;
@@ -51,8 +72,16 @@ export class IPImage {
     this.channels = options.channels;
     this.dataType = options.dataType;
     this.metadata = options.metadata ?? {};
-    this.videoFrame = options.videoFrame ?? null;
     this.imageBitmap = options.imageBitmap ?? null;
+
+    if (options.managedVideoFrame) {
+      this.managedVideoFrame = options.managedVideoFrame;
+    } else if (options.videoFrame) {
+      // Legacy path: wrap raw VideoFrame automatically
+      this.managedVideoFrame = ManagedVideoFrame.wrap(options.videoFrame);
+    } else {
+      this.managedVideoFrame = null;
+    }
 
     if (options.data) {
       this.data = options.data;
@@ -155,13 +184,9 @@ export class IPImage {
    * ```
    */
   close(): void {
-    if (this.videoFrame) {
-      try {
-        this.videoFrame.close();
-      } catch {
-        // Already closed
-      }
-      this.videoFrame = null;
+    if (this.managedVideoFrame) {
+      this.managedVideoFrame.release();
+      this.managedVideoFrame = null;
     }
     if (this.imageBitmap) {
       try {
@@ -229,6 +254,116 @@ export class IPImage {
    */
   cloneMetadataOnly(): IPImage {
     return this.clone();
+  }
+
+  /**
+   * Convert this image to an ImageData for CPU effect processing.
+   *
+   * NOTE: For float32 and uint16 images, this performs a lossy conversion
+   * to uint8 (Uint8ClampedArray). Subtle gradients and HDR values outside
+   * [0, 255] will be clamped. This is acceptable for the initial
+   * implementation; a future float-native effect path will address
+   * precision for scene-referred linear-light workflows.
+   */
+  toImageData(): ImageData {
+    const w = this.width;
+    const h = this.height;
+    const ch = this.channels;
+    const src = this.getTypedArray();
+    const dst = new Uint8ClampedArray(w * h * 4);
+
+    const pixelCount = w * h;
+    for (let i = 0; i < pixelCount; i++) {
+      const srcIdx = i * ch;
+      const dstIdx = i * 4;
+
+      if (this.dataType === 'uint8') {
+        if (ch === 1) {
+          // Grayscale: replicate single value to R, G, B
+          const v = src[srcIdx]!;
+          dst[dstIdx] = v;
+          dst[dstIdx + 1] = v;
+          dst[dstIdx + 2] = v;
+          dst[dstIdx + 3] = 255;
+        } else {
+          dst[dstIdx] = ch >= 1 ? src[srcIdx]! : 0;
+          dst[dstIdx + 1] = ch >= 2 ? src[srcIdx + 1]! : 0;
+          dst[dstIdx + 2] = ch >= 3 ? src[srcIdx + 2]! : 0;
+          dst[dstIdx + 3] = ch >= 4 ? src[srcIdx + 3]! : 255;
+        }
+      } else if (this.dataType === 'uint16') {
+        if (ch === 1) {
+          // Grayscale: replicate single value to R, G, B
+          const v = Math.round(src[srcIdx]! / 257);
+          dst[dstIdx] = v;
+          dst[dstIdx + 1] = v;
+          dst[dstIdx + 2] = v;
+          dst[dstIdx + 3] = 255;
+        } else {
+          dst[dstIdx] = ch >= 1 ? Math.round(src[srcIdx]! / 257) : 0;
+          dst[dstIdx + 1] = ch >= 2 ? Math.round(src[srcIdx + 1]! / 257) : 0;
+          dst[dstIdx + 2] = ch >= 3 ? Math.round(src[srcIdx + 2]! / 257) : 0;
+          dst[dstIdx + 3] = ch >= 4 ? Math.round(src[srcIdx + 3]! / 257) : 255;
+        }
+      } else {
+        // float32: [0, 1] -> [0, 255]
+        if (ch === 1) {
+          // Grayscale: replicate single value to R, G, B
+          const v = Math.round(Math.max(0, Math.min(1, src[srcIdx]!)) * 255);
+          dst[dstIdx] = v;
+          dst[dstIdx + 1] = v;
+          dst[dstIdx + 2] = v;
+          dst[dstIdx + 3] = 255;
+        } else {
+          dst[dstIdx] = ch >= 1 ? Math.round(Math.max(0, Math.min(1, src[srcIdx]!)) * 255) : 0;
+          dst[dstIdx + 1] = ch >= 2 ? Math.round(Math.max(0, Math.min(1, src[srcIdx + 1]!)) * 255) : 0;
+          dst[dstIdx + 2] = ch >= 3 ? Math.round(Math.max(0, Math.min(1, src[srcIdx + 2]!)) * 255) : 0;
+          dst[dstIdx + 3] = ch >= 4 ? Math.round(Math.max(0, Math.min(1, src[srcIdx + 3]!)) * 255) : 255;
+        }
+      }
+    }
+
+    return new ImageData(dst, w, h);
+  }
+
+  /**
+   * Update this image's pixel data from an ImageData.
+   *
+   * Converts the Uint8ClampedArray back to the image's native data type.
+   */
+  fromImageData(imageData: ImageData): void {
+    const ch = this.channels;
+    const src = imageData.data;
+    const dst = this.getTypedArray();
+    const pixelCount = this.width * this.height;
+
+    for (let i = 0; i < pixelCount; i++) {
+      const srcIdx = i * 4;
+      const dstIdx = i * ch;
+
+      if (this.dataType === 'uint8') {
+        if (ch >= 1) dst[dstIdx] = src[srcIdx]!;
+        if (ch >= 2) dst[dstIdx + 1] = src[srcIdx + 1]!;
+        if (ch >= 3) dst[dstIdx + 2] = src[srcIdx + 2]!;
+        if (ch >= 4) dst[dstIdx + 3] = src[srcIdx + 3]!;
+      } else if (this.dataType === 'uint16') {
+        if (ch >= 1) dst[dstIdx] = src[srcIdx]! * 257;
+        if (ch >= 2) dst[dstIdx + 1] = src[srcIdx + 1]! * 257;
+        if (ch >= 3) dst[dstIdx + 2] = src[srcIdx + 2]! * 257;
+        if (ch >= 4) dst[dstIdx + 3] = src[srcIdx + 3]! * 257;
+      } else {
+        // float32: [0, 255] -> [0, 1]
+        if (ch >= 1) dst[dstIdx] = src[srcIdx]! / 255;
+        if (ch >= 2) dst[dstIdx + 1] = src[srcIdx + 1]! / 255;
+        if (ch >= 3) dst[dstIdx + 2] = src[srcIdx + 2]! / 255;
+        if (ch >= 4) dst[dstIdx + 3] = src[srcIdx + 3]! / 255;
+      }
+    }
+
+    // Mark texture as needing update
+    this.textureNeedsUpdate = true;
+    // Invalidate cached typed array since data may have changed
+    this.cachedTypedArray = null;
   }
 
   static fromImageData(imageData: ImageData): IPImage {

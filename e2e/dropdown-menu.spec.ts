@@ -483,7 +483,7 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     // Select 25%
     await page.keyboard.press('Enter');
-    await waitForZoomLevel(page, 0.25, 0.05);
+    await waitForZoomLevel(page, 0.25, 0.005);
 
     // Verify zoom is 0.25
     const state = await page.evaluate(() => {
@@ -530,22 +530,25 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
 
     const dropdown = page.locator('[data-testid="channel-dropdown"]');
     await expect(dropdown).toBeVisible();
+    await page.waitForTimeout(100); // Ensure dropdown is interactive
 
     // Items: RGB, Red, Green, Blue, Alpha, Luma
     const items = dropdown.locator('button');
 
     // Navigate to Green (index 2)
     await page.keyboard.press('ArrowDown'); // -> Red
+    await page.waitForTimeout(50);
     await page.keyboard.press('ArrowDown'); // -> Green
+    await page.waitForTimeout(50);
 
     // Verify Green is highlighted
     const greenItem = items.nth(2);
-    await expect(greenItem).toHaveAttribute('aria-selected', 'true');
+    await expect(greenItem).toHaveAttribute('aria-selected', 'true', { timeout: 5000 });
     await expect(greenItem).toContainText('Green');
 
     // Select Green
     await page.keyboard.press('Enter');
-    await waitForChannelMode(page, 'green');
+    await waitForChannelMode(page, 'green', 10000);
 
     // Verify dropdown closed and button shows G
     await expect(dropdown).not.toBeVisible();

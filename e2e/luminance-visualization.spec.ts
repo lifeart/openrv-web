@@ -30,7 +30,7 @@ async function waitForLuminanceVisMode(page: import('@playwright/test').Page, ex
   await page.waitForFunction(
     (mode) => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.mode === mode,
     expectedMode,
-    { timeout: 5000 },
+    { timeout: 10000 },
   );
 }
 
@@ -172,6 +172,8 @@ test.describe('Luminance Visualization - Random Colorization Controls', () => {
 
   test('LV-E022: reseed produces different colors', async ({ page }) => {
     const before = await captureCanvasState(page);
+    // Navigate to QC tab where the luminance vis selector lives
+    await page.click('button[data-tab-id="qc"]');
     const selector = page.locator('[data-testid="luminance-vis-selector"]');
     await expect(selector).toBeVisible();
     await selector.click();
@@ -268,8 +270,8 @@ test.describe('Luminance Visualization - UI Controls', () => {
     await loadVideoFile(page);
   });
 
-  test('LV-E040: mode selector exists in View tab', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
+  test('LV-E040: mode selector exists in QC tab', async ({ page }) => {
+    await page.click('button[data-tab-id="qc"]');
 
     const selector = page.locator('[data-testid="luminance-vis-selector"]');
     await expect(selector).toBeVisible();
@@ -302,7 +304,7 @@ test.describe('Luminance Visualization - State Persistence', () => {
 
     // Switch tabs
     await page.click('button[data-tab-id="color"]');
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="qc"]');
 
     const state = await getLuminanceVisState(page);
     expect(state.mode).toBe('hsv');

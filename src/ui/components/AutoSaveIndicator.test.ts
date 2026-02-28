@@ -33,6 +33,21 @@ describe('AutoSaveIndicator', () => {
       const text = element.querySelector('[data-testid="autosave-text"]');
       expect(text).not.toBeNull();
     });
+
+    it('AUTOSAVE-UI-004a: text is constrained to single line with ellipsis', () => {
+      const element = indicator.render();
+      const text = element.querySelector('[data-testid="autosave-text"]') as HTMLElement;
+      expect(text.style.whiteSpace).toBe('nowrap');
+      expect(text.style.overflow).toBe('hidden');
+      expect(text.style.textOverflow).toBe('ellipsis');
+    });
+
+    it('AUTOSAVE-UI-004b: container uses compact overflow-safe layout', () => {
+      const element = indicator.render();
+      expect(element.style.maxWidth).toBe('180px');
+      expect(element.style.overflow).toBe('hidden');
+      expect(element.style.flexShrink).toBe('0');
+    });
   });
 
   describe('status display', () => {
@@ -266,14 +281,14 @@ describe('AutoSaveIndicator', () => {
       expect(element.style.cursor).toBe('pointer');
     });
 
-    it('AUTOSAVE-UI-032: saving status shows default cursor, other non-error states show pointer', () => {
+    it('AUTOSAVE-UI-032: saving and idle status show default cursor, other non-error states show pointer', () => {
       indicator.setStatus('saving');
       let element = indicator.render();
       expect(element.style.cursor).toBe('default');
 
       indicator.setStatus('idle');
       element = indicator.render();
-      expect(element.style.cursor).toBe('pointer');
+      expect(element.style.cursor).toBe('default');
 
       indicator.setStatus('saved');
       element = indicator.render();

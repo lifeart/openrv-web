@@ -8,7 +8,7 @@
 import { KeyboardManager, type KeyCombination } from './utils/input/KeyboardManager';
 import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/input/KeyBindings';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
-import { showModal, closeModal } from './ui/components/shared/Modal';
+import { showModal } from './ui/components/shared/Modal';
 
 /**
  * Context interface for what AppKeyboardHandler needs from App.
@@ -383,6 +383,7 @@ export class AppKeyboardHandler {
 
   /**
    * Show the custom key bindings management dialog.
+   * Renders the list of actions with their current key bindings inline.
    */
   showCustomBindingsDialog(): void {
     const content = document.createElement('div');
@@ -393,6 +394,17 @@ export class AppKeyboardHandler {
     `;
     content.setAttribute('data-testid', 'custom-keybindings-dialog');
 
+    this.renderCustomBindingsContent(content);
+
+    showModal(content, { title: 'Custom Key Bindings', width: '700px' });
+  }
+
+  /**
+   * Render the custom keybindings dialog content into the given container.
+   * This can be called to refresh the dialog in-place without reopening the modal.
+   */
+  private renderCustomBindingsContent(content: HTMLElement): void {
+    content.innerHTML = '';
     const actions = this.customKeyBindingsManager.getAvailableActions();
 
     // Create table header
@@ -426,6 +438,7 @@ export class AppKeyboardHandler {
         align-items: center;
       `;
       row.setAttribute('data-testid', 'binding-row');
+      row.dataset.action = action.action;
 
       // Action description
       const descCell = document.createElement('div');
@@ -472,14 +485,14 @@ export class AppKeyboardHandler {
         cursor: pointer;
         font-size: 11px;
       `;
-      setButton.onclick = () => this.promptForKeyBinding(action.action, keyCell);
+      setButton.onclick = () => this.promptForKeyBinding(action.action, content);
       buttonCell.appendChild(setButton);
 
       // Reset to default button (only if custom binding exists)
       if (this.customKeyBindingsManager.hasCustomBinding(action.action)) {
         const resetButton = document.createElement('button');
         resetButton.textContent = 'Reset';
-        resetButton.dataset.testid = 'binding-reset-button';
+        resetButton.dataset.testid = 'reset-binding-button';
         resetButton.style.cssText = `
           background: var(--text-muted);
           border: none;
@@ -491,9 +504,8 @@ export class AppKeyboardHandler {
         `;
         resetButton.onclick = () => {
           this.customKeyBindingsManager.removeCustomBinding(action.action);
-          keyCell.textContent = this.formatKeyCombo(this.customKeyBindingsManager.getEffectiveCombo(action.action));
           this.refresh(); // Update keyboard shortcuts immediately
-          resetButton.remove(); // Remove reset button after resetting
+          this.renderCustomBindingsContent(content); // Re-render in-place
         };
         buttonCell.appendChild(resetButton);
       }
@@ -513,7 +525,7 @@ export class AppKeyboardHandler {
 
     const resetAllButton = document.createElement('button');
     resetAllButton.textContent = 'Reset All to Defaults';
-    resetAllButton.dataset.testid = 'binding-reset-all-button';
+    resetAllButton.dataset.testid = 'reset-all-bindings-button';
     resetAllButton.style.cssText = `
       background: var(--error);
       border: none;
@@ -524,87 +536,76 @@ export class AppKeyboardHandler {
       font-size: 12px;
     `;
     resetAllButton.onclick = () => {
-      if (confirm('Reset all custom key bindings to defaults?')) {
-        this.customKeyBindingsManager.resetAll();
-        this.refresh(); // Update keyboard shortcuts immediately
-        // Close and reopen modal to refresh the list
-        closeModal();
-        setTimeout(() => this.showCustomBindingsDialog(), 100);
-      }
+      this.customKeyBindingsManager.resetAll();
+      this.refresh(); // Update keyboard shortcuts immediately
+      this.renderCustomBindingsContent(content); // Re-render in-place
     };
     resetAllContainer.appendChild(resetAllButton);
     content.appendChild(resetAllContainer);
-
-    showModal(content, { title: 'Custom Key Bindings', width: '700px' });
   }
 
   /**
-   * Show a modal that captures a key binding from the user.
+   * Prompt the user to press a key combination for rebinding an action.
+   * Transforms the binding row into an inline key capture area.
+   * On key press: applies binding immediately and re-renders the dialog.
+   * On Escape: cancels the capture.
+   * If a conflict is detected, a warning is shown below the row.
    */
-  promptForKeyBinding(action: string, keyCell: HTMLElement): void {
-    const promptContent = document.createElement('div');
-    promptContent.style.cssText = `
+  promptForKeyBinding(action: string, dialogContent: HTMLElement): void {
+    // Find the row for this action
+    const rows = dialogContent.querySelectorAll<HTMLElement>('[data-testid="binding-row"]');
+    let targetRow: HTMLElement | null = null;
+    for (const row of rows) {
+      if (row.dataset.action === action) {
+        targetRow = row;
+        break;
+      }
+    }
+
+    // Find the key cell in this row
+    const keyCell = targetRow?.querySelector<HTMLElement>('[data-testid="binding-key"]');
+    if (!keyCell) return;
+
+    // Store original text for cancel
+    const originalText = keyCell.textContent || '';
+
+    // Create a key-capture-prompt element appended to the dialog
+    const promptEl = document.createElement('div');
+    promptEl.setAttribute('data-testid', 'key-capture-prompt');
+    promptEl.className = 'key-capture-prompt';
+    promptEl.style.cssText = `
       text-align: center;
-      padding: 20px;
-    `;
-    promptContent.setAttribute('data-testid', 'key-capture-prompt');
-
-    const instruction = document.createElement('div');
-    instruction.style.cssText = `
-      color: var(--text-primary);
-      margin-bottom: 16px;
-      font-size: 14px;
-    `;
-    instruction.textContent = 'Press the key combination you want to use for this action:';
-    promptContent.appendChild(instruction);
-
-    const keyDisplay = document.createElement('div');
-    keyDisplay.style.cssText = `
-      background: var(--bg-hover);
-      border: 2px solid var(--accent-primary);
+      padding: 12px;
+      margin: 8px 0;
+      background: var(--bg-hover, #2a2a3e);
+      border: 2px solid var(--accent-primary, #4a7dff);
       border-radius: 8px;
-      padding: 16px;
-      color: var(--accent-primary);
-      font-family: monospace;
-      font-size: 18px;
-      font-weight: bold;
-      margin: 16px 0;
-      min-height: 24px;
+      color: var(--text-primary, #e0e0e0);
+      font-size: 13px;
     `;
-    keyDisplay.setAttribute('data-testid', 'key-display');
-    keyDisplay.textContent = 'Waiting for key press...';
-    promptContent.appendChild(keyDisplay);
+    promptEl.textContent = 'Press a key combination... (Escape to cancel)';
+    // Insert the prompt after the target row
+    if (targetRow?.nextSibling) {
+      dialogContent.insertBefore(promptEl, targetRow.nextSibling);
+    } else {
+      dialogContent.appendChild(promptEl);
+    }
 
-    const cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
-    cancelButton.style.cssText = `
-      background: var(--text-muted);
-      border: none;
-      color: var(--bg-primary);
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-      margin-top: 16px;
-    `;
-    // Listen for key presses
+    // Visual feedback on the key cell
+    keyCell.textContent = '...';
+    keyCell.style.borderColor = 'var(--accent-primary, #4a7dff)';
+
     let listening = true;
 
-    // Cleanup function to ensure event listener is always removed
     const cleanup = () => {
       if (!listening) return;
       listening = false;
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, true);
+      if (promptEl.parentNode) promptEl.remove();
+      // Also remove any conflict warning
+      const warning = dialogContent.querySelector('[data-testid="binding-conflict-warning"]');
+      if (warning) warning.remove();
     };
-
-    // Show the prompt modal with onClose to guarantee cleanup on any dismissal
-    const { close } = showModal(promptContent, { title: 'Set Key Binding', width: '400px', onClose: cleanup });
-
-    // Set up cancel button to properly clean up
-    cancelButton.onclick = () => {
-      cleanup();
-      close();
-    };
-    promptContent.appendChild(cancelButton);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!listening) return;
@@ -617,6 +618,14 @@ export class AppKeyboardHandler {
         return;
       }
 
+      // Handle Escape as cancel
+      if (e.code === 'Escape') {
+        keyCell.textContent = originalText;
+        keyCell.style.borderColor = '';
+        cleanup();
+        return;
+      }
+
       // Create key combination
       const combo: KeyCombination = {
         code: e.code,
@@ -626,91 +635,54 @@ export class AppKeyboardHandler {
         meta: e.metaKey && !e.ctrlKey
       };
 
-      // Display the combination
-      keyDisplay.textContent = this.formatKeyCombo(combo);
-
       // Check for conflicts with other actions
       const conflictAction = this.customKeyBindingsManager.findConflictingAction(combo, action);
 
-      // Remove any previous conflict warning
-      const existingWarning = promptContent.querySelector('.conflict-warning');
-      if (existingWarning) existingWarning.remove();
-
-      // Show conflict warning if needed
-      let forceOverride = false;
       if (conflictAction) {
+        // Show conflict warning below the row
+        // Remove any previous warning
+        const existingWarning = dialogContent.querySelector('[data-testid="binding-conflict-warning"]');
+        if (existingWarning) existingWarning.remove();
+
         const warning = document.createElement('div');
         warning.className = 'conflict-warning';
+        warning.setAttribute('role', 'alert');
         warning.style.cssText = `
           color: #f5a623;
           background: rgba(245, 166, 35, 0.1);
           border: 1px solid rgba(245, 166, 35, 0.3);
           border-radius: 4px;
           padding: 8px 12px;
-          margin-top: 8px;
+          margin: 4px 0;
           font-size: 12px;
+          text-align: center;
         `;
         warning.setAttribute('data-testid', 'binding-conflict-warning');
-        warning.textContent = `This combo is already used by "${conflictAction}". Confirming will override it.`;
-        keyDisplay.insertAdjacentElement('afterend', warning);
-        forceOverride = true;
+        warning.textContent = `This combo conflicts with "${conflictAction}".`;
+
+        // Insert the warning after the prompt
+        promptEl.insertAdjacentElement('afterend', warning);
+
+        // Update key cell to show the pressed combo
+        keyCell.textContent = this.formatKeyCombo(combo);
+        // Keep listening - don't auto-apply on conflict
+        return;
       }
 
-      // Confirm button
-      const confirmButton = document.createElement('button');
-      confirmButton.textContent = conflictAction ? 'Override' : 'Confirm';
-      confirmButton.style.cssText = `
-        background: ${conflictAction ? '#f5a623' : 'var(--accent-primary)'};
-        border: none;
-        color: white;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        margin-left: 8px;
-      `;
-      confirmButton.onclick = () => {
-        try {
-          this.customKeyBindingsManager.setCustomBinding(action, combo, forceOverride);
-          keyCell.textContent = this.formatKeyCombo(combo);
-          this.refresh(); // Update keyboard shortcuts immediately
-          cleanup();
-          close();
-        } catch (err) {
-          alert(`Error setting key binding: ${err}`);
-        }
-      };
+      // No conflict - apply the binding immediately
+      try {
+        this.customKeyBindingsManager.setCustomBinding(action, combo, true);
+        this.refresh(); // Update keyboard shortcuts immediately
+      } catch {
+        // Binding failed silently
+      }
 
-      // Replace cancel button with confirm + cancel
-      const buttonContainer = document.createElement('div');
-      buttonContainer.style.cssText = `
-        margin-top: 16px;
-        display: flex;
-        justify-content: center;
-        gap: 8px;
-      `;
-      buttonContainer.appendChild(confirmButton);
-
-      const newCancelButton = document.createElement('button');
-      newCancelButton.textContent = 'Cancel';
-      newCancelButton.style.cssText = `
-        background: var(--text-muted);
-        border: none;
-        color: var(--bg-primary);
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-      `;
-      newCancelButton.onclick = () => {
-        cleanup();
-        close();
-      };
-      buttonContainer.appendChild(newCancelButton);
-
-      // Replace the old cancel button
-      cancelButton.replaceWith(buttonContainer);
+      // Clean up and re-render the dialog content
+      cleanup();
+      this.renderCustomBindingsContent(dialogContent);
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
   }
 
   /**

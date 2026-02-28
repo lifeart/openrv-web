@@ -604,7 +604,7 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          if (decoderRegistry.detectFormat(buffer) === 'tiff') {
+          if (decoderRegistry.detectFormat(buffer) === 'TIFF') {
             await this.loadHDRFromBuffer(buffer, filename, url, originalUrl);
             return;
           }
@@ -1203,32 +1203,50 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    this.cachedIPImage?.close();
+
     const blob = new Blob([buffer], { type: 'image/avif' });
     const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
-    const videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
-    bitmap.close();
+    let videoFrame: VideoFrame | null = null;
+    let bitmapClosed = false;
+    let frameWidth: number;
+    let frameHeight: number;
+    try {
+      videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+      bitmap.close();
+      bitmapClosed = true;
 
-    const metadata: ImageMetadata = {
-      sourcePath: originalUrl ?? url,
-      frameNumber: 1,
-      transferFunction: colorInfo.transferFunction,
-      colorPrimaries: colorInfo.colorPrimaries,
-      colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
-      attributes: {
-        hdr: true,
-        formatName: 'avif-hdr',
-      },
-    };
+      frameWidth = videoFrame.displayWidth;
+      frameHeight = videoFrame.displayHeight;
 
-    this.cachedIPImage = new IPImage({
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
-      channels: 4,
-      dataType: 'float32',
-      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
-      videoFrame,
-      metadata,
-    });
+      const metadata: ImageMetadata = {
+        sourcePath: originalUrl ?? url,
+        frameNumber: 1,
+        transferFunction: colorInfo.transferFunction,
+        colorPrimaries: colorInfo.colorPrimaries,
+        colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+        attributes: {
+          hdr: true,
+          formatName: 'avif-hdr',
+        },
+      };
+
+      this.cachedIPImage = new IPImage({
+        width: frameWidth,
+        height: frameHeight,
+        channels: 4,
+        dataType: 'float32',
+        data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+        videoFrame,
+        metadata,
+      });
+
+      videoFrame = null; // Ownership transferred to IPImage
+    } catch (e) {
+      if (!bitmapClosed) { try { bitmap.close(); } catch { /* */ } }
+      if (videoFrame) { try { videoFrame.close(); } catch { /* */ } }
+      throw e;
+    }
 
     this.url = url;
     this.isEXR = false;
@@ -1238,8 +1256,8 @@ export class FileSourceNode extends BaseSourceNode {
 
     this.metadata = {
       name,
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
+      width: frameWidth,
+      height: frameHeight,
       duration: 1,
       fps: 24,
     };
@@ -1248,8 +1266,8 @@ export class FileSourceNode extends BaseSourceNode {
     if (originalUrl) {
       this.properties.setValue('originalUrl', originalUrl);
     }
-    this.properties.setValue('width', videoFrame.displayWidth);
-    this.properties.setValue('height', videoFrame.displayHeight);
+    this.properties.setValue('width', frameWidth);
+    this.properties.setValue('height', frameHeight);
     this.properties.setValue('isHDR', true);
 
     this.canvasDirty = true;
@@ -1267,32 +1285,50 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    this.cachedIPImage?.close();
+
     const blob = new Blob([buffer], { type: 'image/jxl' });
     const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
-    const videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
-    bitmap.close();
+    let videoFrame: VideoFrame | null = null;
+    let bitmapClosed = false;
+    let frameWidth: number;
+    let frameHeight: number;
+    try {
+      videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+      bitmap.close();
+      bitmapClosed = true;
 
-    const metadata: ImageMetadata = {
-      sourcePath: originalUrl ?? url,
-      frameNumber: 1,
-      transferFunction: colorInfo.transferFunction,
-      colorPrimaries: colorInfo.colorPrimaries,
-      colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
-      attributes: {
-        hdr: true,
-        formatName: 'jxl-hdr',
-      },
-    };
+      frameWidth = videoFrame.displayWidth;
+      frameHeight = videoFrame.displayHeight;
 
-    this.cachedIPImage = new IPImage({
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
-      channels: 4,
-      dataType: 'float32',
-      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
-      videoFrame,
-      metadata,
-    });
+      const metadata: ImageMetadata = {
+        sourcePath: originalUrl ?? url,
+        frameNumber: 1,
+        transferFunction: colorInfo.transferFunction,
+        colorPrimaries: colorInfo.colorPrimaries,
+        colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+        attributes: {
+          hdr: true,
+          formatName: 'jxl-hdr',
+        },
+      };
+
+      this.cachedIPImage = new IPImage({
+        width: frameWidth,
+        height: frameHeight,
+        channels: 4,
+        dataType: 'float32',
+        data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+        videoFrame,
+        metadata,
+      });
+
+      videoFrame = null; // Ownership transferred to IPImage
+    } catch (e) {
+      if (!bitmapClosed) { try { bitmap.close(); } catch { /* */ } }
+      if (videoFrame) { try { videoFrame.close(); } catch { /* */ } }
+      throw e;
+    }
 
     this.url = url;
     this.isEXR = false;
@@ -1302,8 +1338,8 @@ export class FileSourceNode extends BaseSourceNode {
 
     this.metadata = {
       name,
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
+      width: frameWidth,
+      height: frameHeight,
       duration: 1,
       fps: 24,
     };
@@ -1312,8 +1348,8 @@ export class FileSourceNode extends BaseSourceNode {
     if (originalUrl) {
       this.properties.setValue('originalUrl', originalUrl);
     }
-    this.properties.setValue('width', videoFrame.displayWidth);
-    this.properties.setValue('height', videoFrame.displayHeight);
+    this.properties.setValue('width', frameWidth);
+    this.properties.setValue('height', frameHeight);
     this.properties.setValue('isHDR', true);
 
     this.canvasDirty = true;
@@ -1398,32 +1434,50 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    this.cachedIPImage?.close();
+
     const blob = new Blob([buffer], { type: 'image/heic' });
     const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
-    const videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
-    bitmap.close();
+    let videoFrame: VideoFrame | null = null;
+    let bitmapClosed = false;
+    let frameWidth: number;
+    let frameHeight: number;
+    try {
+      videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+      bitmap.close();
+      bitmapClosed = true;
 
-    const metadata: ImageMetadata = {
-      sourcePath: originalUrl ?? url,
-      frameNumber: 1,
-      transferFunction: colorInfo.transferFunction,
-      colorPrimaries: colorInfo.colorPrimaries,
-      colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
-      attributes: {
-        hdr: true,
-        formatName: 'heic-hdr',
-      },
-    };
+      frameWidth = videoFrame.displayWidth;
+      frameHeight = videoFrame.displayHeight;
 
-    this.cachedIPImage = new IPImage({
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
-      channels: 4,
-      dataType: 'float32',
-      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
-      videoFrame,
-      metadata,
-    });
+      const metadata: ImageMetadata = {
+        sourcePath: originalUrl ?? url,
+        frameNumber: 1,
+        transferFunction: colorInfo.transferFunction,
+        colorPrimaries: colorInfo.colorPrimaries,
+        colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+        attributes: {
+          hdr: true,
+          formatName: 'heic-hdr',
+        },
+      };
+
+      this.cachedIPImage = new IPImage({
+        width: frameWidth,
+        height: frameHeight,
+        channels: 4,
+        dataType: 'float32',
+        data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+        videoFrame,
+        metadata,
+      });
+
+      videoFrame = null; // Ownership transferred to IPImage
+    } catch (e) {
+      if (!bitmapClosed) { try { bitmap.close(); } catch { /* */ } }
+      if (videoFrame) { try { videoFrame.close(); } catch { /* */ } }
+      throw e;
+    }
 
     this.url = url;
     this.isEXR = false;
@@ -1433,8 +1487,8 @@ export class FileSourceNode extends BaseSourceNode {
 
     this.metadata = {
       name,
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
+      width: frameWidth,
+      height: frameHeight,
       duration: 1,
       fps: 24,
     };
@@ -1443,8 +1497,8 @@ export class FileSourceNode extends BaseSourceNode {
     if (originalUrl) {
       this.properties.setValue('originalUrl', originalUrl);
     }
-    this.properties.setValue('width', videoFrame.displayWidth);
-    this.properties.setValue('height', videoFrame.displayHeight);
+    this.properties.setValue('width', frameWidth);
+    this.properties.setValue('height', frameHeight);
     this.properties.setValue('isHDR', true);
 
     this.canvasDirty = true;
@@ -1790,7 +1844,7 @@ export class FileSourceNode extends BaseSourceNode {
     // Check if this is a TIFF file - only use HDR path for float TIFFs
     if (isTIFFExtension(file.name)) {
       const buffer = await file.arrayBuffer();
-      if (decoderRegistry.detectFormat(buffer) === 'tiff') {
+      if (decoderRegistry.detectFormat(buffer) === 'TIFF') {
         const url = URL.createObjectURL(file);
         await this.loadHDRFromBuffer(buffer, file.name, url);
         return;

@@ -80,6 +80,7 @@ test.describe('Multiple File Loading', () => {
     // Load first file (image) - this becomes source A
     await loadImageFile(page);
     const canvas = page.locator('canvas').first();
+    await page.waitForTimeout(300); // Wait for render to settle
 
     // Verify image content is visible
     const screenshotAfterImage = await canvas.screenshot();
@@ -88,6 +89,7 @@ test.describe('Multiple File Loading', () => {
     // Load second file (video) - this becomes source B
     // View stays on source A (image) for A/B compare UX
     await loadVideoFile(page);
+    await page.waitForTimeout(300); // Wait for source B to be ready
 
     // Verify source A (image) is still visible
     const screenshotAfterVideo = await canvas.screenshot();
@@ -95,8 +97,10 @@ test.describe('Multiple File Loading', () => {
 
     // Content should be similar (still showing source A)
     // Use toggle to switch to source B (video) to verify it's available
+    await canvas.click({ force: true }); // Ensure canvas has focus for keyboard
+    await page.waitForTimeout(100);
     await page.keyboard.press('`');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500); // Wait for source switch and render
 
     const screenshotAfterToggle = await canvas.screenshot();
     // Now should show video (source B), which is different from image

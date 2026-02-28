@@ -37,6 +37,7 @@ interface TestableViewerGLRenderer {
   _canvas2dBlitFailed: boolean;
   _logicalWidth: number;
   _logicalHeight: number;
+  _luminanceAnalyzer: { computeLuminanceStats: (texture: WebGLTexture, inputTransfer: number) => { avg: number; linearAvg: number } } | null;
 }
 
 function createMockContext(): GLRendererContext {
@@ -71,6 +72,7 @@ function createMockRenderer() {
     setColorInversion: vi.fn(),
     setToneMappingState: vi.fn(),
     setDisplayColorState: vi.fn(),
+    setHDRHeadroom: vi.fn(),
     dispose: vi.fn(),
   } as unknown as Renderer;
 }
@@ -167,6 +169,7 @@ describe('ViewerGLRenderer', () => {
       expect(() => renderer.setColorInversion(true)).not.toThrow();
       expect(() => renderer.setToneMappingState({ enabled: true, operator: 'aces' })).not.toThrow();
       expect(() => renderer.setDisplayColorState({ transferFunction: 0, displayGamma: 2.2, displayBrightness: 1, customGamma: 1 })).not.toThrow();
+      expect(() => renderer.setHDRHeadroom(3.0)).not.toThrow();
     });
 
     it('VGLR-024: all delegation methods forward arguments to the underlying renderer', () => {
@@ -189,11 +192,15 @@ describe('ViewerGLRenderer', () => {
       renderer.setDisplayColorState(dcState);
       expect(mock.setDisplayColorState).toHaveBeenCalledWith(dcState);
 
+      renderer.setHDRHeadroom(3.0);
+      expect(mock.setHDRHeadroom).toHaveBeenCalledWith(3.0);
+
       // Each method was called exactly once — no cross-talk between delegation methods
       expect(mock.setColorAdjustments).toHaveBeenCalledTimes(1);
       expect(mock.setColorInversion).toHaveBeenCalledTimes(1);
       expect(mock.setToneMappingState).toHaveBeenCalledTimes(1);
       expect(mock.setDisplayColorState).toHaveBeenCalledTimes(1);
+      expect(mock.setHDRHeadroom).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -407,6 +414,7 @@ describe('ViewerGLRenderer', () => {
         resize: vi.fn(),
         clear: vi.fn(),
         renderImage: vi.fn(),
+        renderTiledImages: vi.fn(),
         hasPendingStateChanges: vi.fn(() => true),
         setColorPrimaries: vi.fn(),
         isOCIOWasmActive: vi.fn(() => false),
@@ -469,7 +477,7 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
 
-    it('VGLR-034: HDR native path disables tone mapping for HLG content', () => {
+    it('VGLR-034: HDR native path preserves tone mapping for HLG content', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
 
       // Spy buildRenderState to return state with tone mapping enabled
@@ -484,11 +492,11 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      // HLG content: tone mapping force-disabled (display handles HLG natively)
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
-    it('VGLR-035: HDR native path disables tone mapping for PQ content', () => {
+    it('VGLR-035: HDR native path preserves tone mapping for PQ content', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
 
       const stateWithTM = createDefaultRenderState();
@@ -502,8 +510,8 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      // PQ content: tone mapping force-disabled
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
     it('VGLR-036: HDR native path preserves tone mapping for linear/sRGB content (gainmap/EXR)', () => {
@@ -566,6 +574,108 @@ describe('ViewerGLRenderer', () => {
 
       // HLG output → rec2020 output; no colorPrimaries metadata → undefined input
       expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith(undefined, 'rec2020');
+    });
+
+    it('VGLR-103: HDR native path updates Drago luminance params in HDR output mode', () => {
+      const { glRenderer, capturedStates, mockRendererObj } = setupHDRRenderer('hlg');
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._luminanceAnalyzer = {
+        computeLuminanceStats: vi.fn(() => ({ avg: 0.4, linearAvg: 0.7 })),
+      };
+
+      (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
+      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({} as WebGLTexture));
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'hlg' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('drago');
+      expect(capturedStates[0]!.toneMappingState.dragoLwa).toBeCloseTo(0.4, 5);
+      expect(capturedStates[0]!.toneMappingState.dragoLmax).toBeCloseTo(4.2, 5);
+    });
+
+    it('VGLR-106: HDR native path preserves highlight/shadow adjustments', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+      const stateWithHighlights = createDefaultRenderState();
+      stateWithHighlights.colorAdjustments = {
+        ...stateWithHighlights.colorAdjustments,
+        highlights: -35,
+        shadows: 22,
+        whites: 18,
+        blacks: -12,
+      };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.colorAdjustments.highlights).toBe(-35);
+      expect(capturedStates[0]!.colorAdjustments.shadows).toBe(22);
+      expect(capturedStates[0]!.colorAdjustments.whites).toBe(18);
+      expect(capturedStates[0]!.colorAdjustments.blacks).toBe(-12);
+    });
+
+    it('VGLR-104: renderTiledHDR applies HDR display overrides and color primaries', () => {
+      const { glRenderer, capturedStates, mockRendererObj } = setupHDRRenderer('hlg');
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { colorPrimaries: 'bt2020' },
+      });
+
+      const ok = glRenderer.renderTiledHDR(
+        [{ image, viewport: { x: 0, y: 0, width: 100, height: 100 } as any }],
+        100,
+        100,
+      );
+
+      expect(ok).toBe(true);
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith('bt2020', 'rec2020');
+    });
+
+    it('VGLR-107: renderTiledHDR preserves highlight/shadow adjustments', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+      const stateWithHighlights = createDefaultRenderState();
+      stateWithHighlights.colorAdjustments = {
+        ...stateWithHighlights.colorAdjustments,
+        highlights: -40,
+        shadows: 15,
+        whites: 10,
+        blacks: -8,
+      };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { transferFunction: 'hlg' },
+      });
+      const ok = glRenderer.renderTiledHDR(
+        [{ image, viewport: { x: 0, y: 0, width: 100, height: 100 } as any }],
+        100,
+        100,
+      );
+
+      expect(ok).toBe(true);
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.colorAdjustments.highlights).toBe(-40);
+      expect(capturedStates[0]!.colorAdjustments.shadows).toBe(15);
+      expect(capturedStates[0]!.colorAdjustments.whites).toBe(10);
+      expect(capturedStates[0]!.colorAdjustments.blacks).toBe(-8);
     });
   });
 
@@ -775,7 +885,7 @@ describe('ViewerGLRenderer', () => {
       };
     }
 
-    it('VGLR-070: Canvas2D blit path disables tone mapping for HLG content', () => {
+    it('VGLR-070: Canvas2D blit path preserves tone mapping for HLG content', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -789,10 +899,11 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
-    it('VGLR-071: Canvas2D blit path disables tone mapping for PQ content', () => {
+    it('VGLR-071: Canvas2D blit path preserves tone mapping for PQ content', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -806,7 +917,8 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('reinhard');
     });
 
     it('VGLR-072: Canvas2D blit path preserves tone mapping for sRGB/linear content', () => {
@@ -827,6 +939,32 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
+    it('VGLR-089: Canvas2D blit path updates Drago luminance params', () => {
+      const { glRenderer, capturedStates, mockRendererObj } = setupCanvas2DBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._luminanceAnalyzer = {
+        computeLuminanceStats: vi.fn(() => ({ avg: 0.5, linearAvg: 0.8 })),
+      };
+
+      (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
+      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({} as WebGLTexture));
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('drago');
+      expect(capturedStates[0]!.toneMappingState.dragoLwa).toBeCloseTo(0.5, 5);
+      expect(capturedStates[0]!.toneMappingState.dragoLmax).toBeCloseTo(8.0, 5);
+    });
+
     it('VGLR-073: Canvas2D blit path sets displayColor overrides for linear-light output', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
@@ -838,13 +976,42 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
     });
 
-    it('VGLR-074: Canvas2D blit path sets gamma override to 1', () => {
+    it('VGLR-074: Canvas2D blit path preserves creative gamma setting', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
-      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      const stateWithGamma = createDefaultRenderState();
+      stateWithGamma.colorAdjustments = { ...stateWithGamma.colorAdjustments, gamma: 2.2 };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithGamma);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32', metadata: { transferFunction: 'hlg' } });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.colorAdjustments.gamma).toBe(1);
+      expect(capturedStates[0]!.colorAdjustments.gamma).toBe(2.2);
+    });
+
+    it('VGLR-109: Canvas2D blit path preserves highlight/shadow adjustments', () => {
+      const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
+      const stateWithHighlights = createDefaultRenderState();
+      stateWithHighlights.colorAdjustments = {
+        ...stateWithHighlights.colorAdjustments,
+        highlights: -32,
+        shadows: 20,
+        whites: 14,
+        blacks: -11,
+      };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.colorAdjustments.highlights).toBe(-32);
+      expect(capturedStates[0]!.colorAdjustments.shadows).toBe(20);
+      expect(capturedStates[0]!.colorAdjustments.whites).toBe(14);
+      expect(capturedStates[0]!.colorAdjustments.blacks).toBe(-11);
     });
 
     it('VGLR-075: Canvas2D blit path uses sync readback when state has pending changes', () => {
@@ -983,7 +1150,7 @@ describe('ViewerGLRenderer', () => {
       };
     }
 
-    it('VGLR-080: WebGPU blit path disables tone mapping for HLG content', () => {
+    it('VGLR-080: WebGPU blit path preserves tone mapping for HLG content', () => {
       const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -997,10 +1164,11 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
     });
 
-    it('VGLR-081: WebGPU blit path disables tone mapping for PQ content', () => {
+    it('VGLR-081: WebGPU blit path preserves tone mapping for PQ content', () => {
       const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
 
       const stateWithTM = createDefaultRenderState();
@@ -1014,7 +1182,8 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('drago');
     });
 
     it('VGLR-082: WebGPU blit path preserves tone mapping for linear float content', () => {
@@ -1032,6 +1201,57 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates.length).toBe(1);
       expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
       expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
+    });
+
+    it('VGLR-108: WebGPU blit path preserves highlight/shadow adjustments', () => {
+      const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
+      const stateWithHighlights = createDefaultRenderState();
+      stateWithHighlights.colorAdjustments = {
+        ...stateWithHighlights.colorAdjustments,
+        highlights: -28,
+        shadows: 12,
+        whites: 16,
+        blacks: -9,
+      };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'hlg' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.colorAdjustments.highlights).toBe(-28);
+      expect(capturedStates[0]!.colorAdjustments.shadows).toBe(12);
+      expect(capturedStates[0]!.colorAdjustments.whites).toBe(16);
+      expect(capturedStates[0]!.colorAdjustments.blacks).toBe(-9);
+    });
+
+    it('VGLR-105: WebGPU blit path updates Drago luminance params', () => {
+      const { glRenderer, capturedStates, mockRendererObj } = setupWebGPUBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._luminanceAnalyzer = {
+        computeLuminanceStats: vi.fn(() => ({ avg: 0.55, linearAvg: 0.9 })),
+      };
+
+      (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
+      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({} as WebGLTexture));
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('drago');
+      expect(capturedStates[0]!.toneMappingState.dragoLwa).toBeCloseTo(0.55, 5);
+      expect(capturedStates[0]!.toneMappingState.dragoLmax).toBeCloseTo(9.0, 5);
     });
 
     it('VGLR-083: WebGPU blit path hides Canvas2D blit canvas on activation', () => {

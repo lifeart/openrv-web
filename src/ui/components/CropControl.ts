@@ -175,9 +175,14 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   }
 
   private handleDocumentClick(e: MouseEvent): void {
-    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-      this.hidePanel();
-    }
+    if (!this.isPanelOpen) return;
+    const target = e.target as Node;
+    // Don't close when clicking on the crop button/container or the panel itself
+    if (this.container.contains(target) || this.panel.contains(target)) return;
+    // Don't close when clicking in the viewer area (allows crop handle dragging)
+    const viewer = document.querySelector('.viewer-container');
+    if (viewer && viewer.contains(target)) return;
+    this.hidePanel();
   }
 
   private createPanelContent(): void {

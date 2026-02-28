@@ -10,7 +10,10 @@
  * to initial bundle cost.
  */
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
+/** Built-in format names (autocomplete-friendly) */
+export type BuiltinFormatName = 'exr' | 'DPX' | 'Cineon' | 'TIFF' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf';
+/** Format name type: includes built-in names plus any string for plugin formats */
+export type FormatName = BuiltinFormatName | (string & {}) | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -130,11 +133,26 @@ function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
     const tagType = view.getUint16(pos + 2, le);
 
     if (tagId === TAG_ID_BITS_PER_SAMPLE || tagId === TAG_ID_SAMPLE_FORMAT) {
+      const count = view.getUint32(pos + 4, le);
       let val: number;
       if (tagType === 3) { // SHORT
-        val = view.getUint16(pos + 8, le);
+        if (count <= 2) {
+          // Value fits inline in the 4-byte value/offset field
+          val = view.getUint16(pos + 8, le);
+        } else {
+          // Value/offset field contains an offset to the actual values
+          const dataOffset = view.getUint32(pos + 8, le);
+          if (dataOffset + 2 > buffer.byteLength) continue;
+          val = view.getUint16(dataOffset, le);
+        }
       } else if (tagType === 4) { // LONG
-        val = view.getUint32(pos + 8, le);
+        if (count <= 1) {
+          val = view.getUint32(pos + 8, le);
+        } else {
+          const dataOffset = view.getUint32(pos + 8, le);
+          if (dataOffset + 4 > buffer.byteLength) continue;
+          val = view.getUint32(dataOffset, le);
+        }
       } else {
         continue;
       }
@@ -418,7 +436,7 @@ const exrDecoder: FormatDecoder = {
  * DPX format decoder adapter
  */
 const dpxDecoder: FormatDecoder = {
-  formatName: 'dpx',
+  formatName: 'DPX',
   canDecode: isDPXFile,
   async decode(buffer: ArrayBuffer, options?: Record<string, unknown>) {
     const { decodeDPX } = await import('./DPXDecoder');
@@ -440,7 +458,7 @@ const dpxDecoder: FormatDecoder = {
  * Cineon format decoder adapter
  */
 const cineonDecoder: FormatDecoder = {
-  formatName: 'cineon',
+  formatName: 'Cineon',
   canDecode: isCineonFile,
   async decode(buffer: ArrayBuffer, options?: Record<string, unknown>) {
     const { decodeCineon } = await import('./CineonDecoder');
@@ -462,7 +480,7 @@ const cineonDecoder: FormatDecoder = {
  * TIFF float format decoder adapter
  */
 const tiffDecoder: FormatDecoder = {
-  formatName: 'tiff',
+  formatName: 'TIFF',
   canDecode: isTIFFAndFloat,
   async decode(buffer: ArrayBuffer) {
     const { decodeTIFFFloat } = await import('./TIFFFloatDecoder');
@@ -827,6 +845,19 @@ export class DecoderRegistry {
     } else {
       this.decoders.push(decoder);
     }
+  }
+
+  /**
+   * Unregister a format decoder by format name.
+   * Returns true if a decoder was found and removed.
+   */
+  unregisterDecoder(formatName: string): boolean {
+    const index = this.decoders.findIndex(d => d.formatName === formatName);
+    if (index >= 0) {
+      this.decoders.splice(index, 1);
+      return true;
+    }
+    return false;
   }
 }
 

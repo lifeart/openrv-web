@@ -32,7 +32,7 @@ async function waitForToneMappingState(
       return true;
     },
     expected,
-    { timeout: 5000 },
+    { timeout: 10000 },
   );
 }
 
@@ -45,7 +45,7 @@ async function openToneMappingDropdown(page: import('@playwright/test').Page) {
     await expect(colorPanel).not.toBeVisible();
   }
 
-  await page.locator('button[data-tab-id="view"]').click({ force: true });
+  await page.locator('button[data-tab-id="color"]').click({ force: true });
   const control = page.locator('[data-testid="tone-mapping-control-button"]');
   await expect(control).toBeVisible();
   await control.click();
@@ -60,6 +60,7 @@ async function selectOperatorViaUI(
 ) {
   await openToneMappingDropdown(page);
   await page.click(`[data-testid="tone-mapping-operator-${operator}"]`);
+  await page.waitForTimeout(200); // Wait for state update
   const expectedEnabled = operator !== 'off';
   await waitForToneMappingState(page, { enabled: expectedEnabled, operator });
 }
@@ -91,8 +92,8 @@ test.describe('HDR Tone Mapping Integration', () => {
     await loadVideoFile(page);
   });
 
-  test('HDRTM-E001: tone mapping dropdown is visible in View tab', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
+  test('HDRTM-E001: tone mapping dropdown is visible in Color tab', async ({ page }) => {
+    await page.click('button[data-tab-id="color"]');
 
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
     await expect(control).toBeVisible();

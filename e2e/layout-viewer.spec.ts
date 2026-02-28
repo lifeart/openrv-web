@@ -122,12 +122,15 @@ test.describe('Layout Viewer Integration', () => {
     await expect(rightPanel).toBeAttached();
   });
 
-  test('LV-E010: preset bar is visible with preset buttons', async ({ page }) => {
-    const presetBar = page.locator('[data-testid="layout-preset-bar"]');
-    await expect(presetBar).toBeVisible();
+  test('LV-E010: layout menu button is visible with preset items', async ({ page }) => {
+    const layoutMenuButton = page.locator('[data-testid="layout-menu-button"]');
+    await expect(layoutMenuButton).toBeVisible();
 
-    const defaultPreset = page.locator('[data-testid="layout-preset-default"]');
-    const reviewPreset = page.locator('[data-testid="layout-preset-review"]');
+    // Open the layout preset dropdown menu
+    await layoutMenuButton.click();
+
+    const defaultPreset = page.locator('[data-testid="layout-menu-default"]');
+    const reviewPreset = page.locator('[data-testid="layout-menu-review"]');
     await expect(defaultPreset).toBeVisible();
     await expect(reviewPreset).toBeVisible();
   });
@@ -140,8 +143,9 @@ test.describe('Layout Viewer Integration', () => {
     expect(initialBox).not.toBeNull();
     expect(initialBox!.height).toBeGreaterThan(100);
 
-    // Switch to review preset
-    await page.click('[data-testid="layout-preset-review"]');
+    // Switch to review preset via layout dropdown menu
+    await page.click('[data-testid="layout-menu-button"]');
+    await page.click('[data-testid="layout-menu-review"]');
     await page.waitForTimeout(100);
 
     // Viewer should still have non-zero dimensions
@@ -150,8 +154,9 @@ test.describe('Layout Viewer Integration', () => {
     expect(reviewBox!.width).toBeGreaterThan(100);
     expect(reviewBox!.height).toBeGreaterThan(100);
 
-    // Switch back to default
-    await page.click('[data-testid="layout-preset-default"]');
+    // Switch back to default via layout dropdown menu
+    await page.click('[data-testid="layout-menu-button"]');
+    await page.click('[data-testid="layout-menu-default"]');
     await page.waitForTimeout(100);
 
     const defaultBox = await viewerContainer.boundingBox();
@@ -166,8 +171,9 @@ test.describe('Layout Viewer Integration', () => {
     const canvas = page.locator('[data-testid="viewer-image-canvas"]');
     await expect(canvas).toBeVisible();
 
-    // Switch preset
-    await page.click('[data-testid="layout-preset-review"]');
+    // Switch preset via layout dropdown menu
+    await page.click('[data-testid="layout-menu-button"]');
+    await page.click('[data-testid="layout-menu-review"]');
     await page.waitForTimeout(200);
 
     // Canvas should still be visible

@@ -22,6 +22,8 @@ import { ViewAPI } from './ViewAPI';
 import { ColorAPI } from './ColorAPI';
 import { MarkersAPI } from './MarkersAPI';
 import { EventsAPI } from './EventsAPI';
+import { pluginRegistry } from '../plugin/PluginRegistry';
+import type { Plugin, PluginId, PluginState } from '../plugin/types';
 
 /**
  * Configuration passed to initialize the API.
@@ -68,6 +70,22 @@ export class OpenRVAPI {
 
   /** Event subscription methods */
   readonly events: EventsAPI;
+
+  /** Plugin management */
+  readonly plugins = {
+    /** Register a plugin object */
+    register: (plugin: Plugin) => pluginRegistry.register(plugin),
+    /** Activate a registered plugin */
+    activate: (id: PluginId) => pluginRegistry.activate(id),
+    /** Deactivate an active plugin */
+    deactivate: (id: PluginId) => pluginRegistry.deactivate(id),
+    /** Load and register a plugin from a URL */
+    loadFromURL: (url: string) => pluginRegistry.loadFromURL(url),
+    /** Get current state of a plugin */
+    getState: (id: PluginId): PluginState | undefined => pluginRegistry.getState(id),
+    /** List all registered plugin IDs */
+    list: () => pluginRegistry.getRegisteredIds(),
+  };
 
   private _ready = false;
 

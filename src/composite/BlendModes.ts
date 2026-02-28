@@ -21,6 +21,7 @@
  */
 
 import type { StackCompositeType } from '../nodes/groups/StackGroupNode';
+import { pluginRegistry } from '../plugin/PluginRegistry';
 
 export type BlendMode =
   | 'normal'      // Standard alpha over
@@ -58,7 +59,7 @@ export const BLEND_MODE_LABELS: Record<BlendMode, string> = {
  * Blend two color values using the specified blend mode
  * All values are 0-255, returns 0-255
  */
-function blendChannel(a: number, b: number, mode: BlendMode): number {
+function blendChannel(a: number, b: number, mode: BlendMode | (string & {})): number {
   // Normalize to 0-1 for calculations
   const an = a / 255;
   const bn = b / 255;
@@ -91,8 +92,16 @@ function blendChannel(a: number, b: number, mode: BlendMode): number {
     case 'exclusion':
       result = an + bn - 2 * an * bn;
       break;
-    default:
-      result = bn;
+    default: {
+      // Fallback to plugin-registered blend modes before returning pass-through
+      const pluginBlend = pluginRegistry.getBlendMode(mode);
+      if (pluginBlend) {
+        result = Math.max(0, Math.min(1, pluginBlend.blend(an, bn)));
+      } else {
+        result = bn;
+      }
+      break;
+    }
   }
 
   return Math.round(result * 255);

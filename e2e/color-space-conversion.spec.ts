@@ -5,7 +5,8 @@ import {
   getOCIOState,
   captureCanvasState,
   verifyCanvasChanged,
-  getCanvasBrightness,
+  captureViewerScreenshot,
+  imagesAreDifferent,
   sampleCanvasPixels,
 } from './fixtures';
 
@@ -55,7 +56,8 @@ async function selectDropdownOption(
   await page.locator(`[data-testid="${triggerTestId}"]`).click();
   const dropdown = page.locator('.dropdown-menu').last();
   await expect(dropdown).toBeVisible({ timeout: 5000 });
-  await dropdown.locator('button', { hasText: optionText }).click();
+  // Use exact data-value match to avoid ambiguity (e.g. "sRGB" vs "Linear sRGB")
+  await dropdown.locator(`button[data-value="${optionText}"]`).click();
   await expect(dropdown).not.toBeVisible({ timeout: 5000 });
 }
 
@@ -70,17 +72,17 @@ test.describe('Color Space Conversion E2E', () => {
     await expect(page.locator('[data-testid="ocio-panel-button"]')).toBeVisible();
   });
 
-  test('CS-E001: enabling OCIO changes canvas brightness', async ({ page }) => {
-    const beforeBrightness = await getCanvasBrightness(page);
+  test('CS-E001: enabling OCIO changes canvas output', async ({ page }) => {
+    const screenshotBefore = await captureViewerScreenshot(page);
 
     await enableOCIO(page);
     // Wait for render
     await page.waitForTimeout(500);
 
-    const afterBrightness = await getCanvasBrightness(page);
+    const screenshotAfter = await captureViewerScreenshot(page);
 
-    // Enabling OCIO with default ACEScg→sRGB pipeline should change brightness
-    expect(Math.abs(afterBrightness - beforeBrightness)).toBeGreaterThan(0);
+    // Enabling OCIO with default ACES SDR-video pipeline should change the visual output
+    expect(imagesAreDifferent(screenshotBefore, screenshotAfter)).toBe(true);
   });
 
   test('CS-E002: switching input color space changes canvas', async ({ page }) => {
@@ -135,7 +137,7 @@ test.describe('Color Space Conversion E2E', () => {
     ]);
 
     // Change display to Rec.709 (same primaries as sRGB, only OETF differs)
-    await selectDropdownOption(page, 'ocio-display', 'Rec.709');
+    await selectDropdownOption(page, 'ocio-display-select', 'Rec.709');
     await page.waitForTimeout(300);
     const pixelsRec709 = await sampleCanvasPixels(page, [
       { x: 80, y: 80 },
@@ -149,16 +151,23 @@ test.describe('Color Space Conversion E2E', () => {
   });
 
   test('CS-E005: OCIO round-trip (enable→modify→reset) restores original', async ({ page }) => {
+    test.slow(); // allow extra time under parallel load
+
+    // Wait for initial render to fully settle before capturing baseline
+    await page.waitForTimeout(300);
     const beforeState = await captureCanvasState(page);
 
     // Enable OCIO
     await enableOCIO(page);
-    await page.waitForTimeout(300);
+    // Wait for OCIO shader pipeline to finish rendering
+    await page.waitForTimeout(800);
 
     // Disable OCIO
     await page.locator('[data-testid="ocio-enable-toggle"]').click();
     await waitForOCIOEnabled(page, false);
-    await page.waitForTimeout(300);
+    // Wait for render pipeline to fully reset after disabling OCIO
+    // Needs generous time under heavy parallel load for GPU pipeline flush
+    await page.waitForTimeout(1000);
 
     const afterState = await captureCanvasState(page);
 
@@ -166,24 +175,16 @@ test.describe('Color Space Conversion E2E', () => {
     expect(beforeState).toBe(afterState);
   });
 
-  test('CS-E006: pixel sample with OCIO enabled shows different values than disabled', async ({ page }) => {
-    const pixelsBefore = await sampleCanvasPixels(page, [
-      { x: 60, y: 60 },
-    ]);
+  test('CS-E006: OCIO enabled produces different visual output than disabled', async ({ page }) => {
+    const screenshotBefore = await captureViewerScreenshot(page);
 
     await enableOCIO(page);
     await page.waitForTimeout(500);
 
-    const pixelsAfter = await sampleCanvasPixels(page, [
-      { x: 60, y: 60 },
-    ]);
+    const screenshotAfter = await captureViewerScreenshot(page);
 
-    // At least one channel should differ
-    const differs =
-      pixelsBefore[0]!.r !== pixelsAfter[0]!.r ||
-      pixelsBefore[0]!.g !== pixelsAfter[0]!.g ||
-      pixelsBefore[0]!.b !== pixelsAfter[0]!.b;
-    expect(differs).toBe(true);
+    // The ACES SDR-video view applies a tone-mapping curve that visibly changes the output
+    expect(imagesAreDifferent(screenshotBefore, screenshotAfter)).toBe(true);
   });
 
   test('CS-E007: with OCIO enabled, waveform scope updates', async ({ page }) => {

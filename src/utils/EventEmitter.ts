@@ -46,4 +46,19 @@ export class EventEmitter<Events extends EventMap = EventMap> {
       this.listeners.clear();
     }
   }
+
+  /**
+   * Returns the number of listeners for a specific event,
+   * or the total listener count across all events if no event is specified.
+   */
+  listenerCount<K extends keyof Events>(event?: K): number {
+    if (event !== undefined) {
+      return this.listeners.get(event)?.size ?? 0;
+    }
+    let total = 0;
+    for (const set of this.listeners.values()) {
+      total += set.size;
+    }
+    return total;
+  }
 }

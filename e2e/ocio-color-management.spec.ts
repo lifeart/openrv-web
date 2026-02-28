@@ -141,8 +141,18 @@ test.describe('OCIO Color Management', () => {
       const ocioPanel = page.locator('[data-testid="ocio-panel"]');
       await expect(ocioPanel).toBeVisible();
 
-      // Click on the viewer area (outside panel)
-      await page.locator('.viewer-container canvas').first().click({ position: { x: 10, y: 10 } });
+      // Click on the viewer area (outside panel).
+      // The OCIO panel is fixed-positioned near the top-left, so click at
+      // the bottom-right region of the canvas to avoid the panel overlay.
+      const canvas = page.locator('.viewer-container canvas').first();
+      const canvasBox = await canvas.boundingBox();
+      expect(canvasBox).not.toBeNull();
+      await canvas.click({
+        position: {
+          x: canvasBox!.width - 20,
+          y: canvasBox!.height - 20,
+        },
+      });
       await expect(ocioPanel).not.toBeVisible();
     });
   });

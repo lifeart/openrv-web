@@ -3,6 +3,7 @@
  * Contains functions for creating export canvases with filters and annotations applied.
  */
 
+import { Logger } from '../../utils/Logger';
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
@@ -22,6 +23,8 @@ import {
   type FrameburnContext,
 } from './FrameburnCompositor';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
+
+const log = new Logger('ViewerExport');
 
 /**
  * Shared helper: draw an element onto a context with transform and/or crop applied.
@@ -414,7 +417,9 @@ export function renderSourceToImageData(
       element = frameCanvas;
     } else {
       // Queue async fetch for next render while falling back to current element.
-      source.videoSourceNode.getFrameAsync?.(frame).catch(() => {});
+      source.videoSourceNode.getFrameAsync?.(frame).catch((err) => {
+        log.debug('Background frame fetch for export failed:', err);
+      });
     }
   }
 

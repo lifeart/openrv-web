@@ -27,6 +27,7 @@ import {
 } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade' | 'ycbcr';
@@ -70,7 +71,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   private channelButtons: { r: HTMLButtonElement; g: HTMLButtonElement; b: HTMLButtonElement } | null = null;
   private intensitySlider: HTMLInputElement | null = null;
   private boundOnIntensityChange: ((e: Event) => void) | null = null;
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   constructor() {
     super();
@@ -109,10 +110,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.createFooter();
 
     // Listen for theme changes to redraw with new colors
-    this.boundOnThemeChange = () => {
-      this.redrawLastFrame();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.redrawLastFrame()));
   }
 
   private createControls(): void {
@@ -799,10 +797,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       this.intensitySlider.removeEventListener('input', this.boundOnIntensityChange);
     }
     // Clean up theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-    }
-    this.boundOnThemeChange = null;
+    this.subs.dispose();
     this.boundOnIntensityChange = null;
     this.intensitySlider = null;
     this.modeButton = null;

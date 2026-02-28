@@ -68,6 +68,7 @@ import { WatermarkOverlay, type WatermarkState } from './WatermarkOverlay';
 import { MissingFrameOverlay } from './MissingFrameOverlay';
 import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 
 // Extracted effect processing utilities
@@ -86,7 +87,7 @@ import { GhostFrameManager } from './GhostFrameManager';
 import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
 import type { GLRendererContext } from './ViewerGLRenderer';
-import { detectWebGPUHDR, isHDROutputAvailableWithLog } from '../../color/DisplayCapabilities';
+import { detectWebGPUHDR, isHDROutputAvailableWithLog, queryHDRHeadroom } from '../../color/DisplayCapabilities';
 import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { ToneMappingState } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/media/PixelAspectRatio';
@@ -326,7 +327,7 @@ export class Viewer {
   private pixelSamplingManager!: PixelSamplingManager;
 
   // Theme change listener for runtime theme updates
-  private boundOnThemeChange: (() => void) | null = null;
+  private subs = new DisposableSubscriptionManager();
 
   // Reference image overlay (for A/B reference comparison)
   private _referenceCanvas: HTMLCanvasElement | null = null;
@@ -508,11 +509,18 @@ export class Viewer {
           } else {
             tryCanvas2DFallback();
           }
-        }).catch(() => { tryCanvas2DFallback(); });
+        }).catch((err) => {
+          log.warn('WebGPU HDR check failed, falling back to Canvas2D:', err);
+          tryCanvas2DFallback();
+        });
       } else {
         tryCanvas2DFallback();
       }
     }
+
+    // Query system HDR headroom asynchronously and propagate it to the renderer.
+    // This lets shader tone mapping scale to the actual display capability.
+    this.syncHDRHeadroomFromSystem();
 
     // Create watermark overlay canvas (between image/GL and paint annotations)
     this.watermarkCanvas = document.createElement('canvas');
@@ -563,10 +571,10 @@ export class Viewer {
     this.canvasContainer.appendChild(this.missingFrameOverlay.render());
 
     // Re-render when watermark settings change
-    this.watermarkOverlay.on('stateChanged', () => {
+    this.subs.add(this.watermarkOverlay.on('stateChanged', () => {
       this.watermarkDirty = true;
       this.scheduleRender();
-    });
+    }));
 
     // Create pixel sampling manager (cursor color, probe mouse handlers, source image cache)
     this.pixelSamplingManager = new PixelSamplingManager({
@@ -591,17 +599,17 @@ export class Viewer {
 
     // Create color wheels
     this.colorWheels = new ColorWheels(this.container);
-    this.colorWheels.on('stateChanged', () => {
+    this.subs.add(this.colorWheels.on('stateChanged', () => {
       this.notifyEffectsChanged();
       this.refresh();
-    });
+    }));
 
     // Create HSL Qualifier (secondary color correction)
     this.hslQualifier = new HSLQualifier();
-    this.hslQualifier.on('stateChanged', () => {
+    this.subs.add(this.hslQualifier.on('stateChanged', () => {
       this.notifyEffectsChanged();
       this.refresh();
-    });
+    }));
 
     // Use willReadFrequently for better getImageData performance during effect processing
     // Use P3 color space when available for wider gamut output
@@ -659,12 +667,12 @@ export class Viewer {
     this.container.appendChild(this.abIndicator);
 
     // Listen for A/B changes
-    this.session.on('abSourceChanged', ({ current }) => {
+    this.subs.add(this.session.on('abSourceChanged', ({ current }) => {
       this.updateABIndicator(current);
       // Source switching during playback reuses stale frame-fetch state unless reset.
       this.frameFetchTracker.reset();
       this.scheduleRender();
-    });
+    }));
 
     // Create drop overlay
     this.dropOverlay = document.createElement('div');
@@ -728,10 +736,7 @@ export class Viewer {
     }
 
     // Listen for theme changes to redraw placeholders and overlays with updated colors
-    this.boundOnThemeChange = () => {
-      this.scheduleRender();
-    };
-    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+    this.subs.add(getThemeManager().on('themeChanged', () => this.scheduleRender()));
   }
 
   private initializeCanvas(): void {
@@ -885,16 +890,37 @@ export class Viewer {
     drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.transformManager.zoom);
   }
 
+  /**
+   * Query system HDR headroom and apply it to the GL renderer manager.
+   * Safe no-op when the API is unavailable or permission is denied.
+   */
+  private syncHDRHeadroomFromSystem(): void {
+    if (!this.capabilities?.displayHDR) return;
+
+    void queryHDRHeadroom()
+      .then((headroom) => {
+        if (typeof headroom !== 'number' || !Number.isFinite(headroom) || headroom <= 0) {
+          return;
+        }
+        this.glRendererManager.setHDRHeadroom(headroom);
+        log.info(`System HDR headroom detected: ${headroom.toFixed(2)}x`);
+      })
+      .catch((err) => {
+        log.debug('HDR headroom query unavailable:', err);
+      });
+  }
+
   private bindEvents(): void {
     // Pointer, wheel, drag-drop, and context menu events (delegated to input handler)
     this.inputHandler.bindEvents();
 
     // Session events
-    this.session.on('sourceLoaded', () => {
+    this.subs.add(this.session.on('sourceLoaded', () => {
       this.frameFetchTracker.reset();
+      this.syncHDRHeadroomFromSystem();
       this.scheduleRender();
-    });
-    this.session.on('frameChanged', () => {
+    }));
+    this.subs.add(this.session.on('frameChanged', () => {
       // Phase 2B: Proactively preload for the NEXT frame before it is rendered,
       // giving the worker pool a head start on processing upcoming frames
       if (this.session.isPlaying && this.prerenderBuffer) {
@@ -918,14 +944,14 @@ export class Viewer {
       // Annotations are per-frame, so the paint canvas must be redrawn
       this.paintDirty = true;
       this.scheduleRender();
-    });
+    }));
 
     // Paint events
-    this.paintEngine.on('annotationsChanged', () => {
+    this.subs.add(this.paintEngine.on('annotationsChanged', () => {
       this.paintDirty = true;
       this.renderPaint();
-    });
-    this.paintEngine.on('toolChanged', (tool) => this.inputHandler.updateCursor(tool));
+    }));
+    this.subs.add(this.paintEngine.on('toolChanged', (tool) => this.inputHandler.updateCursor(tool)));
 
     // Pixel probe + cursor color events - single handler for both consumers
     this.container.addEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
@@ -956,6 +982,7 @@ export class Viewer {
         this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight);
         const containerRect = this.getContainerRect();
         this.updatePaintCanvasSize(this.displayWidth, this.displayHeight, containerRect.width, containerRect.height);
+        this.syncHDRHeadroomFromSystem();
         this.scheduleRender();
       }
       // Re-register for the new DPR value
@@ -1300,7 +1327,7 @@ export class Viewer {
                 this.refresh();
               }
             })
-            .catch((err) => console.warn('Failed to load hold frame:', err));
+            .catch((err) => log.warn('Failed to load hold frame:', err));
           element = this.session.getSequenceFrameSync(currentFrame) ?? source.element;
         }
       } else {
@@ -1315,7 +1342,7 @@ export class Viewer {
                 this.refresh();
               }
             })
-            .catch((err) => console.warn('Failed to load sequence frame:', err));
+            .catch((err) => log.warn('Failed to load sequence frame:', err));
           // Use first frame as fallback if available
           element = source.element;
         }
@@ -1514,7 +1541,9 @@ export class Viewer {
         // Skip during playback — PlaybackEngine.update() already calls
         // updatePlaybackBuffer() which triggers preloadHDRFrames().
         if (!this.session.isPlaying) {
-          this.session.preloadVideoHDRFrames(currentFrame).catch(() => {});
+          this.session.preloadVideoHDRFrames(currentFrame).catch((err) => {
+            log.debug('HDR frame preload error:', err);
+          });
         }
         return; // HDR video path complete
       }
@@ -1522,7 +1551,7 @@ export class Viewer {
       if (!hdrIPImage) {
         this.session.fetchVideoHDRFrame(currentFrame)
           .then(() => this.refresh())
-          .catch((err) => console.warn('Failed to fetch HDR video frame:', err));
+          .catch((err) => log.warn('Failed to fetch HDR video frame:', err));
       }
       // Fall through to SDR while waiting (element was set by the video path above)
     } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
@@ -2574,7 +2603,7 @@ export class Viewer {
                 this.watermarkOverlay.setState({ ...nonImageState, enabled: desiredEnabled });
               })
               .catch((err) => {
-                console.warn('[Viewer] Failed to restore watermark image:', err);
+                log.warn('Failed to restore watermark image:', err);
                 this.watermarkOverlay.setState({ enabled: false });
               });
           }
@@ -4081,10 +4110,7 @@ export class Viewer {
     this.pixelSamplingManager.dispose();
 
     // Cleanup theme change listener
-    if (this.boundOnThemeChange) {
-      getThemeManager().off('themeChanged', this.boundOnThemeChange);
-      this.boundOnThemeChange = null;
-    }
+    this.subs.dispose();
 
     // Cleanup frame interpolator
     this.frameInterpolator.dispose();

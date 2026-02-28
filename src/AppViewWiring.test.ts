@@ -133,6 +133,7 @@ describe('wireViewControls', () => {
   let persistenceManager: ReturnType<typeof createMockContext>['persistenceManager'];
   let headerBar: ReturnType<typeof createMockContext>['headerBar'];
   let controls: ReturnType<typeof createMockContext>['controls'];
+  let subs: ReturnType<typeof wireViewControls>;
 
   beforeEach(() => {
     const mock = createMockContext();
@@ -144,7 +145,7 @@ describe('wireViewControls', () => {
     headerBar = mock.headerBar;
     controls = mock.controls;
 
-    wireViewControls(ctx);
+    subs = wireViewControls(ctx);
   });
 
   // VW-001
@@ -298,5 +299,20 @@ describe('wireViewControls', () => {
     expect(viewer.resetStereoEyeTransforms).toHaveBeenCalledOnce();
     expect(viewer.resetStereoAlignMode).toHaveBeenCalledOnce();
     expect(controls.updateStereoEyeControlsVisibility).toHaveBeenCalledOnce();
+  });
+
+  describe('disposal', () => {
+    it('VW-DISP-001: callbacks fire before dispose', () => {
+      (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit');
+      expect(viewer.smoothFitToWindow).toHaveBeenCalledOnce();
+    });
+
+    it('VW-DISP-002: callbacks do not fire after dispose', () => {
+      subs.dispose();
+
+      viewer.smoothFitToWindow.mockClear();
+      (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit');
+      expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
+    });
   });
 });

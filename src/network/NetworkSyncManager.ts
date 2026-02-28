@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from '../utils/EventEmitter';
+import { Logger } from '../utils/Logger';
 import type { ManagerBase } from '../core/ManagerBase';
 import { WebSocketClient } from './WebSocketClient';
 import { SyncStateManager } from './SyncStateManager';
@@ -94,6 +95,8 @@ import {
   type WebRTCURLAnswerSignal,
   WEBRTC_URL_SIGNAL_PARAM,
 } from './WebRTCURLSignaling';
+
+const log = new Logger('NetworkSyncManager');
 
 interface WebRTCPeerState {
   requestId: string;
@@ -1749,7 +1752,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const state = this._webrtcPeers.get(key);
     if (!state) return;
 
-    void state.pc.setRemoteDescription({ type: 'answer', sdp: answerPayload.sdp }).catch(() => {
+    void state.pc.setRemoteDescription({ type: 'answer', sdp: answerPayload.sdp }).catch((err) => {
+      log.warn('WebRTC setRemoteDescription failed, disposing peer:', err);
       this.disposeWebRTCPeer(key);
     });
   }
@@ -1764,8 +1768,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const state = this._webrtcPeers.get(key);
     if (!state) return;
 
-    void state.pc.addIceCandidate(icePayload.candidate).catch(() => {
-      // ignore invalid/late ICE candidates
+    void state.pc.addIceCandidate(icePayload.candidate).catch((err) => {
+      log.debug('WebRTC addIceCandidate failed (late/invalid candidate):', err);
     });
   }
 

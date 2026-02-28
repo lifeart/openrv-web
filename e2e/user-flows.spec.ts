@@ -515,6 +515,10 @@ test.describe('Playback and Timeline Workflow', () => {
     }
 
     // Test K key for stopping playback (this should work)
+    // Click the viewer first to move focus away from the speed button,
+    // otherwise Space re-clicks the focused button instead of toggling playback.
+    const canvas = await getCanvas(page);
+    await canvas.click();
     await page.keyboard.press('Space');
     await waitForPlaybackState(page, true);
 
@@ -715,8 +719,8 @@ test.describe('Scope Analysis Workflow', () => {
 
     await loadVideoFile(page);
 
-    // Enable pixel probe (info panel toggle)
-    await page.keyboard.press('Shift+i');
+    // Enable pixel probe (info panel toggle) — actual binding is Shift+Alt+I
+    await page.keyboard.press('Shift+Alt+i');
     await page.waitForTimeout(200);
 
     // Verify the info panel is enabled via waitForCondition
@@ -804,8 +808,9 @@ test.describe('Session Management Workflow', () => {
     await page.keyboard.press('Shift+Alt+h');
     await page.waitForTimeout(200);
 
-    // Verify the history panel is visible in the DOM
-    const historyPanel = page.locator('[class*="history-panel"]');
+    // Verify the history panel is visible in the DOM — use data-testid to
+    // avoid matching both .history-panel and .history-panel-header
+    const historyPanel = page.locator('[data-testid="history-panel"]');
     await expect(historyPanel).toBeVisible();
   });
 });

@@ -43,7 +43,7 @@ async function waitForToneMappingState(
  * Returns after the dropdown is visible.
  */
 async function openToneMappingDropdown(page: import('@playwright/test').Page) {
-  await page.locator('button[data-tab-id="view"]').click({ force: true });
+  await page.locator('button[data-tab-id="color"]').click({ force: true });
   const control = page.locator('[data-testid="tone-mapping-control-button"]');
   await expect(control).toBeVisible();
   await control.click();
@@ -231,7 +231,7 @@ test.describe('Tone Mapping UI Controls', () => {
 
   test('TM-E020: tone mapping control button exists in View tab', async ({ page }) => {
     // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="color"]');
 
     // Look for tone mapping control
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
@@ -240,7 +240,7 @@ test.describe('Tone Mapping UI Controls', () => {
 
   test('TM-E021: clicking tone mapping control opens dropdown', async ({ page }) => {
     // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="color"]');
 
     // Click the tone mapping control
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
@@ -254,7 +254,7 @@ test.describe('Tone Mapping UI Controls', () => {
 
   test('TM-E022: dropdown has operator buttons', async ({ page }) => {
     // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="color"]');
 
     // Click the tone mapping control to open dropdown
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
@@ -270,7 +270,7 @@ test.describe('Tone Mapping UI Controls', () => {
 
   test('TM-E023: clicking operator button in dropdown changes operator', async ({ page }) => {
     // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="color"]');
 
     // Click the tone mapping control to open dropdown
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
@@ -289,7 +289,7 @@ test.describe('Tone Mapping UI Controls', () => {
 
   test('TM-E024: dropdown has enable checkbox', async ({ page }) => {
     // Go to View tab
-    await page.click('button[data-tab-id="view"]');
+    await page.click('button[data-tab-id="color"]');
 
     // Click the tone mapping control to open dropdown
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
@@ -351,16 +351,16 @@ test.describe('Tone Mapping State Persistence', () => {
     expect(state.enabled).toBe(true);
     expect(state.operator).toBe('filmic');
 
-    // Switch to Color tab
-    await page.click('button[data-tab-id="color"]');
+    // Switch to View tab
+    await page.click('button[data-tab-id="view"]');
     await waitForToneMappingState(page, { enabled: true, operator: 'filmic' });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
     expect(state.operator).toBe('filmic');
 
-    // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
+    // Switch back to Color tab
+    await page.click('button[data-tab-id="color"]');
     await waitForToneMappingState(page, { enabled: true, operator: 'filmic' });
 
     state = await getToneMappingState(page);

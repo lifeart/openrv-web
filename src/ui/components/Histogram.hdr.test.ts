@@ -260,6 +260,31 @@ describe('Histogram HDR Mode', () => {
       expect(data.green[0]).toBe(1);
       expect(data.blue[0]).toBe(1);
     });
+
+    it('P3-028: HDR auto-fit maps SDR-peak float data to full bin range', () => {
+      histogram.setHDRMode(true, 4.0);
+      histogram.setHDRAutoFit(true);
+
+      const hdrImage = createHDRImageData(1, 1, [
+        { r: 1.0, g: 0.5, b: 0.25, a: 1.0 },
+      ]);
+
+      const data = histogram.calculateHDR(hdrImage);
+      // Auto-fit should use effective max=1.0, so value 1.0 maps to the right edge.
+      expect(data.red[255]).toBe(1);
+    });
+
+    it('P3-029: HDR auto-fit remains clamped by configured headroom', () => {
+      histogram.setHDRMode(true, 4.0);
+      histogram.setHDRAutoFit(true);
+
+      const hdrImage = createHDRImageData(1, 1, [
+        { r: 6.0, g: 0.0, b: 0.0, a: 1.0 },
+      ]);
+
+      const data = histogram.calculateHDR(hdrImage);
+      expect(data.red[255]).toBe(1);
+    });
   });
 
   describe('HDR scale labels', () => {

@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ShaderStateManager, DIRTY_DISPLAY } from './ShaderStateManager';
 import type { DisplayColorConfig } from './RenderState';
 import { IPImage } from '../core/image/Image';
+import { ManagedVideoFrame } from '../core/image/ManagedVideoFrame';
 import { isHDRContent } from './Renderer';
 
 // We test the Y-flip logic independently since it's the most error-prone part.
@@ -300,11 +301,14 @@ describe('isHDRContent helper', () => {
   });
 
   it('SFBO-017: uint8 + videoFrame = HDR', () => {
+    ManagedVideoFrame.resetForTesting();
+    const mockFrame = { get format() { return 'RGBA'; }, close() {}, displayWidth: 2, displayHeight: 2, codedWidth: 2, codedHeight: 2, timestamp: 0, duration: null, colorSpace: {} } as unknown as VideoFrame;
     const image = new IPImage({
       width: 2, height: 2, channels: 4, dataType: 'uint8',
-      videoFrame: {} as VideoFrame,
+      videoFrame: mockFrame,
     });
     expect(isHDRContent(image)).toBe(true);
+    image.close();
   });
 
   it('SFBO-018: uint8 + srgb + imageBitmap (no videoFrame) = SDR', () => {
