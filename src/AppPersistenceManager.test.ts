@@ -68,6 +68,7 @@ function createMockContext(): PersistenceManagerContext & {
       currentFrame: 1,
       allSources: [],
       gtoData: null,
+      loadFile: vi.fn(async () => {}),
     } as any,
     viewer: {
       getColorAdjustments: vi.fn(() => ({})),
@@ -451,6 +452,35 @@ describe('AppPersistenceManager', () => {
         expect.objectContaining({ type: 'error' })
       );
       consoleSpy.mockRestore();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // openProject
+  // -----------------------------------------------------------------------
+  describe('openProject', () => {
+    it('APM-085: openProject loads .orvproject files via SessionSerializer', async () => {
+      const file = new File(['{"version":1}'], 'test.orvproject', { type: 'application/json' });
+
+      await manager.openProject(file);
+
+      expect(SessionSerializer.loadFromFile).toHaveBeenCalledWith(file);
+      expect(SessionSerializer.fromJSON).toHaveBeenCalledTimes(1);
+      expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
+    });
+
+    it('APM-086: openProject falls back to media loading for non-project files', async () => {
+      const file = new File(['image-data'], 'IMG_1234.HEIC', { type: 'image/heic' });
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFile).toHaveBeenCalledWith(file);
+      expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
+      expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
+      expect(showAlert).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load project'),
+        expect.anything()
+      );
     });
   });
 

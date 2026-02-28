@@ -293,6 +293,13 @@ export class AppPersistenceManager {
       // Create auto-checkpoint before loading new project
       await this.createAutoCheckpoint('Before Project Load');
 
+      // iOS Safari can route media picks through the project input and ignore
+      // the .orvproject accept filter. Fall back to regular media loading.
+      if (!this.isProjectFile(file)) {
+        await session.loadFile(file);
+        return;
+      }
+
       const state = await SessionSerializer.loadFromFile(file);
       const result = await SessionSerializer.fromJSON(
         state,
@@ -324,6 +331,10 @@ export class AppPersistenceManager {
     } catch (err) {
       showAlert(`Failed to load project: ${err}`, { type: 'error', title: 'Load Error' });
     }
+  }
+
+  private isProjectFile(file: File): boolean {
+    return file.name.trim().toLowerCase().endsWith('.orvproject');
   }
 
   /**
