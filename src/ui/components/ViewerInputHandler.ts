@@ -661,7 +661,7 @@ export class ViewerInputHandler {
     // Single file or mixed files
     for (const file of fileArray) {
       try {
-        if (file.name.endsWith('.rv') || file.name.endsWith('.gto')) {
+        if (file.name.toLowerCase().endsWith('.rv') || file.name.toLowerCase().endsWith('.gto')) {
           const content = await file.arrayBuffer();
           await session.loadFromGTO(content);
         } else {

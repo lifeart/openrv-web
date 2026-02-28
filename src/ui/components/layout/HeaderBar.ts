@@ -223,7 +223,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     fileGroup.appendChild(this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
 
     // Open Project button — icon-only
-    fileGroup.appendChild(this.createIconButton('folder-open', '', () => this.projectInput.click(), 'Open project'));
+    fileGroup.appendChild(this.createIconButton('layers', '', () => this.projectInput.click(), 'Open project'));
 
     // Export dropdown
     fileGroup.appendChild(this.exportControl.render());
@@ -1190,7 +1190,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const fileArray = Array.from(files);
 
     // Check for .rvedl files in the selection
-    const edlFile = fileArray.find(f => f.name.endsWith('.rvedl'));
+    const edlFile = fileArray.find(f => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
       try {
         const text = await edlFile.text();
@@ -1225,7 +1225,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
 
     // Check for .rv or .gto files in the selection
-    const sessionFile = fileArray.find(f => f.name.endsWith('.rv') || f.name.endsWith('.gto'));
+    const sessionFile = fileArray.find(f => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'));
 
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources

@@ -69,6 +69,8 @@ function createMockContext(): PersistenceManagerContext & {
       allSources: [],
       gtoData: null,
       loadFile: vi.fn(async () => {}),
+      loadFromGTO: vi.fn(async () => {}),
+      loadEDL: vi.fn(() => []),
     } as any,
     viewer: {
       getColorAdjustments: vi.fn(() => ({})),
@@ -469,17 +471,68 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
 
-    it('APM-086: openProject falls back to media loading for non-project files', async () => {
+    it('APM-086: openProject shows warning for non-project media files', async () => {
       const file = new File(['image-data'], 'IMG_1234.HEIC', { type: 'image/heic' });
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFile).toHaveBeenCalledWith(file);
+      expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
       expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
       expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
-      expect(showAlert).not.toHaveBeenCalledWith(
-        expect.stringContaining('Failed to load project'),
-        expect.anything()
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to open as project'),
+        expect.objectContaining({ type: 'warning' })
+      );
+    });
+
+    it('APM-087: openProject loads .rv file via session.loadFromGTO', async () => {
+      const file = new File(['rv-data'], 'session.rv');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
+      expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
+    });
+
+    it('APM-088: openProject loads .gto file via session.loadFromGTO', async () => {
+      const file = new File(['gto-data'], 'session.gto');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
+    });
+
+    it('APM-089: openProject handles uppercase .GTO case-insensitively', async () => {
+      const file = new File(['gto-data'], 'SESSION.GTO');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    });
+
+    it('APM-090a: openProject loads .rvedl file via session.loadEDL', async () => {
+      const file = new File(['edl-text'], 'cut.rvedl');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadEDL).toHaveBeenCalledWith('edl-text');
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('EDL loaded'),
+        expect.objectContaining({ type: 'success' })
+      );
+    });
+
+    it('APM-090b: openProject shows warning with extension for unknown file types', async () => {
+      const file = new File(['data'], 'document.xyz');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('.xyz'),
+        expect.objectContaining({ type: 'warning' })
       );
     });
   });

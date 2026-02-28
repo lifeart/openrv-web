@@ -1867,4 +1867,40 @@ describe('HeaderBar', () => {
       document.body.removeChild(el);
     });
   });
+
+  describe('case-insensitive file extension handling', () => {
+    it('HDR-U025: uppercase .RV file triggers session file branch', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+      const rvFile = new File(['rv-data'], 'SESSION.RV');
+      Object.defineProperty(input, 'files', { value: [rvFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      // Wait for async handleFileSelect to complete
+      await vi.waitFor(() => {
+        expect(loadFromGTOSpy).toHaveBeenCalled();
+      });
+
+      loadFromGTOSpy.mockRestore();
+    });
+
+    it('HDR-U026: uppercase .RVEDL file triggers EDL branch', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const loadEDLSpy = vi.spyOn(session, 'loadEDL').mockReturnValue([]);
+      const edlFile = new File(['edl-text'], 'CUT.RVEDL');
+      Object.defineProperty(input, 'files', { value: [edlFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      // Wait for async handleFileSelect to complete
+      await vi.waitFor(() => {
+        expect(loadEDLSpy).toHaveBeenCalled();
+      });
+
+      loadEDLSpy.mockRestore();
+    });
+  });
 });

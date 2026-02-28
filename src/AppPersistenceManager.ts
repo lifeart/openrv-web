@@ -289,52 +289,57 @@ export class AppPersistenceManager {
    */
   async openProject(file: File): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+
     try {
       // Create auto-checkpoint before loading new project
       await this.createAutoCheckpoint('Before Project Load');
 
-      // iOS Safari can route media picks through the project input and ignore
-      // the .orvproject accept filter. Fall back to regular media loading.
-      if (!this.isProjectFile(file)) {
-        await session.loadFile(file);
-        return;
-      }
+      if (ext === 'orvproject') {
+        const state = await SessionSerializer.loadFromFile(file);
+        const result = await SessionSerializer.fromJSON(
+          state,
+          {
+            session,
+            paintEngine,
+            viewer,
+            playlistManager: this.ctx.playlistManager,
+            cacheManager: this.ctx.cacheManager,
+          }
+        );
 
-      const state = await SessionSerializer.loadFromFile(file);
-      const result = await SessionSerializer.fromJSON(
-        state,
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
+        if (result.warnings.length > 0) {
+          showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
+            type: 'warning',
+            title: 'Project Loaded',
+          });
+        } else if (result.loadedMedia > 0) {
+          showAlert(`Project loaded successfully (${result.loadedMedia} media files)`, {
+            type: 'success',
+            title: 'Project Loaded',
+          });
+        } else {
+          showAlert('Project loaded (no media files - state only)', {
+            type: 'info',
+            title: 'Project Loaded',
+          });
         }
-      );
-
-      if (result.warnings.length > 0) {
-        showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
-          type: 'warning',
-          title: 'Project Loaded',
-        });
-      } else if (result.loadedMedia > 0) {
-        showAlert(`Project loaded successfully (${result.loadedMedia} media files)`, {
-          type: 'success',
-          title: 'Project Loaded',
-        });
+      } else if (ext === 'rv' || ext === 'gto') {
+        const content = await file.arrayBuffer();
+        await session.loadFromGTO(content);
+      } else if (ext === 'rvedl') {
+        const text = await file.text();
+        session.loadEDL(text);
+        showAlert(`EDL loaded from ${file.name}`, { type: 'success', title: 'EDL Loaded' });
       } else {
-        showAlert('Project loaded (no media files - state only)', {
-          type: 'info',
-          title: 'Project Loaded',
-        });
+        showAlert(
+          `Unable to open as project. Expected .orvproject, .rv, .gto, or .rvedl but got .${ext}. Use the Open Media button to load media files.`,
+          { type: 'warning', title: 'Unsupported File' }
+        );
       }
     } catch (err) {
       showAlert(`Failed to load project: ${err}`, { type: 'error', title: 'Load Error' });
     }
-  }
-
-  private isProjectFile(file: File): boolean {
-    return file.name.trim().toLowerCase().endsWith('.orvproject');
   }
 
   /**

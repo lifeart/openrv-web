@@ -760,3 +760,46 @@ describe('ViewerInputHandler – HDR Pixel Extraction', () => {
     // Values should not be clamped to 1.0
   });
 });
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop case-insensitive extension handling
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – Case-insensitive drop extensions', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  it('DROP-CI-001: uppercase .GTO dropped file dispatches to loadFromGTO', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const gtoFile = new File(['gto-data'], 'SESSION.GTO');
+
+    // jsdom doesn't implement DataTransfer, so create a minimal mock
+    const mockDataTransfer = { files: [gtoFile] };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+
+    // Wait for the async onDrop handler
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalled();
+    });
+  });
+});
