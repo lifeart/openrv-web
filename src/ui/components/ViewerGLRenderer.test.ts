@@ -30,6 +30,7 @@ interface TestableViewerGLRenderer {
   _renderWorkerProxy: RenderWorkerProxy | null;
   _isAsyncRenderer: boolean;
   _hdrRenderActive: boolean;
+  _hdrPresentationTarget: 'gl' | 'webgpu' | 'canvas2d' | null;
   _sdrWebGLRenderActive: boolean;
   _lastHDRBlitFrame: { data: Float32Array; width: number; height: number } | null;
   _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void } | null;
@@ -57,6 +58,7 @@ function createMockContext(): GLRendererContext {
     getSession: vi.fn(),
     applyColorFilters: vi.fn(),
     scheduleRender: vi.fn(),
+    isInteractionActive: vi.fn(() => false),
     isToneMappingEnabled: vi.fn(() => false),
     getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
     getFilmEmulationParams: vi.fn(() => ({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 })),
@@ -849,6 +851,8 @@ describe('ViewerGLRenderer', () => {
       const capturedStates: RenderState[] = [];
       const mockRendererObj = {
         getHDROutputMode: vi.fn(() => 'sdr'),
+        isOCIOWasmActive: vi.fn(() => false),
+        setColorPrimaries: vi.fn(),
         applyRenderState: vi.fn((state: RenderState) => {
           capturedStates.push(JSON.parse(JSON.stringify(state)));
         }),
@@ -1100,6 +1104,27 @@ describe('ViewerGLRenderer', () => {
       // WebGPU blit canvas should be hidden when Canvas2D blit takes over
       expect(webgpuCanvas.style.display).toBe('none');
     });
+
+    it('VGLR-110: Canvas2D blit path is bypassed during active interaction', () => {
+      const { glRenderer, syncReadback, asyncReadback, mockRendererObj } = setupCanvas2DBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      const imageCanvas = document.createElement('canvas');
+      imageCanvas.style.visibility = 'visible';
+      const blitCtx = (glRenderer as any).ctx as GLRendererContext;
+      (blitCtx.getImageCanvas as ReturnType<typeof vi.fn>).mockReturnValue(imageCanvas);
+      (blitCtx.isInteractionActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(syncReadback).not.toHaveBeenCalled();
+      expect(asyncReadback).not.toHaveBeenCalled();
+      expect(mockRendererObj.renderImage).toHaveBeenCalledTimes(1);
+      expect(internal._glCanvas?.style.display).toBe('block');
+      expect((internal._canvas2dBlit as any).getCanvas().style.display).toBe('none');
+      expect(internal._hdrPresentationTarget).toBe('gl');
+      expect(imageCanvas.style.visibility).toBe('hidden');
+    });
   });
 
   // =========================================================================
@@ -1114,6 +1139,8 @@ describe('ViewerGLRenderer', () => {
       const capturedStates: RenderState[] = [];
       const mockRendererObj = {
         getHDROutputMode: vi.fn(() => 'sdr'),
+        isOCIOWasmActive: vi.fn(() => false),
+        setColorPrimaries: vi.fn(),
         applyRenderState: vi.fn((state: RenderState) => {
           capturedStates.push(JSON.parse(JSON.stringify(state)));
         }),
@@ -1269,6 +1296,27 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(canvas2dBlitCanvas.style.display).toBe('none');
+    });
+
+    it('VGLR-111: WebGPU blit path is bypassed during active interaction', () => {
+      const { glRenderer, mockRendererObj } = setupWebGPUBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      const imageCanvas = document.createElement('canvas');
+      imageCanvas.style.visibility = 'visible';
+      const blitCtx = (glRenderer as any).ctx as GLRendererContext;
+      (blitCtx.getImageCanvas as ReturnType<typeof vi.fn>).mockReturnValue(imageCanvas);
+      (blitCtx.isInteractionActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(mockRendererObj.renderImageToFloat).not.toHaveBeenCalled();
+      expect(mockRendererObj.renderImageToFloatAsync).not.toHaveBeenCalled();
+      expect(mockRendererObj.renderImage).toHaveBeenCalledTimes(1);
+      expect(internal._glCanvas?.style.display).toBe('block');
+      expect((internal._webgpuBlit as any).getCanvas().style.display).toBe('none');
+      expect(internal._hdrPresentationTarget).toBe('gl');
+      expect(imageCanvas.style.visibility).toBe('hidden');
     });
 
     it('VGLR-086: deactivateHDRMode clears lastHDRBlitFrame cache', () => {

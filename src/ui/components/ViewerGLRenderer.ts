@@ -69,6 +69,7 @@ export interface GLRendererContext {
   getSession(): Session;
   applyColorFilters(): void;
   scheduleRender(): void;
+  isInteractionActive(): boolean;
   isToneMappingEnabled(): boolean;
   getDeinterlaceParams(): DeinterlaceParams;
   getNoiseReductionParams(): NoiseReductionParams;
@@ -150,6 +151,9 @@ export class ViewerGLRenderer {
   // rounding drift when computing CSS size from physical / DPR.
   private _logicalWidth = 0;
   private _logicalHeight = 0;
+
+  // Which HDR presentation surface is currently visible.
+  private _hdrPresentationTarget: 'gl' | 'webgpu' | 'canvas2d' | null = null;
 
   // Display HDR headroom (peak luminance / SDR white). Cached so it can be
   // applied even when the renderer is created later (lazy init).
@@ -569,6 +573,7 @@ export class ViewerGLRenderer {
 
     const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     const hasFloatReadback = typeof renderer.renderImageToFloat === 'function';
+    const interactionActive = this.ctx.isInteractionActive();
 
     // Debug: log HDR rendering path decision (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -590,25 +595,18 @@ export class ViewerGLRenderer {
     }
 
     // Try WebGPU HDR blit path when WebGL2 has no native HDR output
-    if (!isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
+    if (!interactionActive && !isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithWebGPUBlit(renderer, image, displayWidth, displayHeight);
     }
 
     // Try Canvas2D HDR blit path as last resort when WebGPU blit is not available
-    if (!isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
+    if (!interactionActive && !isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithCanvas2DBlit(renderer, image, displayWidth, displayHeight);
     }
 
     // Standard WebGL2 HDR path (HLG/PQ/extended) or SDR fallback
     this._lastHDRBlitFrame = null;
-
-    // Activate WebGL canvas
-    if (!this._hdrRenderActive) {
-      this._glCanvas.style.display = 'block';
-      this.hideWebGPUBlitCanvas();
-      this.ctx.getImageCanvas().style.visibility = 'hidden';
-      this._hdrRenderActive = true;
-    }
+    const presentationChanged = this._hdrPresentationTarget !== 'gl';
 
     // Resize canvas buffer if needed. displayWidth/Height may be quality-reduced
     // during interaction (50% of physical) — the browser upscales via CSS sizing.
@@ -677,7 +675,8 @@ export class ViewerGLRenderer {
     // The canvas already shows the correct content from the last render.
     const sameImage = this._lastRenderedImage?.deref() === image;
     const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
-    if (sameImage && sameDims && !renderer.hasPendingStateChanges()) {
+    if (!presentationChanged && sameImage && sameDims && !renderer.hasPendingStateChanges()) {
+      this.activateGLHDRCanvas();
       PerfTrace.count('hdr.renderSkipped');
       return true;
     }
@@ -691,6 +690,7 @@ export class ViewerGLRenderer {
     renderer.renderImage(image, 0, 0, 1, 1);
     PerfTrace.end('renderer.clear+render');
 
+    this.activateGLHDRCanvas();
     this._lastRenderedImage = new WeakRef(image);
     this._lastRenderedWidth = displayWidth;
     this._lastRenderedHeight = displayHeight;
@@ -783,6 +783,8 @@ export class ViewerGLRenderer {
     displayWidth: number,
     displayHeight: number,
   ): boolean {
+    const presentationChanged = this._hdrPresentationTarget !== 'webgpu';
+
     // Ensure GL canvas is sized for FBO rendering (it stays hidden)
     if (this._glCanvas!.width !== displayWidth || this._glCanvas!.height !== displayHeight) {
       renderer.resize(displayWidth, displayHeight);
@@ -832,7 +834,8 @@ export class ViewerGLRenderer {
     const sameImage = this._lastRenderedImage?.deref() === image;
     const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
     const hasPending = renderer.hasPendingStateChanges();
-    if (sameImage && sameDims && !hasPending) {
+    if (!presentationChanged && sameImage && sameDims && !hasPending) {
+      this.activateWebGPUHDRCanvas();
       PerfTrace.count('blit.renderSkipped');
       return true;
     }
@@ -863,13 +866,7 @@ export class ViewerGLRenderer {
 
     // Show WebGPU canvas, hide GL canvas and Canvas2D blit canvas
     const blitCanvas = this._webgpuBlit!.getCanvas();
-    if (!this._hdrRenderActive) {
-      this._glCanvas!.style.display = 'none';
-      blitCanvas.style.display = 'block';
-      this.hideCanvas2DBlitCanvas();
-      this.ctx.getImageCanvas().style.visibility = 'hidden';
-      this._hdrRenderActive = true;
-    }
+    this.activateWebGPUHDRCanvas();
 
     // Apply CSS sizing to match logical (CSS) dimensions — without this,
     // the canvas at physical pixel size appears too large on retina displays.
@@ -893,6 +890,8 @@ export class ViewerGLRenderer {
     displayWidth: number,
     displayHeight: number,
   ): boolean {
+    const presentationChanged = this._hdrPresentationTarget !== 'canvas2d';
+
     // Ensure GL canvas is sized for FBO rendering (it stays hidden)
     if (this._glCanvas!.width !== displayWidth || this._glCanvas!.height !== displayHeight) {
       renderer.resize(displayWidth, displayHeight);
@@ -940,7 +939,8 @@ export class ViewerGLRenderer {
     const sameImage = this._lastRenderedImage?.deref() === image;
     const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
     const hasPending = renderer.hasPendingStateChanges();
-    if (sameImage && sameDims && !hasPending) {
+    if (!presentationChanged && sameImage && sameDims && !hasPending) {
+      this.activateCanvas2DHDRCanvas();
       PerfTrace.count('canvas2dBlit.renderSkipped');
       return true;
     }
@@ -971,13 +971,7 @@ export class ViewerGLRenderer {
 
     // Show Canvas2D canvas, hide GL canvas
     const blitCanvas = this._canvas2dBlit!.getCanvas();
-    if (!this._hdrRenderActive) {
-      this._glCanvas!.style.display = 'none';
-      blitCanvas.style.display = 'block';
-      this.hideWebGPUBlitCanvas();
-      this.ctx.getImageCanvas().style.visibility = 'hidden';
-      this._hdrRenderActive = true;
-    }
+    this.activateCanvas2DHDRCanvas();
 
     // Apply CSS sizing to match logical (CSS) dimensions
     const dpr = window.devicePixelRatio || 1;
@@ -987,6 +981,36 @@ export class ViewerGLRenderer {
     blitCanvas.style.height = `${cssH}px`;
 
     return true;
+  }
+
+  private activateGLHDRCanvas(): void {
+    if (!this._glCanvas) return;
+    this._glCanvas.style.display = 'block';
+    this.hideWebGPUBlitCanvas();
+    this.hideCanvas2DBlitCanvas();
+    this.ctx.getImageCanvas().style.visibility = 'hidden';
+    this._hdrRenderActive = true;
+    this._hdrPresentationTarget = 'gl';
+  }
+
+  private activateWebGPUHDRCanvas(): void {
+    if (!this._glCanvas || !this._webgpuBlit) return;
+    this._glCanvas.style.display = 'none';
+    this._webgpuBlit.getCanvas().style.display = 'block';
+    this.hideCanvas2DBlitCanvas();
+    this.ctx.getImageCanvas().style.visibility = 'hidden';
+    this._hdrRenderActive = true;
+    this._hdrPresentationTarget = 'webgpu';
+  }
+
+  private activateCanvas2DHDRCanvas(): void {
+    if (!this._glCanvas || !this._canvas2dBlit) return;
+    this._glCanvas.style.display = 'none';
+    this._canvas2dBlit.getCanvas().style.display = 'block';
+    this.hideWebGPUBlitCanvas();
+    this.ctx.getImageCanvas().style.visibility = 'hidden';
+    this._hdrRenderActive = true;
+    this._hdrPresentationTarget = 'canvas2d';
   }
 
   /**
@@ -1104,6 +1128,7 @@ export class ViewerGLRenderer {
     this.hideCanvas2DBlitCanvas();
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._hdrRenderActive = false;
+    this._hdrPresentationTarget = null;
     this._lastRenderedImage = null; // Invalidate render cache
     this._lastHDRBlitFrame = null;
   }
@@ -1415,6 +1440,7 @@ export class ViewerGLRenderer {
 
     this._autoExposureController.reset();
     this._glCanvas = null;
+    this._hdrPresentationTarget = null;
     this._lastRenderedImage = null;
     this._lastHDRBlitFrame = null;
   }

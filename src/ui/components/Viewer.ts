@@ -361,6 +361,7 @@ export class Viewer {
       getSession: () => this.session,
       applyColorFilters: () => this.applyColorFilters(),
       scheduleRender: () => this.scheduleRender(),
+      isInteractionActive: () => this.interactionQuality.isInteracting,
       isToneMappingEnabled: () => this.isToneMappingEnabled(),
       getDeinterlaceParams: () => this.getDeinterlaceParams(),
       getFilmEmulationParams: () => this.getFilmEmulationParams(),
