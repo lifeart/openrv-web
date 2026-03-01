@@ -1,14 +1,16 @@
 /**
  * ZoomControl - Compact zoom dropdown for View tab
  *
- * Replaces 5 separate zoom buttons with a single dropdown showing current zoom level.
- * Click to open dropdown, select zoom level or type custom value.
+ * Dropdown options now represent pixel ratios (industry-standard semantics
+ * where 100% = 1:1 pixel ratio), not internal zoom multiplier values.
+ * The "Fit" option remains as a special zoom mode.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
+import { formatRatio, findPresetForRatio } from './ScalePresets';
 
 export type ZoomLevel = 'fit' | 'fit-width' | 'fit-height' | 0.25 | 0.5 | 1 | 2 | 4;
 
@@ -53,7 +55,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     // Create button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'zoom-control-button';
-    this.button.title = 'Zoom level (F to fit, 0-4 for presets)';
+    this.button.title = 'Zoom level (F to fit, Ctrl+1 for 1:1)';
     this.button.setAttribute('aria-haspopup', 'menu');
     this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
@@ -100,7 +102,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
 
     // Create dropdown menu
     this.dropdown = new DropdownMenu({
-      minWidth: '100px',
+      minWidth: '120px',
       onSelect: (value) => {
         const zoom = ZOOM_VALUE_MAP[value];
         if (zoom !== undefined) {
@@ -134,7 +136,13 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     } else if (this.currentZoom === 'fit-height') {
       label = 'Fit Height';
     } else {
-      label = `${Math.round(this.currentZoom * 100)}%`;
+      // For dropdown-selected presets, show pixel ratio notation
+      const preset = findPresetForRatio(this.currentZoom);
+      if (preset) {
+        label = preset.label;
+      } else {
+        label = `${Math.round(this.currentZoom * 100)}%`;
+      }
     }
     this.button.innerHTML = `${getIconSvg('zoom-in', 'sm')}<span>${label}</span><span style="font-size: 8px;">&#9660;</span>`;
   }
@@ -159,6 +167,44 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
 
   getZoom(): ZoomLevel {
     return this.currentZoom;
+  }
+
+  /**
+   * Update the button label from the viewer's actual zoom state.
+   * Called when the viewer zoom changes (e.g. from keyboard shortcuts or wheel zoom).
+   * @param zoom - The internal zoom multiplier
+   * @param fitScale - The current fitScale
+   */
+  updateFromViewer(zoom: number, fitScale: number): void {
+    const isFit = Math.abs(zoom - 1) < 0.001;
+    if (isFit) {
+      this.currentZoom = 'fit';
+    } else {
+      const ratio = zoom * fitScale;
+      // Check if this ratio matches a dropdown preset
+      for (const level of ZOOM_LEVELS) {
+        if (level.value !== 'fit' && Math.abs(level.value - ratio) < 0.01) {
+          this.currentZoom = level.value;
+          this.dropdown.setSelectedValue(String(level.value));
+          this.updateButtonLabel();
+          return;
+        }
+      }
+      // Not a dropdown preset - update label to show current ratio
+      this.currentZoom = 'fit'; // fallback internal state
+      const preset = findPresetForRatio(ratio);
+      let label: string;
+      if (preset) {
+        label = preset.label;
+      } else {
+        label = formatRatio(ratio);
+      }
+      this.button.innerHTML = `${getIconSvg('zoom-in', 'sm')}<span>${label}</span><span style="font-size: 8px;">&#9660;</span>`;
+      this.dropdown.setSelectedValue(''); // Deselect all
+      return;
+    }
+    this.dropdown.setSelectedValue(String(this.currentZoom));
+    this.updateButtonLabel();
   }
 
   /**

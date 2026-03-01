@@ -69,6 +69,9 @@ export class TransformManager implements ManagerBase {
   private _onInteractionStart: (() => void) | null = null;
   private _onInteractionEnd: (() => void) | null = null;
 
+  // --- Callback for zoom change notifications ---
+  private _onZoomChanged: ((zoom: number) => void) | null = null;
+
   /**
    * Set the render callback. Called by the Viewer during construction so that
    * animation frames can request re-renders.
@@ -83,6 +86,14 @@ export class TransformManager implements ManagerBase {
   setInteractionCallbacks(onStart: () => void, onEnd: () => void): void {
     this._onInteractionStart = onStart;
     this._onInteractionEnd = onEnd;
+  }
+
+  /**
+   * Set a callback that fires when zoom changes (via setZoom, smoothZoomTo completion,
+   * or smoothFitToWindow). Used by ScaleRatioIndicator and ZoomControl label updates.
+   */
+  setOnZoomChanged(callback: ((zoom: number) => void) | null): void {
+    this._onZoomChanged = callback;
   }
 
   private requestRender(): void {
@@ -142,6 +153,7 @@ export class TransformManager implements ManagerBase {
     this._zoom = level;
     this._panX = 0;
     this._panY = 0;
+    this._onZoomChanged?.(level);
   }
 
   // =========================================================================
@@ -291,6 +303,7 @@ export class TransformManager implements ManagerBase {
       this._zoom = targetZoom;
       if (targetPanX !== undefined) this._panX = targetPanX;
       if (targetPanY !== undefined) this._panY = targetPanY;
+      this._onZoomChanged?.(targetZoom);
       this.requestRender();
       return;
     }
@@ -306,6 +319,7 @@ export class TransformManager implements ManagerBase {
       this._zoom = targetZoom;
       this._panX = panXTarget;
       this._panY = panYTarget;
+      this._onZoomChanged?.(targetZoom);
       this.requestRender();
       return;
     }
@@ -354,6 +368,7 @@ export class TransformManager implements ManagerBase {
         this._zoomAnimationId = null;
         // Signal interaction end for quality tiering
         this._onInteractionEnd?.();
+        this._onZoomChanged?.(this._zoomAnimationTargetZoom);
         this.requestRender();
       }
     };
@@ -414,5 +429,6 @@ export class TransformManager implements ManagerBase {
     this._scheduleRender = null;
     this._onInteractionStart = null;
     this._onInteractionEnd = null;
+    this._onZoomChanged = null;
   }
 }

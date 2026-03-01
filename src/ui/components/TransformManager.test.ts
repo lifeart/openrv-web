@@ -378,6 +378,95 @@ describe('TransformManager', () => {
   });
 
   // ===========================================================================
+  // onZoomChanged callback
+  // ===========================================================================
+
+  describe('onZoomChanged callback', () => {
+    it('setZoom fires onZoomChanged', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setZoom(2);
+      expect(callback).toHaveBeenCalledWith(2);
+    });
+
+    it('setZoom fires with correct value for each call', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setZoom(0.5);
+      tm.setZoom(3);
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(callback).toHaveBeenNthCalledWith(1, 0.5);
+      expect(callback).toHaveBeenNthCalledWith(2, 3);
+    });
+
+    it('smoothZoomTo with duration 0 fires onZoomChanged immediately', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setScheduleRender(() => {});
+      tm.smoothZoomTo(3, 0);
+      expect(callback).toHaveBeenCalledWith(3);
+    });
+
+    it('smoothZoomTo when already at target fires onZoomChanged', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setScheduleRender(() => {});
+      // Already at zoom=1, pan=0,0
+      tm.smoothZoomTo(1, 200, 0, 0);
+      expect(callback).toHaveBeenCalledWith(1);
+    });
+
+    it('setting callback to null stops notifications', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setZoom(2);
+      expect(callback).toHaveBeenCalledOnce();
+
+      tm.setOnZoomChanged(null);
+      tm.setZoom(3);
+      expect(callback).toHaveBeenCalledOnce(); // Not called again
+    });
+
+    it('no callback set does not throw', () => {
+      expect(() => tm.setZoom(2)).not.toThrow();
+    });
+
+    it('smoothZoomTo animation completion fires onZoomChanged', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setScheduleRender(() => {});
+
+      const rafCallbacks: FrameRequestCallback[] = [];
+      vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+        rafCallbacks.push(cb);
+        return rafCallbacks.length;
+      });
+      vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      // Start animation from zoom=1 to zoom=3
+      tm.smoothZoomTo(3, 200);
+      expect(callback).not.toHaveBeenCalled();
+
+      // Simulate animation completion by calling the last RAF callback with a time
+      // far past the duration (startTime + duration + extra)
+      const startTime = performance.now();
+      if (rafCallbacks.length > 0) {
+        rafCallbacks[rafCallbacks.length - 1]!(startTime + 300);
+      }
+      // The completion callback may trigger another RAF frame or complete
+      // Run all remaining callbacks to ensure completion
+      while (rafCallbacks.length > 0) {
+        const cb = rafCallbacks.pop();
+        if (cb) cb(startTime + 500);
+      }
+
+      expect(callback).toHaveBeenCalledWith(3);
+
+      vi.restoreAllMocks();
+    });
+  });
+
+  // ===========================================================================
   // Dispose
   // ===========================================================================
 
@@ -399,6 +488,15 @@ describe('TransformManager', () => {
       tm.dispose();
       // After dispose, smoothZoomTo should not call the callback
       tm.smoothZoomTo(2, 0);
+      expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('clears onZoomChanged callback', () => {
+      const fn = vi.fn();
+      tm.setOnZoomChanged(fn);
+      tm.dispose();
+      // After dispose, setZoom should not call the callback
+      tm.setZoom(5);
       expect(fn).not.toHaveBeenCalled();
     });
   });

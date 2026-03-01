@@ -8,6 +8,7 @@ import { Transform2D } from './TransformControl';
 import { CropState, CropRegion } from './CropControl';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { VIEWER_PLACEHOLDER_SUPPORT_LINES } from '../../utils/media/SupportedMediaFormats';
+import { MAX_CANVAS_DIMENSION } from './ScalePresets';
 
 function getFontSizePx(font: string, fallback: number): number {
   const match = font.match(/(\d+(?:\.\d+)?)px/);
@@ -460,8 +461,17 @@ export function calculateDisplayDimensions(
 
   // Apply zoom
   const scale = fitScale * zoom;
-  const width = Math.max(1, Math.floor(sourceWidth * scale));
-  const height = Math.max(1, Math.floor(sourceHeight * scale));
+  let width = Math.max(1, Math.floor(sourceWidth * scale));
+  let height = Math.max(1, Math.floor(sourceHeight * scale));
+
+  // Cap dimensions to prevent GPU buffer overflow at high magnification.
+  // The remaining magnification beyond the cap is achieved via CSS scaling.
+  const maxDim = MAX_CANVAS_DIMENSION;
+  if (width > maxDim || height > maxDim) {
+    const scaleFactor = Math.min(maxDim / width, maxDim / height);
+    width = Math.max(1, Math.floor(width * scaleFactor));
+    height = Math.max(1, Math.floor(height * scaleFactor));
+  }
 
   return { width, height };
 }

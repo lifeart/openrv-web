@@ -46,6 +46,7 @@ export interface ActionViewer {
   smoothFitToWidth(): void;
   smoothFitToHeight(): void;
   smoothSetZoom(level: number): void;
+  smoothSetPixelRatio(ratio: number): void;
   refresh(): void;
   copyFrameToClipboard(includeAnnotations: boolean): void;
   getPixelProbe(): { toggle(): void };
@@ -694,5 +695,24 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
 
     // -- Playback mode ---------------------------------------------------
     'playback.togglePlaybackMode': () => session.togglePlaybackMode(),
+
+    // -- Scale presets (magnification) -----------------------------------
+    'view.zoom1to1': () => viewer.smoothSetPixelRatio(1),
+    'view.zoom2to1': () => viewer.smoothSetPixelRatio(2),
+    'view.zoom3to1': () => viewer.smoothSetPixelRatio(3),
+    'view.zoom4to1': () => viewer.smoothSetPixelRatio(4),
+    'view.zoom5to1': () => viewer.smoothSetPixelRatio(5),
+    'view.zoom6to1': () => viewer.smoothSetPixelRatio(6),
+    'view.zoom7to1': () => viewer.smoothSetPixelRatio(7),
+    'view.zoom8to1': () => viewer.smoothSetPixelRatio(8),
+
+    // -- Scale presets (reduction) ----------------------------------------
+    'view.zoom1to2': () => viewer.smoothSetPixelRatio(0.5),
+    'view.zoom1to3': () => viewer.smoothSetPixelRatio(1 / 3),
+    'view.zoom1to4': () => viewer.smoothSetPixelRatio(0.25),
+    'view.zoom1to5': () => viewer.smoothSetPixelRatio(0.2),
+    'view.zoom1to6': () => viewer.smoothSetPixelRatio(1 / 6),
+    'view.zoom1to7': () => viewer.smoothSetPixelRatio(1 / 7),
+    'view.zoom1to8': () => viewer.smoothSetPixelRatio(0.125),
   };
 }

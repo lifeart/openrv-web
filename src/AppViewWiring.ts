@@ -26,6 +26,8 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
   const subs = new DisposableSubscriptionManager();
 
   // Zoom control -> viewer
+  // ZoomControl now emits pixel ratio values (industry standard: 100% = 1:1).
+  // 'fit' is a special zoom mode; numeric values are pixel ratios.
   subs.add(controls.zoomControl.on('zoomChanged', (zoom) => {
     if (zoom === 'fit') {
       viewer.smoothFitToWindow();
@@ -34,7 +36,8 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
     } else if (zoom === 'fit-height') {
       viewer.smoothFitToHeight();
     } else {
-      viewer.smoothSetZoom(zoom);
+      // zoom is a pixel ratio (e.g. 1 = 1:1, 2 = 2:1, 0.25 = 1:4)
+      viewer.smoothSetPixelRatio(zoom);
     }
   }));
 
