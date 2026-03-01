@@ -616,12 +616,14 @@ describe('SessionSerializer', () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty();
       state.playback.playbackMode = 'playAllFrames';
+      // Must include a source so that loadedMedia > 0 and setPlaybackState is called
+      state.media = [{ type: 'video' as const, path: 'test.mp4', name: 'test', width: 1920, height: 1080, duration: 100, fps: 24 }];
 
       await SessionSerializer.fromJSON(state, components);
 
       const setPlaybackState = components.session.setPlaybackState as ReturnType<typeof vi.fn>;
       expect(setPlaybackState).toHaveBeenCalled();
-      const arg = setPlaybackState.mock.calls[0][0];
+      const arg = setPlaybackState.mock.calls[0]![0];
       expect(arg.playbackMode).toBe('playAllFrames');
     });
   });

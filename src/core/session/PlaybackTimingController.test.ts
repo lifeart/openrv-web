@@ -144,7 +144,7 @@ describe('PlaybackTimingController', () => {
       const frameDuration = 1000 / fps;
       state.lastFrameTime = 1000;
 
-      const result = controller.accumulateFrames(state, fps, 1, 1, 1000 + frameDuration);
+      const result = controller.accumulateFrames(state, fps, 1, 1, undefined, 1000 + frameDuration);
       expect(result.framesToAdvance).toBe(1);
       expect(result.frameDuration).toBeCloseTo(frameDuration, 5);
     });
@@ -154,7 +154,7 @@ describe('PlaybackTimingController', () => {
       const frameDuration = 1000 / fps;
       state.lastFrameTime = 1000;
 
-      const result = controller.accumulateFrames(state, fps, 1, 1, 1000 + frameDuration * 0.5);
+      const result = controller.accumulateFrames(state, fps, 1, 1, undefined, 1000 + frameDuration * 0.5);
       expect(result.framesToAdvance).toBe(0);
       // Accumulator should hold the partial time
       expect(state.frameAccumulator).toBeCloseTo(frameDuration * 0.5, 5);
@@ -166,11 +166,11 @@ describe('PlaybackTimingController', () => {
       state.lastFrameTime = 1000;
 
       // First call: 0.6 of a frame
-      const r1 = controller.accumulateFrames(state, fps, 1, 1, 1000 + frameDuration * 0.6);
+      const r1 = controller.accumulateFrames(state, fps, 1, 1, undefined, 1000 + frameDuration * 0.6);
       expect(r1.framesToAdvance).toBe(0);
 
       // Second call: another 0.6 of a frame => total 1.2 => 1 frame advance
-      const r2 = controller.accumulateFrames(state, fps, 1, 1, 1000 + frameDuration * 1.2);
+      const r2 = controller.accumulateFrames(state, fps, 1, 1, undefined, 1000 + frameDuration * 1.2);
       expect(r2.framesToAdvance).toBe(1);
     });
 
@@ -179,7 +179,7 @@ describe('PlaybackTimingController', () => {
       const frameDuration = 1000 / fps;
       state.lastFrameTime = 1000;
 
-      const result = controller.accumulateFrames(state, fps, 1, 1, 1000 + frameDuration * 3.5);
+      const result = controller.accumulateFrames(state, fps, 1, 1, undefined, 1000 + frameDuration * 3.5);
       expect(result.framesToAdvance).toBe(3);
       expect(state.frameAccumulator).toBeCloseTo(frameDuration * 0.5, 5);
     });
@@ -191,7 +191,7 @@ describe('PlaybackTimingController', () => {
 
       // One normal frame duration at 2x speed should produce 2 frames
       const delta = 1000 / fps; // ~41.67ms
-      const result = controller.accumulateFrames(state, fps, 2, 1, 1000 + delta);
+      const result = controller.accumulateFrames(state, fps, 2, 1, undefined, 1000 + delta);
       expect(result.framesToAdvance).toBe(2);
       expect(result.frameDuration).toBeCloseTo(frameDurationAt2x, 5);
     });
@@ -201,14 +201,14 @@ describe('PlaybackTimingController', () => {
       state.lastFrameTime = 1000;
 
       // Request speed 8 in reverse direction; should be capped to MAX_REVERSE_SPEED
-      const result = controller.accumulateFrames(state, fps, 8, -1, 1000 + 1000);
+      const result = controller.accumulateFrames(state, fps, 8, -1, undefined, 1000 + 1000);
       const expectedFrameDuration = (1000 / fps) / MAX_REVERSE_SPEED;
       expect(result.frameDuration).toBeCloseTo(expectedFrameDuration, 5);
     });
 
     it('PTC-U020: updates lastFrameTime to now', () => {
       state.lastFrameTime = 1000;
-      controller.accumulateFrames(state, 24, 1, 1, 2000);
+      controller.accumulateFrames(state, 24, 1, 1, undefined, 2000);
       expect(state.lastFrameTime).toBe(2000);
     });
   });
@@ -923,7 +923,6 @@ describe('PlaybackTimingController', () => {
       // Set up state so multiple frames would normally advance
       state.lastFrameTime = 0;
       const fps = 24;
-      const frameDuration = 1000 / fps; // ~41.67ms
 
       // Simulate a large elapsed time (200ms = ~4.8 frames at 24fps)
       const now = 200;
