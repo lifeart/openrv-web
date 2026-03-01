@@ -84,6 +84,8 @@ export interface GTOParseResult {
     statuses?: StatusEntry[];
     /** Background color as RGBA float array (0-1 range) */
     bgColor?: [number, number, number, number];
+    /** Whether audio scrub is enabled (defaults to true when not present) */
+    audioScrubEnabled?: boolean;
   };
 }
 
@@ -328,6 +330,12 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b) && Number.isFinite(a)) {
           sessionInfo.bgColor = [r, g, b, a];
         }
+      }
+
+      // Audio scrub enabled (int: 0 or 1, defaults to true when absent)
+      const audioScrubEnabled = sessionComp.property('audioScrubEnabled').value() as number;
+      if (typeof audioScrubEnabled === 'number') {
+        sessionInfo.audioScrubEnabled = audioScrubEnabled !== 0;
       }
     }
 

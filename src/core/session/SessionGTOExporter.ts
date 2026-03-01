@@ -1479,6 +1479,7 @@ export class SessionGTOExporter {
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
       .float4('bgColor', [metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]])
+      .int('audioScrubEnabled', playback.audioScrubEnabled ? 1 : 0)
       .end();
 
     obj

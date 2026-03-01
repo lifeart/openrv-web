@@ -11,22 +11,37 @@ describe('AudioCoordinator', () => {
   let coordinator: AudioCoordinator;
   let callbacks: AudioCoordinatorCallbacks;
 
-  // Mock AudioContext & friends (needed by AudioPlaybackManager)
-  const mockGainNode = {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    gain: { value: 1 },
-  };
+  // Helper to create a mock AudioParam with scheduling methods
+  function createMockAudioParam(initialValue = 1) {
+    return {
+      value: initialValue,
+      setValueAtTime: vi.fn(),
+      setValueCurveAtTime: vi.fn(),
+      linearRampToValueAtTime: vi.fn(),
+      cancelScheduledValues: vi.fn(),
+    };
+  }
 
-  const mockSourceNode = {
-    buffer: null as AudioBuffer | null,
-    playbackRate: { value: 1 },
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-    onended: null as (() => void) | null,
-  };
+  // Mock AudioContext & friends (needed by AudioPlaybackManager)
+  function createMockGainNode() {
+    return {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      gain: createMockAudioParam(1),
+    };
+  }
+
+  function createMockSourceNode() {
+    return {
+      buffer: null as AudioBuffer | null,
+      playbackRate: { value: 1 },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: null as (() => void) | null,
+    };
+  }
 
   const mockAudioBuffer = {
     duration: 10,
@@ -36,18 +51,29 @@ describe('AudioCoordinator', () => {
     getChannelData: vi.fn().mockReturnValue(new Float32Array(441000)),
   };
 
+  let createdSourceNodes: ReturnType<typeof createMockSourceNode>[];
+
   const mockAudioContext = {
     state: 'running' as AudioContextState,
     currentTime: 0,
-    createGain: vi.fn().mockReturnValue(mockGainNode),
-    createBufferSource: vi.fn().mockReturnValue(mockSourceNode),
+    createGain: vi.fn(() => createMockGainNode()),
+    createBufferSource: vi.fn(() => {
+      const node = createMockSourceNode();
+      createdSourceNodes.push(node);
+      return node;
+    }),
     decodeAudioData: vi.fn().mockResolvedValue(mockAudioBuffer),
     resume: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     destination: {},
   };
 
+  function getLastSourceNode() {
+    return createdSourceNodes[createdSourceNodes.length - 1]!;
+  }
+
   beforeEach(() => {
+    createdSourceNodes = [];
     vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -57,10 +83,14 @@ describe('AudioCoordinator', () => {
     vi.clearAllMocks();
     mockAudioContext.state = 'running';
     mockAudioContext.currentTime = 0;
-    mockSourceNode.onended = null;
-    mockSourceNode.buffer = null;
-    mockSourceNode.playbackRate.value = 1;
-    mockGainNode.gain.value = 1;
+
+    // Reset factories after clearAllMocks
+    mockAudioContext.createGain.mockImplementation(() => createMockGainNode());
+    mockAudioContext.createBufferSource.mockImplementation(() => {
+      const node = createMockSourceNode();
+      createdSourceNodes.push(node);
+      return node;
+    });
 
     coordinator = new AudioCoordinator();
     callbacks = { onAudioPathChanged: vi.fn() };
@@ -245,7 +275,7 @@ describe('AudioCoordinator', () => {
       coordinator.onPlaybackStarted(25, 24, 1, 1);
 
       // Time = (25-1)/24 = 1.0s
-      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 1);
+      expect(getLastSourceNode().start).toHaveBeenCalledWith(0, 1);
       expect(coordinator.isWebAudioActive).toBe(true);
       expect(callbacks.onAudioPathChanged).toHaveBeenCalled();
     });
@@ -305,13 +335,13 @@ describe('AudioCoordinator', () => {
       await loadWebAudio();
 
       coordinator.onPlaybackStarted(1, 24, 2, 1);
-      vi.clearAllMocks();
+      const sourceCountBefore = createdSourceNodes.length;
 
       // At 2x with preservesPitch, shouldUseWebAudio() is false
       coordinator.onFrameChanged(49, 24, true);
 
-      // Should NOT have called play/syncToTime on the manager
-      expect(mockSourceNode.start).not.toHaveBeenCalled();
+      // Should NOT have created any new source nodes (no sync/play)
+      expect(createdSourceNodes.length).toBe(sourceCountBefore);
     });
 
     it('AC-043: onFrameChanged restarts Web Audio after loop wrap (ended source)', async () => {
@@ -320,8 +350,8 @@ describe('AudioCoordinator', () => {
       coordinator.onPlaybackStarted(1, 24, 1, 1);
 
       // Simulate AudioBufferSourceNode.onended (loop wrap)
-      if (mockSourceNode.onended) {
-        mockSourceNode.onended();
+      if (getLastSourceNode().onended) {
+        getLastSourceNode().onended!();
       }
 
       vi.clearAllMocks();
@@ -329,7 +359,7 @@ describe('AudioCoordinator', () => {
       // Frame changed during playback — manager.isPlaying is false, so should restart
       coordinator.onFrameChanged(1, 24, true);
 
-      expect(mockSourceNode.start).toHaveBeenCalled();
+      expect(getLastSourceNode().start).toHaveBeenCalled();
       expect(callbacks.onAudioPathChanged).toHaveBeenCalled();
     });
   });
@@ -380,6 +410,118 @@ describe('AudioCoordinator', () => {
       // The manager should have received the rate change
       // (isPlaying is false so no activation)
       expect(callbacks.onAudioPathChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  // ======================================================================
+  // Audio scrub gating & scrub mode control
+  // ======================================================================
+
+  describe('audio scrub', () => {
+    it('AC-100: audioScrubEnabled defaults to true', () => {
+      expect(coordinator.audioScrubEnabled).toBe(true);
+    });
+
+    it('AC-101: onAudioScrubEnabledChanged updates audioScrubEnabled', () => {
+      coordinator.onAudioScrubEnabledChanged(false);
+      expect(coordinator.audioScrubEnabled).toBe(false);
+
+      coordinator.onAudioScrubEnabledChanged(true);
+      expect(coordinator.audioScrubEnabled).toBe(true);
+    });
+
+    it('AC-102: onFrameChanged does NOT scrub when audioScrubEnabled is false', async () => {
+      vi.useFakeTimers();
+      try {
+        await loadWebAudio();
+
+        coordinator.onAudioScrubEnabledChanged(false);
+
+        coordinator.onFrameChanged(25, 24, false);
+        vi.advanceTimersByTime(50);
+
+        // No buffer source should have been created for scrub
+        expect(createdSourceNodes.length).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('AC-103: onFrameChanged DOES scrub when audioScrubEnabled is true', async () => {
+      vi.useFakeTimers();
+      try {
+        await loadWebAudio();
+
+        coordinator.onAudioScrubEnabledChanged(true);
+
+        coordinator.onFrameChanged(25, 24, false);
+        vi.advanceTimersByTime(50);
+
+        // Buffer source should have been created for scrub snippet
+        expect(createdSourceNodes.length).toBeGreaterThan(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('AC-104: onScrubStart sets manager to continuous mode', async () => {
+      await loadWebAudio();
+
+      coordinator.onScrubStart();
+      expect(coordinator.manager.scrubMode).toBe('continuous');
+    });
+
+    it('AC-105: onScrubEnd sets manager back to discrete mode', async () => {
+      await loadWebAudio();
+
+      coordinator.onScrubStart();
+      expect(coordinator.manager.scrubMode).toBe('continuous');
+
+      coordinator.onScrubEnd();
+      expect(coordinator.manager.scrubMode).toBe('discrete');
+    });
+
+    it('AC-106: onAudioScrubEnabledChanged(false) sets manager to discrete mode', async () => {
+      await loadWebAudio();
+
+      coordinator.onScrubStart();
+      expect(coordinator.manager.scrubMode).toBe('continuous');
+
+      coordinator.onAudioScrubEnabledChanged(false);
+      expect(coordinator.manager.scrubMode).toBe('discrete');
+    });
+
+    it('AC-107: re-enabling audioScrub after disable allows scrub again', async () => {
+      vi.useFakeTimers();
+      try {
+        await loadWebAudio();
+
+        coordinator.onAudioScrubEnabledChanged(false);
+        coordinator.onFrameChanged(25, 24, false);
+        vi.advanceTimersByTime(50);
+        const countDisabled = createdSourceNodes.length;
+
+        coordinator.onAudioScrubEnabledChanged(true);
+        coordinator.onFrameChanged(30, 24, false);
+        vi.advanceTimersByTime(50);
+        const countEnabled = createdSourceNodes.length;
+
+        expect(countEnabled).toBeGreaterThan(countDisabled);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('AC-108: scrub gating does not affect playback sync', async () => {
+      await loadWebAudio();
+
+      coordinator.onAudioScrubEnabledChanged(false);
+
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      expect(coordinator.isWebAudioActive).toBe(true);
+
+      coordinator.onFrameChanged(49, 24, true);
+      expect(coordinator.isWebAudioActive).toBe(true);
     });
   });
 
@@ -523,7 +665,7 @@ describe('AudioCoordinator', () => {
       coordinator.onPlaybackStarted(1, 24, 1, 1);
 
       // (1-1)/24 = 0
-      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 0);
+      expect(getLastSourceNode().start).toHaveBeenCalledWith(0, 0);
     });
 
     it('AC-084: onPlaybackStarted stores fps/speed/direction for subsequent operations', async () => {
@@ -544,8 +686,8 @@ describe('AudioCoordinator', () => {
       coordinator.onPlaybackStarted(1, 24, 1, 1);
 
       // Simulate AudioBufferSourceNode.onended so manager.isPlaying is false
-      if (mockSourceNode.onended) {
-        mockSourceNode.onended();
+      if (getLastSourceNode().onended) {
+        getLastSourceNode().onended!();
       }
       vi.clearAllMocks();
 
@@ -553,7 +695,7 @@ describe('AudioCoordinator', () => {
       coordinator.onFrameChanged(31, 30, true);
 
       // time = (31-1)/30 = 1.0s
-      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 1);
+      expect(getLastSourceNode().start).toHaveBeenCalledWith(0, 1);
     });
 
     it('AC-086: onPreservesPitchChanged when not playing does not trigger activation', async () => {
@@ -592,7 +734,7 @@ describe('AudioCoordinator', () => {
       coordinator.onSpeedChanged(1);
 
       // manager.play() should NOT have been called again (source.start not called)
-      expect(mockSourceNode.start).not.toHaveBeenCalled();
+      expect(getLastSourceNode().start).not.toHaveBeenCalled();
     });
 
     it('AC-089: frame time calculation at various fps values', async () => {
@@ -600,14 +742,14 @@ describe('AudioCoordinator', () => {
 
       // 30fps: frame 31 → time = (31-1)/30 = 1.0
       coordinator.onPlaybackStarted(31, 30, 1, 1);
-      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 1);
+      expect(getLastSourceNode().start).toHaveBeenCalledWith(0, 1);
 
       coordinator.onPlaybackStopped();
       vi.clearAllMocks();
 
       // 60fps: frame 121 → time = (121-1)/60 = 2.0
       coordinator.onPlaybackStarted(121, 60, 1, 1);
-      expect(mockSourceNode.start).toHaveBeenCalledWith(0, 2);
+      expect(getLastSourceNode().start).toHaveBeenCalledWith(0, 2);
     });
 
     it('AC-08A: loadFromVideo with no-src video falls back gracefully', async () => {
@@ -718,8 +860,8 @@ describe('AudioCoordinator', () => {
       // Simulate AudioBufferSourceNode.onended (loop wrap) — the real
       // AudioPlaybackManager wires this callback on line 249, so calling
       // it triggers real manager code that sets _isPlaying = false
-      if (mockSourceNode.onended) {
-        mockSourceNode.onended();
+      if (getLastSourceNode().onended) {
+        getLastSourceNode().onended!();
       }
 
       // manager.isPlaying is now false (source ended), but coordinator

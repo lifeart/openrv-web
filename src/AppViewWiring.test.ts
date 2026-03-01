@@ -13,6 +13,7 @@ function createMockContext() {
     smoothFitToWidth: vi.fn(),
     smoothFitToHeight: vi.fn(),
     smoothSetZoom: vi.fn(),
+    smoothSetPixelRatio: vi.fn(),
     setWipeState: vi.fn(),
     setDifferenceMatteState: vi.fn(),
     setBlendModeState: vi.fn(),
@@ -154,13 +155,13 @@ describe('wireViewControls', () => {
   it('VW-001: zoomChanged "fit" calls viewer.smoothFitToWindow()', () => {
     (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit');
     expect(viewer.smoothFitToWindow).toHaveBeenCalledOnce();
-    expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
+    expect(viewer.smoothSetPixelRatio).not.toHaveBeenCalled();
   });
 
-  // VW-002
-  it('VW-002: zoomChanged with numeric value calls viewer.smoothSetZoom()', () => {
+  // VW-002 - ZoomControl now emits pixel ratio values (industry standard semantics)
+  it('VW-002: zoomChanged with numeric value calls viewer.smoothSetPixelRatio()', () => {
     (controls.zoomControl as EventEmitter).emit('zoomChanged', 2);
-    expect(viewer.smoothSetZoom).toHaveBeenCalledWith(2);
+    expect(viewer.smoothSetPixelRatio).toHaveBeenCalledWith(2);
     expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
   });
 

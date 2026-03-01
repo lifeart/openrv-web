@@ -216,6 +216,59 @@ describe('VolumeManager', () => {
     });
   });
 
+  describe('audioScrubEnabled', () => {
+    let onAudioScrubEnabledChanged: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      onAudioScrubEnabledChanged = vi.fn();
+      callbacks.onAudioScrubEnabledChanged = onAudioScrubEnabledChanged;
+      manager.setCallbacks(callbacks);
+    });
+
+    it('VOL-030: starts with audioScrubEnabled true', () => {
+      expect(manager.audioScrubEnabled).toBe(true);
+    });
+
+    it('VOL-031: sets audioScrubEnabled to false', () => {
+      manager.audioScrubEnabled = false;
+      expect(manager.audioScrubEnabled).toBe(false);
+      expect(onAudioScrubEnabledChanged).toHaveBeenCalledWith(false);
+    });
+
+    it('VOL-032: sets audioScrubEnabled back to true', () => {
+      manager.audioScrubEnabled = false;
+      onAudioScrubEnabledChanged.mockClear();
+      manager.audioScrubEnabled = true;
+      expect(manager.audioScrubEnabled).toBe(true);
+      expect(onAudioScrubEnabledChanged).toHaveBeenCalledWith(true);
+    });
+
+    it('VOL-033: does not emit when setting same audioScrubEnabled value', () => {
+      manager.audioScrubEnabled = true; // same as default
+      expect(onAudioScrubEnabledChanged).not.toHaveBeenCalled();
+    });
+
+    it('VOL-034: works without onAudioScrubEnabledChanged callback (optional)', () => {
+      const plainCallbacks: VolumeManagerCallbacks = {
+        onVolumeChanged: vi.fn(),
+        onMutedChanged: vi.fn(),
+        onPreservesPitchChanged: vi.fn(),
+      };
+      manager.setCallbacks(plainCallbacks);
+      expect(() => { manager.audioScrubEnabled = false; }).not.toThrow();
+      expect(manager.audioScrubEnabled).toBe(false);
+    });
+
+    it('VOL-035: audioScrubEnabled is independent of muted state', () => {
+      manager.muted = true;
+      expect(manager.audioScrubEnabled).toBe(true);
+
+      manager.audioScrubEnabled = false;
+      expect(manager.muted).toBe(true);
+      expect(manager.audioScrubEnabled).toBe(false);
+    });
+  });
+
   describe('callbacks not set', () => {
     it('VOL-027: works without callbacks', () => {
       const mgr = new VolumeManager();
