@@ -208,20 +208,11 @@ export class MultiSourceLayoutManager extends EventEmitter<MultiSourceLayoutMana
    * @param canvasHeight - Total canvas height in physical pixels (for Y-flip)
    * @returns The tile ID under the point, or null if none
    */
-  hitTest(canvasX: number, canvasY: number, canvasHeight: number): string | null {
+  hitTest(canvasX: number, canvasY: number, canvasWidth: number, canvasHeight: number): string | null {
     const state = this.store.getState();
     if (!state.enabled || state.tiles.length === 0) return null;
 
-    const viewports = this.computeViewports(
-      // We need actual canvas dimensions, but for hit testing we can use
-      // the viewports computed with those dimensions
-      canvasHeight, // placeholder - caller should provide actual width
-      canvasHeight,
-    );
-
-    // For proper hit testing, we need the actual viewport data.
-    // The caller should use computeViewports() with real dimensions,
-    // then call hitTestViewports().
+    const viewports = this.computeViewports(canvasWidth, canvasHeight);
     return this.hitTestViewports(canvasX, canvasY, canvasHeight, viewports, state.tiles);
   }
 

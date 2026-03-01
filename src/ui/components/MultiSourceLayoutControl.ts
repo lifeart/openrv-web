@@ -199,9 +199,9 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     `;
     addBtn.disabled = this.manager.getTileCount() >= MAX_TILE_COUNT;
     addBtn.addEventListener('click', () => {
-      // Add source at the next index
-      const nextIndex = this.manager.getTileCount();
-      this.manager.addSource(nextIndex);
+      // Add a new tile referencing source 0 (default active source).
+      // The user can then change the source assignment in the tile row.
+      this.manager.addSource(0);
       this.refreshDropdown();
     });
     this.dropdown.appendChild(addBtn);
