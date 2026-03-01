@@ -71,6 +71,7 @@ export class Timeline {
   private contextMenu: TimelineContextMenu;
   private playlistManager: PlaylistManager | null = null;
   private transitionManager: TransitionManager | null = null;
+  private _rangeShiftFlashUntil = 0;
   private cachedColors: {
     background: string;
     track: string;
@@ -248,6 +249,7 @@ export class Timeline {
     this.subs.add(this.session.on('inOutChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('loopModeChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('marksChanged', () => this.scheduleDraw()));
+    this.subs.add(this.session.on('rangeShifted', () => this.flashRangeShift()));
 
     // Listen to theme changes so canvas redraws with new colors
     this.subs.add(getThemeManager().on('themeChanged', () => {
@@ -257,6 +259,21 @@ export class Timeline {
 
     // Listen to paint engine changes (only once)
     this.subscribeToPaintEngine();
+  }
+
+  /**
+   * Trigger a brief visual flash on the timeline to indicate a range shift.
+   * The flash persists for 400ms and is cleared on the next draw cycle.
+   */
+  private flashRangeShift(): void {
+    this._rangeShiftFlashUntil = Date.now() + 400;
+    this.scheduleDraw();
+    // Schedule a cleanup draw after the flash duration
+    setTimeout(() => {
+      if (!this.disposed) {
+        this.scheduleDraw();
+      }
+    }, 410);
   }
 
   private subscribeToPaintEngine(): void {
@@ -663,21 +680,44 @@ export class Timeline {
     // Check if custom in/out range is set
     const hasCustomRange = inPoint !== 1 || outPoint !== duration;
 
+    // Check if range shift flash is active
+    const isFlashing = Date.now() < this._rangeShiftFlashUntil;
+    const accentRgb = getThemeManager().getColors().accentPrimaryRgb;
+
     if (duration > 1) {
       if (hasCustomRange) {
         const inX = frameToX(inPoint);
         const outX = frameToX(outPoint);
 
-        // Draw in/out range highlight
-        drawInOutRange(ctx, inX, outX, trackY, trackHeight, colors.inOutRange);
+        // Draw in/out range highlight (brighter during flash)
+        if (isFlashing) {
+          ctx.fillStyle = `rgba(${accentRgb}, 0.3)`;
+          ctx.fillRect(inX, trackY, outX - inX, trackHeight);
+        } else {
+          drawInOutRange(ctx, inX, outX, trackY, trackHeight, colors.inOutRange);
+        }
 
         // Draw played portion within range (from in point to current frame)
         if (currentFrame >= inPoint && currentFrame <= outPoint) {
           drawPlayedRegion(ctx, inX, frameToX(currentFrame), trackY, trackHeight, colors.played);
         }
 
-        // Draw in/out bracket markers
-        drawInOutBrackets(ctx, inX, outX, trackY, trackHeight, colors.playhead);
+        // Draw in/out bracket markers (with glow during flash)
+        if (isFlashing) {
+          ctx.fillStyle = colors.playhead;
+          ctx.globalAlpha = 1.0;
+          ctx.shadowColor = colors.playhead;
+          ctx.shadowBlur = 6;
+          ctx.fillRect(inX - 2, trackY - 4, 4, trackHeight + 8);
+          ctx.fillRect(inX - 2, trackY - 4, 8, 3);
+          ctx.fillRect(inX - 2, trackY + trackHeight + 1, 8, 3);
+          ctx.fillRect(outX - 2, trackY - 4, 4, trackHeight + 8);
+          ctx.fillRect(outX - 6, trackY - 4, 8, 3);
+          ctx.fillRect(outX - 6, trackY + trackHeight + 1, 8, 3);
+          ctx.shadowBlur = 0;
+        } else {
+          drawInOutBrackets(ctx, inX, outX, trackY, trackHeight, colors.playhead);
+        }
       } else {
         // No custom range - draw played portion from start to current frame
         drawPlayedRegion(ctx, padding, frameToX(currentFrame), trackY, trackHeight, colors.played);

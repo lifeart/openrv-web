@@ -192,6 +192,8 @@ export interface SessionEvents extends EventMap {
   versionsChanged: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
+  // Range shifting events
+  rangeShifted: { inPoint: number; outPoint: number };
 }
 
 // Re-export from centralized types for backward compatibility
@@ -814,6 +816,21 @@ export class Session extends EventEmitter<SessionEvents> {
 
   resetInOutPoints(): void {
     this._playback.resetInOutPoints();
+  }
+
+  /**
+   * Atomically set both in and out points, avoiding cross-clamping bugs.
+   * Emits 'inOutChanged' exactly once.
+   */
+  setInOutRange(inPoint: number, outPoint: number): void {
+    this._playback.setInOutRange(inPoint, outPoint);
+  }
+
+  /**
+   * Emit a rangeShifted event (called after range shift navigation).
+   */
+  emitRangeShifted(inPoint: number, outPoint: number): void {
+    this.emit('rangeShifted', { inPoint, outPoint });
   }
 
   // Marks — delegated to SessionAnnotations

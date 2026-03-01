@@ -188,7 +188,10 @@ function createMockDeps(): KeyboardActionDeps & { session: ReturnType<typeof cre
       goToPreviousMarkOrBoundary: vi.fn(),
       goToNextShot: vi.fn(),
       goToPreviousShot: vi.fn(),
+      shiftRangeToNext: vi.fn().mockReturnValue(null),
+      shiftRangeToPrevious: vi.fn().mockReturnValue(null),
     },
+    ariaAnnouncer: { announce: vi.fn() },
   };
 }
 

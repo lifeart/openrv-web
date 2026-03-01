@@ -215,6 +215,12 @@ export interface ActionFrameNavigation {
   goToPreviousMarkOrBoundary(): void;
   goToNextShot(): void;
   goToPreviousShot(): void;
+  shiftRangeToNext(): { inPoint: number; outPoint: number } | null;
+  shiftRangeToPrevious(): { inPoint: number; outPoint: number } | null;
+}
+
+export interface ActionAriaAnnouncer {
+  announce(message: string, priority?: 'polite' | 'assertive'): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +243,7 @@ export interface KeyboardActionDeps {
   externalPresentation: ActionExternalPresentation;
   headerBar: ActionHeaderBar;
   frameNavigation: ActionFrameNavigation;
+  ariaAnnouncer?: ActionAriaAnnouncer | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +273,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     externalPresentation,
     headerBar,
     frameNavigation,
+    ariaAnnouncer,
   } = deps;
 
   return {
@@ -330,6 +338,30 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       session.loopMode = modes[(currentIndex + 1) % modes.length]!;
     },
     'timeline.toggleMagnifier': () => controls.timelineMagnifier.toggle(),
+    'timeline.shiftRangeNext': () => {
+      const result = frameNavigation.shiftRangeToNext();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
+    'timeline.shiftRangePrevious': () => {
+      const result = frameNavigation.shiftRangeToPrevious();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
+    'timeline.shiftRangeNextAlt': () => {
+      const result = frameNavigation.shiftRangeToNext();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
+    'timeline.shiftRangePreviousAlt': () => {
+      const result = frameNavigation.shiftRangeToPrevious();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
 
     // -- View ------------------------------------------------------------
     'view.fitToWindow': () => viewer.smoothFitToWindow(),

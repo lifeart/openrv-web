@@ -324,4 +324,29 @@ describe('MarkerManager', () => {
       expect(onMarksChanged).not.toHaveBeenCalled();
     });
   });
+
+  describe('getMarkBoundaries', () => {
+    it('MKR-044: returns empty array for no marks', () => {
+      expect(manager.getMarkBoundaries()).toEqual([]);
+    });
+
+    it('MKR-045: returns sorted frame numbers', () => {
+      manager.setMarker(50, 'note');
+      manager.setMarker(10, 'note');
+      manager.setMarker(30, 'note');
+      expect(manager.getMarkBoundaries()).toEqual([10, 30, 50]);
+    });
+
+    it('MKR-046: includes duration marker end frames', () => {
+      manager.setMarker(10, '', '#ff0000', 30);
+      manager.setMarker(50, '', '#ff0000', 80);
+      expect(manager.getMarkBoundaries()).toEqual([10, 30, 50, 80]);
+    });
+
+    it('MKR-047: deduplicates overlapping boundaries', () => {
+      manager.setMarker(10, '', '#ff0000', 30);
+      manager.setMarker(30, 'note'); // same as endFrame of first marker
+      expect(manager.getMarkBoundaries()).toEqual([10, 30]);
+    });
+  });
 });

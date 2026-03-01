@@ -88,6 +88,10 @@ The keyboard shortcuts feature is **fully implemented** with a comprehensive cen
 | timeline.toggleMark | M | Toggle mark at current frame |
 | timeline.resetInOut | R | Reset in/out points to full range |
 | timeline.cycleLoopMode | Ctrl+L | Cycle loop mode |
+| timeline.shiftRangeNext | Shift+Down | Shift in/out range to next mark pair |
+| timeline.shiftRangePrevious | Shift+Up | Shift in/out range to previous mark pair |
+| timeline.shiftRangeNextAlt | Ctrl+Right | Shift in/out range to next mark pair (secondary) |
+| timeline.shiftRangePreviousAlt | Ctrl+Left | Shift in/out range to previous mark pair (secondary) |
 
 #### Tab Navigation
 | Action | Shortcut | Description |

@@ -196,6 +196,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   setInPoint(frame?: number): void { this._playbackEngine.setInPoint(frame); }
   setOutPoint(frame?: number): void { this._playbackEngine.setOutPoint(frame); }
   resetInOutPoints(): void { this._playbackEngine.resetInOutPoints(); }
+  setInOutRange(inPoint: number, outPoint: number): void { this._playbackEngine.setInOutRange(inPoint, outPoint); }
 
   update(): void { this._playbackEngine.update(); }
   advanceFrame(direction: number): void { this._playbackEngine.advanceFrame(direction); }

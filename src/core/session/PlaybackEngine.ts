@@ -671,6 +671,17 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     this.currentFrame = 1;
   }
 
+  /**
+   * Atomically set both in and out points, avoiding cross-clamping bugs.
+   * Emits 'inOutChanged' exactly once.
+   */
+  setInOutRange(newIn: number, newOut: number): void {
+    const duration = this._host?.getCurrentSource()?.duration ?? 1;
+    this._inPoint = clamp(newIn, 1, duration);
+    this._outPoint = clamp(newOut, this._inPoint, duration);
+    this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
+  }
+
   // ---------------------------------------------------------------
   // Update loop (called each animation frame)
   // ---------------------------------------------------------------

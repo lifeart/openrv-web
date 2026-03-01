@@ -115,6 +115,28 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'F3',
     description: 'Toggle timeline magnifier'
   },
+  // Range shifting - primary bindings (no OS-level conflicts)
+  'timeline.shiftRangeNext': {
+    code: 'ArrowDown',
+    shift: true,
+    description: 'Shift in/out range to next mark pair'
+  },
+  'timeline.shiftRangePrevious': {
+    code: 'ArrowUp',
+    shift: true,
+    description: 'Shift in/out range to previous mark pair'
+  },
+  // Range shifting - secondary bindings (note: Ctrl+Arrow conflicts with macOS Spaces)
+  'timeline.shiftRangeNextAlt': {
+    code: 'ArrowRight',
+    ctrl: true,
+    description: 'Shift in/out range to next mark pair'
+  },
+  'timeline.shiftRangePreviousAlt': {
+    code: 'ArrowLeft',
+    ctrl: true,
+    description: 'Shift in/out range to previous mark pair'
+  },
 
   // View controls
   'view.fitToWindow': {
