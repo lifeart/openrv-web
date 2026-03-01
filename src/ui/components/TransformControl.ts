@@ -137,6 +137,16 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     this.emitChange();
   }
 
+  /**
+   * Set the rotation to an arbitrary angle (in degrees).
+   * The value is normalized to [0, 360).
+   */
+  setRotation(degrees: number): void {
+    this.transform.rotation = ((degrees % 360) + 360) % 360;
+    this.updateRotationIndicator();
+    this.emitChange();
+  }
+
   reset(): void {
     this.transform = {
       ...DEFAULT_TRANSFORM,

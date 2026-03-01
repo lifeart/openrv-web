@@ -255,6 +255,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Flip vertical'
   },
+  'transform.resetRotation': {
+    code: 'Digit0',
+    ctrl: true,
+    description: 'Reset rotation to 0'
+  },
 
   // Export controls
   'export.quickExport': {

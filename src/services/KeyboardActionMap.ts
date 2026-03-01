@@ -108,6 +108,7 @@ export interface ActionControls {
     rotateRight(): void;
     toggleFlipH(): void;
     toggleFlipV(): void;
+    setRotation(degrees: number): void;
   };
   toneMappingControl: { toggle(): void };
   colorInversionToggle: { toggle(): void };
@@ -536,6 +537,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'transform.rotateRight': () => controls.transformControl.rotateRight(),
     'transform.flipHorizontal': () => controls.transformControl.toggleFlipH(),
     'transform.flipVertical': () => controls.transformControl.toggleFlipV(),
+    'transform.resetRotation': () => controls.transformControl.setRotation(0),
 
     // -- Export ----------------------------------------------------------
     'export.quickExport': () => headerBar.getExportControl().quickExport('png'),

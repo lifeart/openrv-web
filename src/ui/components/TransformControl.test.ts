@@ -462,6 +462,63 @@ describe('TransformControl', () => {
     });
   });
 
+  describe('setRotation', () => {
+    it('TRN-058: setRotation sets rotation to given angle', () => {
+      control.setRotation(45);
+      expect(control.getTransform().rotation).toBe(45);
+    });
+
+    it('TRN-059: setRotation normalizes negative angles', () => {
+      control.setRotation(-90);
+      expect(control.getTransform().rotation).toBe(270);
+    });
+
+    it('TRN-060: setRotation normalizes angles >= 360', () => {
+      control.setRotation(450);
+      expect(control.getTransform().rotation).toBe(90);
+    });
+
+    it('TRN-061: setRotation(0) resets rotation to 0', () => {
+      control.rotateRight(); // 90
+      control.setRotation(0);
+      expect(control.getTransform().rotation).toBe(0);
+    });
+
+    it('TRN-062: setRotation emits transformChanged event', () => {
+      const handler = vi.fn();
+      control.on('transformChanged', handler);
+
+      control.setRotation(135);
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ rotation: 135 })
+      );
+    });
+
+    it('TRN-063: setRotation updates rotation indicator', () => {
+      control.setRotation(45);
+      const indicator = control.render().querySelector('[data-testid="rotation-indicator"]') as HTMLElement;
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('45\u00B0');
+    });
+
+    it('TRN-064: setRotation(0) hides rotation indicator', () => {
+      control.setRotation(90);
+      control.setRotation(0);
+      const indicator = control.render().querySelector('[data-testid="rotation-indicator"]') as HTMLElement;
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TRN-065: setRotation preserves other transform properties', () => {
+      control.toggleFlipH();
+      control.setRotation(180);
+      const transform = control.getTransform();
+      expect(transform.rotation).toBe(180);
+      expect(transform.flipH).toBe(true);
+    });
+  });
+
   describe('reset with scale and translate', () => {
     it('TRN-056: reset returns scale to 1,1', () => {
       control.setScale(2, 3);

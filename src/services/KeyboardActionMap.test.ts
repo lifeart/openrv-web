@@ -103,6 +103,7 @@ function createMockControls() {
       rotateRight: vi.fn(),
       toggleFlipH: vi.fn(),
       toggleFlipV: vi.fn(),
+      setRotation: vi.fn(),
     },
     toneMappingControl: { toggle: vi.fn() },
     colorInversionToggle: { toggle: vi.fn() },
@@ -697,5 +698,24 @@ describe('buildActionHandlers', () => {
   it('KAM-PAF-001: playback.togglePlaybackMode calls session.togglePlaybackMode()', () => {
     handlers['playback.togglePlaybackMode']!();
     expect(deps.session.togglePlaybackMode).toHaveBeenCalledTimes(1);
+  });
+
+  // =================================================================
+  // Transform: reset rotation (Ctrl+0)
+  // =================================================================
+
+  it('KAM-TRR-001: transform.resetRotation handler is registered', () => {
+    expect(handlers['transform.resetRotation']).toBeDefined();
+    expect(typeof handlers['transform.resetRotation']).toBe('function');
+  });
+
+  it('KAM-TRR-002: transform.resetRotation calls transformControl.setRotation(0)', () => {
+    handlers['transform.resetRotation']!();
+    expect(deps.controls.transformControl.setRotation).toHaveBeenCalledWith(0);
+  });
+
+  it('KAM-TRR-003: transform.resetRotation calls setRotation exactly once', () => {
+    handlers['transform.resetRotation']!();
+    expect(deps.controls.transformControl.setRotation).toHaveBeenCalledTimes(1);
   });
 });
