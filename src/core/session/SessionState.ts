@@ -23,9 +23,10 @@ import type { PlaylistState } from './PlaylistManager';
 import type { Note } from './NoteManager';
 import type { VersionGroup } from './VersionManager';
 import type { StatusEntry } from './StatusManager';
+import type { SerializedGraph } from './SessionManagerTypes';
 
 /** Schema version for migration support */
-export const SESSION_STATE_VERSION = 1;
+export const SESSION_STATE_VERSION = 2;
 
 /** Reference to a media file */
 export interface MediaReference {
@@ -136,6 +137,8 @@ export interface SessionState {
   versionGroups?: VersionGroup[];
   /** Shot statuses (optional) */
   statuses?: StatusEntry[];
+  /** Node graph topology (optional, absent in legacy v1 projects) */
+  graph?: SerializedGraph;
 }
 
 /** Default values for empty state */

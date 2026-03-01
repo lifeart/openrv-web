@@ -6,6 +6,22 @@ import type { NodeProcessor } from './NodeProcessor';
 
 let nodeIdCounter = 0;
 
+/**
+ * Reset the module-level node ID counter to at least the given minimum value.
+ * Used after deserialization to prevent ID collisions with subsequently
+ * created nodes. The counter is set to max(current, minValue).
+ */
+export function resetNodeIdCounter(minValue: number): void {
+  nodeIdCounter = Math.max(nodeIdCounter, minValue);
+}
+
+/**
+ * Get the current node ID counter value (for testing purposes).
+ */
+export function getNodeIdCounter(): number {
+  return nodeIdCounter;
+}
+
 export abstract class IPNode {
   readonly id: string;
   readonly type: string;
@@ -92,6 +108,22 @@ export abstract class IPNode {
     for (const input of [...this._inputs]) {
       this.disconnectInput(input);
     }
+  }
+
+  /**
+   * Reorder an input from one index to another within the inputs array.
+   * Used by group nodes to support drag-and-drop reordering of children.
+   * Emits inputsChanged signal on success.
+   */
+  reorderInput(fromIndex: number, toIndex: number): void {
+    if (fromIndex < 0 || fromIndex >= this._inputs.length) return;
+    if (toIndex < 0 || toIndex >= this._inputs.length) return;
+    if (fromIndex === toIndex) return;
+
+    const [moved] = this._inputs.splice(fromIndex, 1);
+    this._inputs.splice(toIndex, 0, moved!);
+    this.markDirty();
+    this.inputsChanged.emit([...this._inputs], this._inputs);
   }
 
   // Get a specific input by index
