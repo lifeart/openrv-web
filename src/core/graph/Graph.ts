@@ -73,6 +73,33 @@ export class Graph {
     this.connectionChanged.emit({ from: fromNode, to: toNode }, { from: fromNode, to: toNode });
   }
 
+  /**
+   * Reorder an input of a node within the graph.
+   * Delegates to IPNode.reorderInput() and emits connectionChanged.
+   */
+  reorderInput(nodeId: string, fromIndex: number, toIndex: number): void {
+    const node = this.nodes.get(nodeId);
+    if (!node) return;
+
+    const inputBefore = node.getInput(fromIndex);
+    if (!inputBefore) return;
+
+    node.reorderInput(fromIndex, toIndex);
+
+    // Emit connectionChanged to notify listeners of the structural change
+    this.connectionChanged.emit(
+      { from: inputBefore, to: node },
+      { from: inputBefore, to: node }
+    );
+  }
+
+  /**
+   * Get the output node of the graph.
+   */
+  getOutputNode(): IPNode | null {
+    return this.outputNode;
+  }
+
   private wouldCreateCycle(from: IPNode, to: IPNode): boolean {
     // Check if connecting from -> to would create a cycle.
     // A cycle would exist if 'to' is already an ancestor of 'from' (reachable
