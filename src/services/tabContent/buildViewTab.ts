@@ -34,8 +34,9 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   viewContent.appendChild(registry.channelSelect.render());
   viewContent.appendChild(ContextToolbar.createDivider());
 
-  // --- GROUP 2: Comparison (Compare + Stereo + Ghost) ---
+  // --- GROUP 2: Comparison (Compare + Layout + Stereo + Ghost) ---
   viewContent.appendChild(registry.compareControl.render());
+  viewContent.appendChild(registry.layoutControl.render());
   viewContent.appendChild(registry.stereoControl.render());
   viewContent.appendChild(registry.stereoEyeTransformControl.render());
   viewContent.appendChild(registry.stereoAlignControl.render());

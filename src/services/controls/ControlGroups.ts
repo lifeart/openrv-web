@@ -29,6 +29,7 @@ import type { StackControl } from '../../ui/components/StackControl';
 import type { PARControl } from '../../ui/components/PARControl';
 import type { BackgroundPatternControl } from '../../ui/components/BackgroundPatternControl';
 import type { DisplayProfileControl } from '../../ui/components/DisplayProfileControl';
+import type { MultiSourceLayoutControl } from '../../ui/components/MultiSourceLayoutControl';
 
 import type { FilterControl } from '../../ui/components/FilterControl';
 import type { SlateEditor } from '../../ui/components/SlateEditor';
@@ -110,6 +111,7 @@ export interface ViewControlGroup {
   readonly parControl: PARControl;
   readonly backgroundPatternControl: BackgroundPatternControl;
   readonly displayProfileControl: DisplayProfileControl;
+  readonly layoutControl: MultiSourceLayoutControl;
 }
 
 /** Filter/lens/deinterlace/effects controls. */

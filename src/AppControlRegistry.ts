@@ -80,6 +80,7 @@ import type { ShotGridConfigUI } from './integrations/ShotGridConfig';
 import type { ShotGridPanel } from './ui/components/ShotGridPanel';
 import type { ConformPanel } from './ui/components/ConformPanel';
 import type { TimelineEditor } from './ui/components/TimelineEditor';
+import type { MultiSourceLayoutControl } from './ui/components/MultiSourceLayoutControl';
 
 import type { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { getIconSvg } from './ui/components/shared/Icons';
@@ -238,6 +239,7 @@ export class AppControlRegistry {
   get parControl(): PARControl { return this.view.parControl; }
   get backgroundPatternControl(): BackgroundPatternControl { return this.view.backgroundPatternControl; }
   get displayProfileControl(): DisplayProfileControl { return this.view.displayProfileControl; }
+  get layoutControl(): MultiSourceLayoutControl { return this.view.layoutControl; }
 
   // --- Effects ---
   get filterControl(): FilterControl { return this.effects.filterControl; }
@@ -688,6 +690,7 @@ export class AppControlRegistry {
     this.zoomControl.dispose();
     this.scopesControl.dispose();
     this.compareControl.dispose();
+    this.layoutControl.dispose();
     this.referenceManager.dispose();
     this.transformControl.dispose();
     this.filterControl.dispose();

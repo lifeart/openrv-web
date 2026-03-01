@@ -64,8 +64,26 @@ function createMockContext() {
 
   const compareControl = Object.assign(new EventEmitter(), {
     getWipePosition: vi.fn().mockReturnValue(0.5),
-    getWipeMode: vi.fn().mockReturnValue('horizontal'),
+    getWipeMode: vi.fn().mockReturnValue('off'),
     getFlickerFrame: vi.fn().mockReturnValue(1),
+    isDifferenceMatteEnabled: vi.fn().mockReturnValue(false),
+    getBlendMode: vi.fn().mockReturnValue('off'),
+    isQuadViewEnabled: vi.fn().mockReturnValue(false),
+    setWipeMode: vi.fn(),
+    setDifferenceMatteEnabled: vi.fn(),
+    setBlendMode: vi.fn(),
+    setQuadViewEnabled: vi.fn(),
+  });
+
+  const layoutManager = {
+    enabled: false,
+    setDeactivateCompareCallback: vi.fn(),
+    on: vi.fn().mockReturnValue(() => {}),
+    disable: vi.fn(),
+  };
+
+  const layoutControl = Object.assign(new EventEmitter(), {
+    getManager: vi.fn().mockReturnValue(layoutManager),
   });
 
   const toneMappingControl = new EventEmitter();
@@ -93,6 +111,7 @@ function createMockContext() {
     vectorscope,
     gamutDiagram,
     compareControl,
+    layoutControl,
     toneMappingControl,
     ghostFrameControl,
     parControl,

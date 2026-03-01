@@ -106,6 +106,35 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
     });
   }));
 
+  // Layout control -> viewer (mutual exclusion with compare)
+  const layoutManager = controls.layoutControl.getManager();
+
+  // Wire mutual exclusion: when layout is enabled, deactivate compare modes
+  layoutManager.setDeactivateCompareCallback(() => {
+    const cc = controls.compareControl;
+    if (cc.getWipeMode() !== 'off') cc.setWipeMode('off');
+    if (cc.isDifferenceMatteEnabled()) cc.setDifferenceMatteEnabled(false);
+    if (cc.getBlendMode() !== 'off') cc.setBlendMode('off');
+    if (cc.isQuadViewEnabled()) cc.setQuadViewEnabled(false);
+  });
+
+  // Wire mutual exclusion: when a compare mode is activated, deactivate layout
+  subs.add(controls.compareControl.on('wipeModeChanged', (mode) => {
+    if (mode !== 'off' && layoutManager.enabled) {
+      layoutManager.disable();
+    }
+  }));
+  subs.add(controls.compareControl.on('differenceMatteChanged', (state) => {
+    if (state.enabled && layoutManager.enabled) {
+      layoutManager.disable();
+    }
+  }));
+  subs.add(controls.compareControl.on('blendModeChanged', (state) => {
+    if (state.mode !== 'off' && layoutManager.enabled) {
+      layoutManager.disable();
+    }
+  }));
+
   // Tone mapping control -> viewer
   subs.add(controls.toneMappingControl.on('stateChanged', (state) => {
     viewer.setToneMappingState(state);
