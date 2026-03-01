@@ -114,6 +114,7 @@ RenderState { luminanceVis: LuminanceVisRenderState }
     v
 ShaderStateManager.applyRenderState()
     |  Updates falseColorLUTData with HSV/Random LUT
+    |  Detects LUT data reference changes for re-upload
     |  Updates contour uniforms
     v
 viewer.frag.glsl
@@ -162,12 +163,16 @@ if (u_falseColorEnabled) {
 
 By uploading HSV or Random LUT data into the same texture, this code automatically performs the correct luminance-to-color mapping. No shader modification is needed for HSV and Random Color modes.
 
+**HDR limitation note:** The `clamp(fcLuma, 0.0, 1.0)` means all super-white values (>1.0) collapse to the same LUT entry (index 255), losing luminance differentiation in the highlight range. Similarly, negative values (common in scene-referred EXR data) all map to index 0. This is acceptable for display-referred SDR-range visualization. When working with HDR content, tone mapping should be enabled before activating visualization modes. A shader comment should document this limitation.
+
 ### Phase 11b: Contour Visualization (New)
 
 Add after the existing Phase 11 false color block:
 
 ```glsl
 // 11b. Contour iso-lines (diagnostic overlay - edge detection on luminance)
+// NOTE: Luminance visualization operates on display-referred SDR-range values.
+// For HDR content, enable tone mapping before activating visualization modes.
 uniform bool u_contourEnabled;
 uniform float u_contourLevels;      // 2.0 to 50.0
 uniform bool u_contourDesaturate;
@@ -175,40 +180,48 @@ uniform vec3 u_contourLineColor;    // normalized RGB [0,1]
 
 // ... inside main():
 if (u_contourEnabled) {
-    float cLuma = dot(color.rgb, LUMA);
+    // Sample 4-connected neighbors + center using texelFetch for exact pixel access.
+    // All five samples come from u_texture (source image) to ensure consistency.
+    // The center pixel's processed color.rgb is preserved for desaturation blending.
+    ivec2 texSize = textureSize(u_texture, 0);
+    ivec2 pc = ivec2(v_texCoord * vec2(texSize));
+
+    // Center pixel luminance from source texture (consistent with neighbors)
+    float cLuma = dot(texelFetch(u_texture, pc, 0).rgb, LUMA);
     float quantC = floor(cLuma * u_contourLevels) / u_contourLevels;
 
-    // Sample 4-connected neighbors using texelFetch for exact pixel access
-    ivec2 texSize = textureSize(u_texture, 0);
-    ivec2 pixelCoord = ivec2(v_texCoord * vec2(texSize));
-
     // Clamp neighbor coordinates to texture bounds
-    ivec2 left  = ivec2(max(pixelCoord.x - 1, 0), pixelCoord.y);
-    ivec2 right = ivec2(min(pixelCoord.x + 1, texSize.x - 1), pixelCoord.y);
-    ivec2 up    = ivec2(pixelCoord.x, max(pixelCoord.y - 1, 0));
-    ivec2 down  = ivec2(pixelCoord.x, min(pixelCoord.y + 1, texSize.y - 1));
+    ivec2 left  = ivec2(max(pc.x - 1, 0), pc.y);
+    ivec2 right = ivec2(min(pc.x + 1, texSize.x - 1), pc.y);
+    ivec2 up    = ivec2(pc.x, max(pc.y - 1, 0));
+    ivec2 down  = ivec2(pc.x, min(pc.y + 1, texSize.y - 1));
 
-    float lumL = dot(texelFetch(u_texture, left, 0).rgb, LUMA);
-    float lumR = dot(texelFetch(u_texture, right, 0).rgb, LUMA);
-    float lumU = dot(texelFetch(u_texture, up, 0).rgb, LUMA);
-    float lumD = dot(texelFetch(u_texture, down, 0).rgb, LUMA);
+    float qL = floor(dot(texelFetch(u_texture, left, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+    float qR = floor(dot(texelFetch(u_texture, right, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+    float qU = floor(dot(texelFetch(u_texture, up, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+    float qD = floor(dot(texelFetch(u_texture, down, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
 
-    float qL = floor(lumL * u_contourLevels) / u_contourLevels;
-    float qR = floor(lumR * u_contourLevels) / u_contourLevels;
-    float qU = floor(lumU * u_contourLevels) / u_contourLevels;
-    float qD = floor(lumD * u_contourLevels) / u_contourLevels;
-
-    bool isContour = (qL != quantC) || (qR != quantC) || (qU != quantC) || (qD != quantC);
+    // Use epsilon-based comparison to avoid floating-point precision artifacts
+    float eps = 0.5 / u_contourLevels;
+    bool isContour = (abs(qL - quantC) > eps) || (abs(qR - quantC) > eps) ||
+                     (abs(qU - quantC) > eps) || (abs(qD - quantC) > eps);
 
     if (isContour) {
         color.rgb = u_contourLineColor;
     } else if (u_contourDesaturate) {
         // Desaturate non-contour pixels: blend toward luminance grey
-        float grey = cLuma;
-        color.rgb = mix(color.rgb, vec3(grey), 0.5);
+        // Use the processed color.rgb luminance for display-referred blending
+        float displayLuma = dot(color.rgb, LUMA);
+        color.rgb = mix(color.rgb, vec3(displayLuma), 0.5);
     }
 }
 ```
+
+**Key design decisions in the contour shader:**
+
+1. **All five luminance samples come from `texelFetch(u_texture, ...)`** -- center and all four neighbors. This ensures consistency: contour boundaries are detected in source-image luminance space, avoiding misalignment that would occur if the center pixel used post-pipeline `color.rgb` while neighbors used pre-pipeline `texelFetch`. The desaturation blend still uses the processed `color.rgb` so the visible image appearance is preserved.
+
+2. **Epsilon-based comparison instead of exact `!=`** -- GPU floating-point precision varies across texture fetches, so exact equality comparison (`qL != quantC`) would produce flickering contour artifacts. Using `abs(qL - quantC) > eps` with `eps = 0.5 / u_contourLevels` provides robust boundary detection.
 
 ### Shader Uniform Summary
 
@@ -298,8 +311,12 @@ getRandomLUT(): Uint8Array { return this.randomLUT; }
 /**
  * Expand the random palette to a 256-entry LUT for GPU upload.
  * Maps each luminance index [0-255] to its band color.
+ * Result is cached and invalidated when bandCount or seed changes.
  */
+private randomLUT256: Uint8Array | null = null;
+
 buildRandomLUT256(): Uint8Array {
+  if (this.randomLUT256) return this.randomLUT256;
   const lut = new Uint8Array(256 * 3);
   const bandCount = this.state.randomBandCount;
   const palette = this.randomLUT;
@@ -310,15 +327,29 @@ buildRandomLUT256(): Uint8Array {
     lut[i * 3 + 1] = palette[band * 3 + 1]!;
     lut[i * 3 + 2] = palette[band * 3 + 2]!;
   }
+  this.randomLUT256 = lut;
   return lut;
 }
 ```
 
-### Step 3: Wire Luminance Vis into ViewerGLRenderer.buildRenderState()
+**Cache invalidation:** Add `this.randomLUT256 = null;` in both `setRandomBandCount()` and `reseedRandom()` methods, immediately after the line that regenerates `this.randomLUT`. This prevents per-frame `Uint8Array(768)` allocation and associated GC pressure.
 
-**Files:** `src/ui/components/ViewerGLRenderer.ts`
+### Step 3: Add `getLuminanceVisualization()` to GLRendererContext Interface and Wire into buildRenderState()
 
-In `buildRenderState()`, read the luminance vis state and inject it into the render state. When the mode is `hsv` or `random-color`, override the `falseColor` field with the appropriate LUT:
+**Files:** `src/ui/components/ViewerGLRenderer.ts`, `src/ui/components/Viewer.ts`
+
+**3a. Add to GLRendererContext interface:** The `GLRendererContext` interface in `ViewerGLRenderer.ts` (around line 56) does NOT currently include a `getLuminanceVisualization()` method. It must be added:
+
+```typescript
+export interface GLRendererContext {
+  // ... existing methods (getFalseColor, getZebraStripes, etc.) ...
+  getLuminanceVisualization(): LuminanceVisualization;
+}
+```
+
+The implementing class in `Viewer.ts` must also implement this method in the context object passed to `ViewerGLRenderer`.
+
+**3b. Wire into buildRenderState():** In `buildRenderState()`, read the luminance vis state and inject it into the render state. When the mode is `hsv` or `random-color`, override the `falseColor` field with the appropriate LUT:
 
 ```typescript
 const lumVis = this.ctx.getLuminanceVisualization();
@@ -344,9 +375,17 @@ state.luminanceVis = {
 };
 ```
 
-This also requires adding `getLuminanceVisualization()` to the `ViewerGLRendererContext` interface if not already there. Currently `Viewer.ts` exposes it, but the GL renderer context needs access through the same interface used for `getFalseColor()` and `getZebraStripes()`.
+This also requires that the luminance vis LUT override is applied AFTER the initial false color state construction, so it takes precedence:
 
-### Step 4: Add Contour Uniforms to ShaderStateManager
+```typescript
+// 1. Start with false color state from FalseColor component
+falseColor: { enabled: fc.isEnabled(), lut: fc.getColorLUT() },
+
+// 2. Override with luminance vis LUT if HSV or Random mode
+// (done after the initial state construction)
+```
+
+### Step 4: Add Contour Uniforms to ShaderStateManager (with Fixed LUT Update Guard)
 
 **Files:** `src/render/ShaderStateManager.ts`
 
@@ -377,7 +416,21 @@ contourDesaturate: true,
 contourLineColor: [1.0, 1.0, 1.0],
 ```
 
-In `applyRenderState()`, read `renderState.luminanceVis`:
+**Fix the `applyRenderState` false color LUT update guard:** The existing condition at ~line 1251 only checks `renderState.falseColor.enabled !== s.falseColorEnabled`. This means switching between HSV and random-color modes (both set `enabled: true`) will NOT trigger a LUT re-upload, because the `enabled` flag does not change. Similarly, changing band count or reseeding within random-color mode will produce a new LUT that is silently ignored.
+
+The fix: extend the condition to also detect LUT data reference changes:
+
+```typescript
+// Fixed: detect both enable/disable changes AND LUT data reference changes
+if (renderState.falseColor.enabled !== s.falseColorEnabled ||
+    (renderState.falseColor.enabled && renderState.falseColor.lut !== s.falseColorLUTData)) {
+  this.setFalseColor(renderState.falseColor);
+}
+```
+
+This uses reference comparison (`!==`) on the LUT `Uint8Array`, which is cheap. Since `buildRandomLUT256()` returns a cached instance that changes only when band count or seed changes, and `getHsvLUT()` returns the same array instance, reference equality correctly detects when new LUT data needs uploading.
+
+In `applyRenderState()`, read `renderState.luminanceVis` for contour state:
 
 ```typescript
 if (renderState.luminanceVis) {
@@ -417,6 +470,9 @@ Add uniform declarations near the existing false color uniforms (around line 62-
 
 ```glsl
 // Contour iso-lines (luminance visualization)
+// NOTE: Visualization operates on display-referred SDR-range values.
+// Super-white (>1.0) and negative values are clamped. For HDR content,
+// enable tone mapping before activating visualization modes.
 uniform bool u_contourEnabled;
 uniform float u_contourLevels;      // 2.0 to 50.0
 uniform bool u_contourDesaturate;   // desaturate non-contour pixels
@@ -427,12 +483,16 @@ Add the contour processing block after Phase 11 (false color), before Phase 12 (
 
 ```glsl
 // 11b. Contour iso-lines (luminance visualization - neighbor edge detection)
+// All five luminance samples (center + 4 neighbors) come from u_texture
+// to ensure consistency. Contour boundaries are detected in source-image
+// luminance space. Desaturation blend uses the processed color.rgb.
 if (u_contourEnabled) {
-    float cLuma = dot(color.rgb, LUMA);
-    float quantC = floor(cLuma * u_contourLevels) / u_contourLevels;
-
     ivec2 texSize = textureSize(u_texture, 0);
     ivec2 pc = ivec2(v_texCoord * vec2(texSize));
+
+    // Center pixel luminance from source texture (consistent with neighbors)
+    float cLuma = dot(texelFetch(u_texture, pc, 0).rgb, LUMA);
+    float quantC = floor(cLuma * u_contourLevels) / u_contourLevels;
 
     ivec2 left  = ivec2(max(pc.x - 1, 0), pc.y);
     ivec2 right = ivec2(min(pc.x + 1, texSize.x - 1), pc.y);
@@ -444,12 +504,17 @@ if (u_contourEnabled) {
     float qU = floor(dot(texelFetch(u_texture, up, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
     float qD = floor(dot(texelFetch(u_texture, down, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
 
-    bool isContour = (qL != quantC) || (qR != quantC) || (qU != quantC) || (qD != quantC);
+    // Epsilon-based comparison to avoid floating-point precision artifacts
+    float eps = 0.5 / u_contourLevels;
+    bool isContour = (abs(qL - quantC) > eps) || (abs(qR - quantC) > eps) ||
+                     (abs(qU - quantC) > eps) || (abs(qD - quantC) > eps);
 
     if (isContour) {
         color.rgb = u_contourLineColor;
     } else if (u_contourDesaturate) {
-        color.rgb = mix(color.rgb, vec3(cLuma), 0.5);
+        // Use processed color.rgb luminance for display-referred desaturation
+        float displayLuma = dot(color.rgb, LUMA);
+        color.rgb = mix(color.rgb, vec3(displayLuma), 0.5);
     }
 }
 ```
@@ -484,9 +549,9 @@ falseColor: { enabled: fc.isEnabled(), lut: fc.getColorLUT() },
 ### Step 8: Update Tests
 
 **Files:**
-- `src/render/ShaderStateManager.test.ts` -- Add tests for contour dirty flag, uniform upload, and state transitions.
+- `src/render/ShaderStateManager.test.ts` -- Add tests for contour dirty flag, uniform upload, state transitions, and LUT update guard fix.
 - `src/render/Renderer.test.ts` -- Add tests for luminance vis LUT upload via the false color texture path.
-- `src/ui/components/LuminanceVisualization.test.ts` -- Add tests for `buildRandomLUT256()` and `getHsvLUT()` accessors.
+- `src/ui/components/LuminanceVisualization.test.ts` -- Add tests for `buildRandomLUT256()` and `getHsvLUT()` accessors, plus cache invalidation.
 - `src/ui/components/ViewerGLRenderer.test.ts` -- Add tests for `buildRenderState()` luminance vis integration.
 
 Key test scenarios:
@@ -497,8 +562,12 @@ Key test scenarios:
 5. Mode `'off'` disables both falseColorEnabled and contourEnabled.
 6. False color mode continues to use the standard false color LUT from `FalseColor.getColorLUT()`.
 7. `buildRandomLUT256()` correctly expands N-band palette to 256 entries.
-8. Band count changes regenerate the random LUT.
-9. Contour levels, desaturate, and line color changes mark `DIRTY_CONTOUR`.
+8. Band count changes regenerate the random LUT (cache invalidation).
+9. Reseed regenerates the random LUT (cache invalidation).
+10. Contour levels, desaturate, and line color changes mark `DIRTY_CONTOUR`.
+11. **LUT update guard:** switching from HSV to random-color mode (both `enabled: true`) triggers LUT re-upload via reference comparison.
+12. **LUT update guard:** changing band count within random-color mode triggers LUT re-upload.
+13. `buildRandomLUT256()` returns cached instance on repeated calls without parameter changes.
 
 ### Step 9: Verify Visual Parity
 
@@ -510,6 +579,8 @@ Manual verification steps:
 5. Verify that Contour produces lines at luminance boundaries with desaturated regions between.
 6. Toggle between GL and Canvas2D rendering and confirm visual parity.
 7. Test at 4K resolution and measure frame time to confirm < 2ms overhead.
+8. **Verify contour lines appear at correct boundaries** when exposure, contrast, or other color adjustments are active (contours should follow source luminance, not display-referred luminance).
+9. **Verify no flickering contour artifacts** at band boundaries (epsilon comparison test).
 
 ---
 
@@ -520,14 +591,14 @@ Manual verification steps:
 | File | Changes |
 |---|---|
 | `src/render/RenderState.ts` | Add `LuminanceVisRenderState` interface and optional `luminanceVis` field to `RenderState`. |
-| `src/render/ShaderStateManager.ts` | Add `DIRTY_CONTOUR` flag, contour fields to `InternalShaderState`, state defaults, `applyRenderState()` contour handling, `applyUniforms()` contour uniform upload. |
+| `src/render/ShaderStateManager.ts` | Add `DIRTY_CONTOUR` flag, contour fields to `InternalShaderState`, state defaults, `applyRenderState()` contour handling, `applyUniforms()` contour uniform upload. **Fix false color LUT update guard** to detect LUT data reference changes (not just enabled/disabled toggle). |
 | `src/render/StateAccessor.ts` | No changes needed (uses `applyRenderState`). |
-| `src/render/shaders/viewer.frag.glsl` | Add contour uniform declarations and Phase 11b contour processing block. |
-| `src/ui/components/LuminanceVisualization.ts` | Add `getHsvLUT()`, `getRandomLUT()`, `buildRandomLUT256()` public accessors. |
-| `src/ui/components/ViewerGLRenderer.ts` | Update `buildRenderState()` to inject luminance vis LUT data and contour state. Add `getLuminanceVisualization()` to context interface if needed. |
-| `src/ui/components/Viewer.ts` | Update ViewerGLRendererContext to expose `getLuminanceVisualization()`. |
-| `src/render/ShaderStateManager.test.ts` | Add contour state tests. |
-| `src/ui/components/LuminanceVisualization.test.ts` | Add LUT accessor tests. |
+| `src/render/shaders/viewer.frag.glsl` | Add contour uniform declarations and Phase 11b contour processing block. Add HDR limitation comment to Phase 11 false color block. |
+| `src/ui/components/LuminanceVisualization.ts` | Add `getHsvLUT()`, `getRandomLUT()`, `buildRandomLUT256()` public accessors. Add `randomLUT256` cache field with invalidation in `setRandomBandCount()` and `reseedRandom()`. |
+| `src/ui/components/ViewerGLRenderer.ts` | Add `getLuminanceVisualization()` to `GLRendererContext` interface. Update `buildRenderState()` to inject luminance vis LUT data and contour state. |
+| `src/ui/components/Viewer.ts` | Implement `getLuminanceVisualization()` in the ViewerGLRendererContext. |
+| `src/render/ShaderStateManager.test.ts` | Add contour state tests and LUT update guard tests. |
+| `src/ui/components/LuminanceVisualization.test.ts` | Add LUT accessor tests and cache invalidation tests. |
 | `src/ui/components/ViewerGLRenderer.test.ts` | Add luminance vis buildRenderState tests. |
 
 ### No New Files Needed
@@ -546,9 +617,9 @@ The implementation reuses existing infrastructure (false color LUT texture, shad
 
 ### 2. Floating-Point Quantization Precision
 
-**Risk**: In the contour shader, comparing `floor(luma * levels) / levels` between neighbors with `!=` operator may produce false positives or negatives due to floating-point precision differences across texture fetches.
+**Risk**: In the contour shader, comparing quantized values between neighbors can produce false positives or negatives due to floating-point precision differences across texture fetches.
 
-**Mitigation**: Use `abs(qL - quantC) > epsilon` instead of `qL != quantC`, where `epsilon = 0.5 / u_contourLevels`. This is more robust. The CPU code uses integer-based `Math.floor()` which has exact semantics, but the GPU path works in float where rounding can differ.
+**Mitigation**: The shader code uses `abs(qL - quantC) > epsilon` with `epsilon = 0.5 / u_contourLevels` instead of exact `!=` comparison. This provides robust boundary detection. The epsilon value is chosen so that only genuine band crossings (where the quantized values differ by at least one full band) trigger contour detection, while same-band floating-point variations are ignored.
 
 ### 3. False Color LUT Override Conflict
 
@@ -560,7 +631,7 @@ The implementation reuses existing infrastructure (false color LUT texture, shad
 
 **Risk**: `buildRandomLUT256()` allocates a new `Uint8Array(768)` and performs 256 iterations. If called every frame in `buildRenderState()`, this creates GC pressure.
 
-**Mitigation**: Cache the expanded 256-entry LUT in `LuminanceVisualization` and only regenerate it when `randomBandCount` or `randomSeed` changes. Add a `private randomLUT256: Uint8Array | null` field that is invalidated in `setRandomBandCount()` and `reseedRandom()`.
+**Mitigation**: The expanded 256-entry LUT is cached in a `private randomLUT256: Uint8Array | null` field on `LuminanceVisualization`. It is invalidated (set to `null`) in `setRandomBandCount()` and `reseedRandom()`. The `buildRandomLUT256()` method returns the cached instance on subsequent calls, avoiding per-frame allocation. The `applyRenderState` LUT update guard uses reference comparison (`!==`), so it correctly detects when the cached instance changes.
 
 ### 5. Contour Performance at 4K
 
@@ -579,3 +650,31 @@ The implementation reuses existing infrastructure (false color LUT texture, shad
 **Risk**: Modifying `buildRenderState()` to inject luminance vis LUT data into `falseColor` could affect the Canvas2D fallback path if the false color component's state is modified as a side effect.
 
 **Mitigation**: `buildRenderState()` constructs a new state object for each render frame. It reads from the `FalseColor` component's state but does not write back to it. The luminance vis LUT override is local to the `RenderState` object and does not affect the `FalseColor` component's internal state. The CPU fallback path continues to call `luminanceVisualization.apply(imageData)` directly, bypassing the render state entirely.
+
+### 8. Contour texelFetch Data Consistency
+
+**Risk**: The contour shader samples `u_texture` (source image) for all five luminance comparisons, while the displayed `color.rgb` at Phase 11 has been through the full color pipeline. Contour boundaries will reflect source luminance, not display-referred luminance. When aggressive color adjustments (exposure, tone mapping, CDL) are active, contour lines may not align with the visually perceived luminance boundaries.
+
+**Mitigation**: This is an intentional design choice: all five samples come from the same source (`u_texture`), ensuring internal consistency. Contour boundaries are stable regardless of color pipeline adjustments, which is useful for analyzing the source material. The CPU fallback path also operates on the processed image, so there is a minor parity difference. If display-referred contour detection is needed in the future, a two-pass approach (render pipeline output to intermediate texture, then sample neighbors from that) would be required.
+
+---
+
+## Review Notes (Future Enhancements)
+
+The following items were identified during expert review as beneficial improvements that are out of scope for this initial implementation:
+
+1. **Contour line color presets in UI:** The `setContourLineColor()` API exists but has no UI exposure. Adding at least three preset buttons (White, Black, Red) to the contour sub-controls would allow quick switching based on content brightness. The API is ready; only UI work is needed.
+
+2. **Extended contour level range (up to 100):** The current 2-50 range is sufficient for most use cases but insufficient for detecting fine banding artifacts in 10-bit content. Extending to 100 would cover professional banding analysis workflows.
+
+3. **Direct keyboard shortcut for false color toggle:** The most frequently used mode (false color) should have a dedicated shortcut (e.g., `Shift+Alt+F`) rather than requiring cycling through all five modes with `Shift+Alt+V`.
+
+4. **BT.2020 luminance coefficients:** When source content has `colorPrimaries: 'bt2020'` metadata, the shader could conditionally use BT.2020 luminance weights (`0.2627, 0.6780, 0.0593`) instead of Rec. 709 (`0.2126, 0.7152, 0.0722`). This requires an additional uniform but would improve accuracy for HDR/WCG content.
+
+5. **Random palette with enforced hue separation:** Replace pure random RGB generation with HSV-space generation where hue is divided into `bandCount` equidistant sectors with random offsets, ensuring all bands are visually distinguishable. Current pure-random RGB can occasionally produce similar adjacent band colors.
+
+6. **Contour + HSV overlay combination:** Allow contour lines to be drawn on top of the HSV or random color visualization for combined analysis. Desktop OpenRV supports stacking overlays. The current plan treats all modes as mutually exclusive.
+
+7. **Overlay opacity control:** The contour mode's desaturation is fixed at 50% blend. A slider for desaturation amount would be useful for adjusting visibility against different content types.
+
+8. **HDR-aware visualization:** Extend the LUT lookup range beyond [0, 1] for HDR content, normalizing to the display peak luminance. This would prevent all super-white values from collapsing to the same LUT entry.

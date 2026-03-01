@@ -8,7 +8,7 @@ This plan covers:
 1. Adding missing pattern generators (EBU bars, checkerboard, resolution test pattern, grey ramp)
 2. Integrating `ProceduralSourceNode` into the session/media/viewer pipeline so patterns actually render
 3. Adding a menu UI so users can create procedural sources without typing `.movieproc` URLs
-4. Extending `.movieproc` URL parsing to support the new patterns
+4. Extending `.movieproc` URL parsing to support the new patterns and desktop OpenRV pattern name aliases
 5. Enabling configurable resolution and frame count
 
 ## Current State
@@ -40,6 +40,8 @@ This plan covers:
 
 6. **No serialization support** -- `SessionSerializer` and GTO export/import do not handle procedural sources.
 
+7. **No desktop OpenRV pattern name aliases** -- Desktop OpenRV uses shorter names (`smpte`, `ebu`, `checker`, `colorchart`, `ramp`) while the web implementation uses underscored names (`smpte_bars`, `ebu_bars`, etc.). `.rv` session files containing desktop-style `.movieproc` URLs will fail to parse.
+
 ## Proposed Architecture
 
 ### Design Principle: Treat Procedural Sources as HDR Images
@@ -47,6 +49,8 @@ This plan covers:
 Procedural sources output `IPImage` with `dataType: 'float32'` and 4 channels. This is identical to how `FileSourceNode` handles HDR images (EXR, DPX, HDR). The viewer already has a working WebGL rendering path for `hdrFileSource.getIPImage()` that accepts `IPImage` directly.
 
 Rather than creating an entirely new rendering path, the plan is to make procedural sources flow through the existing `fileSourceNode`-like path by adding a `proceduralSourceNode` field to `MediaSource` and teaching the viewer to handle it alongside `fileSourceNode`.
+
+**Transfer function semantics:** Pattern generator values are **sRGB-encoded** (not linear). When the shader's `u_inputTransfer` defaults to `INPUT_TRANSFER_SRGB` (code 0), it applies the sRGB EOTF to linearize these values. This means a 0.75 SMPTE bar value is treated as sRGB-encoded 0.75, linearized to ~0.522 for rendering. This is consistent with how `FileSourceNode` handles SDR 8-bit images (they also go through the sRGB EOTF). The pattern generators should document this encoding assumption in code comments.
 
 ### Source Loading Flow
 
@@ -70,6 +74,13 @@ Viewer.renderImage()
     -> [or] fallback: ipImage.toImageData() -> 2D canvas
 ```
 
+**Critical: Viewer placeholder guard integration.** The existing guard at ~line 1432 of `Viewer.ts`:
+```typescript
+if (!source || (!element && !hdrFileSource && !isHDRVideo)) {
+    // Placeholder mode
+```
+will send procedural sources (which have no `element`, no `hdrFileSource`, and no `isHDRVideo`) straight to placeholder mode. The fix requires adding `&& !source?.proceduralSourceNode` to this guard, and ensuring the procedural WebGL rendering block runs before this guard is evaluated. See Step 6 for full details.
+
 ### Pattern Module Organization
 
 All pattern generators stay in or near `ProceduralSourceNode.ts`. New patterns are added as exported generator functions following the existing `PatternResult` return type:
@@ -78,9 +89,25 @@ All pattern generators stay in or near `ProceduralSourceNode.ts`. New patterns a
 interface PatternResult {
   width: number;
   height: number;
-  data: Float32Array;  // RGBA float32, 4 channels
+  data: Float32Array;  // RGBA float32, 4 channels, sRGB-encoded values
 }
 ```
+
+### Pattern Name Aliases (Desktop OpenRV Compatibility)
+
+To ensure `.rv` session file interoperability, the parser must accept both web and desktop OpenRV pattern names. The alias map:
+
+```typescript
+const PATTERN_ALIASES: Record<string, PatternName> = {
+  'smpte': 'smpte_bars',
+  'ebu': 'ebu_bars',
+  'checker': 'checkerboard',
+  'colorchart': 'color_chart',
+  'ramp': 'gradient',
+};
+```
+
+The `parseMovieProc()` function resolves aliases before validation. This means `smpte.movieproc`, `smpte_bars.movieproc`, `ebu.movieproc`, `ebu_bars.movieproc`, `checker.movieproc`, `checkerboard.movieproc`, `colorchart.movieproc`, `color_chart.movieproc`, and `ramp.movieproc`/`gradient.movieproc` all work.
 
 ## Pattern Generation
 
@@ -88,7 +115,7 @@ interface PatternResult {
 
 | Pattern | Function | Description |
 |---------|----------|-------------|
-| `smpte_bars` | `generateSMPTEBars()` | 7-bar 75% SMPTE color bars |
+| `smpte_bars` | `generateSMPTEBars()` | 7-bar 75% SMPTE color bars (sRGB-encoded values; the "White" bar is 75% grey per the standard) |
 | `color_chart` | `generateColorChart()` | Macbeth ColorChecker 6x4 grid |
 | `gradient` | `generateGradient()` | Linear ramp (horizontal or vertical) |
 | `solid` | `generateSolid()` | Flat fill with configurable RGBA |
@@ -103,9 +130,10 @@ EBU (European Broadcasting Union) color bars follow a similar structure to SMPTE
 White | Yellow | Cyan | Green | Magenta | Red | Blue | Black
 ```
 
-All at 100% intensity (1.0 instead of 0.75 for SMPTE).
+All at 100% intensity (1.0 instead of 0.75 for SMPTE). These values are sRGB-encoded, matching the EBU Tech 3325 100/0/100/0 system.
 
 ```typescript
+// Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
 const EBU_BARS_100: readonly [number, number, number][] = [
   [1.0, 1.0, 1.0],  // White
   [1.0, 1.0, 0.0],  // Yellow
@@ -123,7 +151,7 @@ function generateEBUBars(width: number, height: number): PatternResult
 #### 2. Checkerboard (`checkerboard`)
 
 A configurable checkerboard pattern for detecting spatial distortion, alignment, and resolution limits. Parameters:
-- `cellSize`: size of each square in pixels (default: 64)
+- `cellSize`: size of each square in pixels (default: 64, **clamped to >= 1** to prevent division-by-zero)
 - `colorA`: first color RGBA (default: `[1, 1, 1, 1]` white)
 - `colorB`: second color RGBA (default: `[0, 0, 0, 1]` black)
 
@@ -139,10 +167,12 @@ function generateCheckerboard(
 
 The cell assignment uses integer division: `isWhite = ((Math.floor(x / cellSize) + Math.floor(y / cellSize)) % 2) === 0`.
 
+**Input guards:** `cellSize` is clamped to `Math.max(1, Math.floor(cellSize))` before use.
+
 #### 3. Grey Ramp (`grey_ramp`)
 
 A stepped grey ramp showing discrete luminance levels. Useful for gamma/transfer function verification. Parameters:
-- `steps`: number of grey levels (default: 16, producing levels from 0.0 to 1.0)
+- `steps`: number of grey levels (default: 16, **clamped to >= 2** to prevent division-by-zero in `i / (steps - 1)`)
 - `direction`: `'horizontal' | 'vertical'` (default: `'horizontal'`)
 
 Unlike the smooth `gradient` pattern, this produces discrete bands:
@@ -157,6 +187,8 @@ function generateGreyRamp(
 ```
 
 Each step occupies `width / steps` pixels (horizontal) or `height / steps` pixels (vertical). The value for step `i` is `i / (steps - 1)`.
+
+**Input guards:** `steps` is clamped to `Math.max(2, Math.floor(steps))` before use.
 
 #### 4. Resolution Test Pattern (`resolution_chart`)
 
@@ -176,6 +208,31 @@ Implementation approach:
 - Center crosshair: horizontal + vertical lines spanning 20% of image, with a circle at center (radius = 5% of min dimension)
 - Corner markers: small crosshairs at 5% inset from each corner
 - Frequency gratings: alternating black/white vertical and horizontal line pairs at 1px, 2px, 4px, 8px, 16px periods, arranged in horizontal and vertical bands near center
+
+### Input Guards (All Generators)
+
+All generator functions clamp `width` and `height` to `>= 1` before use. The procedural source resolution is additionally capped at a maximum of **8192x8192** (see Procedural Resolution Cap section below). This prevents the creation of excessively large Float32Arrays that would crash the browser.
+
+```typescript
+// Applied at the start of every generator function:
+width = Math.max(1, Math.min(width, PROCEDURAL_MAX_DIMENSION));
+height = Math.max(1, Math.min(height, PROCEDURAL_MAX_DIMENSION));
+
+// Additionally in specific generators:
+// generateCheckerboard: cellSize = Math.max(1, Math.floor(cellSize));
+// generateGreyRamp: steps = Math.max(2, Math.floor(steps));
+```
+
+### Procedural Resolution Cap
+
+The general `IMAGE_LIMITS` in `/src/config/ImageLimits.ts` allows up to 65536 pixels per dimension and 256 megapixels total. For Float32 RGBA procedural sources, these limits are dangerously high (65536x65536 = 64 GB, 256 MP = ~4 GB). A procedural-specific cap is applied:
+
+```typescript
+const PROCEDURAL_MAX_DIMENSION = 8192;  // Hard max per dimension
+const PROCEDURAL_MAX_PIXELS = 8192 * 8192;  // ~1 GB for float32 RGBA
+```
+
+This cap is enforced in `loadPattern()` and `loadFromMovieProc()` before generating the pattern. The cap is independent of `IMAGE_LIMITS` and provides an additional safety net for procedural sources.
 
 ### Extended PatternName Type
 
@@ -204,23 +261,28 @@ export interface MovieProcParams {
   color?: [number, number, number, number];
   direction?: GradientDirection;
   // New fields:
-  cellSize?: number;      // checkerboard cell size
+  cellSize?: number;      // checkerboard cell size (clamped to >= 1)
   colorA?: [number, number, number, number];  // checkerboard color A
   colorB?: [number, number, number, number];  // checkerboard color B
-  steps?: number;         // grey_ramp step count
+  steps?: number;         // grey_ramp step count (clamped to >= 2)
 }
 ```
 
 ### Extended .movieproc URL Format
 
-New URLs:
+New URLs (including desktop OpenRV aliases):
 ```
 ebu_bars.movieproc
+ebu.movieproc                   # alias for ebu_bars
 ebu_bars,width=1920,height=1080.movieproc
 checkerboard,cellSize=32.movieproc
+checker,cellSize=32.movieproc   # alias for checkerboard
 checkerboard,cellSize=64,colorA=1 1 0 1,colorB=0 0 0.5 1.movieproc
 grey_ramp,steps=16,direction=horizontal.movieproc
 resolution_chart,width=1920,height=1080.movieproc
+smpte.movieproc                 # alias for smpte_bars
+colorchart.movieproc            # alias for color_chart
+ramp.movieproc                  # alias for gradient
 ```
 
 ## UI Design
@@ -240,13 +302,62 @@ The Sources dropdown contains:
 | SMPTE Color Bars | `smpte_bars` | 75% intensity SMPTE bars |
 | EBU Color Bars | `ebu_bars` | 100% intensity EBU bars |
 | Color Chart | `color_chart` | Macbeth ColorChecker |
-| Solid Color... | `solid` | Opens color picker prompt |
-| Gradient | `gradient` | Horizontal linear ramp |
+| Solid Color... | `solid` | Opens color picker (see below) |
+| Gradient (horizontal) | `gradient` | Horizontal linear ramp |
 | Checkerboard | `checkerboard` | Black/white checker grid |
 | Grey Ramp | `grey_ramp` | 16-step discrete grey levels |
 | Resolution Chart | `resolution_chart` | Alignment/resolution test |
+| --- | | |
+| Custom Resolution... | `custom` | Prompts for width/height, then pattern |
 
-Clicking most items immediately loads the pattern at the default resolution (1920x1080). "Solid Color..." opens a simple prompt dialog (using the existing `showPrompt` utility) asking for an RGB color specification.
+Clicking most items immediately loads the pattern at the default resolution (1920x1080). "Solid Color..." opens a color input dialog. "Custom Resolution..." prompts for width and height, then shows the pattern list.
+
+### Solid Color Input (Improved)
+
+Instead of a raw text prompt expecting 0-1 float values, the solid color input accepts multiple formats with auto-detection and validation:
+
+```typescript
+private parseSolidColorInput(input: string): [number, number, number, number] | null {
+  const trimmed = input.trim();
+
+  // Hex format: #RGB, #RRGGBB, #RRGGBBAA
+  if (trimmed.startsWith('#')) {
+    return parseHexColor(trimmed);
+  }
+
+  const parts = trimmed.split(/[\s,]+/).map(Number);
+  if (parts.some(isNaN)) return null;
+
+  // 0-255 integer range (any value > 1.0 triggers this)
+  if (parts.some(v => v > 1.0)) {
+    return [
+      (parts[0] ?? 0) / 255,
+      (parts[1] ?? 0) / 255,
+      (parts[2] ?? 0) / 255,
+      parts[3] !== undefined ? parts[3] / 255 : 1,
+    ];
+  }
+
+  // 0-1 float range
+  return [
+    parts[0] ?? 0,
+    parts[1] ?? 0,
+    parts[2] ?? 0,
+    parts[3] ?? 1,
+  ];
+}
+```
+
+The prompt text is updated to:
+```
+Enter a color:
+  Hex: #FF0000 or #FF0000FF
+  RGB (0-255): 255 0 0
+  RGB (0-1): 1.0 0.0 0.0
+Values are interpreted as sRGB-encoded.
+```
+
+On invalid input, a validation error is shown and the user can retry. The `showPrompt` utility is called in a loop until valid input is received or the user cancels.
 
 ### Configuration Dialog (Phase 2, not MVP)
 
@@ -258,22 +369,28 @@ A future enhancement could add a modal dialog for configuring:
 
 For the initial implementation, sensible defaults are used (1920x1080, 1 frame, default pattern parameters).
 
+> **Review Note (Phase 2):** A full configuration dialog with resolution presets, pattern parameters, and a live preview thumbnail is a strong candidate for Phase 2 (N7). Dropdown section separators (Color Bars / Test Patterns / Ramps / Fill) would also improve scanning of the 8+ item list (N1).
+
 ## Implementation Steps
 
 ### Step 1: Add New Pattern Generators
 
 **File:** `/src/nodes/sources/ProceduralSourceNode.ts`
 
-1. Add `EBU_BARS_100` constant array and `generateEBUBars()` function
-2. Add `generateCheckerboard()` function with `cellSize`, `colorA`, `colorB` params
-3. Add `generateGreyRamp()` function with `steps` and `direction` params
-4. Add `generateResolutionChart()` function with line-drawing helpers
-5. Extend `PatternName` type to include new pattern names
-6. Extend `MovieProcParams` interface with new fields (`cellSize`, `colorA`, `colorB`, `steps`)
-7. Update `parseMovieProc()` to parse new parameters from URLs
-8. Update `validPatterns` array in `parseMovieProc()` to accept new pattern names
-9. Update `generatePattern()` switch statement to dispatch to new generators
-10. Export new generator functions
+1. Add `PROCEDURAL_MAX_DIMENSION` constant (8192) and `PROCEDURAL_MAX_PIXELS` constant
+2. Add `PATTERN_ALIASES` map for desktop OpenRV compatibility (`smpte` -> `smpte_bars`, `ebu` -> `ebu_bars`, `checker` -> `checkerboard`, `colorchart` -> `color_chart`, `ramp` -> `gradient`)
+3. Add input guard helper: `clampDimensions(width, height)` that enforces `>= 1` and `<= PROCEDURAL_MAX_DIMENSION`
+4. Add `EBU_BARS_100` constant array and `generateEBUBars()` function
+5. Add `generateCheckerboard()` function with `cellSize`, `colorA`, `colorB` params (cellSize clamped to >= 1)
+6. Add `generateGreyRamp()` function with `steps` and `direction` params (steps clamped to >= 2)
+7. Add `generateResolutionChart()` function with line-drawing helpers
+8. Extend `PatternName` type to include new pattern names
+9. Extend `MovieProcParams` interface with new fields (`cellSize`, `colorA`, `colorB`, `steps`)
+10. Update `parseMovieProc()` to resolve aliases via `PATTERN_ALIASES` map before validation, and to parse new parameters from URLs
+11. Update `validPatterns` array in `parseMovieProc()` to accept new pattern names
+12. Update `generatePattern()` switch statement to dispatch to new generators
+13. Add sRGB-encoding documentation comment to all generator functions
+14. Export new generator functions
 
 ### Step 2: Add Tests for New Patterns
 
@@ -281,10 +398,12 @@ For the initial implementation, sensible defaults are used (1920x1080, 1 frame, 
 
 Add test suites for:
 - `generateEBUBars`: correct bar colors at 100%, correct dimensions, alpha = 1.0
-- `generateCheckerboard`: alternating cells, custom colors, custom cell size, edge cases
-- `generateGreyRamp`: correct step values, step boundaries, both directions
+- `generateCheckerboard`: alternating cells, custom colors, custom cell size, edge cases (cellSize=0 clamped to 1)
+- `generateGreyRamp`: correct step values, step boundaries, both directions, edge cases (steps=0 clamped to 2, steps=1 clamped to 2)
 - `generateResolutionChart`: correct dimensions, crosshair presence, border frame
-- `parseMovieProc`: new pattern parsing, new parameter parsing
+- `parseMovieProc`: new pattern parsing, new parameter parsing, **alias resolution** (`smpte.movieproc` -> `smpte_bars`, `ebu.movieproc` -> `ebu_bars`, etc.)
+- Input guards: dimension clamping, resolution cap enforcement
+- `PROCEDURAL_MAX_DIMENSION` enforcement
 
 ### Step 3: Extend MediaSource Interface
 
@@ -355,9 +474,12 @@ loadProceduralSource(
     duration,
   });
 
+  // Use a counter to ensure unique source names
+  const sourceName = this.generateUniqueSourceName(pattern, width, height);
+
   const source: MediaSource = {
     type: 'image',
-    name: `${pattern} (${width}x${height})`,
+    name: sourceName,
     url: `movieproc://${pattern}`,
     width,
     height,
@@ -373,6 +495,16 @@ loadProceduralSource(
 
   this.emit('sourceLoaded', source);
   this.emit('durationChanged', duration);
+}
+
+// Helper for unique names:
+private _proceduralCounter = 0;
+private generateUniqueSourceName(pattern: string, width: number, height: number): string {
+  this._proceduralCounter++;
+  if (this._proceduralCounter === 1) {
+    return `${pattern} (${width}x${height})`;
+  }
+  return `${pattern} #${this._proceduralCounter} (${width}x${height})`;
 }
 ```
 
@@ -414,7 +546,32 @@ loadMovieProc(url: string): void {
 
 **File:** `/src/ui/components/Viewer.ts`
 
-In `renderImage()`, add a check for `proceduralSourceNode` alongside the existing `fileSourceNode` checks. Insert after the `fileSourceNode` block (around line 1415):
+This step requires careful integration with the existing branching logic. The key issue is the **placeholder guard** at ~line 1432:
+
+```typescript
+const hdrFileSource = source?.fileSourceNode?.isHDR() ? source.fileSourceNode : null;
+const isHDRVideo = source?.videoSourceNode?.isHDR() === true;
+if (!source || (!element && !hdrFileSource && !isHDRVideo)) {
+    // Placeholder mode -- shows grey instead of the pattern!
+```
+
+Without modification, this guard rejects procedural sources (which have no `element`, no `hdrFileSource`, and no `isHDRVideo`), routing them to placeholder mode.
+
+**Fix:** Update the guard and add procedural source handling in the correct location.
+
+**6a. Update the placeholder guard (~line 1432):**
+
+```typescript
+const hdrFileSource = source?.fileSourceNode?.isHDR() ? source.fileSourceNode : null;
+const isHDRVideo = source?.videoSourceNode?.isHDR() === true;
+const hdrProceduralSource = source?.proceduralSourceNode ?? null;
+if (!source || (!element && !hdrFileSource && !isHDRVideo && !hdrProceduralSource)) {
+    // Placeholder mode
+```
+
+**6b. Add procedural rendering block alongside hdrFileSource block (~line 1558-1582):**
+
+Insert a check for `proceduralSourceNode` in the rendering section, alongside the existing `fileSourceNode` and `videoSourceNode` checks:
 
 ```typescript
 } else if (source?.proceduralSourceNode) {
@@ -435,7 +592,7 @@ In `renderImage()`, add a check for `proceduralSourceNode` alongside the existin
   }
 ```
 
-Add a helper for the 2D fallback path:
+**6c. Add fallback helper:**
 
 ```typescript
 private proceduralFallbackCanvas(ipImage: IPImage): HTMLCanvasElement {
@@ -448,7 +605,7 @@ private proceduralFallbackCanvas(ipImage: IPImage): HTMLCanvasElement {
 }
 ```
 
-Also update the HDR detection logic (around line 1288) to recognize procedural sources:
+**6d. Update HDR detection logic (~line 1288):**
 
 ```typescript
 const isCurrentHDR = source?.fileSourceNode?.isHDR() === true
@@ -456,11 +613,7 @@ const isCurrentHDR = source?.fileSourceNode?.isHDR() === true
   || source?.proceduralSourceNode != null;  // float32 = HDR path
 ```
 
-And update the `hdrFileSource` assignment (around line 1430):
-
-```typescript
-const hdrProceduralSource = source?.proceduralSourceNode ?? null;
-```
+Note: Procedural sources are not truly HDR (they contain sRGB-range values 0-1), but routing through the HDR path is correct because the float32 texture upload and sRGB EOTF handling match the procedural source data format. For values in [0, 1], tone mapping operators are typically a no-op.
 
 ### Step 7: HeaderBar UI
 
@@ -482,10 +635,11 @@ sourcesMenu.setItems([
   { value: 'ebu_bars', label: 'EBU Color Bars' },
   { value: 'color_chart', label: 'Color Chart' },
   { value: 'solid', label: 'Solid Color...' },
-  { value: 'gradient', label: 'Gradient' },
+  { value: 'gradient', label: 'Gradient (horizontal)' },
   { value: 'checkerboard', label: 'Checkerboard' },
   { value: 'grey_ramp', label: 'Grey Ramp' },
   { value: 'resolution_chart', label: 'Resolution Chart' },
+  { value: 'custom_resolution', label: 'Custom Resolution...' },
 ]);
 
 const sourcesButton = this.createCompactButton(
@@ -498,25 +652,96 @@ sourcesButton.setAttribute('aria-haspopup', 'menu');
 fileGroup.appendChild(sourcesButton);
 ```
 
-Handler method:
+Handler method with improved color input:
 
 ```typescript
 private async handleProceduralSource(pattern: string): Promise<void> {
+  let options: Record<string, unknown> = {};
+
+  if (pattern === 'custom_resolution') {
+    const resStr = await showPrompt(
+      'Enter resolution (e.g. "1920 1080" or "3840 2160"):',
+      { defaultValue: '1920 1080', title: 'Custom Resolution' }
+    );
+    if (!resStr) return;
+    const [w, h] = resStr.split(/[\sx,]+/).map(Number);
+    if (!w || !h || isNaN(w) || isNaN(h) || w < 1 || h < 1) {
+      await showPrompt('Invalid resolution. Please enter two positive integers.', { title: 'Error' });
+      return;
+    }
+    options = { width: Math.min(w, 8192), height: Math.min(h, 8192) };
+    // After getting resolution, prompt for pattern selection
+    // For MVP, default to SMPTE bars at the custom resolution
+    this.session.loadProceduralSource('smpte_bars', options);
+    this.emit('fileLoaded', undefined);
+    return;
+  }
+
   if (pattern === 'solid') {
     const colorStr = await showPrompt(
-      'Enter RGB color (0-1 range, e.g. "1 0 0" for red):',
+      'Enter a color:\n  Hex: #FF0000\n  RGB 0-255: 255 0 0\n  RGB 0-1: 1.0 0.0 0.0\nValues are sRGB-encoded.',
       { defaultValue: '0.5 0.5 0.5', title: 'Solid Color' }
     );
     if (!colorStr) return;
-    const parts = colorStr.split(/\s+/).map(Number);
-    const color: [number, number, number, number] = [
-      parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 1
-    ];
+    const color = this.parseSolidColorInput(colorStr);
+    if (!color) {
+      await showPrompt('Could not parse color. Use hex (#FF0000), 0-255 (255 0 0), or 0-1 (1.0 0.0 0.0).', { title: 'Invalid Color' });
+      return;
+    }
     this.session.loadProceduralSource('solid', { color });
   } else {
-    this.session.loadProceduralSource(pattern as PatternName);
+    this.session.loadProceduralSource(pattern as PatternName, options);
   }
   this.emit('fileLoaded', undefined);
+}
+
+private parseSolidColorInput(input: string): [number, number, number, number] | null {
+  const trimmed = input.trim();
+
+  // Hex format: #RGB, #RRGGBB, #RRGGBBAA
+  if (trimmed.startsWith('#')) {
+    const hex = trimmed.slice(1);
+    let r: number, g: number, b: number, a = 1;
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16) / 255;
+      g = parseInt(hex[1] + hex[1], 16) / 255;
+      b = parseInt(hex[2] + hex[2], 16) / 255;
+    } else if (hex.length === 6) {
+      r = parseInt(hex.slice(0, 2), 16) / 255;
+      g = parseInt(hex.slice(2, 4), 16) / 255;
+      b = parseInt(hex.slice(4, 6), 16) / 255;
+    } else if (hex.length === 8) {
+      r = parseInt(hex.slice(0, 2), 16) / 255;
+      g = parseInt(hex.slice(2, 4), 16) / 255;
+      b = parseInt(hex.slice(4, 6), 16) / 255;
+      a = parseInt(hex.slice(6, 8), 16) / 255;
+    } else {
+      return null;
+    }
+    if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a)) return null;
+    return [r, g, b, a];
+  }
+
+  const parts = trimmed.split(/[\s,]+/).map(Number);
+  if (parts.length < 3 || parts.some(isNaN)) return null;
+
+  // 0-255 integer range (any value > 1.0 triggers this)
+  if (parts.some(v => v > 1.0)) {
+    return [
+      (parts[0] ?? 0) / 255,
+      (parts[1] ?? 0) / 255,
+      (parts[2] ?? 0) / 255,
+      parts[3] !== undefined ? parts[3] / 255 : 1,
+    ];
+  }
+
+  // 0-1 float range
+  return [
+    parts[0] ?? 0,
+    parts[1] ?? 0,
+    parts[2] ?? 0,
+    parts[3] ?? 1,
+  ];
 }
 ```
 
@@ -544,27 +769,57 @@ loadPattern(
 ): void { ... }
 ```
 
+The method should enforce the procedural resolution cap before generating:
+
+```typescript
+width = Math.max(1, Math.min(width, PROCEDURAL_MAX_DIMENSION));
+height = Math.max(1, Math.min(height, PROCEDURAL_MAX_DIMENSION));
+if (width * height > PROCEDURAL_MAX_PIXELS) {
+  // Scale down proportionally
+  const scale = Math.sqrt(PROCEDURAL_MAX_PIXELS / (width * height));
+  width = Math.floor(width * scale);
+  height = Math.floor(height * scale);
+}
+```
+
 ### Step 9: Session Serialization (GTO)
 
 **File:** `/src/core/session/SessionGTOExporter.ts`
 
-When serializing sources, if a `proceduralSourceNode` is present, serialize the movieproc URL and pattern parameters. On load, detect `RVMovieProc` nodes and re-create the procedural source.
+When serializing sources, if a `proceduralSourceNode` is present, serialize using the desktop OpenRV-compatible GTO structure:
+
+- **Protocol:** `RVMovieProc`
+- **Component:** `movie`
+- **Property:** `url` (string) containing the full `.movieproc` URL
+
+Example GTO structure:
+```
+Object "sourceGroup000001_movieProc" protocol "RVMovieProc" {
+  component "movie" {
+    string url = "smpte_bars,width=1920,height=1080.movieproc"
+  }
+}
+```
+
+This matches desktop OpenRV's serialization format for round-trip compatibility.
 
 **File:** `/src/core/session/GTOGraphLoader.ts`
 
-When loading GTO data that contains `RVMovieProc` node entries, instantiate `ProceduralSourceNode` and call `loadFromMovieProc()` with the stored URL.
+When loading GTO data that contains `RVMovieProc` node entries, instantiate `ProceduralSourceNode` and call `loadFromMovieProc()` with the stored URL. The `NodeFactory` already handles unknown types by returning `null` with a warning, so older sessions without procedural support will degrade gracefully.
 
 ### Step 10: Disposal
 
 **File:** `/src/core/session/SessionMedia.ts` and `/src/core/session/MediaManager.ts`
 
-In `dispose()`, add cleanup for procedural sources:
+In `dispose()`, add cleanup for procedural sources alongside the existing `fileSourceNode` and `videoSourceNode` disposal:
 
 ```typescript
 if (source.proceduralSourceNode) {
   source.proceduralSourceNode.dispose();
 }
 ```
+
+This must be added to the dispose loop -- it is a one-line addition but must not be forgotten.
 
 ### Step 11: API Exposure
 
@@ -578,15 +833,15 @@ Add `loadProceduralSource()` and `loadMovieProc()` to the public API, delegating
 
 | File | Changes |
 |------|---------|
-| `/src/nodes/sources/ProceduralSourceNode.ts` | Add 4 new generator functions, extend `PatternName`, extend `MovieProcParams`, extend parser and dispatcher, add new `loadPattern` options |
-| `/src/nodes/sources/ProceduralSourceNode.test.ts` | Add test suites for EBU bars, checkerboard, grey ramp, resolution chart, extended parsing |
+| `/src/nodes/sources/ProceduralSourceNode.ts` | Add 4 new generator functions, extend `PatternName`, extend `MovieProcParams`, extend parser and dispatcher, add pattern name aliases (`PATTERN_ALIASES` map), add input guards (dimension clamping, cellSize/steps clamping), add procedural resolution cap (`PROCEDURAL_MAX_DIMENSION`), add new `loadPattern` options, add sRGB-encoding comments |
+| `/src/nodes/sources/ProceduralSourceNode.test.ts` | Add test suites for EBU bars, checkerboard, grey ramp, resolution chart, extended parsing, alias resolution, input guard edge cases, resolution cap enforcement |
 | `/src/core/types/session.ts` | No change needed (procedural uses `'image'` type) |
 | `/src/core/session/Session.ts` | Add `proceduralSourceNode` to `MediaSource` interface, add `loadProceduralSource()` and `loadMovieProc()` public methods, import `ProceduralSourceNode` |
-| `/src/core/session/SessionMedia.ts` | Add `loadProceduralSource()` and `loadMovieProc()` methods, import node, add disposal logic |
+| `/src/core/session/SessionMedia.ts` | Add `loadProceduralSource()` and `loadMovieProc()` methods, add `generateUniqueSourceName()` helper, import node, add disposal logic |
 | `/src/core/session/MediaManager.ts` | Add `loadProceduralSource()` and `loadMovieProc()` methods, import node, add disposal logic |
-| `/src/ui/components/layout/HeaderBar.ts` | Add Sources dropdown button and `handleProceduralSource()` handler, import DropdownMenu |
-| `/src/ui/components/Viewer.ts` | Add rendering path for `proceduralSourceNode`, handle in HDR detection, add fallback canvas helper |
-| `/src/core/session/SessionGTOExporter.ts` | Serialize `ProceduralSourceNode` data |
+| `/src/ui/components/layout/HeaderBar.ts` | Add Sources dropdown button and `handleProceduralSource()` handler with improved color input parsing (`parseSolidColorInput`), add "Custom Resolution..." entry, import DropdownMenu |
+| `/src/ui/components/Viewer.ts` | Add rendering path for `proceduralSourceNode`, **fix placeholder guard** to include `!hdrProceduralSource`, handle in HDR detection, add fallback canvas helper |
+| `/src/core/session/SessionGTOExporter.ts` | Serialize `ProceduralSourceNode` data using `RVMovieProc` protocol with `movie.url` property |
 | `/src/core/session/GTOGraphLoader.ts` | Deserialize and instantiate `ProceduralSourceNode` from GTO data |
 | `/src/api/MediaAPI.ts` | Expose `loadProceduralSource()` and `loadMovieProc()` in public API |
 | `/src/handlers/sourceLoadedHandlers.ts` | Handle transfer function detection for procedural sources (sRGB by default) |
@@ -599,9 +854,9 @@ None. All implementation fits within existing files.
 
 | File | Changes |
 |------|---------|
-| `/src/nodes/sources/ProceduralSourceNode.test.ts` | Add tests for new generators and parser extensions |
-| `/src/ui/components/layout/HeaderBar.test.ts` | Add tests for Sources dropdown menu creation and pattern selection |
-| `/src/core/session/SessionMedia.test.ts` | Add tests for `loadProceduralSource()` method |
+| `/src/nodes/sources/ProceduralSourceNode.test.ts` | Add tests for new generators, parser extensions, alias resolution, input guards, resolution cap |
+| `/src/ui/components/layout/HeaderBar.test.ts` | Add tests for Sources dropdown menu creation, pattern selection, solid color input parsing (hex, 0-255, 0-1, invalid input) |
+| `/src/core/session/SessionMedia.test.ts` | Add tests for `loadProceduralSource()` method, unique name generation |
 | `/src/core/session/Session.media.test.ts` | Add tests for session-level procedural source loading |
 
 ## Risks
@@ -610,25 +865,27 @@ None. All implementation fits within existing files.
 
 **Risk:** The viewer's HDR WebGL path (`renderHDRWithWebGL`) may make assumptions specific to `FileSourceNode` or `VideoSourceNode` that fail for procedural sources (e.g., checking `isHDR()`, transfer function metadata).
 
-**Mitigation:** Procedural sources use `dataType: 'float32'` which the renderer already handles. The `isHDRContent()` function in `Renderer.ts` returns `true` for `float32` data, so texture upload will use `gl.RGBA32F`. Transfer function defaults to sRGB (no EOTF needed since values are already linear). Test with the existing SMPTE bars pattern first before adding new patterns.
+**Mitigation:** Procedural sources use `dataType: 'float32'` which the renderer already handles. The `isHDRContent()` function in `Renderer.ts` returns `true` for `float32` data, so texture upload will use `gl.RGBA32F`. Transfer function defaults to sRGB (no EOTF needed since values are already sRGB-encoded and the shader applies the sRGB EOTF consistently with SDR file sources). Test with the existing SMPTE bars pattern first before adding new patterns.
 
 ### 2. Memory Usage for Large Resolutions
 
 **Risk:** A 4K (3840x2160) float32 RGBA image is 3840 * 2160 * 4 * 4 = ~127 MB. Users could create very large procedural sources.
 
-**Mitigation:** Apply the existing `ImageLimits` validation (`/src/config/ImageLimits.ts`) to procedural source resolution. Cap maximum at the same limit used for file sources. The default 1920x1080 is ~32 MB which is reasonable.
+**Mitigation:** A procedural-specific resolution cap of 8192x8192 (~1 GB) is enforced independently of the general `IMAGE_LIMITS`. The `loadPattern()` method clamps dimensions and total pixel count before generation. The default 1920x1080 is ~32 MB which is reasonable. The general `IMAGE_LIMITS` (65536x65536 / 256 MP) is not sufficient for procedural sources because even the pixel count cap allows ~4 GB of float32 data.
 
 ### 3. Pattern Accuracy (SMPTE/EBU Standards)
 
 **Risk:** Professional users expect color bar patterns to match broadcast standards exactly. The existing SMPTE bars use simplified 75% values without the standard bottom-row pluge/sub-carrier patterns.
 
-**Mitigation:** For the MVP, the simplified patterns are acceptable and match the desktop OpenRV movieproc behavior. Document that these are approximate test patterns, not ITU-R BT.2111 compliance targets. A future enhancement could add a full SMPTE RP 219 pattern with the complete three-row layout (75% bars, reverse bars + pluge, pluge + black).
+**Mitigation:** For the MVP, the simplified patterns are acceptable and match the desktop OpenRV movieproc behavior. Document that these are approximate test patterns, not ITU-R BT.2111 compliance targets. Pattern values are sRGB-encoded, which is consistent with how the rendering pipeline handles SDR content.
+
+> **Review Note (Phase 2):** A full SMPTE RP 219 pattern with the complete three-row layout (75% bars, reverse bars + pluge, pluge + black) would be a valuable Phase 2 addition (N5).
 
 ### 4. Viewer Rendering Path Complexity
 
-**Risk:** The `renderImage()` method in `Viewer.ts` is already complex with multiple conditional branches for different source types. Adding another branch for procedural sources increases complexity.
+**Risk:** The `renderImage()` method in `Viewer.ts` is already complex with multiple conditional branches for different source types. Adding another branch for procedural sources increases complexity. Additionally, the existing placeholder guard at ~line 1432 will reject procedural sources if not updated.
 
-**Mitigation:** The procedural source branch is structurally identical to the `fileSourceNode` HDR branch. It retrieves an `IPImage` and passes it to `renderHDRWithWebGL()`. The fallback is a simple `toImageData()` conversion. Keep the branch minimal and consider a future refactoring that unifies all `IPImage`-producing source types (file HDR, video HDR, procedural) behind a common interface.
+**Mitigation:** The placeholder guard must be updated to include `!hdrProceduralSource` (see Step 6a). The procedural source branch is structurally identical to the `fileSourceNode` HDR branch. It retrieves an `IPImage` and passes it to `renderHDRWithWebGL()`. The fallback is a simple `toImageData()` conversion. Keep the branch minimal and consider a future refactoring that unifies all `IPImage`-producing source types (file HDR, video HDR, procedural) behind a common interface.
 
 ### 5. No Font Rendering for Resolution Chart
 
@@ -640,10 +897,18 @@ None. All implementation fits within existing files.
 
 **Risk:** Adding `proceduralSourceNode` to `MediaSource` and serializing it to GTO format could cause issues when loading older project files.
 
-**Mitigation:** The field is optional on `MediaSource`. GTO deserialization should gracefully skip unknown node types. The `NodeFactory` already handles unknown types by returning `null` with a warning. Procedural sources serialized as `RVMovieProc` nodes with a `url` property can be re-created via `loadFromMovieProc()` on load.
+**Mitigation:** The field is optional on `MediaSource`. GTO deserialization should gracefully skip unknown node types. The `NodeFactory` already handles unknown types by returning `null` with a warning. Procedural sources serialized as `RVMovieProc` nodes with a `movie.url` property match desktop OpenRV's format and can be re-created via `loadFromMovieProc()` on load.
 
 ### 7. Source Switching and A/B Compare
 
 **Risk:** Procedural sources added via the menu need to integrate correctly with the A/B source compare system. The `ABCompareManager` auto-assigns source B when a second source is added.
 
 **Mitigation:** Procedural sources flow through the standard `addSource()` path which already handles A/B auto-assignment. No special handling is needed. Test A/B compare with a procedural source as source A and a file as source B (and vice versa).
+
+### 8. Animated Procedural Patterns (Known Limitation)
+
+**Risk:** The `MovieProcParams` interface includes `start`, `end`, `fps`, and `duration` fields, suggesting multi-frame procedural clips. However, the current `ProceduralSourceNode.generatePattern()` creates a single `IPImage` and caches it. The `process()` method mutates `cachedIPImage.metadata.frameNumber` without regenerating pattern data.
+
+**Mitigation:** All MVP patterns are static, so this is acceptable. Document as a known limitation. Animated patterns (e.g., crawling checkerboard, frame counter burn-in) would require `process()` to regenerate per frame based on `context.frame`.
+
+> **Review Note (Phase 2):** Animated procedural patterns are a Phase 2 candidate (N6). Additional Phase 2 pattern candidates include noise (N2), zone plate (N3), and color wheel/hue sweep (N4).

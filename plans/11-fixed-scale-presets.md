@@ -8,6 +8,16 @@ Desktop OpenRV provides number keys 1-8 for zoom presets (1:1 through 8:1 magnif
 
 Keys `Digit1` through `Digit6` are already bound to tab switching (`tab.view` through `tab.qc`). Keys `Digit7` and `Digit8` are free but lack matching magnification counterparts. This creates a fundamental key conflict that must be resolved thoughtfully.
 
+### Priority Note
+
+**1:1 (100%) is the hero feature.** QC artists overwhelmingly use 1:1 for pixel-level inspection (noise, compression artifacts, edge aliasing, texture detail). The constant toggle between Fit and 1:1 is the bread-and-butter workflow. The keyboard shortcut for 1:1 must be the most ergonomic (Ctrl+1 achieves this). The dropdown should prominently include 1:1.
+
+Usage tiers in practice:
+1. **1:1 (100%)** and **Fit** -- constant toggling, the core QC workflow.
+2. **1:2 (50%)** and **2:1 (200%)** -- quick overview vs. closer inspection.
+3. **1:4 (25%)** and **4:1 (400%)** -- high-res plate overview / sub-pixel artifact hunting.
+4. **3:1 through 8:1** and **1:3 through 1:8** -- rare, but included for desktop RV parity.
+
 ---
 
 ## Current State
@@ -39,6 +49,8 @@ The zoom system is built on a **fitScale-multiplied model**:
 ### ZoomControl Widget
 
 `ZoomControl.ts` provides a dropdown with levels: `'fit' | 0.25 | 0.5 | 1 | 2 | 4`. These values are `zoom` multiplier values, NOT pixel ratios. Its `handleKeyboard()` method currently returns `false` for keys 1-4 (acknowledging the tab-switching conflict). It emits `zoomChanged` events consumed by `AppViewWiring.ts`.
+
+**Important semantic issue**: The current dropdown labels "25%", "50%", "100%" etc. are zoom multiplier percentages (where 100% = fit to window). This conflicts with the universal industry convention (Nuke, RV, Flame, Photoshop, DaVinci Resolve) where "100%" means 1:1 pixel ratio. This must be resolved as part of this plan -- see Step 5.
 
 ### Keyboard System
 
@@ -85,12 +97,18 @@ zoomForRatio(ratio) = ratio / fitScale
 where fitScale = Math.min(containerWidth / sourceWidth, containerHeight / sourceHeight, 1)
 ```
 
+**DPR note**: "1:1" means one source pixel per CSS/logical pixel, not per physical pixel. On Retina displays (DPR=2), source pixels will be rendered across 2x2 physical pixels. This matches desktop RV, Nuke, and DaVinci Resolve behavior and is the correct convention for professional review tools.
+
 ### Scale Presets
 
 | Preset | Pixel Ratio | Label | Meaning |
 |--------|-------------|-------|---------|
 | 1:8 | 0.125 | 12.5% | 1 display pixel = 8 source pixels |
+| 1:7 | ~0.143 | ~14.3% | 1 display pixel = 7 source pixels |
+| 1:6 | ~0.167 | ~16.7% | 1 display pixel = 6 source pixels |
+| 1:5 | 0.2 | 20% | 1 display pixel = 5 source pixels |
 | 1:4 | 0.25 | 25% | 1 display pixel = 4 source pixels |
+| 1:3 | ~0.333 | ~33.3% | 1 display pixel = 3 source pixels |
 | 1:2 | 0.5 | 50% | 1 display pixel = 2 source pixels |
 | 1:1 | 1.0 | 100% | Pixel-perfect |
 | 2:1 | 2.0 | 200% | 2 display pixels per source pixel |
@@ -103,9 +121,9 @@ where fitScale = Math.min(containerWidth / sourceWidth, containerHeight / source
 
 ### Centering Strategy
 
-When a scale preset is activated:
-1. **Default**: Center on the current view center (pan stays proportional to new zoom).
-2. **With cursor**: If the cursor is over the viewer canvas, center on the cursor position using `calculateZoomPan()` from `ViewerInteraction.ts`.
+When a scale preset is activated via keyboard shortcut, center on the image center (pan 0,0). This matches desktop RV's default behavior for keyboard-triggered scale presets.
+
+> **Review Note (Nice to Have)**: A future iteration could add center-on-cursor behavior when the cursor is over the viewer canvas, using `calculateZoomPan()` from `ViewerInteraction.ts`. This is deferred from the initial implementation.
 
 ---
 
@@ -126,7 +144,11 @@ Use `Ctrl+1` through `Ctrl+8` for magnification presets and `Ctrl+Shift+1` throu
 | `Ctrl+7` | `view.zoom7to1` | 7:1 (700%) |
 | `Ctrl+8` | `view.zoom8to1` | 8:1 (800%) |
 | `Ctrl+Shift+2` | `view.zoom1to2` | 1:2 (50%) |
+| `Ctrl+Shift+3` | `view.zoom1to3` | 1:3 (~33%) |
 | `Ctrl+Shift+4` | `view.zoom1to4` | 1:4 (25%) |
+| `Ctrl+Shift+5` | `view.zoom1to5` | 1:5 (20%) |
+| `Ctrl+Shift+6` | `view.zoom1to6` | 1:6 (~17%) |
+| `Ctrl+Shift+7` | `view.zoom1to7` | 1:7 (~14%) |
 | `Ctrl+Shift+8` | `view.zoom1to8` | 1:8 (12.5%) |
 
 **Rationale**:
@@ -135,7 +157,9 @@ Use `Ctrl+1` through `Ctrl+8` for magnification presets and `Ctrl+Shift+1` throu
 - `Ctrl+3`/`Ctrl+4` do not collide with existing `Alt+3`/`Alt+4` (layout presets).
 - Browser zoom (`Ctrl+=`/`Ctrl+-`) uses different keys.
 
-**Conflict check**: `Ctrl+Digit3` is not currently bound. `Ctrl+Digit4` is not currently bound. All `Ctrl+Digit1` through `Ctrl+Digit8` are free. `Ctrl+Shift+Digit2/4/8` are all free (existing `Ctrl+Shift` combos use letters).
+**Conflict check**: All `Ctrl+Digit1` through `Ctrl+Digit8` are free. All `Ctrl+Shift+Digit2` through `Ctrl+Shift+Digit8` are free (existing `Ctrl+Shift` combos use letters).
+
+**Desktop RV divergence note**: Desktop RV uses bare `1-8` for magnification and `Shift+1-8` for reduction. This web version uses `Ctrl+N` and `Ctrl+Shift+N` due to tab-switching key conflicts. Users who prefer desktop RV behavior can rebind via the Custom Key Bindings dialog: rebind `tab.view` etc. away from `Digit1-6`, then bind `Digit1-8` to scale presets.
 
 ### Fallback: Custom Rebinding
 
@@ -178,19 +202,36 @@ export const MAGNIFICATION_PRESETS: ScalePreset[] = [
 ];
 
 export const REDUCTION_PRESETS: ScalePreset[] = [
-  { ratio: 0.5,   label: '1:2', percentage: '50%' },
-  { ratio: 0.25,  label: '1:4', percentage: '25%' },
-  { ratio: 0.125, label: '1:8', percentage: '12.5%' },
+  { ratio: 0.5,           label: '1:2', percentage: '50%' },
+  { ratio: 1 / 3,         label: '1:3', percentage: '33.3%' },
+  { ratio: 0.25,          label: '1:4', percentage: '25%' },
+  { ratio: 0.2,           label: '1:5', percentage: '20%' },
+  { ratio: 1 / 6,         label: '1:6', percentage: '16.7%' },
+  { ratio: 1 / 7,         label: '1:7', percentage: '14.3%' },
+  { ratio: 0.125,         label: '1:8', percentage: '12.5%' },
 ];
 
+// IMPORTANT: Use toReversed() or spread+reverse to avoid mutating REDUCTION_PRESETS.
+// Array.prototype.reverse() mutates in place, which would corrupt REDUCTION_PRESETS.
 export const ALL_PRESETS: ScalePreset[] = [
-  ...REDUCTION_PRESETS.reverse(),
+  ...[...REDUCTION_PRESETS].reverse(),
   ...MAGNIFICATION_PRESETS,
 ];
 
 /**
+ * Maximum canvas dimension (CSS pixels) to prevent GPU buffer overflow.
+ * Most GPUs support 16384; some support 32768. We use a conservative value.
+ * At high zoom, display dimensions beyond this cap are achieved via CSS scaling.
+ */
+export const MAX_CANVAS_DIMENSION = 16384;
+
+/**
  * Calculate the fitScale for a given source and container size.
  * This is the base scale at zoom=1 (fit to window).
+ *
+ * IMPORTANT: For rotated images, pass the effective (post-rotation) source
+ * dimensions, not the raw source dimensions. When the image is rotated
+ * 90 or 270 degrees, sourceWidth and sourceHeight should be swapped.
  */
 export function calculateFitScale(
   sourceWidth: number,
@@ -247,7 +288,62 @@ export function formatRatio(ratio: number): string {
 }
 ```
 
-### Step 2: Add Viewer Methods for Scale-Preset Zoom
+### Step 2: Add `zoomChanged` Event to TransformManager
+
+The ScaleRatioIndicator (Step 6), ZoomControl label updates (Step 9), and wiring (Step 8) all depend on being notified when zoom changes. Currently neither `TransformManager` nor `Viewer` emits such an event.
+
+**File**: `src/ui/components/TransformManager.ts` (modify)
+
+Add a `zoomChanged` callback or event:
+
+```typescript
+// Add to TransformManager class:
+private onZoomChanged: ((zoom: number) => void) | null = null;
+
+setOnZoomChanged(callback: ((zoom: number) => void) | null): void {
+  this.onZoomChanged = callback;
+}
+
+// Emit at the end of smoothZoomTo() animation completion and in setZoom():
+// In setZoom():
+setZoom(level: number): void {
+  this.zoom = level;
+  this.panX = 0;
+  this.panY = 0;
+  this.onZoomChanged?.(level);
+}
+
+// In smoothZoomTo() -- at animation completion callback:
+// ... existing animation code ...
+// At completion:
+this.onZoomChanged?.(targetZoom);
+```
+
+This event is consumed by the Viewer (Step 8) to update the ScaleRatioIndicator and ZoomControl.
+
+### Step 3: Add Canvas Size Guard
+
+At high magnification (e.g. 8:1 on a 4K image), `calculateDisplayDimensions()` can return dimensions exceeding GPU texture limits (e.g. 30720x17280). The GL path caps physical dimensions via `getMaxTextureSize()`, but the 2D canvas path in `resetCanvasFromHiDPI()` has no such cap, causing GPU allocation failures.
+
+**File**: `src/ui/components/ViewerRenderingUtils.ts` (modify)
+
+Add a cap to `calculateDisplayDimensions()`:
+
+```typescript
+import { MAX_CANVAS_DIMENSION } from './ScalePresets';
+
+// After computing displayWidth and displayHeight, add:
+const maxDim = MAX_CANVAS_DIMENSION;
+if (displayWidth > maxDim || displayHeight > maxDim) {
+  const scaleFactor = Math.min(maxDim / displayWidth, maxDim / displayHeight);
+  displayWidth = Math.floor(displayWidth * scaleFactor);
+  displayHeight = Math.floor(displayHeight * scaleFactor);
+}
+```
+
+Alternatively, apply the cap in `setCanvasSize()` so both the GL and 2D paths are protected. The remaining magnification beyond the cap is achieved via CSS scaling on the container, which is cheap and produces the expected pixelated appearance at high zoom.
+
+### Step 4: Add Viewer Methods for Scale-Preset Zoom
 
 Extend the `Viewer` class with methods that compute the correct zoom multiplier from a pixel ratio.
 
@@ -259,12 +355,16 @@ Add to public API:
 /**
  * Get the current fitScale (base scale at zoom=1).
  * Returns the ratio between display size and source size when fitting to window.
+ *
+ * IMPORTANT: Uses effective (post-rotation) source dimensions to account
+ * for 90/270 degree rotation, where width and height are swapped.
  */
 getFitScale(): number {
   const containerRect = this.getContainerRect();
+  const { width: effectiveWidth, height: effectiveHeight } = this.getEffectiveDimensions();
   return calculateFitScale(
-    this.sourceWidth,
-    this.sourceHeight,
+    effectiveWidth,
+    effectiveHeight,
     containerRect.width,
     containerRect.height,
   );
@@ -279,7 +379,11 @@ getPixelRatio(): number {
 
 /**
  * Smoothly zoom to a specific pixel ratio (e.g. 1.0 for 1:1, 2.0 for 2:1).
- * Centers on the view center (pan 0,0).
+ * Centers on the image center (pan 0,0).
+ *
+ * Note: "1:1" means one source pixel per CSS/logical pixel, not per physical
+ * pixel. On Retina displays, source pixels will span multiple physical pixels.
+ * This matches desktop RV, Nuke, and DaVinci Resolve behavior.
  */
 smoothSetPixelRatio(ratio: number): void {
   const fitScale = this.getFitScale();
@@ -288,10 +392,13 @@ smoothSetPixelRatio(ratio: number): void {
 }
 
 /**
- * Get the source image dimensions.
+ * Get the effective source image dimensions (post-rotation).
+ * When rotated 90/270 degrees, width and height are swapped.
  */
-getSourceDimensions(): { width: number; height: number } {
-  return { width: this.sourceWidth, height: this.sourceHeight };
+getEffectiveDimensions(): { width: number; height: number } {
+  // Use getEffectiveDimensions() from ViewerRenderingUtils.ts
+  // which accounts for rotation transforms.
+  return getEffectiveDimensions(this.sourceWidth, this.sourceHeight, this.rotation);
 }
 ```
 
@@ -300,7 +407,42 @@ Also add to the `ActionViewer` interface in `KeyboardActionMap.ts`:
 smoothSetPixelRatio(ratio: number): void;
 ```
 
-### Step 3: Register Keyboard Bindings
+### Step 5: Update ZoomControl Dropdown to Use Pixel Ratio Semantics
+
+The current ZoomControl dropdown labels use zoom multiplier percentages (100% = fit to window), which conflicts with the universal industry convention where 100% means 1:1 pixel ratio. This must be fixed to avoid confusion now that pixel-ratio-based scale presets are being introduced.
+
+**File**: `src/ui/components/ZoomControl.ts` (modify)
+
+1. Change the dropdown to emit **pixel ratio values** instead of zoom multiplier values. The "Fit" option remains special-cased.
+
+2. Update `ZoomLevel` type:
+   ```typescript
+   // Values are now pixel ratios, except for 'fit' which is a zoom mode.
+   export type ZoomLevel = 'fit' | 0.25 | 0.5 | 1 | 2 | 4;
+   ```
+
+3. Update dropdown labels to use pixel ratio notation:
+   ```typescript
+   // Dropdown items (manageable subset for casual users):
+   // Fit, 1:4 (25%), 1:2 (50%), 1:1 (100%), 2:1 (200%), 4:1 (400%)
+   ```
+
+4. The "Fit" entry stays as-is. The numeric entries now represent pixel ratios and the wiring layer calls `viewer.smoothSetPixelRatio()` for them.
+
+**File**: `src/AppViewWiring.ts` (modify)
+
+Update the zoom change handler:
+```typescript
+// When ZoomControl emits a zoom level change:
+if (level === 'fit') {
+  viewer.smoothFitToWindow();
+} else {
+  // level is now a pixel ratio, not a zoom multiplier
+  viewer.smoothSetPixelRatio(level);
+}
+```
+
+### Step 6: Register Keyboard Bindings
 
 **File**: `src/utils/input/KeyBindings.ts` (modify)
 
@@ -356,11 +498,35 @@ Add new entries to `DEFAULT_KEY_BINDINGS`:
   shift: true,
   description: 'Zoom to 1:2 (50%) pixel ratio',
 },
+'view.zoom1to3': {
+  code: 'Digit3',
+  ctrl: true,
+  shift: true,
+  description: 'Zoom to 1:3 (~33%) pixel ratio',
+},
 'view.zoom1to4': {
   code: 'Digit4',
   ctrl: true,
   shift: true,
   description: 'Zoom to 1:4 (25%) pixel ratio',
+},
+'view.zoom1to5': {
+  code: 'Digit5',
+  ctrl: true,
+  shift: true,
+  description: 'Zoom to 1:5 (20%) pixel ratio',
+},
+'view.zoom1to6': {
+  code: 'Digit6',
+  ctrl: true,
+  shift: true,
+  description: 'Zoom to 1:6 (~17%) pixel ratio',
+},
+'view.zoom1to7': {
+  code: 'Digit7',
+  ctrl: true,
+  shift: true,
+  description: 'Zoom to 1:7 (~14%) pixel ratio',
 },
 'view.zoom1to8': {
   code: 'Digit8',
@@ -370,7 +536,7 @@ Add new entries to `DEFAULT_KEY_BINDINGS`:
 },
 ```
 
-### Step 4: Register Action Handlers
+### Step 7: Register Action Handlers
 
 **File**: `src/services/KeyboardActionMap.ts` (modify)
 
@@ -393,28 +559,15 @@ Add to `buildActionHandlers()` return object:
 
 // -- Scale presets (reduction) ----------------------------------------
 'view.zoom1to2': () => viewer.smoothSetPixelRatio(0.5),
+'view.zoom1to3': () => viewer.smoothSetPixelRatio(1 / 3),
 'view.zoom1to4': () => viewer.smoothSetPixelRatio(0.25),
+'view.zoom1to5': () => viewer.smoothSetPixelRatio(0.2),
+'view.zoom1to6': () => viewer.smoothSetPixelRatio(1 / 6),
+'view.zoom1to7': () => viewer.smoothSetPixelRatio(1 / 7),
 'view.zoom1to8': () => viewer.smoothSetPixelRatio(0.125),
 ```
 
-### Step 5: Update ZoomControl Dropdown
-
-**File**: `src/ui/components/ZoomControl.ts` (modify)
-
-1. Expand `ZoomLevel` type to include more presets:
-   ```typescript
-   export type ZoomLevel = 'fit' | 0.125 | 0.25 | 0.5 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
-   ```
-
-2. Add entries to `ZOOM_LEVELS` array (the dropdown items). Keep it manageable -- show Fit, 25%, 50%, 100%, 200%, 400%, 800% in the dropdown (matching common usage). The full set of presets is accessible via keyboard only.
-
-3. The dropdown still emits `zoomChanged` with the zoom multiplier value (not the pixel ratio). The wiring in `AppViewWiring.ts` calls `viewer.smoothSetZoom()` for these values, which sets the zoom multiplier directly. **Important**: The dropdown values are zoom multiplier values (where 1 = fit), NOT pixel ratios. To unify behavior:
-   - Add a new event `pixelRatioChanged` to ZoomControl that emits pixel ratio values.
-   - Or convert in the wiring layer. The recommended approach is to keep the dropdown emitting raw zoom multiplier values for backward compatibility, and add a separate "Scale" indicator that shows the pixel ratio. This avoids changing the meaning of existing zoom values.
-
-**Alternative (simpler)**: Keep the ZoomControl as-is. It already has 100%, 200%, 400%. The keyboard shortcuts are the primary entry point for precise pixel-ratio presets. The ZoomControl dropdown serves casual users who click a dropdown.
-
-### Step 6: Add Visual Scale Ratio Indicator
+### Step 8: Add Visual Scale Ratio Indicator
 
 **File**: `src/ui/components/ScaleRatioIndicator.ts` (new)
 
@@ -445,7 +598,31 @@ The indicator shows:
 - "1:1" / "2:1" / "1:2" etc. for exact integer ratios
 - "150%" etc. for non-integer ratios
 
-### Step 7: Update Shortcuts Dialog
+### Step 9: Wire ScaleRatioIndicator and ZoomControl to Zoom Changes
+
+This step depends on the `zoomChanged` event added in Step 2.
+
+**File**: `src/ui/components/Viewer.ts` (modify)
+
+- Create a `ScaleRatioIndicator` instance in the Viewer constructor.
+- Register a `zoomChanged` callback on `TransformManager`.
+- When zoom changes, compute pixel ratio from `zoomToRatio(zoom, fitScale)` and pass to indicator.
+
+**File**: `src/AppViewWiring.ts` (modify)
+
+- After the existing zoom wiring, listen for viewer zoom changes to update the ZoomControl display label.
+- The ZoomControl label should show both percentage and ratio for recognized presets, e.g. "1:1 (100%)".
+
+### Step 10: Update ZoomControl Label to Show Pixel Ratio
+
+**File**: `src/ui/components/ZoomControl.ts` (modify)
+
+Add a method `updateFromViewer(zoom: number, fitScale: number)` that:
+- Computes the pixel ratio from `zoom * fitScale`.
+- Updates the button label to show the ratio, e.g. "1:1", "2:1", or percentage for non-integer ratios.
+- Highlights the matching dropdown entry if one exists.
+
+### Step 11: Update Shortcuts Dialog
 
 **File**: `src/AppKeyboardHandler.ts` (modify)
 
@@ -455,36 +632,12 @@ Add a `SCALE PRESETS` category to the `categories` object in `showShortcutsDialo
 'SCALE PRESETS': [
   'view.zoom1to1', 'view.zoom2to1', 'view.zoom3to1', 'view.zoom4to1',
   'view.zoom5to1', 'view.zoom6to1', 'view.zoom7to1', 'view.zoom8to1',
-  'view.zoom1to2', 'view.zoom1to4', 'view.zoom1to8',
+  'view.zoom1to2', 'view.zoom1to3', 'view.zoom1to4', 'view.zoom1to5',
+  'view.zoom1to6', 'view.zoom1to7', 'view.zoom1to8',
 ],
 ```
 
-### Step 8: Wire ScaleRatioIndicator to Viewer
-
-**File**: `src/ui/components/Viewer.ts` (modify)
-
-- Create a `ScaleRatioIndicator` instance in the Viewer constructor.
-- Show the indicator whenever zoom changes (after animation completes or on instant set).
-- Compute pixel ratio from `zoomToRatio(zoom, fitScale)` and pass to indicator.
-
-Alternatively, wire it in `AppViewWiring.ts` by listening to TransformManager zoom changes.
-
-### Step 9: Update ZoomControl Label to Show Pixel Ratio
-
-**File**: `src/ui/components/ZoomControl.ts` (modify)
-
-Add a method `updateFromViewer(zoom: number, fitScale: number)` that:
-- Computes the pixel ratio from `zoom * fitScale`.
-- Updates the button label to show both percentage and ratio, e.g. "100% (1:1)".
-- Or shows just the ratio for recognized presets.
-
-This requires the wiring layer to call this method when the viewer zoom changes.
-
-**File**: `src/AppViewWiring.ts` (modify)
-
-After the existing zoom wiring, add a listener for viewer zoom changes to update the ZoomControl display. This would require the Viewer or TransformManager to emit a zoom change event.
-
-### Step 10: Tests
+### Step 12: Tests
 
 **File**: `src/ui/components/ScalePresets.test.ts` (new)
 
@@ -492,10 +645,12 @@ After the existing zoom wiring, add a listener for viewer zoom changes to update
 - calculateFitScale: returns correct fitScale for various source/container combos
 - ratioToZoom: converts 1:1 ratio to correct zoom for given fitScale
 - ratioToZoom: converts 2:1 ratio to correct zoom
+- ratioToZoom: converts 1:3 ratio to correct zoom
 - zoomToRatio: round-trips correctly
 - formatRatio: formats integer magnifications correctly
 - formatRatio: formats integer reductions correctly
 - formatRatio: formats non-integer ratios as percentages
+- ALL_PRESETS does not mutate REDUCTION_PRESETS (verify order after access)
 ```
 
 **File**: `src/ui/components/ScaleRatioIndicator.test.ts` (new)
@@ -513,9 +668,10 @@ After the existing zoom wiring, add a listener for viewer zoom changes to update
 
 ```
 - buildActionHandlers includes view.zoom1to1 through view.zoom8to1
-- buildActionHandlers includes view.zoom1to2, view.zoom1to4, view.zoom1to8
+- buildActionHandlers includes view.zoom1to2 through view.zoom1to8
 - view.zoom1to1 calls viewer.smoothSetPixelRatio(1)
 - view.zoom8to1 calls viewer.smoothSetPixelRatio(8)
+- view.zoom1to3 calls viewer.smoothSetPixelRatio(1/3)
 ```
 
 ---
@@ -526,7 +682,7 @@ After the existing zoom wiring, add a listener for viewer zoom changes to update
 
 | File | Purpose |
 |------|---------|
-| `src/ui/components/ScalePresets.ts` | Scale preset definitions, fitScale calculation, ratio/zoom conversion, ratio formatting |
+| `src/ui/components/ScalePresets.ts` | Scale preset definitions, fitScale calculation, ratio/zoom conversion, ratio formatting, MAX_CANVAS_DIMENSION constant |
 | `src/ui/components/ScalePresets.test.ts` | Unit tests for ScalePresets |
 | `src/ui/components/ScaleRatioIndicator.ts` | Transient overlay showing current pixel ratio |
 | `src/ui/components/ScaleRatioIndicator.test.ts` | Unit tests for ScaleRatioIndicator |
@@ -535,13 +691,15 @@ After the existing zoom wiring, add a listener for viewer zoom changes to update
 
 | File | Changes |
 |------|---------|
-| `src/ui/components/Viewer.ts` | Add `getFitScale()`, `getPixelRatio()`, `smoothSetPixelRatio()`, `getSourceDimensions()` methods; create and wire ScaleRatioIndicator |
-| `src/utils/input/KeyBindings.ts` | Add 11 new `view.zoomNtoM` entries to `DEFAULT_KEY_BINDINGS` |
-| `src/services/KeyboardActionMap.ts` | Add `smoothSetPixelRatio()` to `ActionViewer` interface; add 11 action handlers in `buildActionHandlers()` |
+| `src/ui/components/TransformManager.ts` | Add `zoomChanged` callback, emit on `setZoom()` and `smoothZoomTo()` completion |
+| `src/ui/components/ViewerRenderingUtils.ts` | Add canvas dimension cap in `calculateDisplayDimensions()` using `MAX_CANVAS_DIMENSION` |
+| `src/ui/components/Viewer.ts` | Add `getFitScale()` (using post-rotation dimensions), `getPixelRatio()`, `smoothSetPixelRatio()`, `getEffectiveDimensions()` methods; create and wire ScaleRatioIndicator |
+| `src/utils/input/KeyBindings.ts` | Add 15 new `view.zoomNtoM` entries to `DEFAULT_KEY_BINDINGS` (8 magnification + 7 reduction) |
+| `src/services/KeyboardActionMap.ts` | Add `smoothSetPixelRatio()` to `ActionViewer` interface; add 15 action handlers in `buildActionHandlers()` |
 | `src/services/KeyboardActionMap.test.ts` | Add tests for new action handlers |
 | `src/AppKeyboardHandler.ts` | Add `SCALE PRESETS` category to shortcuts dialog |
-| `src/ui/components/ZoomControl.ts` | Optionally extend `ZoomLevel` type and dropdown items; add method to update label from viewer state |
-| `src/AppViewWiring.ts` | Wire viewer zoom changes to ZoomControl label update |
+| `src/ui/components/ZoomControl.ts` | Change dropdown to emit pixel ratios instead of zoom multipliers; update labels to match industry convention; add `updateFromViewer()` method |
+| `src/AppViewWiring.ts` | Wire viewer zoom changes to ZoomControl label update; update zoom handler to call `smoothSetPixelRatio()` for pixel ratio values |
 
 ---
 
@@ -557,34 +715,44 @@ After the existing zoom wiring, add a listener for viewer zoom changes to update
 
 **Risk**: If the browser window is resized after a scale preset is applied, the pixel ratio drifts because fitScale changes but the zoom multiplier stays constant. A 1:1 preset applied at one window size becomes slightly off after resize.
 
-**Mitigation**: This is inherent to the fitScale model and is consistent with how all current zoom presets (50%, 100%, etc.) behave. A future enhancement could re-apply the preset on resize, but that would require storing the "last preset intention" which adds complexity. Not in scope for this plan.
+**Mitigation**: This is inherent to the fitScale model and is consistent with how all current zoom presets behave. Desktop RV also exhibits this behavior -- it does not re-apply zoom presets on resize. A future enhancement could re-apply the preset on resize (storing the "last preset intention"), but this adds complexity and is not in scope for the initial implementation.
 
-### 3. Performance at High Magnification (Low)
+> **Review Note (Nice to Have)**: Store the "intended pixel ratio" and recompute zoom on resize. Deferred since desktop RV does not do this either.
 
-**Risk**: At 8:1, a 4K image (3840x2160) would render at 30720x17280 display pixels. The canvas and WebGL framebuffer may hit size limits or cause GPU memory issues.
+### 3. Performance at High Magnification (Medium -- Mitigated)
 
-**Mitigation**: The existing `calculateWheelZoom()` already caps zoom at `maxZoom = 10`. The TransformManager does not enforce limits on `smoothZoomTo()`, but the value 8/fitScale for a 4K image in a 1280x720 container is ~24, which would exceed the maxZoom cap. However, the maxZoom cap only applies to wheel zoom, not programmatic zoom. Two options:
-- (a) Let it zoom to 8:1 regardless -- the canvas CSS sizing handles display, and the internal canvas resolution stays at source resolution. The browser will upscale via CSS transform, which is cheap.
-- (b) Add a maxZoom guard to `smoothZoomTo()`. Risk: could silently clamp presets without feedback.
+**Risk**: At 8:1, a 4K image (3840x2160) would produce `displayWidth = sourceWidth * fitScale * zoom` = 3840 * 0.333 * 24 = 30,720 CSS pixels. On DPR=2, the physical canvas would be 61,440 pixels, exceeding GPU texture limits (typically 16,384 or 32,768).
 
-**Recommendation**: Option (a) is correct. The `displayWidth/Height` computed by `calculateDisplayDimensions()` is the actual canvas resolution. At 8:1, this would be `sourceWidth * fitScale * zoom` = e.g., 3840 * 0.333 * 24 = 30,720. This is too large. But looking more carefully at the code: `displayWidth` is the CSS size of the canvas element, and the canvas internal resolution is set to `physicalWidth = displayWidth * dpr`. At DPR=2, this could be 61,440 pixels. This will fail.
+**Mitigation (Implemented in Step 3)**: `calculateDisplayDimensions()` is modified to cap output at `MAX_CANVAS_DIMENSION` (16384) per dimension. The remaining magnification beyond the cap is applied via CSS scaling on the container, which is cheap and produces the expected pixelated appearance at high zoom. The GL path already caps via `getMaxTextureSize()`. The 2D path now also has a guard.
 
-**Revised mitigation**: The maximum safe canvas dimension is typically 16,384 or 32,768 pixels depending on GPU. The implementation should either:
-- Clamp the canvas resolution and let CSS upscaling handle the remaining magnification (the image will look pixelated, which is expected at high zoom).
-- Or cap the pixel ratio at a level where the canvas stays within safe bounds.
+### 4. Zoom Multiplier vs Pixel Ratio Semantic Confusion (Medium -- Resolved)
 
-The cleanest approach is to separate the concept of canvas resolution from display size at high zoom. The canvas stays at source resolution (or some capped maximum), and the CSS transform scales it up for display. This is already partially how the system works (the `canvasContainer` gets `translate()` for pan) -- extending it with `scale()` for zoom would make high magnification efficient. However, this is a significant architectural change and should be noted as a **future optimization**, not a blocker for the initial implementation.
+**Risk**: The ZoomControl dropdown previously showed "100%" meaning "fit to window" (zoom multiplier = 1.0), while the industry convention and the new scale presets use "100%" to mean 1:1 pixel ratio. This dual-semantics problem would cause deep confusion.
 
-For the initial implementation, the `calculateDisplayDimensions()` function could be modified to cap the output at a maximum canvas size (e.g., 8192 or 16384 per dimension), and the remaining zoom would be applied via CSS scaling on the container. This ensures the canvas never exceeds GPU limits while still achieving the desired pixel ratio visually.
-
-### 4. Zoom Multiplier vs Pixel Ratio Confusion (Low)
-
-**Risk**: The ZoomControl dropdown shows values like "100%" and "200%" which are zoom multiplier percentages (where 100% = fit to window), NOT pixel ratios. Adding scale presets that use pixel ratios ("1:1 = 100%") creates semantic confusion.
-
-**Mitigation**: The ScaleRatioIndicator overlay clearly uses "N:M" notation to distinguish pixel ratio from zoom percentage. The ZoomControl dropdown could be updated to show both, or the percentage label could include a parenthetical note. Long-term, aligning the dropdown to use pixel ratios would be cleaner.
+**Mitigation (Implemented in Step 5)**: The ZoomControl dropdown is converted to emit pixel ratio values and use pixel-ratio-based labels, matching the universal convention in Nuke, RV, Flame, Photoshop, and DaVinci Resolve. The "Fit" entry remains as a special zoom mode. The wiring layer is updated to call `smoothSetPixelRatio()` for numeric values.
 
 ### 5. Mac Cmd+Number Conflicts (Low)
 
 **Risk**: On macOS, `Cmd+1` through `Cmd+8` switch browser tabs (same as `Ctrl+1-8`). The KeyboardManager treats `metaKey` (Cmd) as `ctrl`, so `Cmd+1` maps to the same binding as `Ctrl+1`.
 
 **Mitigation**: This is already how the KeyboardManager works for all Ctrl shortcuts. Professional users of media review tools accept that the tool captures keyboard shortcuts when focused. The Custom Key Bindings dialog allows remapping if needed.
+
+### 6. Rotation Interaction (Medium -- Mitigated)
+
+**Risk**: When the image is rotated 90/270 degrees, the effective source dimensions are swapped. Using raw `sourceWidth/sourceHeight` in `getFitScale()` would produce incorrect pixel ratios for rotated images.
+
+**Mitigation (Implemented in Step 4)**: `getFitScale()` uses `getEffectiveDimensions()` which returns post-rotation dimensions, accounting for the 90/270 degree swap. The `calculateDisplayDimensions()` function in the render path already uses post-rotation dimensions, so this keeps behavior consistent.
+
+---
+
+## Review Notes (Deferred Items)
+
+The following items from the expert review are acknowledged as valuable but deferred from the initial implementation:
+
+| # | Item | Rationale for deferral |
+|---|------|----------------------|
+| 1 | **Center-on-cursor for keyboard presets** -- When cursor is over the viewer, center on cursor position instead of image center. | Desktop RV defaults to image center for keyboard presets. Cursor-centering is a polish feature. |
+| 2 | **Re-apply preset on window resize** -- Store intended pixel ratio and recompute zoom when the window is resized. | Desktop RV does not do this. Adds state management complexity. |
+| 3 | **Dedicated 1:1 toolbar button** -- A persistent button or double-click-to-1:1 gesture for the most-used preset. | Valuable for discoverability but requires toolbar UI design work. Could be added as a follow-up. |
+| 4 | **Unify zoom50 semantics** -- Decide whether `Digit0` / `view.zoom50` should become a pixel ratio preset (1:2) or remain a zoom multiplier (0.5x fit). | Existing behavior is shipped. Changing it risks user confusion. Should be evaluated after scale presets are in use. |
+| 5 | **Explicit DPR documentation** -- Add a code comment in `smoothSetPixelRatio()` stating that 1:1 means per-CSS-pixel, not per-physical-pixel. | Addressed inline in Step 4 code comments but could be expanded in developer docs. |
