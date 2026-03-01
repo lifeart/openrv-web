@@ -392,6 +392,7 @@ export class Timeline {
 
     this.isDragging = true;
     this.canvas.setPointerCapture(e.pointerId);
+    this.session.onScrubStart();
     this.seekToPosition(e.clientX);
   };
 
@@ -403,6 +404,7 @@ export class Timeline {
   private onPointerUp = (e: PointerEvent): void => {
     if (this.isDragging) {
       this.canvas.releasePointerCapture(e.pointerId);
+      this.session.onScrubEnd();
     }
     this.isDragging = false;
   };

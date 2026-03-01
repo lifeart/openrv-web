@@ -10,6 +10,7 @@ export interface VolumeState {
 export interface VolumeControlEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
+  audioScrubChanged: boolean;
   stateChanged: VolumeState;
 }
 
@@ -22,9 +23,12 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   private _volume = 0.7;
   private _muted = false;
   private _previousVolume = 0.7;
+  private _audioScrubEnabled = true;
   private _sliderExpanded = false;
   private _boundDocumentClick: (e: MouseEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
+  private scrubToggle: HTMLLabelElement | null = null;
+  private scrubCheckbox: HTMLInputElement | null = null;
 
   constructor() {
     super();
@@ -107,7 +111,40 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       this.setVolume(value);
     });
 
+    // Create audio scrub toggle
+    this.scrubCheckbox = document.createElement('input');
+    this.scrubCheckbox.type = 'checkbox';
+    this.scrubCheckbox.checked = this._audioScrubEnabled;
+    this.scrubCheckbox.id = 'volume-scrub-toggle';
+    this.scrubCheckbox.style.cssText = `
+      margin: 0 4px 0 0;
+      cursor: pointer;
+      accent-color: var(--accent-primary);
+    `;
+
+    this.scrubToggle = document.createElement('label');
+    this.scrubToggle.htmlFor = 'volume-scrub-toggle';
+    this.scrubToggle.style.cssText = `
+      display: flex;
+      align-items: center;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      margin-left: 4px;
+      user-select: none;
+    `;
+    this.scrubToggle.title = 'Enable/disable audio scrub during frame stepping';
+    this.scrubToggle.appendChild(this.scrubCheckbox);
+    this.scrubToggle.appendChild(document.createTextNode('Scrub'));
+
+    this.scrubCheckbox.addEventListener('change', () => {
+      this._audioScrubEnabled = this.scrubCheckbox!.checked;
+      this.emit('audioScrubChanged', this._audioScrubEnabled);
+    });
+
     this.volumeContainer.appendChild(this.volumeSlider);
+    this.volumeContainer.appendChild(this.scrubToggle);
 
     // Show slider on hover (but don't collapse if pinned open via click)
     this.container.addEventListener('pointerenter', () => {
@@ -238,6 +275,36 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this._muted = muted;
     this.volumeSlider.value = String(this._muted ? 0 : this._volume);
     this.updateMuteButton();
+  }
+
+  /**
+   * Sync audio scrub enabled state from external source without emitting events.
+   */
+  syncAudioScrub(enabled: boolean): void {
+    this._audioScrubEnabled = enabled;
+    if (this.scrubCheckbox) {
+      this.scrubCheckbox.checked = enabled;
+    }
+  }
+
+  /**
+   * Set whether the scrub audio toggle is available (grayed out when audio buffer unavailable).
+   */
+  setScrubAudioAvailable(available: boolean): void {
+    if (this.scrubCheckbox) {
+      this.scrubCheckbox.disabled = !available;
+    }
+    if (this.scrubToggle) {
+      this.scrubToggle.style.opacity = available ? '1' : '0.5';
+      this.scrubToggle.title = available
+        ? 'Enable/disable audio scrub during frame stepping'
+        : 'Audio scrub requires decoded audio data';
+    }
+  }
+
+  /** Whether audio scrub is currently enabled in this control. */
+  isAudioScrubEnabled(): boolean {
+    return this._audioScrubEnabled;
   }
 
   render(): HTMLElement {

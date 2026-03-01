@@ -64,6 +64,8 @@ export interface PlaybackState {
   muted: boolean;
   marks: Marker[] | number[]; // Support both old format (number[]) and new format (Marker[])
   currentSourceIndex: number;
+  /** Whether audio scrub is enabled (optional for backward compat, defaults to true) */
+  audioScrubEnabled?: boolean;
 }
 
 /** Paint/annotation state (serializable version) */
@@ -155,4 +157,5 @@ export const DEFAULT_PLAYBACK_STATE: PlaybackState = {
   muted: false,
   marks: [],
   currentSourceIndex: 0,
+  audioScrubEnabled: true,
 };
