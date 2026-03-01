@@ -4339,6 +4339,15 @@ export class Viewer {
   }
 
   /**
+   * Returns true if the viewer input handler has an active interaction
+   * (pan, draw, shape draw, advanced draw, or spherical drag).
+   * Used by VirtualSliderController to suppress activation.
+   */
+  isInteracting(): boolean {
+    return this.inputHandler.isInteracting();
+  }
+
+  /**
    * Get the current display width in logical pixels.
    */
   getDisplayWidth(): number {

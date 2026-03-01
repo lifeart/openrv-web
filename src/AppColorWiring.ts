@@ -81,7 +81,16 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
 
-    // Debounced history recording - records after user stops adjusting for 500ms
+    // Debounced history recording - records after user stops adjusting for 500ms.
+    // Skip history recording when an external system (e.g., virtual slider) is
+    // managing its own history entries via the suppressHistory flag.
+    if (controls.colorControls.suppressHistory) {
+      // Still update the previous snapshot so the next non-suppressed change
+      // has a correct baseline.
+      state.colorHistoryPrevious = controls.colorControls.getAdjustments();
+      return;
+    }
+
     if (state.colorHistoryTimer) {
       clearTimeout(state.colorHistoryTimer);
     }

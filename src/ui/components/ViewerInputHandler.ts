@@ -198,6 +198,16 @@ export class ViewerInputHandler {
     return this.isDrawingShape;
   }
 
+  /**
+   * Returns true if any viewer interaction (pan, draw, shape draw,
+   * advanced draw, spherical drag) is in progress.
+   * Used by VirtualSliderController to suppress activation during
+   * other interactions.
+   */
+  isInteracting(): boolean {
+    return this.isPanning || this.isDrawing || this.isDrawingShape || this.isAdvancedDrawing || this.isSphericalDragging;
+  }
+
   get currentLivePoints(): StrokePoint[] {
     return this.livePoints;
   }
