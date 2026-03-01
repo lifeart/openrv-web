@@ -62,6 +62,7 @@ import { SessionGraph } from './SessionGraph';
 import { SessionMedia } from './SessionMedia';
 import { SessionPlayback } from './SessionPlayback';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
+import type { MediaRepresentation } from '../types/representation';
 // Logger removed — playback logging now lives in SessionPlayback.
 
 export type { SubFramePosition };
@@ -185,6 +186,25 @@ export interface SessionEvents extends EventMap {
   versionsChanged: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
+  // Representation events
+  representationChanged: {
+    sourceIndex: number;
+    previousRepId: string | null;
+    newRepId: string;
+    representation: MediaRepresentation;
+  };
+  representationError: {
+    sourceIndex: number;
+    repId: string;
+    error: string;
+    userInitiated: boolean;
+  };
+  fallbackActivated: {
+    sourceIndex: number;
+    failedRepId: string;
+    fallbackRepId: string;
+    fallbackRepresentation: MediaRepresentation;
+  };
 }
 
 // Re-export from centralized types for backward compatibility
@@ -209,6 +229,12 @@ export interface MediaSource {
   fileSourceNode?: FileSourceNode;
   // OPFS cache key (set after successful cache put)
   opfsCacheKey?: string;
+
+  // --- Multiple Media Representations (MMR) ---
+  /** All available representations for this source. Undefined or empty array = legacy mode. */
+  representations?: MediaRepresentation[];
+  /** Index into `representations` for the currently active one. -1 or undefined = legacy mode. */
+  activeRepresentationIndex?: number;
 }
 
 // Re-export for backward compatibility
@@ -394,7 +420,10 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward SessionMedia events
-    const mediaEvents = ['sourceLoaded', 'durationChanged', 'unsupportedCodec'] as const;
+    const mediaEvents = [
+      'sourceLoaded', 'durationChanged', 'unsupportedCodec',
+      'representationChanged', 'representationError', 'fallbackActivated',
+    ] as const;
     for (const event of mediaEvents) {
       this._media.on(event as any, (data: any) => this.emit(event as any, data));
     }
@@ -1075,6 +1104,43 @@ export class Session extends EventEmitter<SessionEvents> {
 
   setCurrentSource(index: number): void {
     this._media.setCurrentSource(index);
+  }
+
+  // --- Representation management — delegated to SessionMedia ---
+
+  /**
+   * Add a representation to a source.
+   */
+  addRepresentationToSource(
+    sourceIndex: number,
+    config: import('../types/representation').AddRepresentationConfig
+  ): MediaRepresentation | null {
+    return this._media.addRepresentationToSource(sourceIndex, config);
+  }
+
+  /**
+   * Remove a representation from a source.
+   */
+  removeRepresentationFromSource(sourceIndex: number, repId: string): boolean {
+    return this._media.removeRepresentationFromSource(sourceIndex, repId);
+  }
+
+  /**
+   * Switch the active representation for a source.
+   */
+  async switchRepresentation(
+    sourceIndex: number,
+    repId: string,
+    options?: import('../types/representation').SwitchRepresentationOptions
+  ): Promise<boolean> {
+    return this._media.switchRepresentation(sourceIndex, repId, options);
+  }
+
+  /**
+   * Get the active representation for a source.
+   */
+  getActiveRepresentation(sourceIndex: number): MediaRepresentation | null {
+    return this._media.getActiveRepresentation(sourceIndex);
   }
 
   // A/B Source Compare methods — delegated to SessionPlayback

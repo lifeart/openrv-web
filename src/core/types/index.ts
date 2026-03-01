@@ -41,3 +41,13 @@ export type { TransitionType, TransitionConfig, TransitionFrameInfo } from './tr
 export { TRANSITION_TYPE_CODES, DEFAULT_TRANSITION_DURATION, isTransitionType } from './transition';
 
 export { withDefaults } from './defaults';
+
+export type {
+  RepresentationKind, RepresentationStatus, RepresentationResolution,
+  MediaRepresentation, RepresentationLoaderConfig, SerializedRepresentation,
+  AddRepresentationConfig, SwitchRepresentationOptions, RepresentationManagerEvents,
+} from './representation';
+export {
+  generateRepresentationId, createRepresentation,
+  serializeRepresentation, deserializeRepresentation,
+} from './representation';
