@@ -684,6 +684,92 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Toggle audio mute'
   },
+
+  // Scale presets - magnification
+  'view.zoom1to1': {
+    code: 'Digit1',
+    ctrl: true,
+    description: 'Zoom to 1:1 (100%) pixel ratio',
+  },
+  'view.zoom2to1': {
+    code: 'Digit2',
+    ctrl: true,
+    description: 'Zoom to 2:1 (200%) pixel ratio',
+  },
+  'view.zoom3to1': {
+    code: 'Digit3',
+    ctrl: true,
+    description: 'Zoom to 3:1 (300%) pixel ratio',
+  },
+  'view.zoom4to1': {
+    code: 'Digit4',
+    ctrl: true,
+    description: 'Zoom to 4:1 (400%) pixel ratio',
+  },
+  'view.zoom5to1': {
+    code: 'Digit5',
+    ctrl: true,
+    description: 'Zoom to 5:1 (500%) pixel ratio',
+  },
+  'view.zoom6to1': {
+    code: 'Digit6',
+    ctrl: true,
+    description: 'Zoom to 6:1 (600%) pixel ratio',
+  },
+  'view.zoom7to1': {
+    code: 'Digit7',
+    ctrl: true,
+    description: 'Zoom to 7:1 (700%) pixel ratio',
+  },
+  'view.zoom8to1': {
+    code: 'Digit8',
+    ctrl: true,
+    description: 'Zoom to 8:1 (800%) pixel ratio',
+  },
+
+  // Scale presets - reduction
+  'view.zoom1to2': {
+    code: 'Digit2',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:2 (50%) pixel ratio',
+  },
+  'view.zoom1to3': {
+    code: 'Digit3',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:3 (~33%) pixel ratio',
+  },
+  'view.zoom1to4': {
+    code: 'Digit4',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:4 (25%) pixel ratio',
+  },
+  'view.zoom1to5': {
+    code: 'Digit5',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:5 (20%) pixel ratio',
+  },
+  'view.zoom1to6': {
+    code: 'Digit6',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:6 (~17%) pixel ratio',
+  },
+  'view.zoom1to7': {
+    code: 'Digit7',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:7 (~14%) pixel ratio',
+  },
+  'view.zoom1to8': {
+    code: 'Digit8',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:8 (12.5%) pixel ratio',
+  },
 };
 /**
  * Get a human-readable description of a key combination

@@ -138,6 +138,12 @@ export class AppKeyboardHandler {
       'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
       'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
+      'SCALE PRESETS': [
+        'view.zoom1to1', 'view.zoom2to1', 'view.zoom3to1', 'view.zoom4to1',
+        'view.zoom5to1', 'view.zoom6to1', 'view.zoom7to1', 'view.zoom8to1',
+        'view.zoom1to2', 'view.zoom1to3', 'view.zoom1to4', 'view.zoom1to5',
+        'view.zoom1to6', 'view.zoom1to7', 'view.zoom1to8',
+      ],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],

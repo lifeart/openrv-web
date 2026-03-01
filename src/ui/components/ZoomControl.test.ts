@@ -41,7 +41,7 @@ describe('ZoomControl', () => {
     it('ZOOM-U012: button has correct title', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.title).toBe('Zoom level (F to fit, 0-4 for presets)');
+      expect(button.title).toBe('Zoom level (F to fit, Ctrl+1 for 1:1)');
     });
 
     it('ZOOM-U013: button displays Fit label initially', () => {
@@ -104,39 +104,39 @@ describe('ZoomControl', () => {
       expect(button.textContent).toContain('Fit');
     });
 
-    it('ZOOM-U031: button shows 25% for 0.25 zoom', () => {
+    it('ZOOM-U031: button shows 1:4 for 0.25 zoom', () => {
       const el = control.render();
       control.setZoom(0.25);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('25%');
+      expect(button.textContent).toContain('1:4');
     });
 
-    it('ZOOM-U032: button shows 50% for 0.5 zoom', () => {
+    it('ZOOM-U032: button shows 1:2 for 0.5 zoom', () => {
       const el = control.render();
       control.setZoom(0.5);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('50%');
+      expect(button.textContent).toContain('1:2');
     });
 
-    it('ZOOM-U033: button shows 100% for 1 zoom', () => {
+    it('ZOOM-U033: button shows 1:1 for 1 zoom', () => {
       const el = control.render();
       control.setZoom(1);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('100%');
+      expect(button.textContent).toContain('1:1');
     });
 
-    it('ZOOM-U034: button shows 200% for 2 zoom', () => {
+    it('ZOOM-U034: button shows 2:1 for 2 zoom', () => {
       const el = control.render();
       control.setZoom(2);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('200%');
+      expect(button.textContent).toContain('2:1');
     });
 
-    it('ZOOM-U035: button shows 400% for 4 zoom', () => {
+    it('ZOOM-U035: button shows 4:1 for 4 zoom', () => {
       const el = control.render();
       control.setZoom(4);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('400%');
+      expect(button.textContent).toContain('4:1');
     });
   });
 
@@ -221,11 +221,11 @@ describe('ZoomControl zoom levels', () => {
 
   const zoomLevels: { value: ZoomLevel; label: string }[] = [
     { value: 'fit', label: 'Fit' },
-    { value: 0.25, label: '25%' },
-    { value: 0.5, label: '50%' },
-    { value: 1, label: '100%' },
-    { value: 2, label: '200%' },
-    { value: 4, label: '400%' },
+    { value: 0.25, label: '1:4 (25%)' },
+    { value: 0.5, label: '1:2 (50%)' },
+    { value: 1, label: '1:1 (100%)' },
+    { value: 2, label: '2:1 (200%)' },
+    { value: 4, label: '4:1 (400%)' },
   ];
 
   zoomLevels.forEach(({ value, label }) => {

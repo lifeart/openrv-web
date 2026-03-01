@@ -106,6 +106,8 @@ import {
   calculateDisplayDimensions,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
+import { calculateFitScale, ratioToZoom, zoomToRatio } from './ScalePresets';
+import { ScaleRatioIndicator } from './ScaleRatioIndicator';
 import {
   createExportCanvas as createExportCanvasUtil,
   createSourceExportCanvas as createSourceExportCanvasUtil,
@@ -333,6 +335,9 @@ export class Viewer {
   private _referenceCanvas: HTMLCanvasElement | null = null;
   private _referenceCtx: CanvasRenderingContext2D | null = null;
 
+  // Scale ratio indicator overlay (transient zoom feedback)
+  private scaleRatioIndicator: ScaleRatioIndicator | null = null;
+
   // Display capabilities for wide color gamut / HDR support
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
@@ -448,6 +453,16 @@ export class Viewer {
       () => this.interactionQuality.endInteraction(),
     );
 
+    // Wire up zoom change callback for scale ratio indicator
+    this.transformManager.setOnZoomChanged((zoom: number) => {
+      if (this.scaleRatioIndicator) {
+        const fitScale = this.getFitScale();
+        const ratio = zoomToRatio(zoom, fitScale);
+        const isFit = Math.abs(zoom - 1) < 0.001;
+        this.scaleRatioIndicator.show(ratio, isFit);
+      }
+    });
+
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'viewer-container';
@@ -463,6 +478,9 @@ export class Viewer {
       user-select: none;
       -webkit-user-select: none;
     `;
+
+    // Create scale ratio indicator (transient zoom feedback overlay)
+    this.scaleRatioIndicator = new ScaleRatioIndicator(this.container);
 
     // Create canvas container for transforms
     this.canvasContainer = document.createElement('div');
@@ -1173,6 +1191,54 @@ export class Viewer {
    */
   isZoomAnimating(): boolean {
     return this.transformManager.isZoomAnimating();
+  }
+
+  /**
+   * Get the current fitScale (base scale at zoom=1).
+   * Returns the ratio between display size and source size when fitting to window.
+   *
+   * IMPORTANT: Uses effective (post-rotation) source dimensions to account
+   * for 90/270 degree rotation, where width and height are swapped.
+   */
+  getFitScale(): number {
+    const containerRect = this.getContainerRect();
+    const { width: effectiveWidth, height: effectiveHeight } = this.getEffectiveDimensions();
+    return calculateFitScale(
+      effectiveWidth,
+      effectiveHeight,
+      containerRect.width,
+      containerRect.height,
+    );
+  }
+
+  /**
+   * Get the current pixel ratio (source pixels per display pixel).
+   */
+  getPixelRatio(): number {
+    return zoomToRatio(this.transformManager.getZoom(), this.getFitScale());
+  }
+
+  /**
+   * Smoothly zoom to a specific pixel ratio (e.g. 1.0 for 1:1, 2.0 for 2:1).
+   * Centers on the image center (pan 0,0).
+   *
+   * Note: "1:1" means one source pixel per CSS/logical pixel, not per physical
+   * pixel. On Retina displays, source pixels will span multiple physical pixels.
+   * This matches desktop RV, Nuke, and DaVinci Resolve behavior.
+   */
+  smoothSetPixelRatio(ratio: number): void {
+    const fitScale = this.getFitScale();
+    const targetZoom = ratioToZoom(ratio, fitScale);
+    this.transformManager.smoothZoomTo(targetZoom, 200, 0, 0);
+  }
+
+  /**
+   * Get the effective source image dimensions (post-rotation).
+   * When rotated 90/270 degrees, width and height are swapped.
+   */
+  getEffectiveDimensions(): { width: number; height: number } {
+    const userRotation = this.transformManager.transform.rotation;
+    return getEffectiveDimensions(this.sourceWidth, this.sourceHeight, userRotation);
   }
 
   private updateCanvasPosition(): void {
@@ -4100,6 +4166,12 @@ export class Viewer {
 
     // Dispose transform manager (cancels zoom animation, clears callback)
     this.transformManager.dispose();
+
+    // Dispose scale ratio indicator
+    if (this.scaleRatioIndicator) {
+      this.scaleRatioIndicator.dispose();
+      this.scaleRatioIndicator = null;
+    }
 
     this.resizeObserver.disconnect();
     this.inputHandler.unbindEvents();
