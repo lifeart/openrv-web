@@ -98,8 +98,17 @@ export interface StateAccessor {
   /** Set channel isolation mode. */
   setChannelMode(mode: ChannelMode): void;
 
-  /** Set 3D LUT data, size, and intensity. Null data disables. */
+  /** Set 3D LUT data, size, and intensity. Null data disables. (Deprecated: routes to Look LUT) */
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
+
+  /** Set File LUT (per-source, applied after EOTF, before input primaries). */
+  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+
+  /** Set Look LUT (per-source, creative grade -- renamed from setLUT). */
+  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+
+  /** Set Display LUT (session-wide, applied after output primaries, before display transfer). */
+  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
 
   /** Get the current display color management state. */
   getDisplayColorState(): DisplayColorConfig;
@@ -205,12 +214,18 @@ export interface StateAccessor {
   /** Get the current false color LUT texture data and dirty state. */
   getFalseColorLUTSnapshot(): FalseColorLUTSnapshot;
 
-  /** Get the current 3D LUT texture data and dirty state. */
+  /** Get the current 3D LUT (Look) texture data and dirty state. */
   getLUT3DSnapshot(): LUT3DSnapshot;
+
+  /** Get the File LUT texture data and dirty state. */
+  getFileLUT3DSnapshot(): LUT3DSnapshot;
+
+  /** Get the Display LUT texture data and dirty state. */
+  getDisplayLUT3DSnapshot(): LUT3DSnapshot;
 
   /**
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty'): void;
+  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty' | 'fileLUT3DDirty' | 'displayLUT3DDirty'): void;
 }

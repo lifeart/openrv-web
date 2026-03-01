@@ -61,6 +61,8 @@ export const DIRTY_PREMULT = 'premult';
 export const DIRTY_DITHER = 'dither';
 export const DIRTY_SPHERICAL = 'spherical';
 export const DIRTY_COLOR_PRIMARIES = 'colorPrimaries';
+export const DIRTY_FILE_LUT3D = 'fileLut3d';
+export const DIRTY_DISPLAY_LUT3D = 'displayLut3d';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -78,6 +80,8 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_DITHER,
   DIRTY_SPHERICAL,
   DIRTY_COLOR_PRIMARIES,
+  DIRTY_FILE_LUT3D,
+  DIRTY_DISPLAY_LUT3D,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -282,12 +286,32 @@ export interface InternalShaderState {
   // Channel mode
   channelModeCode: number;
 
-  // 3D LUT
+  // Look LUT (renamed from lut3D -- per-source creative grade)
   lut3DEnabled: boolean;
   lut3DIntensity: number;
   lut3DSize: number;
   lut3DDirty: boolean;
   lut3DData: Float32Array | null;
+  lookLUT3DDomainMin: [number, number, number];
+  lookLUT3DDomainMax: [number, number, number];
+
+  // File LUT (per-source, applied after EOTF, before input primaries)
+  fileLUT3DEnabled: boolean;
+  fileLUT3DIntensity: number;
+  fileLUT3DSize: number;
+  fileLUT3DDirty: boolean;
+  fileLUT3DData: Float32Array | null;
+  fileLUT3DDomainMin: [number, number, number];
+  fileLUT3DDomainMax: [number, number, number];
+
+  // Display LUT (session-wide, after output primaries, before display transfer)
+  displayLUT3DEnabled: boolean;
+  displayLUT3DIntensity: number;
+  displayLUT3DSize: number;
+  displayLUT3DDirty: boolean;
+  displayLUT3DData: Float32Array | null;
+  displayLUT3DDomainMin: [number, number, number];
+  displayLUT3DDomainMax: [number, number, number];
 
   // Display color management
   displayTransferCode: number;
@@ -439,6 +463,22 @@ function createDefaultInternalState(): InternalShaderState {
     lut3DSize: 0,
     lut3DDirty: true,
     lut3DData: null,
+    lookLUT3DDomainMin: [0, 0, 0],
+    lookLUT3DDomainMax: [1, 1, 1],
+    fileLUT3DEnabled: false,
+    fileLUT3DIntensity: 1.0,
+    fileLUT3DSize: 0,
+    fileLUT3DDirty: true,
+    fileLUT3DData: null,
+    fileLUT3DDomainMin: [0, 0, 0],
+    fileLUT3DDomainMax: [1, 1, 1],
+    displayLUT3DEnabled: false,
+    displayLUT3DIntensity: 1.0,
+    displayLUT3DSize: 0,
+    displayLUT3DDirty: true,
+    displayLUT3DData: null,
+    displayLUT3DDomainMin: [0, 0, 0],
+    displayLUT3DDomainMax: [1, 1, 1],
     displayTransferCode: DISPLAY_TRANSFER_SRGB,
     displayGammaOverride: 1.0,
     displayBrightnessMultiplier: 1.0,
@@ -534,12 +574,16 @@ export interface TextureCallbacks {
   bindCurvesLUTTexture(): void;
   /** Ensure false color LUT texture exists, upload if dirty, activate TEXTURE2, bind. */
   bindFalseColorLUTTexture(): void;
-  /** Ensure 3D LUT texture exists, upload if dirty, activate TEXTURE3, bind. */
+  /** Ensure 3D LUT (Look) texture exists, upload if dirty, activate TEXTURE3, bind. */
   bindLUT3DTexture(): void;
   /** Ensure film LUT texture exists, upload if dirty, activate TEXTURE4, bind. */
   bindFilmLUTTexture(): void;
   /** Ensure inline LUT texture exists, upload if dirty, activate TEXTURE5, bind. */
   bindInlineLUTTexture(): void;
+  /** Ensure File LUT 3D texture exists, upload if dirty, activate TEXTURE6, bind. */
+  bindFileLUT3DTexture(): void;
+  /** Ensure Display LUT 3D texture exists, upload if dirty, activate TEXTURE7, bind. */
+  bindDisplayLUT3DTexture(): void;
   /** Get the current canvas dimensions for u_resolution. */
   getCanvasSize(): { width: number; height: number };
 }
@@ -562,6 +606,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   private cachedCurvesSnapshot: CurvesLUTSnapshot | null = null;
   private cachedFalseColorSnapshot: FalseColorLUTSnapshot | null = null;
   private cachedLUT3DSnapshot: LUT3DSnapshot | null = null;
+  private cachedFileLUT3DSnapshot: LUT3DSnapshot | null = null;
+  private cachedDisplayLUT3DSnapshot: LUT3DSnapshot | null = null;
 
   // --- Cached getter copies (invalidated on change) ---
   private cachedColorAdjustments: ColorAdjustments | null = null;
@@ -641,7 +687,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty'): void {
+  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty' | 'fileLUT3DDirty' | 'displayLUT3DDirty'): void {
     this.state[flag] = false;
     // Invalidate the corresponding cached snapshot since dirty changed
     if (flag === 'curvesLUTDirty') {
@@ -650,6 +696,10 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.cachedFalseColorSnapshot = null;
     } else if (flag === 'lut3DDirty') {
       this.cachedLUT3DSnapshot = null;
+    } else if (flag === 'fileLUT3DDirty') {
+      this.cachedFileLUT3DSnapshot = null;
+    } else if (flag === 'displayLUT3DDirty') {
+      this.cachedDisplayLUT3DSnapshot = null;
     }
     // filmLUTDirty has no cached snapshot
   }
@@ -687,6 +737,28 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       };
     }
     return this.cachedLUT3DSnapshot;
+  }
+
+  getFileLUT3DSnapshot(): LUT3DSnapshot {
+    if (!this.cachedFileLUT3DSnapshot) {
+      this.cachedFileLUT3DSnapshot = {
+        dirty: this.state.fileLUT3DDirty,
+        data: this.state.fileLUT3DData,
+        size: this.state.fileLUT3DSize,
+      };
+    }
+    return this.cachedFileLUT3DSnapshot;
+  }
+
+  getDisplayLUT3DSnapshot(): LUT3DSnapshot {
+    if (!this.cachedDisplayLUT3DSnapshot) {
+      this.cachedDisplayLUT3DSnapshot = {
+        dirty: this.state.displayLUT3DDirty,
+        data: this.state.displayLUT3DData,
+        size: this.state.displayLUT3DSize,
+      };
+    }
+    return this.cachedDisplayLUT3DSnapshot;
   }
 
   // -----------------------------------------------------------------------
@@ -848,6 +920,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   }
 
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void {
+    this.setLookLUT(lutData, lutSize, intensity);
+  }
+
+  setLookLUT(
+    lutData: Float32Array | null,
+    lutSize: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
     this.dirtyFlags.add(DIRTY_LUT3D);
     this.cachedLUT3DSnapshot = null;
     if (!lutData || lutSize === 0) {
@@ -862,6 +944,106 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.lut3DSize = lutSize;
     this.state.lut3DIntensity = intensity;
     this.state.lut3DDirty = true;
+    if (domainMin) {
+      this.state.lookLUT3DDomainMin[0] = domainMin[0];
+      this.state.lookLUT3DDomainMin[1] = domainMin[1];
+      this.state.lookLUT3DDomainMin[2] = domainMin[2];
+    } else {
+      this.state.lookLUT3DDomainMin[0] = 0;
+      this.state.lookLUT3DDomainMin[1] = 0;
+      this.state.lookLUT3DDomainMin[2] = 0;
+    }
+    if (domainMax) {
+      this.state.lookLUT3DDomainMax[0] = domainMax[0];
+      this.state.lookLUT3DDomainMax[1] = domainMax[1];
+      this.state.lookLUT3DDomainMax[2] = domainMax[2];
+    } else {
+      this.state.lookLUT3DDomainMax[0] = 1;
+      this.state.lookLUT3DDomainMax[1] = 1;
+      this.state.lookLUT3DDomainMax[2] = 1;
+    }
+  }
+
+  setFileLUT(
+    lutData: Float32Array | null,
+    lutSize: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
+    this.dirtyFlags.add(DIRTY_FILE_LUT3D);
+    this.cachedFileLUT3DSnapshot = null;
+    if (!lutData || lutSize === 0) {
+      this.state.fileLUT3DEnabled = false;
+      this.state.fileLUT3DData = null;
+      this.state.fileLUT3DSize = 0;
+      this.state.fileLUT3DIntensity = intensity;
+      return;
+    }
+    this.state.fileLUT3DEnabled = true;
+    this.state.fileLUT3DData = lutData;
+    this.state.fileLUT3DSize = lutSize;
+    this.state.fileLUT3DIntensity = intensity;
+    this.state.fileLUT3DDirty = true;
+    if (domainMin) {
+      this.state.fileLUT3DDomainMin[0] = domainMin[0];
+      this.state.fileLUT3DDomainMin[1] = domainMin[1];
+      this.state.fileLUT3DDomainMin[2] = domainMin[2];
+    } else {
+      this.state.fileLUT3DDomainMin[0] = 0;
+      this.state.fileLUT3DDomainMin[1] = 0;
+      this.state.fileLUT3DDomainMin[2] = 0;
+    }
+    if (domainMax) {
+      this.state.fileLUT3DDomainMax[0] = domainMax[0];
+      this.state.fileLUT3DDomainMax[1] = domainMax[1];
+      this.state.fileLUT3DDomainMax[2] = domainMax[2];
+    } else {
+      this.state.fileLUT3DDomainMax[0] = 1;
+      this.state.fileLUT3DDomainMax[1] = 1;
+      this.state.fileLUT3DDomainMax[2] = 1;
+    }
+  }
+
+  setDisplayLUT(
+    lutData: Float32Array | null,
+    lutSize: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
+    this.dirtyFlags.add(DIRTY_DISPLAY_LUT3D);
+    this.cachedDisplayLUT3DSnapshot = null;
+    if (!lutData || lutSize === 0) {
+      this.state.displayLUT3DEnabled = false;
+      this.state.displayLUT3DData = null;
+      this.state.displayLUT3DSize = 0;
+      this.state.displayLUT3DIntensity = intensity;
+      return;
+    }
+    this.state.displayLUT3DEnabled = true;
+    this.state.displayLUT3DData = lutData;
+    this.state.displayLUT3DSize = lutSize;
+    this.state.displayLUT3DIntensity = intensity;
+    this.state.displayLUT3DDirty = true;
+    if (domainMin) {
+      this.state.displayLUT3DDomainMin[0] = domainMin[0];
+      this.state.displayLUT3DDomainMin[1] = domainMin[1];
+      this.state.displayLUT3DDomainMin[2] = domainMin[2];
+    } else {
+      this.state.displayLUT3DDomainMin[0] = 0;
+      this.state.displayLUT3DDomainMin[1] = 0;
+      this.state.displayLUT3DDomainMin[2] = 0;
+    }
+    if (domainMax) {
+      this.state.displayLUT3DDomainMax[0] = domainMax[0];
+      this.state.displayLUT3DDomainMax[1] = domainMax[1];
+      this.state.displayLUT3DDomainMax[2] = domainMax[2];
+    } else {
+      this.state.displayLUT3DDomainMax[0] = 1;
+      this.state.displayLUT3DDomainMax[1] = 1;
+      this.state.displayLUT3DDomainMax[2] = 1;
+    }
   }
 
   getDisplayColorState(): DisplayColorConfig {
@@ -1270,12 +1452,46 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     }
 
-    // --- LUT 3D (3 uniforms) ---
+    // --- Look LUT 3D (via legacy lut field or new lookLUT) ---
     {
-      const l = renderState.lut;
-      if (l.data !== s.lut3DData || l.size !== s.lut3DSize || l.intensity !== s.lut3DIntensity) {
-        this.setLUT(l.data, l.size, l.intensity);
+      const lookLUT = renderState.lookLUT;
+      if (lookLUT) {
+        if (lookLUT.data !== s.lut3DData || lookLUT.size !== s.lut3DSize || lookLUT.intensity !== s.lut3DIntensity ||
+            lookLUT.domainMin[0] !== s.lookLUT3DDomainMin[0] || lookLUT.domainMin[1] !== s.lookLUT3DDomainMin[1] || lookLUT.domainMin[2] !== s.lookLUT3DDomainMin[2] ||
+            lookLUT.domainMax[0] !== s.lookLUT3DDomainMax[0] || lookLUT.domainMax[1] !== s.lookLUT3DDomainMax[1] || lookLUT.domainMax[2] !== s.lookLUT3DDomainMax[2]) {
+          this.setLookLUT(lookLUT.data, lookLUT.size, lookLUT.intensity, lookLUT.domainMin, lookLUT.domainMax);
+        }
+      } else {
+        // Legacy path: use lut field
+        const l = renderState.lut;
+        if (l.data !== s.lut3DData || l.size !== s.lut3DSize || l.intensity !== s.lut3DIntensity) {
+          this.setLUT(l.data, l.size, l.intensity);
+        }
       }
+    }
+
+    // --- File LUT 3D ---
+    if (renderState.fileLUT) {
+      const fl = renderState.fileLUT;
+      if (fl.data !== s.fileLUT3DData || fl.size !== s.fileLUT3DSize || fl.intensity !== s.fileLUT3DIntensity ||
+          fl.domainMin[0] !== s.fileLUT3DDomainMin[0] || fl.domainMin[1] !== s.fileLUT3DDomainMin[1] || fl.domainMin[2] !== s.fileLUT3DDomainMin[2] ||
+          fl.domainMax[0] !== s.fileLUT3DDomainMax[0] || fl.domainMax[1] !== s.fileLUT3DDomainMax[1] || fl.domainMax[2] !== s.fileLUT3DDomainMax[2]) {
+        this.setFileLUT(fl.data, fl.size, fl.intensity, fl.domainMin, fl.domainMax);
+      }
+    } else if (s.fileLUT3DEnabled) {
+      this.setFileLUT(null, 0, 0);
+    }
+
+    // --- Display LUT 3D ---
+    if (renderState.displayLUT) {
+      const dl = renderState.displayLUT;
+      if (dl.data !== s.displayLUT3DData || dl.size !== s.displayLUT3DSize || dl.intensity !== s.displayLUT3DIntensity ||
+          dl.domainMin[0] !== s.displayLUT3DDomainMin[0] || dl.domainMin[1] !== s.displayLUT3DDomainMin[1] || dl.domainMin[2] !== s.displayLUT3DDomainMin[2] ||
+          dl.domainMax[0] !== s.displayLUT3DDomainMax[0] || dl.domainMax[1] !== s.displayLUT3DDomainMax[1] || dl.domainMax[2] !== s.displayLUT3DDomainMax[2]) {
+        this.setDisplayLUT(dl.data, dl.size, dl.intensity, dl.domainMin, dl.domainMax);
+      }
+    } else if (s.displayLUT3DEnabled) {
+      this.setDisplayLUT(null, 0, 0);
     }
 
     // --- Display color (4 uniforms) ---
@@ -1619,12 +1835,36 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       shader.setUniformInt('u_channelMode', s.channelModeCode);
     }
 
-    // 3D LUT
+    // Look LUT (renamed from u_lut3D)
     if (dirty.has(DIRTY_LUT3D)) {
-      shader.setUniformInt('u_lut3DEnabled', s.lut3DEnabled ? 1 : 0);
+      shader.setUniformInt('u_lookLUT3DEnabled', s.lut3DEnabled ? 1 : 0);
       if (s.lut3DEnabled) {
-        shader.setUniform('u_lut3DIntensity', s.lut3DIntensity);
-        shader.setUniform('u_lut3DSize', s.lut3DSize);
+        shader.setUniform('u_lookLUT3DIntensity', s.lut3DIntensity);
+        shader.setUniform('u_lookLUT3DSize', s.lut3DSize);
+        shader.setUniform('u_lookLUT3DDomainMin', s.lookLUT3DDomainMin);
+        shader.setUniform('u_lookLUT3DDomainMax', s.lookLUT3DDomainMax);
+      }
+    }
+
+    // File LUT
+    if (dirty.has(DIRTY_FILE_LUT3D)) {
+      shader.setUniformInt('u_fileLUT3DEnabled', s.fileLUT3DEnabled ? 1 : 0);
+      if (s.fileLUT3DEnabled) {
+        shader.setUniform('u_fileLUT3DIntensity', s.fileLUT3DIntensity);
+        shader.setUniform('u_fileLUT3DSize', s.fileLUT3DSize);
+        shader.setUniform('u_fileLUT3DDomainMin', s.fileLUT3DDomainMin);
+        shader.setUniform('u_fileLUT3DDomainMax', s.fileLUT3DDomainMax);
+      }
+    }
+
+    // Display LUT
+    if (dirty.has(DIRTY_DISPLAY_LUT3D)) {
+      shader.setUniformInt('u_displayLUT3DEnabled', s.displayLUT3DEnabled ? 1 : 0);
+      if (s.displayLUT3DEnabled) {
+        shader.setUniform('u_displayLUT3DIntensity', s.displayLUT3DIntensity);
+        shader.setUniform('u_displayLUT3DSize', s.displayLUT3DSize);
+        shader.setUniform('u_displayLUT3DDomainMin', s.displayLUT3DDomainMin);
+        shader.setUniform('u_displayLUT3DDomainMax', s.displayLUT3DDomainMax);
       }
     }
 
@@ -1834,9 +2074,11 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     if (!this._textureUnitsInitialized) {
       shader.setUniformInt('u_curvesLUT', 1);
       shader.setUniformInt('u_falseColorLUT', 2);
-      shader.setUniformInt('u_lut3D', 3);
+      shader.setUniformInt('u_lookLUT3D', 3);
       shader.setUniformInt('u_filmLUT', 4);
       shader.setUniformInt('u_inlineLUT', 5);
+      shader.setUniformInt('u_fileLUT3D', 6);
+      shader.setUniformInt('u_displayLUT3D', 7);
       this._textureUnitsInitialized = true;
     }
 
@@ -1850,7 +2092,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       texCb.bindFalseColorLUTTexture();
     }
 
-    // Texture unit 3: 3D LUT
+    // Texture unit 3: Look LUT (3D)
     if (s.lut3DEnabled) {
       texCb.bindLUT3DTexture();
     }
@@ -1863,6 +2105,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     // Texture unit 5: inline 1D LUT (RVColor luminanceLUT)
     if (s.inlineLUTEnabled) {
       texCb.bindInlineLUTTexture();
+    }
+
+    // Texture unit 6: File LUT (3D)
+    if (s.fileLUT3DEnabled) {
+      texCb.bindFileLUT3DTexture();
+    }
+
+    // Texture unit 7: Display LUT (3D)
+    if (s.displayLUT3DEnabled) {
+      texCb.bindDisplayLUT3DTexture();
     }
 
     // Clear all dirty flags after uniforms have been set
@@ -1879,6 +2131,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.cachedCurvesSnapshot = null;
     this.cachedFalseColorSnapshot = null;
     this.cachedLUT3DSnapshot = null;
+    this.cachedFileLUT3DSnapshot = null;
+    this.cachedDisplayLUT3DSnapshot = null;
     this.cachedColorAdjustments = null;
     this.cachedToneMappingState = null;
     this._textureUnitsInitialized = false;

@@ -73,11 +73,29 @@
       // Channel Isolation
       uniform int u_channelMode; // 0=rgb, 1=red, 2=green, 3=blue, 4=alpha, 5=luminance
 
-      // 3D LUT (single-pass float precision)
-      uniform sampler3D u_lut3D;
-      uniform bool u_lut3DEnabled;
-      uniform float u_lut3DIntensity;
-      uniform float u_lut3DSize;
+      // File LUT (per-source, applied after EOTF, before/instead-of input primaries)
+      uniform sampler3D u_fileLUT3D;
+      uniform bool u_fileLUT3DEnabled;
+      uniform float u_fileLUT3DIntensity;
+      uniform float u_fileLUT3DSize;
+      uniform vec3 u_fileLUT3DDomainMin;
+      uniform vec3 u_fileLUT3DDomainMax;
+
+      // Look LUT (per-source, creative grade -- renamed from u_lut3D)
+      uniform sampler3D u_lookLUT3D;
+      uniform bool u_lookLUT3DEnabled;
+      uniform float u_lookLUT3DIntensity;
+      uniform float u_lookLUT3DSize;
+      uniform vec3 u_lookLUT3DDomainMin;
+      uniform vec3 u_lookLUT3DDomainMax;
+
+      // Display LUT (session-wide, applied after output primaries, before display transfer)
+      uniform sampler3D u_displayLUT3D;
+      uniform bool u_displayLUT3DEnabled;
+      uniform float u_displayLUT3DIntensity;
+      uniform float u_displayLUT3DSize;
+      uniform vec3 u_displayLUT3DDomainMin;
+      uniform vec3 u_displayLUT3DDomainMax;
 
       // Display transfer function
       uniform int u_displayTransfer;    // 0=linear, 1=sRGB, 2=rec709, 3=gamma2.2, 4=gamma2.4, 5=custom
@@ -578,14 +596,16 @@
         );
       }
 
-      // Apply 3D LUT with trilinear interpolation
-      vec3 applyLUT3D(vec3 color) {
-        vec3 c = clamp(color, 0.0, 1.0);
-        float offset = 0.5 / u_lut3DSize;
-        float scale = (u_lut3DSize - 1.0) / u_lut3DSize;
-        vec3 lutCoord = c * scale + offset;
-        vec3 lutColor = texture(u_lut3D, lutCoord).rgb;
-        return mix(color, lutColor, u_lut3DIntensity);
+      // Generic 3D LUT application with domain mapping, trilinear interpolation, and intensity blend
+      vec3 applyLUT3DGeneric(sampler3D lut, vec3 color, float lutSize, float intensity,
+                             vec3 domainMin, vec3 domainMax) {
+        vec3 normalized = (color - domainMin) / (domainMax - domainMin);
+        normalized = clamp(normalized, 0.0, 1.0);
+        float offset = 0.5 / lutSize;
+        float scale = (lutSize - 1.0) / lutSize;
+        vec3 lutCoord = normalized * scale + offset;
+        vec3 lutColor = texture(lut, lutCoord).rgb;
+        return mix(color, lutColor, intensity);
       }
 
       // Display transfer functions (linear -> display encoded)
@@ -1020,9 +1040,18 @@
           }
         }
 
-        // 0e. Input primaries normalization (source → BT.709 working space)
-        if (u_inputPrimariesEnabled) {
-            color.rgb = u_inputPrimariesMatrix * color.rgb;
+        // 0e-alt. File LUT (per-source input device transform)
+        // When active, bypasses automatic input primaries conversion
+        if (u_fileLUT3DEnabled) {
+          color.rgb = applyLUT3DGeneric(u_fileLUT3D, color.rgb, u_fileLUT3DSize,
+                                         u_fileLUT3DIntensity, u_fileLUT3DDomainMin,
+                                         u_fileLUT3DDomainMax);
+          // Skip input primaries -- the File LUT handles the full IDT
+        } else {
+          // 0e. Input primaries normalization (source → BT.709 working space)
+          if (u_inputPrimariesEnabled) {
+              color.rgb = u_inputPrimariesMatrix * color.rgb;
+          }
         }
 
         // 1. Exposure (in stops, applied in linear space, per-channel)
@@ -1200,9 +1229,11 @@
           color.rgb = cc + excess;
         }
 
-        // 6d. 3D LUT (single-pass, float precision)
-        if (u_lut3DEnabled) {
-          color.rgb = applyLUT3D(color.rgb);
+        // 6d. Look LUT (per-source creative grade)
+        if (u_lookLUT3DEnabled) {
+          color.rgb = applyLUT3DGeneric(u_lookLUT3D, color.rgb, u_lookLUT3DSize,
+                                         u_lookLUT3DIntensity, u_lookLUT3DDomainMin,
+                                         u_lookLUT3DDomainMax);
         }
 
         // 6e. HSL Qualifier (secondary color correction)
@@ -1318,6 +1349,13 @@
         // 7c. Output primaries conversion (BT.709 working space → display gamut)
         if (u_outputPrimariesEnabled) {
             color.rgb = u_outputPrimariesMatrix * color.rgb;
+        }
+
+        // 7d. Display LUT (session-wide display calibration)
+        if (u_displayLUT3DEnabled) {
+          color.rgb = applyLUT3DGeneric(u_displayLUT3D, color.rgb, u_displayLUT3DSize,
+                                         u_displayLUT3DIntensity, u_displayLUT3DDomainMin,
+                                         u_displayLUT3DDomainMax);
         }
 
         // 8. Display output: display transfer function and creative gamma are

@@ -635,6 +635,21 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
+  setFileLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+    // TODO: implement multi-point LUT pipeline for worker proxy
+    this.hasDirtyState = true;
+  }
+
+  setLookLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+    // TODO: implement multi-point LUT pipeline for worker proxy
+    this.hasDirtyState = true;
+  }
+
+  setDisplayLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+    // TODO: implement multi-point LUT pipeline for worker proxy
+    this.hasDirtyState = true;
+  }
+
   setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void {
     this.dirtyState.displayColorState = state;
     this.hasDirtyState = true;
