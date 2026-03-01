@@ -60,6 +60,7 @@ import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { VirtualSliderController } from './ui/components/VirtualSliderController';
 
 const log = new Logger('App');
 
@@ -99,6 +100,7 @@ export class App {
   private cacheManager: MediaCacheManager;
   private audioOrchestrator: AudioOrchestrator;
   private dccBridge: DCCBridge | null = null;
+  private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
   private layoutOrchestrator!: LayoutOrchestrator;
 
@@ -494,6 +496,15 @@ export class App {
 
     const stackState = wireStackControls(wiringCtx);
     this.wiringSubscriptions.add(() => stackState?.subscriptions?.dispose());
+
+    // Virtual slider controller (key-hold-to-adjust color parameters)
+    this.virtualSliderController = new VirtualSliderController({
+      colorControls: this.controls.colorControls,
+      container: this.viewer.getContainer(),
+      keyboardManager: this.keyboardManager,
+      viewerQuery: { isInteracting: () => this.viewer.isInteracting() },
+    });
+    this.wiringSubscriptions.add(() => this.virtualSliderController?.dispose());
 
     // Timeline editor wiring (EDL/SequenceGroup integration)
     this.timelineEditorService.bindEvents();
