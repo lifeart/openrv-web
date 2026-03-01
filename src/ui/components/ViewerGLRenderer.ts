@@ -44,6 +44,7 @@ import { isNoiseReductionActive } from '../../filters/NoiseReduction';
 import { type FilmEmulationParams, getFilmStock } from '../../filters/FilmEmulation';
 import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { isPerspectiveActive, computeInverseHomographyFloat32 } from '../../transform/PerspectiveCorrection';
+import type { LuminanceVisualization } from './LuminanceVisualization';
 import type { AutoExposureState, GamutMappingState, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_AUTO_EXPOSURE_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { AutoExposureController } from '../../color/AutoExposureController';
@@ -77,6 +78,7 @@ export interface GLRendererContext {
   getFilmEmulationParams(): FilmEmulationParams;
   getPerspectiveParams(): PerspectiveCorrectionParams;
   getGamutMappingState(): GamutMappingState;
+  getLuminanceVisualization(): LuminanceVisualization;
 }
 
 // Deinterlace method → shader integer code
@@ -472,6 +474,32 @@ export class ViewerGLRenderer {
     const colorPipeline = this.ctx.getColorPipeline();
     const adj = colorPipeline.colorAdjustments;
     const lut = colorPipeline.currentLUT;
+
+    // Start with false color state from FalseColor component
+    let falseColorState = { enabled: this.ctx.getFalseColor().isEnabled(), lut: this.ctx.getFalseColor().getColorLUT() };
+
+    // Luminance vis: override false color LUT for HSV/Random modes
+    const lumVis = this.ctx.getLuminanceVisualization();
+    const lumVisMode = lumVis.getMode();
+    if (lumVisMode === 'hsv') {
+      falseColorState = { enabled: true, lut: lumVis.getHsvLUT() };
+    } else if (lumVisMode === 'random-color') {
+      falseColorState = { enabled: true, lut: lumVis.buildRandomLUT256() };
+    }
+
+    // Contour state for GPU processing
+    const lumVisState = lumVis.getState();
+    const luminanceVisRenderState = {
+      mode: (lumVisMode === 'false-color' ? 'off' : lumVisMode) as 'off' | 'hsv' | 'random-color' | 'contour',
+      contourLevels: lumVisState.contourLevels,
+      contourDesaturate: lumVisState.contourDesaturate,
+      contourLineColor: [
+        lumVisState.contourLineColor[0] / 255,
+        lumVisState.contourLineColor[1] / 255,
+        lumVisState.contourLineColor[2] / 255,
+      ] as [number, number, number],
+    };
+
     return {
       colorAdjustments: adj,
       colorInversion: colorPipeline.colorInversionEnabled,
@@ -480,7 +508,7 @@ export class ViewerGLRenderer {
       cdl: colorPipeline.cdlValues,
       curvesLUT: isDefaultCurves(colorPipeline.curvesData) ? null : buildAllCurveLUTs(colorPipeline.curvesData),
       colorWheels: this.ctx.getColorWheels().getState(),
-      falseColor: { enabled: this.ctx.getFalseColor().isEnabled(), lut: this.ctx.getFalseColor().getColorLUT() },
+      falseColor: falseColorState,
       zebraStripes: this.ctx.getZebraStripes().getState(),
       channelMode: this.ctx.getChannelMode(),
       lut: lut && colorPipeline.lutIntensity > 0
@@ -501,6 +529,7 @@ export class ViewerGLRenderer {
       filmEmulation: this.buildFilmEmulationState(),
       perspective: this.buildPerspectiveState(),
       gamutMapping: this.ctx.getGamutMappingState(),
+      luminanceVis: luminanceVisRenderState,
     };
   }
 

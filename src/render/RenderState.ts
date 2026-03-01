@@ -19,6 +19,15 @@ export interface DisplayColorConfig {
   customGamma: number;
 }
 
+export interface LuminanceVisRenderState {
+  mode: 'off' | 'hsv' | 'random-color' | 'contour';
+  // HSV/Random modes: the 256-entry LUT is passed via falseColor.lut
+  // Contour mode:
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number]; // RGB normalized 0-1
+}
+
 export interface RenderState {
   colorAdjustments: ColorAdjustments;
   colorInversion: boolean;
@@ -49,4 +58,5 @@ export interface RenderState {
   ditherMode?: number;   // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
   quantizeBits?: number; // 0=off, 2-16 = target bit depth for quantize/posterize
   textureFilterMode?: TextureFilterMode; // 'nearest' or 'linear' (default)
+  luminanceVis?: LuminanceVisRenderState;
 }

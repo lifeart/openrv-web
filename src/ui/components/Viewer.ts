@@ -383,6 +383,7 @@ export class Viewer {
       getPerspectiveParams: () => this.getPerspectiveParams(),
       getGamutMappingState: () => this.getGamutMappingState(),
       getNoiseReductionParams: () => this.getNoiseReductionParams(),
+      getLuminanceVisualization: () => this.overlayManager.getLuminanceVisualization(),
     };
   }
 
