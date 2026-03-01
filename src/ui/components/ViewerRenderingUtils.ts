@@ -95,14 +95,16 @@ export function drawWithTransform(
     ctx.scale(scaleX, scaleY);
   }
 
-  // For 90/270 rotation, draw in swapped dimensions before rotation so the
-  // rotated bounds match the already-rotated layout box.
-  let drawWidth = displayWidth;
-  let drawHeight = displayHeight;
-  if (rotation === 90 || rotation === 270) {
-    drawWidth = displayHeight;
-    drawHeight = displayWidth;
-  }
+  // Compute draw dimensions using AABB: scale the source so the rotated
+  // bounding box fits within the display area.
+  const sourceW = (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || displayWidth;
+  const sourceH = (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || displayHeight;
+  const { width: bbW, height: bbH } = getEffectiveDimensions(sourceW, sourceH, rotation);
+  const fitScaleX = displayWidth / bbW;
+  const fitScaleY = displayHeight / bbH;
+  const fitScale = Math.min(fitScaleX, fitScaleY);
+  const drawWidth = sourceW * fitScale;
+  const drawHeight = sourceH * fitScale;
 
   // Draw centered
   ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -497,15 +499,16 @@ export function drawWithTransformFill(
     ctx.scale(scaleX, scaleY);
   }
 
-  // For 90/270 rotation, swap draw dimensions since the canvas is already swapped
-  let drawWidth = canvasWidth;
-  let drawHeight = canvasHeight;
-  if (rotation === 90 || rotation === 270) {
-    // Canvas dimensions are swapped (height x width), so we draw with swapped dimensions
-    // to fill the canvas after rotation
-    drawWidth = canvasHeight;
-    drawHeight = canvasWidth;
-  }
+  // Compute draw dimensions from AABB: the canvas is sized to the bounding box,
+  // so we need to figure out the source dimensions to draw at.
+  const sourceW = (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || canvasWidth;
+  const sourceH = (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || canvasHeight;
+  const { width: bbW, height: bbH } = getEffectiveDimensions(sourceW, sourceH, rotation);
+  const fitScaleX = canvasWidth / bbW;
+  const fitScaleY = canvasHeight / bbH;
+  const fitScale = Math.min(fitScaleX, fitScaleY);
+  const drawWidth = sourceW * fitScale;
+  const drawHeight = sourceH * fitScale;
 
   // Draw centered (will fill canvas after transform)
   ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -515,15 +518,29 @@ export function drawWithTransformFill(
 
 /**
  * Get effective dimensions after rotation transform.
- * For 90/270 rotation, width and height are swapped.
+ * Computes the axis-aligned bounding box (AABB) of the rotated rectangle.
+ * For cardinal angles (0, 90, 180, 270), this produces exact results
+ * identical to the previous swap-based implementation.
  */
 export function getEffectiveDimensions(
   width: number,
   height: number,
-  rotation: 0 | 90 | 180 | 270
+  rotation: number
 ): { width: number; height: number } {
-  if (rotation === 90 || rotation === 270) {
-    return { width: height, height: width };
-  }
-  return { width, height };
+  const rad = (rotation * Math.PI) / 180;
+  let absCos = Math.abs(Math.cos(rad));
+  let absSin = Math.abs(Math.sin(rad));
+
+  // Epsilon snap for cardinal angles: Math.cos(PI/2) is ~6.12e-17, not 0.
+  // Without this, ceil() can produce off-by-one dimensions at 90/180/270.
+  const EPSILON = 1e-10;
+  if (absCos < EPSILON) absCos = 0;
+  if (absSin < EPSILON) absSin = 0;
+  if (Math.abs(absCos - 1) < EPSILON) absCos = 1;
+  if (Math.abs(absSin - 1) < EPSILON) absSin = 1;
+
+  return {
+    width: Math.ceil(width * absCos + height * absSin),
+    height: Math.ceil(width * absSin + height * absCos),
+  };
 }

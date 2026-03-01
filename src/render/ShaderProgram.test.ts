@@ -35,6 +35,7 @@ function createMockGL() {
     uniform2iv: vi.fn(),
     uniform3iv: vi.fn(),
     uniform4iv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix3fv: vi.fn(),
     uniformMatrix4fv: vi.fn(),
   } as unknown as WebGL2RenderingContext;

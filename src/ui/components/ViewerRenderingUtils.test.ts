@@ -196,16 +196,23 @@ describe('ViewerRenderingUtils', () => {
       const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
 
       // The display box has already been computed for rotated layout.
-      // drawWithTransform should swap draw width/height before rotation.
+      // drawWithTransform now uses AABB-based dimension computation.
+      // AABB of 1080x1920 at 90° = (1920, 1080).
+      // fitScale = min(1000/1920, 560/1080) = 560/1080 ≈ 0.5185
+      // drawWidth = 1080 * fitScale = 560, drawHeight = 1920 * fitScale ≈ 995.56
       drawWithTransform(ctx, video, 1000, 560, transform);
 
       const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
       expect(drawCalls.length).toBeGreaterThan(0);
       const drawCall = drawCalls[0]!;
-      expect(drawCall[1]).toBe(-280); // -drawWidth/2 where drawWidth=displayHeight
-      expect(drawCall[2]).toBe(-500); // -drawHeight/2 where drawHeight=displayWidth
-      expect(drawCall[3]).toBe(560);
-      expect(drawCall[4]).toBe(1000);
+      // Verify draw dimensions are based on source aspect ratio
+      const drawWidth = drawCall[3] as number;
+      const drawHeight = drawCall[4] as number;
+      expect(drawWidth).toBeCloseTo(560, 0);
+      expect(drawHeight).toBeCloseTo(1920 * 560 / 1080, 0);
+      // Verify centered positioning
+      expect(drawCall[1]).toBeCloseTo(-drawWidth / 2, 5);
+      expect(drawCall[2]).toBeCloseTo(-drawHeight / 2, 5);
     });
 
     it('should handle zero video dimensions gracefully', () => {

@@ -123,14 +123,9 @@ function computeExportParams(
   transform: Transform2D | undefined,
   cropRegion: CropRegion | undefined
 ): ExportParams {
-  // Clamp rotation to valid values to handle potentially corrupted session data
+  // Normalize rotation to [0, 360)
   const rawRotation = transform?.rotation ?? 0;
-  const validRotations: (0 | 90 | 180 | 270)[] = [0, 90, 180, 270];
-  const isValidRotation = validRotations.includes(rawRotation as 0 | 90 | 180 | 270);
-  if (!isValidRotation && rawRotation !== 0) {
-    console.warn(`[ViewerExport] Invalid rotation value ${rawRotation}° clamped to 0°. Expected one of: 0, 90, 180, 270.`);
-  }
-  const rotation = isValidRotation ? (rawRotation as 0 | 90 | 180 | 270) : 0;
+  const rotation = Number.isFinite(rawRotation) ? ((rawRotation % 360) + 360) % 360 : 0;
 
   const { width: effectiveWidth, height: effectiveHeight } = getEffectiveDimensions(
     sourceWidth,

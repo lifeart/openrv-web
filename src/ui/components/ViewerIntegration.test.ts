@@ -690,7 +690,7 @@ describe('Viewer Integration Tests', () => {
     });
 
     it('INT-052: transform changes with multiple renders', () => {
-      const rotations: (0 | 90 | 180 | 270)[] = [0, 90, 180, 270];
+      const rotations: number[] = [0, 90, 180, 270];
 
       for (const rotation of rotations) {
         viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation });
@@ -793,7 +793,7 @@ describe('Viewer Integration Tests', () => {
     it('INT-071: handles rapid transform changes', () => {
       session.addTestSource(createMockImageSource());
 
-      const rotations: (0 | 90 | 180 | 270)[] = [0, 90, 180, 270];
+      const rotations: number[] = [0, 90, 180, 270];
       for (let i = 0; i < 20; i++) {
         viewer.setTransform({
           ...DEFAULT_TRANSFORM,

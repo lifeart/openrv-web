@@ -87,6 +87,7 @@ export function createMockRendererGL(
     uniform2iv: vi.fn(),
     uniform3iv: vi.fn(),
     uniform4iv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix3fv: vi.fn(),
     uniformMatrix4fv: vi.fn(),
     activeTexture: vi.fn(),
@@ -351,6 +352,7 @@ export function createMockWebGL2Context() {
     uniform2f: vi.fn(),
     uniform2fv: vi.fn(),
     uniform3fv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix4fv: vi.fn(),
 
     viewport: vi.fn(),
