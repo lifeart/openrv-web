@@ -183,7 +183,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
       const ratio = zoom * fitScale;
       // Check if this ratio matches a dropdown preset
       for (const level of ZOOM_LEVELS) {
-        if (level.value !== 'fit' && Math.abs(level.value - ratio) < 0.01) {
+        if (typeof level.value === 'number' && Math.abs(level.value - ratio) < 0.01) {
           this.currentZoom = level.value;
           this.dropdown.setSelectedValue(String(level.value));
           this.updateButtonLabel();

@@ -2316,6 +2316,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
