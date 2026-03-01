@@ -252,6 +252,12 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Redo last action (alternate)'
   },
 
+  // Navigation
+  'navigation.gotoFrame': {
+    code: 'KeyG',
+    description: 'Go to frame (open frame entry)',
+  },
+
   // Annotation navigation
   'annotation.previous': {
     code: 'Comma',

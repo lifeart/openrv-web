@@ -152,6 +152,7 @@ function createMockControls() {
     hideTimelineEditorPanel: vi.fn(),
     isSlateEditorPanelVisible: vi.fn().mockReturnValue(false),
     hideSlateEditorPanel: vi.fn(),
+    gotoFrameOverlay: { show: vi.fn() },
   };
 }
 

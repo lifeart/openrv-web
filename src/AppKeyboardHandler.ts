@@ -137,6 +137,7 @@ export class AppKeyboardHandler {
     const categories = {
       'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
+      'NAVIGATION': ['navigation.gotoFrame'],
       'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],

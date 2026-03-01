@@ -50,6 +50,7 @@ import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
 import { wireDCCBridge } from './AppDCCWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
+import { GotoFrameOverlay } from './ui/components/GotoFrameOverlay';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
@@ -79,6 +80,7 @@ export class App {
   private paintEngine: PaintEngine;
   private controls: AppControlRegistry;
   private noteOverlay: NoteOverlay;
+  private gotoFrameOverlay: GotoFrameOverlay;
   private renderLoop!: RenderLoopService;
   private frameNavigation!: FrameNavigationService;
   private timelineEditorService!: TimelineEditorService;
@@ -150,6 +152,9 @@ export class App {
 
     // Wire NoteOverlay into timeline for note visualization
     this.noteOverlay = new NoteOverlay(this.session);
+
+    // Create goto-frame overlay (inline text entry for frame navigation)
+    this.gotoFrameOverlay = new GotoFrameOverlay(this.session);
     this.timeline.setNoteOverlay(this.noteOverlay);
     this.timeline.setPlaylistManagers(this.controls.playlistManager, this.controls.transitionManager);
 
@@ -524,6 +529,9 @@ export class App {
     });
     this.layoutOrchestrator.createLayout();
 
+    // Mount goto-frame overlay into the viewer slot (position: relative parent)
+    this.layoutManager.getViewerSlot().appendChild(this.gotoFrameOverlay.getElement());
+
     // Re-register keyboard shortcuts now that focusManager and other
     // layout-dependent objects (fullscreenManager, shortcutCheatSheet) are
     // available.  The initial registration happened during the constructor
@@ -645,7 +653,9 @@ export class App {
       viewer: this.viewer,
       paintEngine: this.paintEngine,
       tabBar: this.tabBar,
-      controls: this.controls,
+      controls: Object.assign(this.controls, {
+        gotoFrameOverlay: this.gotoFrameOverlay,
+      }),
       activeContextManager: this.activeContextManager,
       fullscreenManager: this.fullscreenManager,
       focusManager: this.focusManager,
@@ -695,6 +705,7 @@ export class App {
 
     this.viewer.dispose();
     this.noteOverlay.dispose();
+    this.gotoFrameOverlay.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();

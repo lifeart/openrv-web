@@ -157,6 +157,7 @@ export interface ActionControls {
   hideTimelineEditorPanel(): void;
   isSlateEditorPanelVisible(): boolean;
   hideSlateEditorPanel(): void;
+  gotoFrameOverlay: { show(): void };
 }
 
 export interface ActionActiveContextManager {
@@ -531,6 +532,9 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'paint.toggleBrush': () => controls.paintToolbar.handleKeyboard('b'),
     'paint.toggleGhost': () => controls.paintToolbar.handleKeyboard('g'),
     'paint.toggleHold': () => controls.paintToolbar.handleKeyboard('x'),
+
+    // -- Navigation -------------------------------------------------------
+    'navigation.gotoFrame': () => controls.gotoFrameOverlay.show(),
 
     // -- Annotations -----------------------------------------------------
     'annotation.previous': () => frameNavigation.goToPreviousAnnotation(),
