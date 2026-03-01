@@ -59,6 +59,7 @@ export interface ActionViewer {
   getHSLQualifier(): { toggle(): void };
   getLuminanceVisualization(): { cycleMode(): void };
   getImageData(): { width: number; height: number; data: Uint8ClampedArray } | null;
+  toggleFilterMode(): void;
 }
 
 /** Subset of PaintEngine used by keyboard actions. */
@@ -594,6 +595,11 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     // -- Snapshots / Persistence -----------------------------------------
     'snapshot.create': () => {
       persistenceManager.createQuickSnapshot();
+    },
+
+    // -- Texture filter mode -----------------------------------------------
+    'view.toggleFilterMode': () => {
+      viewer.toggleFilterMode();
     },
 
     // -- Notes -----------------------------------------------------------

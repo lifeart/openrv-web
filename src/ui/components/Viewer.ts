@@ -6,6 +6,7 @@ import { ColorAdjustments } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
+import type { TextureFilterMode } from '../../core/types/filter';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
 import type { GamutMappingState } from '../../core/types/effects';
@@ -143,6 +144,7 @@ const log = new Logger('Viewer');
 const MIN_PAINT_OVERDRAW_PX = 128;
 const PAINT_OVERDRAW_STEP_PX = 64;
 const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
+const FILTER_MODE_STORAGE_KEY = 'openrv.filterMode';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
@@ -234,6 +236,12 @@ export class Viewer {
 
   // Filter effects
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
+
+  // Texture filter mode (nearest-neighbor vs bilinear)
+  private _textureFilterMode: TextureFilterMode = 'linear';
+  private filterModeIndicator: HTMLElement | null = null;
+  private filterModeTimeout: ReturnType<typeof setTimeout> | null = null;
+  private filterModeBadge: HTMLElement | null = null;
   private noiseReductionParams: NoiseReductionParams = { ...DEFAULT_NOISE_REDUCTION_PARAMS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
   private noiseReductionProcessor: ReturnType<typeof createNoiseReductionProcessor> | null = null;
@@ -668,6 +676,34 @@ export class Viewer {
     `;
     this.abIndicator.textContent = 'A';
     this.container.appendChild(this.abIndicator);
+
+    // Create filter mode persistent badge (hidden when mode is 'linear', shown for 'nearest')
+    this.filterModeBadge = document.createElement('div');
+    this.filterModeBadge.className = 'filter-mode-badge';
+    this.filterModeBadge.dataset.testid = 'filter-mode-badge';
+    this.filterModeBadge.style.cssText = `
+      position: absolute;
+      top: 10px;
+      right: 110px;
+      background: rgba(120, 200, 255, 0.9);
+      color: #000;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      z-index: 60;
+      display: none;
+      pointer-events: none;
+    `;
+    this.filterModeBadge.textContent = 'NN';
+    this.container.appendChild(this.filterModeBadge);
+
+    // Load filter mode from localStorage
+    this._textureFilterMode = this.loadFilterModePreference();
+    if (this._textureFilterMode === 'nearest') {
+      this.glRendererManager.setFilterMode('nearest');
+      if (this.filterModeBadge) this.filterModeBadge.style.display = 'block';
+    }
 
     // Listen for A/B changes
     this.subs.add(this.session.on('abSourceChanged', ({ current }) => {
@@ -1751,8 +1787,8 @@ export class Viewer {
       this.cropManager.drawUncropBackground(this.imageCtx, displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
     }
 
-    // Enable high-quality image smoothing for best picture quality
-    this.imageCtx.imageSmoothingEnabled = true;
+    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
+    this.imageCtx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
     this.imageCtx.imageSmoothingQuality = 'high';
 
     // Check if crop clipping should be applied (will be done AFTER all rendering)
@@ -2080,7 +2116,7 @@ export class Viewer {
     displayWidth: number,
     displayHeight: number
   ): void {
-    drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.transformManager.transform);
+    drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.transformManager.transform, this._textureFilterMode === 'linear');
   }
 
   private renderWithWipe(
@@ -2090,8 +2126,8 @@ export class Viewer {
   ): void {
     const ctx = this.imageCtx;
 
-    // Enable high-quality image smoothing for best picture quality
-    ctx.imageSmoothingEnabled = true;
+    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
+    ctx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
     ctx.imageSmoothingQuality = 'high';
 
     // Compute stencil boxes from wipe position/mode.
@@ -2210,8 +2246,8 @@ export class Viewer {
       }
     }
 
-    // Enable high-quality image smoothing
-    ctx.imageSmoothingEnabled = true;
+    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
+    ctx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
     ctx.imageSmoothingQuality = 'high';
 
     ctx.save();
@@ -2267,7 +2303,7 @@ export class Viewer {
     height: number
   ): void {
     // Apply transform and draw
-    drawWithTransformUtil(ctx, element, width, height, this.transformManager.transform);
+    drawWithTransformUtil(ctx, element, width, height, this.transformManager.transform, this._textureFilterMode === 'linear');
   }
 
   private getCanvasFilterString(): string {
@@ -2425,6 +2461,89 @@ export class Viewer {
 
   toggleColorInversion(): void {
     this.setColorInversion(!this.colorPipeline.colorInversionEnabled);
+  }
+
+  // Texture filter mode methods (nearest-neighbor vs bilinear)
+  toggleFilterMode(): void {
+    this._textureFilterMode = this._textureFilterMode === 'linear' ? 'nearest' : 'linear';
+
+    // Persist preference
+    try {
+      localStorage.setItem(FILTER_MODE_STORAGE_KEY, this._textureFilterMode);
+    } catch {
+      // localStorage may be unavailable (e.g. private browsing)
+    }
+
+    // Update GL renderer
+    this.glRendererManager.setFilterMode(this._textureFilterMode);
+
+    // Show transient HUD indicator
+    this.showFilterModeIndicator(this._textureFilterMode);
+
+    // Update persistent badge
+    if (this.filterModeBadge) {
+      this.filterModeBadge.style.display = this._textureFilterMode === 'nearest' ? 'block' : 'none';
+    }
+
+    // Re-render current frame
+    this.scheduleRender();
+  }
+
+  getFilterMode(): TextureFilterMode {
+    return this._textureFilterMode;
+  }
+
+  private loadFilterModePreference(): TextureFilterMode {
+    try {
+      const stored = localStorage.getItem(FILTER_MODE_STORAGE_KEY);
+      if (stored === 'nearest' || stored === 'linear') return stored;
+    } catch {
+      // localStorage may be unavailable
+    }
+    return 'linear';
+  }
+
+  private showFilterModeIndicator(mode: TextureFilterMode): void {
+    // Remove previous indicator
+    if (this.filterModeIndicator?.parentNode) {
+      this.filterModeIndicator.remove();
+    }
+    if (this.filterModeTimeout) {
+      clearTimeout(this.filterModeTimeout);
+    }
+
+    const indicator = document.createElement('div');
+    indicator.dataset.testid = 'filter-mode-indicator';
+    indicator.textContent = mode === 'nearest' ? 'Nearest Neighbor' : 'Bilinear';
+    indicator.style.cssText = `
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      z-index: 100;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.3s ease-out;
+    `;
+
+    this.canvasContainer.appendChild(indicator);
+    this.filterModeIndicator = indicator;
+
+    this.filterModeTimeout = setTimeout(() => {
+      indicator.style.opacity = '0';
+      setTimeout(() => {
+        if (indicator.parentNode) indicator.remove();
+        if (this.filterModeIndicator === indicator) {
+          this.filterModeIndicator = null;
+        }
+      }, 300);
+    }, 1200);
   }
 
   // LUT methods
@@ -3704,8 +3823,8 @@ export class Viewer {
     const duration = source.duration ?? 1;
     const ctx = this.imageCtx;
 
-    // Enable high-quality smoothing
-    ctx.imageSmoothingEnabled = true;
+    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
+    ctx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
     ctx.imageSmoothingQuality = 'high';
 
     // Collect frames to render (before frames first, then after frames)
@@ -4277,6 +4396,19 @@ export class Viewer {
     // Cleanup wipe manager
     this.wipeManager.dispose();
 
+    // Cleanup filter mode indicator and badge
+    if (this.filterModeIndicator?.parentNode) {
+      this.filterModeIndicator.remove();
+      this.filterModeIndicator = null;
+    }
+    if (this.filterModeTimeout) {
+      clearTimeout(this.filterModeTimeout);
+      this.filterModeTimeout = null;
+    }
+    if (this.filterModeBadge?.parentNode) {
+      this.filterModeBadge.remove();
+      this.filterModeBadge = null;
+    }
   }
 
   /**

@@ -3,6 +3,7 @@ import { ShaderProgram } from './ShaderProgram';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
+import type { TextureFilterMode } from '../core/types/filter';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { TileViewport } from '../nodes/groups/LayoutGroupNode';
@@ -165,6 +166,12 @@ export class Renderer implements RendererBackend {
 
   // Mipmap support for float textures (requires OES_texture_float_linear + EXT_color_buffer_float)
   private _mipmapSupported = false;
+
+  // Texture filter mode for the primary image texture (nearest for pixel-accurate QC, linear for smooth)
+  private _textureFilterMode: TextureFilterMode = 'linear';
+
+  // Track which textures have mipmaps generated, so we can restore LINEAR_MIPMAP_LINEAR correctly
+  private _mipmappedTextures: Set<WebGLTexture> = new Set();
 
   // Whether the current SDR texture has mipmaps generated (only for HTMLImageElement sources)
   private _sdrTextureMipmapped = false;
@@ -513,6 +520,11 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_texture', 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, image.texture);
+
+    // Apply texture filter mode (nearest/linear) to the image texture
+    if (image.texture) {
+      this.applyImageTextureFilter(image.texture);
+    }
 
     // For 360 spherical projection, use REPEAT wrap so the equirectangular
     // seam (longitude ±180°) blends smoothly instead of clamping to edge pixels.
@@ -929,8 +941,10 @@ export class Renderer implements RendererBackend {
     if (uploadChannels === 4 && !image.videoFrame && this._mipmapSupported) {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      if (image.texture) this._mipmappedTextures.add(image.texture);
     } else {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      if (image.texture) this._mipmappedTextures.delete(image.texture);
     }
 
     image.textureNeedsUpdate = false;
@@ -1020,7 +1034,39 @@ export class Renderer implements RendererBackend {
 
   deleteTexture(texture: TextureHandle): void {
     if (texture) {
+      this._mipmappedTextures.delete(texture);
       this.gl?.deleteTexture(texture);
+    }
+  }
+
+  setTextureFilterMode(mode: TextureFilterMode): void {
+    if (this._textureFilterMode === mode) return;
+    this._textureFilterMode = mode;
+  }
+
+  getTextureFilterMode(): TextureFilterMode {
+    return this._textureFilterMode;
+  }
+
+  /**
+   * Apply the current texture filter mode to the bound image texture.
+   * Called in renderImage() and renderSDRFrame() after binding the image texture to unit 0.
+   * Correctly restores LINEAR_MIPMAP_LINEAR for mipmapped textures when switching back to bilinear.
+   */
+  private applyImageTextureFilter(texture: WebGLTexture): void {
+    const gl = this.gl!;
+    const magFilter = this._textureFilterMode === 'nearest' ? gl.NEAREST : gl.LINEAR;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+
+    if (this._textureFilterMode === 'nearest') {
+      // In nearest mode, disable mipmap sampling entirely.
+      // At zoomed-out views the aliasing is expected and informative for QC.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    } else {
+      // In bilinear mode, restore mipmap sampling for textures that have mipmaps.
+      const hasMipmaps = this._mipmappedTextures.has(texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER,
+        hasMipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
     }
   }
 
@@ -2053,6 +2099,9 @@ export class Renderer implements RendererBackend {
 
   applyRenderState(state: RenderState): void {
     this.stateManager.applyRenderState(state);
+    if (state.textureFilterMode !== undefined) {
+      this.setTextureFilterMode(state.textureFilterMode);
+    }
   }
 
   hasPendingStateChanges(): boolean {
@@ -2150,9 +2199,11 @@ export class Renderer implements RendererBackend {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       this._sdrTextureMipmapped = true;
+      if (this.sdrTexture) this._mipmappedTextures.add(this.sdrTexture);
     } else if (!isStaticImage) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       this._sdrTextureMipmapped = false;
+      if (this.sdrTexture) this._mipmappedTextures.delete(this.sdrTexture);
     }
 
     // Use display shader
@@ -2195,6 +2246,11 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_texture', 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
+
+    // Apply texture filter mode (nearest/linear) to the SDR texture
+    if (this.sdrTexture) {
+      this.applyImageTextureFilter(this.sdrTexture);
+    }
 
     // Draw quad
     gl.bindVertexArray(this.quadVAO);
@@ -2280,6 +2336,9 @@ export class Renderer implements RendererBackend {
     this.ocioShaderCode = null;
     this.ocioFunctionName = null;
     this.ocioUniforms = null;
+
+    // Clear mipmap tracking (all GL textures are invalidated)
+    this._mipmappedTextures.clear();
 
     this.parallelCompileExt = null;
     this.usingHalfFloatBackbuffer = false;

@@ -570,9 +570,16 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle notes panel'
   },
 
+  // Texture filter mode toggle (N key, matching desktop OpenRV)
+  'view.toggleFilterMode': {
+    code: 'KeyN',
+    description: 'Toggle nearest-neighbor / bilinear filtering'
+  },
+
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
+    context: 'annotate',
     description: 'Add note at current frame'
   },
   'notes.next': {

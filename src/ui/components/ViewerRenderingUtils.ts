@@ -57,19 +57,20 @@ function wrapTextToWidth(
 
 /**
  * Draw image/video with rotation and flip transforms applied.
- * Uses high-quality image smoothing for best picture quality.
+ * Image smoothing defaults to enabled (bilinear) but can be disabled for nearest-neighbor QC.
  */
 export function drawWithTransform(
   ctx: CanvasRenderingContext2D,
   element: CanvasImageSource,
   displayWidth: number,
   displayHeight: number,
-  transform: Transform2D
+  transform: Transform2D,
+  smoothingEnabled = true
 ): void {
   const { rotation, flipH, flipV } = transform;
 
-  // Enable high-quality image smoothing for best picture quality
-  ctx.imageSmoothingEnabled = true;
+  // Image smoothing: bilinear when true, nearest-neighbor when false
+  ctx.imageSmoothingEnabled = smoothingEnabled;
   ctx.imageSmoothingQuality = 'high';
 
   // If no transforms, just draw normally
@@ -478,19 +479,20 @@ export function isFullCropRegion(region: CropRegion): boolean {
  * Unlike drawWithTransform (for display), this function draws to fill the entire
  * canvas without letterboxing, used for exports where we want pixel-perfect output.
  * For 90/270 rotation, the canvas should already be sized with swapped dimensions.
- * Uses high-quality image smoothing for best picture quality.
+ * Image smoothing defaults to enabled (bilinear) but can be disabled for nearest-neighbor QC.
  */
 export function drawWithTransformFill(
   ctx: CanvasRenderingContext2D,
   element: CanvasImageSource,
   canvasWidth: number,
   canvasHeight: number,
-  transform: Transform2D
+  transform: Transform2D,
+  smoothingEnabled = true
 ): void {
   const { rotation, flipH, flipV } = transform;
 
-  // Enable high-quality image smoothing for best picture quality
-  ctx.imageSmoothingEnabled = true;
+  // Image smoothing: bilinear when true, nearest-neighbor when false
+  ctx.imageSmoothingEnabled = smoothingEnabled;
   ctx.imageSmoothingQuality = 'high';
 
   // If no transforms, just draw normally

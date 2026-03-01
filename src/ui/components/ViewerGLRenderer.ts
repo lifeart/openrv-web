@@ -16,6 +16,7 @@ import { WebGPUHDRBlit } from '../../render/WebGPUHDRBlit';
 import { Canvas2DHDRBlit } from '../../render/Canvas2DHDRBlit';
 import type { RenderState } from '../../render/RenderState';
 import type { IPImage } from '../../core/image/Image';
+import type { TextureFilterMode } from '../../core/types/filter';
 import {
   type DisplayCapabilities,
   isDefaultCDL,
@@ -1382,6 +1383,14 @@ export class ViewerGLRenderer {
 
   setPremultMode(mode: number): void {
     this._glRenderer?.setPremultMode(mode);
+  }
+
+  setFilterMode(mode: TextureFilterMode): void {
+    this._glRenderer?.setTextureFilterMode(mode);
+  }
+
+  getFilterMode(): TextureFilterMode {
+    return this._glRenderer?.getTextureFilterMode() ?? 'linear';
   }
 
   setSphericalProjection(state: { enabled: boolean; fov: number; aspect: number; yaw: number; pitch: number }): void {
