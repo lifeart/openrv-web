@@ -95,6 +95,11 @@ export class LayoutGroupNode extends BaseGroupNode {
       return { columns: inputCount, rows: 1 };
     } else if (mode === 'column') {
       return { columns: 1, rows: inputCount };
+    } else if (mode === 'packed') {
+      // Packed mode: always auto-calculate optimal grid (ignore configured columns/rows)
+      const columns = Math.ceil(Math.sqrt(inputCount));
+      const rows = Math.ceil(inputCount / columns);
+      return { columns, rows };
     } else {
       // Grid mode - use configured or auto-calculate
       const configColumns = this.properties.getValue('columns') as number;

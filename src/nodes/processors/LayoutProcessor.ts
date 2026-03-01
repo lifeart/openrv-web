@@ -20,8 +20,15 @@ export { type TileViewport } from '../groups/LayoutGroupNode';
 
 /**
  * Layout mode determining how inputs are arranged.
+ *
+ * - 'row': Single row of tiles
+ * - 'column': Single column of tiles
+ * - 'grid': Custom grid with configurable columns/rows
+ * - 'packed': Auto-grid that calculates optimal columns/rows (alias for grid with auto dimensions)
+ * - 'manual': Free-form positioning via normalized coordinates
+ * - 'static': Same as manual but without interactive repositioning
  */
-export type LayoutMode = 'row' | 'column' | 'grid';
+export type LayoutMode = 'row' | 'column' | 'grid' | 'packed' | 'manual' | 'static';
 
 /**
  * Configuration for the layout processor.
@@ -70,6 +77,15 @@ export class LayoutProcessor implements NodeProcessor {
     if (this.config.mode === 'row') {
       return { columns: count, rows: 1 };
     } else if (this.config.mode === 'column') {
+      return { columns: 1, rows: count };
+    } else if (this.config.mode === 'packed') {
+      // Packed mode: always auto-calculate optimal grid
+      const columns = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / columns);
+      return { columns, rows };
+    } else if (this.config.mode === 'manual' || this.config.mode === 'static') {
+      // Manual/static modes don't use grid dimensions for viewport calculation,
+      // but we return the count as a 1-column layout for compatibility
       return { columns: 1, rows: count };
     } else {
       // Grid mode
