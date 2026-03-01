@@ -61,6 +61,7 @@ export const DIRTY_PREMULT = 'premult';
 export const DIRTY_DITHER = 'dither';
 export const DIRTY_SPHERICAL = 'spherical';
 export const DIRTY_COLOR_PRIMARIES = 'colorPrimaries';
+export const DIRTY_CONTOUR = 'contour';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -78,6 +79,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_DITHER,
   DIRTY_SPHERICAL,
   DIRTY_COLOR_PRIMARIES,
+  DIRTY_CONTOUR,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -395,6 +397,12 @@ export interface InternalShaderState {
   ditherMode: number;    // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
   quantizeBits: number;  // 0=off, 2-16 = target bit depth for quantize/posterize
 
+  // Contour visualization (luminance iso-lines)
+  contourEnabled: boolean;
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number];
+
   // Automatic color primaries conversion
   inputPrimariesEnabled: boolean;
   inputPrimariesMatrix: Float32Array;   // 9 floats, column-major mat3
@@ -509,6 +517,10 @@ function createDefaultInternalState(): InternalShaderState {
     premultMode: 0,
     ditherMode: 0,
     quantizeBits: 0,
+    contourEnabled: false,
+    contourLevels: 10,
+    contourDesaturate: true,
+    contourLineColor: [1.0, 1.0, 1.0],
     inputPrimariesEnabled: false,
     inputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
     outputPrimariesEnabled: false,
@@ -1248,7 +1260,9 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     }
 
     // --- False color (2 uniforms) ---
-    if (renderState.falseColor.enabled !== s.falseColorEnabled) {
+    // Fixed: detect both enable/disable changes AND LUT data reference changes
+    if (renderState.falseColor.enabled !== s.falseColorEnabled ||
+        (renderState.falseColor.enabled && renderState.falseColor.lut !== s.falseColorLUTData)) {
       this.setFalseColor(renderState.falseColor);
     }
 
@@ -1439,6 +1453,27 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         this.setQuantizeBits(newQuantize);
       }
     }
+
+    // --- Contour visualization (4 uniforms) ---
+    if (renderState.luminanceVis) {
+      const lv = renderState.luminanceVis;
+      const contourEnabled = lv.mode === 'contour';
+      if (s.contourEnabled !== contourEnabled ||
+          s.contourLevels !== lv.contourLevels ||
+          s.contourDesaturate !== lv.contourDesaturate ||
+          s.contourLineColor[0] !== lv.contourLineColor[0] ||
+          s.contourLineColor[1] !== lv.contourLineColor[1] ||
+          s.contourLineColor[2] !== lv.contourLineColor[2]) {
+        s.contourEnabled = contourEnabled;
+        s.contourLevels = lv.contourLevels;
+        s.contourDesaturate = lv.contourDesaturate;
+        s.contourLineColor = [...lv.contourLineColor];
+        this.dirtyFlags.add(DIRTY_CONTOUR);
+      }
+    } else if (s.contourEnabled) {
+      s.contourEnabled = false;
+      this.dirtyFlags.add(DIRTY_CONTOUR);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -1600,6 +1635,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     // False Color
     if (dirty.has(DIRTY_FALSE_COLOR)) {
       shader.setUniformInt('u_falseColorEnabled', s.falseColorEnabled ? 1 : 0);
+    }
+
+    // Contour visualization (luminance iso-lines)
+    if (dirty.has(DIRTY_CONTOUR)) {
+      shader.setUniformInt('u_contourEnabled', s.contourEnabled ? 1 : 0);
+      if (s.contourEnabled) {
+        shader.setUniform('u_contourLevels', s.contourLevels);
+        shader.setUniformInt('u_contourDesaturate', s.contourDesaturate ? 1 : 0);
+        shader.setUniform('u_contourLineColor', s.contourLineColor);
+      }
     }
 
     // Zebra Stripes

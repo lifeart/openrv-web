@@ -62,6 +62,15 @@
       uniform sampler2D u_falseColorLUT; // 256x1 RGB texture
       uniform bool u_falseColorEnabled;
 
+      // Contour iso-lines (luminance visualization)
+      // NOTE: Visualization operates on display-referred SDR-range values.
+      // Super-white (>1.0) and negative values are clamped. For HDR content,
+      // enable tone mapping before activating visualization modes.
+      uniform bool u_contourEnabled;
+      uniform float u_contourLevels;      // 2.0 to 50.0
+      uniform bool u_contourDesaturate;   // desaturate non-contour pixels
+      uniform vec3 u_contourLineColor;    // normalized RGB
+
       // Zebra Stripes
       uniform bool u_zebraEnabled;
       uniform float u_zebraHighThreshold;
@@ -1359,10 +1368,50 @@
         else if (u_channelMode == 5) { color.rgb = vec3(dot(color.rgb, LUMA)); }
 
         // 11. False Color (diagnostic overlay - replaces color)
+        // NOTE: For HSV and Random Color luminance visualization modes, the
+        // false color LUT is loaded with the appropriate luminance-to-color mapping.
+        // Super-white (>1.0) and negative values are clamped to LUT bounds.
         if (u_falseColorEnabled) {
           float fcLuma = dot(color.rgb, LUMA);
           float lumaSDR = clamp(fcLuma, 0.0, 1.0);
           color.rgb = texture(u_falseColorLUT, vec2(lumaSDR, 0.5)).rgb;
+        }
+
+        // 11b. Contour iso-lines (luminance visualization - neighbor edge detection)
+        // All five luminance samples (center + 4 neighbors) come from u_texture
+        // to ensure consistency. Contour boundaries are detected in source-image
+        // luminance space. Desaturation blend uses the processed color.rgb.
+        if (u_contourEnabled) {
+          ivec2 texSize = textureSize(u_texture, 0);
+          ivec2 pc = ivec2(v_texCoord * vec2(texSize));
+
+          // Center pixel luminance from source texture (consistent with neighbors)
+          float cLuma = dot(texelFetch(u_texture, pc, 0).rgb, LUMA);
+          float quantC = floor(cLuma * u_contourLevels) / u_contourLevels;
+
+          // Clamp neighbor coordinates to texture bounds
+          ivec2 left  = ivec2(max(pc.x - 1, 0), pc.y);
+          ivec2 right = ivec2(min(pc.x + 1, texSize.x - 1), pc.y);
+          ivec2 up    = ivec2(pc.x, max(pc.y - 1, 0));
+          ivec2 down  = ivec2(pc.x, min(pc.y + 1, texSize.y - 1));
+
+          float qL = floor(dot(texelFetch(u_texture, left, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+          float qR = floor(dot(texelFetch(u_texture, right, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+          float qU = floor(dot(texelFetch(u_texture, up, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+          float qD = floor(dot(texelFetch(u_texture, down, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+
+          // Epsilon-based comparison to avoid floating-point precision artifacts
+          float eps = 0.5 / u_contourLevels;
+          bool isContour = (abs(qL - quantC) > eps) || (abs(qR - quantC) > eps) ||
+                           (abs(qU - quantC) > eps) || (abs(qD - quantC) > eps);
+
+          if (isContour) {
+            color.rgb = u_contourLineColor;
+          } else if (u_contourDesaturate) {
+            // Use processed color.rgb luminance for display-referred desaturation
+            float displayLuma = dot(color.rgb, LUMA);
+            color.rgb = mix(color.rgb, vec3(displayLuma), 0.5);
+          }
         }
 
         // 12. Zebra Stripes (diagnostic overlay)
