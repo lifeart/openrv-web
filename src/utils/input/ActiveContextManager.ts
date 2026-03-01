@@ -15,7 +15,7 @@ import { Signal } from '../../core/graph/Signal';
  * - 'global': Always active; serves as a fallback for all other contexts.
  * - Other contexts are mutually exclusive: only one non-global context can be active at a time.
  */
-export type BindingContext = 'global' | 'timeline' | 'paint' | 'viewer' | 'panel' | 'channel' | 'transform';
+export type BindingContext = 'global' | 'timeline' | 'paint' | 'viewer' | 'panel' | 'channel' | 'transform' | 'annotate';
 
 export class ActiveContextManager {
   private _activeContext: BindingContext = 'global';

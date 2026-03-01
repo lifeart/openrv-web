@@ -18,6 +18,7 @@
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type { TextureFilterMode } from '../core/types/filter';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { CDLValues } from '../color/CDL';
@@ -212,6 +213,14 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
    * @param tiles - Array of { image, viewport } entries to render
    */
   renderTiledImages(tiles: { image: IPImage; viewport: TileViewport }[]): void;
+
+  // --- Texture filter mode ---
+
+  /** Set the texture filtering mode for the primary image texture. */
+  setTextureFilterMode(mode: TextureFilterMode): void;
+
+  /** Get the current texture filtering mode. */
+  getTextureFilterMode(): TextureFilterMode;
 
   // --- Texture management ---
 

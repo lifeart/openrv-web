@@ -60,6 +60,7 @@ function createMockViewer() {
     getHSLQualifier: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getLuminanceVisualization: vi.fn().mockReturnValue({ cycleMode: vi.fn() }),
     getImageData: vi.fn().mockReturnValue({ width: 100, height: 100, data: new Uint8ClampedArray(100 * 100 * 4) }),
+    toggleFilterMode: vi.fn(),
   };
 }
 

@@ -103,8 +103,18 @@ export function createMockRendererGL(
     texParameteri: vi.fn(),
     texImage2D: vi.fn(),
     texImage3D: vi.fn(),
+    generateMipmap: vi.fn(),
+    getParameter: vi.fn((pname: number) => {
+      if (pname === 0x0ba2 /* VIEWPORT */) return new Int32Array([0, 0, 800, 600]);
+      return null;
+    }),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    scissor: vi.fn(),
     isContextLost: vi.fn(() => false),
     // Constants
+    VIEWPORT: 0x0ba2,
+    SCISSOR_TEST: 0x0c11,
     VERTEX_SHADER: 0x8b31,
     FRAGMENT_SHADER: 0x8b30,
     LINK_STATUS: 0x8b82,
@@ -123,6 +133,8 @@ export function createMockRendererGL(
     CLAMP_TO_EDGE: 0x812f,
     REPEAT: 0x2901,
     LINEAR: 0x2601,
+    NEAREST: 0x2600,
+    LINEAR_MIPMAP_LINEAR: 0x2703,
     RGBA8: 0x8058,
     RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
