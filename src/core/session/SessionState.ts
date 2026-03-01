@@ -19,6 +19,7 @@ import type { WatermarkState } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Marker } from './Session';
+import type { SerializedRepresentation } from '../types/representation';
 import type { PlaylistState } from './PlaylistManager';
 import type { Note } from './NoteManager';
 import type { VersionGroup } from './VersionManager';
@@ -52,6 +53,10 @@ export interface MediaReference {
   requiresReload?: boolean;
   /** OPFS cache key for fast reload */
   opfsCacheKey?: string;
+  /** Serialized representations (omits runtime-only fields like sourceNode) */
+  representations?: SerializedRepresentation[];
+  /** Active representation ID */
+  activeRepresentationId?: string;
 }
 
 /** Playback state */
