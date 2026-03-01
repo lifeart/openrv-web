@@ -7,6 +7,7 @@
  */
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
+import { applyHoverEffect } from './shared/Button';
 
 /**
  * Options for showing the timeline context menu.
@@ -312,12 +313,7 @@ export class TimelineContextMenu {
     }
 
     // Hover effects
-    item.addEventListener('pointerenter', () => {
-      item.style.background = 'var(--bg-hover)';
-    });
-    item.addEventListener('pointerleave', () => {
-      item.style.background = 'transparent';
-    });
+    applyHoverEffect(item);
     item.addEventListener('focus', () => {
       item.style.background = 'var(--bg-hover)';
     });

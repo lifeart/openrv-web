@@ -5,6 +5,7 @@ import {
   type NavPlaylistClip,
   type RangeSegment,
 } from './FrameNavigationService';
+import { createMockSession } from '../../test/mocks';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -15,31 +16,6 @@ function makeClip(overrides: Partial<NavPlaylistClip> & { id: string; globalStar
     inPoint: 1,
     outPoint: overrides.duration,
     ...overrides,
-  };
-}
-
-
-// ---------------------------------------------------------------------------
-// Mock factories
-// ---------------------------------------------------------------------------
-
-function createMockSession() {
-  return {
-    currentFrame: 1,
-    currentSourceIndex: 0,
-    inPoint: 1,
-    outPoint: 100,
-    loopMode: 'loop' as 'once' | 'loop' | 'pingpong',
-    marks: new Map<number, { frame: number; endFrame?: number }>(),
-    currentSource: { duration: 100 } as { duration: number } | null,
-    goToFrame: vi.fn(),
-    setCurrentSource: vi.fn(),
-    setInPoint: vi.fn(),
-    setOutPoint: vi.fn(),
-    setInOutRange: vi.fn(),
-    emitRangeShifted: vi.fn(),
-    goToNextMarker: vi.fn().mockReturnValue(null),
-    goToPreviousMarker: vi.fn().mockReturnValue(null),
   };
 }
 

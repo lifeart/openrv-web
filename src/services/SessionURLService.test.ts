@@ -5,40 +5,11 @@ import {
 } from './SessionURLService';
 import type { SessionURLState } from '../core/session/SessionURLManager';
 import { encodeSessionState } from '../core/session/SessionURLManager';
-import { DEFAULT_TRANSFORM } from '../core/types/transform';
+import { createMockSession, createMockViewer } from '../../test/mocks';
 
 // ---------------------------------------------------------------------------
 // Lightweight test doubles
 // ---------------------------------------------------------------------------
-
-function createMockSession() {
-  return {
-    currentFrame: 10,
-    fps: 24,
-    inPoint: 1,
-    outPoint: 100,
-    currentSourceIndex: 0,
-    currentSource: { url: 'https://example.com/media.exr' } as { url?: string } | null,
-    sourceAIndex: 0,
-    sourceBIndex: -1,
-    currentAB: 'A' as 'A' | 'B',
-    sourceCount: 2,
-    goToFrame: vi.fn(),
-    setCurrentSource: vi.fn(),
-    setInPoint: vi.fn(),
-    setOutPoint: vi.fn(),
-    setSourceA: vi.fn(),
-    setSourceB: vi.fn(),
-    setCurrentAB: vi.fn(),
-  };
-}
-
-function createMockViewer() {
-  return {
-    getTransform: vi.fn().mockReturnValue({ ...DEFAULT_TRANSFORM }),
-    setTransform: vi.fn(),
-  };
-}
 
 function createMockCompareControl() {
   return {

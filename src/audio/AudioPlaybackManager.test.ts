@@ -4,79 +4,19 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlaybackManager, type AudioPlaybackError } from './AudioPlaybackManager';
+import {
+  createMockAudioContext,
+  createMockGainNode,
+  createMockSourceNode,
+} from '../../test/mocks';
 
 describe('AudioPlaybackManager', () => {
   let manager: AudioPlaybackManager;
 
-  // Helper to create a mock AudioParam with scheduling methods
-  function createMockAudioParam(initialValue = 1): {
-    value: number;
-    setValueAtTime: ReturnType<typeof vi.fn>;
-    setValueCurveAtTime: ReturnType<typeof vi.fn>;
-    linearRampToValueAtTime: ReturnType<typeof vi.fn>;
-    cancelScheduledValues: ReturnType<typeof vi.fn>;
-  } {
-    return {
-      value: initialValue,
-      setValueAtTime: vi.fn(),
-      setValueCurveAtTime: vi.fn(),
-      linearRampToValueAtTime: vi.fn(),
-      cancelScheduledValues: vi.fn(),
-    };
-  }
-
-  const mockAudioBuffer = {
-    duration: 10,
-    sampleRate: 44100,
-    numberOfChannels: 2,
-    length: 441000,
-    getChannelData: vi.fn().mockReturnValue(new Float32Array(441000)),
-  };
-
-  // Factory to create fresh mock gain nodes (for envelope gain nodes)
-  function createFreshMockGainNode() {
-    return {
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      gain: createMockAudioParam(1),
-    };
-  }
-
-  // Factory to create fresh mock source nodes
-  function createFreshMockSourceNode() {
-    return {
-      buffer: null as AudioBuffer | null,
-      playbackRate: { value: 1 },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      start: vi.fn(),
-      stop: vi.fn(),
-      onended: null as (() => void) | null,
-    };
-  }
-
-  // Track created nodes for assertions
-  let createdGainNodes: ReturnType<typeof createFreshMockGainNode>[];
-  let createdSourceNodes: ReturnType<typeof createFreshMockSourceNode>[];
-
-  const mockAudioContext = {
-    state: 'running' as AudioContextState,
-    currentTime: 0,
-    createGain: vi.fn(() => {
-      const node = createFreshMockGainNode();
-      createdGainNodes.push(node);
-      return node;
-    }),
-    createBufferSource: vi.fn(() => {
-      const node = createFreshMockSourceNode();
-      createdSourceNodes.push(node);
-      return node;
-    }),
-    decodeAudioData: vi.fn().mockResolvedValue(mockAudioBuffer),
-    resume: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn().mockResolvedValue(undefined),
-    destination: {},
-  };
+  // Track created nodes for assertions (populated by the shared mock factory)
+  let createdGainNodes: ReturnType<typeof createMockGainNode>[];
+  let createdSourceNodes: ReturnType<typeof createMockSourceNode>[];
+  let mockAudioContext: ReturnType<typeof createMockAudioContext>['context'];
 
   /** Get the last created source node (convenience helper) */
   function getLastSourceNode() {
@@ -84,32 +24,16 @@ describe('AudioPlaybackManager', () => {
   }
 
   beforeEach(() => {
-    createdGainNodes = [];
-    createdSourceNodes = [];
+    const audioMock = createMockAudioContext();
+    mockAudioContext = audioMock.context;
+    createdGainNodes = audioMock.createdGainNodes;
+    createdSourceNodes = audioMock.createdSourceNodes;
+
     vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
     }));
-
-    // Reset mocks
-    vi.clearAllMocks();
-    mockAudioContext.state = 'running';
-    mockAudioContext.currentTime = 0;
-
-    // Reset the createGain mock to use the factory
-    mockAudioContext.createGain.mockImplementation(() => {
-      const node = createFreshMockGainNode();
-      createdGainNodes.push(node);
-      return node;
-    });
-
-    // Reset the createBufferSource mock to use the factory
-    mockAudioContext.createBufferSource.mockImplementation(() => {
-      const node = createFreshMockSourceNode();
-      createdSourceNodes.push(node);
-      return node;
-    });
 
     manager = new AudioPlaybackManager();
   });

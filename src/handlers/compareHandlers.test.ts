@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { bindCompareHandlers } from './compareHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { Session, SessionEvents } from '../core/session/Session';
+import { createMockSessionBridgeContext } from '../../test/mocks';
 
 type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 
@@ -40,17 +41,6 @@ function createMockOn(): {
   return { on, handlers };
 }
 
-function createMockContext(): SessionBridgeContext {
-  const compareControl = {
-    setABAvailable: vi.fn(),
-    setABSource: vi.fn(),
-  };
-
-  return {
-    getCompareControl: () => compareControl,
-  } as unknown as SessionBridgeContext;
-}
-
 describe('bindCompareHandlers', () => {
   let context: SessionBridgeContext;
   let session: Session;
@@ -58,7 +48,7 @@ describe('bindCompareHandlers', () => {
   let updateEXRLayers: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    context = createMockContext();
+    context = createMockSessionBridgeContext();
     session = createMockSession({ abCompareAvailable: true });
     const mockOn = createMockOn();
     handlers = mockOn.handlers;
@@ -72,7 +62,7 @@ describe('bindCompareHandlers', () => {
   });
 
   it('CMPH-U002: sets initial AB availability to false when not available', () => {
-    const ctx = createMockContext();
+    const ctx = createMockSessionBridgeContext();
     const sess = createMockSession({ abCompareAvailable: false });
     const mockOn = createMockOn();
 

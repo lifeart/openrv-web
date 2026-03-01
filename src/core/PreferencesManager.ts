@@ -12,6 +12,7 @@ import {
   getPreferencesManager,
   PREFERENCE_STORAGE_KEYS,
 } from '../utils/preferences/PreferencesManager';
+import { clamp } from '../utils/math';
 import type { ThemeManager } from '../utils/ui/ThemeManager';
 import type { LayoutStore } from '../ui/layout/LayoutStore';
 import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsManager';
@@ -128,10 +129,6 @@ export interface CorePreferencesEvents extends EventMap {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function sanitizeColorDefaults(value: unknown): ColorDefaults {

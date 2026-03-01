@@ -11,6 +11,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import type { Viewer } from './Viewer';
 
@@ -48,13 +49,13 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
 
   // Colors for cache states - resolved from CSS variables at runtime
   private static getCachedColor(): string {
-    return getComputedStyle(document.documentElement).getPropertyValue('--success').trim() || '#4ade80';
+    return getCSSColor('--success', '#4ade80');
   }
   private static getPendingColor(): string {
-    return getComputedStyle(document.documentElement).getPropertyValue('--warning').trim() || '#facc15';
+    return getCSSColor('--warning', '#facc15');
   }
   private static getUncachedColor(): string {
-    return getComputedStyle(document.documentElement).getPropertyValue('--bg-hover').trim() || '#374151';
+    return getCSSColor('--bg-hover', '#374151');
   }
 
   constructor(session: Session, viewer?: Viewer) {

@@ -5,6 +5,7 @@ import { ThumbnailManager } from './ThumbnailManager';
 import { TimelineContextMenu } from './TimelineContextMenu';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import {
   drawPlayhead,
@@ -23,19 +24,6 @@ export class Timeline {
   static readonly PLAYHEAD_CIRCLE_RADIUS = 9;
   /** Width of the invisible hit area around the playhead in pixels */
   static readonly PLAYHEAD_HIT_AREA_WIDTH = 20;
-
-  /**
-   * Resolve a CSS variable at runtime, falling back to the given hex value.
-   * Follows the CacheIndicator pattern for theme compatibility.
-   */
-  private static resolveCssColor(variable: string, fallback: string): string {
-    try {
-      const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
-      return value || fallback;
-    } catch {
-      return fallback;
-    }
-  }
 
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
@@ -891,11 +879,11 @@ export class Timeline {
       const WARNING_THRESHOLD = 0.97;
       const CRITICAL_THRESHOLD = 0.85;
       if (ratio >= WARNING_THRESHOLD) {
-        fpsColor = Timeline.resolveCssColor('--success', '#4ade80'); // green
+        fpsColor = getCSSColor('--success', '#4ade80'); // green
       } else if (ratio >= CRITICAL_THRESHOLD) {
-        fpsColor = Timeline.resolveCssColor('--warning', '#facc15'); // yellow
+        fpsColor = getCSSColor('--warning', '#facc15'); // yellow
       } else {
-        fpsColor = Timeline.resolveCssColor('--error', '#ef4444'); // red
+        fpsColor = getCSSColor('--error', '#ef4444'); // red
       }
 
       // Append dropped frame count when > 0

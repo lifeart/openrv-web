@@ -6,91 +6,33 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioCoordinator, type AudioCoordinatorCallbacks } from './AudioCoordinator';
+import {
+  createMockAudioContext,
+  createMockSourceNode as createMockSourceNodeFactory,
+} from '../../test/mocks';
 
 describe('AudioCoordinator', () => {
   let coordinator: AudioCoordinator;
   let callbacks: AudioCoordinatorCallbacks;
 
-  // Helper to create a mock AudioParam with scheduling methods
-  function createMockAudioParam(initialValue = 1) {
-    return {
-      value: initialValue,
-      setValueAtTime: vi.fn(),
-      setValueCurveAtTime: vi.fn(),
-      linearRampToValueAtTime: vi.fn(),
-      cancelScheduledValues: vi.fn(),
-    };
-  }
-
-  // Mock AudioContext & friends (needed by AudioPlaybackManager)
-  function createMockGainNode() {
-    return {
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      gain: createMockAudioParam(1),
-    };
-  }
-
-  function createMockSourceNode() {
-    return {
-      buffer: null as AudioBuffer | null,
-      playbackRate: { value: 1 },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      start: vi.fn(),
-      stop: vi.fn(),
-      onended: null as (() => void) | null,
-    };
-  }
-
-  const mockAudioBuffer = {
-    duration: 10,
-    sampleRate: 44100,
-    numberOfChannels: 2,
-    length: 441000,
-    getChannelData: vi.fn().mockReturnValue(new Float32Array(441000)),
-  };
-
-  let createdSourceNodes: ReturnType<typeof createMockSourceNode>[];
-
-  const mockAudioContext = {
-    state: 'running' as AudioContextState,
-    currentTime: 0,
-    createGain: vi.fn(() => createMockGainNode()),
-    createBufferSource: vi.fn(() => {
-      const node = createMockSourceNode();
-      createdSourceNodes.push(node);
-      return node;
-    }),
-    decodeAudioData: vi.fn().mockResolvedValue(mockAudioBuffer),
-    resume: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn().mockResolvedValue(undefined),
-    destination: {},
-  };
+  // Track created nodes for assertions (populated by the shared mock factory)
+  let createdSourceNodes: ReturnType<typeof createMockSourceNodeFactory>[];
+  let mockAudioContext: ReturnType<typeof createMockAudioContext>['context'];
 
   function getLastSourceNode() {
     return createdSourceNodes[createdSourceNodes.length - 1]!;
   }
 
   beforeEach(() => {
-    createdSourceNodes = [];
+    const audioMock = createMockAudioContext();
+    mockAudioContext = audioMock.context;
+    createdSourceNodes = audioMock.createdSourceNodes;
+
     vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
     }));
-
-    vi.clearAllMocks();
-    mockAudioContext.state = 'running';
-    mockAudioContext.currentTime = 0;
-
-    // Reset factories after clearAllMocks
-    mockAudioContext.createGain.mockImplementation(() => createMockGainNode());
-    mockAudioContext.createBufferSource.mockImplementation(() => {
-      const node = createMockSourceNode();
-      createdSourceNodes.push(node);
-      return node;
-    });
 
     coordinator = new AudioCoordinator();
     callbacks = { onAudioPathChanged: vi.fn() };

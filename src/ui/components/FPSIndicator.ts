@@ -15,6 +15,7 @@ import { Session } from '../../core/session/Session';
 import type { FPSMeasurement } from '../../core/session/PlaybackEngine';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 import type { OverlayPosition } from './TimecodeOverlay';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
 import type { PreferencesManager } from '../../core/PreferencesManager';
@@ -44,19 +45,6 @@ export const DEFAULT_FPS_INDICATOR_STATE: FPSIndicatorState = {
 };
 
 /**
- * Resolve a CSS variable at runtime, falling back to the given hex value.
- * Follows the CacheIndicator pattern for theme compatibility.
- */
-function resolveCssColor(variable: string, fallback: string): string {
-  try {
-    const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
-    return value || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-/**
  * Compute the color string for a given ratio and thresholds.
  * Uses raw ratio (not EMA-smoothed) for immediate feedback.
  * Colors are resolved from CSS variables (--success, --warning, --error)
@@ -68,11 +56,11 @@ export function getFPSColor(
   criticalThreshold: number,
 ): string {
   if (ratio >= warningThreshold) {
-    return resolveCssColor('--success', '#4ade80'); // green
+    return getCSSColor('--success', '#4ade80'); // green
   } else if (ratio >= criticalThreshold) {
-    return resolveCssColor('--warning', '#facc15'); // yellow
+    return getCSSColor('--warning', '#facc15'); // yellow
   } else {
-    return resolveCssColor('--error', '#ef4444'); // red
+    return getCSSColor('--error', '#ef4444'); // red
   }
 }
 

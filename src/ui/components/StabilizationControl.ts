@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { createCheckboxRow } from './shared/FormElements';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
 import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
 
@@ -151,10 +152,11 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     this.panel.appendChild(header);
 
     // Enabled checkbox
-    const enabledRow = this.createCheckboxRow('Enabled', this.params.enabled, (checked) => {
+    const enabledRow = createCheckboxRow('Enabled', this.params.enabled, (checked) => {
       this.params.enabled = checked;
       this.emitChange();
-    });
+    }, 'stabilization-enabled-checkbox');
+    enabledRow.checkbox.dataset.testid = 'stabilization-enabled-checkbox';
     this.enabledCheckbox = enabledRow.checkbox;
     this.panel.appendChild(enabledRow.container);
 
@@ -173,29 +175,6 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     }, 'stabilization-crop-slider');
     this.cropSlider = cropResult.slider;
     this.cropValueLabel = cropResult.valueLabel;
-  }
-
-  private createCheckboxRow(label: string, initialValue: boolean, onChange: (checked: boolean) => void): { container: HTMLElement; checkbox: HTMLInputElement } {
-    const row = document.createElement('div');
-    row.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = initialValue;
-    checkbox.id = 'stabilization-enabled-checkbox';
-    checkbox.dataset.testid = 'stabilization-enabled-checkbox';
-    checkbox.style.cssText = 'cursor: pointer;';
-    checkbox.addEventListener('change', () => onChange(checkbox.checked));
-
-    const labelEl = document.createElement('label');
-    labelEl.htmlFor = 'stabilization-enabled-checkbox';
-    labelEl.textContent = label;
-    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer;';
-
-    row.appendChild(checkbox);
-    row.appendChild(labelEl);
-
-    return { container: row, checkbox };
   }
 
   private createSlider(

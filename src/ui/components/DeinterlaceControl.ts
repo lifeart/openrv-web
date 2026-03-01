@@ -1,6 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
+import { createCheckboxRow } from './shared/FormElements';
 import type { DeinterlaceParams, DeinterlaceMethod, FieldOrder } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 
@@ -161,10 +162,11 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.panel.appendChild(header);
 
     // Enabled checkbox
-    const enabledRow = this.createCheckboxRow('Enabled', this.params.enabled, (checked) => {
+    const enabledRow = createCheckboxRow('Enabled', this.params.enabled, (checked) => {
       this.params.enabled = checked;
       this.emitChange();
-    });
+    }, 'deinterlace-enabled-checkbox');
+    enabledRow.checkbox.dataset.testid = 'deinterlace-enabled-checkbox';
     this.enabledCheckbox = enabledRow.checkbox;
     this.panel.appendChild(enabledRow.container);
 
@@ -183,29 +185,6 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     });
     this.fieldOrderSelect = fieldOrderRow.select;
     this.panel.appendChild(fieldOrderRow.container);
-  }
-
-  private createCheckboxRow(label: string, initialValue: boolean, onChange: (checked: boolean) => void): { container: HTMLElement; checkbox: HTMLInputElement } {
-    const row = document.createElement('div');
-    row.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = initialValue;
-    checkbox.id = 'deinterlace-enabled-checkbox';
-    checkbox.dataset.testid = 'deinterlace-enabled-checkbox';
-    checkbox.style.cssText = 'cursor: pointer;';
-    checkbox.addEventListener('change', () => onChange(checkbox.checked));
-
-    const labelEl = document.createElement('label');
-    labelEl.htmlFor = 'deinterlace-enabled-checkbox';
-    labelEl.textContent = label;
-    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer;';
-
-    row.appendChild(checkbox);
-    row.appendChild(labelEl);
-
-    return { container: row, checkbox };
   }
 
   private createSelectRow(label: string, options: [string, string][], initialValue: string, onChange: (value: string) => void): { container: HTMLElement; select: HTMLSelectElement } {

@@ -9,6 +9,12 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import {
+  createSeparator,
+  createSectionHeader,
+  createCheckboxRow,
+  createSliderRow,
+} from './shared/FormElements';
+import {
   type MultiSourceLayoutMode,
   type MultiSourceLayoutState,
   MAX_TILE_COUNT,
@@ -151,8 +157,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     this.dropdown.innerHTML = '';
 
     // Section: Layout Mode
-    const modeHeader = this.createSectionHeader('Layout Mode');
-    this.dropdown.appendChild(modeHeader);
+    this.dropdown.appendChild(createSectionHeader('Layout Mode'));
 
     // Off option
     const offOption = this.createModeOption('Off', !this.manager.enabled, () => {
@@ -175,11 +180,10 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     }
 
     // Divider
-    this.dropdown.appendChild(this.createDivider());
+    this.dropdown.appendChild(createSeparator());
 
     // Section: Sources
-    const sourcesHeader = this.createSectionHeader(`Sources (${this.manager.getTileCount()}/${MAX_TILE_COUNT})`);
-    this.dropdown.appendChild(sourcesHeader);
+    this.dropdown.appendChild(createSectionHeader(`Sources (${this.manager.getTileCount()}/${MAX_TILE_COUNT})`));
 
     // Add source button
     const addBtn = document.createElement('button');
@@ -251,33 +255,32 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     }
 
     // Divider
-    this.dropdown.appendChild(this.createDivider());
+    this.dropdown.appendChild(createSeparator());
 
     // Section: Options
-    const optionsHeader = this.createSectionHeader('Options');
-    this.dropdown.appendChild(optionsHeader);
+    this.dropdown.appendChild(createSectionHeader('Options'));
 
     // Spacing slider
     const state = this.manager.getState();
-    const spacingRow = this.createSliderRow('Spacing', state.spacing, 0, 20, 1, (val) => {
+    const spacingResult = createSliderRow('Spacing', state.spacing, 0, 20, 1, (val) => {
       this.manager.setSpacing(val);
-    });
-    spacingRow.dataset.testid = 'layout-spacing-slider';
-    this.dropdown.appendChild(spacingRow);
+    }, (val) => `Spacing: ${val}px`);
+    spacingResult.container.dataset.testid = 'layout-spacing-slider';
+    this.dropdown.appendChild(spacingResult.container);
 
     // Labels checkbox
-    const labelsRow = this.createCheckboxRow('Show Labels', state.showLabels, (checked) => {
+    const labelsResult = createCheckboxRow('Show Labels', state.showLabels, (checked) => {
       this.manager.getStore().setShowLabels(checked);
     });
-    labelsRow.dataset.testid = 'layout-show-labels';
-    this.dropdown.appendChild(labelsRow);
+    labelsResult.container.dataset.testid = 'layout-show-labels';
+    this.dropdown.appendChild(labelsResult.container);
 
     // Borders checkbox
-    const bordersRow = this.createCheckboxRow('Show Borders', state.showBorders, (checked) => {
+    const bordersResult = createCheckboxRow('Show Borders', state.showBorders, (checked) => {
       this.manager.getStore().setShowBorders(checked);
     });
-    bordersRow.dataset.testid = 'layout-show-borders';
-    this.dropdown.appendChild(bordersRow);
+    bordersResult.container.dataset.testid = 'layout-show-borders';
+    this.dropdown.appendChild(bordersResult.container);
   }
 
   private refreshDropdown(): void {
@@ -358,19 +361,6 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     );
   }
 
-  private createSectionHeader(text: string): HTMLElement {
-    const header = document.createElement('div');
-    header.textContent = text;
-    header.style.cssText = `
-      font-size: 10px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 2px 4px;
-    `;
-    return header;
-  }
-
   private createModeOption(label: string, isActive: boolean, onClick: () => void): HTMLElement {
     const option = document.createElement('button');
     option.type = 'button';
@@ -412,67 +402,4 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     return option;
   }
 
-  private createDivider(): HTMLElement {
-    const div = document.createElement('div');
-    div.style.cssText = `
-      height: 1px;
-      background: var(--border-primary);
-      margin: 4px 0;
-    `;
-    return div;
-  }
-
-  private createSliderRow(
-    label: string,
-    value: number,
-    min: number,
-    max: number,
-    step: number,
-    onChange: (val: number) => void,
-  ): HTMLElement {
-    const row = document.createElement('div');
-    row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 2px 4px;';
-
-    const lbl = document.createElement('span');
-    lbl.textContent = `${label}: ${value}px`;
-    lbl.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 80px;';
-    row.appendChild(lbl);
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(min);
-    slider.max = String(max);
-    slider.step = String(step);
-    slider.value = String(value);
-    slider.style.cssText = 'flex: 1; cursor: pointer;';
-    slider.addEventListener('input', () => {
-      const val = parseInt(slider.value, 10);
-      lbl.textContent = `${label}: ${val}px`;
-      onChange(val);
-    });
-    row.appendChild(slider);
-
-    return row;
-  }
-
-  private createCheckboxRow(
-    label: string,
-    checked: boolean,
-    onChange: (checked: boolean) => void,
-  ): HTMLElement {
-    const row = document.createElement('label');
-    row.style.cssText = 'display: flex; align-items: center; gap: 6px; padding: 2px 4px; cursor: pointer; font-size: 11px; color: var(--text-secondary);';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = checked;
-    checkbox.addEventListener('change', () => onChange(checkbox.checked));
-    row.appendChild(checkbox);
-
-    const text = document.createElement('span');
-    text.textContent = label;
-    row.appendChild(text);
-
-    return row;
-  }
 }
