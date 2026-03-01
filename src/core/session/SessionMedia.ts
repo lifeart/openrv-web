@@ -8,6 +8,8 @@ import {
 } from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
+import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { MediaType } from '../types/session';
 import type { MediaSource, UnsupportedCodecInfo } from './Session';
@@ -66,6 +68,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   private _sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
   private _hdrResizeTier: HDRResizeTier = 'none';
+  private _proceduralCounter = 0;
 
   setHost(host: SessionMediaHost): void {
     this._host = host;
@@ -157,6 +160,105 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         this.emit('durationChanged', newSource.duration);
       }
     }
+  }
+
+  // --- Procedural source loading ---
+
+  private generateUniqueSourceName(pattern: string, width: number, height: number): string {
+    this._proceduralCounter++;
+    if (this._proceduralCounter === 1) {
+      return `${pattern} (${width}x${height})`;
+    }
+    return `${pattern} #${this._proceduralCounter} (${width}x${height})`;
+  }
+
+  /**
+   * Load a procedural test pattern as a source.
+   */
+  loadProceduralSource(
+    pattern: PatternName,
+    options?: {
+      width?: number;
+      height?: number;
+      color?: [number, number, number, number];
+      direction?: GradientDirection;
+      cellSize?: number;
+      steps?: number;
+      fps?: number;
+      duration?: number;
+    },
+  ): void {
+    this._host!.clearGraphData();
+
+    const width = options?.width ?? 1920;
+    const height = options?.height ?? 1080;
+    const fps = options?.fps ?? this._host!.getFps();
+    const duration = options?.duration ?? 1;
+
+    const node = new ProceduralSourceNode();
+    node.loadPattern(pattern, width, height, {
+      color: options?.color,
+      direction: options?.direction,
+      cellSize: options?.cellSize,
+      steps: options?.steps,
+      fps,
+      duration,
+    });
+
+    const metadata = node.getMetadata();
+    const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
+
+    const source: MediaSource = {
+      type: 'image',
+      name: sourceName,
+      url: `movieproc://${pattern}`,
+      width: metadata.width,
+      height: metadata.height,
+      duration,
+      fps,
+      proceduralSourceNode: node,
+    };
+
+    this.addSource(source);
+    this._host!.setInPoint(1);
+    this._host!.setOutPoint(duration);
+    this._host!.setCurrentFrame(1);
+
+    this.emit('sourceLoaded', source);
+    this.emit('durationChanged', duration);
+  }
+
+  /**
+   * Load a procedural source from a .movieproc URL string.
+   */
+  loadMovieProc(url: string): void {
+    this._host!.clearGraphData();
+
+    const params = parseMovieProc(url);
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc(url);
+
+    const metadata = node.getMetadata();
+    const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
+
+    const source: MediaSource = {
+      type: 'image',
+      name: sourceName,
+      url,
+      width: metadata.width,
+      height: metadata.height,
+      duration: metadata.duration,
+      fps: metadata.fps,
+      proceduralSourceNode: node,
+    };
+
+    this.addSource(source);
+    this._host!.setInPoint(1);
+    this._host!.setOutPoint(metadata.duration);
+    this._host!.setCurrentFrame(1);
+
+    this.emit('sourceLoaded', source);
+    this.emit('durationChanged', metadata.duration);
   }
 
   // --- Loading methods ---
@@ -822,6 +924,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       // Dispose FileSourceNode for image sources (loadImageFile / loadEXRFile)
       if (source.fileSourceNode) {
         source.fileSourceNode.dispose();
+      }
+      // Dispose ProceduralSourceNode for procedural sources
+      if (source.proceduralSourceNode) {
+        source.proceduralSourceNode.dispose();
       }
       // Pause and detach video elements to release media resources
       if (source.element instanceof HTMLVideoElement) {

@@ -1,14 +1,31 @@
 /**
  * ProceduralSourceNode - Source node for procedural test pattern images
  *
- * Generates SMPTE bars, color charts, gradients, solid colors, and noise
- * patterns procedurally. Useful for calibration and testing.
+ * Generates SMPTE bars, EBU bars, color charts, gradients, solid colors,
+ * checkerboard, grey ramp, and resolution chart patterns procedurally.
+ * Useful for calibration and testing.
+ *
+ * All pattern generator values are **sRGB-encoded** (not linear). When the
+ * shader's `u_inputTransfer` defaults to `INPUT_TRANSFER_SRGB` (code 0),
+ * it applies the sRGB EOTF to linearize these values. This is consistent
+ * with how FileSourceNode handles SDR 8-bit images.
  *
  * Supports OpenRV's `.movieproc` URL format:
  *   `smpte_bars,start=1,end=100,fps=24.movieproc`
  *   `solid,color=1 0 0 1.movieproc`
  *   `gradient,direction=horizontal.movieproc`
  *   `color_chart.movieproc`
+ *   `ebu_bars.movieproc`
+ *   `checkerboard,cellSize=32.movieproc`
+ *   `grey_ramp,steps=16.movieproc`
+ *   `resolution_chart.movieproc`
+ *
+ * Desktop OpenRV aliases are also supported:
+ *   `smpte.movieproc` -> smpte_bars
+ *   `ebu.movieproc` -> ebu_bars
+ *   `checker.movieproc` -> checkerboard
+ *   `colorchart.movieproc` -> color_chart
+ *   `ramp.movieproc` -> gradient
  */
 
 import { BaseSourceNode } from './BaseSourceNode';
@@ -20,13 +37,22 @@ import { RegisterNode } from '../base/NodeFactory';
 // Types
 // ---------------------------------------------------------------------------
 
-export type PatternName = 'smpte_bars' | 'color_chart' | 'gradient' | 'solid';
+export type PatternName =
+  | 'smpte_bars'
+  | 'ebu_bars'
+  | 'color_chart'
+  | 'gradient'
+  | 'solid'
+  | 'checkerboard'
+  | 'grey_ramp'
+  | 'resolution_chart';
+
 export type GradientDirection = 'horizontal' | 'vertical';
 
 export interface PatternResult {
   width: number;
   height: number;
-  data: Float32Array;
+  data: Float32Array;  // RGBA float32, 4 channels, sRGB-encoded values
 }
 
 export interface MovieProcParams {
@@ -38,10 +64,66 @@ export interface MovieProcParams {
   height?: number;
   color?: [number, number, number, number];
   direction?: GradientDirection;
+  cellSize?: number;      // checkerboard cell size (clamped to >= 1)
+  colorA?: [number, number, number, number];  // checkerboard color A
+  colorB?: [number, number, number, number];  // checkerboard color B
+  steps?: number;         // grey_ramp step count (clamped to >= 2)
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Hard max per dimension for procedural sources (prevents excessive memory) */
+export const PROCEDURAL_MAX_DIMENSION = 8192;
+
+/** Hard max total pixels for procedural sources (~1 GB for float32 RGBA) */
+export const PROCEDURAL_MAX_PIXELS = 8192 * 8192;
+
+/**
+ * Desktop OpenRV pattern name aliases for .rv session file interoperability.
+ */
+export const PATTERN_ALIASES: Record<string, PatternName> = {
+  'smpte': 'smpte_bars',
+  'ebu': 'ebu_bars',
+  'checker': 'checkerboard',
+  'colorchart': 'color_chart',
+  'ramp': 'gradient',
+};
+
+/** All valid pattern names */
+const VALID_PATTERNS: PatternName[] = [
+  'smpte_bars',
+  'ebu_bars',
+  'color_chart',
+  'gradient',
+  'solid',
+  'checkerboard',
+  'grey_ramp',
+  'resolution_chart',
+];
+
+// ---------------------------------------------------------------------------
+// Input guard helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Clamp width and height to >= 1 and <= PROCEDURAL_MAX_DIMENSION.
+ */
+export function clampDimensions(width: number, height: number): { width: number; height: number } {
+  let w = Math.max(1, Math.min(Math.floor(width), PROCEDURAL_MAX_DIMENSION));
+  let h = Math.max(1, Math.min(Math.floor(height), PROCEDURAL_MAX_DIMENSION));
+  if (w * h > PROCEDURAL_MAX_PIXELS) {
+    const scale = Math.sqrt(PROCEDURAL_MAX_PIXELS / (w * h));
+    w = Math.max(1, Math.floor(w * scale));
+    h = Math.max(1, Math.floor(h * scale));
+  }
+  return { width: w, height: h };
 }
 
 // ---------------------------------------------------------------------------
 // SMPTE color bar reference (75% intensity)
+// Values are sRGB-encoded (not linear). The shader applies sRGB EOTF.
 // ---------------------------------------------------------------------------
 
 const SMPTE_BARS_75: readonly [number, number, number][] = [
@@ -52,6 +134,22 @@ const SMPTE_BARS_75: readonly [number, number, number][] = [
   [0.75, 0.0, 0.75],  // Magenta
   [0.75, 0.0, 0.0],   // Red
   [0.0, 0.0, 0.75],   // Blue
+];
+
+// ---------------------------------------------------------------------------
+// EBU color bar reference (100% intensity, 100/0/100/0 system)
+// Values are sRGB-encoded, matching EBU Tech 3325.
+// ---------------------------------------------------------------------------
+
+const EBU_BARS_100: readonly [number, number, number][] = [
+  [1.0, 1.0, 1.0],  // White
+  [1.0, 1.0, 0.0],  // Yellow
+  [0.0, 1.0, 1.0],  // Cyan
+  [0.0, 1.0, 0.0],  // Green
+  [1.0, 0.0, 1.0],  // Magenta
+  [1.0, 0.0, 0.0],  // Red
+  [0.0, 0.0, 1.0],  // Blue
+  [0.0, 0.0, 0.0],  // Black
 ];
 
 // ---------------------------------------------------------------------------
@@ -99,11 +197,13 @@ const COLOR_CHECKER_PATCHES: readonly [number, number, number][] = [
 
 /**
  * Generate SMPTE 75% color bars test pattern.
+ * Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
  *
  * Standard 7-bar layout (left to right, each 1/7 of width):
  * White, Yellow, Cyan, Green, Magenta, Red, Blue
  */
 export function generateSMPTEBars(width: number, height: number): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
   const data = new Float32Array(width * height * 4);
   const numBars = SMPTE_BARS_75.length;
 
@@ -123,9 +223,38 @@ export function generateSMPTEBars(width: number, height: number): PatternResult 
 }
 
 /**
+ * Generate EBU 100% color bars test pattern.
+ * Values are sRGB-encoded, matching EBU Tech 3325 100/0/100/0 system.
+ *
+ * 8-bar layout (left to right, each 1/8 of width):
+ * White, Yellow, Cyan, Green, Magenta, Red, Blue, Black
+ */
+export function generateEBUBars(width: number, height: number): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
+  const data = new Float32Array(width * height * 4);
+  const numBars = EBU_BARS_100.length;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const barIndex = Math.min(Math.floor((x / width) * numBars), numBars - 1);
+      const color = EBU_BARS_100[barIndex]!;
+      const idx = (y * width + x) * 4;
+      data[idx] = color[0];
+      data[idx + 1] = color[1];
+      data[idx + 2] = color[2];
+      data[idx + 3] = 1.0;
+    }
+  }
+
+  return { width, height, data };
+}
+
+/**
  * Generate a Macbeth ColorChecker approximation (6 columns x 4 rows).
+ * Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
  */
 export function generateColorChart(width: number, height: number): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
   const data = new Float32Array(width * height * 4);
   const cols = 6;
   const rows = 4;
@@ -149,6 +278,7 @@ export function generateColorChart(width: number, height: number): PatternResult
 
 /**
  * Generate a linear gradient ramp.
+ * Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
  *
  * @param direction - 'horizontal' ramps left-to-right, 'vertical' ramps top-to-bottom
  */
@@ -157,6 +287,7 @@ export function generateGradient(
   height: number,
   direction: GradientDirection = 'horizontal',
 ): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
   const data = new Float32Array(width * height * 4);
 
   for (let y = 0; y < height; y++) {
@@ -178,6 +309,7 @@ export function generateGradient(
 
 /**
  * Generate a solid flat-fill image.
+ * Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
  *
  * @param color - RGBA values in [0, 1] range
  */
@@ -186,6 +318,7 @@ export function generateSolid(
   height: number,
   color: [number, number, number, number] = [0, 0, 0, 1],
 ): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
   const data = new Float32Array(width * height * 4);
 
   for (let y = 0; y < height; y++) {
@@ -201,6 +334,283 @@ export function generateSolid(
   return { width, height, data };
 }
 
+/**
+ * Generate a checkerboard pattern.
+ * Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
+ *
+ * @param cellSize - size of each square in pixels (default: 64, clamped to >= 1)
+ * @param colorA - first color RGBA (default: white)
+ * @param colorB - second color RGBA (default: black)
+ */
+export function generateCheckerboard(
+  width: number,
+  height: number,
+  cellSize: number = 64,
+  colorA: [number, number, number, number] = [1, 1, 1, 1],
+  colorB: [number, number, number, number] = [0, 0, 0, 1],
+): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
+  cellSize = Math.max(1, Math.floor(cellSize));
+  const data = new Float32Array(width * height * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const isWhite = ((Math.floor(x / cellSize) + Math.floor(y / cellSize)) % 2) === 0;
+      const color = isWhite ? colorA : colorB;
+      const idx = (y * width + x) * 4;
+      data[idx] = color[0];
+      data[idx + 1] = color[1];
+      data[idx + 2] = color[2];
+      data[idx + 3] = color[3];
+    }
+  }
+
+  return { width, height, data };
+}
+
+/**
+ * Generate a stepped grey ramp showing discrete luminance levels.
+ * Values are sRGB-encoded (not linear). The shader applies sRGB EOTF to linearize.
+ *
+ * Unlike the smooth gradient pattern, this produces discrete bands.
+ *
+ * @param steps - number of grey levels (default: 16, clamped to >= 2)
+ * @param direction - 'horizontal' or 'vertical' (default: 'horizontal')
+ */
+export function generateGreyRamp(
+  width: number,
+  height: number,
+  steps: number = 16,
+  direction: GradientDirection = 'horizontal',
+): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
+  steps = Math.max(2, Math.floor(steps));
+  const data = new Float32Array(width * height * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pos = direction === 'horizontal' ? x : y;
+      const size = direction === 'horizontal' ? width : height;
+      const stepIndex = Math.min(Math.floor((pos / size) * steps), steps - 1);
+      const value = stepIndex / (steps - 1);
+      const idx = (y * width + x) * 4;
+      data[idx] = value;
+      data[idx + 1] = value;
+      data[idx + 2] = value;
+      data[idx + 3] = 1.0;
+    }
+  }
+
+  return { width, height, data };
+}
+
+// ---------------------------------------------------------------------------
+// Resolution chart drawing helpers
+// ---------------------------------------------------------------------------
+
+function setPixel(
+  data: Float32Array,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number = 1.0,
+): void {
+  if (x < 0 || x >= width || y < 0 || y >= height) return;
+  const idx = (y * width + x) * 4;
+  data[idx] = r;
+  data[idx + 1] = g;
+  data[idx + 2] = b;
+  data[idx + 3] = a;
+}
+
+function drawLine(
+  data: Float32Array,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  r: number,
+  g: number,
+  b: number,
+): void {
+  // Bresenham's line algorithm
+  let dx = Math.abs(x1 - x0);
+  let dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  let cx = x0;
+  let cy = y0;
+
+  while (true) {
+    setPixel(data, width, height, cx, cy, r, g, b);
+    if (cx === x1 && cy === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      cx += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      cy += sy;
+    }
+  }
+}
+
+function drawCircle(
+  data: Float32Array,
+  width: number,
+  height: number,
+  cx: number,
+  cy: number,
+  radius: number,
+  r: number,
+  g: number,
+  b: number,
+): void {
+  // Midpoint circle algorithm
+  let x = radius;
+  let y = 0;
+  let err = 1 - radius;
+
+  while (x >= y) {
+    setPixel(data, width, height, cx + x, cy + y, r, g, b);
+    setPixel(data, width, height, cx - x, cy + y, r, g, b);
+    setPixel(data, width, height, cx + x, cy - y, r, g, b);
+    setPixel(data, width, height, cx - x, cy - y, r, g, b);
+    setPixel(data, width, height, cx + y, cy + x, r, g, b);
+    setPixel(data, width, height, cx - y, cy + x, r, g, b);
+    setPixel(data, width, height, cx + y, cy - x, r, g, b);
+    setPixel(data, width, height, cx - y, cy - x, r, g, b);
+    y++;
+    if (err < 0) {
+      err += 2 * y + 1;
+    } else {
+      x--;
+      err += 2 * (y - x) + 1;
+    }
+  }
+}
+
+function drawRect(
+  data: Float32Array,
+  width: number,
+  height: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number,
+  r: number,
+  g: number,
+  b: number,
+): void {
+  // Top and bottom edges
+  for (let x = rx; x < rx + rw; x++) {
+    setPixel(data, width, height, x, ry, r, g, b);
+    setPixel(data, width, height, x, ry + rh - 1, r, g, b);
+  }
+  // Left and right edges
+  for (let y = ry; y < ry + rh; y++) {
+    setPixel(data, width, height, rx, y, r, g, b);
+    setPixel(data, width, height, rx + rw - 1, y, r, g, b);
+  }
+}
+
+/**
+ * Generate a resolution/alignment test chart.
+ * Uses purely geometric elements: center crosshair with circle, corner crosshairs,
+ * border frame, and frequency gratings at varying periods.
+ *
+ * Text-free (no font rendering required).
+ * Values are sRGB-encoded (not linear).
+ */
+export function generateResolutionChart(width: number, height: number): PatternResult {
+  ({ width, height } = clampDimensions(width, height));
+  // Start with black background
+  const data = new Float32Array(width * height * 4);
+  for (let i = 3; i < data.length; i += 4) {
+    data[i] = 1.0; // alpha = 1
+  }
+
+  const w = 1.0;  // white color value
+
+  // Border frame (1px white outline)
+  drawRect(data, width, height, 0, 0, width, height, w, w, w);
+
+  const cx = Math.floor(width / 2);
+  const cy = Math.floor(height / 2);
+  const minDim = Math.min(width, height);
+
+  // Center crosshair: spans 20% of image
+  const crossLen = Math.max(1, Math.floor(minDim * 0.1));
+  drawLine(data, width, height, cx - crossLen, cy, cx + crossLen, cy, w, w, w);
+  drawLine(data, width, height, cx, cy - crossLen, cx, cy + crossLen, w, w, w);
+
+  // Center circle (radius = 5% of min dimension)
+  const circleR = Math.max(2, Math.floor(minDim * 0.05));
+  drawCircle(data, width, height, cx, cy, circleR, w, w, w);
+
+  // Corner crosshairs at 5% inset
+  const inset = Math.max(2, Math.floor(minDim * 0.05));
+  const cornerLen = Math.max(1, Math.floor(minDim * 0.02));
+  const corners = [
+    [inset, inset],
+    [width - 1 - inset, inset],
+    [inset, height - 1 - inset],
+    [width - 1 - inset, height - 1 - inset],
+  ];
+  for (const corner of corners) {
+    const ccx = corner[0]!;
+    const ccy = corner[1]!;
+    drawLine(data, width, height, ccx - cornerLen, ccy, ccx + cornerLen, ccy, w, w, w);
+    drawLine(data, width, height, ccx, ccy - cornerLen, ccx, ccy + cornerLen, w, w, w);
+  }
+
+  // Frequency gratings: alternating black/white at 1px, 2px, 4px, 8px, 16px periods
+  // Arranged as horizontal bands above center and vertical bands to the right of center
+  const periods = [1, 2, 4, 8, 16];
+  const gratingLen = Math.max(4, Math.floor(minDim * 0.08));
+  const gratingHeight = Math.max(2, Math.floor(minDim * 0.03));
+
+  // Vertical gratings (above center)
+  let gratingY = cy - circleR - gratingHeight - 10;
+  for (const period of periods) {
+    if (gratingY < 2) break;
+    for (let gx = cx - Math.floor(gratingLen / 2); gx < cx + Math.floor(gratingLen / 2); gx++) {
+      const isWhite = Math.floor((gx - (cx - Math.floor(gratingLen / 2))) / period) % 2 === 0;
+      if (isWhite) {
+        for (let gy = gratingY; gy < gratingY + gratingHeight && gy < height; gy++) {
+          setPixel(data, width, height, gx, gy, w, w, w);
+        }
+      }
+    }
+    gratingY -= gratingHeight + 4;
+  }
+
+  // Horizontal gratings (to the right of center)
+  let gratingX = cx + circleR + 10;
+  for (const period of periods) {
+    if (gratingX + gratingHeight >= width - 2) break;
+    for (let gy = cy - Math.floor(gratingLen / 2); gy < cy + Math.floor(gratingLen / 2); gy++) {
+      const isWhite = Math.floor((gy - (cy - Math.floor(gratingLen / 2))) / period) % 2 === 0;
+      if (isWhite) {
+        for (let gx = gratingX; gx < gratingX + gratingHeight && gx < width; gx++) {
+          setPixel(data, width, height, gx, gy, w, w, w);
+        }
+      }
+    }
+    gratingX += gratingHeight + 4;
+  }
+
+  return { width, height, data };
+}
+
 // ---------------------------------------------------------------------------
 // .movieproc URL parsing
 // ---------------------------------------------------------------------------
@@ -210,11 +620,7 @@ export function generateSolid(
  *
  * Format: `<pattern_name>[,key=value,...].movieproc`
  *
- * Examples:
- *   `smpte_bars,start=1,end=100,fps=24.movieproc`
- *   `solid,color=1 0 0 1.movieproc`
- *   `gradient,direction=horizontal.movieproc`
- *   `color_chart.movieproc`
+ * Supports desktop OpenRV aliases: smpte, ebu, checker, colorchart, ramp
  *
  * @throws Error if the URL is not a valid `.movieproc` URL or the pattern is unknown
  */
@@ -227,11 +633,15 @@ export function parseMovieProc(url: string): MovieProcParams {
 
   // Split on commas to get pattern name and key=value pairs
   const parts = body.split(',');
-  const patternName = parts[0]!.trim();
+  let patternName = parts[0]!.trim();
+
+  // Resolve desktop OpenRV aliases
+  if (patternName in PATTERN_ALIASES) {
+    patternName = PATTERN_ALIASES[patternName]!;
+  }
 
   // Validate pattern name
-  const validPatterns: PatternName[] = ['smpte_bars', 'color_chart', 'gradient', 'solid'];
-  if (!validPatterns.includes(patternName as PatternName)) {
+  if (!VALID_PATTERNS.includes(patternName as PatternName)) {
     throw new Error(`Unknown movieproc pattern: "${patternName}"`);
   }
 
@@ -278,6 +688,30 @@ export function parseMovieProc(url: string): MovieProcParams {
           params.direction = value;
         }
         break;
+      case 'cellSize':
+        params.cellSize = parseInt(value, 10);
+        break;
+      case 'colorA': {
+        const aParts = value.split(/\s+/).map(Number);
+        if (aParts.length >= 4) {
+          params.colorA = [aParts[0]!, aParts[1]!, aParts[2]!, aParts[3]!];
+        } else if (aParts.length === 3) {
+          params.colorA = [aParts[0]!, aParts[1]!, aParts[2]!, 1.0];
+        }
+        break;
+      }
+      case 'colorB': {
+        const bParts = value.split(/\s+/).map(Number);
+        if (bParts.length >= 4) {
+          params.colorB = [bParts[0]!, bParts[1]!, bParts[2]!, bParts[3]!];
+        } else if (bParts.length === 3) {
+          params.colorB = [bParts[0]!, bParts[1]!, bParts[2]!, 1.0];
+        }
+        break;
+      }
+      case 'steps':
+        params.steps = parseInt(value, 10);
+        break;
     }
   }
 
@@ -310,8 +744,9 @@ export class ProceduralSourceNode extends BaseSourceNode {
     const params = parseMovieProc(url);
     this.patternParams = params;
 
-    const width = params.width ?? 1920;
-    const height = params.height ?? 1080;
+    const clamped = clampDimensions(params.width ?? 1920, params.height ?? 1080);
+    const width = clamped.width;
+    const height = clamped.height;
     const fps = params.fps ?? 24;
     const start = params.start ?? 1;
     const end = params.end ?? 1;
@@ -344,16 +779,28 @@ export class ProceduralSourceNode extends BaseSourceNode {
     options?: {
       color?: [number, number, number, number];
       direction?: GradientDirection;
+      cellSize?: number;
+      colorA?: [number, number, number, number];
+      colorB?: [number, number, number, number];
+      steps?: number;
       fps?: number;
       duration?: number;
     },
   ): void {
+    const clamped = clampDimensions(width, height);
+    width = clamped.width;
+    height = clamped.height;
+
     const params: MovieProcParams = {
       pattern,
       width,
       height,
       color: options?.color,
       direction: options?.direction,
+      cellSize: options?.cellSize,
+      colorA: options?.colorA,
+      colorB: options?.colorB,
+      steps: options?.steps,
       fps: options?.fps,
     };
     this.patternParams = params;
@@ -383,6 +830,9 @@ export class ProceduralSourceNode extends BaseSourceNode {
       case 'smpte_bars':
         result = generateSMPTEBars(width, height);
         break;
+      case 'ebu_bars':
+        result = generateEBUBars(width, height);
+        break;
       case 'color_chart':
         result = generateColorChart(width, height);
         break;
@@ -391,6 +841,21 @@ export class ProceduralSourceNode extends BaseSourceNode {
         break;
       case 'solid':
         result = generateSolid(width, height, params.color ?? [0, 0, 0, 1]);
+        break;
+      case 'checkerboard':
+        result = generateCheckerboard(
+          width,
+          height,
+          params.cellSize,
+          params.colorA,
+          params.colorB,
+        );
+        break;
+      case 'grey_ramp':
+        result = generateGreyRamp(width, height, params.steps, params.direction);
+        break;
+      case 'resolution_chart':
+        result = generateResolutionChart(width, height);
         break;
       default:
         throw new Error(`Unknown pattern: ${params.pattern}`);

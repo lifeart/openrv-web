@@ -528,7 +528,7 @@ export class SessionGTOExporter {
   }
 
   /**
-   * Build source group objects (RVSourceGroup + RVFileSource)
+   * Build source group objects (RVSourceGroup + RVFileSource or RVMovieProc)
    * Returns array of objects for a single source
    */
   static buildSourceGroupObjects(source: MediaSource, groupName: string): ObjectData[] {
@@ -545,7 +545,34 @@ export class SessionGTOExporter {
       .end();
     objects.push(groupBuilder.build().objects[0]!);
 
-    // 2. RVFileSource (or RVImageSource based on type)
+    // 2. Check if this is a procedural source (movieproc)
+    if (source.proceduralSourceNode) {
+      const movieProcName = `${groupName}_movieProc`;
+      const movieProcBuilder = new GTOBuilder();
+      const movieProcObject = movieProcBuilder.object(movieProcName, 'RVMovieProc', 1);
+
+      // Build a .movieproc URL from the source metadata
+      let movieProcUrl = source.url;
+      if (movieProcUrl.startsWith('movieproc://')) {
+        // Convert movieproc:// URL back to .movieproc format
+        const pattern = movieProcUrl.replace('movieproc://', '');
+        const parts = [pattern];
+        if (source.width > 0) parts.push(`width=${source.width}`);
+        if (source.height > 0) parts.push(`height=${source.height}`);
+        movieProcUrl = `${parts.join(',')}.movieproc`;
+      }
+
+      movieProcObject
+        .component('movie')
+        .string('url', movieProcUrl)
+        .end();
+
+      movieProcObject.end();
+      objects.push(movieProcBuilder.build().objects[0]!);
+      return objects;
+    }
+
+    // 3. RVFileSource (or RVImageSource based on type)
     const protocol = source.type === 'image' ? 'RVImageSource' : 'RVFileSource';
     const sourceBuilder = new GTOBuilder();
 

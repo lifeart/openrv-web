@@ -5,6 +5,7 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
 
 /**
  * Public source information returned by the API
@@ -124,5 +125,48 @@ export class MediaAPI {
    */
   getSourceCount(): number {
     return this.session.sourceCount;
+  }
+
+  /**
+   * Load a procedural test pattern as a source.
+   *
+   * @param pattern - The pattern type to generate (e.g., 'smpte_bars', 'checkerboard')
+   * @param options - Optional configuration for resolution, color, and other parameters
+   *
+   * @example
+   * ```ts
+   * openrv.media.loadProceduralSource('smpte_bars');
+   * openrv.media.loadProceduralSource('solid', { color: [1, 0, 0, 1] });
+   * openrv.media.loadProceduralSource('checkerboard', { width: 3840, height: 2160, cellSize: 32 });
+   * ```
+   */
+  loadProceduralSource(
+    pattern: PatternName,
+    options?: {
+      width?: number;
+      height?: number;
+      color?: [number, number, number, number];
+      direction?: GradientDirection;
+      cellSize?: number;
+      steps?: number;
+      fps?: number;
+      duration?: number;
+    },
+  ): void {
+    this.session.loadProceduralSource(pattern, options);
+  }
+
+  /**
+   * Load a procedural source from a `.movieproc` URL string.
+   *
+   * @param url - The movieproc URL (e.g., 'smpte_bars,width=1920,height=1080.movieproc')
+   *
+   * @example
+   * ```ts
+   * openrv.media.loadMovieProc('checkerboard,cellSize=32.movieproc');
+   * ```
+   */
+  loadMovieProc(url: string): void {
+    this.session.loadMovieProc(url);
   }
 }

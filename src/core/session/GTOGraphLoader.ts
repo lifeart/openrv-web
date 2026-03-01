@@ -556,7 +556,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const children: string[] = [];
       for (const child of allObjects) {
         if (child.name.startsWith(groupName + '_') &&
-            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource')) {
+            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource' || child.protocol === 'RVMovieProc')) {
           children.push(child.name);
         }
       }
@@ -771,6 +771,17 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           if (typeof channels === 'string') nodeInfo.properties.imageChannels = channels;
           if (typeof bitsPerChannel === 'number') nodeInfo.properties.imageBitsPerChannel = bitsPerChannel;
           if (typeof isFloat === 'number') nodeInfo.properties.imageIsFloat = isFloat !== 0;
+        }
+      }
+    }
+
+    // Parse procedural source (movieproc) properties
+    if (protocol === 'RVMovieProc') {
+      const movieComp = obj.component('movie');
+      if (movieComp?.exists()) {
+        const url = movieComp.property('url').value() as string;
+        if (typeof url === 'string' && url.endsWith('.movieproc')) {
+          nodeInfo.properties.movieProcUrl = url;
         }
       }
     }

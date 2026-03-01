@@ -14,6 +14,8 @@ import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
 import { ThemeControl } from '../ThemeControl';
 import { showAlert, showPrompt } from '../shared/Modal';
+import { DropdownMenu } from '../shared/DropdownMenu';
+import type { PatternName } from '../../../nodes/sources/ProceduralSourceNode';
 import { getIconSvg, IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
 import { Z_INDEX, SHADOWS } from '../shared/theme';
@@ -61,6 +63,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private volumeEl!: HTMLElement;
   private _isImageMode = false;
   private _imageTransitionTimers: ReturnType<typeof setTimeout>[] = [];
+
+  // Procedural sources dropdown
+  private _sourcesMenu: DropdownMenu | null = null;
 
   // Track the active speed menu cleanup callback for disposal
   private _activeSpeedMenuCleanup: (() => void) | null = null;
@@ -227,6 +232,31 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Export dropdown
     fileGroup.appendChild(this.exportControl.render());
+
+    // Sources dropdown (procedural test patterns)
+    this._sourcesMenu = new DropdownMenu({
+      minWidth: '180px',
+      onSelect: (value) => { void this.handleProceduralSource(value); },
+    });
+    this._sourcesMenu.setItems([
+      { value: 'smpte_bars', label: 'SMPTE Color Bars' },
+      { value: 'ebu_bars', label: 'EBU Color Bars' },
+      { value: 'color_chart', label: 'Color Chart' },
+      { value: 'solid', label: 'Solid Color...' },
+      { value: 'gradient', label: 'Gradient (horizontal)' },
+      { value: 'checkerboard', label: 'Checkerboard' },
+      { value: 'grey_ramp', label: 'Grey Ramp' },
+      { value: 'resolution_chart', label: 'Resolution Chart' },
+      { value: 'custom_resolution', label: 'Custom Resolution...' },
+    ]);
+    const sourcesButton = this.createCompactButton(
+      'Sources',
+      () => this._sourcesMenu!.toggle(sourcesButton),
+      'Load procedural test pattern',
+      'image',
+    );
+    sourcesButton.setAttribute('aria-haspopup', 'menu');
+    fileGroup.appendChild(sourcesButton);
 
     this.container.appendChild(fileGroup);
     this.addDivider();
@@ -1369,6 +1399,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       this._activeLayoutMenuCleanup();
     }
 
+    // Remove procedural sources dropdown
+    if (this._sourcesMenu) {
+      this._sourcesMenu.dispose();
+      this._sourcesMenu = null;
+    }
+
     // Remove overflow fade listeners
     if (this._scrollHandler) {
       this.container.removeEventListener('scroll', this._scrollHandler);
@@ -1469,6 +1505,103 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
    */
   setPresentationState(isEnabled: boolean): void {
     setButtonActive(this.presentationButton, isEnabled, 'icon');
+  }
+
+  /**
+   * Handle procedural source selection from the Sources dropdown.
+   */
+  private async handleProceduralSource(pattern: string): Promise<void> {
+    let options: Record<string, unknown> = {};
+
+    if (pattern === 'custom_resolution') {
+      const resStr = await showPrompt(
+        'Enter resolution (e.g. "1920 1080" or "3840 2160"):',
+        { defaultValue: '1920 1080', title: 'Custom Resolution' }
+      );
+      if (!resStr) return;
+      const [w, h] = resStr.split(/[\sx,]+/).map(Number);
+      if (!w || !h || isNaN(w) || isNaN(h) || w < 1 || h < 1) {
+        await showAlert('Invalid resolution. Please enter two positive integers.');
+        return;
+      }
+      options = { width: Math.min(w, 8192), height: Math.min(h, 8192) };
+      // Default to SMPTE bars at the custom resolution
+      this.session.loadProceduralSource('smpte_bars', options as { width: number; height: number });
+      this.emit('fileLoaded', undefined);
+      return;
+    }
+
+    if (pattern === 'solid') {
+      const colorStr = await showPrompt(
+        'Enter a color:\n  Hex: #FF0000\n  RGB 0-255: 255 0 0\n  RGB 0-1: 1.0 0.0 0.0\nValues are sRGB-encoded.',
+        { defaultValue: '0.5 0.5 0.5', title: 'Solid Color' }
+      );
+      if (!colorStr) return;
+      const color = this.parseSolidColorInput(colorStr);
+      if (!color) {
+        await showAlert('Could not parse color. Use hex (#FF0000), 0-255 (255 0 0), or 0-1 (1.0 0.0 0.0).');
+        return;
+      }
+      this.session.loadProceduralSource('solid', { color });
+    } else {
+      this.session.loadProceduralSource(pattern as PatternName, options as { width?: number; height?: number });
+    }
+    this.emit('fileLoaded', undefined);
+  }
+
+  /**
+   * Parse color input from multiple formats: hex, 0-255, or 0-1.
+   */
+  parseSolidColorInput(input: string): [number, number, number, number] | null {
+    const trimmed = input.trim();
+
+    // Hex format: #RGB, #RRGGBB, #RRGGBBAA
+    if (trimmed.startsWith('#')) {
+      const hex = trimmed.slice(1);
+      let r: number, g: number, b: number, a = 1;
+      if (hex.length === 3) {
+        const h0 = hex.charAt(0);
+        const h1 = hex.charAt(1);
+        const h2 = hex.charAt(2);
+        r = parseInt(h0 + h0, 16) / 255;
+        g = parseInt(h1 + h1, 16) / 255;
+        b = parseInt(h2 + h2, 16) / 255;
+      } else if (hex.length === 6) {
+        r = parseInt(hex.slice(0, 2), 16) / 255;
+        g = parseInt(hex.slice(2, 4), 16) / 255;
+        b = parseInt(hex.slice(4, 6), 16) / 255;
+      } else if (hex.length === 8) {
+        r = parseInt(hex.slice(0, 2), 16) / 255;
+        g = parseInt(hex.slice(2, 4), 16) / 255;
+        b = parseInt(hex.slice(4, 6), 16) / 255;
+        a = parseInt(hex.slice(6, 8), 16) / 255;
+      } else {
+        return null;
+      }
+      if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a)) return null;
+      return [r, g, b, a];
+    }
+
+    const parts = trimmed.split(/[\s,]+/).map(Number);
+    if (parts.length < 3 || parts.some(isNaN)) return null;
+
+    // 0-255 integer range (any value > 1.0 triggers this)
+    if (parts.some(v => v > 1.0)) {
+      return [
+        (parts[0] ?? 0) / 255,
+        (parts[1] ?? 0) / 255,
+        (parts[2] ?? 0) / 255,
+        parts[3] !== undefined ? parts[3] / 255 : 1,
+      ];
+    }
+
+    // 0-1 float range
+    return [
+      parts[0] ?? 0,
+      parts[1] ?? 0,
+      parts[2] ?? 0,
+      parts[3] ?? 1,
+    ];
   }
 
   /**
