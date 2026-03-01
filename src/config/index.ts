@@ -11,3 +11,4 @@ export * from './TimingConfig';
 export * from './PlaybackConfig';
 export * from './RenderConfig';
 export * from './UIConfig';
+export * from './CacheConfig';
