@@ -938,7 +938,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
  */
 describe('Renderer Sampler Unit Assignment (regression)', () => {
   /** The four sampler uniforms that must each have a unique texture unit. */
-  const SAMPLER_UNIFORMS = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT', 'u_lut3D'] as const;
+  const SAMPLER_UNIFORMS = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT', 'u_lookLUT3D', 'u_fileLUT3D', 'u_displayLUT3D'] as const;
 
   /**
    * Create a mock GL context that tracks uniform1i calls with named locations.
@@ -1127,10 +1127,12 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     expect(assignments.has('u_texture'), 'u_texture must be assigned when all features disabled').toBe(true);
     expect(assignments.has('u_curvesLUT'), 'u_curvesLUT must be assigned when curves disabled').toBe(true);
     expect(assignments.has('u_falseColorLUT'), 'u_falseColorLUT must be assigned when false color disabled').toBe(true);
-    expect(assignments.has('u_lut3D'), 'u_lut3D must be assigned when 3D LUT disabled').toBe(true);
+    expect(assignments.has('u_lookLUT3D'), 'u_lookLUT3D must be assigned when Look LUT disabled').toBe(true);
+    expect(assignments.has('u_fileLUT3D'), 'u_fileLUT3D must be assigned when File LUT disabled').toBe(true);
+    expect(assignments.has('u_displayLUT3D'), 'u_displayLUT3D must be assigned when Display LUT disabled').toBe(true);
   });
 
-  it('REN-SAM-003: u_lut3D (sampler3D) never shares a unit with any sampler2D uniform', () => {
+  it('REN-SAM-003: sampler3D uniforms never share a unit with any sampler2D uniform', () => {
     const renderer = new Renderer();
     const { getSamplerUnitAssignments } = initWithTrackingGL(renderer);
     const sourceCanvas = document.createElement('canvas');
@@ -1139,23 +1141,25 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     renderer.renderSDRFrame(sourceCanvas);
 
     const assignments = getSamplerUnitAssignments();
-    const lut3DUnit = assignments.get('u_lut3D');
 
-    expect(lut3DUnit, 'u_lut3D must have a texture unit assigned').not.toBeUndefined();
-
-    // u_lut3D (sampler3D) must not share a unit with any sampler2D uniform
+    // All three sampler3D uniforms must not share units with sampler2D uniforms
+    const sampler3DUniforms = ['u_lookLUT3D', 'u_fileLUT3D', 'u_displayLUT3D'] as const;
     const sampler2DUniforms = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT'] as const;
-    for (const name of sampler2DUniforms) {
-      const unit = assignments.get(name);
-      expect(
-        unit,
-        `${name} must have a texture unit assigned`,
-      ).not.toBeUndefined();
-      expect(
-        unit,
-        `u_lut3D (sampler3D, unit ${lut3DUnit}) must not share a texture unit ` +
-        `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
-      ).not.toBe(lut3DUnit);
+    for (const lut3DName of sampler3DUniforms) {
+      const lut3DUnit = assignments.get(lut3DName);
+      expect(lut3DUnit, `${lut3DName} must have a texture unit assigned`).not.toBeUndefined();
+      for (const name of sampler2DUniforms) {
+        const unit = assignments.get(name);
+        expect(
+          unit,
+          `${name} must have a texture unit assigned`,
+        ).not.toBeUndefined();
+        expect(
+          unit,
+          `${lut3DName} (sampler3D, unit ${lut3DUnit}) must not share a texture unit ` +
+          `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
+        ).not.toBe(lut3DUnit);
+      }
     }
   });
 });

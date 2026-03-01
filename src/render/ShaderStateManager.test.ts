@@ -406,6 +406,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -434,6 +436,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -462,6 +466,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -496,6 +502,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -527,6 +535,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -555,6 +565,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -701,6 +713,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -734,6 +748,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -946,6 +962,8 @@ describe('ShaderStateManager', () => {
         bindCurvesLUTTexture: () => {},
         bindFalseColorLUTTexture: () => {},
         bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => { inlineLUTBound = true; },
         getCanvasSize: () => ({ width: 100, height: 100 }),
@@ -973,6 +991,8 @@ describe('ShaderStateManager', () => {
         bindCurvesLUTTexture: () => {},
         bindFalseColorLUTTexture: () => {},
         bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => { inlineLUTBound = true; },
         getCanvasSize: () => ({ width: 100, height: 100 }),
@@ -1078,6 +1098,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1108,6 +1130,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1155,6 +1179,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1308,6 +1334,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1331,6 +1359,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1499,6 +1529,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1522,6 +1554,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1545,6 +1579,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1662,6 +1698,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1704,6 +1742,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1846,7 +1886,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
       expect(uploaded['u_outputPrimariesEnabled']).toBe(0);
     });
@@ -1860,7 +1900,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
       expect(mat).toBeInstanceOf(Float32Array);
@@ -1878,7 +1918,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
       expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
@@ -1894,7 +1934,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
       expect(mat[0]).toBeCloseTo(0.6274, 3);
@@ -1913,7 +1953,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
       expect(mat).toBeInstanceOf(Float32Array);
@@ -1933,7 +1973,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       // Input: bt2020 → sRGB (REC2020_TO_SRGB)
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const inMat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
@@ -1965,6 +2005,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 

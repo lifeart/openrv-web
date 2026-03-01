@@ -335,8 +335,11 @@ export class WebGPUBackend implements RendererBackend {
   setZebraStripes(_state: ZebraState): void { /* STUB */ }
   setChannelMode(_mode: ChannelMode): void { /* STUB */ }
 
-  // --- 3D LUT (single-pass float precision pipeline) ---
+  // --- 3D LUT (multi-point pipeline) ---
   setLUT(_lutData: Float32Array | null, _lutSize: number, _intensity: number): void { /* STUB */ }
+  setFileLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
+  setLookLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
+  setDisplayLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
 
   // --- Display color management ---
   setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }

@@ -41,6 +41,27 @@ export interface RenderState {
   zebraStripes: ZebraState;
   channelMode: ChannelMode;
   lut: { data: Float32Array | null; size: number; intensity: number };
+  fileLUT?: {
+    data: Float32Array | null;
+    size: number;
+    intensity: number;
+    domainMin: [number, number, number];
+    domainMax: [number, number, number];
+  };
+  lookLUT?: {
+    data: Float32Array | null;
+    size: number;
+    intensity: number;
+    domainMin: [number, number, number];
+    domainMax: [number, number, number];
+  };
+  displayLUT?: {
+    data: Float32Array | null;
+    size: number;
+    intensity: number;
+    domainMin: [number, number, number];
+    domainMax: [number, number, number];
+  };
   displayColor: DisplayColorConfig;
   highlightsShadows: HighlightsShadowsState;
   vibrance: { amount: number; skinProtection: boolean };

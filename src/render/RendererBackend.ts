@@ -176,8 +176,17 @@ export interface RendererHDR {
   /** Set background pattern for alpha compositing in HDR mode. */
   setBackgroundPattern(state: BackgroundPatternState): void;
 
-  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. */
+  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. (Deprecated: routes to Look LUT) */
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
+
+  /** Set File LUT (per-source, applied after EOTF, before input primaries). */
+  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+
+  /** Set Look LUT (per-source creative grade). */
+  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+
+  /** Set Display LUT (session-wide, after output primaries, before display transfer). */
+  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
 }
 
 // ---------------------------------------------------------------------------

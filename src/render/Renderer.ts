@@ -97,6 +97,8 @@ export class Renderer implements RendererBackend {
   private curvesLUTTexture: WebGLTexture | null = null;
   private falseColorLUTTexture: WebGLTexture | null = null;
   private lut3DTexture: WebGLTexture | null = null;
+  private fileLUT3DTexture: WebGLTexture | null = null;
+  private displayLUT3DTexture: WebGLTexture | null = null;
   private filmLUTTexture: WebGLTexture | null = null;
   private inlineLUTTexture: WebGLTexture | null = null;
 
@@ -104,6 +106,10 @@ export class Renderer implements RendererBackend {
   private falseColorRGBABuffer: Uint8Array | null = null;
   private lut3DRGBABuffer: Float32Array | null = null;
   private lut3DRGBABufferSize = 0; // tracks the LUT size the buffer was allocated for
+  private fileLUT3DRGBABuffer: Float32Array | null = null;
+  private fileLUT3DRGBABufferSize = 0;
+  private displayLUT3DRGBABuffer: Float32Array | null = null;
+  private displayLUT3DRGBABufferSize = 0;
   private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
   private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
 
@@ -121,7 +127,7 @@ export class Renderer implements RendererBackend {
 
   // --- OCIO WASM shader integration ---
   // When OCIO WASM is active, the baked 3D LUT from the WASM processor is
-  // uploaded through the existing u_lut3D uniform path. The OCIO shader code
+  // uploaded through the Look LUT (u_lookLUT3D) uniform path. The OCIO shader code
   // and uniform metadata are stored here for future shader injection support.
   private ocioWasmActive = false;
   private ocioShaderCode: string | null = null;
@@ -628,6 +634,18 @@ export class Renderer implements RendererBackend {
         const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE5);
         gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
+      },
+      bindFileLUT3DTexture: () => {
+        this.ensureFileLUT3DTexture();
+        const gl = this.gl!;
+        gl.activeTexture(gl.TEXTURE6);
+        gl.bindTexture(gl.TEXTURE_3D, this.fileLUT3DTexture);
+      },
+      bindDisplayLUT3DTexture: () => {
+        this.ensureDisplayLUT3DTexture();
+        const gl = this.gl!;
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_3D, this.displayLUT3DTexture);
       },
       getCanvasSize: () => {
         this.canvasSizeCache.width = this.canvas?.width ?? 0;
@@ -1924,6 +1942,18 @@ export class Renderer implements RendererBackend {
     this.stateManager.setLUT(lutData, lutSize, intensity);
   }
 
+  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+    this.stateManager.setFileLUT(data, size, intensity, domainMin, domainMax);
+  }
+
+  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+    this.stateManager.setLookLUT(data, size, intensity, domainMin, domainMax);
+  }
+
+  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+    this.stateManager.setDisplayLUT(data, size, intensity, domainMin, domainMax);
+  }
+
   // -----------------------------------------------------------------------
   // OCIO WASM Integration
   // -----------------------------------------------------------------------
@@ -1932,8 +1962,8 @@ export class Renderer implements RendererBackend {
    * Set the OCIO WASM shader and 3D LUT for GPU-accelerated OCIO processing.
    *
    * When OCIO WASM is active, the baked 3D LUT from the WASM processor is
-   * uploaded to a dedicated GPU texture and applied through the existing
-   * u_lut3D pipeline path at full intensity (1.0). The translated GLSL
+   * uploaded to a dedicated GPU texture and applied through the Look LUT
+   * (u_lookLUT3D) pipeline path at full intensity (1.0). The translated GLSL
    * shader code and uniform metadata are stored for future dynamic shader
    * injection support.
    *
@@ -2052,6 +2082,92 @@ export class Renderer implements RendererBackend {
       gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
       this.stateManager.clearTextureDirtyFlag('lut3DDirty');
+    }
+  }
+
+  private ensureFileLUT3DTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const snapshot = this.stateManager.getFileLUT3DSnapshot();
+
+    if (!this.fileLUT3DTexture) {
+      this.fileLUT3DTexture = gl.createTexture();
+    }
+
+    if (snapshot.dirty && snapshot.data && snapshot.size > 0) {
+      const size = snapshot.size;
+      const totalEntries = size * size * size;
+      if (!this.fileLUT3DRGBABuffer || this.fileLUT3DRGBABufferSize !== size) {
+        this.fileLUT3DRGBABuffer = new Float32Array(totalEntries * RGBA_CHANNELS);
+        this.fileLUT3DRGBABufferSize = size;
+        const rgbaData = this.fileLUT3DRGBABuffer;
+        for (let i = 0; i < totalEntries; i++) {
+          rgbaData[i * RGBA_CHANNELS + 3] = 1.0;
+        }
+      }
+      const rgbaData = this.fileLUT3DRGBABuffer;
+      const src = snapshot.data;
+      for (let i = 0; i < totalEntries; i++) {
+        const dstOff = i * RGBA_CHANNELS;
+        const srcOff = i * RGB_CHANNELS;
+        rgbaData[dstOff] = src[srcOff]!;
+        rgbaData[dstOff + 1] = src[srcOff + 1]!;
+        rgbaData[dstOff + 2] = src[srcOff + 2]!;
+      }
+
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_3D, this.fileLUT3DTexture);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+      this.stateManager.clearTextureDirtyFlag('fileLUT3DDirty');
+    }
+  }
+
+  private ensureDisplayLUT3DTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const snapshot = this.stateManager.getDisplayLUT3DSnapshot();
+
+    if (!this.displayLUT3DTexture) {
+      this.displayLUT3DTexture = gl.createTexture();
+    }
+
+    if (snapshot.dirty && snapshot.data && snapshot.size > 0) {
+      const size = snapshot.size;
+      const totalEntries = size * size * size;
+      if (!this.displayLUT3DRGBABuffer || this.displayLUT3DRGBABufferSize !== size) {
+        this.displayLUT3DRGBABuffer = new Float32Array(totalEntries * RGBA_CHANNELS);
+        this.displayLUT3DRGBABufferSize = size;
+        const rgbaData = this.displayLUT3DRGBABuffer;
+        for (let i = 0; i < totalEntries; i++) {
+          rgbaData[i * RGBA_CHANNELS + 3] = 1.0;
+        }
+      }
+      const rgbaData = this.displayLUT3DRGBABuffer;
+      const src = snapshot.data;
+      for (let i = 0; i < totalEntries; i++) {
+        const dstOff = i * RGBA_CHANNELS;
+        const srcOff = i * RGB_CHANNELS;
+        rgbaData[dstOff] = src[srcOff]!;
+        rgbaData[dstOff + 1] = src[srcOff + 1]!;
+        rgbaData[dstOff + 2] = src[srcOff + 2]!;
+      }
+
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_3D, this.displayLUT3DTexture);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+      this.stateManager.clearTextureDirtyFlag('displayLUT3DDirty');
     }
   }
 
@@ -2297,6 +2413,8 @@ export class Renderer implements RendererBackend {
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
+    if (this.fileLUT3DTexture) gl.deleteTexture(this.fileLUT3DTexture);
+    if (this.displayLUT3DTexture) gl.deleteTexture(this.displayLUT3DTexture);
     if (this.filmLUTTexture) gl.deleteTexture(this.filmLUTTexture);
     if (this.inlineLUTTexture) gl.deleteTexture(this.inlineLUTTexture);
 
@@ -2304,6 +2422,10 @@ export class Renderer implements RendererBackend {
     this.falseColorRGBABuffer = null;
     this.lut3DRGBABuffer = null;
     this.lut3DRGBABufferSize = 0;
+    this.fileLUT3DRGBABuffer = null;
+    this.fileLUT3DRGBABufferSize = 0;
+    this.displayLUT3DRGBABuffer = null;
+    this.displayLUT3DRGBABufferSize = 0;
     this.inlineLUTDeinterleavedBuffer = null;
     this.inlineLUTDeinterleavedBufferSize = 0;
     this.rgbaPadBuffer = null;
