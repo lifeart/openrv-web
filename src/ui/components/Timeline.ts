@@ -2,6 +2,7 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
+import { TimelineContextMenu } from './TimelineContextMenu';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -67,6 +68,7 @@ export class Timeline {
   private drawScheduled = false;
   private scheduledRafId = 0;
   private noteOverlay: NoteOverlay | null = null;
+  private contextMenu: TimelineContextMenu;
   private playlistManager: PlaylistManager | null = null;
   private transitionManager: TransitionManager | null = null;
   private cachedColors: {
@@ -213,6 +215,7 @@ export class Timeline {
     if (!ctx) throw new Error('Failed to get 2D context');
     this.ctx = ctx;
 
+    this.contextMenu = new TimelineContextMenu();
     this.bindEvents();
   }
 
@@ -221,6 +224,7 @@ export class Timeline {
     this.canvas.addEventListener('dblclick', this.onDoubleClick);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
+    this.canvas.addEventListener('contextmenu', this.onContextMenu);
 
     // Listen to session changes
     this.subs.add(this.session.on('frameChanged', () => this.scheduleDraw()));
@@ -433,15 +437,7 @@ export class Timeline {
   private onDoubleClick = (e: MouseEvent): void => {
     if (!this.paintEngine) return;
 
-    const rect = this.canvas.getBoundingClientRect();
-    const padding = 60;
-    const trackWidth = rect.width - padding * 2;
-    const x = e.clientX - rect.left - padding;
-    const progress = Math.max(0, Math.min(1, x / trackWidth));
-
-    const source = this.session.currentSource;
-    const duration = source?.duration ?? 1;
-    const clickedFrame = Math.round(1 + progress * (duration - 1));
+    const clickedFrame = this.frameAtClientX(e.clientX);
 
     // Find nearest annotated frame
     const annotatedFrames = this.paintEngine.getAnnotatedFrames();
@@ -462,6 +458,9 @@ export class Timeline {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    // Only left-clicks trigger seeking; right-clicks are handled by contextmenu
+    if (e.button !== 0) return;
+
     const rect = this.canvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const x = e.clientX - rect.left;
@@ -491,18 +490,73 @@ export class Timeline {
   };
 
   private seekToPosition(clientX: number): void {
+    const frame = this.frameAtClientX(clientX);
+    this.session.goToFrame(frame);
+  }
+
+  /**
+   * Convert a clientX coordinate to a 1-based frame number.
+   */
+  private frameAtClientX(clientX: number): number {
     const rect = this.canvas.getBoundingClientRect();
     const padding = 60;
     const trackWidth = rect.width - padding * 2;
     const x = clientX - rect.left - padding;
     const progress = Math.max(0, Math.min(1, x / trackWidth));
-
-    // Seek within full source duration, not just in/out range
     const source = this.session.currentSource;
     const duration = source?.duration ?? 1;
-    const frame = Math.round(1 + progress * (duration - 1));
-    this.session.goToFrame(frame);
+    return Math.round(1 + progress * (duration - 1));
   }
+
+  private onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault();
+
+    // No menu when no source is loaded
+    const source = this.session.currentSource;
+    if (!source) return;
+
+    // Cancel any in-progress drag
+    if (this.isDragging) {
+      this.isDragging = false;
+    }
+
+    const frame = this.frameAtClientX(e.clientX);
+    const fps = this.session.fps;
+    const frameLabel = formatFrameDisplay(frame, fps, this._timecodeDisplayMode);
+    const timecode = formatTimecode(frame, fps);
+
+    const markerAtFrame = this.session.getMarkerAtFrame(frame);
+    const inPoint = this.session.inPoint;
+    const outPoint = this.session.outPoint;
+    const duration = source.duration ?? 1;
+    const hasCustomInOut = inPoint !== 1 || outPoint !== duration;
+
+    this.contextMenu.show({
+      x: e.clientX,
+      y: e.clientY,
+      frame,
+      frameLabel,
+      timecode,
+      sourceName: source.name ?? null,
+      sourceResolution: source.width && source.height ? `${source.width}x${source.height}` : null,
+      sourceType: source.type ?? null,
+      markerAtFrame: markerAtFrame ? { frame: markerAtFrame.frame } : null,
+      hasCustomInOut,
+      inPoint,
+      outPoint,
+      onGoToFrame: (f) => this.session.goToFrame(f),
+      onSetInPoint: (f) => this.session.setInPoint(f),
+      onSetOutPoint: (f) => this.session.setOutPoint(f),
+      onResetInOutPoints: () => this.session.resetInOutPoints(),
+      onToggleMark: (f) => this.session.toggleMark(f),
+      onRemoveMark: (f) => this.session.removeMark(f),
+      onCopyTimecode: (tc) => {
+        navigator.clipboard.writeText(tc).catch(() => {
+          // clipboard may not be available
+        });
+      },
+    });
+  };
 
   render(): HTMLElement {
     // Initial resize (store ID for cleanup)
@@ -890,6 +944,8 @@ export class Timeline {
     window.removeEventListener('resize', this.boundHandleResize);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    this.contextMenu.dispose();
     this.thumbnailManager.dispose();
     this.subs.dispose();
     if (this.resizeDebounceTimer) {
