@@ -705,36 +705,40 @@ describe('ViewerExport', () => {
       expect(result!.height).toBe(1080);
     });
 
-    it('should clamp invalid rotation to 0 (no dimension swap)', () => {
+    it('should use AABB dimensions for arbitrary rotation (45°)', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      // Invalid rotation (e.g., corrupted session data)
-      const transform: Transform2D = { rotation: 45 as any, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
-
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
-
-      // Should fall back to 0° (no swap)
-      expect(result).not.toBeNull();
-      expect(result!.width).toBe(1920);
-      expect(result!.height).toBe(1080);
-    });
-
-    it('should clamp negative rotation to 0', () => {
-      const source = createMockMediaSource('image', 1920, 1080);
-      mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: -90 as any, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      // 45° is now a valid rotation angle (no longer clamped)
+      const transform: Transform2D = { rotation: 45, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(1920);
-      expect(result!.height).toBe(1080);
+      // AABB of 1920x1080 at 45° produces larger bounding box
+      const s2 = Math.SQRT2 / 2;
+      const expectedW = Math.ceil(1920 * s2 + 1080 * s2);
+      const expectedH = Math.ceil(1920 * s2 + 1080 * s2);
+      expect(result!.width).toBe(expectedW);
+      expect(result!.height).toBe(expectedH);
     });
 
-    it('should clamp 360 rotation to 0', () => {
+    it('should normalize negative rotation to equivalent positive angle', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      // -90° normalizes to 270° (swaps dimensions)
+      const transform: Transform2D = { rotation: -90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1080);
+      expect(result!.height).toBe(1920);
+    });
+
+    it('should normalize 360 rotation to 0', () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 360 as any, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = { rotation: 360, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 

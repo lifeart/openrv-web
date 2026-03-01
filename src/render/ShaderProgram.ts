@@ -22,6 +22,7 @@ export class ShaderProgram {
   private program: WebGLProgram;
   private uniformLocations = new Map<string, WebGLUniformLocation | null>();
   private attributeLocations = new Map<string, number>();
+  private readonly mat2Buffer = new Float32Array(4);
   private readonly mat3Buffer = new Float32Array(9);
   private readonly mat4Buffer = new Float32Array(16);
 
@@ -348,6 +349,18 @@ export class ShaderProgram {
       } else {
         this.mat4Buffer.set(value);
         this.gl.uniformMatrix4fv(location, false, this.mat4Buffer);
+      }
+    }
+  }
+
+  setUniformMatrix2fv(name: string, value: Float32Array | number[]): void {
+    const location = this.getUniformLocation(name);
+    if (location !== null) {
+      if (value instanceof Float32Array) {
+        this.gl.uniformMatrix2fv(location, false, value);
+      } else {
+        this.mat2Buffer.set(value);
+        this.gl.uniformMatrix2fv(location, false, this.mat2Buffer);
       }
     }
   }

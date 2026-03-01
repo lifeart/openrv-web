@@ -400,14 +400,10 @@ export function parseTransform(dto: GTODTO): Transform2D | null {
   const flipValue = getNumberValue(transformComp.property('flip').value());
   const flopValue = getNumberValue(transformComp.property('flop').value());
 
-  const rotationOptions: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
-  let rotation: 0 | 90 | 180 | 270 = 0;
+  let rotation = 0;
 
-  if (typeof rotationValue === 'number') {
-    const snapped = Math.round(rotationValue / 90) * 90;
-    if (rotationOptions.includes(snapped as 0 | 90 | 180 | 270)) {
-      rotation = snapped as 0 | 90 | 180 | 270;
-    }
+  if (typeof rotationValue === 'number' && Number.isFinite(rotationValue)) {
+    rotation = ((rotationValue % 360) + 360) % 360;
   }
 
   // Parse scale and translate if available

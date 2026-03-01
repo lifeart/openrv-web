@@ -286,12 +286,28 @@ describe('SessionURLManager', () => {
       expect(decodeSessionState(encoded)).toBeNull();
     });
 
-    it('clamps invalid rotation to 0', () => {
+    it('preserves arbitrary rotation angles', () => {
       const json = JSON.stringify({ f: 1, fps: 24, si: 0, t: { r: 45 } });
       const encoded = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       const decoded = decodeSessionState(encoded);
       expect(decoded).not.toBeNull();
-      expect(decoded!.transform!.rotation).toBe(0);
+      expect(decoded!.transform!.rotation).toBe(45);
+    });
+
+    it('normalizes negative rotation to [0, 360)', () => {
+      const json = JSON.stringify({ f: 1, fps: 24, si: 0, t: { r: -90 } });
+      const encoded = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const decoded = decodeSessionState(encoded);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.transform!.rotation).toBe(270);
+    });
+
+    it('normalizes rotation >= 360 to [0, 360)', () => {
+      const json = JSON.stringify({ f: 1, fps: 24, si: 0, t: { r: 450 } });
+      const encoded = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const decoded = decodeSessionState(encoded);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.transform!.rotation).toBe(90);
     });
 
     it('handles hash with # prefix', () => {

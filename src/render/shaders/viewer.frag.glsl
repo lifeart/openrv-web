@@ -916,6 +916,13 @@
       }
 
       void main() {
+        // Out-of-bounds check: discard pixels outside [0,1] texture range
+        // (occurs with non-cardinal rotation angles)
+        if (v_texCoord.x < 0.0 || v_texCoord.x > 1.0 || v_texCoord.y < 0.0 || v_texCoord.y > 1.0) {
+          fragColor = vec4(0.0, 0.0, 0.0, 0.0);
+          return;
+        }
+
         vec4 color = texture(u_texture, v_texCoord);
 
         // 0a. Deinterlace (before EOTF, operates on raw texels)

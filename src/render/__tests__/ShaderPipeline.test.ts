@@ -149,6 +149,7 @@ function createMockGL() {
     uniform2fv: vi.fn(),
     uniform3fv: vi.fn(),
     uniform4fv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix3fv: vi.fn(),
     bindTexture: vi.fn(),
     texImage2D: vi.fn(),
@@ -349,7 +350,7 @@ describe('ShaderPipeline', () => {
 
   it('A-17: passthrough vertex shader does not apply transforms', () => {
     // When we have multiple active stages, intermediate stages should use
-    // passthrough.vert.glsl which has no u_offset/u_scale/u_texRotation uniforms
+    // passthrough.vert.glsl which has no u_offset/u_scale/u_texRotationMatrix uniforms
     pipeline.registerStage(createMockStage('primaryGrade', () => false));
     pipeline.registerStage(createMockStage('compositing', () => false));
 
@@ -390,7 +391,7 @@ describe('ShaderPipeline', () => {
       .map(c => c[1] as string)
       .filter(s => s.includes('a_position'));
 
-    // First program: viewer.vert.glsl (has u_offset, u_scale, u_texRotation)
+    // First program: viewer.vert.glsl (has u_offset, u_scale, u_texRotationMatrix)
     // Other programs: passthrough.vert.glsl (no transforms)
     const viewerVertCount = vertexSources.filter(s => s.includes('u_offset')).length;
     const passthroughVertCount = vertexSources.filter(s => !s.includes('u_offset')).length;

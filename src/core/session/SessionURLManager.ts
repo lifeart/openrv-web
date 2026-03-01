@@ -221,8 +221,8 @@ function parseState(obj: unknown): SessionURLState | null {
 }
 
 function parseTransform(t: Record<string, unknown>): Transform2D {
-  const rotation = typeof t.r === 'number' && [0, 90, 180, 270].includes(t.r)
-    ? (t.r as 0 | 90 | 180 | 270)
+  const rotation = typeof t.r === 'number' && Number.isFinite(t.r)
+    ? ((t.r % 360) + 360) % 360
     : 0;
 
   return {

@@ -1,5 +1,6 @@
 import { IPImage, DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
+import { getRotationMatrix2x2, normalizeAngle } from '../utils/rotation';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
@@ -188,7 +189,7 @@ export class Renderer implements RendererBackend {
   private _currentUnpackColorSpace: string = 'srgb';
 
   // User-applied transform (rotation/flip from TransformControl)
-  private _userRotation: 0 | 90 | 180 | 270 = 0;
+  private _userRotation: number = 0;
   private _userFlipH = false;
   private _userFlipV = false;
 
@@ -499,10 +500,11 @@ export class Renderer implements RendererBackend {
     }
 
     // Combine video rotation metadata with user-applied rotation.
-    // Both are in degrees (0, 90, 180, 270). The shader uniform is 0-3.
+    // Both are in degrees. Build a 2x2 rotation matrix for the vertex shader.
     const videoRotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
-    const totalRotation = (Math.round(videoRotation / 90) + Math.round(this._userRotation / 90)) % 4;
-    this.displayShader.setUniformInt('u_texRotation', totalRotation);
+    const totalRotationDeg = normalizeAngle(videoRotation + this._userRotation);
+    const rotMatrix = getRotationMatrix2x2(totalRotationDeg);
+    this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', rotMatrix);
     this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
     this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
@@ -1078,7 +1080,7 @@ export class Renderer implements RendererBackend {
    * Set user-applied rotation and flip (from TransformControl).
    * Combined with video rotation metadata in the vertex shader.
    */
-  setUserTransform(rotation: 0 | 90 | 180 | 270, flipH: boolean, flipV: boolean): void {
+  setUserTransform(rotation: number, flipH: boolean, flipV: boolean): void {
     this._userRotation = rotation;
     this._userFlipH = flipH;
     this._userFlipV = flipV;
@@ -2217,7 +2219,8 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
     // Apply user rotation/flip (SDR has no video rotation metadata)
-    this.displayShader.setUniformInt('u_texRotation', Math.round(this._userRotation / 90) % 4);
+    const sdrRotMatrix = getRotationMatrix2x2(normalizeAngle(this._userRotation));
+    this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', sdrRotMatrix);
     this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
     this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
