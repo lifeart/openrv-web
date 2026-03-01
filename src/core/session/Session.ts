@@ -5,6 +5,8 @@ import type { RVEDLEntry } from '../../formats/RVEDLParser';
 import type { SequenceFrame, SequenceInfo } from '../../utils/media/SequenceLoader';
 import type { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import type { FileSourceNode } from '../../nodes/sources/FileSourceNode';
+import type { ProceduralSourceNode } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type {
@@ -237,6 +239,8 @@ export interface MediaSource {
   videoSourceNode?: VideoSourceNode;
   // File source node for EXR files (supports layer selection)
   fileSourceNode?: FileSourceNode;
+  // Procedural source node for test patterns (movieproc)
+  proceduralSourceNode?: ProceduralSourceNode;
   // OPFS cache key (set after successful cache put)
   opfsCacheKey?: string;
 
@@ -1062,6 +1066,27 @@ export class Session extends EventEmitter<SessionEvents> {
 
   protected parseTextAnnotation(textId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): TextAnnotation | null {
     return this._annotations.annotationStore.parseTextAnnotation(textId, frame, comp, aspectRatio);
+  }
+
+  // Procedural source loading — delegated to SessionMedia
+  loadProceduralSource(
+    pattern: PatternName,
+    options?: {
+      width?: number;
+      height?: number;
+      color?: [number, number, number, number];
+      direction?: GradientDirection;
+      cellSize?: number;
+      steps?: number;
+      fps?: number;
+      duration?: number;
+    },
+  ): void {
+    this._media.loadProceduralSource(pattern, options);
+  }
+
+  loadMovieProc(url: string): void {
+    this._media.loadMovieProc(url);
   }
 
   // File loading — delegated to SessionMedia

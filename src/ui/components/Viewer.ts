@@ -1499,7 +1499,7 @@ export class Viewer {
 
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
     // (unless WebGPU blit bypasses OCIO for HDR output)
-    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true || source?.videoSourceNode?.isHDR() === true;
+    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true || source?.videoSourceNode?.isHDR() === true || source?.proceduralSourceNode != null;
     const ocioActive = this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
     const blitBypassesOCIO = this.glRendererManager.isWebGPUBlitReady;
     if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || (ocioActive && !blitBypassesOCIO))) {
@@ -1643,7 +1643,8 @@ export class Viewer {
     // HDR sources may have no element (they render via WebGL); treat them as valid
     const hdrFileSource = source?.fileSourceNode?.isHDR() ? source.fileSourceNode : null;
     const isHDRVideo = source?.videoSourceNode?.isHDR() === true;
-    if (!source || (!element && !hdrFileSource && !isHDRVideo)) {
+    const hdrProceduralSource = source?.proceduralSourceNode ?? null;
+    if (!source || (!element && !hdrFileSource && !isHDRVideo && !hdrProceduralSource)) {
       // Placeholder mode
       this.sourceWidth = 640;
       this.sourceHeight = 360;
@@ -1789,6 +1790,31 @@ export class Viewer {
     } else if (hdrFileSource) {
       // OCIO is active — bypass WebGL and use 2D canvas so OCIO LUT can be applied
       element = hdrFileSource.getCanvas() ?? undefined;
+      if (!element) {
+        this.drawPlaceholder();
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return;
+      }
+    } else if (hdrProceduralSource) {
+      // Procedural sources produce float32 IPImage — render via WebGL HDR path
+      const ipImage = hdrProceduralSource.getIPImage();
+      if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return; // Procedural HDR path complete
+      }
+      // Fallback: convert to ImageData and use 2D canvas
+      if (ipImage) {
+        const fallbackCanvas = document.createElement('canvas');
+        fallbackCanvas.width = ipImage.width;
+        fallbackCanvas.height = ipImage.height;
+        const fallbackCtx = fallbackCanvas.getContext('2d');
+        if (fallbackCtx) {
+          fallbackCtx.putImageData(ipImage.toImageData(), 0, 0);
+          element = fallbackCanvas;
+        }
+      }
       if (!element) {
         this.drawPlaceholder();
         this.updateCanvasPosition();

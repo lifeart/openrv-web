@@ -1,17 +1,26 @@
 /**
  * ProceduralSourceNode Unit Tests
  *
- * Tests for procedural test pattern generation and .movieproc URL parsing.
+ * Tests for procedural test pattern generation, .movieproc URL parsing,
+ * pattern name aliases, input guards, and resolution cap enforcement.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   generateSMPTEBars,
+  generateEBUBars,
   generateColorChart,
   generateGradient,
   generateSolid,
+  generateCheckerboard,
+  generateGreyRamp,
+  generateResolutionChart,
   parseMovieProc,
   ProceduralSourceNode,
+  clampDimensions,
+  PROCEDURAL_MAX_DIMENSION,
+  PROCEDURAL_MAX_PIXELS,
+  PATTERN_ALIASES,
 } from './ProceduralSourceNode';
 
 // ---------------------------------------------------------------------------
@@ -27,6 +36,88 @@ function getPixel(
   const idx = (y * width + x) * 4;
   return [data[idx]!, data[idx + 1]!, data[idx + 2]!, data[idx + 3]!];
 }
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+describe('PROCEDURAL_MAX_DIMENSION', () => {
+  it('is 8192', () => {
+    expect(PROCEDURAL_MAX_DIMENSION).toBe(8192);
+  });
+});
+
+describe('PROCEDURAL_MAX_PIXELS', () => {
+  it('is 8192 * 8192', () => {
+    expect(PROCEDURAL_MAX_PIXELS).toBe(8192 * 8192);
+  });
+});
+
+describe('PATTERN_ALIASES', () => {
+  it('maps smpte to smpte_bars', () => {
+    expect(PATTERN_ALIASES['smpte']).toBe('smpte_bars');
+  });
+  it('maps ebu to ebu_bars', () => {
+    expect(PATTERN_ALIASES['ebu']).toBe('ebu_bars');
+  });
+  it('maps checker to checkerboard', () => {
+    expect(PATTERN_ALIASES['checker']).toBe('checkerboard');
+  });
+  it('maps colorchart to color_chart', () => {
+    expect(PATTERN_ALIASES['colorchart']).toBe('color_chart');
+  });
+  it('maps ramp to gradient', () => {
+    expect(PATTERN_ALIASES['ramp']).toBe('gradient');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// clampDimensions
+// ---------------------------------------------------------------------------
+
+describe('clampDimensions', () => {
+  it('passes through valid dimensions', () => {
+    expect(clampDimensions(1920, 1080)).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it('clamps width below 1 to 1', () => {
+    expect(clampDimensions(0, 100)).toEqual({ width: 1, height: 100 });
+    expect(clampDimensions(-5, 100)).toEqual({ width: 1, height: 100 });
+  });
+
+  it('clamps height below 1 to 1', () => {
+    expect(clampDimensions(100, 0)).toEqual({ width: 100, height: 1 });
+  });
+
+  it('clamps width above PROCEDURAL_MAX_DIMENSION', () => {
+    const result = clampDimensions(10000, 100);
+    expect(result.width).toBe(8192);
+    expect(result.height).toBe(100);
+  });
+
+  it('clamps height above PROCEDURAL_MAX_DIMENSION', () => {
+    const result = clampDimensions(100, 10000);
+    expect(result.width).toBe(100);
+    expect(result.height).toBe(8192);
+  });
+
+  it('scales down proportionally when total pixels exceed PROCEDURAL_MAX_PIXELS', () => {
+    // 8192 x 8192 is exactly the limit, so it should be fine
+    const atLimit = clampDimensions(8192, 8192);
+    expect(atLimit.width * atLimit.height).toBeLessThanOrEqual(PROCEDURAL_MAX_PIXELS);
+
+    // Beyond limit: both at max should still fit
+    const result = clampDimensions(8192, 8192);
+    expect(result.width).toBeLessThanOrEqual(8192);
+    expect(result.height).toBeLessThanOrEqual(8192);
+  });
+
+  it('floors fractional dimensions', () => {
+    const result = clampDimensions(100.7, 200.3);
+    expect(result.width).toBe(100);
+    expect(result.height).toBe(200);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // SMPTE Bars Tests
@@ -95,6 +186,60 @@ describe('generateSMPTEBars', () => {
     expect(result.width).toBe(7);
     expect(result.height).toBe(1);
     expect(result.data.length).toBe(7 * 1 * 4);
+  });
+
+  it('clamps oversized dimensions', () => {
+    const result = generateSMPTEBars(10000, 100);
+    expect(result.width).toBe(8192);
+    expect(result.height).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EBU Bars Tests
+// ---------------------------------------------------------------------------
+
+describe('generateEBUBars', () => {
+  it('generates 8 bars at 100% intensity', () => {
+    const result = generateEBUBars(800, 100);
+    expect(result.width).toBe(800);
+    expect(result.height).toBe(100);
+
+    const expectedColors: [number, number, number][] = [
+      [1.0, 1.0, 1.0],  // White
+      [1.0, 1.0, 0.0],  // Yellow
+      [0.0, 1.0, 1.0],  // Cyan
+      [0.0, 1.0, 0.0],  // Green
+      [1.0, 0.0, 1.0],  // Magenta
+      [1.0, 0.0, 0.0],  // Red
+      [0.0, 0.0, 1.0],  // Blue
+      [0.0, 0.0, 0.0],  // Black
+    ];
+
+    for (let bar = 0; bar < 8; bar++) {
+      const x = Math.floor(bar * 100 + 50); // center of each bar
+      const [r, g, b] = getPixel(result.data, result.width, x, 50);
+      expect(r).toBeCloseTo(expectedColors[bar]![0], 2);
+      expect(g).toBeCloseTo(expectedColors[bar]![1], 2);
+      expect(b).toBeCloseTo(expectedColors[bar]![2], 2);
+    }
+  });
+
+  it('has alpha = 1.0 for all pixels', () => {
+    const result = generateEBUBars(80, 10);
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 80; x++) {
+        const [, , , a] = getPixel(result.data, result.width, x, y);
+        expect(a).toBe(1.0);
+      }
+    }
+  });
+
+  it('outputs correct dimensions', () => {
+    const result = generateEBUBars(1920, 1080);
+    expect(result.width).toBe(1920);
+    expect(result.height).toBe(1080);
+    expect(result.data.length).toBe(1920 * 1080 * 4);
   });
 });
 
@@ -278,6 +423,233 @@ describe('generateColorChart', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Checkerboard Tests
+// ---------------------------------------------------------------------------
+
+describe('generateCheckerboard', () => {
+  it('alternates black and white cells with default parameters', () => {
+    const result = generateCheckerboard(128, 128, 64);
+    // Top-left cell should be white (colorA)
+    const [r0, g0, b0, a0] = getPixel(result.data, result.width, 0, 0);
+    expect(r0).toBe(1.0);
+    expect(g0).toBe(1.0);
+    expect(b0).toBe(1.0);
+    expect(a0).toBe(1.0);
+
+    // Second cell (right of first) should be black (colorB)
+    const [r1, g1, b1] = getPixel(result.data, result.width, 64, 0);
+    expect(r1).toBe(0.0);
+    expect(g1).toBe(0.0);
+    expect(b1).toBe(0.0);
+
+    // Cell below first should also be black
+    const [r2, g2, b2] = getPixel(result.data, result.width, 0, 64);
+    expect(r2).toBe(0.0);
+    expect(g2).toBe(0.0);
+    expect(b2).toBe(0.0);
+
+    // Diagonal cell (1,1) should be white
+    const [r3, g3, b3] = getPixel(result.data, result.width, 64, 64);
+    expect(r3).toBe(1.0);
+    expect(g3).toBe(1.0);
+    expect(b3).toBe(1.0);
+  });
+
+  it('supports custom colors', () => {
+    const colorA: [number, number, number, number] = [1, 0, 0, 1]; // red
+    const colorB: [number, number, number, number] = [0, 0, 1, 1]; // blue
+    const result = generateCheckerboard(100, 100, 50, colorA, colorB);
+
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    expect(r0).toBe(1.0); // red
+
+    const [r1, , b1] = getPixel(result.data, result.width, 50, 0);
+    expect(r1).toBe(0.0);
+    expect(b1).toBe(1.0); // blue
+  });
+
+  it('supports custom cell size', () => {
+    const result = generateCheckerboard(20, 20, 5);
+    // Pixel at (0,0) = cell (0,0) -> white
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    expect(r0).toBe(1.0);
+
+    // Pixel at (5,0) = cell (1,0) -> black
+    const [r1] = getPixel(result.data, result.width, 5, 0);
+    expect(r1).toBe(0.0);
+
+    // Pixel at (10,0) = cell (2,0) -> white
+    const [r2] = getPixel(result.data, result.width, 10, 0);
+    expect(r2).toBe(1.0);
+  });
+
+  it('clamps cellSize=0 to 1', () => {
+    const result = generateCheckerboard(10, 10, 0);
+    expect(result.width).toBe(10);
+    expect(result.height).toBe(10);
+    // With cellSize=1, every pixel alternates
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    const [r1] = getPixel(result.data, result.width, 1, 0);
+    expect(r0).not.toBe(r1);
+  });
+
+  it('clamps negative cellSize to 1', () => {
+    const result = generateCheckerboard(10, 10, -5);
+    expect(result.data.length).toBe(10 * 10 * 4);
+  });
+
+  it('has correct dimensions', () => {
+    const result = generateCheckerboard(200, 100, 32);
+    expect(result.width).toBe(200);
+    expect(result.height).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Grey Ramp Tests
+// ---------------------------------------------------------------------------
+
+describe('generateGreyRamp', () => {
+  it('generates correct step values for 4 horizontal steps', () => {
+    const result = generateGreyRamp(400, 100, 4, 'horizontal');
+    // Step 0: 0/(4-1) = 0.0
+    const [r0] = getPixel(result.data, result.width, 10, 50);
+    expect(r0).toBeCloseTo(0.0, 5);
+
+    // Step 1: 1/(4-1) = 0.333
+    const [r1] = getPixel(result.data, result.width, 110, 50);
+    expect(r1).toBeCloseTo(1 / 3, 4);
+
+    // Step 2: 2/(4-1) = 0.667
+    const [r2] = getPixel(result.data, result.width, 210, 50);
+    expect(r2).toBeCloseTo(2 / 3, 4);
+
+    // Step 3: 3/(4-1) = 1.0
+    const [r3] = getPixel(result.data, result.width, 399, 50);
+    expect(r3).toBeCloseTo(1.0, 5);
+  });
+
+  it('generates correct step values for vertical direction', () => {
+    const result = generateGreyRamp(100, 400, 4, 'vertical');
+    // First step at top
+    const [r0] = getPixel(result.data, result.width, 50, 10);
+    expect(r0).toBeCloseTo(0.0, 5);
+
+    // Last step at bottom
+    const [r3] = getPixel(result.data, result.width, 50, 399);
+    expect(r3).toBeCloseTo(1.0, 5);
+  });
+
+  it('step boundaries are discrete (not smooth)', () => {
+    const result = generateGreyRamp(100, 10, 4, 'horizontal');
+    // Within step 0 (pixels 0-24), all should be the same
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    const [r24] = getPixel(result.data, result.width, 24, 0);
+    expect(r24).toBe(r0);
+
+    // Step 1 should be different from step 0
+    const [r25] = getPixel(result.data, result.width, 25, 0);
+    expect(r25).not.toBe(r0);
+  });
+
+  it('clamps steps=0 to 2', () => {
+    const result = generateGreyRamp(100, 10, 0);
+    expect(result.data.length).toBe(100 * 10 * 4);
+    // With 2 steps: first half = 0.0, second half = 1.0
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    expect(r0).toBeCloseTo(0.0, 5);
+    const [r99] = getPixel(result.data, result.width, 99, 0);
+    expect(r99).toBeCloseTo(1.0, 5);
+  });
+
+  it('clamps steps=1 to 2', () => {
+    const result = generateGreyRamp(100, 10, 1);
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    expect(r0).toBeCloseTo(0.0, 5);
+    const [r99] = getPixel(result.data, result.width, 99, 0);
+    expect(r99).toBeCloseTo(1.0, 5);
+  });
+
+  it('defaults to 16 steps and horizontal direction', () => {
+    const result = generateGreyRamp(160, 10);
+    // Each step should be 10px wide
+    const [r0] = getPixel(result.data, result.width, 0, 0);
+    expect(r0).toBeCloseTo(0.0, 5);
+    const [r159] = getPixel(result.data, result.width, 159, 0);
+    expect(r159).toBeCloseTo(1.0, 5);
+  });
+
+  it('alpha is always 1.0', () => {
+    const result = generateGreyRamp(50, 10, 8);
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 50; x++) {
+        const [, , , a] = getPixel(result.data, result.width, x, y);
+        expect(a).toBe(1.0);
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Resolution Chart Tests
+// ---------------------------------------------------------------------------
+
+describe('generateResolutionChart', () => {
+  it('generates correct dimensions', () => {
+    const result = generateResolutionChart(640, 480);
+    expect(result.width).toBe(640);
+    expect(result.height).toBe(480);
+    expect(result.data.length).toBe(640 * 480 * 4);
+  });
+
+  it('has white border frame (top-left corner pixel is white)', () => {
+    const result = generateResolutionChart(100, 100);
+    const [r, g, b] = getPixel(result.data, result.width, 0, 0);
+    expect(r).toBe(1.0);
+    expect(g).toBe(1.0);
+    expect(b).toBe(1.0);
+  });
+
+  it('has white border frame (bottom-right corner pixel is white)', () => {
+    const result = generateResolutionChart(100, 100);
+    const [r, g, b] = getPixel(result.data, result.width, 99, 99);
+    expect(r).toBe(1.0);
+    expect(g).toBe(1.0);
+    expect(b).toBe(1.0);
+  });
+
+  it('has center crosshair (center pixel is white)', () => {
+    const result = generateResolutionChart(200, 200);
+    const cx = 100;
+    const cy = 100;
+    const [r, g, b] = getPixel(result.data, result.width, cx, cy);
+    expect(r).toBe(1.0);
+    expect(g).toBe(1.0);
+    expect(b).toBe(1.0);
+  });
+
+  it('interior pixels are mostly black (background)', () => {
+    const result = generateResolutionChart(200, 200);
+    // Pick a pixel far from any features
+    const [r] = getPixel(result.data, result.width, 15, 15);
+    expect(r).toBe(0.0);
+  });
+
+  it('alpha is 1.0 everywhere', () => {
+    const result = generateResolutionChart(50, 50);
+    for (let i = 3; i < result.data.length; i += 4) {
+      expect(result.data[i]).toBe(1.0);
+    }
+  });
+
+  it('handles small dimensions gracefully', () => {
+    const result = generateResolutionChart(10, 10);
+    expect(result.width).toBe(10);
+    expect(result.height).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // .movieproc URL Parsing Tests
 // ---------------------------------------------------------------------------
 
@@ -343,6 +715,75 @@ describe('parseMovieProc', () => {
     expect(params.height).toBe(200);
     expect(params.fps).toBe(30);
   });
+
+  // New pattern parsing
+  it('parses ebu_bars', () => {
+    const params = parseMovieProc('ebu_bars.movieproc');
+    expect(params.pattern).toBe('ebu_bars');
+  });
+
+  it('parses checkerboard with cellSize', () => {
+    const params = parseMovieProc('checkerboard,cellSize=32.movieproc');
+    expect(params.pattern).toBe('checkerboard');
+    expect(params.cellSize).toBe(32);
+  });
+
+  it('parses checkerboard with colorA and colorB', () => {
+    const params = parseMovieProc('checkerboard,cellSize=64,colorA=1 1 0 1,colorB=0 0 0.5 1.movieproc');
+    expect(params.pattern).toBe('checkerboard');
+    expect(params.cellSize).toBe(64);
+    expect(params.colorA).toEqual([1, 1, 0, 1]);
+    expect(params.colorB).toEqual([0, 0, 0.5, 1]);
+  });
+
+  it('parses grey_ramp with steps and direction', () => {
+    const params = parseMovieProc('grey_ramp,steps=16,direction=horizontal.movieproc');
+    expect(params.pattern).toBe('grey_ramp');
+    expect(params.steps).toBe(16);
+    expect(params.direction).toBe('horizontal');
+  });
+
+  it('parses resolution_chart with width and height', () => {
+    const params = parseMovieProc('resolution_chart,width=1920,height=1080.movieproc');
+    expect(params.pattern).toBe('resolution_chart');
+    expect(params.width).toBe(1920);
+    expect(params.height).toBe(1080);
+  });
+
+  // Alias resolution
+  it('resolves smpte alias to smpte_bars', () => {
+    const params = parseMovieProc('smpte.movieproc');
+    expect(params.pattern).toBe('smpte_bars');
+  });
+
+  it('resolves ebu alias to ebu_bars', () => {
+    const params = parseMovieProc('ebu.movieproc');
+    expect(params.pattern).toBe('ebu_bars');
+  });
+
+  it('resolves checker alias to checkerboard', () => {
+    const params = parseMovieProc('checker,cellSize=16.movieproc');
+    expect(params.pattern).toBe('checkerboard');
+    expect(params.cellSize).toBe(16);
+  });
+
+  it('resolves colorchart alias to color_chart', () => {
+    const params = parseMovieProc('colorchart.movieproc');
+    expect(params.pattern).toBe('color_chart');
+  });
+
+  it('resolves ramp alias to gradient', () => {
+    const params = parseMovieProc('ramp,direction=vertical.movieproc');
+    expect(params.pattern).toBe('gradient');
+    expect(params.direction).toBe('vertical');
+  });
+
+  it('resolves smpte alias with parameters', () => {
+    const params = parseMovieProc('smpte,width=3840,height=2160.movieproc');
+    expect(params.pattern).toBe('smpte_bars');
+    expect(params.width).toBe(3840);
+    expect(params.height).toBe(2160);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -400,6 +841,46 @@ describe('ProceduralSourceNode', () => {
     const last = image!.getPixel(10, 0);
     expect(first[0]).toBeCloseTo(0.0, 5);
     expect(last[0]).toBeCloseTo(1.0, 5);
+  });
+
+  it('loadPattern with EBU bars', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('ebu_bars', 800, 100);
+
+    expect(node.isReady()).toBe(true);
+    const image = node.getIPImage();
+    expect(image).not.toBeNull();
+    expect(image!.width).toBe(800);
+    expect(image!.height).toBe(100);
+  });
+
+  it('loadPattern with checkerboard', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('checkerboard', 100, 100, { cellSize: 50 });
+
+    expect(node.isReady()).toBe(true);
+    const image = node.getIPImage();
+    expect(image).not.toBeNull();
+  });
+
+  it('loadPattern with grey_ramp', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('grey_ramp', 100, 100, { steps: 8 });
+
+    expect(node.isReady()).toBe(true);
+    const image = node.getIPImage();
+    expect(image).not.toBeNull();
+  });
+
+  it('loadPattern with resolution_chart', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('resolution_chart', 200, 200);
+
+    expect(node.isReady()).toBe(true);
+    const image = node.getIPImage();
+    expect(image).not.toBeNull();
+    expect(image!.width).toBe(200);
+    expect(image!.height).toBe(200);
   });
 
   it('sets metadata correctly from movieproc URL', () => {
@@ -472,5 +953,72 @@ describe('ProceduralSourceNode', () => {
     expect(() => node.loadFromMovieProc('noise.movieproc')).toThrow(
       'Unknown movieproc pattern: "noise"',
     );
+  });
+
+  it('loadFromMovieProc with alias resolves correctly', () => {
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc('smpte.movieproc');
+    expect(node.isReady()).toBe(true);
+
+    const metadata = node.getMetadata();
+    expect(metadata.width).toBe(1920);
+  });
+
+  it('loadFromMovieProc with ebu alias', () => {
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc('ebu,width=640,height=480.movieproc');
+    expect(node.isReady()).toBe(true);
+
+    const metadata = node.getMetadata();
+    expect(metadata.width).toBe(640);
+    expect(metadata.height).toBe(480);
+  });
+
+  it('loadFromMovieProc with checker alias', () => {
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc('checker,cellSize=32.movieproc');
+    expect(node.isReady()).toBe(true);
+  });
+
+  it('enforces PROCEDURAL_MAX_DIMENSION cap in loadPattern', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('solid', 10000, 100);
+
+    const metadata = node.getMetadata();
+    expect(metadata.width).toBe(8192);
+    expect(metadata.height).toBe(100);
+  });
+
+  it('enforces PROCEDURAL_MAX_DIMENSION cap in loadFromMovieProc', () => {
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc('solid,width=10000,height=100.movieproc');
+
+    const metadata = node.getMetadata();
+    expect(metadata.width).toBe(8192);
+    expect(metadata.height).toBe(100);
+  });
+
+  it('loadPattern with new options (cellSize, colorA, colorB, steps)', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('checkerboard', 100, 100, {
+      cellSize: 25,
+      colorA: [1, 0, 0, 1],
+      colorB: [0, 1, 0, 1],
+    });
+    expect(node.isReady()).toBe(true);
+
+    const image = node.getIPImage();
+    expect(image).not.toBeNull();
+
+    // First pixel (cell 0,0) should be colorA (red)
+    const p = image!.getPixel(0, 0);
+    expect(p[0]).toBe(1.0);
+    expect(p[1]).toBe(0.0);
+  });
+
+  it('loadPattern grey_ramp with steps option', () => {
+    const node = new ProceduralSourceNode();
+    node.loadPattern('grey_ramp', 100, 10, { steps: 4 });
+    expect(node.isReady()).toBe(true);
   });
 });
