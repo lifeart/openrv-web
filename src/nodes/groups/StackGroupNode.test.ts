@@ -1083,4 +1083,51 @@ describe('StackGroupNode', () => {
       });
     });
   });
+
+  describe('supportsGPUCompositing', () => {
+    it('returns true for over', () => {
+      stackNode.setCompositeType('over');
+      expect(stackNode.supportsGPUCompositing()).toBe(true);
+    });
+
+    it('returns true for replace', () => {
+      stackNode.setCompositeType('replace');
+      expect(stackNode.supportsGPUCompositing()).toBe(true);
+    });
+
+    it('returns true for add', () => {
+      stackNode.setCompositeType('add');
+      expect(stackNode.supportsGPUCompositing()).toBe(true);
+    });
+
+    it('returns true for difference', () => {
+      stackNode.setCompositeType('difference');
+      expect(stackNode.supportsGPUCompositing()).toBe(true);
+    });
+
+    it('returns false for dissolve', () => {
+      stackNode.setCompositeType('dissolve');
+      expect(stackNode.supportsGPUCompositing()).toBe(false);
+    });
+
+    it('returns false for topmost', () => {
+      stackNode.setCompositeType('topmost');
+      expect(stackNode.supportsGPUCompositing()).toBe(false);
+    });
+
+    it('returns false for minus', () => {
+      stackNode.setCompositeType('minus');
+      expect(stackNode.supportsGPUCompositing()).toBe(false);
+    });
+
+    it('returns false for -difference', () => {
+      stackNode.setCompositeType('-difference');
+      expect(stackNode.supportsGPUCompositing()).toBe(false);
+    });
+
+    it('returns false for custom types', () => {
+      stackNode.setCompositeType('custom-blend');
+      expect(stackNode.supportsGPUCompositing()).toBe(false);
+    });
+  });
 });

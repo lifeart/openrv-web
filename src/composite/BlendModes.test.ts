@@ -10,6 +10,9 @@ import {
   compositeMultipleLayers,
   CompositeLayer,
   stackCompositeToBlendMode,
+  COMPOSITE_MODES,
+  COMPOSITE_MODE_CODES,
+  isGLBlendStateMode,
 } from './BlendModes';
 import { createTestImageData } from '../../test/utils';
 
@@ -761,6 +764,79 @@ describe('BlendModes', () => {
       expect(result.data[0]).toBeGreaterThanOrEqual(125);
       expect(result.data[0]).toBeLessThanOrEqual(131);
       expect(result.data[3]).toBe(255); // fully opaque composite
+    });
+  });
+
+  describe('COMPOSITE_MODES', () => {
+    it('contains the Release 1 modes', () => {
+      expect(COMPOSITE_MODES).toContain('over');
+      expect(COMPOSITE_MODES).toContain('replace');
+      expect(COMPOSITE_MODES).toContain('add');
+      expect(COMPOSITE_MODES).toContain('difference');
+    });
+
+    it('has 4 modes', () => {
+      expect(COMPOSITE_MODES.length).toBe(4);
+    });
+  });
+
+  describe('COMPOSITE_MODE_CODES', () => {
+    it('maps over to 0', () => {
+      expect(COMPOSITE_MODE_CODES['over']).toBe(0);
+    });
+
+    it('maps normal to 0 (same as over)', () => {
+      expect(COMPOSITE_MODE_CODES['normal']).toBe(0);
+    });
+
+    it('maps replace to 1', () => {
+      expect(COMPOSITE_MODE_CODES['replace']).toBe(1);
+    });
+
+    it('maps add to 2', () => {
+      expect(COMPOSITE_MODE_CODES['add']).toBe(2);
+    });
+
+    it('maps difference to 3', () => {
+      expect(COMPOSITE_MODE_CODES['difference']).toBe(3);
+    });
+  });
+
+  describe('isGLBlendStateMode', () => {
+    it('returns true for over', () => {
+      expect(isGLBlendStateMode('over')).toBe(true);
+    });
+
+    it('returns true for normal', () => {
+      expect(isGLBlendStateMode('normal')).toBe(true);
+    });
+
+    it('returns true for replace', () => {
+      expect(isGLBlendStateMode('replace')).toBe(true);
+    });
+
+    it('returns true for add', () => {
+      expect(isGLBlendStateMode('add')).toBe(true);
+    });
+
+    it('returns false for difference', () => {
+      expect(isGLBlendStateMode('difference')).toBe(false);
+    });
+
+    it('returns false for multiply', () => {
+      expect(isGLBlendStateMode('multiply')).toBe(false);
+    });
+
+    it('returns false for screen', () => {
+      expect(isGLBlendStateMode('screen')).toBe(false);
+    });
+
+    it('returns false for overlay', () => {
+      expect(isGLBlendStateMode('overlay')).toBe(false);
+    });
+
+    it('returns false for dissolve', () => {
+      expect(isGLBlendStateMode('dissolve')).toBe(false);
     });
   });
 
