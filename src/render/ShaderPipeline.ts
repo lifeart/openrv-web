@@ -390,6 +390,228 @@ void main() {
     }
   }
 
+  /**
+   * Per-layer stage IDs (scene-referred / linear space).
+   * These stages are applied per-layer before compositing.
+   */
+  static readonly PER_LAYER_STAGES: ReadonlySet<StageId> = new Set([
+    'inputDecode',
+    'linearize',
+    'primaryGrade',
+    'secondaryGrade',
+    'spatialEffects',
+    'colorPipeline',
+  ]);
+
+  /**
+   * Display output stage IDs (applied once to the composited result).
+   */
+  static readonly DISPLAY_STAGES: ReadonlySet<StageId> = new Set([
+    'sceneAnalysis',
+    'spatialEffectsPost',
+    'displayOutput',
+    'diagnostics',
+    'compositing',
+  ]);
+
+  /**
+   * Execute per-layer stages only (inputDecode through colorPipeline),
+   * rendering the result into the given target FBO.
+   *
+   * This produces a linear-space (scene-referred) result suitable for
+   * multi-layer compositing before the display output transform.
+   *
+   * @returns true if rendering succeeded, false on failure.
+   */
+  executeToLinearFBO(
+    gl: WebGL2RenderingContext,
+    sourceTexture: WebGLTexture,
+    renderWidth: number,
+    renderHeight: number,
+    state: Readonly<InternalShaderState>,
+    texCb: TextureCallbacks,
+    targetFBO: WebGLFramebuffer,
+    isHDR: boolean = false,
+  ): boolean {
+    // Filter to only per-layer active stages
+    const activeStages = this.stages.filter(
+      s => ShaderPipeline.PER_LAYER_STAGES.has(s.id) && !s.isIdentity(state),
+    );
+
+    if (activeStages.length === 0) {
+      // No active per-layer stages: just passthrough-blit source to the target FBO
+      this.renderPassthrough(gl, sourceTexture, targetFBO, renderWidth, renderHeight);
+      return true;
+    }
+
+    // Update Global Uniforms UBO
+    this.updateGlobalUBO(gl, state);
+
+    if (activeStages.length === 1) {
+      // Single stage: render directly to target FBO
+      const stage = activeStages[0]!;
+      const program = this.ensureProgram(gl, stage, true);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+      gl.viewport(0, 0, renderWidth, renderHeight);
+      program.use();
+      stage.applyUniforms(program, state, texCb);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, sourceTexture);
+      program.setUniformInt('u_inputTexture', 0);
+      this.drawQuad(gl);
+      return true;
+    }
+
+    // Multi-pass: ping-pong for intermediate stages, last stage to targetFBO
+    const fboFormat = isHDR ? 'rgba16f' : 'rgba8';
+    if (!this.pingPong.ensure(gl, renderWidth, renderHeight, fboFormat)) {
+      if (fboFormat === 'rgba16f') {
+        if (!this.pingPong.ensure(gl, renderWidth, renderHeight, 'rgba8')) {
+          log.warn('executeToLinearFBO: FBO allocation failed');
+          return false;
+        }
+      } else {
+        log.warn('executeToLinearFBO: FBO allocation failed');
+        return false;
+      }
+    }
+
+    this.pingPong.resetChain();
+    let currentReadTexture: WebGLTexture | null = sourceTexture;
+
+    for (let i = 0; i < activeStages.length; i++) {
+      const stage = activeStages[i]!;
+      const isFirst = i === 0;
+      const isLast = i === activeStages.length - 1;
+      const program = this.ensureProgram(gl, stage, isFirst);
+
+      if (isLast) {
+        // Last per-layer stage renders to the target FBO
+        gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+        gl.viewport(0, 0, renderWidth, renderHeight);
+      } else {
+        this.pingPong.beginPass(gl);
+      }
+
+      if (!isFirst) {
+        this.pingPong.setFilteringMode(gl, stage.needsBilinearInput ?? false);
+        currentReadTexture = this.pingPong.readTexture;
+      }
+
+      program.use();
+      stage.applyUniforms(program, state, texCb);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, currentReadTexture);
+      program.setUniformInt('u_inputTexture', 0);
+      this.drawQuad(gl);
+
+      if (!isLast) {
+        this.pingPong.endPass();
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Execute display output stages only (sceneAnalysis through compositing),
+   * reading from the given input texture (the composited linear-space result).
+   *
+   * @param inputTexture - The composited linear-space texture to process.
+   * @param targetFBO - null for screen, or a specific FBO.
+   */
+  executeDisplayOutput(
+    gl: WebGL2RenderingContext,
+    inputTexture: WebGLTexture,
+    renderWidth: number,
+    renderHeight: number,
+    state: Readonly<InternalShaderState>,
+    texCb: TextureCallbacks,
+    targetFBO: WebGLFramebuffer | null = null,
+    isHDR: boolean = false,
+  ): void {
+    // Filter to only display output active stages
+    const activeStages = this.stages.filter(
+      s => ShaderPipeline.DISPLAY_STAGES.has(s.id) && !s.isIdentity(state),
+    );
+
+    if (activeStages.length === 0) {
+      // No active display stages: passthrough blit
+      this.renderPassthrough(gl, inputTexture, targetFBO, renderWidth, renderHeight);
+      return;
+    }
+
+    // Update Global Uniforms UBO
+    this.updateGlobalUBO(gl, state);
+
+    if (activeStages.length === 1) {
+      // Single stage: render directly to target
+      const stage = activeStages[0]!;
+      // Display stages always use passthrough.vert.glsl (no pan/zoom — the
+      // input is already a composited FBO texture in normalized coords).
+      const program = this.ensureProgram(gl, stage, false);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+      gl.viewport(0, 0, renderWidth, renderHeight);
+      program.use();
+      stage.applyUniforms(program, state, texCb);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, inputTexture);
+      program.setUniformInt('u_inputTexture', 0);
+      this.drawQuad(gl);
+      return;
+    }
+
+    // Multi-pass
+    const fboFormat = isHDR ? 'rgba16f' : 'rgba8';
+    if (!this.pingPong.ensure(gl, renderWidth, renderHeight, fboFormat)) {
+      if (fboFormat === 'rgba16f') {
+        if (!this.pingPong.ensure(gl, renderWidth, renderHeight, 'rgba8')) {
+          log.warn('executeDisplayOutput: FBO allocation failed, using passthrough');
+          this.renderPassthrough(gl, inputTexture, targetFBO, renderWidth, renderHeight);
+          return;
+        }
+      } else {
+        log.warn('executeDisplayOutput: FBO allocation failed, using passthrough');
+        this.renderPassthrough(gl, inputTexture, targetFBO, renderWidth, renderHeight);
+        return;
+      }
+    }
+
+    this.pingPong.resetChain();
+    let currentReadTexture: WebGLTexture | null = inputTexture;
+
+    for (let i = 0; i < activeStages.length; i++) {
+      const stage = activeStages[i]!;
+      const isFirst = i === 0;
+      const isLast = i === activeStages.length - 1;
+      // Display stages always use passthrough.vert.glsl
+      const program = this.ensureProgram(gl, stage, false);
+
+      if (isLast) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+        gl.viewport(0, 0, renderWidth, renderHeight);
+      } else {
+        this.pingPong.beginPass(gl);
+      }
+
+      if (!isFirst) {
+        this.pingPong.setFilteringMode(gl, stage.needsBilinearInput ?? false);
+        currentReadTexture = this.pingPong.readTexture;
+      }
+
+      program.use();
+      stage.applyUniforms(program, state, texCb);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, currentReadTexture);
+      program.setUniformInt('u_inputTexture', 0);
+      this.drawQuad(gl);
+
+      if (!isLast) {
+        this.pingPong.endPass();
+      }
+    }
+  }
+
   private sortStages(): void {
     const orderMap = new Map(this.stageOrder.map((id, i) => [id, i]));
     this.stages.sort((a, b) => (orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER));

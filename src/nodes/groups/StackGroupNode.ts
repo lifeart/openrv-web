@@ -517,4 +517,13 @@ export class StackGroupNode extends BaseGroupNode {
     this.properties.setValue('layerStencilBoxes', []);
     this.markDirty();
   }
+
+  /**
+   * Whether this stack node's composite type is supported by GPU compositing.
+   * Release 1 supports: over, replace, add, difference.
+   */
+  supportsGPUCompositing(): boolean {
+    const type = this.getCompositeType();
+    return type === 'over' || type === 'replace' || type === 'add' || type === 'difference';
+  }
 }

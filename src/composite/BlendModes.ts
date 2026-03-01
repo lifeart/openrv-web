@@ -343,6 +343,37 @@ export function stackCompositeToBlendMode(composite: StackCompositeType): BlendM
 }
 
 /**
+ * Release 1 composite modes supported by the GPU compositing path.
+ * Over, Replace, Add, Difference cover 95%+ of VFX review workflows.
+ */
+export const COMPOSITE_MODES: readonly (BlendMode | StackCompositeType)[] = [
+  'over',
+  'replace',
+  'add',
+  'difference',
+] as const;
+
+/**
+ * Shader mode codes for the compositing fragment shader.
+ * Must match the constants in compositing.frag.glsl.
+ */
+export const COMPOSITE_MODE_CODES: Record<string, number> = {
+  over: 0,
+  normal: 0,
+  replace: 1,
+  add: 2,
+  difference: 3,
+};
+
+/**
+ * Check if a blend mode can use the fast GL blend state path
+ * (no shader needed). Returns true for Over/Normal, Replace, Add.
+ */
+export function isGLBlendStateMode(mode: BlendMode | StackCompositeType): boolean {
+  return mode === 'over' || mode === 'normal' || mode === 'replace' || mode === 'add';
+}
+
+/**
  * Bilinear interpolation resize for ImageData.
  *
  * For each destination pixel, the corresponding source position is computed as
