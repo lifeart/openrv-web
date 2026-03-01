@@ -20,6 +20,7 @@ export type OpenRVEventName =
   | 'speedChange'
   | 'volumeChange'
   | 'muteChange'
+  | 'audioScrubEnabledChange'
   | 'loopModeChange'
   | 'inOutChange'
   | 'markerChange'
@@ -37,6 +38,7 @@ export interface OpenRVEventData {
   speedChange: { speed: number };
   volumeChange: { volume: number };
   muteChange: { muted: boolean };
+  audioScrubEnabledChange: { enabled: boolean };
   loopModeChange: { mode: string };
   inOutChange: { inPoint: number; outPoint: number };
   markerChange: { markers: Array<{ frame: number; note: string; color: string }> };
@@ -54,6 +56,7 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'speedChange',
   'volumeChange',
   'muteChange',
+  'audioScrubEnabledChange',
   'loopModeChange',
   'inOutChange',
   'markerChange',
@@ -222,6 +225,12 @@ export class EventsAPI {
       this.emit('muteChange', { muted });
     });
     this.internalUnsubscribers.push(unsubMute);
+
+    // Audio scrub enabled changes
+    const unsubAudioScrub = this.session.on('audioScrubEnabledChanged', (enabled) => {
+      this.emit('audioScrubEnabledChange', { enabled });
+    });
+    this.internalUnsubscribers.push(unsubAudioScrub);
 
     // Loop mode changes
     const unsubLoop = this.session.on('loopModeChanged', (mode) => {

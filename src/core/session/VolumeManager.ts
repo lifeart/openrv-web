@@ -6,6 +6,7 @@ export interface VolumeManagerCallbacks {
   onVolumeChanged(volume: number): void;
   onMutedChanged(muted: boolean): void;
   onPreservesPitchChanged(preservesPitch: boolean): void;
+  onAudioScrubEnabledChanged?(enabled: boolean): void;
 }
 
 /**
@@ -24,6 +25,7 @@ export class VolumeManager {
   private _previousVolume = 0.7; // For unmute restore
   private _preservesPitch = true; // Pitch correction at non-1x speeds (default: on)
   private _audioSyncEnabled = true; // Controls whether to sync video element for audio
+  private _audioScrubEnabled = true; // Controls whether audio scrub snippets play during frame stepping
   private _callbacks: VolumeManagerCallbacks | null = null;
 
   /**
@@ -119,6 +121,25 @@ export class VolumeManager {
 
   set audioSyncEnabled(value: boolean) {
     this._audioSyncEnabled = value;
+  }
+
+  // ---- Audio scrub ----
+
+  /**
+   * Whether audio scrub snippets play during frame stepping and timeline drag.
+   * When true, scrubbing produces short audio snippets at the target frame.
+   * When false, scrubbing is silent (independent of mute state).
+   * Default: true.
+   */
+  get audioScrubEnabled(): boolean {
+    return this._audioScrubEnabled;
+  }
+
+  set audioScrubEnabled(value: boolean) {
+    if (value !== this._audioScrubEnabled) {
+      this._audioScrubEnabled = value;
+      this._callbacks?.onAudioScrubEnabledChanged?.(this._audioScrubEnabled);
+    }
   }
 
   // ---- Video element helpers ----

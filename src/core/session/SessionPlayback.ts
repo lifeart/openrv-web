@@ -66,6 +66,7 @@ export interface SessionPlaybackEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
   preservesPitchChanged: boolean;
+  audioScrubEnabledChanged: boolean;
   audioError: AudioPlaybackError;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
   fpsUpdated: FPSMeasurement;
@@ -154,6 +155,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   get preservesPitch(): boolean { return this._volumeManager.preservesPitch; }
   set preservesPitch(value: boolean) { this._volumeManager.preservesPitch = value; }
 
+  get audioScrubEnabled(): boolean { return this._volumeManager.audioScrubEnabled; }
+  set audioScrubEnabled(value: boolean) { this._volumeManager.audioScrubEnabled = value; }
+
   // ---- A/B Compare public accessors (delegation) ----
 
   get currentAB(): 'A' | 'B' { return this._abCompareManager.currentAB; }
@@ -200,6 +204,11 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
 
   update(): void { this._playbackEngine.update(); }
   advanceFrame(direction: number): void { this._playbackEngine.advanceFrame(direction); }
+
+  /** Signal that a continuous scrub (timeline drag) has started. */
+  onScrubStart(): void { this._audioCoordinator.onScrubStart(); }
+  /** Signal that a continuous scrub (timeline drag) has ended. */
+  onScrubEnd(): void { this._audioCoordinator.onScrubEnd(); }
 
   increaseSpeed(): void { this._playbackEngine.increaseSpeed(); }
   decreaseSpeed(): void { this._playbackEngine.decreaseSpeed(); }
@@ -424,6 +433,10 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
         this.applyPreservesPitchToVideo();
         this._audioCoordinator.onPreservesPitchChanged(p);
         this.emit('preservesPitchChanged', p);
+      },
+      onAudioScrubEnabledChanged: (enabled) => {
+        this._audioCoordinator.onAudioScrubEnabledChanged(enabled);
+        this.emit('audioScrubEnabledChanged', enabled);
       },
     });
   }

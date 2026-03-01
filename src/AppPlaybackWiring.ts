@@ -81,6 +81,10 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     session.muted = muted;
     deps.getAudioMixer?.()?.setMasterMuted(muted);
   }));
+  // Audio scrub toggle
+  subs.add(volumeControl.on('audioScrubChanged', (enabled) => {
+    session.audioScrubEnabled = enabled;
+  }));
   // Sync back from Session to VolumeControl (for external changes)
   subs.add(session.on('volumeChanged', (volume) => {
     volumeControl.syncVolume(volume);
@@ -89,6 +93,9 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(session.on('mutedChanged', (muted) => {
     volumeControl.syncMuted(muted);
     deps.getAudioMixer?.()?.setMasterMuted(muted);
+  }));
+  subs.add(session.on('audioScrubEnabledChanged', (enabled) => {
+    volumeControl.syncAudioScrub(enabled);
   }));
 
   // Export control (from HeaderBar) -> viewer

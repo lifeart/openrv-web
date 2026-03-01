@@ -159,6 +159,7 @@ export interface SessionEvents extends EventMap {
   playDirectionChanged: number;
   playbackSpeedChanged: number;
   preservesPitchChanged: boolean;
+  audioScrubEnabledChanged: boolean;
   marksChanged: ReadonlyMap<number, Marker>;
   annotationsLoaded: ParsedAnnotations;
   settingsLoaded: GTOViewSettings;
@@ -344,8 +345,8 @@ export class Session extends EventEmitter<SessionEvents> {
       'frameChanged', 'playbackChanged', 'playDirectionChanged', 'playbackSpeedChanged',
       'loopModeChanged', 'playbackModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
       'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
-      'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioError',
-      'abSourceChanged', 'fpsUpdated', 'frameDecodeTimeout',
+      'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioScrubEnabledChanged',
+      'audioError', 'abSourceChanged', 'fpsUpdated', 'frameDecodeTimeout',
     ] as const;
     for (const event of playbackEvents) {
       this._playback.on(event as any, (data: any) => this.emit(event as any, data));
@@ -689,6 +690,30 @@ export class Session extends EventEmitter<SessionEvents> {
 
   set preservesPitch(value: boolean) {
     this._playback.preservesPitch = value;
+  }
+
+  /**
+   * Whether audio scrub snippets play during frame stepping and timeline drag.
+   * When true, scrubbing produces short audio snippets at the target frame.
+   * When false, scrubbing is silent (independent of mute state).
+   * Default: true.
+   */
+  get audioScrubEnabled(): boolean {
+    return this._playback.audioScrubEnabled;
+  }
+
+  set audioScrubEnabled(value: boolean) {
+    this._playback.audioScrubEnabled = value;
+  }
+
+  /** Signal that a continuous scrub (timeline drag) has started. */
+  onScrubStart(): void {
+    this._playback.onScrubStart();
+  }
+
+  /** Signal that a continuous scrub (timeline drag) has ended. */
+  onScrubEnd(): void {
+    this._playback.onScrubEnd();
   }
 
   /**
@@ -1192,6 +1217,7 @@ export class Session extends EventEmitter<SessionEvents> {
     volume: number;
     muted: boolean;
     preservesPitch: boolean;
+    audioScrubEnabled: boolean;
     marks: Marker[];
     currentSourceIndex: number;
   } {
@@ -1205,6 +1231,7 @@ export class Session extends EventEmitter<SessionEvents> {
       volume: this._playback.volume,
       muted: this._playback.muted,
       preservesPitch: this._playback.preservesPitch,
+      audioScrubEnabled: this._playback.audioScrubEnabled,
       marks: this._annotations.markerManager.toArray(),
       currentSourceIndex: this._currentSourceIndex,
     };
@@ -1223,6 +1250,7 @@ export class Session extends EventEmitter<SessionEvents> {
     volume: number;
     muted: boolean;
     preservesPitch: boolean;
+    audioScrubEnabled: boolean;
     marks: Marker[] | number[]; // Support both old and new format
     currentSourceIndex: number;
   }>): void {
@@ -1236,6 +1264,7 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.volume !== undefined) this.volume = state.volume;
     if (state.muted !== undefined) this.muted = state.muted;
     if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;
+    if (state.audioScrubEnabled !== undefined) this.audioScrubEnabled = state.audioScrubEnabled;
     if (state.inPoint !== undefined) this.setInPoint(state.inPoint);
     if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
