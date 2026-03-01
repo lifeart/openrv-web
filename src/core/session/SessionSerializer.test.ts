@@ -580,6 +580,51 @@ describe('SessionSerializer', () => {
       expect(setCurrentFrame).toHaveBeenCalledWith(1);
     });
   });
+
+  // =================================================================
+  // Playback Mode Serialization
+  // =================================================================
+
+  describe('playbackMode persistence', () => {
+    it('SER-PAF-001: playbackMode round-trips through toJSON/fromJSON', async () => {
+      const components = createMockComponents();
+      const session = components.session as any;
+      session.getPlaybackState = vi.fn().mockReturnValue({
+        currentFrame: 1,
+        inPoint: 1,
+        outPoint: 100,
+        fps: 24,
+        loopMode: 'loop',
+        playbackMode: 'playAllFrames',
+        volume: 0.7,
+        muted: false,
+        preservesPitch: true,
+        marks: [],
+        currentSourceIndex: 0,
+      });
+
+      const state = SessionSerializer.toJSON(components, 'Test');
+      expect(state.playback.playbackMode).toBe('playAllFrames');
+    });
+
+    it('SER-PAF-002: missing playbackMode defaults to realtime', () => {
+      const state = SessionSerializer.createEmpty();
+      expect(state.playback.playbackMode).toBe('realtime');
+    });
+
+    it('SER-PAF-003: migration preserves playbackMode when present', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.playback.playbackMode = 'playAllFrames';
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const setPlaybackState = components.session.setPlaybackState as ReturnType<typeof vi.fn>;
+      expect(setPlaybackState).toHaveBeenCalled();
+      const arg = setPlaybackState.mock.calls[0][0];
+      expect(arg.playbackMode).toBe('playAllFrames');
+    });
+  });
 });
 
 /**

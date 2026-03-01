@@ -111,6 +111,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Cycle loop mode'
   },
+  'timeline.toggleMagnifier': {
+    code: 'F3',
+    description: 'Toggle timeline magnifier'
+  },
 
   // View controls
   'view.fitToWindow': {
@@ -130,6 +134,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyW',
     shift: true,
     description: 'Cycle wipe mode'
+  },
+  'view.fitToWidth': {
+    code: 'KeyW',
+    description: 'Fit image width to window'
   },
   'view.toggleWaveform': {
     code: 'KeyW',
@@ -188,6 +196,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyG',
     context: 'panel',
     description: 'Toggle CIE gamut diagram'
+  },
+  'view.fitToHeight': {
+    code: 'KeyH',
+    description: 'Fit image height to window'
   },
   'panel.histogram': {
     code: 'KeyH',
@@ -436,6 +448,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle timecode overlay on viewer'
   },
 
+  // FPS indicator
+  'view.toggleFPSIndicator': {
+    code: 'KeyF',
+    ctrl: true,
+    shift: true,
+    description: 'Toggle FPS indicator overlay'
+  },
+
   // Zebra stripes
   'view.toggleZebraStripes': {
     code: 'KeyZ',
@@ -671,6 +691,17 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle reference comparison overlay'
   },
 
+  // Info strip overlay
+  'view.toggleInfoStrip': {
+    code: 'F7',
+    description: 'Toggle info strip overlay',
+  },
+  'view.toggleInfoStripPath': {
+    code: 'F7',
+    shift: true,
+    description: 'Toggle info strip full path',
+  },
+
   // Help / cheat sheet
   'help.toggleCheatSheet': {
     code: 'Slash',
@@ -683,6 +714,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyM',
     shift: true,
     description: 'Toggle audio mute'
+  },
+
+  // Playback mode toggle
+  'playback.togglePlaybackMode': {
+    code: 'KeyA',
+    ctrl: true,
+    shift: true,
+    description: 'Toggle between Realtime and Play All Frames'
   },
 };
 /**

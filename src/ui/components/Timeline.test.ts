@@ -936,4 +936,164 @@ describe('Timeline', () => {
       expect(Timeline.PLAYHEAD_HIT_AREA_WIDTH).toBe(20);
     });
   });
+
+  // =================================================================
+  // Color-coded FPS display in timeline
+  // =================================================================
+
+  describe('Color-coded FPS display', () => {
+    it('TML-FPS-001: draws green color when FPS ratio >= 0.97', () => {
+      // Set session to playing state with good FPS
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 24.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastValue = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { lastValue = v; fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // Green (#4ade80) should appear in the fill styles
+      expect(fillStyleValues).toContain('#4ade80');
+
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-FPS-002: draws yellow color when FPS ratio between 0.85 and 0.97', () => {
+      // effectiveFps = 22 / targetFps = 24 => ratio = 0.917
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 22.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastValue = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { lastValue = v; fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // Yellow (#facc15) should appear
+      expect(fillStyleValues).toContain('#facc15');
+
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-FPS-003: draws red color when FPS ratio < 0.85', () => {
+      // effectiveFps = 18 / targetFps = 24 => ratio = 0.75
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 18.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastValue = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { lastValue = v; fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // Red color should appear (resolved from --error CSS variable; dark theme = #f87171, fallback = #ef4444)
+      const themeError = getThemeManager().getColors().error;
+      expect(fillStyleValues).toContain(themeError);
+
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-FPS-004: FPS text shows target only (no color coding) when paused', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => false, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      // When paused, the FPS text should show target fps only, without actual/target format
+      const fpsText = textCalls.find(t => t.includes('fps'));
+      expect(fpsText).toBeDefined();
+      // Should show "Paused" status, not "Playing"
+      const statusText = textCalls.find(t => t.includes('Paused'));
+      expect(statusText).toBeDefined();
+      // Should NOT show the actual/target format (e.g., "24.0/24 fps")
+      const dualFpsText = textCalls.find(t => /\d+\.\d+\/\d+/.test(t));
+      expect(dualFpsText).toBeUndefined();
+    });
+
+    it('TML-FPS-005: fillText includes skipped count when droppedFrames > 0', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 20.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 5, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      const fpsText = textCalls.find(t => t.includes('skipped'));
+      expect(fpsText).toBeDefined();
+      expect(fpsText).toContain('5 skipped');
+    });
+
+    it('TML-FPS-006: fillText shows effective target at non-1x speed', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 45.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 2, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      // Should show effective target fps and speed multiplier
+      const fpsText = textCalls.find(t => t.includes('eff. fps') && t.includes('2x'));
+      expect(fpsText).toBeDefined();
+    });
+
+    it('TML-FPS-007: fillText does not include skipped when droppedFrames is 0', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 24.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      const fpsText = textCalls.find(t => t.includes('skipped'));
+      expect(fpsText).toBeUndefined();
+    });
+  });
 });

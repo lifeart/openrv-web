@@ -29,7 +29,7 @@ import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
 import type { StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoEyeTransform';
-import type { LoopMode, MediaType } from '../types/session';
+import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Graph } from '../graph/Graph';
 import type {
   HashResolveResult,
@@ -53,6 +53,7 @@ import {
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
+import type { FPSMeasurement } from './PlaybackEngine';
 import { MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import type { NoteManager } from './NoteManager';
 import type { VersionManager } from './VersionManager';
@@ -65,6 +66,7 @@ import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 // Logger removed — playback logging now lives in SessionPlayback.
 
 export type { SubFramePosition };
+export type { FPSMeasurement };
 export { MARKER_COLORS };
 export type { Marker, MarkerColor };
 
@@ -153,6 +155,7 @@ export interface SessionEvents extends EventMap {
   durationChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
   loopModeChanged: LoopMode;
+  playbackModeChanged: PlaybackMode;
   playDirectionChanged: number;
   playbackSpeedChanged: number;
   preservesPitchChanged: boolean;
@@ -178,6 +181,10 @@ export interface SessionEvents extends EventMap {
   // Sub-frame interpolation events
   interpolationEnabledChanged: boolean;
   subFramePositionChanged: SubFramePosition | null;
+  // FPS measurement events
+  fpsUpdated: FPSMeasurement;
+  // Frame decode timeout in play-all-frames mode
+  frameDecodeTimeout: number;
   // EDL events
   edlLoaded: RVEDLEntry[];
   // Note/comment events
@@ -188,7 +195,7 @@ export interface SessionEvents extends EventMap {
 }
 
 // Re-export from centralized types for backward compatibility
-export type { LoopMode, MediaType } from '../types/session';
+export type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 export type { RVEDLEntry } from '../../formats/RVEDLParser';
 
 export interface MediaSource {
@@ -333,10 +340,10 @@ export class Session extends EventEmitter<SessionEvents> {
     // Forward SessionPlayback events to Session events
     const playbackEvents = [
       'frameChanged', 'playbackChanged', 'playDirectionChanged', 'playbackSpeedChanged',
-      'loopModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
+      'loopModeChanged', 'playbackModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
       'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
       'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioError',
-      'abSourceChanged',
+      'abSourceChanged', 'fpsUpdated', 'frameDecodeTimeout',
     ] as const;
     for (const event of playbackEvents) {
       this._playback.on(event as any, (data: any) => this.emit(event as any, data));
@@ -359,6 +366,7 @@ export class Session extends EventEmitter<SessionEvents> {
       setInPoint: (v) => { this._inPoint = v; },
       setOutPoint: (v) => { this._outPoint = v; },
       setFrameIncrement: (v) => { this._frameIncrement = v; },
+      setPlaybackMode: (mode) => { this.playbackMode = mode; },
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
       emitFrameIncrementChanged: (inc) => this.emit('frameIncrementChanged', inc),
       getAnnotations: () => this._annotations,
@@ -567,6 +575,18 @@ export class Session extends EventEmitter<SessionEvents> {
     this._sessionGraph.setDisplayName(displayName);
   }
 
+  get playbackMode(): PlaybackMode {
+    return this._playback.playbackMode;
+  }
+
+  set playbackMode(mode: PlaybackMode) {
+    this._playback.playbackMode = mode;
+  }
+
+  togglePlaybackMode(): void {
+    this._playback.togglePlaybackMode();
+  }
+
   get playbackSpeed(): number {
     return this._playback.playbackSpeed;
   }
@@ -754,6 +774,14 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   get effectiveFps(): number {
     return this._playback.effectiveFps;
+  }
+
+  /**
+   * Get cumulative dropped frame count since last play() started.
+   * Resets to 0 when playback begins.
+   */
+  get droppedFrameCount(): number {
+    return this._playback.droppedFrameCount;
   }
 
   stepForward(): void {
@@ -1143,6 +1171,7 @@ export class Session extends EventEmitter<SessionEvents> {
     outPoint: number;
     fps: number;
     loopMode: LoopMode;
+    playbackMode: PlaybackMode;
     volume: number;
     muted: boolean;
     preservesPitch: boolean;
@@ -1155,6 +1184,7 @@ export class Session extends EventEmitter<SessionEvents> {
       outPoint: this._outPoint,
       fps: this._fps,
       loopMode: this._loopMode,
+      playbackMode: this._playback.playbackMode,
       volume: this._playback.volume,
       muted: this._playback.muted,
       preservesPitch: this._playback.preservesPitch,
@@ -1172,6 +1202,7 @@ export class Session extends EventEmitter<SessionEvents> {
     outPoint: number;
     fps: number;
     loopMode: LoopMode;
+    playbackMode: PlaybackMode;
     volume: number;
     muted: boolean;
     preservesPitch: boolean;
@@ -1184,6 +1215,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // No direct emit — PlaybackEngine.loopMode setter already emits,
       // which chains through SessionPlayback → Session event forwarding.
     }
+    if (state.playbackMode !== undefined) this.playbackMode = state.playbackMode;
     if (state.volume !== undefined) this.volume = state.volume;
     if (state.muted !== undefined) this.muted = state.muted;
     if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;

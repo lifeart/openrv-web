@@ -38,6 +38,9 @@ export class AppKeyboardHandler {
     'channel.red',     // Shift+R is reserved for transform.rotateLeft
     'channel.blue',    // Shift+B is reserved for view.cycleBackgroundPattern
     'channel.none',    // Shift+N is reserved for network.togglePanel
+    'view.toggleWaveform', // W key - now used for view.fitToWidth
+    'panel.waveform',      // W key - now used for view.fitToWidth
+    'panel.histogram',     // H key - now used for view.fitToHeight
   ]);
 
   constructor(
@@ -137,7 +140,7 @@ export class AppKeyboardHandler {
     const categories = {
       'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
-      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
+      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.fitToWidth', 'view.fitToHeight', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier', 'view.toggleInfoStrip', 'view.toggleInfoStripPath', 'view.toggleFPSIndicator'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
@@ -152,7 +155,8 @@ export class AppKeyboardHandler {
         'timeline.previousMarkOrBoundary',
         'timeline.nextShot',
         'timeline.previousShot',
-        'timeline.cycleLoopMode'
+        'timeline.cycleLoopMode',
+        'timeline.toggleMagnifier'
       ],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],

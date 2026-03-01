@@ -28,11 +28,17 @@ describe('SyncStateManager', () => {
     });
 
     it('SSM-001b: stores local view state', () => {
-      manager.updateLocalView({ panX: 10, panY: 20, zoom: 2.5, channelMode: 'red' });
+      manager.updateLocalView({ panX: 10, panY: 20, zoom: 2.5, channelMode: 'red', fitMode: 'width' });
       const state = manager.localView;
       expect(state.panX).toBe(10);
       expect(state.zoom).toBe(2.5);
       expect(state.channelMode).toBe('red');
+      expect(state.fitMode).toBe('width');
+    });
+
+    it('SSM-001d: local view state defaults fitMode to null', () => {
+      const state = manager.localView;
+      expect(state.fitMode).toBeNull();
     });
 
     it('SSM-001c: stores local color state', () => {
@@ -69,6 +75,22 @@ describe('SyncStateManager', () => {
       const state = manager.remoteView;
       expect(state.zoom).toBe(3);
       expect(state.channelMode).toBe('blue');
+    });
+
+    it('SSM-002d: remote view state fitMode defaults to null when not provided', () => {
+      const payload: ViewSyncPayload = { panX: 5, panY: -5, zoom: 3, channelMode: 'blue' };
+      manager.updateRemoteView(payload);
+
+      const state = manager.remoteView;
+      expect(state.fitMode).toBeNull();
+    });
+
+    it('SSM-002e: remote view state stores fitMode when provided', () => {
+      const payload = { panX: 5, panY: -5, zoom: 3, channelMode: 'blue', fitMode: 'height' };
+      manager.updateRemoteView(payload as ViewSyncPayload);
+
+      const state = manager.remoteView;
+      expect(state.fitMode).toBe('height');
     });
 
     it('SSM-002c: stores remote color state', () => {

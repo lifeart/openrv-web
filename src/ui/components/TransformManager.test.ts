@@ -269,6 +269,115 @@ describe('TransformManager', () => {
   });
 
   // ===========================================================================
+  // Fit Mode
+  // ===========================================================================
+
+  describe('fitMode', () => {
+    it('defaults to "all"', () => {
+      expect(tm.fitMode).toBe('all');
+    });
+
+    it('fitToWindow sets fitMode to "all"', () => {
+      tm.fitMode = 'width';
+      tm.fitToWindow();
+      expect(tm.fitMode).toBe('all');
+    });
+
+    it('fitToWidth sets fitMode to "width" and resets pan/zoom', () => {
+      tm.panX = 100;
+      tm.panY = -50;
+      tm.zoom = 3;
+      tm.fitToWidth();
+      expect(tm.fitMode).toBe('width');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('fitToHeight sets fitMode to "height" and resets pan/zoom', () => {
+      tm.panX = 100;
+      tm.panY = -50;
+      tm.zoom = 3;
+      tm.fitToHeight();
+      expect(tm.fitMode).toBe('height');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('clearFitMode sets fitMode to null', () => {
+      tm.fitToWidth();
+      expect(tm.fitMode).toBe('width');
+      tm.clearFitMode();
+      expect(tm.fitMode).toBeNull();
+    });
+
+    it('setZoom clears fitMode', () => {
+      tm.fitToWidth();
+      expect(tm.fitMode).toBe('width');
+      tm.setZoom(2);
+      expect(tm.fitMode).toBeNull();
+    });
+
+    it('fitMode setter works directly', () => {
+      tm.fitMode = 'height';
+      expect(tm.fitMode).toBe('height');
+      tm.fitMode = null;
+      expect(tm.fitMode).toBeNull();
+    });
+
+    it('resetForSourceChange preserves fitMode while resetting pan/zoom', () => {
+      tm.fitToWidth();
+      tm.panX = 50;
+      tm.panY = 30;
+      tm.zoom = 2;
+      tm.resetForSourceChange();
+      expect(tm.fitMode).toBe('width');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('resetForSourceChange defaults to fit-all when no fit mode is active', () => {
+      tm.clearFitMode();
+      tm.panX = 50;
+      tm.panY = 30;
+      tm.zoom = 2;
+      tm.resetForSourceChange();
+      expect(tm.fitMode).toBe('all');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('resetForSourceChange preserves fit-height mode', () => {
+      tm.fitToHeight();
+      tm.panX = 100;
+      tm.resetForSourceChange();
+      expect(tm.fitMode).toBe('height');
+      expect(tm.panX).toBe(0);
+    });
+  });
+
+  describe('smoothFitToWidth', () => {
+    it('sets fitMode to "width" and calls smoothZoomTo', () => {
+      const spy = vi.spyOn(tm, 'smoothZoomTo');
+      tm.smoothFitToWidth();
+      expect(tm.fitMode).toBe('width');
+      expect(spy).toHaveBeenCalledWith(1, 200, 0, 0);
+    });
+  });
+
+  describe('smoothFitToHeight', () => {
+    it('sets fitMode to "height" and calls smoothZoomTo', () => {
+      const spy = vi.spyOn(tm, 'smoothZoomTo');
+      tm.smoothFitToHeight();
+      expect(tm.fitMode).toBe('height');
+      expect(spy).toHaveBeenCalledWith(1, 200, 0, 0);
+    });
+  });
+
+  // ===========================================================================
   // Dispose
   // ===========================================================================
 

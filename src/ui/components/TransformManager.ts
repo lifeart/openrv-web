@@ -14,6 +14,14 @@ import { interpolateZoom } from './ViewerInteraction';
 import type { ManagerBase } from '../../core/ManagerBase';
 
 /**
+ * Fit mode determines how the image is scaled to the viewport.
+ * - 'all': scale to fit both dimensions (letterboxed if needed)
+ * - 'width': scale to fill container width; user can pan vertically
+ * - 'height': scale to fill container height; user can pan horizontally
+ */
+export type FitMode = 'all' | 'width' | 'height';
+
+/**
  * Snapshot of all spatial transform state.
  */
 export interface TransformSnapshot {
@@ -28,6 +36,9 @@ export class TransformManager implements ManagerBase {
   private _panX = 0;
   private _panY = 0;
   private _zoom = 1;
+
+  // --- Fit Mode ---
+  private _fitMode: FitMode | null = 'all';
 
   // --- Smooth zoom animation ---
   private _zoomAnimationId: number | null = null;
@@ -127,6 +138,7 @@ export class TransformManager implements ManagerBase {
 
   setZoom(level: number): void {
     this.cancelZoomAnimation();
+    this.clearFitMode();
     this._zoom = level;
     this._panX = 0;
     this._panY = 0;
@@ -153,11 +165,69 @@ export class TransformManager implements ManagerBase {
   }
 
   // =========================================================================
+  // Fit Mode
+  // =========================================================================
+
+  get fitMode(): FitMode | null {
+    return this._fitMode;
+  }
+
+  set fitMode(value: FitMode | null) {
+    this._fitMode = value;
+  }
+
+  /**
+   * Clear the active fit mode (e.g. when user manually zooms).
+   */
+  clearFitMode(): void {
+    this._fitMode = null;
+  }
+
+  // =========================================================================
   // Fit to window
   // =========================================================================
 
   fitToWindow(): void {
     this.cancelZoomAnimation();
+    this._fitMode = 'all';
+    this._panX = 0;
+    this._panY = 0;
+    this._zoom = 1;
+  }
+
+  /**
+   * Fit image width to the container width.
+   * Resets pan and zoom; user can pan vertically.
+   */
+  fitToWidth(): void {
+    this.cancelZoomAnimation();
+    this._fitMode = 'width';
+    this._panX = 0;
+    this._panY = 0;
+    this._zoom = 1;
+  }
+
+  /**
+   * Fit image height to the container height.
+   * Resets pan and zoom; user can pan horizontally.
+   */
+  fitToHeight(): void {
+    this.cancelZoomAnimation();
+    this._fitMode = 'height';
+    this._panX = 0;
+    this._panY = 0;
+    this._zoom = 1;
+  }
+
+  /**
+   * Reset pan/zoom for a source change while preserving the active fit mode.
+   * If no fit mode is active, behaves like fitToWindow() (resets to fit-all).
+   */
+  resetForSourceChange(): void {
+    this.cancelZoomAnimation();
+    if (this._fitMode === null) {
+      this._fitMode = 'all';
+    }
     this._panX = 0;
     this._panY = 0;
     this._zoom = 1;
@@ -167,6 +237,23 @@ export class TransformManager implements ManagerBase {
    * Fit to window with a smooth animated transition.
    */
   smoothFitToWindow(): void {
+    this._fitMode = 'all';
+    this.smoothZoomTo(1, 200, 0, 0);
+  }
+
+  /**
+   * Fit width with a smooth animated transition.
+   */
+  smoothFitToWidth(): void {
+    this._fitMode = 'width';
+    this.smoothZoomTo(1, 200, 0, 0);
+  }
+
+  /**
+   * Fit height with a smooth animated transition.
+   */
+  smoothFitToHeight(): void {
+    this._fitMode = 'height';
     this.smoothZoomTo(1, 200, 0, 0);
   }
 

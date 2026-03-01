@@ -1469,7 +1469,7 @@ export class SessionGTOExporter {
       .int2('range', [[playback.inPoint, playback.outPoint]])
       .int2('region', [[playback.inPoint, playback.outPoint]])
       .float('fps', playback.fps)
-      .float('realtime', metadata.realtime || 0)
+      .float('realtime', session.playbackMode === 'playAllFrames' ? 0 : (metadata.realtime || playback.fps))
       .int('inc', session.frameIncrement)
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
@@ -1651,7 +1651,7 @@ export class SessionGTOExporter {
         this.updateProperty(sessionComp, 'range', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'region', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'fps', playback.fps);
-        this.updateProperty(sessionComp, 'realtime', session.metadata.realtime || 0);
+        this.updateProperty(sessionComp, 'realtime', session.playbackMode === 'playAllFrames' ? 0 : (session.metadata.realtime || playback.fps));
         this.updateProperty(sessionComp, 'bgColor', session.metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]);
 
         if (playback.marks.length > 0) {

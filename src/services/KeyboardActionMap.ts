@@ -33,6 +33,7 @@ export interface ActionSession {
   goToFrame(frame: number): void;
   toggleAB(): void;
   toggleMute(): void;
+  togglePlaybackMode(): void;
   noteManager: {
     getNextNoteFrame(sourceIndex: number, currentFrame: number): number;
     getPreviousNoteFrame(sourceIndex: number, currentFrame: number): number;
@@ -42,12 +43,16 @@ export interface ActionSession {
 /** Subset of Viewer used by keyboard actions. */
 export interface ActionViewer {
   smoothFitToWindow(): void;
+  smoothFitToWidth(): void;
+  smoothFitToHeight(): void;
   smoothSetZoom(level: number): void;
   refresh(): void;
   copyFrameToClipboard(includeAnnotations: boolean): void;
   getPixelProbe(): { toggle(): void };
   getFalseColor(): { toggle(): void };
   getTimecodeOverlay(): { toggle(): void };
+  getInfoStripOverlay(): { toggle(): void; togglePathMode(): void };
+  getFPSIndicator(): { toggle(): void };
   getZebraStripes(): { toggle(): void };
   getColorWheels(): { toggle(): void };
   getSpotlightOverlay(): { toggle(): void };
@@ -157,6 +162,7 @@ export interface ActionControls {
   hideTimelineEditorPanel(): void;
   isSlateEditorPanelVisible(): boolean;
   hideSlateEditorPanel(): void;
+  timelineMagnifier: { toggle(): void };
 }
 
 export interface ActionActiveContextManager {
@@ -321,10 +327,13 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       const currentIndex = modes.indexOf(session.loopMode);
       session.loopMode = modes[(currentIndex + 1) % modes.length]!;
     },
+    'timeline.toggleMagnifier': () => controls.timelineMagnifier.toggle(),
 
     // -- View ------------------------------------------------------------
     'view.fitToWindow': () => viewer.smoothFitToWindow(),
     'view.fitToWindowAlt': () => viewer.smoothFitToWindow(),
+    'view.fitToWidth': () => viewer.smoothFitToWidth(),
+    'view.fitToHeight': () => viewer.smoothFitToHeight(),
     'view.zoom50': () => {
       if (tabBar.activeTab === 'view') {
         viewer.smoothSetZoom(0.5);
@@ -345,6 +354,9 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'view.toggleFalseColor': () => viewer.getFalseColor().toggle(),
     'view.toggleToneMapping': () => controls.toneMappingControl.toggle(),
     'view.toggleTimecodeOverlay': () => viewer.getTimecodeOverlay().toggle(),
+    'view.toggleInfoStrip': () => viewer.getInfoStripOverlay().toggle(),
+    'view.toggleInfoStripPath': () => viewer.getInfoStripOverlay().togglePathMode(),
+    'view.toggleFPSIndicator': () => viewer.getFPSIndicator().toggle(),
     'view.toggleZebraStripes': () => {
       const zebras = viewer.getZebraStripes();
       zebras.toggle();
@@ -635,5 +647,8 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
 
     // -- Audio -----------------------------------------------------------
     'audio.toggleMute': () => session.toggleMute(),
+
+    // -- Playback mode ---------------------------------------------------
+    'playback.togglePlaybackMode': () => session.togglePlaybackMode(),
   };
 }

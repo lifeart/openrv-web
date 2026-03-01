@@ -29,6 +29,10 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
   subs.add(controls.zoomControl.on('zoomChanged', (zoom) => {
     if (zoom === 'fit') {
       viewer.smoothFitToWindow();
+    } else if (zoom === 'fit-width') {
+      viewer.smoothFitToWidth();
+    } else if (zoom === 'fit-height') {
+      viewer.smoothFitToHeight();
     } else {
       viewer.smoothSetZoom(zoom);
     }

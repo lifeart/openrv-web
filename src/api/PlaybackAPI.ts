@@ -5,6 +5,7 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PlaybackMode } from '../core/types/session';
 import { ValidationError } from '../core/errors';
 
 export class PlaybackAPI {
@@ -201,5 +202,38 @@ export class PlaybackAPI {
    */
   getTotalFrames(): number {
     return this.session.currentSource?.duration ?? 0;
+  }
+
+  /**
+   * Set the playback mode.
+   *
+   * @param mode - Either `'realtime'` (frames may be skipped to maintain target FPS)
+   *   or `'playAllFrames'` (every frame is displayed, effective FPS may drop).
+   * @throws {ValidationError} If `mode` is not a valid playback mode.
+   *
+   * @example
+   * ```ts
+   * openrv.playback.setPlaybackMode('playAllFrames');
+   * ```
+   */
+  setPlaybackMode(mode: PlaybackMode): void {
+    if (mode !== 'realtime' && mode !== 'playAllFrames') {
+      throw new ValidationError("setPlaybackMode() requires 'realtime' or 'playAllFrames'");
+    }
+    this.session.playbackMode = mode;
+  }
+
+  /**
+   * Get the current playback mode.
+   *
+   * @returns `'realtime'` or `'playAllFrames'`.
+   *
+   * @example
+   * ```ts
+   * const mode = openrv.playback.getPlaybackMode(); // e.g. 'realtime'
+   * ```
+   */
+  getPlaybackMode(): PlaybackMode {
+    return this.session.playbackMode;
   }
 }

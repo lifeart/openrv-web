@@ -138,6 +138,7 @@ export interface RoomErrorPayload {
 }
 
 export type LoopModeSync = 'once' | 'loop' | 'pingpong';
+export type PlaybackModeSync = 'realtime' | 'playAllFrames';
 
 export interface PlaybackSyncPayload {
   isPlaying: boolean;
@@ -145,6 +146,7 @@ export interface PlaybackSyncPayload {
   playbackSpeed: number;
   playDirection: number;
   loopMode: LoopModeSync;
+  playbackMode?: PlaybackModeSync;
   timestamp: number;
 }
 

@@ -114,6 +114,10 @@ export interface LayoutControlsSubset {
     enable(): void;
     disable(): void;
   };
+  timelineMagnifier?: {
+    getElement(): HTMLElement;
+    setVisibilityCallback(callback: (visible: boolean) => void): void;
+  };
   setupTabContents(
     contextToolbar: LayoutContextToolbar,
     viewer: LayoutViewer,
@@ -266,9 +270,16 @@ export class LayoutOrchestrator {
     // Viewer goes in the center slot
     layoutManager.getViewerSlot().appendChild(viewerEl);
 
-    // Cache indicator + timeline go in the bottom slot
+    // Cache indicator + magnifier + timeline go in the bottom slot
     const bottomSlot = layoutManager.getBottomSlot();
     bottomSlot.appendChild(cacheIndicatorEl);
+
+    // Insert timeline magnifier between cache indicator and timeline (if available)
+    const magnifierEl = controls.timelineMagnifier?.getElement();
+    if (magnifierEl) {
+      bottomSlot.appendChild(magnifierEl);
+    }
+
     bottomSlot.appendChild(timelineEl);
 
     // Mount layout root into app container
@@ -399,13 +410,17 @@ export class LayoutOrchestrator {
     });
 
     // Set elements to hide in presentation mode
-    controls.presentationMode.setElementsToHide([
+    const elementsToHide = [
       headerBarEl,
       tabBarEl,
       contextToolbarEl,
       cacheIndicatorEl,
       timelineEl,
-    ]);
+    ];
+    if (magnifierEl) {
+      elementsToHide.push(magnifierEl);
+    }
+    controls.presentationMode.setElementsToHide(elementsToHide);
 
     // === IMAGE MODE: hide playback controls + timeline for single images ===
     const updateImageMode = () => {
@@ -418,26 +433,37 @@ export class LayoutOrchestrator {
         this._imageTransitionTimer = null;
       }
 
+      const imageModeTargets = [timelineEl];
+      if (magnifierEl) imageModeTargets.push(magnifierEl);
+
       if (isImage) {
-        timelineEl.style.transition = 'opacity 0.3s ease';
-        timelineEl.style.opacity = '0';
-        timelineEl.style.pointerEvents = 'none';
-        timelineEl.setAttribute('aria-hidden', 'true');
+        for (const el of imageModeTargets) {
+          el.style.transition = 'opacity 0.3s ease';
+          el.style.opacity = '0';
+          el.style.pointerEvents = 'none';
+          el.setAttribute('aria-hidden', 'true');
+        }
         this._imageTransitionTimer = setTimeout(() => {
           if (session.isSingleImage) {
-            timelineEl.style.display = 'none';
+            for (const el of imageModeTargets) {
+              el.style.display = 'none';
+            }
             window.dispatchEvent(new Event('resize'));
           }
         }, 300);
       } else {
-        timelineEl.style.display = '';
-        timelineEl.style.pointerEvents = '';
-        timelineEl.removeAttribute('aria-hidden');
-        void timelineEl.offsetHeight;
-        timelineEl.style.transition = 'opacity 0.3s ease';
-        timelineEl.style.opacity = '1';
+        for (const el of imageModeTargets) {
+          el.style.display = '';
+          el.style.pointerEvents = '';
+          el.removeAttribute('aria-hidden');
+          void el.offsetHeight;
+          el.style.transition = 'opacity 0.3s ease';
+          el.style.opacity = '1';
+        }
         this._imageTransitionTimer = setTimeout(() => {
-          timelineEl.style.transition = '';
+          for (const el of imageModeTargets) {
+            el.style.transition = '';
+          }
           window.dispatchEvent(new Event('resize'));
         }, 300);
       }
@@ -457,11 +483,15 @@ export class LayoutOrchestrator {
         headerBar.setImageMode(isImage);
         if (isImage) {
           // Directly hide without fade to avoid flash
-          timelineEl.style.display = 'none';
-          timelineEl.style.opacity = '0';
-          timelineEl.style.pointerEvents = 'none';
-          timelineEl.setAttribute('aria-hidden', 'true');
-          timelineEl.style.transition = '';
+          const presentationTargets = [timelineEl];
+          if (magnifierEl) presentationTargets.push(magnifierEl);
+          for (const el of presentationTargets) {
+            el.style.display = 'none';
+            el.style.opacity = '0';
+            el.style.pointerEvents = 'none';
+            el.setAttribute('aria-hidden', 'true');
+            el.style.transition = '';
+          }
           window.dispatchEvent(new Event('resize'));
         }
       }

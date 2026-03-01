@@ -28,6 +28,8 @@ import { ClippingOverlay } from './ClippingOverlay';
 import { SpotlightOverlay } from './SpotlightOverlay';
 import { BugOverlay } from './BugOverlay';
 import { EXRWindowOverlay } from './EXRWindowOverlay';
+import { InfoStripOverlay } from './InfoStripOverlay';
+import { FPSIndicator } from './FPSIndicator';
 
 /**
  * Callbacks the OverlayManager needs from the Viewer to wire up
@@ -48,6 +50,8 @@ export class OverlayManager {
   private _spotlightOverlay: SpotlightOverlay | null = null;
   private _bugOverlay: BugOverlay | null = null;
   private _exrWindowOverlay: EXRWindowOverlay | null = null;
+  private _infoStripOverlay: InfoStripOverlay | null = null;
+  private _fpsIndicator: FPSIndicator | null = null;
 
   // Non-DOM overlays (pixel probe has its own floating panel)
   private readonly pixelProbe: PixelProbe;
@@ -111,6 +115,10 @@ export class OverlayManager {
     // Eagerly create matte overlay so its DOM element is always present
     // (E2E tests and UI components expect it to be attached after init).
     this.getMatteOverlay();
+
+    // Eagerly create FPS indicator so it is ready when playback starts,
+    // without requiring user interaction (keyboard shortcut or View tab).
+    this.getFPSIndicator();
   }
 
   // ---------------------------------------------------------------------------
@@ -255,6 +263,22 @@ export class OverlayManager {
     return this._exrWindowOverlay;
   }
 
+  getInfoStripOverlay(): InfoStripOverlay {
+    if (!this._infoStripOverlay) {
+      this._infoStripOverlay = new InfoStripOverlay(this.session);
+      this.canvasContainer.appendChild(this._infoStripOverlay.getElement());
+    }
+    return this._infoStripOverlay;
+  }
+
+  getFPSIndicator(): FPSIndicator {
+    if (!this._fpsIndicator) {
+      this._fpsIndicator = new FPSIndicator(this.session);
+      this.canvasContainer.appendChild(this._fpsIndicator.getElement());
+    }
+    return this._fpsIndicator;
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -274,5 +298,7 @@ export class OverlayManager {
     this._spotlightOverlay?.dispose();
     this._bugOverlay?.dispose();
     this._exrWindowOverlay?.dispose();
+    this._infoStripOverlay?.dispose();
+    this._fpsIndicator?.dispose();
   }
 }

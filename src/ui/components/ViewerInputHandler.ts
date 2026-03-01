@@ -603,11 +603,13 @@ export class ViewerInputHandler {
       tm.panY,
       tm.zoom,
       newZoom,
+      tm.fitMode ?? 'all',
     );
 
     tm.panX = panX;
     tm.panY = panY;
     tm.zoom = newZoom;
+    tm.clearFitMode();
     this.ctx.scheduleRender();
 
     this.ctx.getInteractionQuality().endInteraction();

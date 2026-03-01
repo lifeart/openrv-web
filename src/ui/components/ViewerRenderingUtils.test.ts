@@ -690,6 +690,75 @@ describe('ViewerRenderingUtils', () => {
       expect(result.width).toBe(8000);
       expect(result.height).toBe(6000);
     });
+
+    // --- Fit Mode Tests ---
+
+    it('default fitMode ("all") behaves same as before', () => {
+      const result1 = calculateDisplayDimensions(1600, 1200, 800, 600, 1);
+      const result2 = calculateDisplayDimensions(1600, 1200, 800, 600, 1, 'all');
+      expect(result1).toEqual(result2);
+    });
+
+    it('fitMode "width" scales to fill container width', () => {
+      // 1920x1080 source in 800x600 container
+      // fitScale = 800/1920 = 0.41667
+      const result = calculateDisplayDimensions(1920, 1080, 800, 600, 1, 'width');
+      expect(result.width).toBe(800); // fills width exactly
+      expect(result.height).toBe(Math.floor(1080 * (800 / 1920))); // 450
+    });
+
+    it('fitMode "height" scales to fill container height', () => {
+      // 1920x1080 source in 800x600 container
+      // fitScale = 600/1080 = 0.5556
+      const result = calculateDisplayDimensions(1920, 1080, 800, 600, 1, 'height');
+      expect(result.height).toBe(600); // fills height exactly
+      expect(result.width).toBe(Math.floor(1920 * (600 / 1080))); // 1066
+    });
+
+    it('fitMode "width" upscales small images to fill width', () => {
+      // 400x300 source in 800x600 container
+      // fitScale = 800/400 = 2.0 (no Math.min(..., 1) cap)
+      const result = calculateDisplayDimensions(400, 300, 800, 600, 1, 'width');
+      expect(result.width).toBe(800); // upscaled to fill width
+      expect(result.height).toBe(600); // 300 * 2.0
+    });
+
+    it('fitMode "height" upscales small images to fill height', () => {
+      // 400x300 source in 800x600 container
+      // fitScale = 600/300 = 2.0 (no Math.min(..., 1) cap)
+      const result = calculateDisplayDimensions(400, 300, 800, 600, 1, 'height');
+      expect(result.height).toBe(600); // upscaled to fill height
+      expect(result.width).toBe(800); // 400 * 2.0
+    });
+
+    it('fitMode "all" does NOT upscale small images', () => {
+      // 400x300 source in 800x600 container — stays at native size
+      const result = calculateDisplayDimensions(400, 300, 800, 600, 1, 'all');
+      expect(result.width).toBe(400);
+      expect(result.height).toBe(300);
+    });
+
+    it('fitMode "width" with zoom multiplier', () => {
+      // 1920x1080 in 800x600, zoom=2
+      const result = calculateDisplayDimensions(1920, 1080, 800, 600, 2, 'width');
+      // fitScale = 800/1920, scale = fitScale * 2
+      expect(result.width).toBe(1600);
+      expect(result.height).toBe(Math.floor(1080 * (800 / 1920) * 2));
+    });
+
+    it('fitMode "width" with rotated image (90 degrees, effective 1080x1920)', () => {
+      // A 1920x1080 image rotated 90 degrees has effective dimensions 1080x1920.
+      // In fit-width mode, fitScale = containerWidth / 1080
+      const result = calculateDisplayDimensions(1080, 1920, 800, 600, 1, 'width');
+      // fitScale = 800/1080 ≈ 0.7407
+      expect(result.width).toBe(800);
+      expect(result.height).toBe(Math.floor(1920 * (800 / 1080))); // 1422
+    });
+
+    it('fitMode "width" handles zero dimensions gracefully', () => {
+      expect(calculateDisplayDimensions(0, 0, 800, 600, 1, 'width')).toEqual({ width: 1, height: 1 });
+      expect(calculateDisplayDimensions(800, 600, 0, 0, 1, 'width')).toEqual({ width: 1, height: 1 });
+    });
   });
 
   describe('isFullCropRegion', () => {

@@ -352,5 +352,16 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     setButtonActive(exrWindowButton, state.enabled, 'icon');
   }));
 
+  // FPS Indicator toggle button
+  const fpsIndicatorButton = ContextToolbar.createIconButton('activity', () => {
+    viewer.getFPSIndicator().toggle();
+  }, { title: 'Toggle FPS indicator (Ctrl+Shift+F)' });
+  fpsIndicatorButton.dataset.testid = 'fps-indicator-toggle-btn';
+  viewContent.appendChild(fpsIndicatorButton);
+
+  addUnsubscriber(viewer.getFPSIndicator().on('stateChanged', (state) => {
+    setButtonActive(fpsIndicatorButton, state.enabled, 'icon');
+  }));
+
   return { element: viewContent, convergenceButton, floatingWindowButton };
 }

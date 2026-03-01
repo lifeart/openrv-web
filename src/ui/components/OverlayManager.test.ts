@@ -147,5 +147,57 @@ describe('OverlayManager', () => {
       expect(spy2).toHaveBeenCalledWith(1280, 720, 0, 0, 1280, 720);
       expect(spy3).toHaveBeenCalledWith(1280, 720, 0, 0, 1280, 720);
     });
+
+    it('OM-LAZY-017: info strip overlay created on first access', () => {
+      const overlay = manager.getInfoStripOverlay();
+      expect(overlay).toBeTruthy();
+      expect(container.contains(overlay.getElement())).toBe(true);
+    });
+
+    it('OM-LAZY-018: info strip overlay second access returns same instance', () => {
+      const overlay1 = manager.getInfoStripOverlay();
+      const overlay2 = manager.getInfoStripOverlay();
+      expect(overlay1).toBe(overlay2);
+    });
+
+    it('OM-LAZY-019: dispose disposes info strip overlay', () => {
+      const freshManager = new OverlayManager(container, session, callbacks);
+      const infoStrip = freshManager.getInfoStripOverlay();
+      const disposeSpy = vi.spyOn(infoStrip, 'dispose');
+      freshManager.dispose();
+      expect(disposeSpy).toHaveBeenCalled();
+    });
+
+    it('OM-LAZY-020: info strip overlay element is appended to canvasContainer', () => {
+      const overlay = manager.getInfoStripOverlay();
+      const element = overlay.getElement();
+      expect(element.parentElement).toBe(container);
+    });
+
+    it('OM-LAZY-021: FPS indicator created on first access', () => {
+      const overlay = manager.getFPSIndicator();
+      expect(overlay).toBeTruthy();
+      expect(container.contains(overlay.getElement())).toBe(true);
+    });
+
+    it('OM-LAZY-022: FPS indicator second access returns same instance', () => {
+      const overlay1 = manager.getFPSIndicator();
+      const overlay2 = manager.getFPSIndicator();
+      expect(overlay1).toBe(overlay2);
+    });
+
+    it('OM-LAZY-023: dispose disposes FPS indicator', () => {
+      const freshManager = new OverlayManager(container, session, callbacks);
+      const fpsIndicator = freshManager.getFPSIndicator();
+      const disposeSpy = vi.spyOn(fpsIndicator, 'dispose');
+      freshManager.dispose();
+      expect(disposeSpy).toHaveBeenCalled();
+    });
+
+    it('OM-LAZY-024: FPS indicator element is appended to canvasContainer', () => {
+      const overlay = manager.getFPSIndicator();
+      const element = overlay.getElement();
+      expect(element.parentElement).toBe(container);
+    });
   });
 });

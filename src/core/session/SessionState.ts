@@ -17,7 +17,7 @@ import type { PARState } from '../../utils/media/PixelAspectRatio';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import type { WatermarkState } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
-import type { LoopMode, MediaType } from '../types/session';
+import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Marker } from './Session';
 import type { PlaylistState } from './PlaylistManager';
 import type { Note } from './NoteManager';
@@ -60,6 +60,7 @@ export interface PlaybackState {
   outPoint: number;
   fps: number;
   loopMode: LoopMode;
+  playbackMode?: PlaybackMode;
   volume: number;
   muted: boolean;
   marks: Marker[] | number[]; // Support both old format (number[]) and new format (Marker[])
@@ -151,6 +152,7 @@ export const DEFAULT_PLAYBACK_STATE: PlaybackState = {
   outPoint: 1,
   fps: 24,
   loopMode: 'loop',
+  playbackMode: 'realtime',
   volume: 0.7,
   muted: false,
   marks: [],

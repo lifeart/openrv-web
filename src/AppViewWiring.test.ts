@@ -10,6 +10,8 @@ import type { AppWiringContext } from './AppWiringContext';
 function createMockContext() {
   const viewer = {
     smoothFitToWindow: vi.fn(),
+    smoothFitToWidth: vi.fn(),
+    smoothFitToHeight: vi.fn(),
     smoothSetZoom: vi.fn(),
     setWipeState: vi.fn(),
     setDifferenceMatteState: vi.fn(),
@@ -299,6 +301,22 @@ describe('wireViewControls', () => {
     expect(viewer.resetStereoEyeTransforms).toHaveBeenCalledOnce();
     expect(viewer.resetStereoAlignMode).toHaveBeenCalledOnce();
     expect(controls.updateStereoEyeControlsVisibility).toHaveBeenCalledOnce();
+  });
+
+  // VW-020: fit-width zoom level
+  it('VW-020: zoomChanged "fit-width" calls viewer.smoothFitToWidth()', () => {
+    (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit-width');
+    expect(viewer.smoothFitToWidth).toHaveBeenCalledOnce();
+    expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
+    expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
+  });
+
+  // VW-021: fit-height zoom level
+  it('VW-021: zoomChanged "fit-height" calls viewer.smoothFitToHeight()', () => {
+    (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit-height');
+    expect(viewer.smoothFitToHeight).toHaveBeenCalledOnce();
+    expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
+    expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
   });
 
   describe('disposal', () => {

@@ -415,26 +415,45 @@ export function drawPlaceholder(
 /**
  * Calculate display dimensions for a source at a given zoom level.
  * Applies fit-to-container scaling with zoom factor.
+ *
+ * @param fitMode - The fit mode to use for scaling:
+ *   - 'all' (default): fit both dimensions, no upscale
+ *   - 'width': fill container width (may upscale)
+ *   - 'height': fill container height (may upscale)
  */
 export function calculateDisplayDimensions(
   sourceWidth: number,
   sourceHeight: number,
   containerWidth: number,
   containerHeight: number,
-  zoom: number
+  zoom: number,
+  fitMode: 'all' | 'width' | 'height' = 'all'
 ): { width: number; height: number } {
   // Guard against zero/negative dimensions
   if (sourceWidth <= 0 || sourceHeight <= 0 || containerWidth <= 0 || containerHeight <= 0) {
     return { width: 1, height: 1 };
   }
 
-  // Calculate fit scale: scale down to fit the container while preserving aspect ratio.
-  // Only scale down images larger than the viewport; smaller images stay at native size.
-  const fitScale = Math.min(
-    containerWidth / sourceWidth,
-    containerHeight / sourceHeight,
-    1
-  );
+  // Calculate fit scale based on the active fit mode
+  let fitScale: number;
+  switch (fitMode) {
+    case 'width':
+      fitScale = containerWidth / sourceWidth;
+      break;
+    case 'height':
+      fitScale = containerHeight / sourceHeight;
+      break;
+    case 'all':
+    default:
+      // Scale down to fit the container while preserving aspect ratio.
+      // Only scale down images larger than the viewport; smaller images stay at native size.
+      fitScale = Math.min(
+        containerWidth / sourceWidth,
+        containerHeight / sourceHeight,
+        1
+      );
+      break;
+  }
 
   // Apply zoom
   const scale = fitScale * zoom;

@@ -10,14 +10,16 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
 
-export type ZoomLevel = 'fit' | 0.25 | 0.5 | 1 | 2 | 4;
+export type ZoomLevel = 'fit' | 'fit-width' | 'fit-height' | 0.25 | 0.5 | 1 | 2 | 4;
 
 export interface ZoomControlEvents extends EventMap {
   zoomChanged: ZoomLevel;
 }
 
 const ZOOM_LEVELS: { value: ZoomLevel; label: string }[] = [
-  { value: 'fit', label: 'Fit' },
+  { value: 'fit', label: 'Fit All' },
+  { value: 'fit-width', label: 'Fit Width' },
+  { value: 'fit-height', label: 'Fit Height' },
   { value: 0.25, label: '25%' },
   { value: 0.5, label: '50%' },
   { value: 1, label: '100%' },
@@ -126,7 +128,11 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
   private updateButtonLabel(): void {
     let label: string;
     if (this.currentZoom === 'fit') {
-      label = 'Fit';
+      label = 'Fit All';
+    } else if (this.currentZoom === 'fit-width') {
+      label = 'Fit Width';
+    } else if (this.currentZoom === 'fit-height') {
+      label = 'Fit Height';
     } else {
       label = `${Math.round(this.currentZoom * 100)}%`;
     }

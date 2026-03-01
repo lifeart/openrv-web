@@ -38,6 +38,7 @@ function createMockSession() {
     goToFrame: vi.fn(),
     toggleAB: vi.fn(),
     toggleMute: vi.fn(),
+    togglePlaybackMode: vi.fn(),
     noteManager: {
       getNextNoteFrame: vi.fn().mockReturnValue(20),
       getPreviousNoteFrame: vi.fn().mockReturnValue(5),
@@ -48,12 +49,16 @@ function createMockSession() {
 function createMockViewer() {
   return {
     smoothFitToWindow: vi.fn(),
+    smoothFitToWidth: vi.fn(),
+    smoothFitToHeight: vi.fn(),
     smoothSetZoom: vi.fn(),
     refresh: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     getPixelProbe: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getFalseColor: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getTimecodeOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getInfoStripOverlay: vi.fn().mockReturnValue({ toggle: vi.fn(), togglePathMode: vi.fn() }),
+    getFPSIndicator: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getZebraStripes: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getColorWheels: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getSpotlightOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
@@ -152,6 +157,7 @@ function createMockControls() {
     hideTimelineEditorPanel: vi.fn(),
     isSlateEditorPanelVisible: vi.fn().mockReturnValue(false),
     hideSlateEditorPanel: vi.fn(),
+    timelineMagnifier: { toggle: vi.fn() },
   };
 }
 
@@ -368,6 +374,16 @@ describe('buildActionHandlers', () => {
   it('view.fitToWindow calls viewer.smoothFitToWindow', () => {
     handlers['view.fitToWindow']!();
     expect(deps.viewer.smoothFitToWindow).toHaveBeenCalledOnce();
+  });
+
+  it('view.fitToWidth calls viewer.smoothFitToWidth', () => {
+    handlers['view.fitToWidth']!();
+    expect(deps.viewer.smoothFitToWidth).toHaveBeenCalledOnce();
+  });
+
+  it('view.fitToHeight calls viewer.smoothFitToHeight', () => {
+    handlers['view.fitToHeight']!();
+    expect(deps.viewer.smoothFitToHeight).toHaveBeenCalledOnce();
   });
 
   it('view.zoom50 calls viewer.smoothSetZoom(0.5) when on view tab', () => {
@@ -667,5 +683,14 @@ describe('buildActionHandlers', () => {
   it('paint.eraser delegates to paintToolbar with e', () => {
     handlers['paint.eraser']!();
     expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('e');
+  });
+
+  // =================================================================
+  // Playback mode
+  // =================================================================
+
+  it('KAM-PAF-001: playback.togglePlaybackMode calls session.togglePlaybackMode()', () => {
+    handlers['playback.togglePlaybackMode']!();
+    expect(deps.session.togglePlaybackMode).toHaveBeenCalledTimes(1);
   });
 });

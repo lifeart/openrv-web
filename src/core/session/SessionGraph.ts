@@ -19,6 +19,7 @@ import type {
 import { parseInitialSettings as _parseInitialSettings } from './GTOSettingsParser';
 import { getNumberValue, getNumberArray } from './AnnotationStore';
 import type { SessionMetadata, GTOViewSettings } from './Session';
+import type { PlaybackMode } from '../types/session';
 import type { UncropState } from '../types/transform';
 import { Logger } from '../../utils/Logger';
 import type { SessionAnnotations } from './SessionAnnotations';
@@ -40,6 +41,7 @@ export interface SessionGraphHost {
   setInPoint(value: number): void;
   setOutPoint(value: number): void;
   setFrameIncrement(value: number): void;
+  setPlaybackMode(mode: PlaybackMode): void;
   emitInOutChanged(inPoint: number, outPoint: number): void;
   emitFrameIncrementChanged(inc: number): void;
 
@@ -325,6 +327,13 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       // Apply statuses
       if (result.sessionInfo.statuses && result.sessionInfo.statuses.length > 0) {
         annotations.statusManager.fromSerializable(result.sessionInfo.statuses);
+      }
+
+      // Apply playback mode from GTO realtime property:
+      // realtime === 0 means play-all-frames; realtime > 0 means realtime
+      if (result.sessionInfo.realtime !== undefined) {
+        const gtoRealtime = result.sessionInfo.realtime;
+        this._host!.setPlaybackMode(gtoRealtime === 0 ? 'playAllFrames' : 'realtime');
       }
 
       // Apply session metadata

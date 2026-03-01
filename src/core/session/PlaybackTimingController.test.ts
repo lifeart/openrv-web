@@ -23,6 +23,7 @@ function createTimingState(overrides: Partial<TimingState> = {}): TimingState {
     fpsLastTime: 0,
     effectiveFps: 0,
     subFramePosition: null,
+    droppedFrameCount: 0,
     ...overrides,
   };
 }
@@ -88,6 +89,12 @@ describe('PlaybackTimingController', () => {
       const after = performance.now();
       expect(state.fpsLastTime).toBeGreaterThanOrEqual(before);
       expect(state.fpsLastTime).toBeLessThanOrEqual(after);
+    });
+
+    it('PTC-U099: resets droppedFrameCount to 0', () => {
+      state.droppedFrameCount = 5;
+      controller.resetFpsTracking(state, 1000);
+      expect(state.droppedFrameCount).toBe(0);
     });
   });
 
@@ -599,6 +606,38 @@ describe('PlaybackTimingController', () => {
   });
 
   // =================================================================
+  // trackDroppedFrame
+  // =================================================================
+
+  describe('trackDroppedFrame', () => {
+    it('PTC-U100: increments droppedFrameCount by 1 by default', () => {
+      expect(state.droppedFrameCount).toBe(0);
+      controller.trackDroppedFrame(state);
+      expect(state.droppedFrameCount).toBe(1);
+      controller.trackDroppedFrame(state);
+      expect(state.droppedFrameCount).toBe(2);
+    });
+
+    it('PTC-U101: increments droppedFrameCount by specified count', () => {
+      controller.trackDroppedFrame(state, 5);
+      expect(state.droppedFrameCount).toBe(5);
+    });
+
+    it('PTC-U102: accumulates across multiple calls', () => {
+      controller.trackDroppedFrame(state, 2);
+      controller.trackDroppedFrame(state, 3);
+      expect(state.droppedFrameCount).toBe(5);
+    });
+
+    it('PTC-U103: reset via resetFpsTracking clears droppedFrameCount', () => {
+      controller.trackDroppedFrame(state, 10);
+      expect(state.droppedFrameCount).toBe(10);
+      controller.resetFpsTracking(state, 1000);
+      expect(state.droppedFrameCount).toBe(0);
+    });
+  });
+
+  // =================================================================
   // computeNextFrame
   // =================================================================
 
@@ -872,6 +911,85 @@ describe('PlaybackTimingController', () => {
       }
 
       expect(new Set(frames).size).toBeGreaterThan(2);
+    });
+  });
+
+  // =================================================================
+  // Play All Frames mode
+  // =================================================================
+
+  describe('accumulateFrames with playAllFrames mode', () => {
+    it('PTC-PAF-001: caps framesToAdvance to 1 in playAllFrames mode', () => {
+      // Set up state so multiple frames would normally advance
+      state.lastFrameTime = 0;
+      const fps = 24;
+      const frameDuration = 1000 / fps; // ~41.67ms
+
+      // Simulate a large elapsed time (200ms = ~4.8 frames at 24fps)
+      const now = 200;
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'playAllFrames', now);
+
+      // In playAllFrames mode, should cap to 1
+      expect(result.framesToAdvance).toBe(1);
+    });
+
+    it('PTC-PAF-002: does not cap in realtime mode (default)', () => {
+      state.lastFrameTime = 0;
+      const fps = 24;
+
+      // Simulate a large elapsed time (200ms = ~4.8 frames at 24fps)
+      const now = 200;
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'realtime', now);
+
+      // In realtime mode, should advance multiple frames
+      expect(result.framesToAdvance).toBeGreaterThan(1);
+    });
+
+    it('PTC-PAF-003: accumulator does not grow unbounded in playAllFrames mode', () => {
+      state.lastFrameTime = 0;
+      const fps = 24;
+      const frameDuration = 1000 / fps;
+
+      // Simulate large elapsed time
+      const now = 500; // ~12 frames at 24fps
+      controller.accumulateFrames(state, fps, 1, 1, 'playAllFrames', now);
+
+      // Accumulator should be capped to frameDuration
+      expect(state.frameAccumulator).toBeLessThanOrEqual(frameDuration);
+    });
+
+    it('PTC-PAF-004: default playbackMode parameter is realtime', () => {
+      state.lastFrameTime = 0;
+      const fps = 24;
+
+      // Call without playbackMode param
+      const now = 200;
+      const result = controller.accumulateFrames(state, fps, 1, 1, undefined, now);
+
+      // Should behave as realtime (multiple frames)
+      expect(result.framesToAdvance).toBeGreaterThan(1);
+    });
+
+    it('PTC-PAF-005: returns 0 when no full frame has elapsed', () => {
+      state.lastFrameTime = 0;
+      const fps = 24;
+      const frameDuration = 1000 / fps;
+
+      // Simulate small elapsed time (less than one frame)
+      const now = frameDuration / 2;
+      const result = controller.accumulateFrames(state, fps, 1, 1, 'playAllFrames', now);
+
+      expect(result.framesToAdvance).toBe(0);
+    });
+  });
+
+  describe('shouldSkipStarvedFrame', () => {
+    it('PTC-PAF-010: returns true for realtime mode', () => {
+      expect(controller.shouldSkipStarvedFrame('realtime')).toBe(true);
+    });
+
+    it('PTC-PAF-011: returns false for playAllFrames mode', () => {
+      expect(controller.shouldSkipStarvedFrame('playAllFrames')).toBe(false);
     });
   });
 });

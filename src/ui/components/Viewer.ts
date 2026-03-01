@@ -58,6 +58,8 @@ import type { PixelProbe } from './PixelProbe';
 import type { FalseColor } from './FalseColor';
 import type { LuminanceVisualization } from './LuminanceVisualization';
 import type { TimecodeOverlay } from './TimecodeOverlay';
+import type { InfoStripOverlay } from './InfoStripOverlay';
+import type { FPSIndicator } from './FPSIndicator';
 import type { ZebraStripes } from './ZebraStripes';
 import { ColorWheels } from './ColorWheels';
 import type { SpotlightOverlay } from './SpotlightOverlay';
@@ -1147,6 +1149,95 @@ export class Viewer {
   }
 
   /**
+   * Fit image width to the container width.
+   */
+  fitToWidth(): void {
+    this.transformManager.fitToWidth();
+    this.scheduleRender();
+    this.showFitModeIndicator('width');
+  }
+
+  /**
+   * Fit image height to the container height.
+   */
+  fitToHeight(): void {
+    this.transformManager.fitToHeight();
+    this.scheduleRender();
+    this.showFitModeIndicator('height');
+  }
+
+  /**
+   * Fit width with a smooth animated transition.
+   */
+  smoothFitToWidth(): void {
+    this.transformManager.smoothFitToWidth();
+    this.showFitModeIndicator('width');
+  }
+
+  /**
+   * Fit height with a smooth animated transition.
+   */
+  smoothFitToHeight(): void {
+    this.transformManager.smoothFitToHeight();
+    this.showFitModeIndicator('height');
+  }
+
+  /**
+   * Get the current fit mode.
+   */
+  getFitMode(): string | null {
+    return this.transformManager.fitMode;
+  }
+
+  /**
+   * Show a brief transient indicator when fit mode changes.
+   */
+  private showFitModeIndicator(mode: 'all' | 'width' | 'height'): void {
+    const labels: Record<string, string> = {
+      all: 'Fit All',
+      width: 'Fit Width',
+      height: 'Fit Height',
+    };
+    const label = labels[mode] ?? mode;
+
+    // Remove any existing indicator
+    const existing = this.container.querySelector('.fit-mode-indicator');
+    if (existing) {
+      existing.remove();
+    }
+
+    const indicator = document.createElement('div');
+    indicator.className = 'fit-mode-indicator';
+    indicator.textContent = label;
+    indicator.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      pointer-events: none;
+      z-index: 1000;
+      transition: opacity 0.3s ease;
+      opacity: 1;
+    `;
+    this.container.appendChild(indicator);
+
+    setTimeout(() => {
+      indicator.style.opacity = '0';
+      setTimeout(() => {
+        if (indicator.parentNode) {
+          indicator.remove();
+        }
+      }, 300);
+    }, 1200);
+  }
+
+  /**
    * Animate zoom smoothly to a target level over a given duration.
    * Uses requestAnimationFrame with ease-out cubic interpolation.
    * Also animates pan position to the target values.
@@ -1179,6 +1270,26 @@ export class Viewer {
     const containerRect = this.getContainerRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
+    const fitMode = this.transformManager.fitMode;
+
+    // Apply pan clamping based on active fit mode
+    if (fitMode === 'all') {
+      // In fit-all mode, no pan is needed
+      this.transformManager.panX = 0;
+      this.transformManager.panY = 0;
+    } else if (fitMode === 'width') {
+      // Lock horizontal pan, clamp vertical pan with margin
+      this.transformManager.panX = 0;
+      const margin = Math.min(50, containerHeight * 0.1);
+      const maxPanY = Math.max(0, (this.displayHeight - containerHeight) / 2 + margin);
+      this.transformManager.panY = Math.max(-maxPanY, Math.min(maxPanY, this.transformManager.panY));
+    } else if (fitMode === 'height') {
+      // Lock vertical pan, clamp horizontal pan with margin
+      this.transformManager.panY = 0;
+      const margin = Math.min(50, containerWidth * 0.1);
+      const maxPanX = Math.max(0, (this.displayWidth - containerWidth) / 2 + margin);
+      this.transformManager.panX = Math.max(-maxPanX, Math.min(maxPanX, this.transformManager.panX));
+    }
 
     // Calculate base position (centered)
     const baseX = (containerWidth - this.displayWidth) / 2;
@@ -1439,7 +1550,8 @@ export class Viewer {
         this.sourceHeight,
         containerWidth,
         containerHeight,
-        this.transformManager.zoom
+        this.transformManager.zoom,
+        this.transformManager.fitMode ?? 'all'
       );
 
       if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
@@ -1478,7 +1590,8 @@ export class Viewer {
       effectiveHeight,
       containerWidth,
       containerHeight,
-      this.transformManager.zoom
+      this.transformManager.zoom,
+      this.transformManager.fitMode ?? 'all'
     );
 
     // Scale factor from effective source to display pixels
@@ -4319,6 +4432,20 @@ export class Viewer {
 
   getEXRWindowOverlay(): import('./EXRWindowOverlay').EXRWindowOverlay {
     return this.overlayManager.getEXRWindowOverlay();
+  }
+
+  /**
+   * Get the info strip overlay instance
+   */
+  getInfoStripOverlay(): InfoStripOverlay {
+    return this.overlayManager.getInfoStripOverlay();
+  }
+
+  /**
+   * Get the FPS indicator overlay instance
+   */
+  getFPSIndicator(): FPSIndicator {
+    return this.overlayManager.getFPSIndicator();
   }
 
   /**

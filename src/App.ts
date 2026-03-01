@@ -17,6 +17,7 @@
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
+import { TimelineMagnifier } from './ui/components/TimelineMagnifier';
 import { HeaderBar } from './ui/components/layout/HeaderBar';
 import { TabBar, TabId } from './ui/components/layout/TabBar';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
@@ -73,6 +74,7 @@ export class App {
   private session: Session;
   private viewer: Viewer;
   private timeline: Timeline;
+  private timelineMagnifier: TimelineMagnifier;
   private headerBar: HeaderBar;
   private tabBar: TabBar;
   private contextToolbar: ContextToolbar;
@@ -136,6 +138,16 @@ export class App {
     this.viewer = new Viewer({ session: this.session, paintEngine: this.paintEngine, capabilities: this.displayCapabilities });
     this.renderLoop = new RenderLoopService({ session: this.session, viewer: this.viewer });
     this.timeline = new Timeline(this.session, this.paintEngine);
+
+    // Create timeline magnifier (zoomed-in timeline sub-view)
+    this.timelineMagnifier = new TimelineMagnifier(
+      this.session,
+      this.timeline.getWaveformRenderer(),
+      this.paintEngine,
+    );
+
+    // Wire magnifier toggle button on main timeline
+    this.timeline.setMagnifierToggle(() => this.timelineMagnifier.toggle());
 
     // Create OPFS media cache manager
     this.cacheManager = new MediaCacheManager();
@@ -516,7 +528,7 @@ export class App {
       timeline: this.timeline,
       layoutManager: this.layoutManager,
       layoutStore: this.layoutStore,
-      controls: this.controls,
+      controls: Object.assign(this.controls, { timelineMagnifier: this.timelineMagnifier }),
       sessionBridge: this.sessionBridge,
       clientMode: this.clientMode,
       paintEngine: this.paintEngine,
@@ -645,7 +657,7 @@ export class App {
       viewer: this.viewer,
       paintEngine: this.paintEngine,
       tabBar: this.tabBar,
-      controls: this.controls,
+      controls: Object.assign(this.controls, { timelineMagnifier: this.timelineMagnifier }),
       activeContextManager: this.activeContextManager,
       fullscreenManager: this.fullscreenManager,
       focusManager: this.focusManager,
@@ -695,6 +707,7 @@ export class App {
 
     this.viewer.dispose();
     this.noteOverlay.dispose();
+    this.timelineMagnifier.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();

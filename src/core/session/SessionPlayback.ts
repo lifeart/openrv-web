@@ -12,10 +12,11 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import type { LoopMode } from '../types/session';
+import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource, AudioPlaybackError } from './Session';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackEngine } from './PlaybackEngine';
+import type { FPSMeasurement } from './PlaybackEngine';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
 import { AudioCoordinator } from '../../audio/AudioCoordinator';
@@ -55,6 +56,7 @@ export interface SessionPlaybackEvents extends EventMap {
   playDirectionChanged: number;
   playbackSpeedChanged: number;
   loopModeChanged: LoopMode;
+  playbackModeChanged: PlaybackMode;
   fpsChanged: number;
   frameIncrementChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
@@ -66,6 +68,8 @@ export interface SessionPlaybackEvents extends EventMap {
   preservesPitchChanged: boolean;
   audioError: AudioPlaybackError;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
+  fpsUpdated: FPSMeasurement;
+  frameDecodeTimeout: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +129,12 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   get playDirection(): number { return this._playbackEngine.playDirection; }
   get effectiveFps(): number { return this._playbackEngine.effectiveFps; }
   get frameCount(): number { return this._playbackEngine.frameCount; }
+
+  get playbackMode(): PlaybackMode { return this._playbackEngine.playbackMode; }
+  set playbackMode(mode: PlaybackMode) { this._playbackEngine.playbackMode = mode; }
+  togglePlaybackMode(): void { this._playbackEngine.togglePlaybackMode(); }
+
+  get droppedFrameCount(): number { return this._playbackEngine.droppedFrameCount; }
 
   get interpolationEnabled(): boolean { return this._playbackEngine.interpolationEnabled; }
   set interpolationEnabled(value: boolean) { this._playbackEngine.interpolationEnabled = value; }
@@ -457,12 +467,15 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     });
 
     pe.on('loopModeChanged', (mode) => this.emit('loopModeChanged', mode));
+    pe.on('playbackModeChanged', (mode) => this.emit('playbackModeChanged', mode));
     pe.on('fpsChanged', (fps) => this.emit('fpsChanged', fps));
     pe.on('frameIncrementChanged', (inc) => this.emit('frameIncrementChanged', inc));
     pe.on('inOutChanged', (range) => this.emit('inOutChanged', range));
     pe.on('interpolationEnabledChanged', (enabled) => this.emit('interpolationEnabledChanged', enabled));
     pe.on('subFramePositionChanged', (pos) => this.emit('subFramePositionChanged', pos));
     pe.on('buffering', (buffering) => this.emit('buffering', buffering));
+    pe.on('fpsUpdated', (measurement) => this.emit('fpsUpdated', measurement));
+    pe.on('frameDecodeTimeout', (frame) => this.emit('frameDecodeTimeout', frame));
   }
 
   // ---- Dispose ----

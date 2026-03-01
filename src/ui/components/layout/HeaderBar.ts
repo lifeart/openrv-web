@@ -44,6 +44,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private loopButton!: HTMLButtonElement;
   private directionButton!: HTMLButtonElement;
   private speedButton!: HTMLButtonElement;
+  private playbackModeButton!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
   private projectInput!: HTMLInputElement;
   private sessionNameDisplay!: HTMLElement;
@@ -280,6 +281,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Speed button
     this.speedButton = this.createSpeedButton();
     playbackGroup.appendChild(this.speedButton);
+
+    // Playback mode button (RT / ALL)
+    this.playbackModeButton = this.createPlaybackModeButton();
+    playbackGroup.appendChild(this.playbackModeButton);
 
     this.container.appendChild(playbackGroup);
     this.playbackDividerAfter = this.createDivider();
@@ -597,6 +602,77 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Initial state
     this.updateSpeedButtonText(button);
     return button;
+  }
+
+  private createPlaybackModeButton(): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.dataset.testid = 'playback-mode-button';
+    button.title = 'Toggle Play All Frames mode (Ctrl+Shift+A)';
+    button.style.cssText = `
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 8px;
+      min-width: 36px;
+      height: 28px;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.5px;
+    `;
+
+    button.addEventListener('pointerenter', () => {
+      button.style.background = 'rgba(255, 255, 255, 0.1)';
+    });
+
+    button.addEventListener('pointerleave', () => {
+      this.updatePlaybackModeButton();
+    });
+
+    button.addEventListener('click', () => {
+      this.session.togglePlaybackMode();
+    });
+
+    this.updatePlaybackModeButton(button);
+    return button;
+  }
+
+  private updatePlaybackModeButton(button?: HTMLButtonElement): void {
+    const btn = button ?? this.playbackModeButton;
+    if (!btn) return;
+
+    const mode = this.session.playbackMode;
+    // Check if native video path is active (play-all-frames not fully effective)
+    const isNativeVideo = this.session.currentSource?.type === 'video'
+      && !this.session.isUsingMediabunny()
+      && this.session.currentSource?.videoSourceNode === undefined;
+    const isDimmed = mode === 'playAllFrames' && isNativeVideo;
+
+    if (mode === 'playAllFrames') {
+      btn.textContent = 'ALL';
+      if (isDimmed) {
+        btn.style.background = 'rgba(128, 128, 128, 0.15)';
+        btn.style.color = 'rgba(128, 128, 128, 0.5)';
+        btn.style.borderColor = 'rgba(128, 128, 128, 0.3)';
+        btn.title = 'Play All Frames is not available for this source (native video playback)';
+      } else {
+        btn.style.background = 'rgba(245, 158, 11, 0.2)';
+        btn.style.color = '#f59e0b';
+        btn.style.borderColor = '#f59e0b';
+        btn.title = 'Play All Frames mode active (Ctrl+Shift+A)';
+      }
+    } else {
+      btn.textContent = 'RT';
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-secondary)';
+      btn.style.borderColor = 'transparent';
+      btn.title = 'Toggle Play All Frames mode (Ctrl+Shift+A)';
+    }
   }
 
   private closeAllHeaderMenus(): void {
@@ -1320,6 +1396,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.on('loopModeChanged', () => this.updateLoopButton());
     this.session.on('playDirectionChanged', () => this.updateDirectionButton());
     this.session.on('playbackSpeedChanged', () => this.updateSpeedButton());
+    this.session.on('playbackModeChanged', () => this.updatePlaybackModeButton());
     this.session.on('metadataChanged', () => this.updateSessionNameDisplay());
   }
 
@@ -1353,6 +1430,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.updatePlayButton();
     this.updateDirectionButton();
     this.updateSpeedButton();
+    this.updatePlaybackModeButton();
     this.updateSessionNameDisplay();
     return this.wrapper;
   }
