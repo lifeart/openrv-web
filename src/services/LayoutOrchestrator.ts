@@ -433,11 +433,14 @@ export class LayoutOrchestrator {
         this._imageTransitionTimer = null;
       }
 
-      const imageModeTargets = [timelineEl];
-      if (magnifierEl) imageModeTargets.push(magnifierEl);
+      // Hide targets include magnifier (hide it in image mode),
+      // but show targets exclude it (magnifier visibility is managed by its own show/hide).
+      const hideTargets = [timelineEl];
+      if (magnifierEl) hideTargets.push(magnifierEl);
+      const showTargets = [timelineEl];
 
       if (isImage) {
-        for (const el of imageModeTargets) {
+        for (const el of hideTargets) {
           el.style.transition = 'opacity 0.3s ease';
           el.style.opacity = '0';
           el.style.pointerEvents = 'none';
@@ -445,14 +448,14 @@ export class LayoutOrchestrator {
         }
         this._imageTransitionTimer = setTimeout(() => {
           if (session.isSingleImage) {
-            for (const el of imageModeTargets) {
+            for (const el of hideTargets) {
               el.style.display = 'none';
             }
             window.dispatchEvent(new Event('resize'));
           }
         }, 300);
       } else {
-        for (const el of imageModeTargets) {
+        for (const el of showTargets) {
           el.style.display = '';
           el.style.pointerEvents = '';
           el.removeAttribute('aria-hidden');
@@ -461,7 +464,7 @@ export class LayoutOrchestrator {
           el.style.opacity = '1';
         }
         this._imageTransitionTimer = setTimeout(() => {
-          for (const el of imageModeTargets) {
+          for (const el of showTargets) {
             el.style.transition = '';
           }
           window.dispatchEvent(new Event('resize'));
