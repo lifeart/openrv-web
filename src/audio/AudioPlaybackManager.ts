@@ -526,7 +526,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
    * and non-linear (quadratic ease-in) mapping.
    */
   private computeSnippetDuration(frame: number, fps: number): number {
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = Date.now();
     const dt = now - this.lastScrubTime; // ms since last scrub call
 
     this.lastScrubTime = now;
@@ -761,5 +761,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     this.audioBuffer = null;
     this.videoElement = null;
     this._state = 'idle';
+
+    this.removeAllListeners();
   }
 }
