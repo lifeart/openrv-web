@@ -30,10 +30,17 @@ function createMockSession() {
   return {
     currentFrame: 1,
     currentSourceIndex: 0,
+    inPoint: 1,
+    outPoint: 100,
+    loopMode: 'loop' as 'once' | 'loop' | 'pingpong',
+    marks: new Map() as ReadonlyMap<number, { frame: number; endFrame?: number }>,
+    currentSource: { duration: 100 } as { duration: number } | null,
     goToFrame: vi.fn(),
     setCurrentSource: vi.fn(),
     setInPoint: vi.fn(),
     setOutPoint: vi.fn(),
+    setInOutRange: vi.fn(),
+    emitRangeShifted: vi.fn(),
     goToNextMarker: vi.fn().mockReturnValue(null),
     goToPreviousMarker: vi.fn().mockReturnValue(null),
   };

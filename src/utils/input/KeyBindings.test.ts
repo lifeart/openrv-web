@@ -406,4 +406,68 @@ describe('KeyBindings', () => {
       expect(layoutDefault.alt).toBe(true);
     });
   });
+
+  describe('range shifting bindings', () => {
+    it('KB-U080: defines timeline.shiftRangeNext with Shift+ArrowDown', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangeNext'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('ArrowDown');
+      expect(binding!.shift).toBe(true);
+      expect(binding!.description).toBe('Shift in/out range to next mark pair');
+    });
+
+    it('KB-U081: defines timeline.shiftRangePrevious with Shift+ArrowUp', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangePrevious'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('ArrowUp');
+      expect(binding!.shift).toBe(true);
+      expect(binding!.description).toBe('Shift in/out range to previous mark pair');
+    });
+
+    it('KB-U082: defines timeline.shiftRangeNextAlt with Ctrl+ArrowRight', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangeNextAlt'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('ArrowRight');
+      expect(binding!.ctrl).toBe(true);
+      expect(binding!.description).toBe('Shift in/out range to next mark pair');
+    });
+
+    it('KB-U083: defines timeline.shiftRangePreviousAlt with Ctrl+ArrowLeft', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangePreviousAlt'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('ArrowLeft');
+      expect(binding!.ctrl).toBe(true);
+      expect(binding!.description).toBe('Shift in/out range to previous mark pair');
+    });
+
+    it('KB-U084: Shift+ArrowDown does not conflict with Shift+ArrowUp', () => {
+      const next = DEFAULT_KEY_BINDINGS['timeline.shiftRangeNext']!;
+      const prev = DEFAULT_KEY_BINDINGS['timeline.shiftRangePrevious']!;
+      expect(next.code).not.toBe(prev.code);
+    });
+
+    it('KB-U085: describes Shift+ArrowDown correctly', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangeNext']!;
+      const desc = describeKeyCombo(binding);
+      expect(desc).toBe('Shift+↓');
+    });
+
+    it('KB-U086: describes Shift+ArrowUp correctly', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangePrevious']!;
+      const desc = describeKeyCombo(binding);
+      expect(desc).toBe('Shift+↑');
+    });
+
+    it('KB-U087: describes Ctrl+ArrowRight correctly', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangeNextAlt']!;
+      const desc = describeKeyCombo(binding);
+      expect(desc).toBe('Ctrl+→');
+    });
+
+    it('KB-U088: describes Ctrl+ArrowLeft correctly', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.shiftRangePreviousAlt']!;
+      const desc = describeKeyCombo(binding);
+      expect(desc).toBe('Ctrl+←');
+    });
+  });
 });

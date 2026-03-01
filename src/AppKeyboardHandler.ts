@@ -152,7 +152,11 @@ export class AppKeyboardHandler {
         'timeline.previousMarkOrBoundary',
         'timeline.nextShot',
         'timeline.previousShot',
-        'timeline.cycleLoopMode'
+        'timeline.cycleLoopMode',
+        'timeline.shiftRangeNext',
+        'timeline.shiftRangePrevious',
+        'timeline.shiftRangeNextAlt',
+        'timeline.shiftRangePreviousAlt'
       ],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
