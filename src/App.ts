@@ -63,6 +63,7 @@ import { MediaCacheManager } from './cache/MediaCacheManager';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { VirtualSliderController } from './ui/components/VirtualSliderController';
+import { getCurrentSourceStartFrame } from './utils/media/SourceUIState';
 
 const log = new Logger('App');
 
@@ -174,6 +175,10 @@ export class App {
 
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
+    this.syncCurrentSourceTimecodeOffsets();
+    this.wiringSubscriptions.add(this.session.on('sourceLoaded', () => this.syncCurrentSourceTimecodeOffsets()));
+    this.wiringSubscriptions.add(this.session.on('durationChanged', () => this.syncCurrentSourceTimecodeOffsets()));
+    this.wiringSubscriptions.add(this.session.on('representationChanged', () => this.syncCurrentSourceTimecodeOffsets()));
 
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
@@ -265,6 +270,29 @@ export class App {
       () => this.controls.paintToolbar.handleKeyboard('l'),
       'paint',
       'Select line tool',
+    );
+
+    // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint) vs panel.gamutDiagram (panel)
+    this.contextualKeyboardManager.register(
+      'navigation.gotoFrame',
+      { code: 'KeyG' },
+      () => this.gotoFrameOverlay.show(),
+      'global',
+      'Go to frame (open frame entry)',
+    );
+    this.contextualKeyboardManager.register(
+      'paint.toggleGhost',
+      { code: 'KeyG' },
+      () => this.controls.paintToolbar.handleKeyboard('g'),
+      'paint',
+      'Toggle ghost mode',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.gamutDiagram',
+      { code: 'KeyG' },
+      () => this.controls.scopesControl.toggleScope('gamutDiagram'),
+      'panel',
+      'Toggle CIE gamut diagram',
     );
 
     // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
@@ -688,6 +716,12 @@ export class App {
       headerBar: this.headerBar,
       frameNavigation: this.frameNavigation,
     });
+  }
+
+  private syncCurrentSourceTimecodeOffsets(): void {
+    const startFrame = getCurrentSourceStartFrame(this.session.currentSource);
+    this.gotoFrameOverlay.setStartFrame(startFrame);
+    this.headerBar.getTimecodeDisplay().setStartFrame(startFrame);
   }
 
   /**

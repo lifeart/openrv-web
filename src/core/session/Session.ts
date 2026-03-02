@@ -163,6 +163,7 @@ export interface SessionEvents extends EventMap {
   playbackSpeedChanged: number;
   preservesPitchChanged: boolean;
   audioScrubEnabledChanged: boolean;
+  audioScrubAvailabilityChanged: boolean;
   marksChanged: ReadonlyMap<number, Marker>;
   annotationsLoaded: ParsedAnnotations;
   settingsLoaded: GTOViewSettings;
@@ -376,6 +377,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'loopModeChanged', 'playbackModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
       'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
       'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioScrubEnabledChanged',
+      'audioScrubAvailabilityChanged',
       'audioError', 'abSourceChanged', 'fpsUpdated', 'frameDecodeTimeout',
     ] as const;
     for (const event of playbackEvents) {

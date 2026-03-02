@@ -353,6 +353,17 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     setButtonActive(exrWindowButton, state.enabled, 'icon');
   }));
 
+  // Info Strip overlay toggle button
+  const infoStripButton = ContextToolbar.createIconButton('info', () => {
+    viewer.getInfoStripOverlay().toggle();
+  }, { title: 'Toggle info strip overlay (F7)' });
+  infoStripButton.dataset.testid = 'info-strip-toggle-btn';
+  viewContent.appendChild(infoStripButton);
+
+  addUnsubscriber(viewer.getInfoStripOverlay().on('stateChanged', (state) => {
+    setButtonActive(infoStripButton, state.enabled, 'icon');
+  }));
+
   // FPS Indicator toggle button
   const fpsIndicatorButton = ContextToolbar.createIconButton('activity', () => {
     viewer.getFPSIndicator().toggle();

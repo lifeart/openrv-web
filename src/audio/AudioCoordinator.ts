@@ -27,6 +27,8 @@ const log = new Logger('AudioCoordinator');
 export interface AudioCoordinatorCallbacks {
   /** The active audio path changed; host should re-apply volume to the video element. */
   onAudioPathChanged(): void;
+  /** Scrub audio availability changed; host should update UI affordances. */
+  onAudioScrubAvailabilityChanged?(available: boolean): void;
 }
 
 export class AudioCoordinator implements ManagerBase {
@@ -84,12 +86,14 @@ export class AudioCoordinator implements ManagerBase {
     this._manager.loadFromVideo(video).then(() => {
       this._manager.setVolume(volume);
       this._manager.setMuted(muted);
+      this._callbacks?.onAudioScrubAvailabilityChanged?.(this._manager.isUsingWebAudio);
       // If playback started while audio was still loading, activate now
       if (this._isPlaying) {
         this.activateAppropriateAudioPath();
       }
     }).catch(err => {
       log.warn('Audio extraction failed, using video element audio:', err);
+      this._callbacks?.onAudioScrubAvailabilityChanged?.(false);
     });
   }
 

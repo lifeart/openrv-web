@@ -33,6 +33,7 @@ import { generateReport } from './export/ReportExporter';
 import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { isAudioScrubAvailable } from './utils/media/SourceUIState';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -97,6 +98,17 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(session.on('audioScrubEnabledChanged', (enabled) => {
     volumeControl.syncAudioScrub(enabled);
   }));
+
+  const syncAudioScrubAvailability = () => {
+    volumeControl.setScrubAudioAvailable(
+      isAudioScrubAvailable(session.currentSource, session.audioPlaybackManager),
+    );
+  };
+  syncAudioScrubAvailability();
+  subs.add(session.on('sourceLoaded', syncAudioScrubAvailability));
+  subs.add(session.on('durationChanged', syncAudioScrubAvailability));
+  subs.add(session.on('representationChanged', syncAudioScrubAvailability));
+  subs.add(session.on('audioScrubAvailabilityChanged', syncAudioScrubAvailability));
 
   // Export control (from HeaderBar) -> viewer
   const exportControl = headerBar.getExportControl();

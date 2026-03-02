@@ -85,6 +85,8 @@ function createMockVolumeControl() {
   return Object.assign(emitter, {
     syncVolume: vi.fn(),
     syncMuted: vi.fn(),
+    syncAudioScrub: vi.fn(),
+    setScrubAudioAvailable: vi.fn(),
   });
 }
 
@@ -108,7 +110,7 @@ function createMockSession() {
   const session = Object.assign(emitter, {
     volume: 1,
     muted: false,
-    currentSource: null as { name: string } | null,
+    currentSource: null as { name?: string; type?: string } | null,
     currentSourceIndex: 0,
     currentFrame: 1,
     frameCount: 100,
@@ -139,6 +141,9 @@ function createMockSession() {
       session.outPoint = session.frameCount;
     }),
     pause: vi.fn(),
+    audioPlaybackManager: {
+      isUsingWebAudio: false,
+    },
   });
   return session;
 }
@@ -275,6 +280,25 @@ describe('wirePlaybackControls', () => {
     const volumeControl = headerBar.getVolumeControl();
     session.emit('mutedChanged', true);
     expect(volumeControl.syncMuted).toHaveBeenCalledWith(true);
+  });
+
+  it('PW-004b: initial wiring disables audio scrub when decoded audio is unavailable', () => {
+    const volumeControl = headerBar.getVolumeControl();
+    expect(volumeControl.setScrubAudioAvailable).toHaveBeenCalledWith(false);
+  });
+
+  it('PW-004c: audio scrub availability follows session source and decode state', () => {
+    const volumeControl = headerBar.getVolumeControl();
+    volumeControl.setScrubAudioAvailable.mockClear();
+
+    session.currentSource = { name: 'shot.mov', type: 'video' };
+    session.audioPlaybackManager.isUsingWebAudio = true;
+    session.emit('audioScrubAvailabilityChanged', true);
+    expect(volumeControl.setScrubAudioAvailable).toHaveBeenLastCalledWith(true);
+
+    session.currentSource = { name: 'plate.exr', type: 'image' };
+    session.emit('durationChanged', 100);
+    expect(volumeControl.setScrubAudioAvailable).toHaveBeenLastCalledWith(false);
   });
 
   it('PW-005: exportRequested calls viewer.exportFrame()', () => {

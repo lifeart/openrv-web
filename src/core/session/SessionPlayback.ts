@@ -67,6 +67,7 @@ export interface SessionPlaybackEvents extends EventMap {
   mutedChanged: boolean;
   preservesPitchChanged: boolean;
   audioScrubEnabledChanged: boolean;
+  audioScrubAvailabilityChanged: boolean;
   audioError: AudioPlaybackError;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
   fpsUpdated: FPSMeasurement;
@@ -450,6 +451,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   private wireAudioCoordinator(): void {
     this._audioCoordinator.setCallbacks({
       onAudioPathChanged: () => this.applyVolumeToVideo(),
+      onAudioScrubAvailabilityChanged: (available) => this.emit('audioScrubAvailabilityChanged', available),
     });
   }
 
