@@ -45,3 +45,6 @@ docs/.vitepress/cache/
 # Generated API docs (built from source by TypeDoc)
 docs/api/*
 !docs/api/index.md
+
+# Generated documentation (built by scripts/docs/)
+docs/generated/

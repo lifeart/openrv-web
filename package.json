@@ -26,8 +26,10 @@
     "test:e2e:smoke": "playwright test --project=smoke",
     "test:e2e:ui": "playwright test --ui",
     "docs:api": "typedoc",
-    "docs:dev": "pnpm docs:api && vitepress dev docs",
-    "docs:build": "pnpm docs:api && vitepress build docs",
+    "docs:generate": "npx tsx scripts/docs/generate-all.ts",
+    "docs:check": "npx tsx scripts/docs/generate-all.ts --check",
+    "docs:dev": "pnpm docs:generate && pnpm docs:api && vitepress dev docs",
+    "docs:build": "pnpm docs:generate && pnpm docs:api && vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
@@ -42,6 +44,7 @@
     "@vitest/coverage-v8": "^1.2.0",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^24.0.0",
+    "tsx": "^4.21.0",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typedoc-vitepress-theme": "^1.1.2",
