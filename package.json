@@ -30,7 +30,9 @@
     "docs:check": "npx tsx scripts/docs/generate-all.ts --check",
     "docs:dev": "pnpm docs:generate && pnpm docs:api && vitepress dev docs",
     "docs:build": "pnpm docs:generate && pnpm docs:api && vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "screenshots": "playwright test --project=screenshots",
+    "screenshots:update": "playwright test --project=screenshots --update-snapshots"
   },
   "dependencies": {
     "@jsquash/jxl": "^1.3.0",

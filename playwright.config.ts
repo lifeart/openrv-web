@@ -52,6 +52,17 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       testMatch: SMOKE_SPECS,
     },
+    {
+      name: 'screenshots',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'dark',
+      },
+      testDir: './e2e/screenshots',
+      testMatch: '*.screenshot.ts',
+      retries: 0,
+    },
   ],
   webServer: {
     command: 'pnpm dev',
