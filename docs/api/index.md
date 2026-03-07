@@ -37,7 +37,7 @@
 
 > **ExporterContribution** = `BlobExporterContribution` \| `TextExporterContribution`
 
-Defined in: [plugin/types.ts:178](https://github.com/lifeart/openrv-web/blob/1a639a6456288bd6da9a39eeb935d000c0167630/src/plugin/types.ts#L178)
+Defined in: [plugin/types.ts:178](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L178)
 
 Union of all exporter contribution types
 
@@ -47,7 +47,7 @@ Union of all exporter contribution types
 
 > **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoaded"` \| `"error"`
 
-Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/1a639a6456288bd6da9a39eeb935d000c0167630/src/api/EventsAPI.ts#L15)
+Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/api/EventsAPI.ts#L15)
 
 Events that can be subscribed to via the public API
 
@@ -57,7 +57,7 @@ Events that can be subscribed to via the public API
 
 > **PluginContributionType** = `"decoder"` \| `"node"` \| `"processor"` \| `"tool"` \| `"exporter"` \| `"blendMode"` \| `"uiPanel"`
 
-Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/1a639a6456288bd6da9a39eeb935d000c0167630/src/plugin/types.ts#L44)
+Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L44)
 
 ***
 
@@ -65,7 +65,7 @@ Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/1a63
 
 > **PluginId** = `string`
 
-Defined in: [plugin/types.ts:17](https://github.com/lifeart/openrv-web/blob/1a639a6456288bd6da9a39eeb935d000c0167630/src/plugin/types.ts#L17)
+Defined in: [plugin/types.ts:17](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L17)
 
 Unique plugin identifier, reverse-domain style: "com.example.myformat"
 
@@ -75,4 +75,4 @@ Unique plugin identifier, reverse-domain style: "com.example.myformat"
 
 > **PluginState** = `"registered"` \| `"initialized"` \| `"active"` \| `"inactive"` \| `"disposed"` \| `"error"`
 
-Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/1a639a6456288bd6da9a39eeb935d000c0167630/src/plugin/types.ts#L57)
+Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L57)

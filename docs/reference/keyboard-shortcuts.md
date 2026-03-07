@@ -26,10 +26,6 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 |----------|--------|
 | `F` | Fit image to window |
 | `Shift+F` | Fit image to window (alternative) |
-| `=` | Zoom in |
-| `-` | Zoom out |
-| `Shift+=` | Fine zoom in |
-| `Shift+-` | Fine zoom out |
 | `0` | Set zoom to 50% |
 | `1` | Switch to View tab |
 | `2` | Switch to Color tab |
@@ -104,7 +100,7 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+A` | Alpha channel only |
 | `Shift+L` | Luminance / Grayscale |
 | `Shift+Y` | Grayscale (alias for Shift+L) |
-| `Shift+N` | Normal RGB (all channels) |
+| `Shift+N` | Reset channel view (no isolation) |
 
 ## Color and Effects
 
@@ -142,8 +138,7 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `A` | Arrow tool |
 | `B` | Toggle brush type (soft/hard) |
 | `G` | Toggle ghost mode |
-| `Shift+G` | Toggle ghost frames (onion skin) |
-| `Ctrl+G` | Toggle ghost frames (alternative) |
+| `Ctrl+G` | Toggle ghost frames (onion skin) |
 | `X` | Toggle hold mode (persist annotations across frames) |
 | `Shift+Q` | Toggle spotlight |
 | `Ctrl+Z` | Undo |

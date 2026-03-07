@@ -251,7 +251,7 @@ const adj = window.openrv.color.getAdjustments();
 console.log(adj.exposure); // 1.5
 
 // Reset all adjustments
-window.openrv.color.resetAdjustments();
+window.openrv.color.reset();
 ```
 
 ---

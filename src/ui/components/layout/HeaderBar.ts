@@ -383,6 +383,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     themeElement.style.marginLeft = '8px';
     utilityGroup.appendChild(themeElement);
 
+    // Documentation button — visible link to docs site
+    const docsButton = this.createIconButton('book-open', '', () => window.open('./docs/', '_blank'), 'Documentation');
+    docsButton.dataset.testid = 'docs-button';
+    docsButton.style.marginLeft = '8px';
+    utilityGroup.appendChild(docsButton);
+
     // Help dropdown button (combines Keyboard Shortcuts + Custom Key Bindings)
     this.helpButton = this.createIconButton('help', '', () => this.showHelpMenu(this.helpButton), 'Help & Key Bindings');
     this.helpButton.dataset.testid = 'help-menu-button';
