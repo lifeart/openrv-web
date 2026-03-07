@@ -1,16 +1,23 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Documentation consistency tests.
  *
  * These tests verify that documentation stays in sync with the source code.
  * They extract facts from source files and validate that docs reflect them
  * accurately. Run as part of the normal test suite to catch drift at CI time.
+ *
+ * Note: Uses dynamic require() for Node.js built-ins to avoid TypeScript errors
+ * in a browser-targeted tsconfig that lacks @types/node.
  */
 
 import { describe, test, expect } from 'vitest';
-import fs from 'fs';
-import path from 'path';
 
-const ROOT = path.resolve(__dirname, '../..');
+// Dynamic imports to avoid TS2307 "Cannot find module 'fs'" in browser tsconfig
+const fs: typeof import('fs') = (await import('fs' as any)).default ?? (await import('fs' as any));
+const path: typeof import('path') = (await import('path' as any)).default ?? (await import('path' as any));
+const url: typeof import('url') = (await import('url' as any)).default ?? (await import('url' as any));
+
+const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 
 function readFile(relPath: string): string {
   return fs.readFileSync(path.join(ROOT, relPath), 'utf8');
@@ -18,12 +25,6 @@ function readFile(relPath: string): string {
 
 function fileExists(relPath: string): boolean {
   return fs.existsSync(path.join(ROOT, relPath));
-}
-
-function listFiles(relPath: string): string[] {
-  const dir = path.join(ROOT, relPath);
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir);
 }
 
 // ---------------------------------------------------------------------------
@@ -35,32 +36,37 @@ function getEventNames(): string[] {
   const match = source.match(
     /export type OpenRVEventName\s*=\s*([\s\S]*?);/,
   );
-  if (!match) return [];
-  return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  if (!match?.[1]) return [];
+  const results: string[] = [];
+  for (const m of match[1].matchAll(/'([^']+)'/g)) {
+    if (m[1]) results.push(m[1]);
+  }
+  return results;
 }
 
 function getAPIClassFiles(): string[] {
   const dir = path.join(ROOT, 'src/api');
-  return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('API.ts') && !f.endsWith('.test.ts'));
+  return (fs.readdirSync(dir) as string[]).filter(
+    (f: string) => f.endsWith('API.ts') && !f.endsWith('.test.ts'),
+  );
 }
 
 function getAPIClassNames(): string[] {
-  return getAPIClassFiles().map((f) => f.replace('.ts', ''));
+  return getAPIClassFiles().map((f: string) => f.replace('.ts', ''));
 }
 
 function getRegisteredNodes(): string[] {
   const srcDir = path.join(ROOT, 'src/nodes');
   const results: string[] = [];
-  function walk(dir: string) {
+  function walk(dir: string): void {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         walk(path.join(dir, entry.name));
       } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
         const content = fs.readFileSync(path.join(dir, entry.name), 'utf8');
-        const matches = content.matchAll(/@RegisterNode\('([^']+)'\)/g);
-        for (const m of matches) results.push(m[1]);
+        for (const m of content.matchAll(/@RegisterNode\('([^']+)'\)/g)) {
+          if (m[1]) results.push(m[1]);
+        }
       }
     }
   }
@@ -73,30 +79,36 @@ function getBuiltinFormats(): string[] {
   const match = source.match(
     /export type BuiltinFormatName\s*=\s*([\s\S]*?);/,
   );
-  if (!match) return [];
-  return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  if (!match?.[1]) return [];
+  const results: string[] = [];
+  for (const m of match[1].matchAll(/'([^']+)'/g)) {
+    if (m[1]) results.push(m[1]);
+  }
+  return results;
 }
 
 function getLUT3DUniformNames(): string[] {
   const shader = readFile('src/render/shaders/viewer.frag.glsl');
-  const matches = shader.matchAll(/uniform sampler3D (u_\w+LUT3D)\b/g);
-  return [...matches].map((m) => m[1]);
+  const results: string[] = [];
+  for (const m of shader.matchAll(/uniform sampler3D (u_\w+LUT3D)\b/g)) {
+    if (m[1]) results.push(m[1]);
+  }
+  return results;
 }
 
 function getScreenshotRefsInDocs(): string[] {
   const docsDir = path.join(ROOT, 'docs');
   const refs: string[] = [];
-  function walk(dir: string) {
+  function walk(dir: string): void {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory() && entry.name !== '.vitepress' && entry.name !== 'node_modules') {
         walk(full);
       } else if (entry.name.endsWith('.md')) {
         const content = fs.readFileSync(full, 'utf8');
-        const matches = content.matchAll(
-          /\/assets\/screenshots\/([^)\s"]+\.png)/g,
-        );
-        for (const m of matches) refs.push(m[1]);
+        for (const m of content.matchAll(/\/assets\/screenshots\/([^)\s"]+\.png)/g)) {
+          if (m[1]) refs.push(m[1]);
+        }
       }
     }
   }
@@ -116,7 +128,6 @@ describe('Documentation consistency', () => {
     expect(eventNames.length).toBeGreaterThanOrEqual(13);
 
     const apiIndex = readFile('docs/api/index.md');
-    // The TypeDoc-generated index should contain all event names
     for (const name of eventNames) {
       expect(apiIndex).toContain(name);
     }
@@ -163,7 +174,6 @@ describe('Documentation consistency', () => {
     for (const file of filesToCheck) {
       if (!fileExists(file)) continue;
       const content = readFile(file);
-      // Should not claim tetrahedral on GPU - trilinear is correct
       expect(content).not.toMatch(
         /tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i,
       );
@@ -213,12 +223,9 @@ describe('Documentation consistency', () => {
 
   test('README LUT interpolation claim is accurate', () => {
     const readme = readFile('README.md');
-    // Should mention trilinear for GPU
     expect(readme).toMatch(/trilinear/i);
-    // Should not claim tetrahedral runs on GPU (check line-by-line)
     const lines = readme.split('\n');
     for (const line of lines) {
-      // A line should not claim tetrahedral ON the GPU
       expect(line).not.toMatch(
         /tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i,
       );
@@ -231,7 +238,6 @@ describe('Documentation consistency', () => {
   test('README API class count matches source', () => {
     const readme = readFile('README.md');
     const classCount = getAPIClassNames().length;
-    // README says "all 9 public API classes"
     expect(readme).toContain(`${classCount} public API classes`);
   });
 
