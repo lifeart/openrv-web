@@ -8,8 +8,8 @@ import { getGlobalHistoryManager, type HistoryEntry } from './utils/HistoryManag
 
 function createMockContext() {
   const transformControl = new EventEmitter<TransformControlEvents>() as EventEmitter<TransformControlEvents> & {
-    setTransform: Mock<[Transform2D], void>;
-    getTransform: Mock<[], Transform2D>;
+    setTransform: Mock<(t: Transform2D) => void>;
+    getTransform: Mock<() => Transform2D>;
   };
   transformControl.setTransform = vi.fn();
   transformControl.getTransform = vi.fn(() => ({ ...DEFAULT_TRANSFORM }));
@@ -37,7 +37,7 @@ function createMockContext() {
 
 describe('wireTransformControls', () => {
   const historyManager = getGlobalHistoryManager();
-  let recordActionSpy: MockInstance<[string, HistoryEntry['category'], () => void, (() => void)?], HistoryEntry>;
+  let recordActionSpy: MockInstance<(label: string, category: HistoryEntry['category'], redo: () => void, undo?: () => void) => HistoryEntry>;
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -787,11 +787,15 @@ describe('FileSourceNode', () => {
         close: vi.fn(),
       }));
 
-      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
-        displayWidth: bitmap.width ?? 64,
-        displayHeight: bitmap.height ?? 64,
-        close: vi.fn(),
-      }));
+      (globalThis as any).VideoFrame = class {
+        displayWidth: number;
+        displayHeight: number;
+        close = vi.fn();
+        constructor(bitmap: any) {
+          this.displayWidth = bitmap.width ?? 64;
+          this.displayHeight = bitmap.height ?? 64;
+        }
+      };
     });
 
     afterEach(() => {
@@ -975,11 +979,15 @@ describe('FileSourceNode', () => {
         height: 64,
         close: vi.fn(),
       }));
-      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
-        displayWidth: bitmap.width ?? 64,
-        displayHeight: bitmap.height ?? 64,
-        close: vi.fn(),
-      }));
+      (globalThis as any).VideoFrame = class {
+        displayWidth: number;
+        displayHeight: number;
+        close = vi.fn();
+        constructor(bitmap: any) {
+          this.displayWidth = bitmap.width ?? 64;
+          this.displayHeight = bitmap.height ?? 64;
+        }
+      };
 
       // Test mixed case
       const fileMixed = new File([buffer], 'test.AviF', { type: 'image/avif' });
@@ -1428,11 +1436,15 @@ describe('FileSourceNode', () => {
         close: vi.fn(),
       }));
 
-      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
-        displayWidth: bitmap.width ?? 64,
-        displayHeight: bitmap.height ?? 64,
-        close: vi.fn(),
-      }));
+      (globalThis as any).VideoFrame = class {
+        displayWidth: number;
+        displayHeight: number;
+        close = vi.fn();
+        constructor(bitmap: any) {
+          this.displayWidth = bitmap.width ?? 64;
+          this.displayHeight = bitmap.height ?? 64;
+        }
+      };
     });
 
     afterEach(() => {
@@ -1587,11 +1599,13 @@ describe('FileSourceNode', () => {
         close: vi.fn(),
       }));
 
-      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
-        displayWidth: bitmap.width ?? 32,
-        displayHeight: bitmap.height ?? 32,
-        close: vi.fn(),
-      }));
+      (globalThis as any).VideoFrame = vi.fn(function(bitmap: any) {
+        return {
+          displayWidth: bitmap.width ?? 32,
+          displayHeight: bitmap.height ?? 32,
+          close: vi.fn(),
+        };
+      });
     });
 
     afterEach(() => {

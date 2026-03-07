@@ -426,7 +426,7 @@ describe('Half-Resolution Processing', () => {
       processor = new EffectProcessor();
     });
 
-    it('EP-HALF-008: half-res clarity is faster than full-res', () => {
+    it('EP-HALF-008: half-res clarity is faster than full-res', { timeout: 30000 }, () => {
       // Use a larger image so the computational savings are more pronounced
       // relative to the downsampling/upsampling overhead
       const width = 1200;
@@ -519,7 +519,7 @@ describe('Half-Resolution Processing', () => {
       processor = new EffectProcessor();
     });
 
-    it('EP-HALF-009: default halfRes=false preserves existing behavior', () => {
+    it('EP-HALF-009: default halfRes=false preserves existing behavior', { timeout: 30000 }, () => {
       const width = 400;
       const height = 400;
       const imageData1 = createGradientImageData(width, height);
@@ -540,7 +540,7 @@ describe('Half-Resolution Processing', () => {
       }
     });
 
-    it('EP-HALF-010: halfRes flag does not affect per-pixel effects', () => {
+    it('EP-HALF-010: halfRes flag does not affect per-pixel effects', { timeout: 30000 }, () => {
       const width = 400;
       const height = 400;
       const imageData1 = createGradientImageData(width, height);

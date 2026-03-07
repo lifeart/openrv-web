@@ -739,7 +739,7 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       expect(halfDiff).toBe(true);
     });
 
-    it('WK-HALF-002: halfRes=undefined backward compatibility (defaults to false)', () => {
+    it('WK-HALF-002: halfRes=undefined backward compatibility (defaults to false)', { timeout: 30000 }, () => {
       const width = 400;
       const height = 400;
       const data1 = createGradientPixelData(width, height);

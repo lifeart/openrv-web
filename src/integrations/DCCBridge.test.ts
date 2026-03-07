@@ -91,16 +91,17 @@ function defaultConfig(overrides?: Partial<DCCBridgeConfig>): DCCBridgeConfig {
 
 async function createConnectedBridge(config?: Partial<DCCBridgeConfig>): Promise<{ bridge: DCCBridge; ws: MockWebSocket }> {
   let capturedWs: MockWebSocket | null = null;
-  const WsMock = vi.fn().mockImplementation((url: string) => {
-    capturedWs = new MockWebSocket(url);
-    return capturedWs;
-  }) as unknown as typeof WebSocket;
-
-  // Assign static constants
-  (WsMock as unknown as Record<string, number>).CONNECTING = 0;
-  (WsMock as unknown as Record<string, number>).OPEN = 1;
-  (WsMock as unknown as Record<string, number>).CLOSING = 2;
-  (WsMock as unknown as Record<string, number>).CLOSED = 3;
+  class WsMockClass {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+    constructor(url: string) {
+      capturedWs = new MockWebSocket(url);
+      return capturedWs as any;
+    }
+  }
+  const WsMock = WsMockClass as unknown as typeof WebSocket;
 
   const bridge = new DCCBridge(defaultConfig(config), WsMock);
   bridge.connect();

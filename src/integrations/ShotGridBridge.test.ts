@@ -30,7 +30,7 @@ function defaultConfig(overrides?: Partial<ShotGridConfig>): ShotGridConfig {
 }
 
 function createMockFetch() {
-  return vi.fn<[input: RequestInfo | URL, init?: RequestInit], Promise<Response>>();
+  return vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
 }
 
 type MockFetchFn = ReturnType<typeof createMockFetch>;

@@ -11,8 +11,8 @@ interface TestFrame {
 }
 
 describe('FramePreloadManager', () => {
-  let loader: Mock<[frame: number], Promise<TestFrame>>;
-  let disposer: Mock<[frame: number, data: TestFrame], void>;
+  let loader: Mock<(frame: number) => Promise<TestFrame>>;
+  let disposer: Mock<(frame: number, data: TestFrame) => void>;
 
   beforeEach(() => {
     loader = vi.fn((frame: number) => Promise.resolve({ frame, data: `frame-${frame}` }));

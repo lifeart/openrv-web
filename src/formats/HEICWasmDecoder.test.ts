@@ -83,7 +83,7 @@ function createMockImage(opts: {
  */
 function mockLibheif(images: MockHeifImage[] | null) {
   const decodeFn = vi.fn().mockReturnValue(images);
-  const HeifDecoderMock = vi.fn().mockImplementation(() => ({ decode: decodeFn }));
+  const HeifDecoderMock = class { decode = decodeFn; };
   vi.doMock('libheif-js', () => ({ HeifDecoder: HeifDecoderMock }));
   return { decodeFn, HeifDecoderMock };
 }
@@ -269,7 +269,7 @@ describe('HEICWasmDecoder', () => {
         throw new Error('Corrupt HEIC bitstream');
       });
       vi.doMock('libheif-js', () => ({
-        HeifDecoder: vi.fn().mockImplementation(() => ({ decode: decodeFn })),
+        HeifDecoder: class { decode = decodeFn; },
       }));
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');

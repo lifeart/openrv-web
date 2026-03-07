@@ -106,7 +106,7 @@ function createDCCBridgeWiring(dccUrl: string | null) {
 
   if (dccUrl) {
     // Capture the MockWebSocket instance when created
-    const wsImpl = vi.fn((url: string) => {
+    const wsImpl = vi.fn(function(url: string) {
       mockWs = new MockWebSocket(url);
       return mockWs;
     }) as unknown as typeof WebSocket;

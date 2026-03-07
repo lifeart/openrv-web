@@ -305,7 +305,7 @@ describe('AudioMixer', () => {
   let mixer: AudioMixer;
 
   beforeEach(() => {
-    vi.stubGlobal('AudioContext', vi.fn().mockImplementation(createMockAudioContext));
+    vi.stubGlobal('AudioContext', vi.fn(function() { return createMockAudioContext(); }));
     mixer = new AudioMixer();
   });
 

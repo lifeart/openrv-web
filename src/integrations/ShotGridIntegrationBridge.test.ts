@@ -80,15 +80,15 @@ vi.mock('./ShotGridBridge', async () => {
   const actual = await vi.importActual('./ShotGridBridge');
   return {
     ...actual,
-    ShotGridBridge: vi.fn().mockImplementation(() => ({
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      getVersionsForPlaylist: vi.fn().mockResolvedValue([makeVersion()]),
-      getVersionsForShot: vi.fn().mockResolvedValue([makeVersion()]),
-      getNotesForVersion: vi.fn().mockResolvedValue([]),
-      pushNote: vi.fn().mockResolvedValue({ id: 500, subject: 'Test' }),
-      pushStatus: vi.fn().mockResolvedValue(undefined),
-      dispose: vi.fn(),
-    })),
+    ShotGridBridge: vi.fn(function(this: any) {
+      this.authenticate = vi.fn().mockResolvedValue(undefined);
+      this.getVersionsForPlaylist = vi.fn().mockResolvedValue([makeVersion()]);
+      this.getVersionsForShot = vi.fn().mockResolvedValue([makeVersion()]);
+      this.getNotesForVersion = vi.fn().mockResolvedValue([]);
+      this.pushNote = vi.fn().mockResolvedValue({ id: 500, subject: 'Test' });
+      this.pushStatus = vi.fn().mockResolvedValue(undefined);
+      this.dispose = vi.fn();
+    }),
   };
 });
 

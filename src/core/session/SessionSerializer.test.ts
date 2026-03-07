@@ -651,9 +651,9 @@ function createMockComponents(): SessionComponents {
       ],
       getPlaybackState: vi.fn().mockReturnValue({ currentFrame: 1, fps: 24, loopMode: 'loop' }),
       setPlaybackState: vi.fn(),
-      loadImage: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
-      loadVideo: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
-      loadFile: vi.fn<[File], Promise<void>>().mockResolvedValue(undefined),
+      loadImage: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
+      loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
+      loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
       noteManager: {
         toSerializable: vi.fn().mockReturnValue([]),
         fromSerializable: vi.fn(),

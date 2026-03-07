@@ -506,8 +506,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     // Indentation increases with depth: 28px for depth 1, 44px for depth 2+
     const paddingLeft = isReply ? 12 + 16 * replyDepth : 12;
     el.style.cssText = `
-      padding: 8px 12px;
-      padding-left: ${paddingLeft}px;
+      padding: 8px 12px 8px ${paddingLeft}px;
       border-bottom: 1px solid var(--overlay-border);
       cursor: pointer;
       transition: background 0.1s;

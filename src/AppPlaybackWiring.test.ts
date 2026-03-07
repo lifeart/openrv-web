@@ -61,13 +61,13 @@ vi.mock('./export/MP4Muxer', () => ({
 }));
 
 vi.mock('./ui/components/ExportProgress', () => ({
-  ExportProgressDialog: vi.fn().mockImplementation(() => ({
-    show: mockDialogShow,
-    hide: mockDialogHide,
-    dispose: mockDialogDispose,
-    updateProgress: mockDialogUpdateProgress,
-    on: mockDialogOnFn,
-  })),
+  ExportProgressDialog: class MockExportProgressDialog {
+    show = mockDialogShow;
+    hide = mockDialogHide;
+    dispose = mockDialogDispose;
+    updateProgress = mockDialogUpdateProgress;
+    on = mockDialogOnFn;
+  },
 }));
 
 vi.mock('./utils/export/AnnotationJSONExporter', () => ({

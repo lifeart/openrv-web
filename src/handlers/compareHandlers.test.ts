@@ -4,7 +4,7 @@
  * Tests for bindCompareHandlers: A/B availability updates and source switching.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { bindCompareHandlers } from './compareHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { Session, SessionEvents } from '../core/session/Session';
@@ -45,7 +45,7 @@ describe('bindCompareHandlers', () => {
   let context: SessionBridgeContext;
   let session: Session;
   let handlers: EventHandlers;
-  let updateEXRLayers: ReturnType<typeof vi.fn>;
+  let updateEXRLayers: Mock<() => void>;
 
   beforeEach(() => {
     context = createMockSessionBridgeContext();

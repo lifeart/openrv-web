@@ -13,29 +13,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock the mediabunny module (required: WebCodecs APIs unavailable in test env)
 vi.mock('mediabunny', () => {
   return {
-    Input: vi.fn().mockImplementation(() => ({
-      getPrimaryVideoTrack: vi.fn().mockResolvedValue({
+    Input: class MockInput {
+      getPrimaryVideoTrack = vi.fn().mockResolvedValue({
         displayWidth: 1920,
         displayHeight: 1080,
         codec: 'avc1',
         canDecode: vi.fn().mockResolvedValue(true),
-      }),
-      computeDuration: vi.fn().mockResolvedValue(10),
-      dispose: vi.fn(),
-    })),
-    BlobSource: vi.fn(),
-    CanvasSink: vi.fn().mockImplementation(() => {
-      return {
-        canvases: vi.fn().mockReturnValue({
-          [Symbol.asyncIterator]: async function* () {
-            yield { canvas: document.createElement('canvas'), timestamp: 0 };
-          },
-        }),
-      };
-    }),
-    VideoSampleSink: vi.fn().mockImplementation(() => ({
-      getSample: vi.fn().mockResolvedValue(null),
-    })),
+      });
+      computeDuration = vi.fn().mockResolvedValue(10);
+      dispose = vi.fn();
+    },
+    BlobSource: class MockBlobSource {},
+    CanvasSink: class MockCanvasSink {
+      canvases = vi.fn().mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield { canvas: document.createElement('canvas'), timestamp: 0 };
+        },
+      });
+    },
+    VideoSampleSink: class MockVideoSampleSink {
+      getSample = vi.fn().mockResolvedValue(null);
+    },
     ALL_FORMATS: [],
   };
 });

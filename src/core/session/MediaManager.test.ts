@@ -37,7 +37,7 @@ function createMockVideoSourceNode(name?: string) {
   };
 }
 vi.mock('../../nodes/sources/VideoSourceNode', () => ({
-  VideoSourceNode: vi.fn().mockImplementation((name?: string) => createMockVideoSourceNode(name)),
+  VideoSourceNode: vi.fn(function(name?: string) { return createMockVideoSourceNode(name); }),
 }));
 
 // Mock FileSourceNode
@@ -58,7 +58,7 @@ function createMockFileSourceNode(name?: string) {
   };
 }
 vi.mock('../../nodes/sources/FileSourceNode', () => ({
-  FileSourceNode: vi.fn().mockImplementation((name?: string) => createMockFileSourceNode(name)),
+  FileSourceNode: vi.fn(function(name?: string) { return createMockFileSourceNode(name); }),
 }));
 
 // Import mocked modules so we can access them
@@ -531,7 +531,7 @@ describe('MediaManager', () => {
         width: 640,
         height: 480,
       };
-      vi.stubGlobal('Image', vi.fn(() => mockImg));
+      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
 
       const promise = manager.loadImage('test.png', 'http://example.com/test.png');
       // Trigger the onload callback
@@ -556,7 +556,7 @@ describe('MediaManager', () => {
         width: 100,
         height: 100,
       };
-      vi.stubGlobal('Image', vi.fn(() => mockImg));
+      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
 
       const promise = manager.loadImage('test.png', 'http://example.com/test.png');
       mockImg.onload!();
@@ -574,7 +574,7 @@ describe('MediaManager', () => {
         width: 0,
         height: 0,
       };
-      vi.stubGlobal('Image', vi.fn(() => mockImg));
+      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
 
       const promise = manager.loadImage('test.png', 'http://example.com/bad.png');
       mockImg.onerror!();
@@ -592,7 +592,7 @@ describe('MediaManager', () => {
         width: 100,
         height: 100,
       };
-      vi.stubGlobal('Image', vi.fn(() => mockImg));
+      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
 
       const promise = managerNoHost.loadImage('test.png', 'url');
       mockImg.onload!();

@@ -29,7 +29,7 @@ describe('AudioPlaybackManager', () => {
     createdGainNodes = audioMock.createdGainNodes;
     createdSourceNodes = audioMock.createdSourceNodes;
 
-    vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
+    vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
