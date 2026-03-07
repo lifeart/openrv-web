@@ -352,6 +352,7 @@ describe('AudioMixer volume wiring fix', () => {
     return Object.assign(emitter, {
       syncVolume: vi.fn(),
       syncMuted: vi.fn(),
+      setScrubAudioAvailable: vi.fn(),
     });
   }
 
