@@ -53,7 +53,7 @@ Saturation is applied after the SOP transform. It interpolates between the Rec. 
 The CDL transform follows the ASC specification:
 
 ```
-out = clamp(pow(max(in * slope + offset, 0), power))
+out = pow(max(in * slope + offset, 0), power)
 luma = 0.2126 * R + 0.7152 * G + 0.0722 * B
 final = luma + (out - luma) * saturation
 ```

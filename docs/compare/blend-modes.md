@@ -45,6 +45,25 @@ Only one blend mode can be active at a time. Enabling onion skin disables flicke
 
 This mutual exclusivity prevents conflicting visualizations. The Compare dropdown clearly indicates which mode is active with accent-color highlighting.
 
+## Layer Stack Blend Modes
+
+In addition to the three comparison blend modes above, the multi-layer stack system (see [Advanced Compare](advanced-compare.md)) supports eight compositing blend modes for combining multiple sources:
+
+| Mode | Description |
+|------|-------------|
+| Normal | Standard Porter-Duff alpha over compositing |
+| Add | Additive (linear dodge) -- brightens the image |
+| Minus | Subtractive -- darkens the image |
+| Multiply | Multiply -- darkens by multiplying pixel values |
+| Screen | Screen -- lightens, inverse of multiply |
+| Overlay | Overlay -- combines multiply and screen based on luminance |
+| Difference | Absolute difference between layers |
+| Exclusion | Similar to difference but lower contrast |
+
+Both straight alpha and premultiplied alpha compositing are supported. Premultiplied alpha matches OpenRV's desktop compositing pipeline and is used automatically when loading RV session files.
+
+---
+
 ## Practical Tips
 
 - **Flicker at 4 Hz** is a common choice for change detection -- slow enough to see each frame but fast enough to make differences pop

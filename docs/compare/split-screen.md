@@ -48,3 +48,4 @@ Split screen requires two loaded sources. If only one source is loaded, enabling
 - [A/B Switching](ab-switching.md) -- toggle between sources without side-by-side display
 - [Wipe Mode](wipe-mode.md) -- compare original vs. graded on a single source
 - [Difference Matte](difference-matte.md) -- pixel-level difference analysis
+- [Shape Tools](../annotations/shapes.md) -- annotate areas of interest during comparison

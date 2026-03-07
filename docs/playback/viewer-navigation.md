@@ -83,6 +83,19 @@ The Transform tab toolbar includes a **Reset** button that restores all transfor
 
 Pressing `F` (Fit to window) resets the zoom and pan but does not affect rotation or flip.
 
+## Spherical (360) Projection
+
+OpenRV Web supports equirectangular (lat/long) panoramic image viewing. When 360 content is detected (via metadata or 2:1 aspect ratio), the viewer maps the image onto the inside of a sphere, allowing interactive exploration.
+
+| Action | Control |
+|--------|---------|
+| Look around | Click and drag on the canvas |
+| Zoom (field of view) | Scroll wheel |
+
+The spherical projection uses yaw/pitch rotation with configurable field of view. Detection is automatic for files with spherical metadata, or can be enabled manually from the View menu.
+
+---
+
 ## Transform Rendering
 
 Transforms are applied in the rendering pipeline in this order:
@@ -101,3 +114,6 @@ All transforms persist across frame changes and tab switches, so navigating thro
 - [Quick Start](../getting-started/quick-start.md) -- basic navigation overview
 - [UI Overview](../getting-started/ui-overview.md) -- full interface layout
 - [Channel Isolation](channel-isolation.md) -- combine with zoom for pixel-level inspection
+- [J/K/L Navigation](jkl-navigation.md) -- playback speed and shuttle controls
+- [Transforms](../advanced/transforms.md) -- crop, lens distortion, and perspective correction
+- [Pixel Probe](../scopes/pixel-probe.md) -- inspect pixel values at zoom (`Shift+I`)

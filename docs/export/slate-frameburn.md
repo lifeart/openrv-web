@@ -2,6 +2,10 @@
 
 Slate frames and frameburn overlays add production metadata to exported video and image sequences. These features are standard in professional post-production for identifying deliverables and tracking review content.
 
+::: tip Who uses this
+Production teams delivering dailies to editorial, clients, or internal review rely on slate and frameburn to meet industry-standard delivery specs. Timecode burn-in, shot identification, and confidentiality watermarks are expected on every professional deliverable.
+:::
+
 ## Slate (Leader Frames)
 
 A slate is a title card inserted at the beginning of an exported video containing production metadata. It serves as identification for the content that follows.

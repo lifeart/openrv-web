@@ -216,6 +216,7 @@ export default defineConfig({
         {
           text: 'Reference',
           items: [
+            { text: 'Overview', link: '/reference/' },
             { text: 'Keyboard Shortcuts', link: '/reference/keyboard-shortcuts' },
             { text: 'File Formats', link: '/reference/file-formats' },
             { text: 'Browser Compatibility', link: '/reference/browser-compatibility' },

@@ -75,3 +75,4 @@ These features are covered in detail in the [Session Management](../advanced/ses
 - [Frame Export](frame-export.md) -- export individual frames
 - [Video Export](video-export.md) -- export encoded video
 - [EDL and OTIO](edl-otio.md) -- export edit decision lists
+- [Exporting Annotations](../annotations/export.md) -- annotation-specific export as JSON or PDF

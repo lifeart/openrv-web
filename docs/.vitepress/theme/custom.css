@@ -1,0 +1,154 @@
+/*
+ * OpenRV Web docs -- custom VitePress theme overrides
+ */
+
+/* --------------------------------------------------------
+ * 1. HERO IMAGE -- make it larger and more prominent
+ * -------------------------------------------------------- */
+
+/* Increase the hero image max width on desktop */
+.VPHero .VPImage {
+  max-width: 550px !important;
+  max-height: 400px !important;
+}
+
+@media (min-width: 960px) {
+  .VPHero .VPImage {
+    max-width: 620px !important;
+    max-height: 460px !important;
+  }
+}
+
+/* Add a subtle shadow and rounded corners to the hero image */
+.VPHero .VPImage img {
+  border-radius: 10px;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* In dark mode, lighten the shadow glow slightly */
+.dark .VPHero .VPImage img {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* --------------------------------------------------------
+ * 2. SCREENSHOT SHOWCASE -- grid below features
+ * -------------------------------------------------------- */
+
+.screenshot-showcase {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+
+.screenshot-showcase h2 {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.screenshot-showcase .showcase-subtitle {
+  text-align: center;
+  color: var(--vp-c-text-2);
+  margin-bottom: 32px;
+  font-size: 0.95rem;
+}
+
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.screenshot-card {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.screenshot-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.dark .screenshot-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.screenshot-card img {
+  width: 100%;
+  display: block;
+}
+
+.screenshot-card .caption {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+}
+
+.screenshot-card .caption span {
+  display: block;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--vp-c-text-2);
+  margin-top: 2px;
+}
+
+/* On small screens, single column */
+@media (max-width: 640px) {
+  .screenshot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------
+ * 3. QUICK LINKS -- improve the role-based link grid
+ * -------------------------------------------------------- */
+
+.quick-links {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+
+.quick-links h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--vp-c-brand-1);
+}
+
+.quick-links ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.quick-links li {
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.quick-links a {
+  font-weight: 500;
+}
+
+/* On small screens, single column */
+@media (max-width: 640px) {
+  .quick-links {
+    grid-template-columns: 1fr;
+  }
+}

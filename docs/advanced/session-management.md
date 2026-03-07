@@ -169,6 +169,10 @@ On application startup, the auto-save manager checks for a clean shutdown flag:
 
 Crash recovery restores the full session state, including media references (which may require file reloading for local files), color corrections, annotations, and playback position.
 
+### Session Recovery After Browser Restart
+
+After a browser restart, locally-loaded media files are referenced by blob URLs that are no longer valid. The session recovery system detects these invalid blob URLs and displays file re-selection prompts for each affected media source. The user selects the original files from disk, and the session resumes with all color corrections, annotations, and playback state intact. This ensures that no review work is lost even when the browser is closed unexpectedly or the system restarts.
+
 ---
 
 ## Storage Quota
@@ -218,3 +222,4 @@ For detailed information on the RV session format, node mapping tables, and migr
 - [Session Compatibility](../guides/session-compatibility.md) -- RV/GTO format details, node mapping, migration guide
 - [Playlist Management](playlist.md) -- Playlist state included in session persistence
 - [Review Workflow](review-workflow.md) -- Using sessions in dailies and review processes
+- [Exporting Annotations](../annotations/export.md) -- Export annotations independently from the session

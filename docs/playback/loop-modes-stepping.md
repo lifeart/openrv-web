@@ -4,7 +4,7 @@ OpenRV Web provides three loop modes that control what happens when playback rea
 
 ## Loop Modes
 
-Cycle through loop modes by pressing `L` (or clicking the loop mode button in the header bar). The modes cycle in this order: Loop, Ping-pong, Once.
+Cycle through loop modes by clicking the loop mode button in the header bar. The modes cycle in this order: Loop, Ping-pong, Once.
 
 ### Loop Mode
 
@@ -34,7 +34,7 @@ The timeline status bar displays the current loop mode alongside the playback st
 Playing | 24/24 fps | loop
 ```
 
-The loop mode button in the header bar shows an icon and label (e.g., "Loop", "Ping", "Once") and has a minimum width of 70px. The button tooltip reads "Cycle loop mode (L)".
+The loop mode button in the header bar shows an icon and label (e.g., "Loop", "Ping", "Once") and has a minimum width of 70px.
 
 ## In/Out Point Integration
 
@@ -104,3 +104,4 @@ Loop mode, playback speed, and direction are preserved in the session state. The
 - [Timeline Controls](timeline-controls.md) -- in/out points, markers, scrubbing
 - [J/K/L Navigation](jkl-navigation.md) -- speed control and shuttle
 - [Audio Playback](audio.md) -- audio behavior during loop transitions
+- [Viewer Navigation](viewer-navigation.md) -- pan, zoom, and rotation controls

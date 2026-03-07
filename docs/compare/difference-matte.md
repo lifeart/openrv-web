@@ -64,3 +64,4 @@ Enabling difference matte disables wipe mode and split screen. Only one comparis
 - [A/B Switching](ab-switching.md) -- load and switch between two sources
 - [Blend Modes](blend-modes.md) -- onion skin and flicker comparison
 - [Wipe Mode](wipe-mode.md) -- split-line comparison
+- [Shape Tools](../annotations/shapes.md) -- annotate differences found during comparison

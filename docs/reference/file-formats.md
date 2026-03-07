@@ -75,6 +75,25 @@ ProRes and DNxHD codecs are detected during MXF and MOV parsing. Since browsers 
 | At-sign | `frame.@@@@.exr` | Each `@` = one digit |
 | Numeric | `frame_001.png` | Auto-detected numbering |
 
+## Procedural Test Patterns
+
+OpenRV Web can generate procedural test patterns without loading any file. These patterns are useful for display calibration, pipeline testing, and scope verification.
+
+| Pattern | Description |
+|---------|-------------|
+| SMPTE Bars | Standard SMPTE color bars |
+| EBU Bars | EBU color bar pattern |
+| Color Chart | Color reference chart |
+| Checkerboard | Configurable cell-size checkerboard |
+| Gradient | Horizontal or vertical gradient ramp |
+| Grey Ramp | Stepped grey ramp with configurable step count |
+| Solid | Solid color fill (configurable RGBA) |
+| Resolution Chart | Resolution test chart |
+
+Patterns are accessible via the API using `openrv.media.loadProceduralSource('smpte_bars')` or the OpenRV-compatible `.movieproc` URL format (e.g., `checkerboard,cellSize=32.movieproc`). Desktop OpenRV aliases (`smpte.movieproc`, `checker.movieproc`, `ramp.movieproc`) are also supported.
+
+---
+
 ## Session and Timeline Formats
 
 | Format | Extensions | Direction | Notes |
@@ -92,15 +111,24 @@ ProRes and DNxHD codecs are detected during MXF and MOV parsing. Since browsers 
 |--------|-----------|------|-------|
 | Cube | `.cube` | 1D and 3D | Industry standard |
 | CSP | `.csp` | 1D and 3D | Cinespace format |
-| 3DL | `.3dl` | 3D | Autodesk/Lustre format |
+| 3DL | `.3dl` | 1D and 3D | Autodesk/Lustre format |
+| ITX | `.itx` | 3D | IRIDAS SpeedGrade format |
+| Look | `.look` | 3D | XML-based IRIDAS format |
+| Houdini LUT | `.lut` | 1D and 3D | Houdini channel and 3D types |
+| Nuke Vectorfield | `.nk` | 3D | Nuke exported vectorfield |
+| Pandora MGA | `.mga` | 3D | Pandora color corrector format |
+| RV 3D LUT | (native) | 3D | OpenRV native 3D format |
+| RV Channel LUT | (native) | 1D | OpenRV native 1D format |
 
 LUTs are loaded as float32 data and applied via hardware trilinear interpolation (for 3D LUTs) in the GPU fragment shader. A higher-accuracy tetrahedral interpolation path is available for CPU-side processing (`TetrahedralInterp.ts`).
 
-## CDL Format
+## CDL Formats
 
 | Format | Extension | Direction | Notes |
 |--------|-----------|-----------|-------|
-| ASC CDL | `.cdl` | Read | Slope, offset, power, saturation |
+| ASC CDL | `.cdl` | Read/Write | Single color decision in XML format |
+| CC | `.cc` | Read | Single ColorCorrection element |
+| CCC | `.ccc` | Read | ColorCorrectionCollection with multiple entries |
 
 ## OCIO Configuration
 

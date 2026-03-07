@@ -1,3 +1,12 @@
+---
+prev:
+  text: 'Installation'
+  link: '/getting-started/installation'
+next:
+  text: 'Quick Start'
+  link: '/getting-started/quick-start'
+---
+
 # Browser Requirements
 
 OpenRV Web runs entirely in the browser and relies on modern web APIs for GPU-accelerated rendering, video decoding, and audio playback. This page lists the minimum browser versions, required APIs, and optional capabilities.

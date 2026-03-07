@@ -1,3 +1,9 @@
+---
+next:
+  text: 'Browser Requirements'
+  link: '/getting-started/browser-requirements'
+---
+
 # Installation and Accessing the App
 
 OpenRV Web is a browser-based VFX image and video review tool that requires no installation for end users. It runs entirely in the browser with no server-side processing. There are two ways to access it: via the hosted live demo or by self-hosting a local instance.

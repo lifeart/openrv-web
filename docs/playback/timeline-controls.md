@@ -91,6 +91,10 @@ Frames with annotations (drawings, text, shapes) display yellow triangle indicat
 
 A cache indicator shows the status of cached frames and memory usage, particularly useful during video playback with the mediabunny WebCodecs extractor. Cached frames load instantly; uncached frames may cause a brief buffer while decoding.
 
+## Prerender Buffer
+
+The prerender buffer is a double-buffered cache that allows glitch-free updates when changing effect parameters during playback. While the current frame displays from one buffer, the next frame renders into the second buffer with the updated settings. The system uses SIMD-like TypedArray optimizations, half-resolution convolution for expensive filters, and async chunked processing to keep rendering fast. This ensures that adjusting color corrections, filters, or LUT settings mid-playback does not cause visible frame drops or stuttering.
+
 ## Timeline Editor
 
 For playlist and EDL workflows, the timeline editor provides an extended view with:

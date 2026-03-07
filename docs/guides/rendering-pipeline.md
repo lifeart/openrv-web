@@ -665,6 +665,24 @@ A visualization tool for simulating lower bit-depth output:
 
 ---
 
+## Canvas2D HDR Fallback
+
+When neither WebGL2 native HDR output nor WebGPU is available, OpenRV Web falls back to the Canvas 2D API for HDR display. This path uses the `srgb-linear`, `rec2100-hlg`, or `float16` color space configurations available on the CanvasRenderingContext2D. The fallback ensures that HDR content can still be viewed with extended luminance range on browsers that support Canvas2D HDR but lack WebGL2 HDR drawing buffer extensions.
+
+## Render Worker
+
+The render worker offloads rendering to a background thread using `OffscreenCanvas`. When available, the main canvas is transferred to a Web Worker that runs the full WebGL2 rendering pipeline off the main thread. This keeps the UI responsive during heavy rendering operations such as large-image display, LUT application, or multi-stage color correction. The render worker communicates frame updates and state changes via structured-clone messages.
+
+## Adaptive Proxy Rendering
+
+Adaptive proxy rendering dynamically adjusts rendering quality based on interaction state to maintain smooth frame rates. During active interactions (panning, zooming, scrubbing), the renderer drops to a lower-resolution proxy by reducing the canvas backing store relative to the display DPI. When interaction stops, the full-resolution render is restored. The system also leverages GL mipmaps for static textures and cache-level resize to minimize GPU memory pressure on large images.
+
+## Premultiply / Unpremultiply Alpha
+
+The renderer provides explicit control over alpha premultiplication. Source images with premultiplied alpha (common in EXR compositing outputs) can be unpremultiplied before color corrections to prevent dark fringing, then re-premultiplied for correct compositing. This toggle is accessible from the View tab and is applied as an early stage in the fragment shader pipeline before any color math.
+
+---
+
 ## Related Pages
 
 - [LUT System](lut-system.md) -- 3D LUT pipeline, format support, and workflow

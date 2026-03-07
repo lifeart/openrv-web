@@ -1,3 +1,9 @@
+---
+prev:
+  text: 'Quick Start'
+  link: '/getting-started/quick-start'
+---
+
 # UI Overview
 
 OpenRV Web organizes its interface into a header bar, context toolbar, viewer canvas, and timeline. Floating panels provide additional controls without obscuring the image. This page describes every major area of the interface and how they interact.
@@ -224,6 +230,10 @@ Press `F11` to toggle native fullscreen mode. The browser chrome disappears, giv
 Press `Ctrl+Shift+P` to enter Presentation mode. This hides all UI elements (header, toolbar, timeline) and displays only the image. The cursor auto-hides after a period of inactivity. This mode is ideal for client reviews and dailies sessions.
 
 The External Presentation feature (`BroadcastChannel`-based) opens a second browser window that syncs frame, playback, and color state with the main window. Use this to present on a secondary display while maintaining controls on the primary screen.
+
+## Accessibility
+
+OpenRV Web includes an ARIA announcer that provides screen reader support for key UI actions. State changes such as playback start/stop, frame navigation, source loading, and tool selection are announced via a live region so that assistive technology users receive audio feedback. All interactive controls use semantic HTML elements with appropriate ARIA labels and roles.
 
 ---
 

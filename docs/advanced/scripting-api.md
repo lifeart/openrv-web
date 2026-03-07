@@ -367,6 +367,39 @@ openrv.events.on('frameChange', (data) => {
 
 ---
 
+## Plugin System
+
+OpenRV Web includes a plugin registry that allows extending the application with custom capabilities. Plugins are registered through `window.openrv.plugins` and can contribute:
+
+| Extension Point | Description |
+|-----------------|-------------|
+| Format decoders | Add support for additional image/video formats |
+| Node types | Register custom processing nodes in the render graph |
+| Paint tools | Add custom annotation/drawing tools |
+| Exporters | Register custom export formats |
+| Blend modes | Add compositing blend modes beyond the built-in set |
+| UI panels | Inject custom panels into the interface |
+
+Plugins follow a lifecycle of register, initialize, activate, deactivate, and dispose. Dependencies between plugins are resolved automatically with cycle detection. All registrations are scoped per-plugin and cleaned up on deactivation.
+
+```javascript
+// Example: register a plugin
+openrv.plugins.register({
+  id: 'my-custom-exporter',
+  name: 'Custom Exporter',
+  version: '1.0.0',
+  activate(context) {
+    context.registerExporter({
+      name: 'custom-pdf',
+      label: 'Custom PDF Report',
+      export(state) { /* ... */ }
+    });
+  }
+});
+```
+
+---
+
 ## Error Handling
 
 API methods validate their arguments and throw `ValidationError` for invalid input. Wrap API calls in try/catch blocks when using programmatic access:

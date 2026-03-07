@@ -1,4 +1,17 @@
+---
+prev:
+  text: 'Browser Requirements'
+  link: '/getting-started/browser-requirements'
+next:
+  text: 'UI Overview'
+  link: '/getting-started/ui-overview'
+---
+
 # Quick Start Guide
+
+::: tip Try it right now
+Open **[lifeart.github.io/openrv-web](https://lifeart.github.io/openrv-web)** and drag any image, EXR, DPX, or video file onto the window. That's it -- you are reviewing. No account, no install, no upload. Your files stay on your machine.
+:::
 
 This guide walks through loading media, navigating the viewer, adjusting color, and comparing two sources. Within five minutes, the essential controls will feel familiar.
 

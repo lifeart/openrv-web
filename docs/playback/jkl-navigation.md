@@ -101,3 +101,4 @@ window.openrv.playback.seek(50);  // Go to frame 50
 - [Timeline Controls](timeline-controls.md) -- frame navigation and scrubbing
 - [Loop Modes and Stepping](loop-modes-stepping.md) -- loop behavior at playback boundaries
 - [Audio Playback](audio.md) -- audio sync and volume controls
+- [Viewer Navigation](viewer-navigation.md) -- pan, zoom, and rotation controls

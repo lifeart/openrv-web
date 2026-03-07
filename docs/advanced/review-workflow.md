@@ -84,9 +84,9 @@ Click any note to navigate to its associated frame. Notes with frame ranges high
 
 Notes can be exported in several formats:
 
-- **PDF report**: A formatted document with frame thumbnails, timecodes, and note text for distribution to artists and supervisors
-- **JSON**: Machine-readable format for import into tracking systems
-- **CSV**: Spreadsheet-compatible format for production management
+- **HTML report**: A formatted document with timecodes and note text for distribution to artists and supervisors, viewable in any browser
+- **CSV**: Spreadsheet-compatible format for production management and import into tracking systems
+- **JSON**: Machine-readable format for session state exchange
 
 ---
 
@@ -107,10 +107,10 @@ The generated report includes:
 
 - Session date, supervisor name, and project identifier
 - Shot-by-shot summary with status, version number, and all notes
-- Frame thumbnails for each noted issue
+- Timecodes and frame ranges for each clip
 - Statistics: total shots reviewed, approval rate, revision counts by category
 
-Reports are exported as PDF for distribution to the production team.
+Reports are exported as HTML or CSV for distribution to the production team.
 
 ---
 
@@ -140,7 +140,7 @@ Presentation mode maximizes the viewer area by hiding all toolbars, panels, and 
 
 ### Entering Presentation Mode
 
-Press `F` for fullscreen mode, then press `Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View menu.
+Press `F` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View menu.
 
 In presentation mode:
 
@@ -152,13 +152,17 @@ In presentation mode:
 
 ### Exiting Presentation Mode
 
-Press `Escape` or `Shift+P` to return to the normal interface. All previously open panels and toolbars are restored to their prior state.
+Press `Escape` or `Ctrl+Shift+P` to return to the normal interface. All previously open panels and toolbars are restored to their prior state.
 
 ---
 
 ## External Presentation
 
 For remote reviews and client presentations, OpenRV Web supports sharing the viewer output to external participants through several methods:
+
+### Secondary Browser Window
+
+OpenRV Web can open a secondary browser window that mirrors the viewer output via the BroadcastChannel API. The secondary window displays the same frame, playback state, and color corrections in real time, synced with the primary window. This is useful for dual-monitor setups where the review UI runs on one screen and a clean full-frame presentation runs on a projector or client monitor. The secondary window updates are same-origin and require no network connection.
 
 ### Screen Sharing
 
@@ -186,3 +190,5 @@ Generate a self-contained review package that can be shared with external partic
 - [Overlays and Guides](overlays.md) -- Timecode, watermark, and bug overlays for review
 - [Session Management](session-management.md) -- Saving review session state
 - [Scripting API](scripting-api.md) -- Automating review workflows
+- [Shape Tools](../annotations/shapes.md) -- Annotate shots during review
+- [Exporting Annotations](../annotations/export.md) -- Export review annotations as JSON or PDF

@@ -74,3 +74,4 @@ Like all annotations, shapes are stored per frame. Each frame maintains its own 
 - [Text Annotations](text.md) -- add text labels
 - [Per-Frame Modes](per-frame-modes.md) -- ghost and hold modes
 - [Exporting Annotations](export.md) -- JSON and PDF export
+- [Wipe Mode](../compare/wipe-mode.md) -- annotate while comparing versions (`Shift+W`)

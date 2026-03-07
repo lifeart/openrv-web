@@ -52,3 +52,4 @@ Unlike split screen (which compares two different sources), wipe mode compares t
 - [A/B Switching](ab-switching.md) -- switch between two different sources
 - [Split Screen](split-screen.md) -- side-by-side display of two sources
 - [Difference Matte](difference-matte.md) -- pixel-level difference analysis
+- [Shape Tools](../annotations/shapes.md) -- annotate areas of interest during comparison

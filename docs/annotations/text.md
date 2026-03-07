@@ -48,3 +48,4 @@ Adding a text annotation is a single undo step. Press `Ctrl+Z` to remove the mos
 - [Shape Tools](shapes.md) -- geometric annotations
 - [Per-Frame Modes](per-frame-modes.md) -- ghost and hold visibility
 - [Exporting Annotations](export.md) -- export annotations as JSON or PDF
+- [Review Workflow](../advanced/review-workflow.md) -- using annotations in dailies and review sessions

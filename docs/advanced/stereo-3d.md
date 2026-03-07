@@ -122,6 +122,12 @@ The alignment overlay is a diagnostic tool intended for identifying problems. Co
 
 ---
 
+## Convergence Measurement
+
+OpenRV Web provides a convergence measurement tool that analyzes the horizontal disparity between the left and right eye images. This allows quantitative evaluation of parallax values across the frame, supplementing the visual convergence check with numerical data. The measurement reports maximum positive parallax (background depth), maximum negative parallax (foreground pop-out), and average parallax, expressed as a percentage of image width.
+
+---
+
 ## Floating Window
 
 Floating window (also called floating edge or stereo window) is a technique used in stereo 3D presentation to prevent objects with negative parallax from being clipped by the physical screen edge, which breaks the stereo illusion.

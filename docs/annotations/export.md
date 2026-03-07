@@ -94,3 +94,4 @@ Both export options appear in the Export dropdown menu in the header bar when an
 - [Shape Tools](shapes.md) -- geometric annotations
 - [Per-Frame Modes](per-frame-modes.md) -- ghost and hold mode settings in export
 - [Sessions](../export/sessions.md) -- session save/load includes annotations
+- [Video Export](../export/video-export.md) -- export video with annotations baked in

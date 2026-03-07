@@ -4,6 +4,10 @@ OpenRV Web supports real-time collaborative review sessions where multiple users
 
 ---
 
+::: tip Who uses this
+Distributed VFX teams use network sync to run remote review sessions across studios and time zones. A supervisor in London and a client in LA can review the same frame simultaneously -- no file uploads, no third-party platform, no per-seat fees.
+:::
+
 ## Room Creation
 
 A review session begins when a host creates a room. The host is the user who initiates the session and has authority over playback state.
@@ -77,7 +81,7 @@ The room creator is the **host**. All other users are **participants**.
 
 ## Connection Technology
 
-OpenRV Web uses **WebSocket** connections (Secure WebSocket, `wss://`) for all sync communication. WebSocket provides low-latency bidirectional messaging suitable for real-time playback synchronization.
+OpenRV Web uses **WebSocket** connections (Secure WebSocket, `wss://`) as the primary transport for sync communication and signaling. WebSocket provides low-latency bidirectional messaging suitable for real-time playback synchronization. For media transfer and direct peer-to-peer data exchange, **WebRTC** data channels are used alongside WebSocket.
 
 ### URL-Based Signaling
 
@@ -106,9 +110,13 @@ Network sync enables remote cinesync-style review sessions where the director, V
 For remote dailies with a director or client, create the room with a PIN for security -- review content is typically confidential before release. Share the room link via a secure channel. Each participant must load the same media files locally, so ensure the review package has been distributed to all sites before the session begins.
 :::
 
+## WebRTC Peer Connections
+
+In addition to WebSocket-based sync, OpenRV Web supports direct peer-to-peer connections via WebRTC for lower-latency communication. NAT traversal uses public STUN and TURN servers (Google, Cloudflare, OpenRelay) so peers behind firewalls and NATs can establish direct connections. URL-based signaling enables serverless P2P connection setup -- participants exchange connection offers through encoded URLs without needing a dedicated signaling server.
+
 ## Media Transfer
 
-Each participant loads media independently. The room does not transfer media files between participants. All users must have access to the same media files, whether through:
+Each participant typically loads media independently. However, when direct file access is not available, the media transfer system supports request/offer/chunk-based sharing between peers. A participant can request media from the host, who offers the file and streams it in chunks over the peer connection. For standard workflows, all users should have access to the same media files through:
 
 - Shared network storage (NFS, SMB)
 - Cloud storage URLs

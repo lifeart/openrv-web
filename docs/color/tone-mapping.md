@@ -69,6 +69,17 @@ An alternative ACES approximation by Stephen Hill that provides a computationall
 
 **Best for:** Fast preview of ACES-like rendering, interactive sessions where performance matters.
 
+### Drago
+
+An adaptive logarithmic tone mapping operator (Drago et al.) that uses scene statistics (average and peak luminance) to drive the compression. A configurable bias parameter (default 0.85) controls the interpolation between logarithmic and linear mapping.
+
+**Parameters:**
+- **Bias** (default 0.85) -- controls the compression curve shape. Lower values produce more aggressive compression.
+- **Scene average luminance** -- measured from the image, used to anchor the adaptation.
+- **Scene peak luminance** -- measured from the image, defines the upper extent of the input range.
+
+**Best for:** Scenes with very high dynamic range where automatic adaptation to content brightness is desired.
+
 ---
 
 ## Pipeline Position
@@ -102,6 +113,7 @@ Tone mapping is a destructive, non-invertible operation. When reviewing CG light
 | Product/archviz visualization | PBR Neutral or AgX |
 | Quick preview of any content | Reinhard (simplest, fewest artifacts) |
 | Matching theatrical delivery | ACES |
+| Very high dynamic range scenes | Drago (adaptive to content luminance) |
 
 When in doubt, start with **Reinhard** for a neutral preview, then switch to **ACES** or **AgX** for a more polished result. Use the operator parameters to fine-tune highlight handling for the specific content.
 
@@ -136,3 +148,4 @@ window.openrv.color.setToneMapping({ enabled: false });
 - [Log Curve Presets](log-curves.md) -- input linearization for camera log footage
 - [OCIO Integration](ocio.md) -- ACES view transforms as an alternative to standalone tone mapping
 - [Rendering Pipeline](../guides/rendering-pipeline.md) -- tone mapping position in the full pipeline (stage 7)
+- [Histogram](../scopes/histogram.md) -- verify tonal distribution after tone mapping (`H`)

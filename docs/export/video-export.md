@@ -83,3 +83,5 @@ Hardware-accelerated H.264 encoding can process 1080p content at near real-time 
 - [Frame Export](frame-export.md) -- export individual frames as images
 - [Slate and Frameburn](slate-frameburn.md) -- add metadata overlays to video exports
 - [EDL and OTIO](edl-otio.md) -- export edit decision lists
+- [Primary Color Controls](../color/primary-controls.md) -- color corrections baked into the export
+- [Exporting Annotations](../annotations/export.md) -- export annotations separately as JSON or PDF

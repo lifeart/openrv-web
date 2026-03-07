@@ -8,7 +8,14 @@ OpenRV Web provides spatial transform controls for rotating, flipping, cropping,
 
 ### Rotation
 
-Rotate the image in 90-degree increments using the `R` key. Each press rotates the image clockwise by 90 degrees. After four presses, the image returns to its original orientation.
+Rotate the image in 90-degree increments:
+
+| Key | Action |
+|-----|--------|
+| `Shift+R` | Rotate 90 degrees counter-clockwise |
+| `Alt+R` | Rotate 90 degrees clockwise |
+
+After four rotations, the image returns to its original orientation.
 
 Rotation is applied before all other transforms in the pipeline, so crop regions and lens distortion parameters orient relative to the rotated image.
 
@@ -17,7 +24,7 @@ Rotation is applied before all other transforms in the pipeline, so crop regions
 - **Flip** (vertical mirror): Mirrors the image vertically around the horizontal axis
 - **Flop** (horizontal mirror): Mirrors the image horizontally around the vertical axis
 
-Flip and flop are available from the Transform menu or via keyboard shortcuts. These operations are useful for reviewing plates that were scanned or rendered with an inverted coordinate system.
+Flip and flop are available from the Transform menu or via keyboard shortcuts (`Alt+H` for horizontal flip, `Shift+V` for vertical flip). These operations are useful for reviewing plates that were scanned or rendered with an inverted coordinate system.
 
 ---
 
@@ -103,4 +110,5 @@ Four corner pins define the perspective mapping. Drag each corner to adjust the 
 - [Rendering Pipeline](../guides/rendering-pipeline.md) -- Pipeline stage ordering for transforms
 - [Filters and Effects](filters-effects.md) -- Image processing filters
 - [Overlays and Guides](overlays.md) -- Safe area and grid overlays
+- [Viewer Navigation](../playback/viewer-navigation.md) -- Pan, zoom, rotate, and flip in the viewer
 - [Session Management](session-management.md) -- Transform settings in session persistence

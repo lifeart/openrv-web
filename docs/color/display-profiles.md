@@ -100,6 +100,10 @@ All detection results are cached in a `DisplayCapabilities` object. No throwaway
 
 The **active color space** (sRGB or Display-P3) is resolved from the combination of user preference and detected capabilities. A preference of `auto` selects P3 when both the display and WebGL support it.
 
+### Canvas2D HDR Fallback
+
+When WebGL2 native HDR output and WebGPU are both unavailable, OpenRV Web falls back to the Canvas 2D API for HDR display. This path uses the `srgb-linear`, `rec2100-hlg`, or `float16` color space configurations on `CanvasRenderingContext2D`. The fallback preserves extended-range luminance values so that HDR content remains viewable on browsers that support Canvas2D HDR extensions but lack WebGL2 HDR drawing buffer support.
+
 ---
 
 ::: info Pipeline Note
@@ -109,6 +113,12 @@ Choosing the correct display profile is essential for accurate delivery review. 
 ::: tip VFX Use Case
 When reviewing on a wide-gamut display (P3 or Rec.2020), enable the **highlight out-of-gamut** diagnostic mode to identify colors that will be clipped when the deliverable is mastered to a narrower gamut like Rec.709. This catches issues before the final conform where out-of-gamut colors would shift unpredictably.
 :::
+
+## ICC Profile Support
+
+OpenRV Web can parse ICC v2/v4 display profiles with matrix/TRC (tone response curve) models. When an ICC profile is loaded, the parser extracts per-channel tone response curves and the chromatic adaptation matrix to convert from the profile's device color space to the CIEXYZ Profile Connection Space (PCS). This enables accurate color reproduction when the monitor's ICC profile is known. ICC profiles use the standard tags (`rTRC`, `gTRC`, `bTRC`, `rXYZ`, `gXYZ`, `bXYZ`) defined by ICC.1:2022.
+
+---
 
 ## Gamut Mapping
 

@@ -73,6 +73,35 @@ Loop mode can also be changed through the scripting API.
 
 ---
 
+## Retiming
+
+Playlist clips support time remapping through the retime system. Each clip can be retimed with:
+
+- **Speed scale**: Scale the playback speed (e.g., 0.5 for half speed, 2.0 for double speed).
+- **Reverse**: Play the clip in reverse.
+- **Frame offset**: Shift the starting frame within the source.
+- **Explicit frame mapping**: Map specific output frames to arbitrary input frames for freeze frames or irregular timing.
+- **Warp keyframes**: Define speed ramps with keyframed rate values for smooth speed transitions.
+
+Retime settings from imported RV/GTO sessions (including explicit and warp modes) are preserved and applied correctly.
+
+---
+
+## Playlist Transitions
+
+OpenRV Web supports GPU-accelerated transitions between playlist clips. Transitions are rendered by blending the outgoing and incoming frames through a dedicated transition shader.
+
+| Type | Description |
+|------|-------------|
+| Cut | Instant switch (default, no transition) |
+| Crossfade | Linear opacity blend between outgoing and incoming frames |
+| Dissolve | Smooth dissolve with configurable duration |
+| Wipe | Directional reveal of the incoming frame |
+
+Transition duration and type are configurable per cut point in the Timeline Editor. Both outgoing and incoming frames pass through the full viewer color pipeline before blending.
+
+---
+
 ## EDL Export and OTIO Import
 
 The playlist can be exported as a CMX 3600 EDL file using the **EDL** button in the playlist panel footer. EDL export generates a standard-format edit decision list with SMPTE timecodes at the session frame rate.
@@ -102,3 +131,4 @@ The Timeline Editor and Playlist panel stay synchronized. Changes in either view
 - [Session Management](session-management.md) -- Playlist state in session persistence
 - [Review Workflow](review-workflow.md) -- Using playlists in dailies sessions
 - [Scripting API](scripting-api.md) -- Programmatic playlist control
+- [Loop Modes and Stepping](../playback/loop-modes-stepping.md) -- Per-clip loop behavior

@@ -6,6 +6,10 @@ OpenColorIO (OCIO) is the industry-standard color management framework used acro
 
 ---
 
+::: tip Who uses this
+Studios running ACES pipelines use OCIO to guarantee color consistency from camera through comp to final review. If your facility ships an OCIO config, OpenRV Web can load it directly -- so dailies review matches what artists see in Nuke, Resolve, and Houdini.
+:::
+
 ## Opening the OCIO Panel
 
 Press `Shift+O` to toggle the OCIO color management panel. The panel is also accessible from the Color tab context toolbar.

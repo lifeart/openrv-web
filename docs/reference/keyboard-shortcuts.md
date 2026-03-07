@@ -90,6 +90,12 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 |----------|--------|
 | `Shift+3` | Cycle stereo modes (off / SBS / over-under / mirror / anaglyph / etc.) |
 
+## Display Output
+
+| Shortcut | Action |
+|----------|--------|
+| `Shift+Alt+D` | Cycle display profile (Linear / sRGB / Rec.709 / Gamma 2.2 / Gamma 2.4) |
+
 ## Channel View
 
 | Shortcut | Action |
@@ -176,16 +182,22 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | Scrub frames | Drag on timeline |
 | Pinch zoom | Two-finger pinch (trackpad/touch) |
 
-## Customizing Shortcuts
+## Shortcut Cheat Sheet
 
-OpenRV Web supports customizable key bindings through the `CustomKeyBindingsManager`. Custom bindings are stored in the browser's localStorage and persist across sessions.
+Press `?` or open the Help menu to display the shortcut cheat sheet overlay. This quick-reference panel shows all available shortcuts grouped by category in a scannable grid layout. The cheat sheet overlay is dismissed by pressing `Escape` or clicking outside the panel.
+
+## Shortcut Editor
+
+OpenRV Web includes a dedicated shortcut editor UI for viewing and customizing keyboard shortcuts. Open it from the Settings panel. The editor displays every registered shortcut with its current binding, default binding, and category. Click any shortcut row to record a new key combination.
 
 ### Customization Features
 
 - **Override any default binding** -- reassign any shortcut to a different key combination
-- **Conflict detection** -- warns if a new binding conflicts with an existing one
-- **Export/Import** -- save and restore custom bindings
-- **Reset** -- return all bindings to defaults
+- **Conflict detection** -- the editor highlights conflicts in real time when a new binding collides with an existing one, showing which action holds the conflicting key
+- **Export/Import** -- save custom bindings as a JSON file and import them on another machine or browser to share a consistent shortcut layout across a team
+- **Reset** -- return individual bindings or all bindings to defaults
+
+Custom bindings are stored in the browser's localStorage and persist across sessions.
 
 ### Input Field Handling
 

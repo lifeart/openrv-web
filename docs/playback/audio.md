@@ -46,6 +46,10 @@ Audio sync behavior by playback state:
 
 When switching from reverse to forward playback, or from non-1x speed to 1x, audio resumes at the correct position with the previous volume level restored.
 
+### Pitch Correction
+
+At non-1x playback speeds, audio pitch correction compensates for the speed change so that dialogue and music remain at their natural pitch. Without pitch correction, sped-up audio sounds higher-pitched and slowed-down audio sounds lower-pitched. The Web Audio API's playback rate is adjusted while the pitch correction algorithm preserves the original tonal quality.
+
 ## Waveform Display
 
 When a video file with audio is loaded, the WaveformRenderer extracts audio data and generates a waveform visualization for the timeline. The waveform appears as a semi-transparent blue overlay on the timeline track.
@@ -89,3 +93,4 @@ window.openrv.audio.isMuted();          // Check mute state
 - [J/K/L Navigation](jkl-navigation.md) -- audio behavior at different speeds
 - [Loop Modes](loop-modes-stepping.md) -- audio during loop transitions
 - [Timeline Controls](timeline-controls.md) -- waveform display on timeline
+- [Viewer Navigation](viewer-navigation.md) -- pan, zoom, and view controls

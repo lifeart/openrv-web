@@ -4,6 +4,10 @@ OpenRV Web provides a bridge for connecting to Digital Content Creation (DCC) ap
 
 ---
 
+::: tip Who uses this
+Compositors, lighters, and animators use DCC integration for seamless roundtrip review with Nuke, Maya, and Houdini. Push a frame from your comp directly to OpenRV Web, check it with scopes and the show LUT, then send annotations back -- without saving files or switching applications.
+:::
+
 ## DCC Bridge Architecture
 
 The DCC bridge uses a **WebSocket** connection between OpenRV Web (running in the browser) and a lightweight bridge server process running alongside the DCC application. The bridge server translates between the DCC's internal scripting API and the OpenRV Web message protocol.
