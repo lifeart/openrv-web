@@ -98,6 +98,14 @@ The sync protocol includes timestamp-based latency compensation:
 
 ---
 
+::: tip VFX Use Case
+Network sync enables remote cinesync-style review sessions where the director, VFX supervisor, and client can all view the same frame simultaneously from different locations. The host (typically the VFX supervisor or coordinator) controls playback while participants follow along. Disable color sync so each participant can view on their own calibrated display without overriding each other's display profiles.
+:::
+
+::: info Pipeline Note
+For remote dailies with a director or client, create the room with a PIN for security -- review content is typically confidential before release. Share the room link via a secure channel. Each participant must load the same media files locally, so ensure the review package has been distributed to all sites before the session begins.
+:::
+
 ## Media Transfer
 
 Each participant loads media independently. The room does not transfer media files between participants. All users must have access to the same media files, whether through:

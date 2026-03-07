@@ -42,6 +42,14 @@ RED's log encoding used in REDCODE RAW recording. Log3G10 encodes an extremely w
 
 ---
 
+::: info Pipeline Note
+Each camera manufacturer uses a proprietary log curve: ARRI shoots **LogC3** (ALEXA) or **LogC4** (ALEXA 35), Sony uses **S-Log3** (VENICE, FX series), and RED uses **Log3G10**. Selecting the correct curve is critical -- applying the wrong log-to-linear transform produces incorrect exposure and color. When in doubt, check the camera report or metadata embedded in the file.
+:::
+
+::: tip VFX Use Case
+On-set DIT monitors and review software must apply the same linearization as the post pipeline. If dailies look different on set versus in review, the most common cause is a mismatched log curve selection. Confirm the camera's recording format and exposure index with the DIT before selecting a preset.
+:::
+
 ## Applying a Log Curve
 
 1. Open the Color tab and locate the **Log Curve** selector in the color controls or OCIO panel.

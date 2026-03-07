@@ -102,6 +102,14 @@ The **active color space** (sRGB or Display-P3) is resolved from the combination
 
 ---
 
+::: info Pipeline Note
+Choosing the correct display profile is essential for accurate delivery review. Use **Rec.709** when reviewing broadcast/episodic deliverables on a calibrated reference monitor. Use **sRGB** for web and streaming delivery. Use **Gamma 2.4** for DI suite and grading theater environments (dim surround). For theatrical DCPs, the target is **DCI-P3**. Mismatched display profiles are the most common cause of "it looked different on my monitor" issues across departments.
+:::
+
+::: tip VFX Use Case
+When reviewing on a wide-gamut display (P3 or Rec.2020), enable the **highlight out-of-gamut** diagnostic mode to identify colors that will be clipped when the deliverable is mastered to a narrower gamut like Rec.709. This catches issues before the final conform where out-of-gamut colors would shift unpredictably.
+:::
+
 ## Gamut Mapping
 
 When source content has a wider gamut than the display (for example, Rec. 2020 source on an sRGB monitor), gamut mapping brings out-of-gamut colors into the displayable range. Two modes are available:

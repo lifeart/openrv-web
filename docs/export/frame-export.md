@@ -39,6 +39,14 @@ Press `Ctrl+C` to copy the current frame to the system clipboard. The clipboard 
 
 Clipboard access requires a secure context (HTTPS) and user permission. If the browser denies clipboard access, an error message appears.
 
+::: tip VFX Use Case
+Frame export is commonly used to capture reference frames for client approval. When a supervisor approves a specific frame during review, export it with `Ctrl+S` and include it in the delivery package or attach it to the ShotGrid note as a visual reference. The export captures the graded, tone-mapped result as displayed -- ideal for communicating the intended final look.
+:::
+
+::: warning
+Exported frames are display-referred (post-tone-mapping, post-display-transform) in PNG/JPEG/WebP. They are not suitable as source material for further compositing. For scene-referred frame capture, use the original EXR or DPX source files from the render farm.
+:::
+
 ## Export Workflow
 
 1. Navigate to the desired frame

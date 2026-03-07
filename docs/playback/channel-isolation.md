@@ -46,6 +46,14 @@ Channel isolation is applied late in the render pipeline -- after color correcti
 
 ![Luminance channel isolation](/assets/screenshots/18-channel-luma.png)
 
+::: tip VFX Use Case
+Alpha channel isolation (`Shift+A`) is the fastest way to QC roto and keying work. A clean matte should have solid white in the foreground, solid black in the background, and smooth semi-transparent edges. Look for chatter (flickering edges frame-to-frame), holes in the matte, and edge fringing. Step through the sequence frame-by-frame with the arrow keys while viewing the alpha to catch temporal instabilities.
+:::
+
+::: info Pipeline Note
+Channel packing is common in VFX pipelines -- for example, packing a utility matte into the blue channel of a three-channel EXR, or storing motion vectors as R=horizontal and G=vertical displacement. Use channel isolation to verify that packed channels contain the expected data. If the blue channel of a "packed" EXR looks like image data instead of a matte, the render may have been output incorrectly.
+:::
+
 ## Use Cases
 
 - **Alpha/matte checking**: Isolate the alpha channel (`Shift+A`) to verify matte edges, holdout areas, and transparency.

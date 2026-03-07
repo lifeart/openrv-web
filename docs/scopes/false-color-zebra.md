@@ -86,6 +86,14 @@ Separate from false color and zebra, the clipping overlay highlights pixels at a
 
 This overlay can be used alongside the histogram's clipping percentage indicators for a complete picture of data loss.
 
+::: tip VFX Use Case
+On-set DITs and cinematographers use false color extensively during capture to verify exposure. When reviewing dailies, select the **ARRI** or **RED** preset to match the same false color scale the DP saw on set. This ensures that exposure discussions in dailies reference the same visual language used during production. Skin tones should appear green on the ARRI scale (approximately 40-50 IRE).
+:::
+
+::: info Pipeline Note
+Zebra stripes at **95% IRE** are the standard broadcast overexposure warning. For HDR content, you may need to adjust thresholds since HDR signals intentionally carry values above 100 IRE. When reviewing HDR dailies, raise the high zebra threshold or rely on false color to evaluate the extended highlight range.
+:::
+
 ## Practical Tips
 
 - Enable false color during exposure adjustments to see the effect in real time

@@ -29,6 +29,10 @@ Position-aware labels identify each side:
 
 Labels hide automatically when the wipe line is dragged to the edge of the frame, since only one version is visible at that point.
 
+::: tip VFX Use Case
+Wipe mode is ideal for evaluating color grades and LUT effects during review. Drag the wipe line across the subject's face to compare skin tone rendering before and after the grade, or across a CG element to verify that the grade integrates the element with the plate. The horizontal wipe is most commonly used, but switch to vertical wipe when evaluating sky gradients or top-to-bottom lighting changes.
+:::
+
 ## How It Works
 
 Wipe mode renders the same source twice: once with the current color corrections applied and once without. The wipe line defines the clip region between the two renders. This allows direct visual comparison of exposure, contrast, saturation, LUT, tone mapping, and other adjustments.

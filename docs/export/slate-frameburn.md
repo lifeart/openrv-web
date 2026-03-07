@@ -67,6 +67,14 @@ Fields at the same position stack vertically.
 
 Configure font size, weight, and color for burn-in text. A semi-transparent background can be added behind the text to ensure readability against any image content.
 
+::: info Pipeline Note
+Most studios require specific frameburn formats for dailies delivery. A typical requirement includes: timecode (top-left), frame number (top-right), shot name and version (bottom-left), and date (bottom-right). Client review deliveries often add "CONFIDENTIAL" or watermark text. Check your facility's delivery spec before configuring burn-ins -- incorrect or missing burn-in fields are a common cause of rejected dailies submissions.
+:::
+
+::: tip VFX Use Case
+For editorial hand-off, always include both SMPTE timecode and absolute frame number in the burn-in. Timecode allows editorial to sync against the master timeline, while frame numbers let artists reference specific frames in review notes (e.g., "fix edge artifact at frame 1047"). Including the color space in the burn-in helps prevent downstream confusion about the intended viewing transform.
+:::
+
 ## Common Workflows
 
 ### Dailies Export

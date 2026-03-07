@@ -53,6 +53,14 @@ The Houdini bridge supports:
 
 ---
 
+::: tip VFX Use Case
+The Nuke bridge replaces the traditional "render, save, open in RV" workflow with a direct push from the comp to the viewer. Compositors can send the current frame from Nuke to OpenRV Web to immediately check it with scopes, false color, and the show LUT -- without leaving Nuke. For Maya, routing playblasts directly to OpenRV Web gives animators frame-accurate review with timecode and markers, which the built-in Maya playblast viewer does not support.
+:::
+
+::: info Pipeline Note
+ShotGrid integration closes the production tracking loop: review a shot in OpenRV Web, set the status to "Approved" or "Needs Revision," and the change is reflected in ShotGrid immediately. Notes and annotations are published as version notes with frame references, so artists see exactly which frame the feedback applies to. This eliminates the need to manually transcribe review notes from a screening into the tracking system.
+:::
+
 ## Inbound Commands (DCC to Viewer)
 
 The bridge server sends the following command types to OpenRV Web:

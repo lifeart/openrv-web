@@ -40,6 +40,14 @@ The vectorscope supports zoom levels to magnify the center region. Zooming in is
 
 The vectorscope is rendered using WebGL for real-time performance. It updates live as color adjustments are applied, providing immediate feedback on how grading operations affect the color distribution.
 
+::: tip VFX Use Case
+The **skin tone line** (approximately 123 degrees on the vectorscope, between red and yellow) is the single most important reference for color correction. Regardless of ethnicity, properly white-balanced skin tones cluster along this line -- only the distance from center (saturation) varies. If skin tones drift off the line during comp or grading, the shot will look wrong to the audience even if they cannot articulate why.
+:::
+
+::: info Pipeline Note
+Use the vectorscope to check **memory colors** -- colors that audiences have strong expectations about, such as sky blue, foliage green, and skin tones. During dailies review, if the point cloud is shifted uniformly in one direction, a global color cast is present. This is often caused by an incorrect input color space or a missing white balance correction from set.
+:::
+
 ## Practical Tips
 
 - Use the vectorscope alongside the waveform when color correcting: the waveform handles exposure while the vectorscope handles color

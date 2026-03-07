@@ -59,6 +59,14 @@ The IRE value represents perceived brightness using Rec.709 coefficients:
 | 100 IRE | Reference white |
 | > 100 IRE | Super-white / HDR values |
 
+::: tip VFX Use Case
+Use the pixel probe to verify VFX delivery specs. Many studios require specific black point values (e.g., 0.0 for EXR, code value 64 for 10-bit DPX) and white point ranges. Lock the probe on a known reference patch (gray card, color chart) and compare the RGB values against the expected targets. Copy the values to clipboard for inclusion in QC reports.
+:::
+
+::: info Pipeline Note
+When reviewing compositing work, probe the edge pixels of a keyed element to check for residual green/blue spill. The floating-point RGB readout reveals subtle spill contamination that may not be visible to the eye but will become apparent when a grade is applied. Values like R:0.45 G:0.47 B:0.44 on a supposedly neutral edge indicate residual green spill that needs despill correction.
+:::
+
 ## State Persistence
 
 The pixel probe visibility persists when changing frames and when switching tabs. Enabling the probe on frame 1, stepping to frame 50, and switching from the View tab to the Color tab does not disable the probe.

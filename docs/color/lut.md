@@ -67,6 +67,14 @@ Use the intensity slider to:
 
 ---
 
+::: info Pipeline Note
+In a VFX pipeline, LUTs serve three distinct roles: **camera LUTs** (IDTs) convert camera-native log/gamut to a working space, **show LUTs** apply the creative look defined by the colorist for the project, and **display LUTs** calibrate for the specific monitor or projector. OpenRV Web's three-slot pipeline mirrors this exact structure. The `.cube` format is the industry standard accepted by virtually every grading and compositing application.
+:::
+
+::: tip VFX Use Case
+When reviewing dailies, load the show LUT provided by the DI colorist into the Look LUT slot (slot 2). This ensures all departments see the same creative intent during review. If the footage also needs an input transform (e.g., camera manufacturer's technical LUT), load it into the File LUT slot (slot 1) so both transforms are applied in the correct order.
+:::
+
 ## Three-Slot LUT Pipeline
 
 OpenRV Web supports three independent LUT slots, each serving a distinct role in the pipeline:

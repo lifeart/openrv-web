@@ -72,6 +72,14 @@ color = pow(color, 1.0 / (1.0 + gammaColor)) * midWeight + color * (1.0 - midWei
 
 ---
 
+::: info Pipeline Note
+Lift/gamma/gain is the digital equivalent of the film lab's printer lights system. In the film era, printer lights (red, green, blue values) controlled the color balance of a print. Modern DI workflows use the same three-way concept with continuous precision. OpenRV Web's color wheels match the paradigm used in DaVinci Resolve, Baselight, and desktop RV, so grades discussed during review sessions translate directly to the colorist's toolset.
+:::
+
+::: tip VFX Use Case
+During shot matching in dailies, use the **gain** wheel to match highlight color temperature between shots (warm vs. cool highlights), and the **lift** wheel to match shadow density and color. This is the fastest way to evaluate whether shots in a sequence will cut together before sending to the DI colorist for final grading.
+:::
+
 ## Typical Workflows
 
 - **Warm highlights, cool shadows:** Push the gain wheel toward orange/yellow and the lift wheel toward blue for a classic cinematic look.

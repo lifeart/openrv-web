@@ -3,7 +3,7 @@
 [![Deploy to GitHub Pages](https://github.com/lifeart/openrv-web/actions/workflows/deploy.yml/badge.svg)](https://github.com/lifeart/openrv-web/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**[Live Demo](https://lifeart.github.io/openrv-web)**
+**[Live Demo](https://lifeart.github.io/openrv-web)** | **[Documentation](https://lifeart.github.io/openrv-web/docs/)**
 
 A professional web-based image and video review tool inspired by [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV). Built for VFX, animation, and post-production workflows, OpenRV Web provides frame-accurate playback, comprehensive color management, annotation tools, collaborative review sessions, and RV session file compatibility -- all running entirely in the browser with no server-side processing.
 
@@ -74,7 +74,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 **LUT Support**
 - 3D LUT and 1D LUT loading (.cube, .csp, .3dl, and other formats)
 - Single-pass float LUT pipeline in the fragment shader (no 8-bit bottleneck)
-- Tetrahedral interpolation for 3D LUTs
+- Hardware trilinear interpolation on GPU; tetrahedral interpolation available for CPU-side processing
 - LUT pipeline with pre-cache stage and GPU chain
 - Film emulation presets (10 built-in looks: Warm Film, Cool Chrome, Bleach Bypass, Cross Process, Monochrome, Cinematic Teal & Orange, Vintage Fade, High Contrast, Low Contrast)
 
@@ -339,6 +339,23 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - **Shortcut Editor** -- view and customize keyboard shortcuts with conflict detection and export/import
 - **Shortcut Cheat Sheet** -- quick-reference keyboard shortcut overlay
 - **Accessibility** -- ARIA announcer for screen reader support
+
+---
+
+## Documentation
+
+Comprehensive documentation is available at **[lifeart.github.io/openrv-web/docs/](https://lifeart.github.io/openrv-web/docs/)**:
+
+- **Getting Started** -- installation, browser requirements, quick start, UI overview
+- **Playback & Navigation** -- timeline, J/K/L shuttle, loop modes, image sequences, EXR layers, channel isolation
+- **Color Management** -- primary controls, color wheels, HSL qualifier, CDL, curves, LUTs, OCIO, tone mapping, display profiles
+- **Comparison & Review** -- A/B switching, wipe, split screen, difference matte, blend modes
+- **Scopes & Analysis** -- histogram, waveform, vectorscope, pixel probe, false color, zebra, gamut diagram
+- **Annotations** -- pen, shapes, text, per-frame modes, export
+- **Export** -- frame/video export, slate, frameburn, EDL/OTIO, sessions
+- **Advanced Topics** -- stereo 3D, network sync, DCC integration, scripting API, filters, transforms
+- **API Reference** -- auto-generated TypeDoc reference for all 9 public API classes
+- **Technical Guides** -- rendering pipeline, LUT system, CDL, OCIO, node graph, file formats, session compatibility
 
 ---
 
@@ -667,7 +684,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (12200+ tests)
+# Run unit tests (19,800+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -683,7 +700,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **12200+ unit tests** across 294 test files and **103 e2e test suites**.
+The codebase includes comprehensive test coverage with **19,800+ unit tests** across 483 test files and **103 e2e test suites**.
 
 ---
 

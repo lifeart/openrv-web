@@ -58,6 +58,14 @@ HDR content extends beyond 100 IRE. The waveform in OpenRV Web accommodates valu
 
 The waveform is computed using WebGL, ensuring real-time performance for high-resolution images. The scope updates live as the frame changes or as color adjustments are applied.
 
+::: info Pipeline Note
+For broadcast delivery, signals must fall within legal levels: **16-235** (8-bit) or **64-940** (10-bit) for video-legal, which corresponds to **0-100 IRE**. Values outside this range will be clipped by broadcast encoders. Use the waveform to verify that highlights do not exceed 100 IRE and blacks do not dip below 0 IRE before handing off to editorial or mastering.
+:::
+
+::: tip VFX Use Case
+Skin tones should sit around **70 IRE** for properly exposed Caucasian skin, with darker skin tones typically in the 50-65 IRE range. During dailies, use the parade mode to verify that skin tone exposure is consistent across shots in a sequence -- if the three channels are not tracking together in the skin tone region, a color cast is present that needs correction before the grade.
+:::
+
 ## Practical Tips
 
 - Use the parade mode when matching exposure across shots in a sequence

@@ -32,6 +32,14 @@ The A/B controls respond to the number of loaded sources:
 | 1 | Highlighted | Disabled | Disabled | Hidden |
 | 2+ | Active | Active | Active | Visible |
 
+::: tip VFX Use Case
+A/B switching is the fastest way to compare shot versions during dailies. Load the previous version as source A and the latest version as source B, then toggle with backtick (`` ` ``) to instantly evaluate changes. This is particularly effective for spotting comp fixes, paint cleanup, and animation timing adjustments that are difficult to assess without direct comparison.
+:::
+
+::: info Pipeline Note
+When comparing versions, ensure both sources have the same color pipeline applied (same LUT, same OCIO config, same display profile). A version comparison with mismatched color settings will produce misleading results. Use the wipe mode or difference matte for more targeted comparisons.
+:::
+
 ## Compare Dropdown
 
 The Compare dropdown in the View tab consolidates all comparison tools in one location:

@@ -91,6 +91,14 @@ Click **Reset** in the curves panel header to restore all channels to the defaul
 
 ---
 
+::: tip VFX Use Case
+The **Film Look** preset emulates the characteristic S-curve response of analog film stock -- lifted shadows, compressed highlights, and a slight midtone warmth. This is useful during comp review to approximate the final DI grade before the colorist has delivered the show LUT. For compositing QC, use per-channel curves to verify that a comp's black levels and highlight response match the plate.
+:::
+
+::: info Pipeline Note
+Curves provide finer control than the contrast slider when you need different amounts of contrast in shadows vs. highlights. During review, a gentle S-curve on the master channel (the "S-Curve Mild" preset) is a quick way to add punch to flat log plates without waiting for a grade.
+:::
+
 ## Pipeline Position
 
 Curves are applied at stage 6c in the rendering pipeline, after CDL and color wheels, and before the Look LUT. The curves engine builds a 256-entry lookup table for each channel, which is uploaded to the GPU as a texture. The fragment shader samples this texture for each pixel, providing constant-time curve evaluation regardless of the number of control points.

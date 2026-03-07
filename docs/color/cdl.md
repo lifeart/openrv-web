@@ -62,6 +62,14 @@ The ordering is always Slope, then Offset, then Power, then Saturation. This is 
 
 ---
 
+::: info Pipeline Note
+CDL is the standard interchange format for communicating color decisions between on-set (live grading), editorial (Resolve/Baselight), and final DI. A typical dailies workflow starts with the DIT applying a CDL on set, which is exported as a `.cdl` or `.ccc` file and carried through editorial into the review tool. OpenRV Web can load these files directly, ensuring continuity from set to screen.
+:::
+
+::: tip VFX Use Case
+CDL files exported from OpenRV Web are compatible with DaVinci Resolve, Baselight, Nuke (OCIOCDLTransform), and other ASC CDL-compliant tools. Use the Save function to hand off a look from review back to the colorist or compositor without any baked-in transforms.
+:::
+
 ## Loading and Saving CDL Files
 
 ### Loading

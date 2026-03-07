@@ -67,6 +67,14 @@ An optional creative transform applied within the OCIO pipeline. Looks can add c
 
 ---
 
+::: info Pipeline Note
+OCIO is the backbone of color consistency across VFX departments. When lighting, compositing, and review all share the same OCIO config, an artist in Nuke sees the same colors as the lighter in Maya/Houdini and the supervisor in the review tool. Facility OCIO configs typically define studio-specific input transforms, display presets, and show looks that all applications reference from a shared network path.
+:::
+
+::: tip VFX Use Case
+For ACES-managed shows, set the working space to **ACEScg** (linear, AP1 primaries) -- this is the standard for CG rendering and compositing. Use the workflow presets to quickly configure the correct camera-to-display pipeline (e.g., "ARRI LogC3 to 709" for ALEXA dailies). If your facility has a custom OCIO config, load it via "Load Custom Config" to get the exact same color transforms used in Nuke, Resolve, and other tools on your show.
+:::
+
 ## Workflow Presets
 
 OpenRV Web provides one-click workflow presets that configure the entire OCIO pipeline for common camera-to-display combinations:

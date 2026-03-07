@@ -54,6 +54,14 @@ When multiple markers are placed on the timeline, consecutive marker pairs defin
 
 In loop and ping-pong modes, shifting past the last or first segment wraps around. In once mode, shifting stops at the boundary.
 
+::: tip VFX Use Case
+Frame-accurate navigation is critical for animation review and lip sync evaluation. Use the arrow keys to step frame-by-frame and set in/out points (`I`/`O`) to loop a specific action or transition. Place markers (`M`) on frames where timing feels off or where fixes are needed, then use the marker notes to record feedback for the animator. This marker-based review workflow is faster than writing timecoded notes separately.
+:::
+
+::: info Pipeline Note
+When reviewing editorial cuts loaded via OTIO, use the timeline editor's cut blocks to verify that each shot's frame range matches the editorial intent. The handles (frames before/after the cut point) should match what the compositor expects. Mismatched frame ranges between editorial and VFX are a common source of "the comp doesn't line up with the edit" issues.
+:::
+
 ## Frame Counter
 
 The timeline displays frame numbers at both ends of the track. During playback, the status area shows the current frame number, actual vs. target FPS (e.g., "24/24 fps"), and the active loop mode.

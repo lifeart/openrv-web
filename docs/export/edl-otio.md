@@ -71,6 +71,14 @@ When OTIO clips reference media files that are not yet loaded, the Conform/Re-li
 
 Once media is re-linked, the timeline plays back with the correct content at the specified frame ranges.
 
+::: info Pipeline Note
+EDL export enables the editorial roundtrip: assemble a review playlist in OpenRV Web, export a CMX 3600 EDL, and import it into Avid, Premiere, or Resolve to conform the edit against the original media. OTIO import works in the opposite direction -- export a timeline from editorial and load it into OpenRV Web to review the cut with the VFX team. This closes the loop between editorial and VFX review.
+:::
+
+::: tip VFX Use Case
+When using OTIO import for conform, the Re-link panel is critical. VFX media often lives on different storage paths than editorial media. Use the fuzzy filename matching to quickly re-link shots to your local VFX renders, then review the edit in context with the latest comp versions rather than the editorial offline media.
+:::
+
 ## Dailies Reports
 
 The Report Exporter generates review session reports in CSV and HTML formats. Reports include:

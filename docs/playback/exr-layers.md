@@ -82,6 +82,14 @@ EXR files can define separate data windows and display windows:
 
 OpenRV Web visualizes this distinction with the EXR Window Overlay, which draws borders showing both windows. This is useful for compositing review where overscan or region-of-interest rendering produces data windows that differ from the display window.
 
+::: info Pipeline Note
+Multi-layer EXR files are the standard delivery format in VFX for render passes (AOVs). Lighting TDs output separate diffuse, specular, reflection, SSS, and utility passes so that compositors can adjust each contribution independently in Nuke. OpenRV Web lets supervisors review all AOVs without opening a comp application, catching issues like missing shadow passes, noisy specular, or incorrect depth ranges early in the pipeline.
+:::
+
+::: tip VFX Use Case
+When reviewing CG lighting, cycle through the **diffuse** and **specular** layers to evaluate the balance between diffuse fill and specular highlights. Check the **depth** pass with the pixel probe to verify that Z-values are in the expected range for downstream defocus effects. Examine the **cryptomatte** layers to confirm that object/material IDs are correctly assigned before the comp artist builds mattes from them.
+:::
+
 ## AOV Inspection Workflow
 
 A typical AOV inspection workflow:

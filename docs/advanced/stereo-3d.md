@@ -99,6 +99,14 @@ The offset value is displayed next to the slider with a sign indicator (e.g., "+
 
 ---
 
+::: tip VFX Use Case
+For stereo dailies review, start with **Anaglyph Luminance** mode and red/cyan glasses to evaluate convergence and depth placement without color distraction. Use the convergence offset slider to set the screen plane at the subject's eye position -- this is the standard for dialogue-heavy scenes. Swap eyes periodically to verify that depth cues are consistent and comfortable. Flag any shots with excessive negative parallax (objects popping too far in front of the screen) for adjustment by the stereo compositor.
+:::
+
+::: info Pipeline Note
+Multi-view EXR is the preferred stereo delivery format in VFX because both eyes travel together in a single file, eliminating the risk of left/right eye mismatch during file management. When loading multi-view EXRs, verify that the view naming convention matches your pipeline standard (`left`/`right`, `L`/`R`, or custom names) to ensure correct eye assignment.
+:::
+
 ## Alignment Overlay
 
 When reviewing stereo content, vertical misalignment between the two eyes is a common issue that causes discomfort. OpenRV Web provides an alignment overlay mode that superimposes both eyes at reduced opacity, making vertical shifts, rotation differences, and scale mismatches immediately visible.

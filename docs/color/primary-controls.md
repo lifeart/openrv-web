@@ -182,6 +182,14 @@ Blacks adjusts the black clipping point. Positive values raise the black point (
 
 ---
 
+::: tip VFX Use Case
+During dailies review, **exposure** and **contrast** are the most-used primary controls. A quick exposure bump of +0.5 to +1.0 stops can reveal shadow detail in underexposed plates, while a contrast boost to 120-130% helps evaluate whether a shot will cut well with adjacent shots. These adjustments are non-destructive and apply only in the viewer -- they do not modify the source media, making them safe for review sessions with supervisors and clients.
+:::
+
+::: info Pipeline Note
+Temperature and tint controls are invaluable for evaluating white balance consistency across a sequence. During dailies, if shots were captured under mixed lighting (practical tungsten + daylight), use the pixel probe (`Shift+I`) on a known neutral surface and adjust temperature/tint to match across shots before presenting to the director.
+:::
+
 ## Processing Order
 
 All primary color adjustments execute within a single-pass GPU fragment shader. The precise ordering determines how adjustments interact:

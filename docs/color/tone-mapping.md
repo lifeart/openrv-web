@@ -84,6 +84,14 @@ Press `Shift+Alt+J` to toggle tone mapping on or off.
 
 ---
 
+::: tip VFX Use Case
+For ACES-managed shows, use the **ACES** operator to match the Reference Rendering Transform (RRT) used in theatrical and broadcast deliverables. During HDR dailies review, consider leaving tone mapping off and using the display's native HDR capabilities (HLG/PQ output) to evaluate the full dynamic range of the source material. Switch to **Reinhard** for a quick neutral preview when comparing multiple shots that haven't been graded yet.
+:::
+
+::: warning
+Tone mapping is a destructive, non-invertible operation. When reviewing CG lighting or compositing work, be aware that the tone mapper's highlight rolloff and hue shifts may mask issues (or create false ones) in the source render. Toggle tone mapping on and off (`Shift+Alt+J`) to compare the raw linear data against the display-mapped result.
+:::
+
 ## Choosing the Right Operator
 
 | Content Type | Recommended Operator |

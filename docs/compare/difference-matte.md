@@ -39,6 +39,14 @@ Drag the gain slider or enter a value directly. The range is 1x to 10x.
 - **Compression artifacts** -- compare an original frame with a compressed version to evaluate quality loss
 - **Compositing QC** -- verify that a composited element only affects its intended region
 
+::: tip VFX Use Case
+Difference mattes are essential for compositing QC. Load the clean plate as source A and the final comp as source B -- the difference reveals every pixel modified by the comp, making it easy to spot edge artifacts, despill halos, color mismatches, and roto errors. Increase the gain to 5x-10x to catch subtle differences invisible at 1x. This is the standard technique supervisors use to verify that comp fixes are isolated to the intended area.
+:::
+
+::: warning
+For CG renders, even tiny floating-point differences in anti-aliased edges will show up in the difference matte. A gain above 5x on CG content will typically show noise at every edge. This is expected behavior and not necessarily an error -- focus on large, contiguous difference areas when evaluating render changes.
+:::
+
 ## Mutual Exclusivity
 
 Enabling difference matte disables wipe mode and split screen. Only one comparison visualization can be active at a time. Enabling a blend mode also disables difference matte.
