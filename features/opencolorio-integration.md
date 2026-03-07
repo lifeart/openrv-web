@@ -82,12 +82,12 @@ OpenRV provides comprehensive OpenColorIO (OCIO) integration for industry-standa
 |-----------|--------|---------|
 | GTO RVOCIO Parsing | Done | `src/core/session/GTOGraphLoader.ts` - Full parsing of RVOCIO nodes |
 | GTO RVOCIO Export | Done | `src/core/session/SessionGTOExporter.ts` - Full export with `buildOCIOObject()` |
-| OCIO Config Loading | Not Started | No runtime OCIO config file support |
-| Color Space Transforms | Not Started | No actual transform processing |
-| Display Transforms | Not Started | No display/view transforms |
-| Look Transforms | Not Started | No look application |
-| WebGL Shader Generation | Not Started | No GPU-accelerated OCIO transforms |
-| UI Controls | Not Started | No OCIO control panel |
+| OCIO Config Loading | Done | `src/color/OCIOConfigParser.ts` - custom .ocio config file parsing with drag-and-drop and validation |
+| Color Space Transforms | Done | `src/color/OCIOTransform.ts` - matrix-based transforms, transfer functions, Bradford chromatic adaptation |
+| Display Transforms | Done | `src/color/OCIOProcessor.ts` - transform chain building, `bakeTo3DLUT()` for GPU pipeline |
+| Look Transforms | Done | Built-in ACES 1.2 and sRGB Studio configs with look definitions |
+| WebGL Shader Generation | Done | WASM-based OCIO processing with shader translation (`src/color/wasm/OCIOShaderTranslator.ts`) |
+| UI Controls | Done | `src/ui/components/OCIOControl.ts` - full panel with config/input/working/display/view dropdowns |
 
 ### Existing Related Implementation
 

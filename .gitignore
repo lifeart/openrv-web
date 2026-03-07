@@ -37,3 +37,14 @@ sample/cosmos-pq.avif
 sample/IMG_5220.MOV
 sample/Ultra_HDR_Samples_Originals_06.jpg
 .claude/worktrees/
+
+# Docs build output
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+# Generated API docs (built from source by TypeDoc)
+docs/api/*
+!docs/api/index.md
+
+# Generated documentation (built by scripts/docs/)
+docs/generated/

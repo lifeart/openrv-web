@@ -108,10 +108,14 @@ The system also provides "Luminance LUTs" with predefined mappings including HSV
 
 ### What is NOT Implemented
 
-1. **OpenColorIO (OCIO) Integration** - Not implemented
-   - No OCIO config file loading
-   - No color space detection from file metadata
-   - No automatic transform chains
+1. **OpenColorIO (OCIO) Integration** - Partially implemented
+   - OCIO config file loading, parsing, and validation implemented (`src/color/OCIOConfigParser.ts`)
+   - Built-in ACES 1.2 and sRGB Studio configs (`src/color/OCIOConfig.ts`)
+   - OCIO UI panel with config/input/working/display/view dropdowns (`src/ui/components/OCIOControl.ts`)
+   - Matrix-based color space transforms with Bradford chromatic adaptation (`src/color/OCIOTransform.ts`)
+   - WASM-based OCIO processing with shader translation (`src/color/wasm/`)
+   - Transform chain baked to 3D LUT for GPU pipeline (`src/color/OCIOProcessor.ts`)
+   - Missing: per-source input color space auto-detection from file metadata
 
 2. **Multi-Point LUT Pipeline** - Partially implemented
    - Only single LUT support (no Pre-Cache/File/Look/Display chain)
@@ -131,10 +135,12 @@ The system also provides "Luminance LUTs" with predefined mappings including HSV
    - No YRY BY conversion for OpenEXR
    - No custom color primaries support
 
-5. **HDR Features** - Not implemented
-   - No HDR to SDR tone mapping
-   - No floating-point precision controls
-   - No HDR metadata handling
+5. **HDR Features** - Partially implemented
+   - HDR to SDR tone mapping implemented (Reinhard, Filmic, ACES operators in GLSL shaders)
+   - EXR/float TIFF loading with Float32 precision implemented
+   - HLG/PQ output modes and WebGPU HDR backend implemented
+   - Display capabilities detection (P3, HDR, WebGPU) implemented
+   - Missing: per-operator parameter controls, custom tone curves
 
 6. **Luminance LUTs** - Not implemented
    - No HSV visualization
@@ -149,12 +155,12 @@ The system also provides "Luminance LUTs" with predefined mappings including HSV
 | Multiple LUT formats (cube, csp, 3dl, etc.) | Partial (.cube only) |
 | Per-source LUT assignment | Not implemented |
 | Session-wide display LUT | Not implemented |
-| OpenColorIO (OCIO) integration | Not implemented |
+| OpenColorIO (OCIO) integration | Partial (config loading, transforms, UI, WASM bridge) |
 | Color space detection from file metadata | Not implemented |
 | Linear/Log/sRGB/Rec.709 conversions | Implemented (Log curves) |
 | Custom color primaries support | Not implemented |
-| HDR to SDR tone mapping | Not implemented |
-| Floating-point precision for HDR content | Not implemented |
+| HDR to SDR tone mapping | Implemented (Reinhard, Filmic, ACES GLSL operators) |
+| Floating-point precision for HDR content | Partial (EXR/float TIFF loading, HDR display output) |
 
 ## UI/UX Specification
 

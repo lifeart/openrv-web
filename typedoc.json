@@ -1,0 +1,22 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/api/index.ts"],
+  "out": "docs/api",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-vitepress-theme"],
+  "tsconfig": "tsconfig.typedoc.json",
+  "readme": "none",
+  "githubPages": false,
+  "disableSources": false,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "hideGenerator": true,
+  "entryPointStrategy": "resolve",
+  "outputFileStrategy": "members",
+  "flattenOutputFiles": false,
+  "membersWithOwnFile": ["Class", "Interface", "Enum"],
+  "navigationModel": {
+    "excludeGroups": false,
+    "excludeCategories": false
+  }
+}
