@@ -2,6 +2,8 @@
 
 The difference matte mode computes and displays the pixel-by-pixel difference between sources A and B. Areas where the two sources are identical appear black; areas with differences appear bright. This mode is invaluable for spotting subtle changes between renders or versions.
 
+![Difference matte comparison](/assets/screenshots/36-difference-matte.png)
+
 ## Enabling Difference Matte
 
 Press `Shift+D` to toggle difference matte mode. The viewer switches to displaying the computed difference image. Press `Shift+D` again to return to normal display.

@@ -2,6 +2,8 @@
 
 OpenRV Web supports loading two media sources and switching between them instantly for comparison. This workflow is fundamental to VFX review, where comparing different versions or before/after states is a daily task.
 
+![A/B source switching UI](/assets/screenshots/34-ab-switching.png)
+
 ## Loading Multiple Sources
 
 When a second file is loaded (via drag and drop or the file picker) after the first, it automatically assigns as **source B**. The first file remains as **source A**. The A/B controls in the Compare dropdown (View tab) become active.

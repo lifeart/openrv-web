@@ -2,6 +2,8 @@
 
 Display profiles control the final stage of the color pipeline -- converting graded, tone-mapped linear light values into the signal encoding expected by the physical display device. OpenRV Web provides transfer function selection, display gamma and brightness overrides, HDR output modes, gamut mapping, and automatic display capabilities detection.
 
+![Display profiles and transfer function selection](/assets/screenshots/31-display-profiles.png)
+
 ---
 
 ## Transfer Functions

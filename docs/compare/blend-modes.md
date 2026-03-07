@@ -2,6 +2,8 @@
 
 Blend modes provide additional methods for comparing sources A and B by combining them in the viewer. Three blend modes are available: onion skin, flicker, and blend.
 
+![Blend modes and onion skin](/assets/screenshots/37-blend-modes.png)
+
 ## Onion Skin
 
 Onion skin overlays source B on top of source A with adjustable opacity. At 0% opacity, only source A is visible. At 100%, only source B is visible. At 50%, both sources are equally blended.

@@ -2,6 +2,8 @@
 
 Log encoding is a technique used by cinema cameras to record a wider dynamic range in a limited bit depth. By distributing code values logarithmically rather than linearly, log encoding preserves more detail in both shadows and highlights than a linear recording would allow. OpenRV Web provides mathematically accurate log-to-linear conversion presets for all major camera formats.
 
+![Log curve presets](/assets/screenshots/30-log-curves.png)
+
 ---
 
 ## Why Log Encoding Matters

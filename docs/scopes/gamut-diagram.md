@@ -2,6 +2,8 @@
 
 The gamut diagram displays the CIE 1931 chromaticity diagram with the image's color data plotted on it. This scope visualizes which colors in the image fall within or outside a target color gamut, making it essential for HDR and wide color gamut workflows.
 
+![CIE gamut diagram scope](/assets/screenshots/38-gamut-diagram.png)
+
 ## CIE 1931 Display
 
 The diagram shows the familiar horseshoe-shaped CIE 1931 chromaticity space. Standard color gamuts (sRGB, Display P3, Rec. 2020) are drawn as triangles within this space, with their primaries at the vertices.

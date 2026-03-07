@@ -2,6 +2,8 @@
 
 ASC CDL (American Society of Cinematographers Color Decision List) is an industry-standard format for communicating color correction values between production and post-production. OpenRV Web supports full CDL grading with real-time GPU preview and file interchange.
 
+![CDL controls panel](/assets/screenshots/28-cdl-controls.png)
+
 ---
 
 ## Opening the CDL Panel

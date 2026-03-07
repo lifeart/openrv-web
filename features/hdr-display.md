@@ -168,15 +168,16 @@ The current codebase has a **partial foundation** for tone mapping:
 
 ### Not Implemented Features
 
-#### 1. HDR Image Format Support
-- **Missing**: OpenEXR (.exr) file loading
-- **Missing**: 32-bit TIFF loading
-- **Missing**: Values outside [0.0, 1.0] preservation
+#### 1. HDR Image Format Support -- IMPLEMENTED
+- **Implemented**: OpenEXR (.exr/.sxr) via WebAssembly decoder with Float32 HDR precision (`src/formats/EXRDecoder.ts`, PIZ and DWA codecs)
+- **Implemented**: 32-bit float TIFF loading
+- **Implemented**: Values outside [0.0, 1.0] preserved through Float32Array pipeline
 
-#### 2. HDR Display Output
-- **Missing**: HDR10/PQ output for HDR displays
-- **Missing**: Display P3 color space support
-- **Missing**: Browser HDR canvas support detection
+#### 2. HDR Display Output -- IMPLEMENTED
+- **Implemented**: HLG and PQ output modes for HDR displays (`src/render/WebGPUHDRBlit.ts`, `src/render/Canvas2DHDRBlit.ts`)
+- **Implemented**: Display P3 / wide color gamut detection (`src/color/DisplayCapabilities.ts`)
+- **Implemented**: Browser HDR canvas support detection and WebGPU HDR backend (`src/render/WebGPUBackend.ts`)
+- **Implemented**: Canvas2D HDR fallback path (srgb-linear, rec2100-hlg, float16)
 
 #### 3. Luminance Visualization Modes
 - **Missing**: HSV visualization
@@ -192,17 +193,17 @@ The current codebase has a **partial foundation** for tone mapping:
 - [x] False color display modes (Standard/ARRI/RED)
 - [x] Histogram with clipping statistics
 - [x] Log scale histogram option
-- [ ] Floating point image support (EXR, float TIFF)
+- [x] Floating point image support (EXR, float TIFF)
 - [ ] Out-of-range value visualization
 - [ ] Floating-point LUT processing
 
 ### Core Tone Mapping Operators
-- [ ] Filmic (Hable/Uncharted 2) tone mapping with configurable shoulder/toe
-- [ ] ACES tone mapping with Academy-standard fitted curve
-- [ ] Reinhard tone mapping with configurable white point parameter
+- [x] Filmic (Hable/Uncharted 2) tone mapping with configurable shoulder/toe
+- [x] ACES tone mapping with Academy-standard fitted curve
+- [x] Reinhard tone mapping with configurable white point parameter
 - [ ] Custom tone mapping via user-adjustable Catmull-Rom spline curve
-- [ ] All operators implemented as GLSL fragment shader functions
-- [ ] All operators preserve alpha channel unchanged
+- [x] All operators implemented as GLSL fragment shader functions
+- [x] All operators preserve alpha channel unchanged
 - [ ] HDR to SDR conversion pipeline
 
 ### Per-Operator Parameters

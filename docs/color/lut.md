@@ -2,6 +2,8 @@
 
 Look-Up Tables (LUTs) encode precomputed color transforms that can replicate complex grading operations, film stock emulations, and color space conversions in constant time per pixel. OpenRV Web supports loading external LUT files and provides built-in film emulation presets, all processed on the GPU for real-time performance.
 
+![LUT controls](/assets/screenshots/29-lut-loaded.png)
+
 ---
 
 ## 1D vs 3D LUTs
@@ -14,7 +16,7 @@ A 1D LUT applies an independent curve to each color channel. Each input value ma
 
 A 3D LUT maps every possible (R, G, B) input triplet to a new output triplet. The data is arranged as a cube where each axis represents one input channel. 3D LUTs can encode any color transform including hue shifts, saturation changes, film stock emulations, and complete color space conversions.
 
-OpenRV Web uses tetrahedral interpolation for 3D LUT sampling on the GPU, which provides higher accuracy than trilinear interpolation at the lattice boundaries. The LUT data is uploaded as a WebGL2 3D texture with `RGB32F` precision for full floating-point accuracy.
+OpenRV Web uses hardware trilinear interpolation for 3D LUT sampling on the GPU via WebGL2 `TEXTURE_3D` with `LINEAR` filtering. The LUT data is uploaded with `RGB32F` precision for full floating-point accuracy. A higher-accuracy tetrahedral interpolation path is available for CPU-side offline processing (`TetrahedralInterp.ts`).
 
 ---
 

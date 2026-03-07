@@ -2,6 +2,8 @@
 
 Split screen displays sources A and B simultaneously in the viewer, divided by a draggable divider. Each side shows a different source, making it straightforward to compare two versions of the same shot or two different shots side by side.
 
+![Split screen comparison](/assets/screenshots/35-split-screen.png)
+
 ## Enabling Split Screen
 
 Press `Shift+Alt+S` to toggle split screen. The mode cycles through:

@@ -2,6 +2,8 @@
 
 The HSL Qualifier provides secondary color correction -- the ability to isolate and adjust a specific range of colors within an image without affecting the rest. Select a color region by hue, saturation, and luminance, then apply corrections only to the qualified pixels.
 
+![HSL Qualifier panel](/assets/screenshots/27-hsl-qualifier.png)
+
 ---
 
 ## Opening the HSL Qualifier

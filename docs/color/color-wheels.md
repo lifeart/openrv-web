@@ -2,6 +2,8 @@
 
 The three-way color correction wheels provide an intuitive interface for adjusting color balance independently in the shadows, midtones, and highlights. This is the same grading paradigm used in professional color correction suites such as DaVinci Resolve, Baselight, and desktop OpenRV.
 
+![Color wheels panel showing Lift, Gamma, and Gain controls](/assets/screenshots/26-color-wheels.png)
+
 ---
 
 ## Concept

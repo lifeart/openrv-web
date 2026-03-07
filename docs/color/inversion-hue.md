@@ -6,6 +6,8 @@ OpenRV Web provides two simple but essential color manipulation tools: color inv
 
 ## Color Inversion
 
+![Color inversion applied to video](/assets/screenshots/32-color-inversion.png)
+
 Color inversion applies a negation to each RGB channel: `output = 1.0 - input`. The alpha channel is preserved unchanged. This is equivalent to the negation matrix:
 
 ```
@@ -31,6 +33,8 @@ Inversion is applied at stage 9 in the rendering pipeline, after all color corre
 ---
 
 ## Hue Rotation
+
+![Hue rotation applied to video](/assets/screenshots/33-hue-rotation.png)
 
 Hue rotation shifts all colors in the image around the color wheel by a specified number of degrees. The transform uses a luminance-preserving 3x3 matrix built from Rec. 709 luminance weights, ensuring that the perceived brightness of each pixel remains constant as its hue changes.
 

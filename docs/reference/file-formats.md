@@ -94,7 +94,7 @@ ProRes and DNxHD codecs are detected during MXF and MOV parsing. Since browsers 
 | CSP | `.csp` | 1D and 3D | Cinespace format |
 | 3DL | `.3dl` | 3D | Autodesk/Lustre format |
 
-LUTs are loaded as float32 data and applied via tetrahedral interpolation (for 3D LUTs) in the GPU fragment shader.
+LUTs are loaded as float32 data and applied via hardware trilinear interpolation (for 3D LUTs) in the GPU fragment shader. A higher-accuracy tetrahedral interpolation path is available for CPU-side processing (`TetrahedralInterp.ts`).
 
 ## CDL Format
 
