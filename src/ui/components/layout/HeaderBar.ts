@@ -946,6 +946,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const items: { icon: string; label: string; action: () => void }[] = [
       { icon: 'help', label: 'Keyboard Shortcuts', action: () => this.emit('showShortcuts', undefined) },
       { icon: 'keyboard', label: 'Custom Key Bindings', action: () => this.emit('showCustomKeyBindings', undefined) },
+      { icon: 'book-open', label: 'Documentation', action: () => window.open('./docs/', '_blank') },
     ];
 
     for (const { icon, label, action } of items) {

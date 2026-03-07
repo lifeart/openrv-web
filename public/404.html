@@ -7,11 +7,16 @@
     <script>
       // Single Page App redirect for GitHub Pages
       // Redirects 404s to index.html with the path preserved in sessionStorage
+      // Skip redirect for /docs/ paths — they are served as static files by VitePress
       const path = window.location.pathname;
-      const search = window.location.search;
-      const hash = window.location.hash;
-      sessionStorage.setItem('redirect', path + search + hash);
-      window.location.replace('/openrv-web/');
+      if (path.startsWith('/openrv-web/docs/') || path === '/openrv-web/docs') {
+        // Do not redirect docs paths; let the docs site handle its own 404
+      } else {
+        const search = window.location.search;
+        const hash = window.location.hash;
+        sessionStorage.setItem('redirect', path + search + hash);
+        window.location.replace('/openrv-web/');
+      }
     </script>
   </head>
   <body>

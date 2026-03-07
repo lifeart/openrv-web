@@ -32,7 +32,10 @@
     "docs:build": "pnpm docs:generate && pnpm docs:api && vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "screenshots": "playwright test --project=screenshots",
-    "screenshots:update": "playwright test --project=screenshots --update-snapshots"
+    "screenshots:update": "playwright test --project=screenshots --update-snapshots",
+    "docs:ai-generate": "npx tsx docs/scripts/ai-generate.ts",
+    "docs:fact-check": "npx tsx docs/scripts/fact-check.ts --all",
+    "docs:validate": "npx tsx docs/scripts/validate-output.ts --all"
   },
   "dependencies": {
     "@jsquash/jxl": "^1.3.0",
@@ -42,6 +45,7 @@
     "mediabunny": "^1.28.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@playwright/test": "^1.40.0",
     "@vitest/coverage-v8": "^1.2.0",
     "fake-indexeddb": "^6.2.5",
