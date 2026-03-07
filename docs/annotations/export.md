@@ -1,5 +1,7 @@
 # Exporting Annotations
 
+![Export menu with annotation export options](/assets/screenshots/42-annotation-export-menu.png)
+
 Annotations can be exported in JSON format for data interchange and in PDF format for printable review reports. Both export options are available from the Export menu in the header bar.
 
 ## JSON Export

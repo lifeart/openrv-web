@@ -1,5 +1,7 @@
 # Loop Modes and Frame Stepping
 
+![Loop mode button in transport controls](/assets/screenshots/45-loop-mode.png)
+
 OpenRV Web provides three loop modes that control what happens when playback reaches the end of the frame range. Frame stepping offers precise single-frame navigation for detailed review.
 
 ## Loop Modes

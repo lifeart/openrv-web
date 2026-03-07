@@ -1,5 +1,7 @@
 # Filters and Effects
 
+![Filters panel with noise reduction and sharpen controls](/assets/screenshots/53-filters-panel.png)
+
 OpenRV Web includes a set of image processing filters that operate in real time on the GPU. Filters are applied per-frame as part of the rendering pipeline and do not modify the source media. All filter settings are non-destructive and can be adjusted, reset, or saved as part of the session state.
 
 ---

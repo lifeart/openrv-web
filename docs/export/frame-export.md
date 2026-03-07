@@ -1,5 +1,7 @@
 # Frame Export
 
+![Frame export dialog with format options](/assets/screenshots/48-frame-export-dialog.png)
+
 OpenRV Web exports individual frames or sequences of frames as image files. Exported frames include all applied color corrections, LUTs, and overlays as rendered in the viewer.
 
 ## Single Frame Export

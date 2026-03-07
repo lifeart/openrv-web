@@ -1,5 +1,7 @@
 # Per-Frame Annotations, Ghost Mode, and Hold Mode
 
+![Ghost mode showing annotations from adjacent frames](/assets/screenshots/41-ghost-mode.png)
+
 OpenRV Web stores annotations on a per-frame basis and provides two display modes -- ghost and hold -- that control how annotations appear across multiple frames.
 
 ## Per-Frame Storage

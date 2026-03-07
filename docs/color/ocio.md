@@ -1,5 +1,7 @@
 # OCIO Integration
 
+![OCIO panel with color space configuration](/assets/screenshots/57-ocio-panel.png)
+
 OpenColorIO (OCIO) is the industry-standard color management framework used across VFX, animation, and post-production. OpenRV Web provides OCIO-compatible color management with built-in configurations for common workflows, custom configuration loading, and GPU-accelerated processing.
 
 > **Note:** OCIO integration in OpenRV Web is a partial implementation. Built-in configurations provide the most common camera-to-display transforms. Full native OCIO library support via WASM is available for advanced workflows but may have performance implications compared to the native GPU pipeline.

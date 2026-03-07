@@ -1,5 +1,7 @@
 # Audio Playback
 
+![Audio waveform on timeline with volume control](/assets/screenshots/43-audio-waveform.png)
+
 OpenRV Web provides audio playback with sync correction, volume control, waveform visualization, and automatic handling of browser autoplay restrictions.
 
 ## Audio Sources

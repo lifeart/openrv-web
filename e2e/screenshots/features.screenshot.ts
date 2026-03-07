@@ -92,8 +92,8 @@ test.describe('Feature Screenshots', () => {
     await switchTab(page, 'annotate');
     await page.waitForTimeout(300);
 
-    // Select pen tool by pressing 'b' (paint.pen -> KeyB)
-    await page.keyboard.press('b');
+    // Select pen tool by pressing 'p' (paint.pen -> KeyP)
+    await page.keyboard.press('p');
     await page.waitForTimeout(200);
 
     // Draw some strokes on the canvas
@@ -158,7 +158,7 @@ test.describe('Feature Screenshots', () => {
 
     // Look for tone mapping control button and click it
     const tmButton = page.locator(
-      '[data-testid="tone-mapping-button"], .tone-mapping-control button',
+      '[data-testid="tone-mapping-control-button"], [data-testid="tone-mapping-button"], .tone-mapping-control button',
     ).first();
     if (await tmButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tmButton.click();

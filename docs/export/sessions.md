@@ -1,5 +1,7 @@
 # Session Save and Load
 
+![Session save with state summary](/assets/screenshots/51-session-save.png)
+
 OpenRV Web saves the complete state of a review session to a `.orvproject` file. This includes all media references, color corrections, annotations, playback settings, and viewer configuration.
 
 This page provides an overview of session persistence. For detailed coverage of snapshots, auto-save, and crash recovery, see [Session Management](../advanced/session-management.md).

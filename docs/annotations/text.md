@@ -1,5 +1,7 @@
 # Text Annotations
 
+![Text annotations on the viewer canvas](/assets/screenshots/40-annotation-text.png)
+
 Text annotations add typed labels, notes, and callouts directly on the viewer canvas. They are useful for labeling specific areas, adding review comments, and providing context that freehand drawing cannot convey.
 
 ## Using the Text Tool

@@ -1,5 +1,7 @@
 # Playlist Management
 
+![Playlist panel with multiple clips](/assets/screenshots/55-playlist-panel.png)
+
 OpenRV Web supports multi-clip playlists for reviewing sequences of shots in a defined order. The playlist system manages clip ordering, per-clip in/out points, and loop behavior, providing a lightweight editorial timeline within the viewer.
 
 ---

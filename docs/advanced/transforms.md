@@ -1,5 +1,7 @@
 # Transforms
 
+![Transform controls with crop and rotation](/assets/screenshots/54-transform-controls.png)
+
 OpenRV Web provides spatial transform controls for rotating, flipping, cropping, and correcting geometric distortions in the viewed image. All transforms are non-destructive and operate in real time on the GPU. Transform settings are saved as part of the session state.
 
 ---

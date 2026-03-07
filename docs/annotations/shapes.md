@@ -1,5 +1,7 @@
 # Shape Tools
 
+![Shape annotation tools on the viewer canvas](/assets/screenshots/39-annotation-shapes.png)
+
 Shape tools create geometric annotations on the viewer canvas. They are useful for circling areas of interest, drawing attention to specific regions, and creating structured markup for review notes.
 
 ## Available Shapes

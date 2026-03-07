@@ -1,5 +1,7 @@
 # Viewer Navigation
 
+![Viewer zoomed in to 200% showing pan and zoom](/assets/screenshots/46-viewer-zoomed.png)
+
 The viewer canvas supports pan, zoom, rotation, and flip operations for inspecting images at different scales and orientations. All transforms are non-destructive and can be reset at any time.
 
 ## Pan

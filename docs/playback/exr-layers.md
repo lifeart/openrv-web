@@ -4,6 +4,8 @@ OpenRV EXR support extends beyond simple image display to include multi-layer fi
 
 ![EXR file loaded in OpenRV Web](/assets/screenshots/22-exr-loaded.png)
 
+![EXR layer selector with multiple render passes](/assets/screenshots/58-exr-layers.png)
+
 ## Multi-Layer EXR Overview
 
 OpenRV Web decodes EXR files using a WebAssembly decoder with Float32 HDR precision. Multi-layer EXR files contain multiple named layers, each representing a different render pass or data channel. Common layers include:

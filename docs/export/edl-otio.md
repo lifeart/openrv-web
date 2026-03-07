@@ -1,5 +1,7 @@
 # EDL and OTIO
 
+![Export menu with EDL export option](/assets/screenshots/52-edl-export.png)
+
 OpenRV Web supports exporting Edit Decision Lists (EDL) in CMX 3600 format and importing OpenTimelineIO (OTIO) editorial timelines. These features bridge OpenRV Web with editorial and conform workflows.
 
 ## EDL Export (CMX 3600)

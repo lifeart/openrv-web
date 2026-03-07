@@ -37,6 +37,12 @@ Each screenshot follows the pattern:
 | 01-10 | Core UI | `core-ui.screenshot.ts` |
 | 11-17 | Scopes & Analysis | `scopes.screenshot.ts` |
 | 18-25 | Features | `features.screenshot.ts` |
+| 26-33 | Color Management | `color.screenshot.ts` |
+| 34-38 | Comparison & Gamut | `compare.screenshot.ts` |
+| 39-42 | Annotations | `annotations.screenshot.ts` |
+| 43-47 | Playback | `playback.screenshot.ts` |
+| 48-52 | Export | `export.screenshot.ts` |
+| 53-58 | Advanced | `advanced.screenshot.ts` |
 
 ## Adding New Screenshots
 
@@ -57,6 +63,12 @@ Each screenshot follows the pattern:
 - **`core-ui.screenshot.ts`** -- empty state, loaded video, header, tabs, color panel, timeline
 - **`scopes.screenshot.ts`** -- histogram, waveform, vectorscope, parade, pixel probe, false color
 - **`features.screenshot.ts`** -- channels, A/B compare, annotations, shortcuts, EXR, curves, zebra, safe areas
+- **`color.screenshot.ts`** -- color wheels, HSL qualifier, CDL, LUT, log curves, display profiles, inversion, hue rotation
+- **`compare.screenshot.ts`** -- A/B switching, split screen, difference matte, blend modes, gamut diagram
+- **`annotations.screenshot.ts`** -- shape tools, text annotations, ghost mode, export menu
+- **`playback.screenshot.ts`** -- audio waveform, JKL speed, loop modes, viewer navigation, image sequences
+- **`export.screenshot.ts`** -- frame export, video export, slate editor, session save, EDL export
+- **`advanced.screenshot.ts`** -- filters panel, transform controls, playlist, quad view, OCIO panel, EXR layers
 
 ## CI Notes
 

@@ -1,5 +1,7 @@
 # J/K/L Navigation and Speed Control
 
+![JKL speed indicator showing 2x playback](/assets/screenshots/44-jkl-speed.png)
+
 OpenRV Web implements the professional J/K/L shuttle controls found in editing and review applications. These three keys provide fast, hands-on-keyboard control over playback speed and direction.
 
 ## J/K/L Shuttle Controls

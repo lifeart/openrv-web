@@ -1,5 +1,7 @@
 # Video Export
 
+![Video export dialog with codec and bitrate options](/assets/screenshots/49-video-export-dialog.png)
+
 OpenRV Web encodes video files directly in the browser using the WebCodecs API. The exported video includes all color corrections, LUTs, tone mapping, and overlays as applied in the viewer.
 
 ## WebCodecs Encoding

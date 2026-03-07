@@ -1,5 +1,7 @@
 # Image Sequences
 
+![Image sequence loaded with frame counter](/assets/screenshots/47-image-sequence.png)
+
 OpenRV Web loads and plays back numbered image file sequences as if they were video clips. Sequences are detected automatically from file naming patterns and support missing frame detection, FPS assignment, and memory-efficient frame caching.
 
 ## Loading Image Sequences

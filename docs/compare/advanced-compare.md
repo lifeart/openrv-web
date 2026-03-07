@@ -1,5 +1,7 @@
 # Advanced Comparison Features
 
+![Quad view showing four sources simultaneously](/assets/screenshots/56-quad-view.png)
+
 Beyond the standard A/B comparison tools, OpenRV Web provides quad view, reference image management, matte overlay, and multi-layer stack capabilities for complex review scenarios.
 
 ## Quad View

@@ -1,5 +1,7 @@
 # Slate and Frameburn
 
+![Slate editor with production metadata fields](/assets/screenshots/50-slate-editor.png)
+
 Slate frames and frameburn overlays add production metadata to exported video and image sequences. These features are standard in professional post-production for identifying deliverables and tracking review content.
 
 ::: tip Who uses this
