@@ -46,6 +46,15 @@ jobs:
         env:
           BASE_URL: /${{ github.event.repository.name }}/
 
+      - name: Generate API docs
+        run: pnpm docs:api
+
+      - name: Build docs site
+        run: pnpm docs:build
+
+      - name: Merge docs into deploy artifact
+        run: cp -r docs/.vitepress/dist dist/docs
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
