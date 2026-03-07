@@ -1,6 +1,6 @@
 # Supported File Formats
 
-This page lists all file formats supported by OpenRV Web. For the auto-generated format table, see [docs/generated/format-support.md](../generated/format-support.md) if available.
+This page lists all file formats supported by OpenRV Web.
 
 ## Image Formats
 

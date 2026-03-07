@@ -186,10 +186,8 @@ test.describe('Feature Screenshots', () => {
   test('25-zebra-stripes', async ({ page }) => {
     await initWithVideo(page);
 
-    // Enable zebra stripes via test helper
-    await page.evaluate(() => {
-      window.__OPENRV_TEST__?.toggleZebraHigh();
-    });
+    // Enable zebra stripes via keyboard shortcut (Shift+Alt+Z)
+    await page.keyboard.press('Shift+Alt+KeyZ');
     await page.waitForTimeout(500);
     await waitForCanvasStable(page, 2000);
 
@@ -201,9 +199,15 @@ test.describe('Feature Screenshots', () => {
   test('25-safe-areas', async ({ page }) => {
     await initWithVideo(page);
 
-    // Enable safe areas via test helper
-    await page.evaluate(() => {
-      window.__OPENRV_TEST__?.toggleSafeAreasTitleSafe();
+    // Enable safe areas via QC tab button
+    await page.locator('[data-tab-id="qc"]').click().catch(() => {});
+    await page.waitForTimeout(300);
+    // Click safe areas toggle if available
+    await page.locator('button:has-text("Safe"), [title*="Safe Area"], [aria-label*="Safe"]').first().click().catch(() => {
+      // Fallback: try via test helper
+      return page.evaluate(() => {
+        (window as any).__OPENRV_TEST__?.toggleSafeAreasTitleSafe?.();
+      });
     });
     await page.waitForTimeout(500);
     await waitForCanvasStable(page, 2000);

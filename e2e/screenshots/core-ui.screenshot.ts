@@ -110,15 +110,16 @@ test.describe('Core UI Screenshots', () => {
   test('10-timeline-markers', async ({ page }) => {
     await initWithVideo(page);
 
-    // Add markers programmatically via the test helper bridge
-    await page.evaluate(() => {
-      const api = window.__OPENRV_TEST__;
-      if (!api) return;
-      api.setMarker(10, 'VFX shot start', '#ff4444');
-      api.setMarker(30, 'Color grade note', '#44ff44');
-      api.setMarker(50, 'Review comment', '#4444ff');
-      api.setMarker(70, 'Client feedback', '#ffaa00');
-    });
+    // Add markers via keyboard shortcut (M to toggle mark at current frame)
+    // Seek to different frames and mark each one
+    for (const frame of [10, 30, 50, 70]) {
+      await page.evaluate((f) => {
+        window.__OPENRV_TEST__?.seekToFrame?.(f);
+      }, frame);
+      await page.waitForTimeout(200);
+      await page.keyboard.press('m');
+      await page.waitForTimeout(100);
+    }
 
     // Wait for markers to render
     await page.waitForTimeout(500);

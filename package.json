@@ -28,6 +28,7 @@
     "docs:api": "typedoc",
     "docs:generate": "npx tsx scripts/docs/generate-all.ts",
     "docs:check": "npx tsx scripts/docs/generate-all.ts --check",
+    "docs:check-wiring": "npx tsx scripts/docs/check-wiring.ts",
     "docs:dev": "pnpm docs:generate && pnpm docs:api && vitepress dev docs",
     "docs:build": "pnpm docs:generate && pnpm docs:api && vitepress build docs",
     "docs:preview": "vitepress preview docs",
