@@ -2,6 +2,8 @@
 
 Channel isolation displays a single color channel as a grayscale image, making it possible to inspect the contribution of individual channels without the visual complexity of the full-color image.
 
+![Red channel isolation](/assets/screenshots/18-channel-red.png)
+
 ## Channel Modes
 
 OpenRV Web provides six channel viewing modes:
@@ -37,6 +39,12 @@ When a single channel is isolated, the viewer extracts the selected channel valu
 - **Luminance**: Calculates the weighted sum using Rec.709 coefficients and displays the result as grayscale. Green contributes the most (71.5%), followed by red (21.3%), then blue (7.2%).
 
 Channel isolation is applied late in the render pipeline -- after color corrections, CDL, curves, and filters but before the paint annotation layer.
+
+![Green channel isolation](/assets/screenshots/18-channel-green.png)
+
+![Blue channel isolation](/assets/screenshots/18-channel-blue.png)
+
+![Luminance channel isolation](/assets/screenshots/18-channel-luma.png)
 
 ## Use Cases
 

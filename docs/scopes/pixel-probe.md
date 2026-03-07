@@ -2,6 +2,8 @@
 
 The pixel probe provides a real-time readout of exact color values under the cursor. It is essential for precise color evaluation, verifying exposure levels, and confirming that specific pixel values meet requirements.
 
+![Pixel probe overlay showing color values](/assets/screenshots/16-pixel-probe.png)
+
 ## Enabling the Pixel Probe
 
 Press `Shift+I` to toggle the pixel probe. A floating overlay appears near the cursor and follows it across the viewer. An eyedropper icon in the View tab toolbar also toggles the probe. Press `Shift+I` again or `Escape` to close it.

@@ -2,6 +2,8 @@
 
 OpenRV Web organizes its interface into a header bar, context toolbar, viewer canvas, and timeline. Floating panels provide additional controls without obscuring the image. This page describes every major area of the interface and how they interact.
 
+![OpenRV Web with no media loaded](/assets/screenshots/01-empty-app.png)
+
 ## Layout Structure
 
 The application uses a vertical layout with four main regions stacked from top to bottom:
@@ -23,7 +25,11 @@ The application uses a vertical layout with four main regions stacked from top t
 
 Floating panels (color controls, histogram, markers, snapshots, etc.) overlay the viewer canvas and can be toggled on and off independently.
 
+![OpenRV Web with video loaded](/assets/screenshots/02-video-loaded.png)
+
 ## Header Bar
+
+![Header bar close-up](/assets/screenshots/03-header-bar.png)
 
 The header bar spans the full width of the application and contains three groups of controls.
 
@@ -45,6 +51,16 @@ Five numbered tabs control which context toolbar appears below:
 | `5` | **Annotate** | Pen, eraser, text, shapes, spotlight, ghost/hold modes |
 
 Press the corresponding number key to switch tabs. The active tab is highlighted with the accent color.
+
+![View tab](/assets/screenshots/04-tab-view.png)
+
+![Color tab](/assets/screenshots/05-tab-color.png)
+
+![Effects tab](/assets/screenshots/06-tab-effects.png)
+
+![Transform tab](/assets/screenshots/07-tab-transform.png)
+
+![Annotate tab](/assets/screenshots/08-tab-annotate.png)
 
 A sixth tab, **QC** (key `6`), provides quality control tools for review workflows including shot status tracking and version management.
 

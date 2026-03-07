@@ -2,6 +2,8 @@
 
 The waveform monitor displays luminance or color values plotted against the horizontal position in the image. Unlike the histogram, which shows overall distribution, the waveform preserves spatial information -- the left side of the waveform corresponds to the left side of the image.
 
+![Waveform monitor](/assets/screenshots/13-waveform.png)
+
 ## Opening the Waveform
 
 Press `W` to toggle the waveform monitor. It appears as a floating overlay. Press `W` again or `Escape` to close it.
@@ -17,6 +19,8 @@ Displays a single luminance waveform. The vertical axis represents brightness (0
 Displays red, green, and blue waveforms overlaid on the same graph, each in its respective color. This mode reveals color balance across the image -- if one channel consistently sits above or below the others, a color cast is present.
 
 ### Parade
+
+![Parade scope display](/assets/screenshots/15-parade-scope.png)
 
 Displays red, green, and blue waveforms side by side in three separate columns. This layout makes it easier to compare channels without overlap confusion. The parade is the preferred mode for matching black levels and white levels across channels during color correction.
 

@@ -6,6 +6,8 @@ False color and zebra stripes provide visual overlays that map pixel luminance t
 
 False color replaces the image colors with a heatmap based on luminance, assigning a specific color to each exposure range. This makes it possible to evaluate exposure across the entire frame at a glance.
 
+![False color exposure visualization](/assets/screenshots/17-false-color.png)
+
 ### Enabling False Color
 
 Press `Shift+Alt+F` to toggle false color display. The viewer switches from the normal image to the false color representation. Press `Shift+Alt+F` again to return to normal display.
@@ -47,6 +49,8 @@ The key areas to watch:
 - **Even distribution** of colors indicates a well-balanced exposure
 
 ## Zebra Stripes
+
+![Zebra stripes exposure warning](/assets/screenshots/25-zebra-stripes.png)
 
 Zebra stripes overlay animated diagonal stripe patterns on image regions that exceed (or fall below) configurable IRE thresholds. They provide a more targeted warning than false color by highlighting only the problem areas.
 

@@ -2,6 +2,8 @@
 
 Wipe mode splits the viewer with a draggable line, showing the original image on one side and the color-graded version on the other. This compares the effect of color corrections on a single source without switching between two files.
 
+![A/B split screen comparison](/assets/screenshots/19-ab-split-screen.png)
+
 ## Enabling Wipe Mode
 
 Press `Shift+W` to cycle through wipe modes:

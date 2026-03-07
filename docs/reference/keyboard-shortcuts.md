@@ -2,6 +2,8 @@
 
 This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are organized by category. On macOS, the `Ctrl` key maps to `Cmd` automatically.
 
+![Keyboard shortcuts reference](/assets/screenshots/21-keyboard-shortcuts.png)
+
 <!-- Auto-generated shortcut data available in docs/generated/keyboard-shortcuts.md -->
 
 ## Playback

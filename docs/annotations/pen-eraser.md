@@ -2,6 +2,8 @@
 
 The pen and eraser tools enable freehand drawing directly on the viewer canvas. Annotations are stored per frame and rendered through the WebGL paint engine for high-performance display.
 
+![Annotations drawn on the viewer](/assets/screenshots/20-annotations.png)
+
 ## Activating the Annotation Tab
 
 Press `5` to switch to the Annotate tab. The context toolbar displays all drawing tools, brush settings, and annotation controls.

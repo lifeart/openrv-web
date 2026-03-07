@@ -2,6 +2,8 @@
 
 The vectorscope displays the color information of the image as a circular plot, showing the hue (angle) and saturation (distance from center) of every pixel. It is the primary tool for evaluating color accuracy, identifying color casts, and verifying skin tone consistency.
 
+![Vectorscope display](/assets/screenshots/14-vectorscope.png)
+
 ## Opening the Vectorscope
 
 Press `Y` to toggle the vectorscope. It appears as a floating overlay. Press `Y` again or `Escape` to close it.

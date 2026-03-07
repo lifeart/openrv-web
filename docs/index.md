@@ -5,6 +5,9 @@ hero:
   name: OpenRV Web
   text: Web-based VFX Image & Sequence Viewer
   tagline: A browser-native viewer inspired by OpenRV for reviewing images, sequences, and video with professional color tools.
+  image:
+    src: /assets/screenshots/02-video-loaded.png
+    alt: OpenRV Web with video loaded
   actions:
     - theme: brand
       text: Get Started

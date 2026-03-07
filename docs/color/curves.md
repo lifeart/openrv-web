@@ -8,6 +8,8 @@ The curves editor provides spline-based tonal adjustments for precise control ov
 
 Press `U` to toggle the curves panel. The panel can also be opened from the Color tab context toolbar by clicking the **Curves** button. The panel is draggable and can be repositioned by dragging its header bar. Press `Escape` or click the close button to dismiss.
 
+![Curves editor panel](/assets/screenshots/24-curves-editor.png)
+
 ---
 
 ## Channel Tabs

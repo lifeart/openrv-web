@@ -24,6 +24,8 @@ Click the **Open** button (folder icon) in the header bar to open the file picke
 
 Load an OpenRV `.rv` or `.gto` session file directly. OpenRV Web parses the session graph and restores playback ranges, channel selection, and paint annotations from the original session.
 
+![OpenRV Web with video loaded](/assets/screenshots/02-video-loaded.png)
+
 ## Basic Playback Controls
 
 Once media is loaded, the timeline appears at the bottom and playback controls become active.

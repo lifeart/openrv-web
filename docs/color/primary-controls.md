@@ -8,6 +8,8 @@ OpenRV Web provides a comprehensive set of primary color controls for real-time 
 
 Press `C` to toggle the color controls panel, or navigate to the **Color** tab (key `2`) and click the **Color** button. The panel appears as a floating dropdown with all adjustment sliders. Press `Escape` to close.
 
+![Color controls panel](/assets/screenshots/09-color-panel.png)
+
 ---
 
 ## Available Controls

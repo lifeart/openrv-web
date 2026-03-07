@@ -2,6 +2,8 @@
 
 Tone mapping compresses the dynamic range of scene-referred linear light values into the displayable range of a monitor. Without tone mapping, HDR content and even well-exposed linear renders appear with clipped highlights and crushed detail. OpenRV Web provides multiple tone mapping operators (TMOs), each with distinct characteristics suited to different content types.
 
+![Tone mapping controls](/assets/screenshots/23-tone-mapping.png)
+
 ---
 
 ## Why Tone Map

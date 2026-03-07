@@ -12,9 +12,13 @@ The histogram supports several display modes:
 
 ### RGB Mode
 
+![Histogram in RGB mode](/assets/screenshots/11-histogram-rgb.png)
+
 Displays overlapping red, green, and blue histograms on the same graph. This mode reveals the relative distribution of each color channel and makes color casts immediately visible. For example, if the red histogram is shifted to the right compared to green and blue, the image has a warm (red) cast.
 
 ### Luminance Mode
+
+![Histogram in luminance mode](/assets/screenshots/12-histogram-luminance.png)
 
 Displays a single white histogram representing the perceived brightness of each pixel, calculated using Rec.709 luminance coefficients (0.2126R + 0.7152G + 0.0722B). This mode is useful for evaluating overall exposure without regard to color.
 

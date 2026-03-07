@@ -23,6 +23,8 @@ Toggle the timecode overlay from the Overlays menu or the context toolbar.
 
 ## Safe Areas
 
+![Safe area guides overlay](/assets/screenshots/25-safe-areas.png)
+
 Safe area overlays mark the broadcast-safe and title-safe regions of the frame, following industry standards for television and streaming delivery.
 
 ### Standard Safe Areas

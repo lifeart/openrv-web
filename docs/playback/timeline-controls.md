@@ -2,6 +2,8 @@
 
 The timeline is the primary tool for navigating through frames, setting playback ranges, and managing markers. It appears at the bottom of the interface whenever media is loaded.
 
+![Timeline with markers and playback controls](/assets/screenshots/10-timeline-markers.png)
+
 ## Timeline Overview
 
 The timeline is an 80-pixel-tall canvas-based component that displays:

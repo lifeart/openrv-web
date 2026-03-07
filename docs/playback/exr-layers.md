@@ -2,6 +2,8 @@
 
 OpenRV EXR support extends beyond simple image display to include multi-layer files with AOV (Arbitrary Output Variable) selection and channel remapping. This workflow is essential for VFX compositing review where artists need to inspect individual render passes.
 
+![EXR file loaded in OpenRV Web](/assets/screenshots/22-exr-loaded.png)
+
 ## Multi-Layer EXR Overview
 
 OpenRV Web decodes EXR files using a WebAssembly decoder with Float32 HDR precision. Multi-layer EXR files contain multiple named layers, each representing a different render pass or data channel. Common layers include:
