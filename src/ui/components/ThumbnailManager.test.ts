@@ -686,11 +686,12 @@ describe('ThumbnailManager', () => {
       const mockGetContext = vi.fn(() => ({
         drawImage: vi.fn(),
       }));
-      globalThis.OffscreenCanvas = vi.fn((w: number, h: number) => ({
-        width: w,
-        height: h,
-        getContext: mockGetContext,
-      })) as any;
+      globalThis.OffscreenCanvas = class {
+        width: number;
+        height: number;
+        getContext = mockGetContext;
+        constructor(w: number, h: number) { this.width = w; this.height = h; }
+      } as any;
 
       stub.currentSource = {
         name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 10,
@@ -720,10 +721,12 @@ describe('ThumbnailManager', () => {
       const mockGetContext = vi.fn(() => ({
         drawImage: drawImageSpy,
       }));
-      globalThis.OffscreenCanvas = vi.fn((w: number, h: number) => ({
-        width: w, height: h,
-        getContext: mockGetContext,
-      })) as any;
+      globalThis.OffscreenCanvas = class {
+        width: number;
+        height: number;
+        getContext = mockGetContext;
+        constructor(w: number, h: number) { this.width = w; this.height = h; }
+      } as any;
 
       stub.currentSource = {
         name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 5,
@@ -768,10 +771,12 @@ describe('ThumbnailManager', () => {
 
     it('THUMB-004: drawThumbnails works with OffscreenCanvas cache entries', async () => {
       const origOffscreen = globalThis.OffscreenCanvas;
-      globalThis.OffscreenCanvas = vi.fn((w: number, h: number) => ({
-        width: w, height: h,
-        getContext: vi.fn(() => ({ drawImage: vi.fn() })),
-      })) as any;
+      globalThis.OffscreenCanvas = class {
+        width: number;
+        height: number;
+        getContext = vi.fn(() => ({ drawImage: vi.fn() }));
+        constructor(w: number, h: number) { this.width = w; this.height = h; }
+      } as any;
 
       stub.currentSource = {
         name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 3,

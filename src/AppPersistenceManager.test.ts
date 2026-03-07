@@ -33,12 +33,16 @@ vi.mock('./core/session/SessionGTOExporter', () => ({
 }));
 
 vi.mock('./core/session/SessionGTOStore', () => ({
-  SessionGTOStore: vi.fn().mockImplementation((data: any) => ({
-    _data: data,
-    updateFromState: vi.fn(),
-    saveToFile: vi.fn(async () => {}),
-    toGTOData: vi.fn(() => data),
-  })),
+  SessionGTOStore: class {
+    _data: any;
+    updateFromState = vi.fn();
+    saveToFile = vi.fn(async () => {});
+    toGTOData: any;
+    constructor(data: any) {
+      this._data = data;
+      this.toGTOData = vi.fn(() => data);
+    }
+  },
 }));
 
 vi.mock('./ui/components/shared/Modal', () => ({

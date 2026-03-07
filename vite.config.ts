@@ -5,7 +5,7 @@ export default defineConfig({
   base: process.env.BASE_URL || '/',
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
+      '@': resolve(import.meta.dirname, 'src'),
     },
   },
   worker: {

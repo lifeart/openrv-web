@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { installGlobalErrorHandler, _resetForTesting } from './globalErrorHandler';
-import { Logger, LogLevel } from './Logger';
+import { Logger, LogLevel, type LogSink } from './Logger';
 
 describe('globalErrorHandler', () => {
-  let sink: ReturnType<typeof vi.fn>;
+  let sink: Mock<LogSink>;
 
   beforeEach(() => {
     _resetForTesting();

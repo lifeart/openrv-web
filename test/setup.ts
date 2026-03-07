@@ -5,6 +5,56 @@
 
 import { vi } from 'vitest';
 
+// Workaround for jsdom 28 CSS parsing bugs (https://github.com/jsdom/jsdom/issues/4095):
+// 1. `border` shorthand with CSS var() values silently rejects entire cssText
+// 2. `background` shorthand followed by any other property silently rejects entire cssText
+// Caused by @acemir/cssom introduced in jsdom 27.1.0. Remove when fixed upstream.
+const cssTextDesc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'cssText');
+if (cssTextDesc && cssTextDesc.set) {
+  const originalSet = cssTextDesc.set;
+  Object.defineProperty(CSSStyleDeclaration.prototype, 'cssText', {
+    ...cssTextDesc,
+    set(value: string) {
+      let fixed = value;
+
+      // Fix 1: extract `border[-side]: <width> <style> var(...)` declarations
+      // and apply them individually after the main cssText, because jsdom 28
+      // rejects border shorthand with var() values entirely, and expanding to
+      // three longhands causes jsdom to re-collapse and lose borderColor.
+      const borderDecls: Array<{ side: string; width: string; style: string; color: string }> = [];
+      fixed = fixed.replace(
+        /\bborder(?:-(top|right|bottom|left))?\s*:\s*([^;]*?)\s+(solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden)\s+(var\([^)]+\))\s*;?/g,
+        (_match, side: string | undefined, width: string, style: string, color: string) => {
+          borderDecls.push({ side: side || '', width, style, color });
+          return '';
+        }
+      );
+
+      // Fix 2: move `background` shorthand to end of cssText.
+      // `background: <value>` followed by any other property breaks in jsdom 28.
+      // Moving it to the end avoids the parsing bug while preserving style.background readability.
+      const bgMatches: string[] = [];
+      fixed = fixed.replace(
+        /\bbackground\s*:\s*[^;]+;/g,
+        (match) => { bgMatches.push(match); return ''; }
+      );
+      if (bgMatches.length > 0) {
+        fixed = fixed + ' ' + bgMatches.join(' ');
+      }
+
+      originalSet.call(this, fixed);
+
+      // Apply border declarations individually to avoid jsdom 28 collapse bug
+      for (const { side, width, style, color } of borderDecls) {
+        const s = side ? `-${side}` : '';
+        (this as CSSStyleDeclaration).setProperty(`border${s}-width`, width);
+        (this as CSSStyleDeclaration).setProperty(`border${s}-style`, style);
+        (this as CSSStyleDeclaration).setProperty(`border${s}-color`, color);
+      }
+    },
+  });
+}
+
 // Polyfill ImageData if not available in jsdom
 if (typeof globalThis.ImageData === 'undefined') {
   class ImageDataPolyfill {
@@ -162,27 +212,28 @@ global.requestAnimationFrame = vi.fn((callback) => {
 global.cancelAnimationFrame = vi.fn();
 
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+global.ResizeObserver = class ResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  constructor(_callback?: ResizeObserverCallback) {}
+} as unknown as typeof globalThis.ResizeObserver;
 
 // Mock AudioContext
-global.AudioContext = vi.fn().mockImplementation(() => ({
-  createMediaElementSource: vi.fn(() => ({
+global.AudioContext = class MockAudioContext {
+  createMediaElementSource = vi.fn(() => ({
     connect: vi.fn(),
-  })),
-  createAnalyser: vi.fn(() => ({
+  }));
+  createAnalyser = vi.fn(() => ({
     connect: vi.fn(),
     fftSize: 2048,
     frequencyBinCount: 1024,
     getByteFrequencyData: vi.fn(),
     getByteTimeDomainData: vi.fn(),
-  })),
-  destination: {},
-  close: vi.fn(),
-}));
+  }));
+  destination = {};
+  close = vi.fn();
+} as unknown as typeof globalThis.AudioContext;
 
 // Mock Image loading
 Object.defineProperty(global.Image.prototype, 'src', {

@@ -5,7 +5,7 @@
  * and handleEXRLayerChange functions.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import {
   handleSourceLoaded,
   updateStackControlSources,
@@ -80,12 +80,12 @@ function createMockContext(overrides: {
 }
 
 describe('handleSourceLoaded', () => {
-  let updateInfoPanel: ReturnType<typeof vi.fn>;
-  let updateStackCtrl: ReturnType<typeof vi.fn>;
-  let updateEXR: ReturnType<typeof vi.fn>;
-  let updateHistogram: ReturnType<typeof vi.fn>;
-  let updateWaveform: ReturnType<typeof vi.fn>;
-  let updateVectorscope: ReturnType<typeof vi.fn>;
+  let updateInfoPanel: Mock<() => void>;
+  let updateStackCtrl: Mock<() => void>;
+  let updateEXR: Mock<() => void>;
+  let updateHistogram: Mock<() => void>;
+  let updateWaveform: Mock<() => void>;
+  let updateVectorscope: Mock<() => void>;
 
   beforeEach(() => {
     vi.useFakeTimers();

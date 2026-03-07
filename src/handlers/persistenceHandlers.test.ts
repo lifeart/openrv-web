@@ -5,7 +5,7 @@
  * paint effects, matte settings, metadata, and settings restoration.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { bindPersistenceHandlers } from './persistenceHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { Session, SessionEvents } from '../core/session/Session';
@@ -43,10 +43,10 @@ describe('bindPersistenceHandlers', () => {
   let context: SessionBridgeContext;
   let session: Session;
   let handlers: EventHandlers;
-  let updateHistogram: ReturnType<typeof vi.fn>;
-  let updateWaveform: ReturnType<typeof vi.fn>;
-  let updateVectorscope: ReturnType<typeof vi.fn>;
-  let updateGamutDiagram: ReturnType<typeof vi.fn>;
+  let updateHistogram: Mock<() => void>;
+  let updateWaveform: Mock<() => void>;
+  let updateVectorscope: Mock<() => void>;
+  let updateGamutDiagram: Mock<() => void>;
 
   beforeEach(() => {
     context = createMockSessionBridgeContext();

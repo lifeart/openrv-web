@@ -2,13 +2,13 @@
  * Custom Key Bindings Manager Tests
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import { CustomKeyBindingsManager } from './CustomKeyBindingsManager';
 import { DEFAULT_KEY_BINDINGS } from './KeyBindings';
 
 describe('CustomKeyBindingsManager', () => {
   let manager: CustomKeyBindingsManager;
-  let onBindingsChanged: ReturnType<typeof vi.fn>;
+  let onBindingsChanged: Mock<() => void>;
 
   beforeEach(() => {
     // Clear localStorage before each test

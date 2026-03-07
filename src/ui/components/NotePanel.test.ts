@@ -802,7 +802,7 @@ describe('NotePanel', () => {
       expect(entries.length).toBe(150);
     });
 
-    it('relative performance: 150 notes render in < 10x time of 15', () => {
+    it('relative performance: 150 notes render in < 10x time of 15', { timeout: 60000 }, () => {
       // Measure 15 notes
       for (let i = 0; i < 15; i++) {
         session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');

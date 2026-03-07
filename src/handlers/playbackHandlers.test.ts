@@ -5,13 +5,13 @@
  * prerender buffer updates, video preload management, and scope refresh on stop.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { handlePlaybackChanged } from './playbackHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
 function createMockContext(overrides: {
   playDirection?: number;
-  currentSource?: { videoSourceNode?: { stopPlaybackPreload: ReturnType<typeof vi.fn> } } | null;
+  currentSource?: { videoSourceNode?: { stopPlaybackPreload: Mock<() => void> } } | null;
 } = {}): SessionBridgeContext {
   const histogram = { setPlaybackMode: vi.fn() };
   const waveform = { setPlaybackMode: vi.fn() };
@@ -32,9 +32,9 @@ function createMockContext(overrides: {
 }
 
 describe('handlePlaybackChanged', () => {
-  let updateHistogram: ReturnType<typeof vi.fn>;
-  let updateWaveform: ReturnType<typeof vi.fn>;
-  let updateVectorscope: ReturnType<typeof vi.fn>;
+  let updateHistogram: Mock<() => void>;
+  let updateWaveform: Mock<() => void>;
+  let updateVectorscope: Mock<() => void>;
 
   beforeEach(() => {
     updateHistogram = vi.fn();

@@ -93,7 +93,7 @@ describe('Session', () => {
 
     it('loadImage succeeds', async () => {
       const img = { crossOrigin: '', src: '', onload: null as any, onerror: null as any, width: 100, height: 100 };
-      vi.stubGlobal('Image', vi.fn(() => img));
+      vi.stubGlobal('Image', vi.fn(function() { return img; }));
 
       const promise = session.loadImage('test.png', 'url');
       img.onload();
@@ -105,7 +105,7 @@ describe('Session', () => {
 
     it('loadImage fails', async () => {
       const img = { src: '', onload: null as any, onerror: null as any };
-      vi.stubGlobal('Image', vi.fn(() => img));
+      vi.stubGlobal('Image', vi.fn(function() { return img; }));
 
       const promise = session.loadImage('test.png', 'url');
       img.onerror();

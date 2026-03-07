@@ -15,12 +15,12 @@ import { LuminanceAnalyzer } from './LuminanceAnalyzer';
 
 // Mock the ShaderProgram class
 vi.mock('./ShaderProgram', () => ({
-  ShaderProgram: vi.fn().mockImplementation(() => ({
-    use: vi.fn(),
-    setUniformInt: vi.fn(),
-    getAttributeLocation: vi.fn().mockReturnValue(0),
-    dispose: vi.fn(),
-  })),
+  ShaderProgram: class MockShaderProgram {
+    use = vi.fn();
+    setUniformInt = vi.fn();
+    getAttributeLocation = vi.fn().mockReturnValue(0);
+    dispose = vi.fn();
+  },
 }));
 
 // Mock the GLSL import

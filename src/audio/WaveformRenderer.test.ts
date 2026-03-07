@@ -115,7 +115,7 @@ describe('WaveformRenderer', () => {
     };
 
     beforeEach(() => {
-      vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
+      vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -342,7 +342,7 @@ describe('WaveformRenderer', () => {
     };
 
     beforeEach(() => {
-      vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
+      vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         status: 200,

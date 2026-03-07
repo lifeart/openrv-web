@@ -6,23 +6,23 @@ import { SequenceRepresentationLoader } from './SequenceRepresentationLoader';
 
 // Mock the source nodes used by loaders
 vi.mock('../../../nodes/sources/FileSourceNode', () => ({
-  FileSourceNode: vi.fn().mockImplementation(() => ({
-    loadFile: vi.fn().mockResolvedValue(undefined),
-    isHDR: vi.fn().mockReturnValue(false),
-    width: 1920,
-    height: 1080,
-    properties: { getValue: vi.fn() },
-    dispose: vi.fn(),
-  })),
+  FileSourceNode: class MockFileSourceNode {
+    loadFile = vi.fn().mockResolvedValue(undefined);
+    isHDR = vi.fn().mockReturnValue(false);
+    width = 1920;
+    height = 1080;
+    properties = { getValue: vi.fn() };
+    dispose = vi.fn();
+  },
 }));
 
 vi.mock('../../../nodes/sources/VideoSourceNode', () => ({
-  VideoSourceNode: vi.fn().mockImplementation(() => ({
-    loadFile: vi.fn().mockResolvedValue({ success: true }),
-    isHDR: vi.fn().mockReturnValue(false),
-    getMetadata: vi.fn().mockReturnValue({ width: 1920, height: 1080, duration: 100, fps: 24 }),
-    dispose: vi.fn(),
-  })),
+  VideoSourceNode: class MockVideoSourceNode {
+    loadFile = vi.fn().mockResolvedValue({ success: true });
+    isHDR = vi.fn().mockReturnValue(false);
+    getMetadata = vi.fn().mockReturnValue({ width: 1920, height: 1080, duration: 100, fps: 24 });
+    dispose = vi.fn();
+  },
 }));
 
 vi.mock('../../../utils/media/SequenceLoader', () => ({

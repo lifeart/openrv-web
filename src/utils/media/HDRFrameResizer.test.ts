@@ -32,20 +32,17 @@ function setupOffscreenCanvasMock(contextReturnsNull = false) {
     drawImage: vi.fn(),
   };
 
-  const MockOffscreenCanvas = vi.fn().mockImplementation((w: number, h: number) => {
-    const canvas = {
-      width: w,
-      height: h,
-      getContext: vi.fn().mockReturnValue(contextReturnsNull ? null : mockCtx),
-    };
-    return canvas;
+  const MockOffscreenCanvas = vi.fn(function(this: any, w: number, h: number) {
+    this.width = w;
+    this.height = h;
+    this.getContext = vi.fn().mockReturnValue(contextReturnsNull ? null : mockCtx);
   });
 
   vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
 
   // Mock VideoFrame constructor for the resized frame
   const originalVideoFrame = globalThis.VideoFrame;
-  const MockVideoFrame = vi.fn().mockImplementation((_source: unknown, opts: { timestamp: number }) => {
+  const MockVideoFrame = vi.fn(function(this: any, _source: unknown, opts: { timestamp: number }) {
     return createMockVideoFrame({
       displayWidth: 960,
       displayHeight: 540,
@@ -226,9 +223,7 @@ describe('HDRFrameResizer', () => {
 
     it('should return original frame when VideoFrame constructor throws', () => {
       setupOffscreenCanvasMock();
-      vi.stubGlobal('VideoFrame', vi.fn().mockImplementation(() => {
-        throw new Error('VideoFrame construction failed');
-      }));
+      vi.stubGlobal('VideoFrame', vi.fn(function() { throw new Error('VideoFrame construction failed'); }));
       const resizer = new HDRFrameResizer('rec2100');
       const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160 });
 
