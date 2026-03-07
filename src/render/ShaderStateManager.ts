@@ -17,588 +17,57 @@ import type { ShaderProgram } from './ShaderProgram';
 import type { ColorPrimaries } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ToneMappingOperator, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import { PATTERN_COLORS } from '../core/types/background';
-import { getHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState, DisplayColorConfig } from './RenderState';
-import { DISPLAY_TRANSFER_SRGB, LUT_1D_SIZE, RGBA_CHANNELS } from '../config/RenderConfig';
+import { LUT_1D_SIZE, RGBA_CHANNELS } from '../config/RenderConfig';
 import type { StateAccessor, CurvesLUTSnapshot, FalseColorLUTSnapshot, LUT3DSnapshot } from './StateAccessor';
 
-// ---------------------------------------------------------------------------
-// Dirty flag constants
-// ---------------------------------------------------------------------------
-
-export const DIRTY_COLOR = 'color';
-export const DIRTY_TONE_MAPPING = 'toneMapping';
-export const DIRTY_CDL = 'cdl';
-export const DIRTY_COLOR_WHEELS = 'colorWheels';
-export const DIRTY_HSL = 'hsl';
-export const DIRTY_ZEBRA = 'zebra';
-export const DIRTY_CHANNELS = 'channels';
-export const DIRTY_BACKGROUND = 'background';
-export const DIRTY_DISPLAY = 'display';
-export const DIRTY_CLARITY = 'clarity';
-export const DIRTY_SHARPEN = 'sharpen';
-export const DIRTY_FALSE_COLOR = 'falseColor';
-export const DIRTY_CURVES = 'curves';
-export const DIRTY_VIBRANCE = 'vibrance';
-export const DIRTY_HIGHLIGHTS_SHADOWS = 'highlightsShadows';
-export const DIRTY_INVERSION = 'inversion';
-export const DIRTY_LUT3D = 'lut3d';
-export const DIRTY_GAMUT_MAPPING = 'gamutMapping';
-export const DIRTY_DEINTERLACE = 'deinterlace';
-export const DIRTY_FILM_EMULATION = 'filmEmulation';
-export const DIRTY_PERSPECTIVE = 'perspective';
-export const DIRTY_LINEARIZE = 'linearize';
-export const DIRTY_INLINE_LUT = 'inlineLUT';
-export const DIRTY_OUT_OF_RANGE = 'outOfRange';
-export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
-export const DIRTY_PREMULT = 'premult';
-export const DIRTY_DITHER = 'dither';
-export const DIRTY_SPHERICAL = 'spherical';
-export const DIRTY_COLOR_PRIMARIES = 'colorPrimaries';
-export const DIRTY_CONTOUR = 'contour';
-export const DIRTY_FILE_LUT3D = 'fileLut3d';
-export const DIRTY_DISPLAY_LUT3D = 'displayLut3d';
-
-/** All dirty flag names -- used to initialize on first render so all uniforms are set. */
-export const ALL_DIRTY_FLAGS = [
+// Re-export from extracted modules for backward compatibility
+export {
   DIRTY_COLOR, DIRTY_TONE_MAPPING, DIRTY_CDL, DIRTY_COLOR_WHEELS,
   DIRTY_HSL, DIRTY_ZEBRA, DIRTY_CHANNELS, DIRTY_BACKGROUND,
   DIRTY_DISPLAY, DIRTY_CLARITY, DIRTY_SHARPEN, DIRTY_FALSE_COLOR,
   DIRTY_CURVES, DIRTY_VIBRANCE, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_INVERSION,
   DIRTY_LUT3D, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE, DIRTY_FILM_EMULATION,
-  DIRTY_PERSPECTIVE,
-  DIRTY_LINEARIZE,
-  DIRTY_INLINE_LUT,
-  DIRTY_OUT_OF_RANGE,
-  DIRTY_CHANNEL_SWIZZLE,
-  DIRTY_PREMULT,
-  DIRTY_DITHER,
-  DIRTY_SPHERICAL,
-  DIRTY_COLOR_PRIMARIES,
-  DIRTY_CONTOUR,
-  DIRTY_FILE_LUT3D,
-  DIRTY_DISPLAY_LUT3D,
-] as const;
+  DIRTY_PERSPECTIVE, DIRTY_LINEARIZE, DIRTY_INLINE_LUT, DIRTY_OUT_OF_RANGE,
+  DIRTY_CHANNEL_SWIZZLE, DIRTY_PREMULT, DIRTY_DITHER, DIRTY_SPHERICAL,
+  DIRTY_COLOR_PRIMARIES, DIRTY_CONTOUR, DIRTY_FILE_LUT3D, DIRTY_DISPLAY_LUT3D,
+  ALL_DIRTY_FLAGS,
+  TONE_MAPPING_OPERATOR_CODES,
+  BG_PATTERN_NONE, BG_PATTERN_SOLID, BG_PATTERN_CHECKER, BG_PATTERN_CROSSHATCH,
+  CHANNEL_MODE_CODES, GAMUT_CODES, GAMUT_MODE_CODES,
+  COLOR_PRIMARIES_MATRICES,
+  DEFAULT_ZEBRA_HIGH_THRESHOLD, DEFAULT_ZEBRA_LOW_THRESHOLD, DEFAULT_CHECKER_SIZE,
+} from './ShaderConstants';
 
-// ---------------------------------------------------------------------------
-// Shader constant codes
-// ---------------------------------------------------------------------------
+export type { InternalShaderState, TextureCallbacks } from './ShaderStateTypes';
+export { createDefaultInternalState } from './ShaderStateTypes';
 
-/** Tone mapping operator integer codes for shader uniform */
-export const TONE_MAPPING_OPERATOR_CODES: Record<ToneMappingOperator, number> = {
-  'off': 0,
-  'reinhard': 1,
-  'filmic': 2,
-  'aces': 3,
-  'agx': 4,
-  'pbrNeutral': 5,
-  'gt': 6,
-  'acesHill': 7,
-  'drago': 8,
-};
+import { ALL_DIRTY_FLAGS, DIRTY_COLOR, DIRTY_TONE_MAPPING, DIRTY_CDL,
+  DIRTY_COLOR_WHEELS, DIRTY_CURVES, DIRTY_FALSE_COLOR, DIRTY_ZEBRA,
+  DIRTY_CHANNELS, DIRTY_LUT3D, DIRTY_FILE_LUT3D, DIRTY_DISPLAY_LUT3D,
+  DIRTY_DISPLAY, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_VIBRANCE, DIRTY_CLARITY,
+  DIRTY_SHARPEN, DIRTY_HSL, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE,
+  DIRTY_FILM_EMULATION, DIRTY_PERSPECTIVE, DIRTY_LINEARIZE, DIRTY_INLINE_LUT,
+  DIRTY_OUT_OF_RANGE, DIRTY_CHANNEL_SWIZZLE, DIRTY_PREMULT, DIRTY_DITHER,
+  DIRTY_SPHERICAL, DIRTY_COLOR_PRIMARIES, DIRTY_CONTOUR, DIRTY_INVERSION, DIRTY_BACKGROUND,
+  BG_PATTERN_NONE, BG_PATTERN_SOLID, BG_PATTERN_CHECKER, BG_PATTERN_CROSSHATCH,
+  CHANNEL_MODE_CODES, GAMUT_CODES, GAMUT_MODE_CODES,
+  COLOR_PRIMARIES_MATRICES,
+  DEFAULT_CHECKER_SIZE,
+} from './ShaderConstants';
 
-/** Gamut identifier integer codes for shader uniform */
-const GAMUT_CODES: Record<GamutIdentifier, number> = {
-  'srgb': 0,
-  'rec2020': 1,
-  'display-p3': 2,
-};
+import type { InternalShaderState, TextureCallbacks } from './ShaderStateTypes';
+import { createDefaultInternalState, hexToRgbInto, assignColorAdjustments, assignToneMappingState } from './ShaderStateTypes';
 
-/** Gamut mapping mode codes for shader uniform */
-const GAMUT_MODE_CODES: Record<string, number> = {
-  'clip': 0,
-  'compress': 1,
-};
-
-/**
- * Color primaries conversion matrices (column-major for GLSL mat3).
- * Derived from CIE xy chromaticity coordinates and the Bradford chromatic
- * adaptation transform.
- */
-const COLOR_PRIMARIES_MATRICES = {
-  IDENTITY: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-  // BT.2020 → BT.709/sRGB
-  REC2020_TO_SRGB: new Float32Array([
-     1.6605, -0.1246, -0.0182,
-    -0.5877,  1.1329, -0.1006,
-    -0.0728, -0.0083,  1.1187,
-  ]),
-  // Display-P3 → BT.709/sRGB
-  P3_TO_SRGB: new Float32Array([
-     1.2249, -0.0420, -0.0197,
-    -0.2247,  1.0419, -0.0786,
-    -0.0002,  0.0001,  1.0983,
-  ]),
-  // BT.709/sRGB → Display-P3
-  SRGB_TO_P3: new Float32Array([
-     0.8225,  0.0332,  0.0171,
-     0.1774,  0.9669,  0.0724,
-     0.0001, -0.0001,  0.9105,
-  ]),
-  // BT.709/sRGB → BT.2020
-  SRGB_TO_REC2020: new Float32Array([
-     0.6274,  0.0691,  0.0164,
-     0.3293,  0.9195,  0.0880,
-     0.0433,  0.0114,  0.8956,
-  ]),
-} as const;
-
-/** Map ChannelMode string to shader integer */
-const CHANNEL_MODE_CODES: Record<ChannelMode, number> = {
-  'rgb': 0,
-  'red': 1,
-  'green': 2,
-  'blue': 3,
-  'alpha': 4,
-  'luminance': 5,
-};
-
-// --- Background pattern shader codes ---
-const BG_PATTERN_NONE = 0;
-const BG_PATTERN_SOLID = 1;
-const BG_PATTERN_CHECKER = 2;
-const BG_PATTERN_CROSSHATCH = 3;
-
-// --- Default thresholds and sizes ---
-const DEFAULT_ZEBRA_HIGH_THRESHOLD = 0.95;
-const DEFAULT_ZEBRA_LOW_THRESHOLD = 0.05;
-const DEFAULT_CHECKER_SIZE = 16;
-
-/** Compare two Float32Array instances element-by-element. */
-function float32ArrayEquals(a: Float32Array, b: Float32Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
-/** Parse hex color into an existing tuple (avoids allocation). */
-function hexToRgbInto(hex: string, out: [number, number, number]): void {
-  let h = hex.replace('#', '');
-  if (h.length === 3) {
-    h = h[0]! + h[0]! + h[1]! + h[1]! + h[2]! + h[2]!;
-  }
-  const num = parseInt(h, 16);
-  out[0] = (num >> 16) / 255;
-  out[1] = ((num >> 8) & 0xff) / 255;
-  out[2] = (num & 0xff) / 255;
-}
-
-/** Copy all properties from src to dst (shallow, same-shape objects). */
-function assignColorAdjustments(dst: ColorAdjustments, src: Readonly<ColorAdjustments>): void {
-  dst.exposure = src.exposure;
-  dst.gamma = src.gamma;
-  dst.saturation = src.saturation;
-  dst.vibrance = src.vibrance;
-  dst.vibranceSkinProtection = src.vibranceSkinProtection;
-  dst.contrast = src.contrast;
-  dst.clarity = src.clarity;
-  dst.hueRotation = src.hueRotation;
-  dst.temperature = src.temperature;
-  dst.tint = src.tint;
-  dst.brightness = src.brightness;
-  dst.highlights = src.highlights;
-  dst.shadows = src.shadows;
-  dst.whites = src.whites;
-  dst.blacks = src.blacks;
-  dst.exposureRGB = src.exposureRGB;
-  dst.gammaRGB = src.gammaRGB;
-  dst.contrastRGB = src.contrastRGB;
-  dst.scale = src.scale;
-  dst.scaleRGB = src.scaleRGB;
-  dst.offset = src.offset;
-  dst.offsetRGB = src.offsetRGB;
-  dst.inlineLUT = src.inlineLUT;
-  dst.lutChannels = src.lutChannels;
-}
-
-/** Copy all properties from src to dst for ToneMappingState. */
-function assignToneMappingState(dst: ToneMappingState, src: Readonly<ToneMappingState>): void {
-  dst.enabled = src.enabled;
-  dst.operator = src.operator;
-  dst.reinhardWhitePoint = src.reinhardWhitePoint;
-  dst.filmicExposureBias = src.filmicExposureBias;
-  dst.filmicWhitePoint = src.filmicWhitePoint;
-  dst.dragoBias = src.dragoBias;
-  dst.dragoLwa = src.dragoLwa;
-  dst.dragoLmax = src.dragoLmax;
-  dst.dragoBrightness = src.dragoBrightness;
-}
-
-// ---------------------------------------------------------------------------
-// Internal "flat" state mirroring what Renderer used to hold
-// ---------------------------------------------------------------------------
-
-/** Internal flattened state that maps 1:1 to shader uniforms. */
-export interface InternalShaderState {
-  // Color adjustments
-  colorAdjustments: ColorAdjustments;
-
-  // Color inversion
-  colorInversionEnabled: boolean;
-
-  // Tone mapping
-  toneMappingState: ToneMappingState;
-
-  // Background pattern
-  bgPatternCode: number;
-  bgColor1: [number, number, number];
-  bgColor2: [number, number, number];
-  bgCheckerSize: number;
-
-  // CDL
-  cdlEnabled: boolean;
-  cdlSlope: [number, number, number];
-  cdlOffset: [number, number, number];
-  cdlPower: [number, number, number];
-  cdlSaturation: number;
-  cdlColorspace: number;  // 0=rec709/direct, 1=ACEScct
-
-  // Curves
-  curvesEnabled: boolean;
-  curvesLUTData: Uint8Array | null;
-  curvesLUTDirty: boolean;
-
-  // Color Wheels
-  colorWheelsEnabled: boolean;
-  wheelLift: [number, number, number, number];
-  wheelGamma: [number, number, number, number];
-  wheelGain: [number, number, number, number];
-
-  // False Color
-  falseColorEnabled: boolean;
-  falseColorLUTData: Uint8Array | null;
-  falseColorLUTDirty: boolean;
-
-  // Zebra
-  zebraEnabled: boolean;
-  zebraHighThreshold: number;
-  zebraLowThreshold: number;
-  zebraHighEnabled: boolean;
-  zebraLowEnabled: boolean;
-  zebraTime: number;
-
-  // Channel mode
-  channelModeCode: number;
-
-  // Look LUT (renamed from lut3D -- per-source creative grade)
-  lut3DEnabled: boolean;
-  lut3DIntensity: number;
-  lut3DSize: number;
-  lut3DDirty: boolean;
-  lut3DData: Float32Array | null;
-  lookLUT3DDomainMin: [number, number, number];
-  lookLUT3DDomainMax: [number, number, number];
-
-  // File LUT (per-source, applied after EOTF, before input primaries)
-  fileLUT3DEnabled: boolean;
-  fileLUT3DIntensity: number;
-  fileLUT3DSize: number;
-  fileLUT3DDirty: boolean;
-  fileLUT3DData: Float32Array | null;
-  fileLUT3DDomainMin: [number, number, number];
-  fileLUT3DDomainMax: [number, number, number];
-
-  // Display LUT (session-wide, after output primaries, before display transfer)
-  displayLUT3DEnabled: boolean;
-  displayLUT3DIntensity: number;
-  displayLUT3DSize: number;
-  displayLUT3DDirty: boolean;
-  displayLUT3DData: Float32Array | null;
-  displayLUT3DDomainMin: [number, number, number];
-  displayLUT3DDomainMax: [number, number, number];
-
-  // Display color management
-  displayTransferCode: number;
-  displayGammaOverride: number;
-  displayBrightnessMultiplier: number;
-  displayCustomGamma: number;
-
-  // Highlights/Shadows
-  hsEnabled: boolean;
-  highlightsValue: number;
-  shadowsValue: number;
-  whitesValue: number;
-  blacksValue: number;
-
-  // Vibrance
-  vibranceEnabled: boolean;
-  vibranceValue: number;
-  vibranceSkinProtection: boolean;
-
-  // Clarity
-  clarityEnabled: boolean;
-  clarityValue: number;
-
-  // Sharpen
-  sharpenEnabled: boolean;
-  sharpenAmount: number;
-
-  // Texel size (set by Renderer before applyUniforms)
-  texelSize: [number, number];
-
-  // HSL Qualifier
-  hslQualifierEnabled: boolean;
-  hslHueCenter: number;
-  hslHueWidth: number;
-  hslHueSoftness: number;
-  hslSatCenter: number;
-  hslSatWidth: number;
-  hslSatSoftness: number;
-  hslLumCenter: number;
-  hslLumWidth: number;
-  hslLumSoftness: number;
-  hslCorrHueShift: number;
-  hslCorrSatScale: number;
-  hslCorrLumScale: number;
-  hslInvert: boolean;
-  hslMattePreview: boolean;
-
-  // Gamut Mapping
-  gamutMappingEnabled: boolean;
-  gamutMappingModeCode: number;
-  gamutSourceCode: number;
-  gamutTargetCode: number;
-  gamutHighlightEnabled: boolean;
-
-  // Deinterlace
-  deinterlaceEnabled: boolean;
-  deinterlaceMethod: number;    // 0=bob, 1=weave, 2=blend
-  deinterlaceFieldOrder: number; // 0=tff, 1=bff
-
-  // Film Emulation
-  filmEnabled: boolean;
-  filmIntensity: number;
-  filmSaturation: number;
-  filmGrainIntensity: number;
-  filmGrainSeed: number;
-  filmLUTData: Uint8Array | null;
-  filmLUTDirty: boolean;
-
-  // Perspective Correction
-  perspectiveEnabled: boolean;
-  perspectiveInvH: Float32Array;
-  perspectiveQuality: number;
-
-  // Linearize (RVLinearize log-to-linear conversion)
-  linearizeLogType: number;  // 0=none, 1=cineon, 2=viper, 3=logc3
-  linearizeSRGB2linear: boolean;
-  linearizeRec709ToLinear: boolean;
-  linearizeFileGamma: number;
-  linearizeAlphaType: number;
-
-  // Inline 1D LUT (from RVColor luminanceLUT)
-  inlineLUTEnabled: boolean;
-  inlineLUTChannels: number;   // 1=luminance, 3=per-channel RGB
-  inlineLUTSize: number;       // number of entries per channel
-  inlineLUTData: Float32Array | null;
-  inlineLUTDirty: boolean;
-
-  // Out-of-range visualization mode
-  outOfRange: number;  // 0=off, 1=clamp-to-black, 2=highlight
-
-  // Spherical (equirectangular 360) projection
-  sphericalEnabled: boolean;
-  sphericalFov: number;     // horizontal FOV in radians
-  sphericalAspect: number;  // canvas width / height
-  sphericalYaw: number;     // yaw in radians
-  sphericalPitch: number;   // pitch in radians
-
-  // Channel swizzle (RVChannelMap remapping)
-  channelSwizzle: [number, number, number, number]; // default [0,1,2,3] = identity
-
-  // Premultiply/unpremultiply alpha mode
-  premultMode: number;  // 0=off, 1=premultiply, 2=unpremultiply
-
-  // Dither + Quantize visualization
-  ditherMode: number;    // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
-  quantizeBits: number;  // 0=off, 2-16 = target bit depth for quantize/posterize
-
-  // Contour visualization (luminance iso-lines)
-  contourEnabled: boolean;
-  contourLevels: number;
-  contourDesaturate: boolean;
-  contourLineColor: [number, number, number];
-
-  // Automatic color primaries conversion
-  inputPrimariesEnabled: boolean;
-  inputPrimariesMatrix: Float32Array;   // 9 floats, column-major mat3
-  outputPrimariesEnabled: boolean;
-  outputPrimariesMatrix: Float32Array;  // 9 floats, column-major mat3
-}
-
-function createDefaultInternalState(): InternalShaderState {
-  return {
-    colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
-    colorInversionEnabled: false,
-    toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
-    bgPatternCode: BG_PATTERN_NONE,
-    bgColor1: [0, 0, 0],
-    bgColor2: [0, 0, 0],
-    bgCheckerSize: DEFAULT_CHECKER_SIZE,
-    cdlEnabled: false,
-    cdlSlope: [1, 1, 1],
-    cdlOffset: [0, 0, 0],
-    cdlPower: [1, 1, 1],
-    cdlSaturation: 1,
-    cdlColorspace: 0,
-    curvesEnabled: false,
-    curvesLUTData: null,
-    curvesLUTDirty: true,
-    colorWheelsEnabled: false,
-    wheelLift: [0, 0, 0, 0],
-    wheelGamma: [0, 0, 0, 0],
-    wheelGain: [0, 0, 0, 0],
-    falseColorEnabled: false,
-    falseColorLUTData: null,
-    falseColorLUTDirty: true,
-    zebraEnabled: false,
-    zebraHighThreshold: DEFAULT_ZEBRA_HIGH_THRESHOLD,
-    zebraLowThreshold: DEFAULT_ZEBRA_LOW_THRESHOLD,
-    zebraHighEnabled: true,
-    zebraLowEnabled: false,
-    zebraTime: 0,
-    channelModeCode: CHANNEL_MODE_CODES['rgb'],
-    lut3DEnabled: false,
-    lut3DIntensity: 1.0,
-    lut3DSize: 0,
-    lut3DDirty: true,
-    lut3DData: null,
-    lookLUT3DDomainMin: [0, 0, 0],
-    lookLUT3DDomainMax: [1, 1, 1],
-    fileLUT3DEnabled: false,
-    fileLUT3DIntensity: 1.0,
-    fileLUT3DSize: 0,
-    fileLUT3DDirty: true,
-    fileLUT3DData: null,
-    fileLUT3DDomainMin: [0, 0, 0],
-    fileLUT3DDomainMax: [1, 1, 1],
-    displayLUT3DEnabled: false,
-    displayLUT3DIntensity: 1.0,
-    displayLUT3DSize: 0,
-    displayLUT3DDirty: true,
-    displayLUT3DData: null,
-    displayLUT3DDomainMin: [0, 0, 0],
-    displayLUT3DDomainMax: [1, 1, 1],
-    displayTransferCode: DISPLAY_TRANSFER_SRGB,
-    displayGammaOverride: 1.0,
-    displayBrightnessMultiplier: 1.0,
-    displayCustomGamma: 2.2,
-    hsEnabled: false,
-    highlightsValue: 0,
-    shadowsValue: 0,
-    whitesValue: 0,
-    blacksValue: 0,
-    vibranceEnabled: false,
-    vibranceValue: 0,
-    vibranceSkinProtection: true,
-    clarityEnabled: false,
-    clarityValue: 0,
-    sharpenEnabled: false,
-    sharpenAmount: 0,
-    texelSize: [0, 0],
-    hslQualifierEnabled: false,
-    hslHueCenter: 0,
-    hslHueWidth: 30,
-    hslHueSoftness: 20,
-    hslSatCenter: 50,
-    hslSatWidth: 100,
-    hslSatSoftness: 10,
-    hslLumCenter: 50,
-    hslLumWidth: 100,
-    hslLumSoftness: 10,
-    hslCorrHueShift: 0,
-    hslCorrSatScale: 1,
-    hslCorrLumScale: 1,
-    hslInvert: false,
-    hslMattePreview: false,
-    gamutMappingEnabled: false,
-    gamutMappingModeCode: 0,
-    gamutSourceCode: 0,
-    gamutTargetCode: 0,
-    gamutHighlightEnabled: false,
-    deinterlaceEnabled: false,
-    deinterlaceMethod: 0,
-    deinterlaceFieldOrder: 0,
-    filmEnabled: false,
-    filmIntensity: 0,
-    filmSaturation: 1,
-    filmGrainIntensity: 0,
-    filmGrainSeed: 0,
-    filmLUTData: null,
-    filmLUTDirty: false,
-    perspectiveEnabled: false,
-    perspectiveInvH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-    perspectiveQuality: 0,
-    linearizeLogType: 0,
-    linearizeSRGB2linear: false,
-    linearizeRec709ToLinear: false,
-    linearizeFileGamma: 1.0,
-    linearizeAlphaType: 0,
-    inlineLUTEnabled: false,
-    inlineLUTChannels: 1,
-    inlineLUTSize: 0,
-    inlineLUTData: null,
-    inlineLUTDirty: false,
-    outOfRange: 0,
-    sphericalEnabled: false,
-    sphericalFov: Math.PI / 2,
-    sphericalAspect: 1,
-    sphericalYaw: 0,
-    sphericalPitch: 0,
-    channelSwizzle: [0, 1, 2, 3],
-    premultMode: 0,
-    ditherMode: 0,
-    quantizeBits: 0,
-    contourEnabled: false,
-    contourLevels: 10,
-    contourDesaturate: true,
-    contourLineColor: [1.0, 1.0, 1.0],
-    inputPrimariesEnabled: false,
-    inputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-    outputPrimariesEnabled: false,
-    outputPrimariesMatrix: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Texture management callback interface
-// ---------------------------------------------------------------------------
-
-/**
- * Callbacks the ShaderStateManager uses to interact with GPU texture resources
- * owned by the Renderer. This keeps texture lifecycle in the Renderer while
- * allowing the state manager to trigger texture uploads.
- *
- * Each `bind*` callback is responsible for ensuring the texture exists,
- * uploading any dirty data, activating the correct texture unit, and
- * binding the texture.
- */
-export interface TextureCallbacks {
-  /** Ensure curves LUT texture exists, upload if dirty, activate TEXTURE1, bind. */
-  bindCurvesLUTTexture(): void;
-  /** Ensure false color LUT texture exists, upload if dirty, activate TEXTURE2, bind. */
-  bindFalseColorLUTTexture(): void;
-  /** Ensure 3D LUT (Look) texture exists, upload if dirty, activate TEXTURE3, bind. */
-  bindLUT3DTexture(): void;
-  /** Ensure film LUT texture exists, upload if dirty, activate TEXTURE4, bind. */
-  bindFilmLUTTexture(): void;
-  /** Ensure inline LUT texture exists, upload if dirty, activate TEXTURE5, bind. */
-  bindInlineLUTTexture(): void;
-  /** Ensure File LUT 3D texture exists, upload if dirty, activate TEXTURE6, bind. */
-  bindFileLUT3DTexture(): void;
-  /** Ensure Display LUT 3D texture exists, upload if dirty, activate TEXTURE7, bind. */
-  bindDisplayLUT3DTexture(): void;
-  /** Get the current canvas dimensions for u_resolution. */
-  getCanvasSize(): { width: number; height: number };
-}
+import { applyUniforms as applyUniformsFn } from './ShaderUniformUploader';
+import type { UniformBuffers } from './ShaderUniformUploader';
+import { applyRenderState as applyRenderStateFn } from './ShaderBatchApplicator';
 
 // ---------------------------------------------------------------------------
 // ShaderStateManager
@@ -625,18 +94,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   private cachedColorAdjustments: ColorAdjustments | null = null;
   private cachedToneMappingState: ToneMappingState | null = null;
 
-  /** Pre-allocated resolution array for applyUniforms */
-  private readonly resolutionBuffer: [number, number] = [0, 0];
-
-  /** Pre-allocated color grading tuple buffers for applyUniforms */
-  private readonly exposureRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly gammaRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly contrastRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly safeGammaRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly safeExposureRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly scaleRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly offsetRGBBuffer: [number, number, number] = [0, 0, 0];
-  private readonly channelSwizzleBuffer = new Int32Array(4);
+  /** Pre-allocated uniform buffers (passed to applyUniforms) */
+  private readonly uniformBuffers: UniformBuffers = {
+    resolutionBuffer: [0, 0],
+    exposureRGBBuffer: [0, 0, 0],
+    gammaRGBBuffer: [0, 0, 0],
+    contrastRGBBuffer: [0, 0, 0],
+    safeGammaRGBBuffer: [0, 0, 0],
+    safeExposureRGBBuffer: [0, 0, 0],
+    scaleRGBBuffer: [0, 0, 0],
+    offsetRGBBuffer: [0, 0, 0],
+    channelSwizzleBuffer: new Int32Array(4),
+  };
 
   /**
    * Texture unit bindings (u_curvesLUT=1, u_falseColorLUT=2, etc.) are constant
@@ -649,8 +118,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   // Public accessors
   // -----------------------------------------------------------------------
 
-  /** Get current dirty flags (read-only for testing). */
-  getDirtyFlags(): ReadonlySet<string> {
+  /** Get current dirty flags (mutable for batch applicator). */
+  getDirtyFlags(): Set<string> {
     return this.dirtyFlags;
   }
 
@@ -659,7 +128,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     for (const flag of ALL_DIRTY_FLAGS) {
       this.dirtyFlags.add(flag);
     }
-    // Reset texture unit bindings so they are re-sent to the new GL context
     this._textureUnitsInitialized = false;
   }
 
@@ -701,7 +169,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    */
   clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty' | 'fileLUT3DDirty' | 'displayLUT3DDirty'): void {
     this.state[flag] = false;
-    // Invalidate the corresponding cached snapshot since dirty changed
     if (flag === 'curvesLUTDirty') {
       this.cachedCurvesSnapshot = null;
     } else if (flag === 'falseColorLUTDirty') {
@@ -713,7 +180,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     } else if (flag === 'displayLUT3DDirty') {
       this.cachedDisplayLUT3DSnapshot = null;
     }
-    // filmLUTDirty has no cached snapshot
   }
 
   // -----------------------------------------------------------------------
@@ -829,7 +295,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.bgPatternCode = BG_PATTERN_SOLID;
       hexToRgbInto(bgState.customColor, this.state.bgColor1);
     } else {
-      // Solid color patterns (grey18, grey50, white)
       this.state.bgPatternCode = BG_PATTERN_SOLID;
       const color = PATTERN_COLORS[pattern];
       if (color) {
@@ -859,6 +324,23 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.dirtyFlags.add(DIRTY_CDL);
   }
 
+  setCDLColorspace(colorspace: number): void {
+    this.state.cdlColorspace = colorspace;
+  }
+
+  setContour(state: { enabled: boolean; levels: number; desaturate: boolean; lineColor: [number, number, number] }): void {
+    this.state.contourEnabled = state.enabled;
+    this.state.contourLevels = state.levels;
+    this.state.contourDesaturate = state.desaturate;
+    this.state.contourLineColor = [...state.lineColor];
+    this.dirtyFlags.add(DIRTY_CONTOUR);
+  }
+
+  disableContour(): void {
+    this.state.contourEnabled = false;
+    this.dirtyFlags.add(DIRTY_CONTOUR);
+  }
+
   setCurvesLUT(luts: CurveLUTs | null): void {
     this.dirtyFlags.add(DIRTY_CURVES);
     this.cachedCurvesSnapshot = null;
@@ -866,7 +348,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.curvesEnabled = false;
       return;
     }
-    // Pack into LUT_1D_SIZEx1 RGBA: R=red channel, G=green channel, B=blue channel, A=master
     if (!this.curvesLUTBuffer) {
       this.curvesLUTBuffer = new Uint8Array(LUT_1D_SIZE * RGBA_CHANNELS);
     }
@@ -877,7 +358,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       data[i * RGBA_CHANNELS + 2] = luts.blue[i]!;
       data[i * RGBA_CHANNELS + 3] = luts.master[i]!;
     }
-    // Check if identity (no effect)
     let isIdentity = true;
     for (let i = 0; i < LUT_1D_SIZE; i++) {
       if (data[i * RGBA_CHANNELS] !== i || data[i * RGBA_CHANNELS + 1] !== i || data[i * RGBA_CHANNELS + 2] !== i || data[i * RGBA_CHANNELS + 3] !== i) {
@@ -1148,20 +628,10 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     return { mode, sourceGamut: source, targetGamut: target, highlightOutOfGamut: s.gamutHighlightEnabled };
   }
 
-  /**
-   * Set automatic color primaries conversion matrices.
-   *
-   * Input matrix: source primaries → BT.709 working space (before grading)
-   * Output matrix: BT.709 working space → display gamut (before display OETF)
-   *
-   * @param inputPrimaries - Source image color primaries (undefined = BT.709)
-   * @param outputColorSpace - Display color space ('srgb', 'display-p3', 'rec2020')
-   */
   setColorPrimaries(
     inputPrimaries: ColorPrimaries | undefined,
     outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
   ): void {
-    // Input: convert source → BT.709
     if (inputPrimaries === 'bt2020') {
       this.state.inputPrimariesEnabled = true;
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.REC2020_TO_SRGB;
@@ -1173,7 +643,6 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.inputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.IDENTITY;
     }
 
-    // Output: convert BT.709 → display gamut
     if (outputColorSpace === 'display-p3') {
       this.state.outputPrimariesEnabled = true;
       this.state.outputPrimariesMatrix = COLOR_PRIMARIES_MATRICES.SRGB_TO_P3;
@@ -1189,7 +658,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   }
 
   setDeinterlace(diState: { enabled: boolean; method: number; fieldOrder: number }): void {
-    this.state.deinterlaceEnabled = diState.enabled && diState.method !== 1; // not weave
+    this.state.deinterlaceEnabled = diState.enabled && diState.method !== 1;
     this.state.deinterlaceMethod = diState.method;
     this.state.deinterlaceFieldOrder = diState.fieldOrder;
     this.dirtyFlags.add(DIRTY_DEINTERLACE);
@@ -1334,362 +803,8 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   // Batch state application (from RenderState)
   // -----------------------------------------------------------------------
 
-  /**
-   * Apply a full RenderState, marking only groups whose values actually changed.
-   *
-   * During steady-state playback (no user interaction), all comparisons
-   * short-circuit → no dirty flags → applyUniforms() skips all GL calls.
-   * This eliminates ~65 redundant uniform uploads per frame.
-   */
   applyRenderState(renderState: RenderState): void {
-    const s = this.state;
-
-    // --- Color adjustments (8+ uniforms) ---
-    {
-      const a = renderState.colorAdjustments;
-      const c = s.colorAdjustments;
-      const rgbChanged = (aRGB: [number, number, number] | undefined, cRGB: [number, number, number] | undefined): boolean => {
-        if (aRGB === cRGB) return false; // both undefined or same reference
-        if (!aRGB || !cRGB) return true; // one is undefined
-        return aRGB[0] !== cRGB[0] || aRGB[1] !== cRGB[1] || aRGB[2] !== cRGB[2];
-      };
-      if (a.exposure !== c.exposure || a.gamma !== c.gamma ||
-          a.saturation !== c.saturation || a.contrast !== c.contrast ||
-          a.brightness !== c.brightness || a.temperature !== c.temperature ||
-          a.tint !== c.tint || a.hueRotation !== c.hueRotation ||
-          a.scale !== c.scale || a.offset !== c.offset ||
-          rgbChanged(a.exposureRGB, c.exposureRGB) ||
-          rgbChanged(a.gammaRGB, c.gammaRGB) ||
-          rgbChanged(a.contrastRGB, c.contrastRGB) ||
-          rgbChanged(a.scaleRGB, c.scaleRGB) ||
-          rgbChanged(a.offsetRGB, c.offsetRGB)) {
-        this.setColorAdjustments(a);
-      }
-
-      // Inline LUT (part of color adjustments but uses separate texture)
-      const newLUT = a.inlineLUT ?? null;
-      const newChannels = a.lutChannels ?? 1;
-      if (newLUT !== s.inlineLUTData || newChannels !== s.inlineLUTChannels) {
-        this.setInlineLUT(newLUT, newChannels);
-      }
-    }
-
-    // --- Color inversion (1 uniform) ---
-    if (renderState.colorInversion !== s.colorInversionEnabled) {
-      this.setColorInversion(renderState.colorInversion);
-    }
-
-    // --- Tone mapping (3+ uniforms) ---
-    {
-      const t = renderState.toneMappingState;
-      const c = s.toneMappingState;
-      if (t.enabled !== c.enabled || t.operator !== c.operator ||
-          (t.reinhardWhitePoint ?? 4.0) !== (c.reinhardWhitePoint ?? 4.0) ||
-          (t.filmicExposureBias ?? 2.0) !== (c.filmicExposureBias ?? 2.0) ||
-          (t.filmicWhitePoint ?? 11.2) !== (c.filmicWhitePoint ?? 11.2) ||
-          (t.dragoBias ?? 0.85) !== (c.dragoBias ?? 0.85) ||
-          (t.dragoLwa ?? 0.2) !== (c.dragoLwa ?? 0.2) ||
-          (t.dragoLmax ?? 1.5) !== (c.dragoLmax ?? 1.5) ||
-          (t.dragoBrightness ?? 2.0) !== (c.dragoBrightness ?? 2.0)) {
-        this.setToneMappingState(t);
-      }
-    }
-
-    // --- Background pattern (4 uniforms) ---
-    // Compare computed values before/after to avoid unconditional dirty marking.
-    {
-      const oldCode = s.bgPatternCode;
-      const oldC1_0 = s.bgColor1[0], oldC1_1 = s.bgColor1[1], oldC1_2 = s.bgColor1[2];
-      const oldC2_0 = s.bgColor2[0], oldC2_1 = s.bgColor2[1], oldC2_2 = s.bgColor2[2];
-      const oldChecker = s.bgCheckerSize;
-      this.setBackgroundPattern(renderState.backgroundPattern);
-      if (s.bgPatternCode === oldCode &&
-          s.bgColor1[0] === oldC1_0 && s.bgColor1[1] === oldC1_1 && s.bgColor1[2] === oldC1_2 &&
-          s.bgColor2[0] === oldC2_0 && s.bgColor2[1] === oldC2_1 && s.bgColor2[2] === oldC2_2 &&
-          s.bgCheckerSize === oldChecker) {
-        this.dirtyFlags.delete(DIRTY_BACKGROUND);
-      }
-    }
-
-    // --- CDL (6 uniforms) ---
-    {
-      const c = renderState.cdl;
-      const newColorspace = renderState.cdlColorspace ?? 0;
-      if (c.slope.r !== s.cdlSlope[0] || c.slope.g !== s.cdlSlope[1] || c.slope.b !== s.cdlSlope[2] ||
-          c.offset.r !== s.cdlOffset[0] || c.offset.g !== s.cdlOffset[1] || c.offset.b !== s.cdlOffset[2] ||
-          c.power.r !== s.cdlPower[0] || c.power.g !== s.cdlPower[1] || c.power.b !== s.cdlPower[2] ||
-          c.saturation !== s.cdlSaturation || newColorspace !== s.cdlColorspace) {
-        this.setCDL(c);
-        this.state.cdlColorspace = newColorspace;
-      }
-    }
-
-    // --- Curves LUT (1-2 uniforms) ---
-    // Skip when null and already disabled (common case: curves not in use)
-    if (renderState.curvesLUT !== null || s.curvesEnabled) {
-      this.setCurvesLUT(renderState.curvesLUT);
-    }
-
-    // --- Color wheels (4 uniforms) ---
-    {
-      const cw = renderState.colorWheels;
-      const wl = s.wheelLift; const wg = s.wheelGamma; const wn = s.wheelGain;
-      if (cw.lift.r !== wl[0] || cw.lift.g !== wl[1] || cw.lift.b !== wl[2] || cw.lift.y !== wl[3] ||
-          cw.gamma.r !== wg[0] || cw.gamma.g !== wg[1] || cw.gamma.b !== wg[2] || cw.gamma.y !== wg[3] ||
-          cw.gain.r !== wn[0] || cw.gain.g !== wn[1] || cw.gain.b !== wn[2] || cw.gain.y !== wn[3]) {
-        this.setColorWheels(cw);
-      }
-    }
-
-    // --- False color (2 uniforms) ---
-    // Fixed: detect both enable/disable changes AND LUT data reference changes
-    if (renderState.falseColor.enabled !== s.falseColorEnabled ||
-        (renderState.falseColor.enabled && renderState.falseColor.lut !== s.falseColorLUTData)) {
-      this.setFalseColor(renderState.falseColor);
-    }
-
-    // --- Zebra stripes (5 uniforms, time animates when enabled) ---
-    {
-      const z = renderState.zebraStripes;
-      const newEnabled = z.enabled && (z.highEnabled || z.lowEnabled);
-      // Always call when enabled (zebraTime animates), skip when staying disabled
-      if (newEnabled || newEnabled !== s.zebraEnabled) {
-        this.setZebraStripes(z);
-      }
-    }
-
-    // --- Channel mode (1 uniform) ---
-    {
-      const code = CHANNEL_MODE_CODES[renderState.channelMode] ?? 0;
-      if (code !== s.channelModeCode) {
-        this.setChannelMode(renderState.channelMode);
-      }
-    }
-
-    // --- Look LUT 3D (via legacy lut field or new lookLUT) ---
-    {
-      const lookLUT = renderState.lookLUT;
-      if (lookLUT) {
-        if (lookLUT.data !== s.lut3DData || lookLUT.size !== s.lut3DSize || lookLUT.intensity !== s.lut3DIntensity ||
-            lookLUT.domainMin[0] !== s.lookLUT3DDomainMin[0] || lookLUT.domainMin[1] !== s.lookLUT3DDomainMin[1] || lookLUT.domainMin[2] !== s.lookLUT3DDomainMin[2] ||
-            lookLUT.domainMax[0] !== s.lookLUT3DDomainMax[0] || lookLUT.domainMax[1] !== s.lookLUT3DDomainMax[1] || lookLUT.domainMax[2] !== s.lookLUT3DDomainMax[2]) {
-          this.setLookLUT(lookLUT.data, lookLUT.size, lookLUT.intensity, lookLUT.domainMin, lookLUT.domainMax);
-        }
-      } else {
-        // Legacy path: use lut field
-        const l = renderState.lut;
-        if (l.data !== s.lut3DData || l.size !== s.lut3DSize || l.intensity !== s.lut3DIntensity) {
-          this.setLUT(l.data, l.size, l.intensity);
-        }
-      }
-    }
-
-    // --- File LUT 3D ---
-    if (renderState.fileLUT) {
-      const fl = renderState.fileLUT;
-      if (fl.data !== s.fileLUT3DData || fl.size !== s.fileLUT3DSize || fl.intensity !== s.fileLUT3DIntensity ||
-          fl.domainMin[0] !== s.fileLUT3DDomainMin[0] || fl.domainMin[1] !== s.fileLUT3DDomainMin[1] || fl.domainMin[2] !== s.fileLUT3DDomainMin[2] ||
-          fl.domainMax[0] !== s.fileLUT3DDomainMax[0] || fl.domainMax[1] !== s.fileLUT3DDomainMax[1] || fl.domainMax[2] !== s.fileLUT3DDomainMax[2]) {
-        this.setFileLUT(fl.data, fl.size, fl.intensity, fl.domainMin, fl.domainMax);
-      }
-    } else if (s.fileLUT3DEnabled) {
-      this.setFileLUT(null, 0, 0);
-    }
-
-    // --- Display LUT 3D ---
-    if (renderState.displayLUT) {
-      const dl = renderState.displayLUT;
-      if (dl.data !== s.displayLUT3DData || dl.size !== s.displayLUT3DSize || dl.intensity !== s.displayLUT3DIntensity ||
-          dl.domainMin[0] !== s.displayLUT3DDomainMin[0] || dl.domainMin[1] !== s.displayLUT3DDomainMin[1] || dl.domainMin[2] !== s.displayLUT3DDomainMin[2] ||
-          dl.domainMax[0] !== s.displayLUT3DDomainMax[0] || dl.domainMax[1] !== s.displayLUT3DDomainMax[1] || dl.domainMax[2] !== s.displayLUT3DDomainMax[2]) {
-        this.setDisplayLUT(dl.data, dl.size, dl.intensity, dl.domainMin, dl.domainMax);
-      }
-    } else if (s.displayLUT3DEnabled) {
-      this.setDisplayLUT(null, 0, 0);
-    }
-
-    // --- Display color (4 uniforms) ---
-    {
-      const d = renderState.displayColor;
-      if (d.transferFunction !== s.displayTransferCode || d.displayGamma !== s.displayGammaOverride ||
-          d.displayBrightness !== s.displayBrightnessMultiplier || d.customGamma !== s.displayCustomGamma) {
-        this.setDisplayColorState(d);
-      }
-    }
-
-    // --- Highlights/shadows (5 uniforms) ---
-    {
-      const h = renderState.highlightsShadows;
-      if (h.highlights / 100 !== s.highlightsValue || h.shadows / 100 !== s.shadowsValue ||
-          h.whites / 100 !== s.whitesValue || h.blacks / 100 !== s.blacksValue) {
-        this.setHighlightsShadows(h);
-      }
-    }
-
-    // --- Vibrance (3 uniforms) ---
-    {
-      const v = renderState.vibrance;
-      if (v.amount / 100 !== s.vibranceValue || v.skinProtection !== s.vibranceSkinProtection) {
-        this.setVibrance({ vibrance: v.amount, skinProtection: v.skinProtection });
-      }
-    }
-
-    // --- Clarity (2 uniforms) ---
-    if (renderState.clarity / 100 !== s.clarityValue) {
-      this.setClarity({ clarity: renderState.clarity });
-    }
-
-    // --- Sharpen (2 uniforms) ---
-    if (renderState.sharpen / 100 !== s.sharpenAmount) {
-      this.setSharpen({ amount: renderState.sharpen });
-    }
-
-    // --- HSL qualifier (14 uniforms) ---
-    {
-      const h = renderState.hslQualifier;
-      if (h.enabled !== s.hslQualifierEnabled ||
-          h.hue.center !== s.hslHueCenter || h.hue.width !== s.hslHueWidth || h.hue.softness !== s.hslHueSoftness ||
-          h.saturation.center !== s.hslSatCenter || h.saturation.width !== s.hslSatWidth || h.saturation.softness !== s.hslSatSoftness ||
-          h.luminance.center !== s.hslLumCenter || h.luminance.width !== s.hslLumWidth || h.luminance.softness !== s.hslLumSoftness ||
-          h.correction.hueShift !== s.hslCorrHueShift || h.correction.saturationScale !== s.hslCorrSatScale ||
-          h.correction.luminanceScale !== s.hslCorrLumScale ||
-          h.invert !== s.hslInvert || h.mattePreview !== s.hslMattePreview) {
-        this.setHSLQualifier(h);
-      }
-    }
-
-    // --- Gamut mapping (5 uniforms) ---
-    if (renderState.gamutMapping) {
-      const gm = renderState.gamutMapping;
-      const newEnabled = gm.mode !== 'off' && gm.sourceGamut !== gm.targetGamut;
-      const newModeCode = newEnabled ? (GAMUT_MODE_CODES[gm.mode] ?? 0) : 0;
-      const newSourceCode = GAMUT_CODES[gm.sourceGamut] ?? 0;
-      const newTargetCode = GAMUT_CODES[gm.targetGamut] ?? 0;
-      const newHighlight = newEnabled && (gm.highlightOutOfGamut === true);
-      if (newEnabled !== s.gamutMappingEnabled ||
-          newModeCode !== s.gamutMappingModeCode ||
-          newSourceCode !== s.gamutSourceCode ||
-          newTargetCode !== s.gamutTargetCode ||
-          newHighlight !== s.gamutHighlightEnabled) {
-        this.setGamutMapping(gm);
-      }
-    }
-
-    // --- Deinterlace (3 uniforms) ---
-    if (renderState.deinterlace) {
-      const di = renderState.deinterlace;
-      const newEnabled = di.enabled && di.method !== 1;
-      if (newEnabled !== s.deinterlaceEnabled ||
-          di.method !== s.deinterlaceMethod ||
-          di.fieldOrder !== s.deinterlaceFieldOrder) {
-        this.setDeinterlace(di);
-      }
-    } else if (s.deinterlaceEnabled) {
-      this.setDeinterlace({ enabled: false, method: 1, fieldOrder: 0 });
-    }
-
-    // --- Film emulation (5 uniforms + LUT texture) ---
-    if (renderState.filmEmulation) {
-      const fe = renderState.filmEmulation;
-      const newEnabled = fe.enabled && fe.intensity > 0;
-      if (newEnabled !== s.filmEnabled ||
-          fe.intensity !== s.filmIntensity ||
-          fe.saturation !== s.filmSaturation ||
-          fe.grainIntensity !== s.filmGrainIntensity ||
-          fe.grainSeed !== s.filmGrainSeed ||
-          fe.lutData !== s.filmLUTData) {
-        this.setFilmEmulation(fe);
-      }
-    } else if (s.filmEnabled) {
-      this.setFilmEmulation({ enabled: false, intensity: 0, saturation: 1, grainIntensity: 0, grainSeed: 0, lutData: null });
-    }
-
-    // --- Perspective correction (3 uniforms) ---
-    if (renderState.perspective) {
-      const pc = renderState.perspective;
-      if (pc.enabled !== s.perspectiveEnabled ||
-          pc.quality !== s.perspectiveQuality ||
-          !float32ArrayEquals(pc.invH, s.perspectiveInvH)) {
-        this.setPerspective(pc);
-      }
-    } else if (s.perspectiveEnabled) {
-      this.setPerspective({ enabled: false, invH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]), quality: 0 });
-    }
-
-    // --- Linearize (log-to-linear conversion, 4 uniforms) ---
-    if (renderState.linearize) {
-      const lz = renderState.linearize;
-      if (lz.logType !== s.linearizeLogType ||
-          lz.sRGB2linear !== s.linearizeSRGB2linear ||
-          lz.rec709ToLinear !== s.linearizeRec709ToLinear ||
-          lz.fileGamma !== s.linearizeFileGamma ||
-          lz.alphaType !== s.linearizeAlphaType) {
-        this.setLinearize(lz);
-      }
-    } else if (s.linearizeLogType !== 0 || s.linearizeSRGB2linear || s.linearizeRec709ToLinear || s.linearizeFileGamma !== 1.0 || s.linearizeAlphaType !== 0) {
-      this.setLinearize({ logType: 0, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1.0, alphaType: 0 });
-    }
-
-    // --- Out-of-range visualization (1 uniform) ---
-    {
-      const newOutOfRange = renderState.outOfRange ?? 0;
-      if (newOutOfRange !== s.outOfRange) {
-        this.setOutOfRange(newOutOfRange);
-      }
-    }
-
-    // --- Premultiply/unpremultiply alpha (1 uniform) ---
-    {
-      const newPremult = renderState.premultMode ?? 0;
-      if (newPremult !== s.premultMode) {
-        this.setPremultMode(newPremult);
-      }
-    }
-
-    // --- Channel swizzle (1 uniform, ivec4) ---
-    if (renderState.channelSwizzle) {
-      const cs = renderState.channelSwizzle;
-      if (cs[0] !== s.channelSwizzle[0] || cs[1] !== s.channelSwizzle[1] ||
-          cs[2] !== s.channelSwizzle[2] || cs[3] !== s.channelSwizzle[3]) {
-        this.setChannelSwizzle(cs);
-      }
-    } else if (s.channelSwizzle[0] !== 0 || s.channelSwizzle[1] !== 1 ||
-               s.channelSwizzle[2] !== 2 || s.channelSwizzle[3] !== 3) {
-      this.setChannelSwizzle([0, 1, 2, 3]);
-    }
-
-    // --- Dither + Quantize visualization (2 uniforms) ---
-    {
-      const newDither = renderState.ditherMode ?? 0;
-      const newQuantize = renderState.quantizeBits ?? 0;
-      if (newDither !== s.ditherMode) {
-        this.setDitherMode(newDither);
-      }
-      if (newQuantize !== s.quantizeBits) {
-        this.setQuantizeBits(newQuantize);
-      }
-    }
-
-    // --- Contour visualization (4 uniforms) ---
-    if (renderState.luminanceVis) {
-      const lv = renderState.luminanceVis;
-      const contourEnabled = lv.mode === 'contour';
-      if (s.contourEnabled !== contourEnabled ||
-          s.contourLevels !== lv.contourLevels ||
-          s.contourDesaturate !== lv.contourDesaturate ||
-          s.contourLineColor[0] !== lv.contourLineColor[0] ||
-          s.contourLineColor[1] !== lv.contourLineColor[1] ||
-          s.contourLineColor[2] !== lv.contourLineColor[2]) {
-        s.contourEnabled = contourEnabled;
-        s.contourLevels = lv.contourLevels;
-        s.contourDesaturate = lv.contourDesaturate;
-        s.contourLineColor = [...lv.contourLineColor];
-        this.dirtyFlags.add(DIRTY_CONTOUR);
-      }
-    } else if (s.contourEnabled) {
-      s.contourEnabled = false;
-      this.dirtyFlags.add(DIRTY_CONTOUR);
-    }
+    applyRenderStateFn(this, renderState);
   }
 
   // -----------------------------------------------------------------------
@@ -1701,469 +816,19 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    *
    * Callers must set u_inputTransfer and u_outputMode BEFORE calling this,
    * since those differ between the two render paths (renderImage vs renderSDRFrame).
-   *
-   * @param shader  The compiled display shader program.
-   * @param texCb   Callbacks for texture management (owned by Renderer).
    */
   applyUniforms(
     shader: ShaderProgram,
     texCb: TextureCallbacks,
   ): void {
-    const dirty = this.dirtyFlags;
-    const s = this.state;
-
-    // Color adjustments
-    if (dirty.has(DIRTY_COLOR)) {
-      // Per-channel vec3 uniforms: broadcast scalar when per-channel data is absent
-      const adj = s.colorAdjustments;
-
-      // Write exposure into pre-allocated buffer
-      const expBuf = this.exposureRGBBuffer;
-      if (adj.exposureRGB) {
-        expBuf[0] = adj.exposureRGB[0]; expBuf[1] = adj.exposureRGB[1]; expBuf[2] = adj.exposureRGB[2];
-      } else {
-        expBuf[0] = adj.exposure; expBuf[1] = adj.exposure; expBuf[2] = adj.exposure;
-      }
-
-      // Write gamma into pre-allocated buffer
-      const gamBuf = this.gammaRGBBuffer;
-      if (adj.gammaRGB) {
-        gamBuf[0] = adj.gammaRGB[0]; gamBuf[1] = adj.gammaRGB[1]; gamBuf[2] = adj.gammaRGB[2];
-      } else {
-        gamBuf[0] = adj.gamma; gamBuf[1] = adj.gamma; gamBuf[2] = adj.gamma;
-      }
-
-      // Write contrast into pre-allocated buffer
-      const conBuf = this.contrastRGBBuffer;
-      if (adj.contrastRGB) {
-        conBuf[0] = adj.contrastRGB[0]; conBuf[1] = adj.contrastRGB[1]; conBuf[2] = adj.contrastRGB[2];
-      } else {
-        conBuf[0] = adj.contrast; conBuf[1] = adj.contrast; conBuf[2] = adj.contrast;
-      }
-
-      // Sanitize: clamp gamma to avoid division by zero in shader (1.0/0.0 = Inf)
-      const safeGamBuf = this.safeGammaRGBBuffer;
-      safeGamBuf[0] = gamBuf[0] <= 0 ? 1e-4 : gamBuf[0];
-      safeGamBuf[1] = gamBuf[1] <= 0 ? 1e-4 : gamBuf[1];
-      safeGamBuf[2] = gamBuf[2] <= 0 ? 1e-4 : gamBuf[2];
-
-      // Sanitize exposure: replace non-finite values with 0
-      const safeExpBuf = this.safeExposureRGBBuffer;
-      safeExpBuf[0] = Number.isFinite(expBuf[0]) ? expBuf[0] : 0;
-      safeExpBuf[1] = Number.isFinite(expBuf[1]) ? expBuf[1] : 0;
-      safeExpBuf[2] = Number.isFinite(expBuf[2]) ? expBuf[2] : 0;
-
-      // Per-channel scale: broadcast scalar when per-channel is absent; identity = [1,1,1]
-      const sclBuf = this.scaleRGBBuffer;
-      const scaleScalar = adj.scale ?? 1;
-      if (adj.scaleRGB) {
-        sclBuf[0] = adj.scaleRGB[0]; sclBuf[1] = adj.scaleRGB[1]; sclBuf[2] = adj.scaleRGB[2];
-      } else {
-        sclBuf[0] = scaleScalar; sclBuf[1] = scaleScalar; sclBuf[2] = scaleScalar;
-      }
-
-      // Per-channel offset: broadcast scalar when per-channel is absent; identity = [0,0,0]
-      const offBuf = this.offsetRGBBuffer;
-      const offsetScalar = adj.offset ?? 0;
-      if (adj.offsetRGB) {
-        offBuf[0] = adj.offsetRGB[0]; offBuf[1] = adj.offsetRGB[1]; offBuf[2] = adj.offsetRGB[2];
-      } else {
-        offBuf[0] = offsetScalar; offBuf[1] = offsetScalar; offBuf[2] = offsetScalar;
-      }
-
-      shader.setUniform('u_exposureRGB', safeExpBuf);
-      shader.setUniform('u_gammaRGB', safeGamBuf);
-      shader.setUniform('u_contrastRGB', conBuf);
-      shader.setUniform('u_scaleRGB', sclBuf);
-      shader.setUniform('u_offsetRGB', offBuf);
-      shader.setUniform('u_saturation', adj.saturation);
-      shader.setUniform('u_brightness', adj.brightness);
-      shader.setUniform('u_temperature', adj.temperature);
-      shader.setUniform('u_tint', adj.tint);
-
-      // Hue rotation
-      const hueRotationDegrees = adj.hueRotation;
-      if (isIdentityHueRotation(hueRotationDegrees)) {
-        shader.setUniformInt('u_hueRotationEnabled', 0);
-      } else {
-        shader.setUniformInt('u_hueRotationEnabled', 1);
-        const hueMatrix = getHueRotationMatrix(hueRotationDegrees);
-        shader.setUniformMatrix3('u_hueRotationMatrix', hueMatrix);
-      }
-    }
-
-    // Tone mapping
-    if (dirty.has(DIRTY_TONE_MAPPING)) {
-      const toneMappingCode = s.toneMappingState.enabled
-        ? TONE_MAPPING_OPERATOR_CODES[s.toneMappingState.operator]
-        : 0;
-      shader.setUniformInt('u_toneMappingOperator', toneMappingCode);
-      shader.setUniform('u_tmReinhardWhitePoint', s.toneMappingState.reinhardWhitePoint ?? 4.0);
-      shader.setUniform('u_tmFilmicExposureBias', s.toneMappingState.filmicExposureBias ?? 2.0);
-      shader.setUniform('u_tmDragoBias', s.toneMappingState.dragoBias ?? 0.85);
-      shader.setUniform('u_tmDragoLwa', s.toneMappingState.dragoLwa ?? 0.2);
-      shader.setUniform('u_tmDragoLmax', s.toneMappingState.dragoLmax ?? 1.5);
-      shader.setUniform('u_tmDragoBrightness', s.toneMappingState.dragoBrightness ?? 2.0);
-      shader.setUniform('u_tmFilmicWhitePoint', s.toneMappingState.filmicWhitePoint ?? 11.2);
-    }
-
-    // Color inversion
-    if (dirty.has(DIRTY_INVERSION)) {
-      shader.setUniformInt('u_invert', s.colorInversionEnabled ? 1 : 0);
-    }
-
-    // CDL
-    if (dirty.has(DIRTY_CDL)) {
-      shader.setUniformInt('u_cdlEnabled', s.cdlEnabled ? 1 : 0);
-      if (s.cdlEnabled) {
-        shader.setUniform('u_cdlSlope', s.cdlSlope);
-        shader.setUniform('u_cdlOffset', s.cdlOffset);
-        shader.setUniform('u_cdlPower', s.cdlPower);
-        shader.setUniform('u_cdlSaturation', s.cdlSaturation);
-        shader.setUniformInt('u_cdlColorspace', s.cdlColorspace);
-      }
-    }
-
-    // Curves LUT
-    if (dirty.has(DIRTY_CURVES)) {
-      shader.setUniformInt('u_curvesEnabled', s.curvesEnabled ? 1 : 0);
-    }
-
-    // Inline 1D LUT (from RVColor luminanceLUT)
-    if (dirty.has(DIRTY_INLINE_LUT)) {
-      shader.setUniformInt('u_inlineLUTEnabled', s.inlineLUTEnabled ? 1 : 0);
-      if (s.inlineLUTEnabled) {
-        shader.setUniformInt('u_inlineLUTChannels', s.inlineLUTChannels);
-        shader.setUniform('u_inlineLUTSize', s.inlineLUTSize);
-      }
-    }
-
-    // Color Wheels
-    if (dirty.has(DIRTY_COLOR_WHEELS)) {
-      shader.setUniformInt('u_colorWheelsEnabled', s.colorWheelsEnabled ? 1 : 0);
-      if (s.colorWheelsEnabled) {
-        shader.setUniform('u_wheelLift', s.wheelLift);
-        shader.setUniform('u_wheelGamma', s.wheelGamma);
-        shader.setUniform('u_wheelGain', s.wheelGain);
-      }
-    }
-
-    // False Color
-    if (dirty.has(DIRTY_FALSE_COLOR)) {
-      shader.setUniformInt('u_falseColorEnabled', s.falseColorEnabled ? 1 : 0);
-    }
-
-    // Contour visualization (luminance iso-lines)
-    if (dirty.has(DIRTY_CONTOUR)) {
-      shader.setUniformInt('u_contourEnabled', s.contourEnabled ? 1 : 0);
-      if (s.contourEnabled) {
-        shader.setUniform('u_contourLevels', s.contourLevels);
-        shader.setUniformInt('u_contourDesaturate', s.contourDesaturate ? 1 : 0);
-        shader.setUniform('u_contourLineColor', s.contourLineColor);
-      }
-    }
-
-    // Zebra Stripes
-    if (dirty.has(DIRTY_ZEBRA)) {
-      shader.setUniformInt('u_zebraEnabled', s.zebraEnabled ? 1 : 0);
-      if (s.zebraEnabled) {
-        shader.setUniform('u_zebraHighThreshold', s.zebraHighThreshold);
-        shader.setUniform('u_zebraLowThreshold', s.zebraLowThreshold);
-        shader.setUniform('u_zebraTime', s.zebraTime);
-        shader.setUniformInt('u_zebraHighEnabled', s.zebraHighEnabled ? 1 : 0);
-        shader.setUniformInt('u_zebraLowEnabled', s.zebraLowEnabled ? 1 : 0);
-      }
-    }
-
-    // Channel mode
-    if (dirty.has(DIRTY_CHANNELS)) {
-      shader.setUniformInt('u_channelMode', s.channelModeCode);
-    }
-
-    // Look LUT (renamed from u_lut3D)
-    if (dirty.has(DIRTY_LUT3D)) {
-      shader.setUniformInt('u_lookLUT3DEnabled', s.lut3DEnabled ? 1 : 0);
-      if (s.lut3DEnabled) {
-        shader.setUniform('u_lookLUT3DIntensity', s.lut3DIntensity);
-        shader.setUniform('u_lookLUT3DSize', s.lut3DSize);
-        shader.setUniform('u_lookLUT3DDomainMin', s.lookLUT3DDomainMin);
-        shader.setUniform('u_lookLUT3DDomainMax', s.lookLUT3DDomainMax);
-      }
-    }
-
-    // File LUT
-    if (dirty.has(DIRTY_FILE_LUT3D)) {
-      shader.setUniformInt('u_fileLUT3DEnabled', s.fileLUT3DEnabled ? 1 : 0);
-      if (s.fileLUT3DEnabled) {
-        shader.setUniform('u_fileLUT3DIntensity', s.fileLUT3DIntensity);
-        shader.setUniform('u_fileLUT3DSize', s.fileLUT3DSize);
-        shader.setUniform('u_fileLUT3DDomainMin', s.fileLUT3DDomainMin);
-        shader.setUniform('u_fileLUT3DDomainMax', s.fileLUT3DDomainMax);
-      }
-    }
-
-    // Display LUT
-    if (dirty.has(DIRTY_DISPLAY_LUT3D)) {
-      shader.setUniformInt('u_displayLUT3DEnabled', s.displayLUT3DEnabled ? 1 : 0);
-      if (s.displayLUT3DEnabled) {
-        shader.setUniform('u_displayLUT3DIntensity', s.displayLUT3DIntensity);
-        shader.setUniform('u_displayLUT3DSize', s.displayLUT3DSize);
-        shader.setUniform('u_displayLUT3DDomainMin', s.displayLUT3DDomainMin);
-        shader.setUniform('u_displayLUT3DDomainMax', s.displayLUT3DDomainMax);
-      }
-    }
-
-    // Display transfer function
-    if (dirty.has(DIRTY_DISPLAY)) {
-      shader.setUniformInt('u_displayTransfer', s.displayTransferCode);
-      shader.setUniform('u_displayGamma', s.displayGammaOverride);
-      shader.setUniform('u_displayBrightness', s.displayBrightnessMultiplier);
-      shader.setUniform('u_displayCustomGamma', s.displayCustomGamma);
-    }
-
-    // Background pattern
-    if (dirty.has(DIRTY_BACKGROUND)) {
-      shader.setUniformInt('u_backgroundPattern', s.bgPatternCode);
-      if (s.bgPatternCode !== BG_PATTERN_NONE) {
-        shader.setUniform('u_bgColor1', s.bgColor1);
-        shader.setUniform('u_bgColor2', s.bgColor2);
-        shader.setUniform('u_bgCheckerSize', s.bgCheckerSize);
-      }
-    }
-    // Resolution is always needed for zebra stripes too and can change
-    // without a setter (via resize()), so it is set unconditionally.
-    // Reuse pre-allocated buffer to avoid per-frame allocation.
-    const canvasSize = texCb.getCanvasSize();
-    this.resolutionBuffer[0] = canvasSize.width;
-    this.resolutionBuffer[1] = canvasSize.height;
-    shader.setUniform('u_resolution', this.resolutionBuffer);
-
-    // --- Phase 1B: New GPU shader effect uniforms ---
-
-    // Highlights/Shadows/Whites/Blacks
-    if (dirty.has(DIRTY_HIGHLIGHTS_SHADOWS)) {
-      shader.setUniformInt('u_hsEnabled', s.hsEnabled ? 1 : 0);
-      if (s.hsEnabled) {
-        shader.setUniform('u_highlights', s.highlightsValue);
-        shader.setUniform('u_shadows', s.shadowsValue);
-        shader.setUniform('u_whites', s.whitesValue);
-        shader.setUniform('u_blacks', s.blacksValue);
-      }
-    }
-
-    // Vibrance
-    if (dirty.has(DIRTY_VIBRANCE)) {
-      shader.setUniformInt('u_vibranceEnabled', s.vibranceEnabled ? 1 : 0);
-      if (s.vibranceEnabled) {
-        shader.setUniform('u_vibrance', s.vibranceValue);
-        shader.setUniformInt('u_vibranceSkinProtection', s.vibranceSkinProtection ? 1 : 0);
-      }
-    }
-
-    // Clarity
-    if (dirty.has(DIRTY_CLARITY)) {
-      shader.setUniformInt('u_clarityEnabled', s.clarityEnabled ? 1 : 0);
-      if (s.clarityEnabled) {
-        shader.setUniform('u_clarity', s.clarityValue);
-      }
-    }
-
-    // Sharpen
-    if (dirty.has(DIRTY_SHARPEN)) {
-      shader.setUniformInt('u_sharpenEnabled', s.sharpenEnabled ? 1 : 0);
-      if (s.sharpenEnabled) {
-        shader.setUniform('u_sharpenAmount', s.sharpenAmount);
-      }
-    }
-
-    // Texel size (needed for clarity and sharpen)
-    if ((dirty.has(DIRTY_CLARITY) || dirty.has(DIRTY_SHARPEN)) && (s.clarityEnabled || s.sharpenEnabled)) {
-      shader.setUniform('u_texelSize', s.texelSize);
-    }
-
-    // HSL Qualifier
-    if (dirty.has(DIRTY_HSL)) {
-      shader.setUniformInt('u_hslQualifierEnabled', s.hslQualifierEnabled ? 1 : 0);
-      if (s.hslQualifierEnabled) {
-        shader.setUniform('u_hslHueCenter', s.hslHueCenter);
-        shader.setUniform('u_hslHueWidth', s.hslHueWidth);
-        shader.setUniform('u_hslHueSoftness', s.hslHueSoftness);
-        shader.setUniform('u_hslSatCenter', s.hslSatCenter);
-        shader.setUniform('u_hslSatWidth', s.hslSatWidth);
-        shader.setUniform('u_hslSatSoftness', s.hslSatSoftness);
-        shader.setUniform('u_hslLumCenter', s.hslLumCenter);
-        shader.setUniform('u_hslLumWidth', s.hslLumWidth);
-        shader.setUniform('u_hslLumSoftness', s.hslLumSoftness);
-        shader.setUniform('u_hslCorrHueShift', s.hslCorrHueShift);
-        shader.setUniform('u_hslCorrSatScale', s.hslCorrSatScale);
-        shader.setUniform('u_hslCorrLumScale', s.hslCorrLumScale);
-        shader.setUniformInt('u_hslInvert', s.hslInvert ? 1 : 0);
-        shader.setUniformInt('u_hslMattePreview', s.hslMattePreview ? 1 : 0);
-      }
-    }
-
-    // Gamut Mapping
-    if (dirty.has(DIRTY_GAMUT_MAPPING)) {
-      shader.setUniformInt('u_gamutMappingEnabled', s.gamutMappingEnabled ? 1 : 0);
-      if (s.gamutMappingEnabled) {
-        shader.setUniformInt('u_gamutMappingMode', s.gamutMappingModeCode);
-        shader.setUniformInt('u_sourceGamut', s.gamutSourceCode);
-        shader.setUniformInt('u_targetGamut', s.gamutTargetCode);
-        shader.setUniformInt('u_gamutHighlightEnabled', s.gamutHighlightEnabled ? 1 : 0);
-      } else {
-        shader.setUniformInt('u_gamutHighlightEnabled', 0);
-      }
-    }
-
-    // Automatic Color Primaries Conversion
-    if (dirty.has(DIRTY_COLOR_PRIMARIES)) {
-      shader.setUniformInt('u_inputPrimariesEnabled', s.inputPrimariesEnabled ? 1 : 0);
-      if (s.inputPrimariesEnabled) {
-        shader.setUniformMatrix3('u_inputPrimariesMatrix', s.inputPrimariesMatrix);
-      }
-      shader.setUniformInt('u_outputPrimariesEnabled', s.outputPrimariesEnabled ? 1 : 0);
-      if (s.outputPrimariesEnabled) {
-        shader.setUniformMatrix3('u_outputPrimariesMatrix', s.outputPrimariesMatrix);
-      }
-    }
-
-    // Deinterlace
-    if (dirty.has(DIRTY_DEINTERLACE)) {
-      shader.setUniformInt('u_deinterlaceEnabled', s.deinterlaceEnabled ? 1 : 0);
-      if (s.deinterlaceEnabled) {
-        shader.setUniformInt('u_deinterlaceMethod', s.deinterlaceMethod);
-        shader.setUniformInt('u_deinterlaceFieldOrder', s.deinterlaceFieldOrder);
-      }
-    }
-
-    // Texel size - also needed for deinterlace
-    if ((dirty.has(DIRTY_DEINTERLACE)) && s.deinterlaceEnabled) {
-      shader.setUniform('u_texelSize', s.texelSize);
-    }
-
-    // Film Emulation
-    if (dirty.has(DIRTY_FILM_EMULATION)) {
-      shader.setUniformInt('u_filmEnabled', s.filmEnabled ? 1 : 0);
-      if (s.filmEnabled) {
-        shader.setUniform('u_filmIntensity', s.filmIntensity);
-        shader.setUniform('u_filmSaturation', s.filmSaturation);
-        shader.setUniform('u_filmGrainIntensity', s.filmGrainIntensity);
-        shader.setUniform('u_filmGrainSeed', s.filmGrainSeed);
-      }
-    }
-
-    // Linearize (log-to-linear conversion)
-    if (dirty.has(DIRTY_LINEARIZE)) {
-      shader.setUniformInt('u_linearizeLogType', s.linearizeLogType);
-      shader.setUniform('u_linearizeFileGamma', s.linearizeFileGamma);
-      shader.setUniformInt('u_linearizeSRGB2linear', s.linearizeSRGB2linear ? 1 : 0);
-      shader.setUniformInt('u_linearizeRec709ToLinear', s.linearizeRec709ToLinear ? 1 : 0);
-    }
-
-    // Out-of-range visualization
-    if (dirty.has(DIRTY_OUT_OF_RANGE)) {
-      shader.setUniformInt('u_outOfRange', s.outOfRange);
-    }
-
-    // Premultiply/unpremultiply alpha
-    if (dirty.has(DIRTY_PREMULT)) {
-      shader.setUniformInt('u_premult', s.premultMode);
-    }
-
-    // Dither + Quantize visualization
-    if (dirty.has(DIRTY_DITHER)) {
-      shader.setUniformInt('u_ditherMode', s.ditherMode);
-      shader.setUniformInt('u_quantizeBits', s.quantizeBits);
-    }
-
-    // Channel swizzle (RVChannelMap remapping)
-    if (dirty.has(DIRTY_CHANNEL_SWIZZLE)) {
-      this.channelSwizzleBuffer[0] = s.channelSwizzle[0];
-      this.channelSwizzleBuffer[1] = s.channelSwizzle[1];
-      this.channelSwizzleBuffer[2] = s.channelSwizzle[2];
-      this.channelSwizzleBuffer[3] = s.channelSwizzle[3];
-      shader.setUniform('u_channelSwizzle', this.channelSwizzleBuffer);
-    }
-
-    // Perspective Correction
-    if (dirty.has(DIRTY_PERSPECTIVE)) {
-      shader.setUniformInt('u_perspectiveEnabled', s.perspectiveEnabled ? 1 : 0);
-      if (s.perspectiveEnabled) {
-        shader.setUniformMatrix3('u_perspectiveInvH', s.perspectiveInvH);
-        shader.setUniformInt('u_perspectiveQuality', s.perspectiveQuality);
-        // Texel size needed for bicubic perspective interpolation
-        if (s.perspectiveQuality === 1) {
-          shader.setUniform('u_texelSize', s.texelSize);
-        }
-      }
-    }
-
-    // Spherical (equirectangular 360) projection
-    if (dirty.has(DIRTY_SPHERICAL)) {
-      shader.setUniformInt('u_sphericalEnabled', s.sphericalEnabled ? 1 : 0);
-      if (s.sphericalEnabled) {
-        shader.setUniform('u_sphericalFov', s.sphericalFov);
-        shader.setUniform('u_sphericalAspect', s.sphericalAspect);
-        shader.setUniform('u_sphericalYaw', s.sphericalYaw);
-        shader.setUniform('u_sphericalPitch', s.sphericalPitch);
-      }
-    }
-
-    // --- Bind effect textures ---
-    // Sampler uniform-to-unit bindings are constant (they never change after the
-    // first assignment). We set them once, then skip on subsequent frames.
-    // In WebGL2, all sampler uniforms default to texture unit 0. If a sampler3D
-    // (u_lut3D) and a sampler2D (u_texture) both point to unit 0, glDrawArrays
-    // fails with GL_INVALID_OPERATION: "Two textures of different types use the
-    // same sampler location." So these must be set at least once.
-    if (!this._textureUnitsInitialized) {
-      shader.setUniformInt('u_curvesLUT', 1);
-      shader.setUniformInt('u_falseColorLUT', 2);
-      shader.setUniformInt('u_lookLUT3D', 3);
-      shader.setUniformInt('u_filmLUT', 4);
-      shader.setUniformInt('u_inlineLUT', 5);
-      shader.setUniformInt('u_fileLUT3D', 6);
-      shader.setUniformInt('u_displayLUT3D', 7);
-      this._textureUnitsInitialized = true;
-    }
-
-    // Texture unit 1: curves LUT
-    if (s.curvesEnabled) {
-      texCb.bindCurvesLUTTexture();
-    }
-
-    // Texture unit 2: false color LUT
-    if (s.falseColorEnabled) {
-      texCb.bindFalseColorLUTTexture();
-    }
-
-    // Texture unit 3: Look LUT (3D)
-    if (s.lut3DEnabled) {
-      texCb.bindLUT3DTexture();
-    }
-
-    // Texture unit 4: film emulation LUT
-    if (s.filmEnabled) {
-      texCb.bindFilmLUTTexture();
-    }
-
-    // Texture unit 5: inline 1D LUT (RVColor luminanceLUT)
-    if (s.inlineLUTEnabled) {
-      texCb.bindInlineLUTTexture();
-    }
-
-    // Texture unit 6: File LUT (3D)
-    if (s.fileLUT3DEnabled) {
-      texCb.bindFileLUT3DTexture();
-    }
-
-    // Texture unit 7: Display LUT (3D)
-    if (s.displayLUT3DEnabled) {
-      texCb.bindDisplayLUT3DTexture();
-    }
-
-    // Clear all dirty flags after uniforms have been set
-    dirty.clear();
+    this._textureUnitsInitialized = applyUniformsFn(
+      this.state,
+      this.dirtyFlags,
+      shader,
+      texCb,
+      this.uniformBuffers,
+      this._textureUnitsInitialized,
+    );
   }
 
   /**
