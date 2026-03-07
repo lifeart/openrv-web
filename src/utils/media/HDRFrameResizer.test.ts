@@ -43,12 +43,11 @@ function setupOffscreenCanvasMock(contextReturnsNull = false) {
   // Mock VideoFrame constructor for the resized frame
   const originalVideoFrame = globalThis.VideoFrame;
   const MockVideoFrame = vi.fn(function(this: any, _source: unknown, opts: { timestamp: number }) {
-    const inner = createMockVideoFrame({
+    return createMockVideoFrame({
       displayWidth: 960,
       displayHeight: 540,
       timestamp: opts.timestamp,
     });
-    return inner;
   });
   vi.stubGlobal('VideoFrame', MockVideoFrame);
 

@@ -5,10 +5,10 @@
 
 import { vi } from 'vitest';
 
-// Workaround for jsdom 28 CSS parsing bugs:
+// Workaround for jsdom 28 CSS parsing bugs (https://github.com/jsdom/jsdom/issues/4095):
 // 1. `border` shorthand with CSS var() values silently rejects entire cssText
 // 2. `background` shorthand followed by any other property silently rejects entire cssText
-// We patch the cssText setter to expand these shorthands into longhands.
+// Caused by @acemir/cssom introduced in jsdom 27.1.0. Remove when fixed upstream.
 const cssTextDesc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'cssText');
 if (cssTextDesc && cssTextDesc.set) {
   const originalSet = cssTextDesc.set;
@@ -23,7 +23,7 @@ if (cssTextDesc && cssTextDesc.set) {
       // three longhands causes jsdom to re-collapse and lose borderColor.
       const borderDecls: Array<{ side: string; width: string; style: string; color: string }> = [];
       fixed = fixed.replace(
-        /\bborder(?:-(top|right|bottom|left))?\s*:\s*([^;]*?)\s+(solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden)\s+(var\([^)]+\))\s*;/g,
+        /\bborder(?:-(top|right|bottom|left))?\s*:\s*([^;]*?)\s+(solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden)\s+(var\([^)]+\))\s*;?/g,
         (_match, side: string | undefined, width: string, style: string, color: string) => {
           borderDecls.push({ side: side || '', width, style, color });
           return '';

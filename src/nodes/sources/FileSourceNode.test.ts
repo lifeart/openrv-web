@@ -1599,13 +1599,15 @@ describe('FileSourceNode', () => {
         close: vi.fn(),
       }));
 
-      (globalThis as any).VideoFrame = vi.fn(function(bitmap: any) {
-        return {
-          displayWidth: bitmap.width ?? 32,
-          displayHeight: bitmap.height ?? 32,
-          close: vi.fn(),
-        };
-      });
+      (globalThis as any).VideoFrame = class {
+        displayWidth: number;
+        displayHeight: number;
+        close = vi.fn();
+        constructor(bitmap: any) {
+          this.displayWidth = bitmap.width ?? 32;
+          this.displayHeight = bitmap.height ?? 32;
+        }
+      };
     });
 
     afterEach(() => {
