@@ -372,6 +372,7 @@ describe('AppControlRegistry', () => {
         getDisplayHeight: vi.fn(() => 600),
         getEXRWindowOverlay: vi.fn(() => createMockOverlay()),
         getFPSIndicator: vi.fn(() => createMockOverlay()),
+        getInfoStripOverlay: vi.fn(() => createMockOverlay()),
         setSphericalProjection: vi.fn(),
       } as any;
       const sessionBridge = { updateInfoPanel: vi.fn() } as any;
