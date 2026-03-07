@@ -124,6 +124,11 @@ export class ViewerInputHandler {
   /** Whether the active pixel buffer was extracted from the GL renderer (HDR path) */
   private _isHDRBuffer = false;
 
+  // Rotation scrub state (Ctrl+Shift+drag)
+  private isRotationScrubbing = false;
+  private rotationScrubStartX = 0;
+  private rotationScrubStartAngle = 0;
+
   // Spherical (360) drag state
   private isSphericalDragging = false;
 
@@ -196,6 +201,16 @@ export class ViewerInputHandler {
 
   get drawingShape(): boolean {
     return this.isDrawingShape;
+  }
+
+  /**
+   * Returns true if any viewer interaction (pan, draw, shape draw,
+   * advanced draw, spherical drag) is in progress.
+   * Used by VirtualSliderController to suppress activation during
+   * other interactions.
+   */
+  isInteracting(): boolean {
+    return this.isPanning || this.isDrawing || this.isDrawingShape || this.isAdvancedDrawing || this.isSphericalDragging || this.isRotationScrubbing;
   }
 
   get currentLivePoints(): StrokePoint[] {
@@ -340,9 +355,16 @@ export class ViewerInputHandler {
           }
         }
       } else if (e.button === 0 || e.pointerType === 'touch') {
+        // Rotation scrub: Ctrl+Shift+drag
+        if (e.ctrlKey && e.shiftKey) {
+          this.isRotationScrubbing = true;
+          this.rotationScrubStartX = e.clientX;
+          const tm = this.ctx.getTransformManager();
+          this.rotationScrubStartAngle = tm.transform.rotation;
+          container.style.cursor = 'ew-resize';
         // Spherical (360) drag mode: route to SphericalProjection when enabled
-        const sp = this.ctx.getSphericalProjection();
-        if (sp && sp.enabled) {
+        } else if (this.ctx.getSphericalProjection()?.enabled) {
+          const sp = this.ctx.getSphericalProjection()!;
           this.isSphericalDragging = true;
           sp.beginDrag(e.clientX, e.clientY);
           container.style.cursor = 'grabbing';
@@ -416,6 +438,16 @@ export class ViewerInputHandler {
         this.shapeCurrentPoint = { x: point.x, y: point.y };
         this.renderLiveShape();
       }
+    } else if (this.isRotationScrubbing) {
+      const dx = e.clientX - this.rotationScrubStartX;
+      // Sensitivity: 0.5 degrees per pixel of horizontal movement
+      const angleDelta = dx * 0.5;
+      const newAngle = ((this.rotationScrubStartAngle + angleDelta) % 360 + 360) % 360;
+      const tm = this.ctx.getTransformManager();
+      const currentTransform = tm.getTransform();
+      currentTransform.rotation = newAngle;
+      tm.setTransform(currentTransform);
+      this.ctx.scheduleRender();
     } else if (this.isSphericalDragging) {
       const sp = this.ctx.getSphericalProjection();
       if (sp) {
@@ -474,6 +506,16 @@ export class ViewerInputHandler {
 
     if (this.isDrawingShape) {
       this.finalizeShape();
+    }
+
+    if (this.isRotationScrubbing) {
+      this.isRotationScrubbing = false;
+      const paintEngine = this.ctx.getPaintEngine();
+      if (paintEngine.tool === 'none') {
+        this.ctx.getContainer().style.cursor = 'grab';
+      } else {
+        this.updateCursor(paintEngine.tool);
+      }
     }
 
     if (this.isSphericalDragging) {
@@ -603,11 +645,13 @@ export class ViewerInputHandler {
       tm.panY,
       tm.zoom,
       newZoom,
+      tm.fitMode ?? 'all',
     );
 
     tm.panX = panX;
     tm.panY = panY;
     tm.zoom = newZoom;
+    tm.clearFitMode();
     this.ctx.scheduleRender();
 
     this.ctx.getInteractionQuality().endInteraction();

@@ -437,6 +437,9 @@ export class AppNetworkBridge {
         if (session.playbackSpeed !== payload.playbackSpeed) {
           session.playbackSpeed = payload.playbackSpeed;
         }
+        if (payload.playbackMode && session.playbackMode !== payload.playbackMode) {
+          session.playbackMode = payload.playbackMode;
+        }
       } finally {
         sm.endApplyRemote();
       }
@@ -639,6 +642,7 @@ export class AppNetworkBridge {
           playbackSpeed: session.playbackSpeed,
           playDirection: session.playDirection,
           loopMode: session.loopMode,
+          playbackMode: session.playbackMode,
           timestamp: Date.now(),
         });
       }

@@ -22,6 +22,7 @@ import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
+import type { TextureFilterMode } from '../core/types/filter';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
@@ -82,6 +83,9 @@ export class WebGPUBackend implements RendererBackend {
 
   // Whether extended tone mapping is active (vs. standard fallback)
   private extendedToneMapping = false;
+
+  // Texture filter mode (stored for future WebGPU pipeline implementation)
+  private _textureFilterMode: TextureFilterMode = 'linear';
 
   // --- Lifecycle ---
 
@@ -270,6 +274,17 @@ export class WebGPUBackend implements RendererBackend {
     // TODO: implement for WebGPU pipeline when HDR rendering is added
   }
 
+  // --- Texture filter mode (IMPLEMENTED - state management) ---
+
+  setTextureFilterMode(mode: TextureFilterMode): void {
+    this._textureFilterMode = mode;
+    // WebGPU pipeline will apply via GPUSamplerDescriptor when implemented.
+  }
+
+  getTextureFilterMode(): TextureFilterMode {
+    return this._textureFilterMode;
+  }
+
   // --- Texture management (STUBS - WebGPU uses GPUTexture, not WebGLTexture) ---
 
   createTexture(): TextureHandle {
@@ -320,8 +335,11 @@ export class WebGPUBackend implements RendererBackend {
   setZebraStripes(_state: ZebraState): void { /* STUB */ }
   setChannelMode(_mode: ChannelMode): void { /* STUB */ }
 
-  // --- 3D LUT (single-pass float precision pipeline) ---
+  // --- 3D LUT (multi-point pipeline) ---
   setLUT(_lutData: Float32Array | null, _lutSize: number, _intensity: number): void { /* STUB */ }
+  setFileLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
+  setLookLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
+  setDisplayLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
 
   // --- Display color management ---
   setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }
@@ -364,6 +382,9 @@ export class WebGPUBackend implements RendererBackend {
     this.setPremultMode(state.premultMode ?? 0);
     this.setDitherMode(state.ditherMode ?? 0);
     this.setQuantizeBits(state.quantizeBits ?? 0);
+    if (state.textureFilterMode !== undefined) {
+      this.setTextureFilterMode(state.textureFilterMode);
+    }
   }
 
   hasPendingStateChanges(): boolean {

@@ -132,4 +132,60 @@ export class AudioAPI {
   getPreservesPitch(): boolean {
     return this.session.preservesPitch;
   }
+
+  /**
+   * Enable audio scrubbing (play audio snippets during frame stepping/timeline drag).
+   *
+   * @example
+   * ```ts
+   * openrv.audio.enableAudioScrub();
+   * ```
+   */
+  enableAudioScrub(): void {
+    this.session.audioScrubEnabled = true;
+  }
+
+  /**
+   * Disable audio scrubbing (silent frame stepping/timeline drag).
+   *
+   * @example
+   * ```ts
+   * openrv.audio.disableAudioScrub();
+   * ```
+   */
+  disableAudioScrub(): void {
+    this.session.audioScrubEnabled = false;
+  }
+
+  /**
+   * Check if audio scrubbing is enabled.
+   *
+   * @returns `true` if audio scrub is enabled, `false` otherwise.
+   *
+   * @example
+   * ```ts
+   * const scrubbing = openrv.audio.isAudioScrubEnabled();
+   * ```
+   */
+  isAudioScrubEnabled(): boolean {
+    return this.session.audioScrubEnabled;
+  }
+
+  /**
+   * Set audio scrubbing enabled state.
+   *
+   * @param enabled - `true` to enable audio scrub, `false` to disable.
+   * @throws {ValidationError} If `enabled` is not a boolean.
+   *
+   * @example
+   * ```ts
+   * openrv.audio.setAudioScrubEnabled(false);
+   * ```
+   */
+  setAudioScrubEnabled(enabled: boolean): void {
+    if (typeof enabled !== 'boolean') {
+      throw new ValidationError('setAudioScrubEnabled() requires a boolean value');
+    }
+    this.session.audioScrubEnabled = enabled;
+  }
 }

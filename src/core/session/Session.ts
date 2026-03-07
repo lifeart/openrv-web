@@ -5,6 +5,8 @@ import type { RVEDLEntry } from '../../formats/RVEDLParser';
 import type { SequenceFrame, SequenceInfo } from '../../utils/media/SequenceLoader';
 import type { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import type { FileSourceNode } from '../../nodes/sources/FileSourceNode';
+import type { ProceduralSourceNode } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type {
@@ -29,7 +31,7 @@ import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
 import type { StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoEyeTransform';
-import type { LoopMode, MediaType } from '../types/session';
+import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Graph } from '../graph/Graph';
 import type {
   HashResolveResult,
@@ -53,6 +55,7 @@ import {
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
+import type { FPSMeasurement } from './PlaybackEngine';
 import { MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import type { NoteManager } from './NoteManager';
 import type { VersionManager } from './VersionManager';
@@ -62,9 +65,11 @@ import { SessionGraph } from './SessionGraph';
 import { SessionMedia } from './SessionMedia';
 import { SessionPlayback } from './SessionPlayback';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
+import type { MediaRepresentation } from '../types/representation';
 // Logger removed — playback logging now lives in SessionPlayback.
 
 export type { SubFramePosition };
+export type { FPSMeasurement };
 export { MARKER_COLORS };
 export type { Marker, MarkerColor };
 
@@ -153,9 +158,12 @@ export interface SessionEvents extends EventMap {
   durationChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
   loopModeChanged: LoopMode;
+  playbackModeChanged: PlaybackMode;
   playDirectionChanged: number;
   playbackSpeedChanged: number;
   preservesPitchChanged: boolean;
+  audioScrubEnabledChanged: boolean;
+  audioScrubAvailabilityChanged: boolean;
   marksChanged: ReadonlyMap<number, Marker>;
   annotationsLoaded: ParsedAnnotations;
   settingsLoaded: GTOViewSettings;
@@ -178,6 +186,10 @@ export interface SessionEvents extends EventMap {
   // Sub-frame interpolation events
   interpolationEnabledChanged: boolean;
   subFramePositionChanged: SubFramePosition | null;
+  // FPS measurement events
+  fpsUpdated: FPSMeasurement;
+  // Frame decode timeout in play-all-frames mode
+  frameDecodeTimeout: number;
   // EDL events
   edlLoaded: RVEDLEntry[];
   // Note/comment events
@@ -185,10 +197,31 @@ export interface SessionEvents extends EventMap {
   versionsChanged: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
+  // Range shifting events
+  rangeShifted: { inPoint: number; outPoint: number };
+  // Representation events
+  representationChanged: {
+    sourceIndex: number;
+    previousRepId: string | null;
+    newRepId: string;
+    representation: MediaRepresentation;
+  };
+  representationError: {
+    sourceIndex: number;
+    repId: string;
+    error: string;
+    userInitiated: boolean;
+  };
+  fallbackActivated: {
+    sourceIndex: number;
+    failedRepId: string;
+    fallbackRepId: string;
+    fallbackRepresentation: MediaRepresentation;
+  };
 }
 
 // Re-export from centralized types for backward compatibility
-export type { LoopMode, MediaType } from '../types/session';
+export type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 export type { RVEDLEntry } from '../../formats/RVEDLParser';
 
 export interface MediaSource {
@@ -207,8 +240,16 @@ export interface MediaSource {
   videoSourceNode?: VideoSourceNode;
   // File source node for EXR files (supports layer selection)
   fileSourceNode?: FileSourceNode;
+  // Procedural source node for test patterns (movieproc)
+  proceduralSourceNode?: ProceduralSourceNode;
   // OPFS cache key (set after successful cache put)
   opfsCacheKey?: string;
+
+  // --- Multiple Media Representations (MMR) ---
+  /** All available representations for this source. Undefined or empty array = legacy mode. */
+  representations?: MediaRepresentation[];
+  /** Index into `representations` for the currently active one. -1 or undefined = legacy mode. */
+  activeRepresentationIndex?: number;
 }
 
 // Re-export for backward compatibility
@@ -333,10 +374,11 @@ export class Session extends EventEmitter<SessionEvents> {
     // Forward SessionPlayback events to Session events
     const playbackEvents = [
       'frameChanged', 'playbackChanged', 'playDirectionChanged', 'playbackSpeedChanged',
-      'loopModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
+      'loopModeChanged', 'playbackModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
       'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
-      'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioError',
-      'abSourceChanged',
+      'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioScrubEnabledChanged',
+      'audioScrubAvailabilityChanged',
+      'audioError', 'abSourceChanged', 'fpsUpdated', 'frameDecodeTimeout',
     ] as const;
     for (const event of playbackEvents) {
       this._playback.on(event as any, (data: any) => this.emit(event as any, data));
@@ -359,6 +401,7 @@ export class Session extends EventEmitter<SessionEvents> {
       setInPoint: (v) => { this._inPoint = v; },
       setOutPoint: (v) => { this._outPoint = v; },
       setFrameIncrement: (v) => { this._frameIncrement = v; },
+      setPlaybackMode: (mode) => { this.playbackMode = mode; },
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
       emitFrameIncrementChanged: (inc) => this.emit('frameIncrementChanged', inc),
       getAnnotations: () => this._annotations,
@@ -394,7 +437,10 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward SessionMedia events
-    const mediaEvents = ['sourceLoaded', 'durationChanged', 'unsupportedCodec'] as const;
+    const mediaEvents = [
+      'sourceLoaded', 'durationChanged', 'unsupportedCodec',
+      'representationChanged', 'representationError', 'fallbackActivated',
+    ] as const;
     for (const event of mediaEvents) {
       this._media.on(event as any, (data: any) => this.emit(event as any, data));
     }
@@ -567,6 +613,18 @@ export class Session extends EventEmitter<SessionEvents> {
     this._sessionGraph.setDisplayName(displayName);
   }
 
+  get playbackMode(): PlaybackMode {
+    return this._playback.playbackMode;
+  }
+
+  set playbackMode(mode: PlaybackMode) {
+    this._playback.playbackMode = mode;
+  }
+
+  togglePlaybackMode(): void {
+    this._playback.togglePlaybackMode();
+  }
+
   get playbackSpeed(): number {
     return this._playback.playbackSpeed;
   }
@@ -670,6 +728,30 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Whether audio scrub snippets play during frame stepping and timeline drag.
+   * When true, scrubbing produces short audio snippets at the target frame.
+   * When false, scrubbing is silent (independent of mute state).
+   * Default: true.
+   */
+  get audioScrubEnabled(): boolean {
+    return this._playback.audioScrubEnabled;
+  }
+
+  set audioScrubEnabled(value: boolean) {
+    this._playback.audioScrubEnabled = value;
+  }
+
+  /** Signal that a continuous scrub (timeline drag) has started. */
+  onScrubStart(): void {
+    this._playback.onScrubStart();
+  }
+
+  /** Signal that a continuous scrub (timeline drag) has ended. */
+  onScrubEnd(): void {
+    this._playback.onScrubEnd();
+  }
+
+  /**
    * Whether sub-frame interpolation is enabled for slow-motion playback.
    * When true and playing at speeds < 1x, adjacent frames are blended
    * to produce smoother slow-motion output.
@@ -756,6 +838,14 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._playback.effectiveFps;
   }
 
+  /**
+   * Get cumulative dropped frame count since last play() started.
+   * Resets to 0 when playback begins.
+   */
+  get droppedFrameCount(): number {
+    return this._playback.droppedFrameCount;
+  }
+
   stepForward(): void {
     this._playback.stepForward();
   }
@@ -786,6 +876,21 @@ export class Session extends EventEmitter<SessionEvents> {
 
   resetInOutPoints(): void {
     this._playback.resetInOutPoints();
+  }
+
+  /**
+   * Atomically set both in and out points, avoiding cross-clamping bugs.
+   * Emits 'inOutChanged' exactly once.
+   */
+  setInOutRange(inPoint: number, outPoint: number): void {
+    this._playback.setInOutRange(inPoint, outPoint);
+  }
+
+  /**
+   * Emit a rangeShifted event (called after range shift navigation).
+   */
+  emitRangeShifted(inPoint: number, outPoint: number): void {
+    this.emit('rangeShifted', { inPoint, outPoint });
   }
 
   // Marks — delegated to SessionAnnotations
@@ -965,6 +1070,27 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._annotations.annotationStore.parseTextAnnotation(textId, frame, comp, aspectRatio);
   }
 
+  // Procedural source loading — delegated to SessionMedia
+  loadProceduralSource(
+    pattern: PatternName,
+    options?: {
+      width?: number;
+      height?: number;
+      color?: [number, number, number, number];
+      direction?: GradientDirection;
+      cellSize?: number;
+      steps?: number;
+      fps?: number;
+      duration?: number;
+    },
+  ): void {
+    this._media.loadProceduralSource(pattern, options);
+  }
+
+  loadMovieProc(url: string): void {
+    this._media.loadMovieProc(url);
+  }
+
   // File loading — delegated to SessionMedia
   async loadFile(file: File): Promise<void> {
     return this._media.loadFile(file);
@@ -1077,6 +1203,43 @@ export class Session extends EventEmitter<SessionEvents> {
     this._media.setCurrentSource(index);
   }
 
+  // --- Representation management — delegated to SessionMedia ---
+
+  /**
+   * Add a representation to a source.
+   */
+  addRepresentationToSource(
+    sourceIndex: number,
+    config: import('../types/representation').AddRepresentationConfig
+  ): MediaRepresentation | null {
+    return this._media.addRepresentationToSource(sourceIndex, config);
+  }
+
+  /**
+   * Remove a representation from a source.
+   */
+  removeRepresentationFromSource(sourceIndex: number, repId: string): boolean {
+    return this._media.removeRepresentationFromSource(sourceIndex, repId);
+  }
+
+  /**
+   * Switch the active representation for a source.
+   */
+  async switchRepresentation(
+    sourceIndex: number,
+    repId: string,
+    options?: import('../types/representation').SwitchRepresentationOptions
+  ): Promise<boolean> {
+    return this._media.switchRepresentation(sourceIndex, repId, options);
+  }
+
+  /**
+   * Get the active representation for a source.
+   */
+  getActiveRepresentation(sourceIndex: number): MediaRepresentation | null {
+    return this._media.getActiveRepresentation(sourceIndex);
+  }
+
   // A/B Source Compare methods — delegated to SessionPlayback
 
   get currentAB(): 'A' | 'B' {
@@ -1143,9 +1306,11 @@ export class Session extends EventEmitter<SessionEvents> {
     outPoint: number;
     fps: number;
     loopMode: LoopMode;
+    playbackMode: PlaybackMode;
     volume: number;
     muted: boolean;
     preservesPitch: boolean;
+    audioScrubEnabled: boolean;
     marks: Marker[];
     currentSourceIndex: number;
   } {
@@ -1155,9 +1320,11 @@ export class Session extends EventEmitter<SessionEvents> {
       outPoint: this._outPoint,
       fps: this._fps,
       loopMode: this._loopMode,
+      playbackMode: this._playback.playbackMode,
       volume: this._playback.volume,
       muted: this._playback.muted,
       preservesPitch: this._playback.preservesPitch,
+      audioScrubEnabled: this._playback.audioScrubEnabled,
       marks: this._annotations.markerManager.toArray(),
       currentSourceIndex: this._currentSourceIndex,
     };
@@ -1172,9 +1339,11 @@ export class Session extends EventEmitter<SessionEvents> {
     outPoint: number;
     fps: number;
     loopMode: LoopMode;
+    playbackMode: PlaybackMode;
     volume: number;
     muted: boolean;
     preservesPitch: boolean;
+    audioScrubEnabled: boolean;
     marks: Marker[] | number[]; // Support both old and new format
     currentSourceIndex: number;
   }>): void {
@@ -1184,9 +1353,11 @@ export class Session extends EventEmitter<SessionEvents> {
       // No direct emit — PlaybackEngine.loopMode setter already emits,
       // which chains through SessionPlayback → Session event forwarding.
     }
+    if (state.playbackMode !== undefined) this.playbackMode = state.playbackMode;
     if (state.volume !== undefined) this.volume = state.volume;
     if (state.muted !== undefined) this.muted = state.muted;
     if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;
+    if (state.audioScrubEnabled !== undefined) this.audioScrubEnabled = state.audioScrubEnabled;
     if (state.inPoint !== undefined) this.setInPoint(state.inPoint);
     if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;

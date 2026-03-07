@@ -2,9 +2,19 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
+import { TimelineContextMenu } from './TimelineContextMenu';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
+import {
+  drawPlayhead,
+  drawInOutBrackets,
+  drawInOutRange,
+  drawPlayedRegion,
+  drawMarkLines,
+  drawAnnotationTriangles,
+} from './timelineRenderHelpers';
 import type { NoteOverlay } from './NoteOverlay';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
@@ -33,6 +43,9 @@ export class Timeline {
   protected width = 0;
   protected height = 0;
 
+  private magnifierToggleButton: HTMLButtonElement | null = null;
+  private magnifierToggleCallback: (() => void) | null = null;
+
   // Bound event handlers for proper cleanup
   private boundHandleResize: () => void;
   private subs = new DisposableSubscriptionManager();
@@ -43,8 +56,10 @@ export class Timeline {
   private drawScheduled = false;
   private scheduledRafId = 0;
   private noteOverlay: NoteOverlay | null = null;
+  private contextMenu: TimelineContextMenu;
   private playlistManager: PlaylistManager | null = null;
   private transitionManager: TransitionManager | null = null;
+  private _rangeShiftFlashUntil = 0;
   private cachedColors: {
     background: string;
     track: string;
@@ -140,10 +155,56 @@ export class Timeline {
     `;
     this.container.appendChild(this.canvas);
 
+    // Create magnifying glass toggle button (overlaid on left padding area)
+    this.magnifierToggleButton = document.createElement('button');
+    this.magnifierToggleButton.type = 'button';
+    this.magnifierToggleButton.title = 'Toggle timeline magnifier (F3)';
+    this.magnifierToggleButton.setAttribute('aria-label', 'Toggle timeline magnifier');
+    this.magnifierToggleButton.dataset.testid = 'timeline-magnifier-toggle';
+    this.magnifierToggleButton.innerHTML = `<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`;
+    this.magnifierToggleButton.style.cssText = `
+      position: absolute;
+      left: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      transition: all 0.12s ease;
+    `;
+    this.magnifierToggleButton.addEventListener('pointerenter', () => {
+      if (this.magnifierToggleButton) {
+        this.magnifierToggleButton.style.background = 'var(--bg-hover)';
+        this.magnifierToggleButton.style.borderColor = 'var(--border-secondary)';
+        this.magnifierToggleButton.style.color = 'var(--text-primary)';
+      }
+    });
+    this.magnifierToggleButton.addEventListener('pointerleave', () => {
+      if (this.magnifierToggleButton) {
+        this.magnifierToggleButton.style.background = 'transparent';
+        this.magnifierToggleButton.style.borderColor = 'transparent';
+        this.magnifierToggleButton.style.color = 'var(--text-muted)';
+      }
+    });
+    this.magnifierToggleButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.magnifierToggleCallback?.();
+    });
+    this.container.style.position = 'relative';
+    this.container.appendChild(this.magnifierToggleButton);
+
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this.ctx = ctx;
 
+    this.contextMenu = new TimelineContextMenu();
     this.bindEvents();
   }
 
@@ -152,6 +213,7 @@ export class Timeline {
     this.canvas.addEventListener('dblclick', this.onDoubleClick);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
+    this.canvas.addEventListener('contextmenu', this.onContextMenu);
 
     // Listen to session changes
     this.subs.add(this.session.on('frameChanged', () => this.scheduleDraw()));
@@ -175,6 +237,7 @@ export class Timeline {
     this.subs.add(this.session.on('inOutChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('loopModeChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('marksChanged', () => this.scheduleDraw()));
+    this.subs.add(this.session.on('rangeShifted', () => this.flashRangeShift()));
 
     // Listen to theme changes so canvas redraws with new colors
     this.subs.add(getThemeManager().on('themeChanged', () => {
@@ -184,6 +247,21 @@ export class Timeline {
 
     // Listen to paint engine changes (only once)
     this.subscribeToPaintEngine();
+  }
+
+  /**
+   * Trigger a brief visual flash on the timeline to indicate a range shift.
+   * The flash persists for 400ms and is cleared on the next draw cycle.
+   */
+  private flashRangeShift(): void {
+    this._rangeShiftFlashUntil = Date.now() + 400;
+    this.scheduleDraw();
+    // Schedule a cleanup draw after the flash duration
+    setTimeout(() => {
+      if (!this.disposed) {
+        this.scheduleDraw();
+      }
+    }, 410);
   }
 
   private subscribeToPaintEngine(): void {
@@ -201,6 +279,20 @@ export class Timeline {
     this.paintEngine = paintEngine;
     this.subscribeToPaintEngine();
     this.scheduleDraw();
+  }
+
+  /**
+   * Set the callback for the magnifier toggle button.
+   */
+  setMagnifierToggle(callback: () => void): void {
+    this.magnifierToggleCallback = callback;
+  }
+
+  /**
+   * Get the WaveformRenderer instance (for sharing with magnifier).
+   */
+  getWaveformRenderer(): WaveformRenderer {
+    return this.waveformRenderer;
   }
 
   /**
@@ -350,15 +442,7 @@ export class Timeline {
   private onDoubleClick = (e: MouseEvent): void => {
     if (!this.paintEngine) return;
 
-    const rect = this.canvas.getBoundingClientRect();
-    const padding = 60;
-    const trackWidth = rect.width - padding * 2;
-    const x = e.clientX - rect.left - padding;
-    const progress = Math.max(0, Math.min(1, x / trackWidth));
-
-    const source = this.session.currentSource;
-    const duration = source?.duration ?? 1;
-    const clickedFrame = Math.round(1 + progress * (duration - 1));
+    const clickedFrame = this.frameAtClientX(e.clientX);
 
     // Find nearest annotated frame
     const annotatedFrames = this.paintEngine.getAnnotatedFrames();
@@ -379,6 +463,9 @@ export class Timeline {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    // Only left-clicks trigger seeking; right-clicks are handled by contextmenu
+    if (e.button !== 0) return;
+
     const rect = this.canvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const x = e.clientX - rect.left;
@@ -392,6 +479,7 @@ export class Timeline {
 
     this.isDragging = true;
     this.canvas.setPointerCapture(e.pointerId);
+    this.session.onScrubStart();
     this.seekToPosition(e.clientX);
   };
 
@@ -403,23 +491,79 @@ export class Timeline {
   private onPointerUp = (e: PointerEvent): void => {
     if (this.isDragging) {
       this.canvas.releasePointerCapture(e.pointerId);
+      this.session.onScrubEnd();
     }
     this.isDragging = false;
   };
 
   private seekToPosition(clientX: number): void {
+    const frame = this.frameAtClientX(clientX);
+    this.session.goToFrame(frame);
+  }
+
+  /**
+   * Convert a clientX coordinate to a 1-based frame number.
+   */
+  private frameAtClientX(clientX: number): number {
     const rect = this.canvas.getBoundingClientRect();
     const padding = 60;
     const trackWidth = rect.width - padding * 2;
     const x = clientX - rect.left - padding;
     const progress = Math.max(0, Math.min(1, x / trackWidth));
-
-    // Seek within full source duration, not just in/out range
     const source = this.session.currentSource;
     const duration = source?.duration ?? 1;
-    const frame = Math.round(1 + progress * (duration - 1));
-    this.session.goToFrame(frame);
+    return Math.round(1 + progress * (duration - 1));
   }
+
+  private onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault();
+
+    // No menu when no source is loaded
+    const source = this.session.currentSource;
+    if (!source) return;
+
+    // Cancel any in-progress drag
+    if (this.isDragging) {
+      this.isDragging = false;
+    }
+
+    const frame = this.frameAtClientX(e.clientX);
+    const fps = this.session.fps;
+    const frameLabel = formatFrameDisplay(frame, fps, this._timecodeDisplayMode);
+    const timecode = formatTimecode(frame, fps);
+
+    const markerAtFrame = this.session.getMarkerAtFrame(frame);
+    const inPoint = this.session.inPoint;
+    const outPoint = this.session.outPoint;
+    const duration = source.duration ?? 1;
+    const hasCustomInOut = inPoint !== 1 || outPoint !== duration;
+
+    this.contextMenu.show({
+      x: e.clientX,
+      y: e.clientY,
+      frame,
+      frameLabel,
+      timecode,
+      sourceName: source.name ?? null,
+      sourceResolution: source.width && source.height ? `${source.width}x${source.height}` : null,
+      sourceType: source.type ?? null,
+      markerAtFrame: markerAtFrame ? { frame: markerAtFrame.frame } : null,
+      hasCustomInOut,
+      inPoint,
+      outPoint,
+      onGoToFrame: (f) => this.session.goToFrame(f),
+      onSetInPoint: (f) => this.session.setInPoint(f),
+      onSetOutPoint: (f) => this.session.setOutPoint(f),
+      onResetInOutPoints: () => this.session.resetInOutPoints(),
+      onToggleMark: (f) => this.session.toggleMark(f),
+      onRemoveMark: (f) => this.session.removeMark(f),
+      onCopyTimecode: (tc) => {
+        navigator.clipboard.writeText(tc).catch(() => {
+          // clipboard may not be available
+        });
+      },
+    });
+  };
 
   render(): HTMLElement {
     // Initial resize (store ID for cleanup)
@@ -526,103 +670,58 @@ export class Timeline {
     // Check if custom in/out range is set
     const hasCustomRange = inPoint !== 1 || outPoint !== duration;
 
+    // Check if range shift flash is active
+    const isFlashing = Date.now() < this._rangeShiftFlashUntil;
+    const accentRgb = getThemeManager().getColors().accentPrimaryRgb;
+
     if (duration > 1) {
       if (hasCustomRange) {
         const inX = frameToX(inPoint);
         const outX = frameToX(outPoint);
-        const rangeWidth = outX - inX;
 
-        // Draw in/out range highlight
-        ctx.fillStyle = colors.inOutRange;
-        ctx.fillRect(inX, trackY, rangeWidth, trackHeight);
+        // Draw in/out range highlight (brighter during flash)
+        if (isFlashing) {
+          ctx.fillStyle = `rgba(${accentRgb}, 0.3)`;
+          ctx.fillRect(inX, trackY, outX - inX, trackHeight);
+        } else {
+          drawInOutRange(ctx, inX, outX, trackY, trackHeight, colors.inOutRange);
+        }
 
         // Draw played portion within range (from in point to current frame)
         if (currentFrame >= inPoint && currentFrame <= outPoint) {
-          const playedWidth = frameToX(currentFrame) - inX;
-          if (playedWidth > 0) {
-            ctx.fillStyle = colors.played;
-            ctx.fillRect(inX, trackY, playedWidth, trackHeight);
-          }
+          drawPlayedRegion(ctx, inX, frameToX(currentFrame), trackY, trackHeight, colors.played);
         }
 
-        // Draw in point marker (left bracket)
-        ctx.fillStyle = colors.playhead;
-        ctx.fillRect(inX - 2, trackY - 4, 4, trackHeight + 8);
-        ctx.fillRect(inX - 2, trackY - 4, 8, 3);
-        ctx.fillRect(inX - 2, trackY + trackHeight + 1, 8, 3);
-
-        // Draw out point marker (right bracket)
-        ctx.fillRect(outX - 2, trackY - 4, 4, trackHeight + 8);
-        ctx.fillRect(outX - 6, trackY - 4, 8, 3);
-        ctx.fillRect(outX - 6, trackY + trackHeight + 1, 8, 3);
+        // Draw in/out bracket markers (with glow during flash)
+        if (isFlashing) {
+          ctx.fillStyle = colors.playhead;
+          ctx.globalAlpha = 1.0;
+          ctx.shadowColor = colors.playhead;
+          ctx.shadowBlur = 6;
+          ctx.fillRect(inX - 2, trackY - 4, 4, trackHeight + 8);
+          ctx.fillRect(inX - 2, trackY - 4, 8, 3);
+          ctx.fillRect(inX - 2, trackY + trackHeight + 1, 8, 3);
+          ctx.fillRect(outX - 2, trackY - 4, 4, trackHeight + 8);
+          ctx.fillRect(outX - 6, trackY - 4, 8, 3);
+          ctx.fillRect(outX - 6, trackY + trackHeight + 1, 8, 3);
+          ctx.shadowBlur = 0;
+        } else {
+          drawInOutBrackets(ctx, inX, outX, trackY, trackHeight, colors.playhead);
+        }
       } else {
         // No custom range - draw played portion from start to current frame
-        const playedWidth = frameToX(currentFrame) - padding;
-        if (playedWidth > 0) {
-          ctx.fillStyle = colors.played;
-          ctx.fillRect(padding, trackY, playedWidth, trackHeight);
-        }
+        drawPlayedRegion(ctx, padding, frameToX(currentFrame), trackY, trackHeight, colors.played);
       }
     }
 
     // Draw annotation markers (small triangles below track)
     if (this.paintEngine) {
       const annotatedFrames = this.paintEngine.getAnnotatedFrames();
-      ctx.fillStyle = colors.annotation;
-      for (const frame of annotatedFrames) {
-        if (frame >= 1 && frame <= duration) {
-          const annotX = frameToX(frame);
-          // Draw small triangle pointing up below track
-          ctx.beginPath();
-          ctx.moveTo(annotX, trackY + trackHeight + 8);
-          ctx.lineTo(annotX - 4, trackY + trackHeight + 14);
-          ctx.lineTo(annotX + 4, trackY + trackHeight + 14);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
+      drawAnnotationTriangles(ctx, annotatedFrames, frameToX, trackY, trackHeight, colors.annotation, duration);
     }
 
     // Draw marks (within full duration) - with custom colors from Marker data
-    for (const marker of this.session.marks.values()) {
-      if (marker.frame >= 1 && marker.frame <= duration) {
-        const markX = frameToX(marker.frame);
-        // Use marker's color if set, otherwise default to mark color
-        const markerColor = marker.color || colors.mark;
-
-        if (marker.endFrame !== undefined && marker.endFrame > marker.frame) {
-          // Duration marker: draw colored span across the range
-          const endX = frameToX(Math.min(marker.endFrame, duration));
-
-          // Draw semi-transparent filled range
-          ctx.fillStyle = markerColor;
-          ctx.globalAlpha = 0.25;
-          ctx.fillRect(markX, trackY, endX - markX, trackHeight);
-          ctx.globalAlpha = 1.0;
-
-          // Draw solid start and end lines
-          ctx.fillStyle = markerColor;
-          ctx.fillRect(markX - 1, trackY, 2, trackHeight);
-          ctx.fillRect(endX - 1, trackY, 2, trackHeight);
-
-          // Draw top and bottom borders of the range
-          ctx.fillRect(markX, trackY, endX - markX, 1);
-          ctx.fillRect(markX, trackY + trackHeight - 1, endX - markX, 1);
-        } else {
-          // Point marker: draw single vertical line
-          ctx.fillStyle = markerColor;
-          ctx.fillRect(markX - 1, trackY, 2, trackHeight);
-        }
-
-        // If marker has a note, draw a small indicator dot above
-        if (marker.note) {
-          ctx.fillStyle = markerColor;
-          ctx.beginPath();
-          ctx.arc(markX, trackY + trackHeight + 4, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
+    drawMarkLines(ctx, this.session.marks.values(), frameToX, trackY, trackHeight, colors.mark, duration);
 
     // Draw note overlay bars (between marks and playhead)
     if (this.noteOverlay) {
@@ -684,21 +783,7 @@ export class Timeline {
 
     // Draw playhead
     const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
-
-    // Playhead glow
-    ctx.fillStyle = colors.playheadShadow;
-    ctx.beginPath();
-    ctx.arc(playheadX, trackY + trackHeight / 2, 14, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Playhead line
-    ctx.fillStyle = colors.playhead;
-    ctx.fillRect(playheadX - 1.5, trackY - 10, 3, trackHeight + 20);
-
-    // Playhead circle (drag handle)
-    ctx.beginPath();
-    ctx.arc(playheadX, trackY - 10, Timeline.PLAYHEAD_CIRCLE_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
+    drawPlayhead(ctx, playheadX, trackY, trackHeight, colors.playhead, colors.playheadShadow, Timeline.PLAYHEAD_CIRCLE_RADIUS);
 
     // Frame numbers / timecode
     const fps = this.session.fps;
@@ -769,14 +854,103 @@ export class Timeline {
       drawMiddleAlignedText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, infoRowY);
     }
 
-    // Playback info
+    // Playback info - draw with split coloring so only FPS portion gets colored
     ctx.textAlign = 'right';
     const status = this.session.isPlaying ? '▶ Playing' : '❚❚ Paused';
     const effectiveFps = this.session.effectiveFps;
-    const fpsDisplay = this.session.isPlaying && effectiveFps > 0
-      ? `${effectiveFps.toFixed(1)}/${this.session.fps} fps`
-      : `${this.session.fps} fps`;
-    drawMiddleAlignedText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, infoRowY);
+    const playbackSpeed = this.session.playbackSpeed;
+    const targetFps = this.session.fps;
+    const effectiveTargetFps = targetFps * playbackSpeed;
+
+    let fpsDisplay: string;
+    let fpsColor: string | null = null;
+    if (this.session.isPlaying && effectiveFps > 0) {
+      if (playbackSpeed !== 1) {
+        const speedStr = `${playbackSpeed}x`;
+        fpsDisplay = `${effectiveFps.toFixed(1)}/${Math.round(effectiveTargetFps)} eff. fps (${speedStr})`;
+      } else {
+        fpsDisplay = `${effectiveFps.toFixed(1)}/${targetFps} fps`;
+      }
+
+      // Color-code actual FPS portion based on ratio (CSS variables with hex fallbacks)
+      const ratio = effectiveTargetFps > 0
+        ? Math.min(1, effectiveFps / effectiveTargetFps)
+        : 0;
+      const WARNING_THRESHOLD = 0.97;
+      const CRITICAL_THRESHOLD = 0.85;
+      if (ratio >= WARNING_THRESHOLD) {
+        fpsColor = getCSSColor('--success', '#4ade80'); // green
+      } else if (ratio >= CRITICAL_THRESHOLD) {
+        fpsColor = getCSSColor('--warning', '#facc15'); // yellow
+      } else {
+        fpsColor = getCSSColor('--error', '#ef4444'); // red
+      }
+
+      // Append dropped frame count when > 0
+      const droppedFrames = this.session.droppedFrameCount;
+      if (droppedFrames > 0) {
+        fpsDisplay += ` (${droppedFrames} skipped)`;
+      }
+    } else {
+      fpsDisplay = `${targetFps} fps`;
+    }
+    // Playback mode indicator
+    const playbackMode = this.session.playbackMode;
+    const playbackModeLabel = playbackMode === 'playAllFrames' ? 'ALL' : 'RT';
+    // Check if native video path is active (play-all-frames not fully effective)
+    const isNativeVideo = this.session.currentSource?.type === 'video'
+      && !this.session.isUsingMediabunny()
+      && this.session.currentSource?.videoSourceNode === undefined;
+    const isDimmed = playbackMode === 'playAllFrames' && isNativeVideo;
+
+    // Draw status line with split coloring: only FPS portion gets the color
+    const suffixStr = ` | ${this.session.loopMode} | `;
+    const fpsStr = fpsDisplay;
+    const prefixStr = `${status} | `;
+
+    // Measure each part to position them right-to-left (right-aligned)
+    const suffixWidth = ctx.measureText(suffixStr).width;
+    const fpsWidth = ctx.measureText(fpsStr).width;
+    const prefixWidth = ctx.measureText(prefixStr).width;
+    const modeWidth = ctx.measureText(playbackModeLabel).width;
+    const totalWidth = prefixWidth + fpsWidth + suffixWidth + modeWidth;
+
+    // Draw from right to left: mode indicator, suffix, FPS, prefix
+    const rightEdge = width - padding;
+
+    // Mode indicator (rightmost, left-aligned at its position)
+    const savedAlign = ctx.textAlign;
+    ctx.textAlign = 'left';
+    const modeX = rightEdge - totalWidth;
+    if (isDimmed) {
+      ctx.fillStyle = 'rgba(128, 128, 128, 0.5)'; // dimmed gray
+    } else if (playbackMode === 'playAllFrames') {
+      ctx.fillStyle = '#f59e0b'; // amber/orange for ALL
+    } else {
+      ctx.fillStyle = colors.textDim; // standard color for RT
+    }
+    drawMiddleAlignedText(playbackModeLabel, modeX, infoRowY);
+
+    // Suffix in dim color (loop mode + separator)
+    ctx.fillStyle = colors.textDim;
+    drawMiddleAlignedText(suffixStr, modeX + modeWidth, infoRowY);
+
+    // FPS portion in its computed color (or dim if no color)
+    if (fpsColor) {
+      ctx.fillStyle = fpsColor;
+    } else {
+      ctx.fillStyle = colors.textDim;
+    }
+    drawMiddleAlignedText(fpsStr, modeX + modeWidth + suffixWidth, infoRowY);
+
+    // Status prefix in dim color
+    ctx.fillStyle = colors.textDim;
+    drawMiddleAlignedText(prefixStr, modeX + modeWidth + suffixWidth + fpsWidth, infoRowY);
+
+    ctx.textAlign = savedAlign;
+
+    // Reset fill style to dim text
+    ctx.fillStyle = colors.textDim;
   }
 
   refresh(): void {
@@ -800,6 +974,8 @@ export class Timeline {
     window.removeEventListener('resize', this.boundHandleResize);
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    this.contextMenu.dispose();
     this.thumbnailManager.dispose();
     this.subs.dispose();
     if (this.resizeDebounceTimer) {

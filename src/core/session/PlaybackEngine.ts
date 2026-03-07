@@ -1,15 +1,28 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
-import type { LoopMode } from '../types/session';
+import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource } from './Session';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import type { TimingState } from './PlaybackTimingController';
-import { PLAYBACK_SPEED_PRESETS, type PlaybackSpeedPreset } from '../../config/PlaybackConfig';
+import { PLAYBACK_SPEED_PRESETS, DEFAULT_PLAYBACK_MODE, type PlaybackSpeedPreset } from '../../config/PlaybackConfig';
+import { PLAY_ALL_FRAMES_ABSOLUTE_TIMEOUT_MS } from '../../config/TimingConfig';
 import { Logger } from '../../utils/Logger';
 import { PerfTrace } from '../../utils/PerfTrace';
 
 const log = new Logger('PlaybackEngine');
+
+/**
+ * FPS measurement snapshot emitted every 500ms during playback.
+ */
+export interface FPSMeasurement {
+  targetFps: number;
+  effectiveTargetFps: number;
+  actualFps: number;
+  droppedFrames: number;
+  ratio: number;
+  playbackSpeed: number;
+}
 
 /**
  * Interface that the PlaybackEngine uses to communicate with Session
@@ -41,12 +54,15 @@ export interface PlaybackEngineEvents extends EventMap {
   playDirectionChanged: number;
   playbackSpeedChanged: number;
   loopModeChanged: LoopMode;
+  playbackModeChanged: PlaybackMode;
   fpsChanged: number;
   frameIncrementChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
   interpolationEnabledChanged: boolean;
   subFramePositionChanged: SubFramePosition | null;
   buffering: boolean;
+  fpsUpdated: FPSMeasurement;
+  frameDecodeTimeout: number;
 }
 
 /**
@@ -70,8 +86,13 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   private _playDirection = 1;
   private _playbackSpeed = 1;
   private _loopMode: LoopMode = 'loop';
+  private _playbackMode: PlaybackMode = DEFAULT_PLAYBACK_MODE;
   private _interpolationEnabled = false;
   private _frameIncrement = 1;
+
+  // Play-all-frames starvation tracking
+  private _playAllFramesWaitStart: number | null = null;
+  private _playAllFramesBuffering = false;
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
@@ -100,6 +121,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     fpsLastTime: 0,
     effectiveFps: 0,
     subFramePosition: null,
+    droppedFrameCount: 0,
   };
 
   // --- Backward-compatible accessors for timing state fields ---
@@ -321,12 +343,80 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     }
   }
 
+  get playbackMode(): PlaybackMode {
+    return this._playbackMode;
+  }
+
+  set playbackMode(mode: PlaybackMode) {
+    if (mode === this._playbackMode) return;
+
+    const oldMode = this._playbackMode;
+    this._playbackMode = mode;
+
+    // Handle mode transitions during active playback
+    if (this._isPlaying) {
+      const tc = this._timingController;
+      const source = this._host?.getCurrentSource();
+
+      if (oldMode === 'realtime' && mode === 'playAllFrames') {
+        // Realtime -> Play All Frames
+        // Cap accumulator to prevent burst of queued-up frames
+        const effectiveSpeed = tc.getEffectiveSpeed(this._playbackSpeed, this._playDirection);
+        const frameDuration = tc.getFrameDuration(this._fps, effectiveSpeed);
+        this._ts.frameAccumulator = Math.min(this._ts.frameAccumulator, frameDuration);
+        // Disable audio sync
+        this._host?.setAudioSyncEnabled(false);
+        if (source?.element instanceof HTMLVideoElement) {
+          source.element.muted = true;
+        }
+        // Reset starvation counter
+        this._ts.consecutiveStarvationSkips = 0;
+      } else if (oldMode === 'playAllFrames' && mode === 'realtime') {
+        // Play All Frames -> Realtime
+        // Reset timing to avoid stale accumulator
+        tc.resetTiming(this._ts);
+        // Clear play-all-frames state
+        this._playAllFramesWaitStart = null;
+        if (this._playAllFramesBuffering) {
+          this._playAllFramesBuffering = false;
+          this.emit('buffering', false);
+        }
+        // Re-enable audio sync
+        this._host?.setAudioSyncEnabled(this._playDirection === 1);
+        if (source?.element instanceof HTMLVideoElement) {
+          const video = source.element;
+          this._host?.applyVolumeToVideo();
+          // Re-sync video element to current frame
+          video.currentTime = (this._currentFrame - 1) / this._fps;
+          if (this._playDirection === 1) {
+            this._host?.safeVideoPlay(video);
+          }
+        }
+      }
+    }
+
+    this.emit('playbackModeChanged', mode);
+  }
+
+  togglePlaybackMode(): void {
+    this.playbackMode = this._playbackMode === 'realtime' ? 'playAllFrames' : 'realtime';
+  }
+
+  /** @internal Direct mutation for test/restore that bypasses event emission */
+  setPlaybackModeInternal(mode: PlaybackMode): void {
+    this._playbackMode = mode;
+  }
+
   get playDirection(): number {
     return this._playDirection;
   }
 
   get effectiveFps(): number {
     return this._isPlaying ? this._ts.effectiveFps : 0;
+  }
+
+  get droppedFrameCount(): number {
+    return this._ts.droppedFrameCount;
   }
 
   get interpolationEnabled(): boolean {
@@ -418,8 +508,17 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       }
     }
 
-    // Enable audio sync for playback
-    this._host?.setAudioSyncEnabled(this._playDirection === 1);
+    // Enable audio sync for playback (disabled in play-all-frames mode)
+    if (this._playbackMode === 'playAllFrames') {
+      this._host?.setAudioSyncEnabled(false);
+      // Mute video audio in play-all-frames mode
+      const audioSource = this._host?.getCurrentSource();
+      if (audioSource?.element instanceof HTMLVideoElement) {
+        audioSource.element.muted = true;
+      }
+    } else {
+      this._host?.setAudioSyncEnabled(this._playDirection === 1);
+    }
 
     this.emit('playbackChanged', true);
   }
@@ -428,6 +527,10 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     if (this._isPlaying) {
       this._isPlaying = false;
       this._hdrBuffering = false;
+
+      // Clear play-all-frames state
+      this._playAllFramesWaitStart = null;
+      this._playAllFramesBuffering = false;
 
       // Clear pending play promise so play() can be called again
       this._pendingPlayPromise = null;
@@ -568,6 +671,17 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     this.currentFrame = 1;
   }
 
+  /**
+   * Atomically set both in and out points, avoiding cross-clamping bugs.
+   * Emits 'inOutChanged' exactly once.
+   */
+  setInOutRange(newIn: number, newOut: number): void {
+    const duration = this._host?.getCurrentSource()?.duration ?? 1;
+    this._inPoint = clamp(newIn, 1, duration);
+    this._outPoint = clamp(newOut, this._inPoint, duration);
+    this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
+  }
+
   // ---------------------------------------------------------------
   // Update loop (called each animation frame)
   // ---------------------------------------------------------------
@@ -604,6 +718,18 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           // Update source B's playback buffer for split screen support
           this.updateSourceBPlaybackBuffer(nextFrame);
           source.videoSourceNode.updatePlaybackBuffer(nextFrame);
+
+          // Clear play-all-frames buffering state when a waited-for frame arrives
+          if (this._playAllFramesBuffering) {
+            this._playAllFramesBuffering = false;
+            this._playAllFramesWaitStart = null;
+            this.emit('buffering', false);
+          }
+
+          // Only advance one frame per tick in play-all-frames mode
+          if (this._playbackMode === 'playAllFrames') {
+            break;
+          }
         } else {
           PerfTrace.count('frame.cacheMiss');
           tc.capAccumulator(this._ts, frameDuration);
@@ -614,6 +740,41 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           );
 
           if (starvation.timedOut) {
+            // In play-all-frames mode, wait indefinitely (with absolute timeout safety net)
+            if (this._playbackMode === 'playAllFrames') {
+              this._playAllFramesWaitStart ??= performance.now();
+              const waitElapsed = performance.now() - this._playAllFramesWaitStart;
+
+              if (waitElapsed > PLAY_ALL_FRAMES_ABSOLUTE_TIMEOUT_MS) {
+                // Safety net: after 60 seconds, the frame is likely undecodable.
+                // Skip it, emit a warning, and continue.
+                log.warn(`Frame ${nextFrame} play-all-frames absolute timeout (${Math.round(waitElapsed)}ms) - skipping frame`);
+                this._playAllFramesWaitStart = null;
+                if (this._playAllFramesBuffering) {
+                  this._playAllFramesBuffering = false;
+                  this.emit('buffering', false);
+                }
+                this.emit('frameDecodeTimeout', nextFrame);
+                tc.trackDroppedFrame(this._ts);
+                tc.resetStarvation(this._ts);
+                this._pendingFetchFrame = null;
+                tc.consumeFrame(this._ts, frameDuration);
+                this.advanceFrame(this._playDirection);
+                continue;
+              } else {
+                // Emit buffering event so UI shows a loading indicator
+                if (!this._playAllFramesBuffering) {
+                  this._playAllFramesBuffering = true;
+                  this.emit('buffering', true);
+                }
+                // Reset starvation timer to avoid triggering the pause logic,
+                // but do NOT consume the frame or advance.
+                tc.resetStarvation(this._ts);
+                break;
+              }
+            }
+
+            // --- Realtime mode starvation handling below ---
             if (starvation.shouldPause) {
               log.warn(
                 `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
@@ -651,6 +812,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
             }
 
             log.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
+            tc.trackDroppedFrame(this._ts);
             tc.resetStarvation(this._ts);
             this._pendingFetchFrame = null;
             tc.consumeFrame(this._ts, frameDuration);
@@ -721,7 +883,12 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       // For images or video with reverse playback (no mediabunny)
       const { framesToAdvance, frameDuration } = tc.accumulateFrames(
         this._ts, this._fps, this._playbackSpeed, this._playDirection,
+        this._playbackMode,
       );
+
+      if (framesToAdvance > 1) {
+        tc.trackDroppedFrame(this._ts, framesToAdvance - 1);
+      }
 
       for (let i = 0; i < framesToAdvance; i++) {
         this.advanceFrame(this._playDirection);
@@ -769,8 +936,31 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   }
 
   advanceFrame(direction: number): void {
-    // Track effective FPS via timing controller
+    // Track effective FPS via timing controller.
+    // NOTE: Known limitation -- trackFrameAdvance() is called for every frame
+    // including skipped ones (both in the starvation skip path and the
+    // accumulator overflow path), which means skipped frames inflate the
+    // reported FPS measurement. The dropped frame counter and the displayed
+    // FPS can therefore be contradictory (e.g., FPS shows 24.0 green while
+    // there are dropped frames). See Plan 20, Risk #7 for context.
+    const prevFps = this._ts.effectiveFps;
     this._timingController.trackFrameAdvance(this._ts);
+
+    // Emit fpsUpdated when the measurement changes (every ~500ms window)
+    if (this._ts.effectiveFps !== prevFps && this._ts.effectiveFps > 0) {
+      const effectiveTargetFps = this._fps * this._playbackSpeed;
+      const ratio = effectiveTargetFps > 0
+        ? Math.min(1, this._ts.effectiveFps / effectiveTargetFps)
+        : 0;
+      this.emit('fpsUpdated', {
+        targetFps: this._fps,
+        effectiveTargetFps,
+        actualFps: this._ts.effectiveFps,
+        droppedFrames: this._ts.droppedFrameCount,
+        ratio,
+        playbackSpeed: this._playbackSpeed,
+      });
+    }
 
     let nextFrame = this._currentFrame + direction;
 

@@ -31,13 +31,22 @@ export class AppKeyboardHandler {
    * Actions whose *default* combos conflict with higher-priority global shortcuts.
    * These are only registered when the user has set a custom (non-conflicting) combo.
    */
-  private static readonly CONFLICTING_DEFAULTS = new Set([
+  private static readonly CONTEXTUAL_DEFAULTS = new Set([
     'paint.line',      // L key - handled by playback.faster
     'paint.rectangle', // R key - handled by timeline.resetInOut
     'paint.ellipse',   // O key - handled by timeline.setOutPoint
+    'navigation.gotoFrame', // G key - handled with paint/panel context variants
+    'paint.toggleGhost',    // G key - handled with global/panel context variants
+    'panel.gamutDiagram',   // G key - handled with global/paint context variants
     'channel.red',     // Shift+R is reserved for transform.rotateLeft
     'channel.blue',    // Shift+B is reserved for view.cycleBackgroundPattern
     'channel.none',    // Shift+N is reserved for network.togglePanel
+  ]);
+  private static readonly HIDDEN_DEFAULTS = new Set([
+    'view.toggleWaveform', // W key - now used for view.fitToWidth
+    'panel.waveform',      // W key - now used for view.fitToWidth
+    'panel.histogram',     // H key - now used for view.fitToHeight
+    'notes.addNote',   // N key - handled by view.toggleFilterMode
   ]);
 
   constructor(
@@ -90,7 +99,7 @@ export class AppKeyboardHandler {
           })();
 
       // Skip conflicting defaults only when still using the default combo
-      if (AppKeyboardHandler.CONFLICTING_DEFAULTS.has(action) && !this.customKeyBindingsManager?.hasCustomBinding(action)) {
+      if (this.skipsDirectRegistration(action)) {
         continue;
       }
 
@@ -136,8 +145,15 @@ export class AppKeyboardHandler {
     // Group shortcuts by category
     const categories = {
       'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
-      'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
-      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
+      'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster', 'playback.togglePlaybackMode'],
+      'NAVIGATION': ['navigation.gotoFrame'],
+      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.fitToWidth', 'view.fitToHeight', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier', 'view.toggleInfoStrip', 'view.toggleInfoStripPath', 'view.toggleFPSIndicator', 'view.toggleFilterMode'],
+      'SCALE PRESETS': [
+        'view.zoom1to1', 'view.zoom2to1', 'view.zoom3to1', 'view.zoom4to1',
+        'view.zoom5to1', 'view.zoom6to1', 'view.zoom7to1', 'view.zoom8to1',
+        'view.zoom1to2', 'view.zoom1to3', 'view.zoom1to4', 'view.zoom1to5',
+        'view.zoom1to6', 'view.zoom1to7', 'view.zoom1to8',
+      ],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
@@ -152,7 +168,12 @@ export class AppKeyboardHandler {
         'timeline.previousMarkOrBoundary',
         'timeline.nextShot',
         'timeline.previousShot',
-        'timeline.cycleLoopMode'
+        'timeline.cycleLoopMode',
+        'timeline.toggleMagnifier',
+        'timeline.shiftRangeNext',
+        'timeline.shiftRangePrevious',
+        'timeline.shiftRangeNextAlt',
+        'timeline.shiftRangePreviousAlt'
       ],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
@@ -160,7 +181,7 @@ export class AppKeyboardHandler {
       'AUDIO (Video only)': ['audio.toggleMute'], // Also has special non-binding entries below
       'EXPORT': ['export.quickExport', 'export.copyFrame'],
       'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
-      'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical'],
+      'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical', 'transform.resetRotation'],
       'PANELS': ['panel.effects', 'panel.crop', 'panel.close'],
       'STEREO': ['stereo.toggle', 'stereo.eyeTransform', 'stereo.cycleAlign']
     };
@@ -173,7 +194,8 @@ export class AppKeyboardHandler {
 
     // Generate content for each category
     for (const [categoryName, actionKeys] of Object.entries(categories)) {
-      if (actionKeys.length === 0 && categoryName !== 'AUDIO (Video only)') continue;
+      const visibleActionKeys = actionKeys.filter((actionKey) => this.shouldShowShortcutAction(actionKey));
+      if (visibleActionKeys.length === 0 && categoryName !== 'AUDIO (Video only)') continue;
 
       const categoryDiv = document.createElement('div');
       categoryDiv.style.cssText = 'margin-bottom: 16px;';
@@ -187,7 +209,7 @@ export class AppKeyboardHandler {
       // Special handling for audio category
       if (categoryName === 'AUDIO (Video only)') {
         // Render regular key bindings first (e.g., audio.toggleMute)
-        for (const actionKey of actionKeys) {
+        for (const actionKey of visibleActionKeys) {
           const defaultBinding = DEFAULT_KEY_BINDINGS[actionKey as keyof typeof DEFAULT_KEY_BINDINGS];
           if (!defaultBinding) continue;
 
@@ -265,13 +287,12 @@ export class AppKeyboardHandler {
         }
       } else {
         // Regular shortcuts from DEFAULT_KEY_BINDINGS
-        for (const actionKey of actionKeys) {
+        for (const actionKey of visibleActionKeys) {
           const defaultBinding = DEFAULT_KEY_BINDINGS[actionKey as keyof typeof DEFAULT_KEY_BINDINGS];
           if (!defaultBinding) continue;
 
           const effectiveCombo = this.customKeyBindingsManager.getEffectiveCombo(actionKey);
           const isCustom = this.customKeyBindingsManager.hasCustomBinding(actionKey);
-          const isConflicting = AppKeyboardHandler.CONFLICTING_DEFAULTS.has(actionKey) && !isCustom;
 
           const shortcutDiv = document.createElement('div');
           shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
@@ -280,17 +301,14 @@ export class AppKeyboardHandler {
           const keyText = describeKeyCombo(effectiveCombo);
           const keySpan = document.createElement('span');
           keySpan.textContent = keyText;
-          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : isConflicting ? 'color: var(--text-muted); opacity: 0.5;' : 'color: var(--text-muted);'}`;
+          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : 'color: var(--text-muted);'}`;
 
           const descSpan = document.createElement('span');
-          descSpan.textContent = defaultBinding.description + (isConflicting ? ' (requires custom binding)' : '');
-          descSpan.style.cssText = `flex: 1; ${isConflicting ? 'color: var(--text-muted); font-style: italic;' : 'color: var(--text-primary);'}`;
+          descSpan.textContent = defaultBinding.description;
+          descSpan.style.cssText = 'flex: 1; color: var(--text-primary);';
 
           shortcutDiv.setAttribute('data-shortcut-key', keyText.toLowerCase());
           shortcutDiv.setAttribute('data-shortcut-desc', defaultBinding.description.toLowerCase());
-          if (isConflicting) {
-            shortcutDiv.setAttribute('data-conflicting', 'true');
-          }
 
           const actionsDiv = document.createElement('div');
           actionsDiv.style.cssText = 'display: flex; gap: 4px;';
@@ -690,6 +708,20 @@ export class AppKeyboardHandler {
    */
   formatKeyCombo(combo: KeyCombination): string {
     return describeKeyCombo(combo);
+  }
+
+  private skipsDirectRegistration(action: string): boolean {
+    return (
+      (AppKeyboardHandler.CONTEXTUAL_DEFAULTS.has(action) || AppKeyboardHandler.HIDDEN_DEFAULTS.has(action)) &&
+      !this.customKeyBindingsManager.hasCustomBinding(action)
+    );
+  }
+
+  private shouldShowShortcutAction(action: string): boolean {
+    return (
+      Boolean(DEFAULT_KEY_BINDINGS[action as keyof typeof DEFAULT_KEY_BINDINGS]) &&
+      !(AppKeyboardHandler.HIDDEN_DEFAULTS.has(action) && !this.customKeyBindingsManager.hasCustomBinding(action))
+    );
   }
 
   /**

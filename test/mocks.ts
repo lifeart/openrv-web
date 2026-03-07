@@ -8,6 +8,7 @@
 import { vi } from 'vitest';
 import type { Renderer } from '../src/render/Renderer';
 import type { MediaSource } from '../src/core/session/Session';
+import type { SessionBridgeContext } from '../src/AppSessionBridge';
 
 // ---------------------------------------------------------------------------
 // WebGL2 – Renderer-style mock
@@ -87,6 +88,7 @@ export function createMockRendererGL(
     uniform2iv: vi.fn(),
     uniform3iv: vi.fn(),
     uniform4iv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix3fv: vi.fn(),
     uniformMatrix4fv: vi.fn(),
     activeTexture: vi.fn(),
@@ -103,8 +105,18 @@ export function createMockRendererGL(
     texParameteri: vi.fn(),
     texImage2D: vi.fn(),
     texImage3D: vi.fn(),
+    generateMipmap: vi.fn(),
+    getParameter: vi.fn((pname: number) => {
+      if (pname === 0x0ba2 /* VIEWPORT */) return new Int32Array([0, 0, 800, 600]);
+      return null;
+    }),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    scissor: vi.fn(),
     isContextLost: vi.fn(() => false),
     // Constants
+    VIEWPORT: 0x0ba2,
+    SCISSOR_TEST: 0x0c11,
     VERTEX_SHADER: 0x8b31,
     FRAGMENT_SHADER: 0x8b30,
     LINK_STATUS: 0x8b82,
@@ -123,6 +135,8 @@ export function createMockRendererGL(
     CLAMP_TO_EDGE: 0x812f,
     REPEAT: 0x2901,
     LINEAR: 0x2601,
+    NEAREST: 0x2600,
+    LINEAR_MIPMAP_LINEAR: 0x2703,
     RGBA8: 0x8058,
     RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
@@ -351,6 +365,7 @@ export function createMockWebGL2Context() {
     uniform2f: vi.fn(),
     uniform2fv: vi.fn(),
     uniform3fv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix4fv: vi.fn(),
 
     viewport: vi.fn(),
@@ -498,4 +513,439 @@ export function createMockMediaSource(
           }
         : undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Session mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock Session object with sensible defaults.
+ *
+ * Covers the superset of properties needed by FrameNavigationService,
+ * KeyboardActionMap, AppPlaybackWiring, RenderLoopService, SessionURLService,
+ * and persistence handler tests.
+ *
+ * Every method is a `vi.fn()` stub. Pass `overrides` to replace any default.
+ *
+ * Used by: FrameNavigationService.test.ts, FrameNavigationService.rangeShift.test.ts,
+ *          KeyboardActionMap.test.ts, RenderLoopService.test.ts, SessionURLService.test.ts
+ */
+export function createMockSession(overrides?: Record<string, unknown>) {
+  return {
+    // State
+    currentFrame: 1,
+    currentSourceIndex: 0,
+    inPoint: 1,
+    outPoint: 100,
+    frameCount: 100,
+    fps: 24,
+    loopMode: 'loop' as 'once' | 'loop' | 'pingpong',
+    playDirection: 1,
+    isPlaying: false,
+    volume: 1,
+    muted: false,
+    currentSource: { duration: 100, width: 1920, height: 1080 } as Record<string, unknown> | null,
+    currentAB: 'A' as 'A' | 'B',
+    sourceAIndex: 0,
+    sourceBIndex: -1,
+    sourceCount: 2,
+    marks: new Map<number, { frame: number; endFrame?: number }>(),
+    metadata: { displayName: 'Test Session' },
+    isSingleImage: false,
+
+    // Navigation
+    goToFrame: vi.fn(),
+    goToStart: vi.fn(),
+    goToEnd: vi.fn(),
+    stepForward: vi.fn(),
+    stepBackward: vi.fn(),
+    setCurrentSource: vi.fn(),
+    setInPoint: vi.fn(),
+    setOutPoint: vi.fn(),
+    setInOutRange: vi.fn(),
+    resetInOutPoints: vi.fn(),
+    emitRangeShifted: vi.fn(),
+
+    // Markers
+    goToNextMarker: vi.fn().mockReturnValue(null),
+    goToPreviousMarker: vi.fn().mockReturnValue(null),
+    toggleMark: vi.fn(),
+
+    // Playback
+    togglePlayback: vi.fn(),
+    togglePlayDirection: vi.fn(),
+    togglePlaybackMode: vi.fn(),
+    pause: vi.fn(),
+    decreaseSpeed: vi.fn(),
+    increaseSpeed: vi.fn(),
+    update: vi.fn(),
+
+    // A/B compare
+    toggleAB: vi.fn(),
+    setCurrentAB: vi.fn(),
+    setSourceA: vi.fn(),
+    setSourceB: vi.fn(),
+
+    // Audio
+    toggleMute: vi.fn(),
+
+    // Notes
+    noteManager: {
+      getNextNoteFrame: vi.fn().mockReturnValue(20),
+      getPreviousNoteFrame: vi.fn().mockReturnValue(5),
+    },
+
+    // Apply overrides
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Viewer mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock Viewer object with sensible defaults.
+ *
+ * Covers the superset of viewer methods needed by KeyboardActionMap,
+ * AppViewWiring, AppPlaybackWiring, RenderLoopService, and SessionURLService tests.
+ *
+ * Every method is a `vi.fn()` stub. Pass `overrides` to replace any default.
+ *
+ * Used by: KeyboardActionMap.test.ts, AppViewWiring.test.ts,
+ *          RenderLoopService.test.ts, SessionURLService.test.ts,
+ *          AppPlaybackWiring.test.ts
+ */
+export function createMockViewer(overrides?: Record<string, unknown>) {
+  return {
+    // Zoom / fit
+    smoothFitToWindow: vi.fn(),
+    smoothFitToWidth: vi.fn(),
+    smoothFitToHeight: vi.fn(),
+    smoothSetZoom: vi.fn(),
+    smoothSetPixelRatio: vi.fn(),
+
+    // Rendering
+    refresh: vi.fn(),
+    renderDirect: vi.fn(),
+    renderFrameToCanvas: vi.fn(),
+    resize: vi.fn(),
+
+    // Export
+    exportFrame: vi.fn(),
+    exportSourceFrame: vi.fn(),
+    copyFrameToClipboard: vi.fn(),
+
+    // State setters
+    setWipeState: vi.fn(),
+    setDifferenceMatteState: vi.fn(),
+    setBlendModeState: vi.fn(),
+    setToneMappingState: vi.fn(),
+    setHDROutputMode: vi.fn(),
+    setGhostFrameState: vi.fn(),
+    setPARState: vi.fn(),
+    setBackgroundPatternState: vi.fn(),
+    setChannelMode: vi.fn(),
+    setStereoState: vi.fn(),
+    setStereoEyeTransforms: vi.fn(),
+    setStereoAlignMode: vi.fn(),
+    resetStereoEyeTransforms: vi.fn(),
+    resetStereoAlignMode: vi.fn(),
+    setTransform: vi.fn(),
+    setNoiseReductionParams: vi.fn(),
+    setColorAdjustments: vi.fn(),
+    initPrerenderBuffer: vi.fn(),
+    updatePrerenderPlaybackState: vi.fn(),
+    toggleFilterMode: vi.fn(),
+
+    // Getters
+    getContainer: vi.fn(() => document.createElement('div')),
+    getElement: vi.fn(() => document.createElement('div')),
+    getImageData: vi.fn().mockReturnValue({
+      width: 100,
+      height: 100,
+      data: new Uint8ClampedArray(100 * 100 * 4),
+    }),
+    getScopeImageData: vi.fn(() => null),
+    getStereoState: vi.fn(() => ({ mode: 'off' })),
+    getStereoPair: vi.fn(() => null),
+    getTransform: vi.fn().mockReturnValue({
+      x: 0, y: 0, zoom: 1, rotation: 0,
+      flipH: false, flipV: false,
+    }),
+    getGLRenderer: vi.fn(() => null),
+    isDisplayHDRCapable: vi.fn(() => false),
+    onCursorColorChange: vi.fn(),
+    getMatteOverlay: vi.fn(() => ({ setSettings: vi.fn() })),
+    getEXRWindowOverlay: vi.fn(() => ({ setWindows: vi.fn(), clearWindows: vi.fn() })),
+
+    // Overlays / tools
+    getPixelProbe: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getFalseColor: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getTimecodeOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getInfoStripOverlay: vi.fn().mockReturnValue({
+      toggle: vi.fn(),
+      togglePathMode: vi.fn(),
+    }),
+    getFPSIndicator: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getZebraStripes: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getColorWheels: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getSpotlightOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getHSLQualifier: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getLuminanceVisualization: vi.fn().mockReturnValue({ cycleMode: vi.fn() }),
+
+    // Apply overrides
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Audio mocks
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock AudioParam with scheduling methods.
+ *
+ * Used by: AudioPlaybackManager.test.ts, AudioMixer.test.ts
+ */
+export function createMockAudioParam(initialValue = 1) {
+  return {
+    value: initialValue,
+    setValueAtTime: vi.fn(),
+    setValueCurveAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+  };
+}
+
+/**
+ * Create a mock GainNode.
+ *
+ * Used by: AudioPlaybackManager.test.ts, AudioMixer.test.ts
+ */
+export function createMockGainNode() {
+  return {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    gain: createMockAudioParam(1),
+  };
+}
+
+/**
+ * Create a mock AudioBufferSourceNode.
+ *
+ * Used by: AudioPlaybackManager.test.ts
+ */
+export function createMockSourceNode() {
+  return {
+    buffer: null as AudioBuffer | null,
+    playbackRate: { value: 1 },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    onended: null as (() => void) | null,
+  };
+}
+
+/**
+ * Create a mock AudioContext with gain/source factories and tracking arrays.
+ *
+ * Returns the context plus helper arrays for tracking created nodes.
+ *
+ * Used by: AudioPlaybackManager.test.ts
+ */
+export function createMockAudioContext(overrides?: Record<string, unknown>) {
+  const createdGainNodes: ReturnType<typeof createMockGainNode>[] = [];
+  const createdSourceNodes: ReturnType<typeof createMockSourceNode>[] = [];
+
+  const mockAudioBuffer = {
+    duration: 10,
+    sampleRate: 44100,
+    numberOfChannels: 2,
+    length: 441000,
+    getChannelData: vi.fn().mockReturnValue(new Float32Array(441000)),
+  };
+
+  const ctx = {
+    state: 'running' as AudioContextState,
+    currentTime: 0,
+    createGain: vi.fn(() => {
+      const node = createMockGainNode();
+      createdGainNodes.push(node);
+      return node;
+    }),
+    createBufferSource: vi.fn(() => {
+      const node = createMockSourceNode();
+      createdSourceNodes.push(node);
+      return node;
+    }),
+    decodeAudioData: vi.fn().mockResolvedValue(mockAudioBuffer),
+    resume: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    destination: {},
+    ...overrides,
+  };
+
+  return {
+    context: ctx,
+    createdGainNodes,
+    createdSourceNodes,
+    mockAudioBuffer,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SessionBridgeContext mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock SessionBridgeContext with all getter methods returning
+ * mock objects with vi.fn() stubs.
+ *
+ * This is the comprehensive version used by persistenceHandlers.test.ts.
+ * Each getter returns a fresh mock object. Pass `overrides` to replace
+ * any specific getter return value.
+ *
+ * Used by: persistenceHandlers.test.ts, scopeHandlers.test.ts,
+ *          sourceLoadedHandlers.test.ts, compareHandlers.test.ts,
+ *          playbackHandlers.test.ts, infoPanelHandlers.test.ts
+ */
+export function createMockSessionBridgeContext(overrides?: Record<string, unknown>): SessionBridgeContext {
+  const paintEngine = {
+    loadFromAnnotations: vi.fn(),
+    setGhostMode: vi.fn(),
+    setHoldMode: vi.fn(),
+  };
+  const persistenceManager = {
+    syncGTOStore: vi.fn(),
+    setGTOStore: vi.fn(),
+  };
+  const matteOverlay = { setSettings: vi.fn() };
+  const viewer = {
+    getMatteOverlay: () => matteOverlay,
+    setTransform: vi.fn(),
+    setNoiseReductionParams: vi.fn(),
+    initPrerenderBuffer: vi.fn(),
+    refresh: vi.fn(),
+    getGLRenderer: vi.fn(() => null),
+    isDisplayHDRCapable: vi.fn(() => false),
+    getImageData: vi.fn(() => null),
+    getScopeImageData: vi.fn(() => null),
+    getEXRWindowOverlay: vi.fn(() => ({ setWindows: vi.fn(), clearWindows: vi.fn() })),
+    updatePrerenderPlaybackState: vi.fn(),
+  };
+  const colorControls = { setAdjustments: vi.fn(), getAdjustments: vi.fn(() => ({})) };
+  const filterControl = { setSettings: vi.fn() };
+  const noiseReductionControl = { setParams: vi.fn() };
+  const cdlControl = { setCDL: vi.fn() };
+  const transformControl = { setTransform: vi.fn() };
+  const lensControl = { setParams: vi.fn() };
+  const cropControl = {
+    setState: vi.fn(),
+    setUncropState: vi.fn(),
+    setSourceDimensions: vi.fn(),
+  };
+  const channelSelect = {
+    setChannel: vi.fn(),
+    clearEXRLayers: vi.fn(),
+    setEXRLayers: vi.fn(),
+  };
+  const stereoControl = { setState: vi.fn() };
+  const stereoEyeTransformControl = { setState: vi.fn() };
+  const stereoAlignControl = { setMode: vi.fn() };
+  const scopesControl = { setScopeVisible: vi.fn() };
+  const histogram = {
+    show: vi.fn(),
+    hide: vi.fn(),
+    isVisible: vi.fn(() => false),
+    update: vi.fn(),
+    updateHDR: vi.fn(),
+    isHDRActive: vi.fn(() => false),
+    calculate: vi.fn(() => null),
+    calculateHDR: vi.fn(() => null),
+    getData: vi.fn(() => null),
+    setPlaybackMode: vi.fn(),
+    setHDRMode: vi.fn(),
+    setHDRAutoFit: vi.fn(),
+  };
+  const waveform = {
+    show: vi.fn(),
+    hide: vi.fn(),
+    isVisible: vi.fn(() => false),
+    update: vi.fn(),
+    updateFloat: vi.fn(),
+    setPlaybackMode: vi.fn(),
+  };
+  const vectorscope = {
+    show: vi.fn(),
+    hide: vi.fn(),
+    isVisible: vi.fn(() => false),
+    update: vi.fn(),
+    updateFloat: vi.fn(),
+    setPlaybackMode: vi.fn(),
+  };
+  const gamutDiagram = {
+    show: vi.fn(),
+    hide: vi.fn(),
+    isVisible: vi.fn(() => false),
+    update: vi.fn(),
+    updateFloat: vi.fn(),
+  };
+  const compareControl = {
+    setABAvailable: vi.fn(),
+    setABSource: vi.fn(),
+  };
+  const infoPanel = { update: vi.fn() };
+  const ocioProcessor = {
+    setActiveSource: vi.fn(),
+    detectColorSpaceFromExtension: vi.fn(() => null),
+    setSourceInputColorSpace: vi.fn(),
+    getSourceInputColorSpace: vi.fn(() => null),
+  };
+  const ocioControl = { getProcessor: () => ocioProcessor };
+  const toneMappingControl = {
+    setState: vi.fn(),
+    getState: vi.fn(() => ({ enabled: false, operator: 'off' })),
+  };
+  const stackControl = { setAvailableSources: vi.fn() };
+  const session = {
+    currentSource: { width: 1920, height: 1080 },
+    gtoData: null,
+    allSources: [],
+    currentSourceIndex: 0,
+    playDirection: 1,
+  };
+
+  const result = {
+    getSession: () => session,
+    getPaintEngine: () => paintEngine,
+    getPersistenceManager: () => persistenceManager,
+    getViewer: () => viewer,
+    getColorControls: () => colorControls,
+    getFilterControl: () => filterControl,
+    getNoiseReductionControl: () => noiseReductionControl,
+    getCDLControl: () => cdlControl,
+    getTransformControl: () => transformControl,
+    getLensControl: () => lensControl,
+    getCropControl: () => cropControl,
+    getChannelSelect: () => channelSelect,
+    getStereoControl: () => stereoControl,
+    getStereoEyeTransformControl: () => stereoEyeTransformControl,
+    getStereoAlignControl: () => stereoAlignControl,
+    getScopesControl: () => scopesControl,
+    getHistogram: () => histogram,
+    getWaveform: () => waveform,
+    getVectorscope: () => vectorscope,
+    getGamutDiagram: () => gamutDiagram,
+    getCompareControl: () => compareControl,
+    getInfoPanel: () => infoPanel,
+    getOCIOControl: () => ocioControl,
+    getToneMappingControl: () => toneMappingControl,
+    getStackControl: () => stackControl,
+    ...overrides,
+  } as unknown as SessionBridgeContext;
+
+  return result;
 }

@@ -8,6 +8,8 @@ import {
 } from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
+import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { MediaType } from '../types/session';
 import type { MediaSource, UnsupportedCodecInfo } from './Session';
@@ -15,6 +17,8 @@ import type { IPImage } from '../../core/image/Image';
 import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';
 import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
+import { MediaRepresentationManager } from './MediaRepresentationManager';
+import type { AddRepresentationConfig, MediaRepresentation, SwitchRepresentationOptions } from '../types/representation';
 
 const log = new Logger('SessionMedia');
 
@@ -22,6 +26,24 @@ export interface SessionMediaEvents extends EventMap {
   sourceLoaded: MediaSource;
   durationChanged: number;
   unsupportedCodec: UnsupportedCodecInfo;
+  representationChanged: {
+    sourceIndex: number;
+    previousRepId: string | null;
+    newRepId: string;
+    representation: MediaRepresentation;
+  };
+  representationError: {
+    sourceIndex: number;
+    repId: string;
+    error: string;
+    userInitiated: boolean;
+  };
+  fallbackActivated: {
+    sourceIndex: number;
+    failedRepId: string;
+    fallbackRepId: string;
+    fallbackRepresentation: MediaRepresentation;
+  };
 }
 
 export interface SessionMediaHost {
@@ -66,9 +88,56 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   private _sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
   private _hdrResizeTier: HDRResizeTier = 'none';
+  private _proceduralCounter = 0;
+
+  /** Representation manager for per-source media representation switching */
+  private _representationManager = new MediaRepresentationManager();
+
+  /** Public accessor for the representation manager */
+  get representationManager(): MediaRepresentationManager {
+    return this._representationManager;
+  }
 
   setHost(host: SessionMediaHost): void {
     this._host = host;
+
+    // Wire representation manager accessor
+    this._representationManager.setAccessor({
+      getRepresentations: (sourceIndex: number) => {
+        const source = this._sources[sourceIndex];
+        if (!source) return null;
+        if (!source.representations) {
+          source.representations = [];
+        }
+        return source.representations;
+      },
+      getActiveRepresentationIndex: (sourceIndex: number) => {
+        const source = this._sources[sourceIndex];
+        return source?.activeRepresentationIndex ?? -1;
+      },
+      setActiveRepresentationIndex: (sourceIndex: number, repIndex: number) => {
+        const source = this._sources[sourceIndex];
+        if (source) {
+          source.activeRepresentationIndex = repIndex;
+        }
+      },
+      applyRepresentationShim: (sourceIndex: number, representation: MediaRepresentation) => {
+        this.applyRepresentationShim(sourceIndex, representation);
+      },
+      getHDRResizeTier: () => this._hdrResizeTier,
+      getCurrentFrame: () => this._host?.getCurrentFrame() ?? 1,
+    });
+
+    // Forward representation manager events
+    this._representationManager.on('representationChanged', (data) => {
+      this.emit('representationChanged', data);
+    });
+    this._representationManager.on('representationError', (data) => {
+      this.emit('representationError', data);
+    });
+    this._representationManager.on('fallbackActivated', (data) => {
+      this.emit('fallbackActivated', data);
+    });
   }
 
   // --- Source accessors ---
@@ -157,6 +226,105 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         this.emit('durationChanged', newSource.duration);
       }
     }
+  }
+
+  // --- Procedural source loading ---
+
+  private generateUniqueSourceName(pattern: string, width: number, height: number): string {
+    this._proceduralCounter++;
+    if (this._proceduralCounter === 1) {
+      return `${pattern} (${width}x${height})`;
+    }
+    return `${pattern} #${this._proceduralCounter} (${width}x${height})`;
+  }
+
+  /**
+   * Load a procedural test pattern as a source.
+   */
+  loadProceduralSource(
+    pattern: PatternName,
+    options?: {
+      width?: number;
+      height?: number;
+      color?: [number, number, number, number];
+      direction?: GradientDirection;
+      cellSize?: number;
+      steps?: number;
+      fps?: number;
+      duration?: number;
+    },
+  ): void {
+    this._host!.clearGraphData();
+
+    const width = options?.width ?? 1920;
+    const height = options?.height ?? 1080;
+    const fps = options?.fps ?? this._host!.getFps();
+    const duration = options?.duration ?? 1;
+
+    const node = new ProceduralSourceNode();
+    node.loadPattern(pattern, width, height, {
+      color: options?.color,
+      direction: options?.direction,
+      cellSize: options?.cellSize,
+      steps: options?.steps,
+      fps,
+      duration,
+    });
+
+    const metadata = node.getMetadata();
+    const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
+
+    const source: MediaSource = {
+      type: 'image',
+      name: sourceName,
+      url: `movieproc://${pattern}`,
+      width: metadata.width,
+      height: metadata.height,
+      duration,
+      fps,
+      proceduralSourceNode: node,
+    };
+
+    this.addSource(source);
+    this._host!.setInPoint(1);
+    this._host!.setOutPoint(duration);
+    this._host!.setCurrentFrame(1);
+
+    this.emit('sourceLoaded', source);
+    this.emit('durationChanged', duration);
+  }
+
+  /**
+   * Load a procedural source from a .movieproc URL string.
+   */
+  loadMovieProc(url: string): void {
+    this._host!.clearGraphData();
+
+    const params = parseMovieProc(url);
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc(url);
+
+    const metadata = node.getMetadata();
+    const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
+
+    const source: MediaSource = {
+      type: 'image',
+      name: sourceName,
+      url,
+      width: metadata.width,
+      height: metadata.height,
+      duration: metadata.duration,
+      fps: metadata.fps,
+      proceduralSourceNode: node,
+    };
+
+    this.addSource(source);
+    this._host!.setInPoint(1);
+    this._host!.setOutPoint(metadata.duration);
+    this._host!.setCurrentFrame(1);
+
+    this.emit('sourceLoaded', source);
+    this.emit('durationChanged', metadata.duration);
   }
 
   // --- Loading methods ---
@@ -799,6 +967,114 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
   }
 
+  // --- Representation management ---
+
+  /**
+   * Add a representation to a source.
+   *
+   * @param sourceIndex - Index of the source to add the representation to
+   * @param config - Configuration for the new representation
+   * @returns The created MediaRepresentation, or null if the source is invalid
+   */
+  addRepresentationToSource(
+    sourceIndex: number,
+    config: AddRepresentationConfig
+  ): MediaRepresentation | null {
+    const source = this._sources[sourceIndex];
+    if (!source) return null;
+
+    // Ensure the representations array exists
+    if (!source.representations) {
+      source.representations = [];
+    }
+
+    return this._representationManager.addRepresentation(sourceIndex, config);
+  }
+
+  /**
+   * Remove a representation from a source.
+   *
+   * @param sourceIndex - Index of the source
+   * @param repId - ID of the representation to remove
+   * @returns true if removed, false if not found
+   */
+  removeRepresentationFromSource(sourceIndex: number, repId: string): boolean {
+    return this._representationManager.removeRepresentation(sourceIndex, repId);
+  }
+
+  /**
+   * Switch the active representation for a source.
+   *
+   * @param sourceIndex - Index of the source
+   * @param repId - ID of the representation to switch to
+   * @param options - Switch options
+   */
+  async switchRepresentation(
+    sourceIndex: number,
+    repId: string,
+    options?: SwitchRepresentationOptions
+  ): Promise<boolean> {
+    // Pause playback before switching to avoid stale state
+    if (this._host?.getIsPlaying()) {
+      this._host.pause();
+    }
+
+    return this._representationManager.switchRepresentation(sourceIndex, repId, options);
+  }
+
+  /**
+   * Get the active representation for a source.
+   */
+  getActiveRepresentation(sourceIndex: number): MediaRepresentation | null {
+    return this._representationManager.getActiveRepresentation(sourceIndex);
+  }
+
+  /**
+   * Apply the active representation's source node to the MediaSource shim fields.
+   * This ensures all existing rendering code works without changes.
+   *
+   * @param sourceIndex - Index of the source
+   * @param representation - The representation to apply
+   */
+  private applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation): void {
+    const source = this._sources[sourceIndex];
+    if (!source) return;
+
+    // Update the top-level fields from the representation
+    source.width = representation.resolution.width;
+    source.height = representation.resolution.height;
+
+    // Clear old source nodes
+    source.videoSourceNode = undefined;
+    source.fileSourceNode = undefined;
+    source.sequenceInfo = undefined;
+    source.sequenceFrames = undefined;
+    source.element = undefined;
+
+    // Set the appropriate source node based on the representation's source node type
+    const sourceNode = representation.sourceNode;
+    if (!sourceNode) return;
+
+    // Check the source node type and update the appropriate field
+    if (sourceNode instanceof VideoSourceNode) {
+      source.videoSourceNode = sourceNode;
+      source.type = 'video';
+    } else if (sourceNode instanceof FileSourceNode) {
+      source.fileSourceNode = sourceNode;
+      source.type = 'image';
+    } else {
+      // Could be a SequenceSourceNodeWrapper or other type
+      // Try to get element from the source node
+      const element = sourceNode.getElement(1);
+      if (element) {
+        source.element = element;
+      }
+      source.type = 'sequence';
+    }
+
+    log.info(`Applied representation shim: ${representation.label} (${representation.kind}) to source ${sourceIndex}`);
+  }
+
   // --- Disposal ---
 
   disposeSequenceSource(source: MediaSource): void {
@@ -823,6 +1099,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       if (source.fileSourceNode) {
         source.fileSourceNode.dispose();
       }
+      // Dispose ProceduralSourceNode for procedural sources
+      if (source.proceduralSourceNode) {
+        source.proceduralSourceNode.dispose();
+      }
       // Pause and detach video elements to release media resources
       if (source.element instanceof HTMLVideoElement) {
         source.element.pause();
@@ -834,6 +1114,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
     this._sources = [];
     this._currentSourceIndex = 0;
+    this._representationManager.dispose();
     this._host = null;
     this.removeAllListeners();
   }

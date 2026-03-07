@@ -4,7 +4,7 @@
       out vec2 v_texCoord;
       uniform vec2 u_offset;
       uniform vec2 u_scale;
-      uniform int u_texRotation; // 0=0°, 1=90°CW, 2=180°, 3=270°CW
+      uniform mat2 u_texRotationMatrix; // 2x2 rotation matrix (replaces integer u_texRotation)
       uniform int u_texFlipH;    // 0=no flip, 1=flip horizontally
       uniform int u_texFlipV;    // 0=no flip, 1=flip vertically
 
@@ -20,13 +20,9 @@
         if (u_texFlipH == 1) tc.x = 1.0 - tc.x;
         if (u_texFlipV == 1) tc.y = 1.0 - tc.y;
 
-        // Step 2: Apply rotation (video rotation + user rotation combined)
-        if (u_texRotation == 1) {
-          tc = vec2(tc.y, 1.0 - tc.x);       // 90° CW
-        } else if (u_texRotation == 2) {
-          tc = vec2(1.0 - tc.x, 1.0 - tc.y); // 180°
-        } else if (u_texRotation == 3) {
-          tc = vec2(1.0 - tc.y, tc.x);        // 270° CW
-        }
+        // Step 2: Apply rotation via matrix (replaces 4-branch if/else)
+        vec2 centered = tc - 0.5;
+        tc = u_texRotationMatrix * centered + 0.5;
+
         v_texCoord = tc;
       }

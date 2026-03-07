@@ -26,7 +26,9 @@ function createMockState(overrides: Partial<InternalShaderState> = {}): Internal
     falseColorEnabled: false, falseColorLUTData: null, falseColorLUTDirty: false,
     zebraEnabled: false, zebraHighThreshold: 0.95, zebraLowThreshold: 0.05, zebraHighEnabled: true, zebraLowEnabled: false, zebraTime: 0,
     channelModeCode: 0,
-    lut3DEnabled: false, lut3DIntensity: 1, lut3DSize: 0, lut3DDirty: false, lut3DData: null,
+    lut3DEnabled: false, lut3DIntensity: 1, lut3DSize: 0, lut3DDirty: false, lut3DData: null, lookLUT3DDomainMin: [0, 0, 0] as [number, number, number], lookLUT3DDomainMax: [1, 1, 1] as [number, number, number],
+    fileLUT3DEnabled: false, fileLUT3DIntensity: 1, fileLUT3DSize: 0, fileLUT3DDirty: false, fileLUT3DData: null, fileLUT3DDomainMin: [0, 0, 0] as [number, number, number], fileLUT3DDomainMax: [1, 1, 1] as [number, number, number],
+    displayLUT3DEnabled: false, displayLUT3DIntensity: 1, displayLUT3DSize: 0, displayLUT3DDirty: false, displayLUT3DData: null, displayLUT3DDomainMin: [0, 0, 0] as [number, number, number], displayLUT3DDomainMax: [1, 1, 1] as [number, number, number],
     displayTransferCode: 1, displayGammaOverride: 1, displayBrightnessMultiplier: 1, displayCustomGamma: 2.2,
     hsEnabled: false, highlightsValue: 0, shadowsValue: 0, whitesValue: 0, blacksValue: 0,
     vibranceEnabled: false, vibranceValue: 0, vibranceSkinProtection: true,
@@ -56,6 +58,8 @@ function createMockTexCb(): TextureCallbacks {
     bindCurvesLUTTexture: vi.fn(),
     bindFalseColorLUTTexture: vi.fn(),
     bindLUT3DTexture: vi.fn(),
+    bindFileLUT3DTexture: vi.fn(),
+    bindDisplayLUT3DTexture: vi.fn(),
     bindFilmLUTTexture: vi.fn(),
     bindInlineLUTTexture: vi.fn(),
     getCanvasSize: vi.fn(() => ({ width: 1920, height: 1080 })),
@@ -149,6 +153,7 @@ function createMockGL() {
     uniform2fv: vi.fn(),
     uniform3fv: vi.fn(),
     uniform4fv: vi.fn(),
+    uniformMatrix2fv: vi.fn(),
     uniformMatrix3fv: vi.fn(),
     bindTexture: vi.fn(),
     texImage2D: vi.fn(),
@@ -349,7 +354,7 @@ describe('ShaderPipeline', () => {
 
   it('A-17: passthrough vertex shader does not apply transforms', () => {
     // When we have multiple active stages, intermediate stages should use
-    // passthrough.vert.glsl which has no u_offset/u_scale/u_texRotation uniforms
+    // passthrough.vert.glsl which has no u_offset/u_scale/u_texRotationMatrix uniforms
     pipeline.registerStage(createMockStage('primaryGrade', () => false));
     pipeline.registerStage(createMockStage('compositing', () => false));
 
@@ -390,7 +395,7 @@ describe('ShaderPipeline', () => {
       .map(c => c[1] as string)
       .filter(s => s.includes('a_position'));
 
-    // First program: viewer.vert.glsl (has u_offset, u_scale, u_texRotation)
+    // First program: viewer.vert.glsl (has u_offset, u_scale, u_texRotationMatrix)
     // Other programs: passthrough.vert.glsl (no transforms)
     const viewerVertCount = vertexSources.filter(s => s.includes('u_offset')).length;
     const passthroughVertCount = vertexSources.filter(s => !s.includes('u_offset')).length;

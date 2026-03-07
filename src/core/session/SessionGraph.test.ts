@@ -284,6 +284,7 @@ describe('SessionGraph', () => {
         setFrameIncrement: vi.fn(),
         emitInOutChanged: vi.fn(),
         emitFrameIncrementChanged: vi.fn(),
+        setPlaybackMode: vi.fn(),
         getAnnotations: vi.fn() as any,
         loadVideoSourcesFromGraph: vi.fn().mockResolvedValue(undefined),
       };
@@ -318,6 +319,7 @@ describe('SessionGraph', () => {
         setFrameIncrement: vi.fn(),
         emitInOutChanged: vi.fn(),
         emitFrameIncrementChanged: vi.fn(),
+        setPlaybackMode: vi.fn(),
         getAnnotations: () => mockAnnotations,
         loadVideoSourcesFromGraph: vi.fn().mockResolvedValue(undefined),
       };

@@ -21,6 +21,9 @@ export interface ViewerProvider {
   setZoom(level: number): void;
   getZoom(): number;
   fitToWindow(): void;
+  fitToWidth(): void;
+  fitToHeight(): void;
+  getFitMode(): string | null;
   setPan(x: number, y: number): void;
   getPan(): { x: number; y: number };
   setChannelMode(mode: ChannelMode): void;

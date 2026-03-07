@@ -41,13 +41,13 @@ describe('ZoomControl', () => {
     it('ZOOM-U012: button has correct title', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.title).toBe('Zoom level (F to fit, 0-4 for presets)');
+      expect(button.title).toBe('Zoom level (F to fit, Ctrl+1 for 1:1)');
     });
 
-    it('ZOOM-U013: button displays Fit label initially', () => {
+    it('ZOOM-U013: button displays Fit All label initially', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('Fit');
+      expect(button.textContent).toContain('Fit All');
     });
   });
 
@@ -97,46 +97,60 @@ describe('ZoomControl', () => {
   });
 
   describe('button label updates', () => {
-    it('ZOOM-U030: button shows Fit for fit zoom', () => {
+    it('ZOOM-U030: button shows Fit All for fit zoom', () => {
       const el = control.render();
       control.setZoom('fit');
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('Fit');
+      expect(button.textContent).toContain('Fit All');
     });
 
-    it('ZOOM-U031: button shows 25% for 0.25 zoom', () => {
+    it('ZOOM-U030b: button shows Fit Width for fit-width zoom', () => {
+      const el = control.render();
+      control.setZoom('fit-width');
+      const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+      expect(button.textContent).toContain('Fit Width');
+    });
+
+    it('ZOOM-U030c: button shows Fit Height for fit-height zoom', () => {
+      const el = control.render();
+      control.setZoom('fit-height');
+      const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+      expect(button.textContent).toContain('Fit Height');
+    });
+
+    it('ZOOM-U031: button shows 1:4 for 0.25 zoom', () => {
       const el = control.render();
       control.setZoom(0.25);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('25%');
+      expect(button.textContent).toContain('1:4');
     });
 
-    it('ZOOM-U032: button shows 50% for 0.5 zoom', () => {
+    it('ZOOM-U032: button shows 1:2 for 0.5 zoom', () => {
       const el = control.render();
       control.setZoom(0.5);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('50%');
+      expect(button.textContent).toContain('1:2');
     });
 
-    it('ZOOM-U033: button shows 100% for 1 zoom', () => {
+    it('ZOOM-U033: button shows 1:1 for 1 zoom', () => {
       const el = control.render();
       control.setZoom(1);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('100%');
+      expect(button.textContent).toContain('1:1');
     });
 
-    it('ZOOM-U034: button shows 200% for 2 zoom', () => {
+    it('ZOOM-U034: button shows 2:1 for 2 zoom', () => {
       const el = control.render();
       control.setZoom(2);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('200%');
+      expect(button.textContent).toContain('2:1');
     });
 
-    it('ZOOM-U035: button shows 400% for 4 zoom', () => {
+    it('ZOOM-U035: button shows 4:1 for 4 zoom', () => {
       const el = control.render();
       control.setZoom(4);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('400%');
+      expect(button.textContent).toContain('4:1');
     });
   });
 
@@ -220,7 +234,9 @@ describe('ZoomControl zoom levels', () => {
   });
 
   const zoomLevels: { value: ZoomLevel; label: string }[] = [
-    { value: 'fit', label: 'Fit' },
+    { value: 'fit', label: 'Fit All' },
+    { value: 'fit-width', label: 'Fit Width' },
+    { value: 'fit-height', label: 'Fit Height' },
     { value: 0.25, label: '25%' },
     { value: 0.5, label: '50%' },
     { value: 1, label: '100%' },
@@ -317,19 +333,19 @@ describe('ZoomControl dropdown visual selection', () => {
     const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
     const options = dropdown.querySelectorAll('button');
 
-    // Set to 100% (index 3: Fit, 25%, 50%, 100%)
+    // Set to 100% (index 5: Fit All, Fit Width, Fit Height, 25%, 50%, 100%)
     control.setZoom(1);
 
     // 100% should have accent styling
-    expect((options[3] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
+    expect((options[5] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
-    // Change to 200% (index 4)
+    // Change to 200% (index 6)
     control.setZoom(2);
 
     // 100% should no longer have accent styling
-    expect((options[3] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
+    expect((options[5] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
     // 200% should have accent styling
-    expect((options[4] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
+    expect((options[6] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
     document.body.removeChild(el);
   });
 
@@ -346,23 +362,23 @@ describe('ZoomControl dropdown visual selection', () => {
     const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
     const options = dropdown.querySelectorAll('button');
 
-    // Click 100% (index 3)
-    (options[3] as HTMLButtonElement).click();
+    // Click 100% (index 5: Fit All, Fit Width, Fit Height, 25%, 50%, 100%)
+    (options[5] as HTMLButtonElement).click();
     expect(handler).toHaveBeenCalledWith(1);
     expect(control.getZoom()).toBe(1);
 
     // Reopen dropdown
     button.click();
 
-    // Click 200% (index 4)
-    (options[4] as HTMLButtonElement).click();
+    // Click 200% (index 6)
+    (options[6] as HTMLButtonElement).click();
     expect(handler).toHaveBeenCalledWith(2);
     expect(control.getZoom()).toBe(2);
 
     // Verify only 200% has accent styling
     button.click();
-    expect((options[3] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
-    expect((options[4] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
+    expect((options[5] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
+    expect((options[6] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
     document.body.removeChild(el);
   });
 
@@ -415,14 +431,14 @@ describe('ZoomControl dropdown visual selection', () => {
     const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
     const options = dropdown.querySelectorAll('button');
 
-    // Click 100% (index 3)
-    (options[3] as HTMLButtonElement).click();
+    // Click 100% (index 5: Fit All, Fit Width, Fit Height, 25%, 50%, 100%)
+    (options[5] as HTMLButtonElement).click();
     expect(control.getZoom()).toBe(1);
 
     // Reopen and verify only 100% has accent styling
     button.click();
     expect((options[0] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
-    expect((options[3] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
+    expect((options[5] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
     document.body.removeChild(el);
   });

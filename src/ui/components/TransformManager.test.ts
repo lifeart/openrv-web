@@ -269,6 +269,204 @@ describe('TransformManager', () => {
   });
 
   // ===========================================================================
+  // Fit Mode
+  // ===========================================================================
+
+  describe('fitMode', () => {
+    it('defaults to "all"', () => {
+      expect(tm.fitMode).toBe('all');
+    });
+
+    it('fitToWindow sets fitMode to "all"', () => {
+      tm.fitMode = 'width';
+      tm.fitToWindow();
+      expect(tm.fitMode).toBe('all');
+    });
+
+    it('fitToWidth sets fitMode to "width" and resets pan/zoom', () => {
+      tm.panX = 100;
+      tm.panY = -50;
+      tm.zoom = 3;
+      tm.fitToWidth();
+      expect(tm.fitMode).toBe('width');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('fitToHeight sets fitMode to "height" and resets pan/zoom', () => {
+      tm.panX = 100;
+      tm.panY = -50;
+      tm.zoom = 3;
+      tm.fitToHeight();
+      expect(tm.fitMode).toBe('height');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('clearFitMode sets fitMode to null', () => {
+      tm.fitToWidth();
+      expect(tm.fitMode).toBe('width');
+      tm.clearFitMode();
+      expect(tm.fitMode).toBeNull();
+    });
+
+    it('setZoom clears fitMode', () => {
+      tm.fitToWidth();
+      expect(tm.fitMode).toBe('width');
+      tm.setZoom(2);
+      expect(tm.fitMode).toBeNull();
+    });
+
+    it('fitMode setter works directly', () => {
+      tm.fitMode = 'height';
+      expect(tm.fitMode).toBe('height');
+      tm.fitMode = null;
+      expect(tm.fitMode).toBeNull();
+    });
+
+    it('resetForSourceChange preserves fitMode while resetting pan/zoom', () => {
+      tm.fitToWidth();
+      tm.panX = 50;
+      tm.panY = 30;
+      tm.zoom = 2;
+      tm.resetForSourceChange();
+      expect(tm.fitMode).toBe('width');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('resetForSourceChange defaults to fit-all when no fit mode is active', () => {
+      tm.clearFitMode();
+      tm.panX = 50;
+      tm.panY = 30;
+      tm.zoom = 2;
+      tm.resetForSourceChange();
+      expect(tm.fitMode).toBe('all');
+      expect(tm.panX).toBe(0);
+      expect(tm.panY).toBe(0);
+      expect(tm.zoom).toBe(1);
+    });
+
+    it('resetForSourceChange preserves fit-height mode', () => {
+      tm.fitToHeight();
+      tm.panX = 100;
+      tm.resetForSourceChange();
+      expect(tm.fitMode).toBe('height');
+      expect(tm.panX).toBe(0);
+    });
+  });
+
+  describe('smoothFitToWidth', () => {
+    it('sets fitMode to "width" and calls smoothZoomTo', () => {
+      const spy = vi.spyOn(tm, 'smoothZoomTo');
+      tm.smoothFitToWidth();
+      expect(tm.fitMode).toBe('width');
+      expect(spy).toHaveBeenCalledWith(1, 200, 0, 0);
+    });
+  });
+
+  describe('smoothFitToHeight', () => {
+    it('sets fitMode to "height" and calls smoothZoomTo', () => {
+      const spy = vi.spyOn(tm, 'smoothZoomTo');
+      tm.smoothFitToHeight();
+      expect(tm.fitMode).toBe('height');
+      expect(spy).toHaveBeenCalledWith(1, 200, 0, 0);
+    });
+  });
+
+  // ===========================================================================
+  // onZoomChanged callback
+  // ===========================================================================
+
+  describe('onZoomChanged callback', () => {
+    it('setZoom fires onZoomChanged', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setZoom(2);
+      expect(callback).toHaveBeenCalledWith(2);
+    });
+
+    it('setZoom fires with correct value for each call', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setZoom(0.5);
+      tm.setZoom(3);
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(callback).toHaveBeenNthCalledWith(1, 0.5);
+      expect(callback).toHaveBeenNthCalledWith(2, 3);
+    });
+
+    it('smoothZoomTo with duration 0 fires onZoomChanged immediately', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setScheduleRender(() => {});
+      tm.smoothZoomTo(3, 0);
+      expect(callback).toHaveBeenCalledWith(3);
+    });
+
+    it('smoothZoomTo when already at target fires onZoomChanged', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setScheduleRender(() => {});
+      // Already at zoom=1, pan=0,0
+      tm.smoothZoomTo(1, 200, 0, 0);
+      expect(callback).toHaveBeenCalledWith(1);
+    });
+
+    it('setting callback to null stops notifications', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setZoom(2);
+      expect(callback).toHaveBeenCalledOnce();
+
+      tm.setOnZoomChanged(null);
+      tm.setZoom(3);
+      expect(callback).toHaveBeenCalledOnce(); // Not called again
+    });
+
+    it('no callback set does not throw', () => {
+      expect(() => tm.setZoom(2)).not.toThrow();
+    });
+
+    it('smoothZoomTo animation completion fires onZoomChanged', () => {
+      const callback = vi.fn();
+      tm.setOnZoomChanged(callback);
+      tm.setScheduleRender(() => {});
+
+      const rafCallbacks: FrameRequestCallback[] = [];
+      vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+        rafCallbacks.push(cb);
+        return rafCallbacks.length;
+      });
+      vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      // Start animation from zoom=1 to zoom=3
+      tm.smoothZoomTo(3, 200);
+      expect(callback).not.toHaveBeenCalled();
+
+      // Simulate animation completion by calling the last RAF callback with a time
+      // far past the duration (startTime + duration + extra)
+      const startTime = performance.now();
+      if (rafCallbacks.length > 0) {
+        rafCallbacks[rafCallbacks.length - 1]!(startTime + 300);
+      }
+      // The completion callback may trigger another RAF frame or complete
+      // Run all remaining callbacks to ensure completion
+      while (rafCallbacks.length > 0) {
+        const cb = rafCallbacks.pop();
+        if (cb) cb(startTime + 500);
+      }
+
+      expect(callback).toHaveBeenCalledWith(3);
+
+      vi.restoreAllMocks();
+    });
+  });
+
+  // ===========================================================================
   // Dispose
   // ===========================================================================
 
@@ -290,6 +488,15 @@ describe('TransformManager', () => {
       tm.dispose();
       // After dispose, smoothZoomTo should not call the callback
       tm.smoothZoomTo(2, 0);
+      expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('clears onZoomChanged callback', () => {
+      const fn = vi.fn();
+      tm.setOnZoomChanged(fn);
+      tm.dispose();
+      // After dispose, setZoom should not call the callback
+      tm.setZoom(5);
       expect(fn).not.toHaveBeenCalled();
     });
   });

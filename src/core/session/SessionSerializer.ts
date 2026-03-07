@@ -29,6 +29,7 @@ import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
+import { serializeRepresentation } from '../types/representation';
 
 /** Components needed for serialization */
 export interface SessionComponents {
@@ -145,6 +146,18 @@ export class SessionSerializer {
           start: source.sequenceInfo.startFrame,
           end: source.sequenceInfo.endFrame,
         };
+      }
+
+      // Serialize representations (if any)
+      if (source.representations && source.representations.length > 0) {
+        ref.representations = source.representations.map(serializeRepresentation);
+        const activeIdx = source.activeRepresentationIndex ?? -1;
+        if (activeIdx >= 0 && activeIdx < source.representations.length) {
+          const activeRep = source.representations[activeIdx];
+          if (activeRep) {
+            ref.activeRepresentationId = activeRep.id;
+          }
+        }
       }
 
       return ref;

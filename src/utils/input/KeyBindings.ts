@@ -111,6 +111,32 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Cycle loop mode'
   },
+  'timeline.toggleMagnifier': {
+    code: 'F3',
+    description: 'Toggle timeline magnifier'
+  },
+  // Range shifting - primary bindings (no OS-level conflicts)
+  'timeline.shiftRangeNext': {
+    code: 'ArrowDown',
+    shift: true,
+    description: 'Shift in/out range to next mark pair'
+  },
+  'timeline.shiftRangePrevious': {
+    code: 'ArrowUp',
+    shift: true,
+    description: 'Shift in/out range to previous mark pair'
+  },
+  // Range shifting - secondary bindings (note: Ctrl+Arrow conflicts with macOS Spaces)
+  'timeline.shiftRangeNextAlt': {
+    code: 'ArrowRight',
+    ctrl: true,
+    description: 'Shift in/out range to next mark pair'
+  },
+  'timeline.shiftRangePreviousAlt': {
+    code: 'ArrowLeft',
+    ctrl: true,
+    description: 'Shift in/out range to previous mark pair'
+  },
 
   // View controls
   'view.fitToWindow': {
@@ -130,6 +156,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyW',
     shift: true,
     description: 'Cycle wipe mode'
+  },
+  'view.fitToWidth': {
+    code: 'KeyW',
+    description: 'Fit image width to window'
   },
   'view.toggleWaveform': {
     code: 'KeyW',
@@ -189,6 +219,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     context: 'panel',
     description: 'Toggle CIE gamut diagram'
   },
+  'view.fitToHeight': {
+    code: 'KeyH',
+    description: 'Fit image height to window'
+  },
   'panel.histogram': {
     code: 'KeyH',
     description: 'Toggle histogram'
@@ -221,6 +255,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Flip vertical'
   },
+  'transform.resetRotation': {
+    code: 'Digit0',
+    ctrl: true,
+    description: 'Reset rotation to 0'
+  },
 
   // Export controls
   'export.quickExport': {
@@ -250,6 +289,12 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     shift: true,
     description: 'Redo last action (alternate)'
+  },
+
+  // Navigation
+  'navigation.gotoFrame': {
+    code: 'KeyG',
+    description: 'Go to frame (open frame entry)',
   },
 
   // Annotation navigation
@@ -436,6 +481,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle timecode overlay on viewer'
   },
 
+  // FPS indicator
+  'view.toggleFPSIndicator': {
+    code: 'KeyF',
+    ctrl: true,
+    shift: true,
+    description: 'Toggle FPS indicator overlay'
+  },
+
   // Zebra stripes
   'view.toggleZebraStripes': {
     code: 'KeyZ',
@@ -544,9 +597,16 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle notes panel'
   },
 
+  // Texture filter mode toggle (N key, matching desktop OpenRV)
+  'view.toggleFilterMode': {
+    code: 'KeyN',
+    description: 'Toggle nearest-neighbor / bilinear filtering'
+  },
+
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
+    context: 'annotate',
     description: 'Add note at current frame'
   },
   'notes.next': {
@@ -671,6 +731,17 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle reference comparison overlay'
   },
 
+  // Info strip overlay
+  'view.toggleInfoStrip': {
+    code: 'F7',
+    description: 'Toggle info strip overlay',
+  },
+  'view.toggleInfoStripPath': {
+    code: 'F7',
+    shift: true,
+    description: 'Toggle info strip full path',
+  },
+
   // Help / cheat sheet
   'help.toggleCheatSheet': {
     code: 'Slash',
@@ -683,6 +754,100 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyM',
     shift: true,
     description: 'Toggle audio mute'
+  },
+
+  // Playback mode toggle
+  'playback.togglePlaybackMode': {
+    code: 'KeyA',
+    ctrl: true,
+    shift: true,
+    description: 'Toggle between Realtime and Play All Frames'
+  },
+
+  // Scale presets - magnification
+  'view.zoom1to1': {
+    code: 'Digit1',
+    ctrl: true,
+    description: 'Zoom to 1:1 (100%) pixel ratio',
+  },
+  'view.zoom2to1': {
+    code: 'Digit2',
+    ctrl: true,
+    description: 'Zoom to 2:1 (200%) pixel ratio',
+  },
+  'view.zoom3to1': {
+    code: 'Digit3',
+    ctrl: true,
+    description: 'Zoom to 3:1 (300%) pixel ratio',
+  },
+  'view.zoom4to1': {
+    code: 'Digit4',
+    ctrl: true,
+    description: 'Zoom to 4:1 (400%) pixel ratio',
+  },
+  'view.zoom5to1': {
+    code: 'Digit5',
+    ctrl: true,
+    description: 'Zoom to 5:1 (500%) pixel ratio',
+  },
+  'view.zoom6to1': {
+    code: 'Digit6',
+    ctrl: true,
+    description: 'Zoom to 6:1 (600%) pixel ratio',
+  },
+  'view.zoom7to1': {
+    code: 'Digit7',
+    ctrl: true,
+    description: 'Zoom to 7:1 (700%) pixel ratio',
+  },
+  'view.zoom8to1': {
+    code: 'Digit8',
+    ctrl: true,
+    description: 'Zoom to 8:1 (800%) pixel ratio',
+  },
+
+  // Scale presets - reduction
+  'view.zoom1to2': {
+    code: 'Digit2',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:2 (50%) pixel ratio',
+  },
+  'view.zoom1to3': {
+    code: 'Digit3',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:3 (~33%) pixel ratio',
+  },
+  'view.zoom1to4': {
+    code: 'Digit4',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:4 (25%) pixel ratio',
+  },
+  'view.zoom1to5': {
+    code: 'Digit5',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:5 (20%) pixel ratio',
+  },
+  'view.zoom1to6': {
+    code: 'Digit6',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:6 (~17%) pixel ratio',
+  },
+  'view.zoom1to7': {
+    code: 'Digit7',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:7 (~14%) pixel ratio',
+  },
+  'view.zoom1to8': {
+    code: 'Digit8',
+    ctrl: true,
+    shift: true,
+    description: 'Zoom to 1:8 (12.5%) pixel ratio',
   },
 };
 /**

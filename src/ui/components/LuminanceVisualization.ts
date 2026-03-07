@@ -115,6 +115,7 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
   private falseColor: FalseColor;
   private hsvLUT: Uint8Array;
   private randomLUT: Uint8Array;
+  private randomLUT256: Uint8Array | null = null;
 
   constructor(falseColor: FalseColor) {
     super();
@@ -124,6 +125,33 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
     // Pre-compute LUTs
     this.hsvLUT = buildHsvLUT();
     this.randomLUT = buildRandomPalette(this.state.randomBandCount, this.state.randomSeed);
+  }
+
+  /** Get the pre-computed HSV LUT (256*3 Uint8Array) for GPU upload. */
+  getHsvLUT(): Uint8Array { return this.hsvLUT; }
+
+  /** Get the pre-computed random palette (bandCount*3 Uint8Array) for GPU upload. */
+  getRandomLUT(): Uint8Array { return this.randomLUT; }
+
+  /**
+   * Expand the random palette to a 256-entry LUT for GPU upload.
+   * Maps each luminance index [0-255] to its band color.
+   * Result is cached and invalidated when bandCount or seed changes.
+   */
+  buildRandomLUT256(): Uint8Array {
+    if (this.randomLUT256) return this.randomLUT256;
+    const lut = new Uint8Array(256 * 3);
+    const bandCount = this.state.randomBandCount;
+    const palette = this.randomLUT;
+    for (let i = 0; i < 256; i++) {
+      const lum = i / 255;
+      const band = Math.min(Math.floor(lum * bandCount), bandCount - 1);
+      lut[i * 3] = palette[band * 3]!;
+      lut[i * 3 + 1] = palette[band * 3 + 1]!;
+      lut[i * 3 + 2] = palette[band * 3 + 2]!;
+    }
+    this.randomLUT256 = lut;
+    return lut;
   }
 
   // --- Mode control ---
@@ -164,12 +192,14 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
     if (this.state.randomBandCount === clamped) return;
     this.state.randomBandCount = clamped;
     this.randomLUT = buildRandomPalette(clamped, this.state.randomSeed);
+    this.randomLUT256 = null;
     this.emit('stateChanged', this.getState());
   }
 
   reseedRandom(): void {
     this.state.randomSeed = Math.floor(Math.random() * 2147483647);
     this.randomLUT = buildRandomPalette(this.state.randomBandCount, this.state.randomSeed);
+    this.randomLUT256 = null;
     this.emit('stateChanged', this.getState());
   }
 

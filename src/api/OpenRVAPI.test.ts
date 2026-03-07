@@ -234,7 +234,16 @@ function createMockViewer() {
   viewer.getZoom = vi.fn(() => viewer._zoom);
   viewer.fitToWindow = vi.fn(() => {
     viewer._zoom = 1;
+    viewer._fitMode = 'all';
   });
+  viewer.fitToWidth = vi.fn(() => {
+    viewer._fitMode = 'width';
+  });
+  viewer.fitToHeight = vi.fn(() => {
+    viewer._fitMode = 'height';
+  });
+  viewer._fitMode = null;
+  viewer.getFitMode = vi.fn(() => viewer._fitMode);
   viewer.setPan = vi.fn((x: number, y: number) => {
     viewer._panX = x;
     viewer._panY = y;
@@ -896,6 +905,26 @@ describe('ViewAPI', () => {
   it('API-U044: setPan() rejects non-number values', () => {
     expect(() => view.setPan('x' as any, 0)).toThrow();
     expect(() => view.setPan(0, 'y' as any)).toThrow();
+  });
+
+  it('API-U045: fitToWidth() calls viewer.fitToWidth()', () => {
+    view.fitToWidth();
+    expect(viewer.fitToWidth).toHaveBeenCalledOnce();
+  });
+
+  it('API-U046: fitToHeight() calls viewer.fitToHeight()', () => {
+    view.fitToHeight();
+    expect(viewer.fitToHeight).toHaveBeenCalledOnce();
+  });
+
+  it('API-U047: getFitMode() returns current fit mode', () => {
+    expect(view.getFitMode()).toBeNull();
+    view.fitToWidth();
+    expect(view.getFitMode()).toBe('width');
+    view.fitToHeight();
+    expect(view.getFitMode()).toBe('height');
+    view.fitToWindow();
+    expect(view.getFitMode()).toBe('all');
   });
 });
 

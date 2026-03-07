@@ -1,8 +1,10 @@
 import { IPImage, DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
+import { getRotationMatrix2x2, normalizeAngle } from '../utils/rotation';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
+import type { TextureFilterMode } from '../core/types/filter';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { TileViewport } from '../nodes/groups/LayoutGroupNode';
@@ -95,6 +97,8 @@ export class Renderer implements RendererBackend {
   private curvesLUTTexture: WebGLTexture | null = null;
   private falseColorLUTTexture: WebGLTexture | null = null;
   private lut3DTexture: WebGLTexture | null = null;
+  private fileLUT3DTexture: WebGLTexture | null = null;
+  private displayLUT3DTexture: WebGLTexture | null = null;
   private filmLUTTexture: WebGLTexture | null = null;
   private inlineLUTTexture: WebGLTexture | null = null;
 
@@ -102,6 +106,10 @@ export class Renderer implements RendererBackend {
   private falseColorRGBABuffer: Uint8Array | null = null;
   private lut3DRGBABuffer: Float32Array | null = null;
   private lut3DRGBABufferSize = 0; // tracks the LUT size the buffer was allocated for
+  private fileLUT3DRGBABuffer: Float32Array | null = null;
+  private fileLUT3DRGBABufferSize = 0;
+  private displayLUT3DRGBABuffer: Float32Array | null = null;
+  private displayLUT3DRGBABufferSize = 0;
   private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
   private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
 
@@ -119,7 +127,7 @@ export class Renderer implements RendererBackend {
 
   // --- OCIO WASM shader integration ---
   // When OCIO WASM is active, the baked 3D LUT from the WASM processor is
-  // uploaded through the existing u_lut3D uniform path. The OCIO shader code
+  // uploaded through the Look LUT (u_lookLUT3D) uniform path. The OCIO shader code
   // and uniform metadata are stored here for future shader injection support.
   private ocioWasmActive = false;
   private ocioShaderCode: string | null = null;
@@ -166,6 +174,12 @@ export class Renderer implements RendererBackend {
   // Mipmap support for float textures (requires OES_texture_float_linear + EXT_color_buffer_float)
   private _mipmapSupported = false;
 
+  // Texture filter mode for the primary image texture (nearest for pixel-accurate QC, linear for smooth)
+  private _textureFilterMode: TextureFilterMode = 'linear';
+
+  // Track which textures have mipmaps generated, so we can restore LINEAR_MIPMAP_LINEAR correctly
+  private _mipmappedTextures: Set<WebGLTexture> = new Set();
+
   // Whether the current SDR texture has mipmaps generated (only for HTMLImageElement sources)
   private _sdrTextureMipmapped = false;
 
@@ -181,7 +195,7 @@ export class Renderer implements RendererBackend {
   private _currentUnpackColorSpace: string = 'srgb';
 
   // User-applied transform (rotation/flip from TransformControl)
-  private _userRotation: 0 | 90 | 180 | 270 = 0;
+  private _userRotation: number = 0;
   private _userFlipH = false;
   private _userFlipV = false;
 
@@ -492,10 +506,11 @@ export class Renderer implements RendererBackend {
     }
 
     // Combine video rotation metadata with user-applied rotation.
-    // Both are in degrees (0, 90, 180, 270). The shader uniform is 0-3.
+    // Both are in degrees. Build a 2x2 rotation matrix for the vertex shader.
     const videoRotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
-    const totalRotation = (Math.round(videoRotation / 90) + Math.round(this._userRotation / 90)) % 4;
-    this.displayShader.setUniformInt('u_texRotation', totalRotation);
+    const totalRotationDeg = normalizeAngle(videoRotation + this._userRotation);
+    const rotMatrix = getRotationMatrix2x2(totalRotationDeg);
+    this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', rotMatrix);
     this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
     this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
@@ -513,6 +528,11 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_texture', 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, image.texture);
+
+    // Apply texture filter mode (nearest/linear) to the image texture
+    if (image.texture) {
+      this.applyImageTextureFilter(image.texture);
+    }
 
     // For 360 spherical projection, use REPEAT wrap so the equirectangular
     // seam (longitude ±180°) blends smoothly instead of clamping to edge pixels.
@@ -614,6 +634,18 @@ export class Renderer implements RendererBackend {
         const gl = this.gl!;
         gl.activeTexture(gl.TEXTURE5);
         gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
+      },
+      bindFileLUT3DTexture: () => {
+        this.ensureFileLUT3DTexture();
+        const gl = this.gl!;
+        gl.activeTexture(gl.TEXTURE6);
+        gl.bindTexture(gl.TEXTURE_3D, this.fileLUT3DTexture);
+      },
+      bindDisplayLUT3DTexture: () => {
+        this.ensureDisplayLUT3DTexture();
+        const gl = this.gl!;
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_3D, this.displayLUT3DTexture);
       },
       getCanvasSize: () => {
         this.canvasSizeCache.width = this.canvas?.width ?? 0;
@@ -929,8 +961,10 @@ export class Renderer implements RendererBackend {
     if (uploadChannels === 4 && !image.videoFrame && this._mipmapSupported) {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      if (image.texture) this._mipmappedTextures.add(image.texture);
     } else {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      if (image.texture) this._mipmappedTextures.delete(image.texture);
     }
 
     image.textureNeedsUpdate = false;
@@ -1020,7 +1054,39 @@ export class Renderer implements RendererBackend {
 
   deleteTexture(texture: TextureHandle): void {
     if (texture) {
+      this._mipmappedTextures.delete(texture);
       this.gl?.deleteTexture(texture);
+    }
+  }
+
+  setTextureFilterMode(mode: TextureFilterMode): void {
+    if (this._textureFilterMode === mode) return;
+    this._textureFilterMode = mode;
+  }
+
+  getTextureFilterMode(): TextureFilterMode {
+    return this._textureFilterMode;
+  }
+
+  /**
+   * Apply the current texture filter mode to the bound image texture.
+   * Called in renderImage() and renderSDRFrame() after binding the image texture to unit 0.
+   * Correctly restores LINEAR_MIPMAP_LINEAR for mipmapped textures when switching back to bilinear.
+   */
+  private applyImageTextureFilter(texture: WebGLTexture): void {
+    const gl = this.gl!;
+    const magFilter = this._textureFilterMode === 'nearest' ? gl.NEAREST : gl.LINEAR;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+
+    if (this._textureFilterMode === 'nearest') {
+      // In nearest mode, disable mipmap sampling entirely.
+      // At zoomed-out views the aliasing is expected and informative for QC.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    } else {
+      // In bilinear mode, restore mipmap sampling for textures that have mipmaps.
+      const hasMipmaps = this._mipmappedTextures.has(texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER,
+        hasMipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
     }
   }
 
@@ -1032,7 +1098,7 @@ export class Renderer implements RendererBackend {
    * Set user-applied rotation and flip (from TransformControl).
    * Combined with video rotation metadata in the vertex shader.
    */
-  setUserTransform(rotation: 0 | 90 | 180 | 270, flipH: boolean, flipV: boolean): void {
+  setUserTransform(rotation: number, flipH: boolean, flipV: boolean): void {
     this._userRotation = rotation;
     this._userFlipH = flipH;
     this._userFlipV = flipV;
@@ -1876,6 +1942,18 @@ export class Renderer implements RendererBackend {
     this.stateManager.setLUT(lutData, lutSize, intensity);
   }
 
+  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+    this.stateManager.setFileLUT(data, size, intensity, domainMin, domainMax);
+  }
+
+  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+    this.stateManager.setLookLUT(data, size, intensity, domainMin, domainMax);
+  }
+
+  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+    this.stateManager.setDisplayLUT(data, size, intensity, domainMin, domainMax);
+  }
+
   // -----------------------------------------------------------------------
   // OCIO WASM Integration
   // -----------------------------------------------------------------------
@@ -1884,8 +1962,8 @@ export class Renderer implements RendererBackend {
    * Set the OCIO WASM shader and 3D LUT for GPU-accelerated OCIO processing.
    *
    * When OCIO WASM is active, the baked 3D LUT from the WASM processor is
-   * uploaded to a dedicated GPU texture and applied through the existing
-   * u_lut3D pipeline path at full intensity (1.0). The translated GLSL
+   * uploaded to a dedicated GPU texture and applied through the Look LUT
+   * (u_lookLUT3D) pipeline path at full intensity (1.0). The translated GLSL
    * shader code and uniform metadata are stored for future dynamic shader
    * injection support.
    *
@@ -2007,6 +2085,92 @@ export class Renderer implements RendererBackend {
     }
   }
 
+  private ensureFileLUT3DTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const snapshot = this.stateManager.getFileLUT3DSnapshot();
+
+    if (!this.fileLUT3DTexture) {
+      this.fileLUT3DTexture = gl.createTexture();
+    }
+
+    if (snapshot.dirty && snapshot.data && snapshot.size > 0) {
+      const size = snapshot.size;
+      const totalEntries = size * size * size;
+      if (!this.fileLUT3DRGBABuffer || this.fileLUT3DRGBABufferSize !== size) {
+        this.fileLUT3DRGBABuffer = new Float32Array(totalEntries * RGBA_CHANNELS);
+        this.fileLUT3DRGBABufferSize = size;
+        const rgbaData = this.fileLUT3DRGBABuffer;
+        for (let i = 0; i < totalEntries; i++) {
+          rgbaData[i * RGBA_CHANNELS + 3] = 1.0;
+        }
+      }
+      const rgbaData = this.fileLUT3DRGBABuffer;
+      const src = snapshot.data;
+      for (let i = 0; i < totalEntries; i++) {
+        const dstOff = i * RGBA_CHANNELS;
+        const srcOff = i * RGB_CHANNELS;
+        rgbaData[dstOff] = src[srcOff]!;
+        rgbaData[dstOff + 1] = src[srcOff + 1]!;
+        rgbaData[dstOff + 2] = src[srcOff + 2]!;
+      }
+
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_3D, this.fileLUT3DTexture);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+      this.stateManager.clearTextureDirtyFlag('fileLUT3DDirty');
+    }
+  }
+
+  private ensureDisplayLUT3DTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const snapshot = this.stateManager.getDisplayLUT3DSnapshot();
+
+    if (!this.displayLUT3DTexture) {
+      this.displayLUT3DTexture = gl.createTexture();
+    }
+
+    if (snapshot.dirty && snapshot.data && snapshot.size > 0) {
+      const size = snapshot.size;
+      const totalEntries = size * size * size;
+      if (!this.displayLUT3DRGBABuffer || this.displayLUT3DRGBABufferSize !== size) {
+        this.displayLUT3DRGBABuffer = new Float32Array(totalEntries * RGBA_CHANNELS);
+        this.displayLUT3DRGBABufferSize = size;
+        const rgbaData = this.displayLUT3DRGBABuffer;
+        for (let i = 0; i < totalEntries; i++) {
+          rgbaData[i * RGBA_CHANNELS + 3] = 1.0;
+        }
+      }
+      const rgbaData = this.displayLUT3DRGBABuffer;
+      const src = snapshot.data;
+      for (let i = 0; i < totalEntries; i++) {
+        const dstOff = i * RGBA_CHANNELS;
+        const srcOff = i * RGB_CHANNELS;
+        rgbaData[dstOff] = src[srcOff]!;
+        rgbaData[dstOff + 1] = src[srcOff + 1]!;
+        rgbaData[dstOff + 2] = src[srcOff + 2]!;
+      }
+
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_3D, this.displayLUT3DTexture);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+      this.stateManager.clearTextureDirtyFlag('displayLUT3DDirty');
+    }
+  }
+
   getDisplayColorState(): DisplayColorConfig {
     return this.stateManager.getDisplayColorState();
   }
@@ -2053,6 +2217,9 @@ export class Renderer implements RendererBackend {
 
   applyRenderState(state: RenderState): void {
     this.stateManager.applyRenderState(state);
+    if (state.textureFilterMode !== undefined) {
+      this.setTextureFilterMode(state.textureFilterMode);
+    }
   }
 
   hasPendingStateChanges(): boolean {
@@ -2150,9 +2317,11 @@ export class Renderer implements RendererBackend {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       this._sdrTextureMipmapped = true;
+      if (this.sdrTexture) this._mipmappedTextures.add(this.sdrTexture);
     } else if (!isStaticImage) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       this._sdrTextureMipmapped = false;
+      if (this.sdrTexture) this._mipmappedTextures.delete(this.sdrTexture);
     }
 
     // Use display shader
@@ -2166,7 +2335,8 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
     // Apply user rotation/flip (SDR has no video rotation metadata)
-    this.displayShader.setUniformInt('u_texRotation', Math.round(this._userRotation / 90) % 4);
+    const sdrRotMatrix = getRotationMatrix2x2(normalizeAngle(this._userRotation));
+    this.displayShader.setUniformMatrix2fv('u_texRotationMatrix', sdrRotMatrix);
     this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
     this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
@@ -2195,6 +2365,11 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_texture', 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
+
+    // Apply texture filter mode (nearest/linear) to the SDR texture
+    if (this.sdrTexture) {
+      this.applyImageTextureFilter(this.sdrTexture);
+    }
 
     // Draw quad
     gl.bindVertexArray(this.quadVAO);
@@ -2238,6 +2413,8 @@ export class Renderer implements RendererBackend {
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
+    if (this.fileLUT3DTexture) gl.deleteTexture(this.fileLUT3DTexture);
+    if (this.displayLUT3DTexture) gl.deleteTexture(this.displayLUT3DTexture);
     if (this.filmLUTTexture) gl.deleteTexture(this.filmLUTTexture);
     if (this.inlineLUTTexture) gl.deleteTexture(this.inlineLUTTexture);
 
@@ -2245,6 +2422,10 @@ export class Renderer implements RendererBackend {
     this.falseColorRGBABuffer = null;
     this.lut3DRGBABuffer = null;
     this.lut3DRGBABufferSize = 0;
+    this.fileLUT3DRGBABuffer = null;
+    this.fileLUT3DRGBABufferSize = 0;
+    this.displayLUT3DRGBABuffer = null;
+    this.displayLUT3DRGBABufferSize = 0;
     this.inlineLUTDeinterleavedBuffer = null;
     this.inlineLUTDeinterleavedBufferSize = 0;
     this.rgbaPadBuffer = null;
@@ -2280,6 +2461,9 @@ export class Renderer implements RendererBackend {
     this.ocioShaderCode = null;
     this.ocioFunctionName = null;
     this.ocioUniforms = null;
+
+    // Clear mipmap tracking (all GL textures are invalidated)
+    this._mipmappedTextures.clear();
 
     this.parallelCompileExt = null;
     this.usingHalfFloatBackbuffer = false;

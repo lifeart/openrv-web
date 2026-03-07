@@ -5,6 +5,7 @@ import {
   type NavPlaylistClip,
   type NavFrameMapping,
 } from './FrameNavigationService';
+import { createMockSession } from '../../test/mocks';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,23 +21,6 @@ function makeClip(overrides: Partial<NavPlaylistClip> & { id: string; globalStar
 
 function makeMapping(clip: NavPlaylistClip, clipIndex: number, sourceIndex: number, localFrame: number): NavFrameMapping {
   return { clip, clipIndex, sourceIndex, localFrame };
-}
-
-// ---------------------------------------------------------------------------
-// Lightweight test doubles
-// ---------------------------------------------------------------------------
-
-function createMockSession() {
-  return {
-    currentFrame: 1,
-    currentSourceIndex: 0,
-    goToFrame: vi.fn(),
-    setCurrentSource: vi.fn(),
-    setInPoint: vi.fn(),
-    setOutPoint: vi.fn(),
-    goToNextMarker: vi.fn().mockReturnValue(null),
-    goToPreviousMarker: vi.fn().mockReturnValue(null),
-  };
 }
 
 function createMockPlaylistManager() {

@@ -17,15 +17,17 @@ import type { PARState } from '../../utils/media/PixelAspectRatio';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import type { WatermarkState } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
-import type { LoopMode, MediaType } from '../types/session';
+import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Marker } from './Session';
+import type { SerializedRepresentation } from '../types/representation';
 import type { PlaylistState } from './PlaylistManager';
 import type { Note } from './NoteManager';
 import type { VersionGroup } from './VersionManager';
 import type { StatusEntry } from './StatusManager';
+import type { SerializedGraph } from './SessionManagerTypes';
 
 /** Schema version for migration support */
-export const SESSION_STATE_VERSION = 1;
+export const SESSION_STATE_VERSION = 2;
 
 /** Reference to a media file */
 export interface MediaReference {
@@ -51,6 +53,10 @@ export interface MediaReference {
   requiresReload?: boolean;
   /** OPFS cache key for fast reload */
   opfsCacheKey?: string;
+  /** Serialized representations (omits runtime-only fields like sourceNode) */
+  representations?: SerializedRepresentation[];
+  /** Active representation ID */
+  activeRepresentationId?: string;
 }
 
 /** Playback state */
@@ -60,10 +66,13 @@ export interface PlaybackState {
   outPoint: number;
   fps: number;
   loopMode: LoopMode;
+  playbackMode?: PlaybackMode;
   volume: number;
   muted: boolean;
   marks: Marker[] | number[]; // Support both old format (number[]) and new format (Marker[])
   currentSourceIndex: number;
+  /** Whether audio scrub is enabled (optional for backward compat, defaults to true) */
+  audioScrubEnabled?: boolean;
 }
 
 /** Paint/annotation state (serializable version) */
@@ -136,6 +145,8 @@ export interface SessionState {
   versionGroups?: VersionGroup[];
   /** Shot statuses (optional) */
   statuses?: StatusEntry[];
+  /** Node graph topology (optional, absent in legacy v1 projects) */
+  graph?: SerializedGraph;
 }
 
 /** Default values for empty state */
@@ -151,8 +162,10 @@ export const DEFAULT_PLAYBACK_STATE: PlaybackState = {
   outPoint: 1,
   fps: 24,
   loopMode: 'loop',
+  playbackMode: 'realtime',
   volume: 0.7,
   muted: false,
   marks: [],
   currentSourceIndex: 0,
+  audioScrubEnabled: true,
 };

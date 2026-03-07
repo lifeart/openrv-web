@@ -10,12 +10,22 @@ import type { ToneMappingState, ZebraState, HighlightsShadowsState, FalseColorSt
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
+import type { TextureFilterMode } from '../core/types/filter';
 
 export interface DisplayColorConfig {
   transferFunction: number;
   displayGamma: number;
   displayBrightness: number;
   customGamma: number;
+}
+
+export interface LuminanceVisRenderState {
+  mode: 'off' | 'hsv' | 'random-color' | 'contour';
+  // HSV/Random modes: the 256-entry LUT is passed via falseColor.lut
+  // Contour mode:
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number]; // RGB normalized 0-1
 }
 
 export interface RenderState {
@@ -31,6 +41,27 @@ export interface RenderState {
   zebraStripes: ZebraState;
   channelMode: ChannelMode;
   lut: { data: Float32Array | null; size: number; intensity: number };
+  fileLUT?: {
+    data: Float32Array | null;
+    size: number;
+    intensity: number;
+    domainMin: [number, number, number];
+    domainMax: [number, number, number];
+  };
+  lookLUT?: {
+    data: Float32Array | null;
+    size: number;
+    intensity: number;
+    domainMin: [number, number, number];
+    domainMax: [number, number, number];
+  };
+  displayLUT?: {
+    data: Float32Array | null;
+    size: number;
+    intensity: number;
+    domainMin: [number, number, number];
+    domainMax: [number, number, number];
+  };
   displayColor: DisplayColorConfig;
   highlightsShadows: HighlightsShadowsState;
   vibrance: { amount: number; skinProtection: boolean };
@@ -47,4 +78,6 @@ export interface RenderState {
   premultMode?: number;  // 0=off, 1=premultiply, 2=unpremultiply
   ditherMode?: number;   // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
   quantizeBits?: number; // 0=off, 2-16 = target bit depth for quantize/posterize
+  textureFilterMode?: TextureFilterMode; // 'nearest' or 'linear' (default)
+  luminanceVis?: LuminanceVisRenderState;
 }

@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { bindPersistenceHandlers } from './persistenceHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { Session, SessionEvents } from '../core/session/Session';
+import { createMockSessionBridgeContext } from '../../test/mocks';
 
 type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 
@@ -38,63 +39,6 @@ function createMockOn(): {
   return { on, handlers };
 }
 
-function createMockContext(): SessionBridgeContext {
-  const paintEngine = {
-    loadFromAnnotations: vi.fn(),
-    setGhostMode: vi.fn(),
-    setHoldMode: vi.fn(),
-  };
-  const persistenceManager = {
-    syncGTOStore: vi.fn(),
-    setGTOStore: vi.fn(),
-  };
-  const matteOverlay = { setSettings: vi.fn() };
-  const viewer = {
-    getMatteOverlay: () => matteOverlay,
-    setTransform: vi.fn(),
-    setNoiseReductionParams: vi.fn(),
-  };
-  const colorControls = { setAdjustments: vi.fn() };
-  const filterControl = { setSettings: vi.fn() };
-  const noiseReductionControl = { setParams: vi.fn() };
-  const cdlControl = { setCDL: vi.fn() };
-  const transformControl = { setTransform: vi.fn() };
-  const lensControl = { setParams: vi.fn() };
-  const cropControl = { setState: vi.fn(), setUncropState: vi.fn() };
-  const channelSelect = { setChannel: vi.fn() };
-  const stereoControl = { setState: vi.fn() };
-  const stereoEyeTransformControl = { setState: vi.fn() };
-  const stereoAlignControl = { setMode: vi.fn() };
-  const scopesControl = { setScopeVisible: vi.fn() };
-  const histogram = { show: vi.fn(), hide: vi.fn() };
-  const waveform = { show: vi.fn(), hide: vi.fn() };
-  const vectorscope = { show: vi.fn(), hide: vi.fn() };
-  const gamutDiagram = { show: vi.fn(), hide: vi.fn() };
-
-  return {
-    getSession: () => createMockSession(),
-    getPaintEngine: () => paintEngine,
-    getPersistenceManager: () => persistenceManager,
-    getViewer: () => viewer,
-    getColorControls: () => colorControls,
-    getFilterControl: () => filterControl,
-    getNoiseReductionControl: () => noiseReductionControl,
-    getCDLControl: () => cdlControl,
-    getTransformControl: () => transformControl,
-    getLensControl: () => lensControl,
-    getCropControl: () => cropControl,
-    getChannelSelect: () => channelSelect,
-    getStereoControl: () => stereoControl,
-    getStereoEyeTransformControl: () => stereoEyeTransformControl,
-    getStereoAlignControl: () => stereoAlignControl,
-    getScopesControl: () => scopesControl,
-    getHistogram: () => histogram,
-    getWaveform: () => waveform,
-    getVectorscope: () => vectorscope,
-    getGamutDiagram: () => gamutDiagram,
-  } as unknown as SessionBridgeContext;
-}
-
 describe('bindPersistenceHandlers', () => {
   let context: SessionBridgeContext;
   let session: Session;
@@ -105,7 +49,7 @@ describe('bindPersistenceHandlers', () => {
   let updateGamutDiagram: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    context = createMockContext();
+    context = createMockSessionBridgeContext();
     session = createMockSession();
     const mockOn = createMockOn();
     handlers = mockOn.handlers;

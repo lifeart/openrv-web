@@ -12,6 +12,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
+import { rgbToHsl, hslToRgb } from '../../utils/color';
 
 export type { HSLRange, HSLCorrection, HSLQualifierState } from '../../core/types/color';
 export { DEFAULT_HSL_RANGE, DEFAULT_HSL_CORRECTION, DEFAULT_HSL_QUALIFIER_STATE } from '../../core/types/color';
@@ -47,7 +48,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
       const b = data[i + 2]! / 255;
 
       // Convert RGB to HSL
-      const { h, s, l } = this.rgbToHsl(r, g, b);
+      const { h, s, l } = rgbToHsl(r, g, b);
 
       // Calculate matte value (0-1) based on how well pixel matches the HSL ranges
       let matte = this.calculateMatte(h, s * 100, l * 100, hue, saturation, luminance);
@@ -66,7 +67,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
       } else if (matte > 0.001) {
         // Apply corrections based on matte strength
         const correctedHsl = this.applyCorrection(h, s, l, correction, matte);
-        const corrected = this.hslToRgb(correctedHsl.h, correctedHsl.s, correctedHsl.l);
+        const corrected = hslToRgb(correctedHsl.h, correctedHsl.s, correctedHsl.l);
 
         data[i] = Math.round(corrected.r * 255);
         data[i + 1] = Math.round(corrected.g * 255);
@@ -181,65 +182,6 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
   private smoothstep(edge0: number, edge1: number, x: number): number {
     const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
     return t * t * (3 - 2 * t);
-  }
-
-  /**
-   * Convert RGB to HSL
-   * R, G, B in range 0-1
-   * Returns H in 0-360, S and L in 0-1
-   */
-  private rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const l = (max + min) / 2;
-
-    if (max === min) {
-      return { h: 0, s: 0, l };
-    }
-
-    const d = max - min;
-    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-
-    let h = 0;
-    if (max === r) {
-      h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
-    } else if (max === g) {
-      h = ((b - r) / d + 2) * 60;
-    } else {
-      h = ((r - g) / d + 4) * 60;
-    }
-
-    return { h, s, l };
-  }
-
-  /**
-   * Convert HSL to RGB
-   * H in 0-360, S and L in 0-1
-   * Returns R, G, B in 0-1
-   */
-  private hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
-    if (s === 0) {
-      return { r: l, g: l, b: l };
-    }
-
-    const hue2rgb = (p: number, q: number, t: number): number => {
-      if (t < 0) t += 1;
-      if (t > 1) t -= 1;
-      if (t < 1 / 6) return p + (q - p) * 6 * t;
-      if (t < 1 / 2) return q;
-      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-      return p;
-    };
-
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    const hNorm = h / 360;
-
-    return {
-      r: hue2rgb(p, q, hNorm + 1 / 3),
-      g: hue2rgb(p, q, hNorm),
-      b: hue2rgb(p, q, hNorm - 1 / 3),
-    };
   }
 
   /**
@@ -405,7 +347,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
    * Converts RGB color to hue and sets it as center
    */
   pickColor(r: number, g: number, b: number): void {
-    const { h, s, l } = this.rgbToHsl(r / 255, g / 255, b / 255);
+    const { h, s, l } = rgbToHsl(r / 255, g / 255, b / 255);
     this.state.hue.center = h;
     this.state.saturation.center = s * 100;
     this.state.luminance.center = l * 100;

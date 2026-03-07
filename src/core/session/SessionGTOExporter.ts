@@ -528,7 +528,7 @@ export class SessionGTOExporter {
   }
 
   /**
-   * Build source group objects (RVSourceGroup + RVFileSource)
+   * Build source group objects (RVSourceGroup + RVFileSource or RVMovieProc)
    * Returns array of objects for a single source
    */
   static buildSourceGroupObjects(source: MediaSource, groupName: string): ObjectData[] {
@@ -545,7 +545,34 @@ export class SessionGTOExporter {
       .end();
     objects.push(groupBuilder.build().objects[0]!);
 
-    // 2. RVFileSource (or RVImageSource based on type)
+    // 2. Check if this is a procedural source (movieproc)
+    if (source.proceduralSourceNode) {
+      const movieProcName = `${groupName}_movieProc`;
+      const movieProcBuilder = new GTOBuilder();
+      const movieProcObject = movieProcBuilder.object(movieProcName, 'RVMovieProc', 1);
+
+      // Build a .movieproc URL from the source metadata
+      let movieProcUrl = source.url;
+      if (movieProcUrl.startsWith('movieproc://')) {
+        // Convert movieproc:// URL back to .movieproc format
+        const pattern = movieProcUrl.replace('movieproc://', '');
+        const parts = [pattern];
+        if (source.width > 0) parts.push(`width=${source.width}`);
+        if (source.height > 0) parts.push(`height=${source.height}`);
+        movieProcUrl = `${parts.join(',')}.movieproc`;
+      }
+
+      movieProcObject
+        .component('movie')
+        .string('url', movieProcUrl)
+        .end();
+
+      movieProcObject.end();
+      objects.push(movieProcBuilder.build().objects[0]!);
+      return objects;
+    }
+
+    // 3. RVFileSource (or RVImageSource based on type)
     const protocol = source.type === 'image' ? 'RVImageSource' : 'RVFileSource';
     const sourceBuilder = new GTOBuilder();
 
@@ -1469,7 +1496,7 @@ export class SessionGTOExporter {
       .int2('range', [[playback.inPoint, playback.outPoint]])
       .int2('region', [[playback.inPoint, playback.outPoint]])
       .float('fps', playback.fps)
-      .float('realtime', metadata.realtime || 0)
+      .float('realtime', session.playbackMode === 'playAllFrames' ? 0 : (metadata.realtime || playback.fps))
       .int('inc', session.frameIncrement)
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
@@ -1479,6 +1506,7 @@ export class SessionGTOExporter {
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
       .float4('bgColor', [metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]])
+      .int('audioScrubEnabled', playback.audioScrubEnabled ? 1 : 0)
       .end();
 
     obj
@@ -1651,7 +1679,7 @@ export class SessionGTOExporter {
         this.updateProperty(sessionComp, 'range', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'region', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'fps', playback.fps);
-        this.updateProperty(sessionComp, 'realtime', session.metadata.realtime || 0);
+        this.updateProperty(sessionComp, 'realtime', session.playbackMode === 'playAllFrames' ? 0 : (session.metadata.realtime || playback.fps));
         this.updateProperty(sessionComp, 'bgColor', session.metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]);
 
         if (playback.marks.length > 0) {

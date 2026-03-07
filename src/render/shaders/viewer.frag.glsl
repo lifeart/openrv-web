@@ -62,6 +62,15 @@
       uniform sampler2D u_falseColorLUT; // 256x1 RGB texture
       uniform bool u_falseColorEnabled;
 
+      // Contour iso-lines (luminance visualization)
+      // NOTE: Visualization operates on display-referred SDR-range values.
+      // Super-white (>1.0) and negative values are clamped. For HDR content,
+      // enable tone mapping before activating visualization modes.
+      uniform bool u_contourEnabled;
+      uniform float u_contourLevels;      // 2.0 to 50.0
+      uniform bool u_contourDesaturate;   // desaturate non-contour pixels
+      uniform vec3 u_contourLineColor;    // normalized RGB
+
       // Zebra Stripes
       uniform bool u_zebraEnabled;
       uniform float u_zebraHighThreshold;
@@ -73,11 +82,29 @@
       // Channel Isolation
       uniform int u_channelMode; // 0=rgb, 1=red, 2=green, 3=blue, 4=alpha, 5=luminance
 
-      // 3D LUT (single-pass float precision)
-      uniform sampler3D u_lut3D;
-      uniform bool u_lut3DEnabled;
-      uniform float u_lut3DIntensity;
-      uniform float u_lut3DSize;
+      // File LUT (per-source, applied after EOTF, before/instead-of input primaries)
+      uniform sampler3D u_fileLUT3D;
+      uniform bool u_fileLUT3DEnabled;
+      uniform float u_fileLUT3DIntensity;
+      uniform float u_fileLUT3DSize;
+      uniform vec3 u_fileLUT3DDomainMin;
+      uniform vec3 u_fileLUT3DDomainMax;
+
+      // Look LUT (per-source, creative grade -- renamed from u_lut3D)
+      uniform sampler3D u_lookLUT3D;
+      uniform bool u_lookLUT3DEnabled;
+      uniform float u_lookLUT3DIntensity;
+      uniform float u_lookLUT3DSize;
+      uniform vec3 u_lookLUT3DDomainMin;
+      uniform vec3 u_lookLUT3DDomainMax;
+
+      // Display LUT (session-wide, applied after output primaries, before display transfer)
+      uniform sampler3D u_displayLUT3D;
+      uniform bool u_displayLUT3DEnabled;
+      uniform float u_displayLUT3DIntensity;
+      uniform float u_displayLUT3DSize;
+      uniform vec3 u_displayLUT3DDomainMin;
+      uniform vec3 u_displayLUT3DDomainMax;
 
       // Display transfer function
       uniform int u_displayTransfer;    // 0=linear, 1=sRGB, 2=rec709, 3=gamma2.2, 4=gamma2.4, 5=custom
@@ -578,14 +605,16 @@
         );
       }
 
-      // Apply 3D LUT with trilinear interpolation
-      vec3 applyLUT3D(vec3 color) {
-        vec3 c = clamp(color, 0.0, 1.0);
-        float offset = 0.5 / u_lut3DSize;
-        float scale = (u_lut3DSize - 1.0) / u_lut3DSize;
-        vec3 lutCoord = c * scale + offset;
-        vec3 lutColor = texture(u_lut3D, lutCoord).rgb;
-        return mix(color, lutColor, u_lut3DIntensity);
+      // Generic 3D LUT application with domain mapping, trilinear interpolation, and intensity blend
+      vec3 applyLUT3DGeneric(sampler3D lut, vec3 color, float lutSize, float intensity,
+                             vec3 domainMin, vec3 domainMax) {
+        vec3 normalized = (color - domainMin) / (domainMax - domainMin);
+        normalized = clamp(normalized, 0.0, 1.0);
+        float offset = 0.5 / lutSize;
+        float scale = (lutSize - 1.0) / lutSize;
+        vec3 lutCoord = normalized * scale + offset;
+        vec3 lutColor = texture(lut, lutCoord).rgb;
+        return mix(color, lutColor, intensity);
       }
 
       // Display transfer functions (linear -> display encoded)
@@ -916,6 +945,13 @@
       }
 
       void main() {
+        // Out-of-bounds check: discard pixels outside [0,1] texture range
+        // (occurs with non-cardinal rotation angles)
+        if (v_texCoord.x < 0.0 || v_texCoord.x > 1.0 || v_texCoord.y < 0.0 || v_texCoord.y > 1.0) {
+          fragColor = vec4(0.0, 0.0, 0.0, 0.0);
+          return;
+        }
+
         vec4 color = texture(u_texture, v_texCoord);
 
         // 0a. Deinterlace (before EOTF, operates on raw texels)
@@ -1020,9 +1056,18 @@
           }
         }
 
-        // 0e. Input primaries normalization (source → BT.709 working space)
-        if (u_inputPrimariesEnabled) {
-            color.rgb = u_inputPrimariesMatrix * color.rgb;
+        // 0e-alt. File LUT (per-source input device transform)
+        // When active, bypasses automatic input primaries conversion
+        if (u_fileLUT3DEnabled) {
+          color.rgb = applyLUT3DGeneric(u_fileLUT3D, color.rgb, u_fileLUT3DSize,
+                                         u_fileLUT3DIntensity, u_fileLUT3DDomainMin,
+                                         u_fileLUT3DDomainMax);
+          // Skip input primaries -- the File LUT handles the full IDT
+        } else {
+          // 0e. Input primaries normalization (source → BT.709 working space)
+          if (u_inputPrimariesEnabled) {
+              color.rgb = u_inputPrimariesMatrix * color.rgb;
+          }
         }
 
         // 1. Exposure (in stops, applied in linear space, per-channel)
@@ -1200,9 +1245,11 @@
           color.rgb = cc + excess;
         }
 
-        // 6d. 3D LUT (single-pass, float precision)
-        if (u_lut3DEnabled) {
-          color.rgb = applyLUT3D(color.rgb);
+        // 6d. Look LUT (per-source creative grade)
+        if (u_lookLUT3DEnabled) {
+          color.rgb = applyLUT3DGeneric(u_lookLUT3D, color.rgb, u_lookLUT3DSize,
+                                         u_lookLUT3DIntensity, u_lookLUT3DDomainMin,
+                                         u_lookLUT3DDomainMax);
         }
 
         // 6e. HSL Qualifier (secondary color correction)
@@ -1320,6 +1367,13 @@
             color.rgb = u_outputPrimariesMatrix * color.rgb;
         }
 
+        // 7d. Display LUT (session-wide display calibration)
+        if (u_displayLUT3DEnabled) {
+          color.rgb = applyLUT3DGeneric(u_displayLUT3D, color.rgb, u_displayLUT3DSize,
+                                         u_displayLUT3DIntensity, u_displayLUT3DDomainMin,
+                                         u_displayLUT3DDomainMax);
+        }
+
         // 8. Display output: display transfer function and creative gamma are
         // INDEPENDENT stages.  Creative gamma is ALWAYS applied regardless of
         // whether a display transfer (sRGB, Rec.709, etc.) is active.
@@ -1359,10 +1413,50 @@
         else if (u_channelMode == 5) { color.rgb = vec3(dot(color.rgb, LUMA)); }
 
         // 11. False Color (diagnostic overlay - replaces color)
+        // NOTE: For HSV and Random Color luminance visualization modes, the
+        // false color LUT is loaded with the appropriate luminance-to-color mapping.
+        // Super-white (>1.0) and negative values are clamped to LUT bounds.
         if (u_falseColorEnabled) {
           float fcLuma = dot(color.rgb, LUMA);
           float lumaSDR = clamp(fcLuma, 0.0, 1.0);
           color.rgb = texture(u_falseColorLUT, vec2(lumaSDR, 0.5)).rgb;
+        }
+
+        // 11b. Contour iso-lines (luminance visualization - neighbor edge detection)
+        // All five luminance samples (center + 4 neighbors) come from u_texture
+        // to ensure consistency. Contour boundaries are detected in source-image
+        // luminance space. Desaturation blend uses the processed color.rgb.
+        if (u_contourEnabled) {
+          ivec2 texSize = textureSize(u_texture, 0);
+          ivec2 pc = ivec2(v_texCoord * vec2(texSize));
+
+          // Center pixel luminance from source texture (consistent with neighbors)
+          float cLuma = dot(texelFetch(u_texture, pc, 0).rgb, LUMA);
+          float quantC = floor(cLuma * u_contourLevels) / u_contourLevels;
+
+          // Clamp neighbor coordinates to texture bounds
+          ivec2 left  = ivec2(max(pc.x - 1, 0), pc.y);
+          ivec2 right = ivec2(min(pc.x + 1, texSize.x - 1), pc.y);
+          ivec2 up    = ivec2(pc.x, max(pc.y - 1, 0));
+          ivec2 down  = ivec2(pc.x, min(pc.y + 1, texSize.y - 1));
+
+          float qL = floor(dot(texelFetch(u_texture, left, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+          float qR = floor(dot(texelFetch(u_texture, right, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+          float qU = floor(dot(texelFetch(u_texture, up, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+          float qD = floor(dot(texelFetch(u_texture, down, 0).rgb, LUMA) * u_contourLevels) / u_contourLevels;
+
+          // Epsilon-based comparison to avoid floating-point precision artifacts
+          float eps = 0.5 / u_contourLevels;
+          bool isContour = (abs(qL - quantC) > eps) || (abs(qR - quantC) > eps) ||
+                           (abs(qU - quantC) > eps) || (abs(qD - quantC) > eps);
+
+          if (isContour) {
+            color.rgb = u_contourLineColor;
+          } else if (u_contourDesaturate) {
+            // Use processed color.rgb luminance for display-referred desaturation
+            float displayLuma = dot(color.rgb, LUMA);
+            color.rgb = mix(color.rgb, vec3(displayLuma), 0.5);
+          }
         }
 
         // 12. Zebra Stripes (diagnostic overlay)

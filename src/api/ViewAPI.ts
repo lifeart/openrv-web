@@ -80,6 +80,46 @@ export class ViewAPI {
   }
 
   /**
+   * Fit the image width to the container width.
+   * The image fills the viewport width; user can pan vertically.
+   *
+   * @example
+   * ```ts
+   * openrv.view.fitToWidth();
+   * ```
+   */
+  fitToWidth(): void {
+    this.viewer.fitToWidth();
+  }
+
+  /**
+   * Fit the image height to the container height.
+   * The image fills the viewport height; user can pan horizontally.
+   *
+   * @example
+   * ```ts
+   * openrv.view.fitToHeight();
+   * ```
+   */
+  fitToHeight(): void {
+    this.viewer.fitToHeight();
+  }
+
+  /**
+   * Get the current fit mode.
+   *
+   * @returns The active fit mode ('all', 'width', 'height') or null if no fit mode is active.
+   *
+   * @example
+   * ```ts
+   * const mode = openrv.view.getFitMode(); // e.g. 'width'
+   * ```
+   */
+  getFitMode(): string | null {
+    return this.viewer.getFitMode();
+  }
+
+  /**
    * Set the pan offset in pixels.
    *
    * @param x - Horizontal pan offset in pixels (positive = right).

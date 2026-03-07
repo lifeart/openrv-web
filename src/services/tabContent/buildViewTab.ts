@@ -34,8 +34,9 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   viewContent.appendChild(registry.channelSelect.render());
   viewContent.appendChild(ContextToolbar.createDivider());
 
-  // --- GROUP 2: Comparison (Compare + Stereo + Ghost) ---
+  // --- GROUP 2: Comparison (Compare + Layout + Stereo + Ghost) ---
   viewContent.appendChild(registry.compareControl.render());
+  viewContent.appendChild(registry.layoutControl.render());
   viewContent.appendChild(registry.stereoControl.render());
   viewContent.appendChild(registry.stereoEyeTransformControl.render());
   viewContent.appendChild(registry.stereoAlignControl.render());
@@ -350,6 +351,28 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   addUnsubscriber(viewer.getEXRWindowOverlay().on('stateChanged', (state) => {
     setButtonActive(exrWindowButton, state.enabled, 'icon');
+  }));
+
+  // Info Strip overlay toggle button
+  const infoStripButton = ContextToolbar.createIconButton('info', () => {
+    viewer.getInfoStripOverlay().toggle();
+  }, { title: 'Toggle info strip overlay (F7)' });
+  infoStripButton.dataset.testid = 'info-strip-toggle-btn';
+  viewContent.appendChild(infoStripButton);
+
+  addUnsubscriber(viewer.getInfoStripOverlay().on('stateChanged', (state) => {
+    setButtonActive(infoStripButton, state.enabled, 'icon');
+  }));
+
+  // FPS Indicator toggle button
+  const fpsIndicatorButton = ContextToolbar.createIconButton('activity', () => {
+    viewer.getFPSIndicator().toggle();
+  }, { title: 'Toggle FPS indicator (Ctrl+Shift+F)' });
+  fpsIndicatorButton.dataset.testid = 'fps-indicator-toggle-btn';
+  viewContent.appendChild(fpsIndicatorButton);
+
+  addUnsubscriber(viewer.getFPSIndicator().on('stateChanged', (state) => {
+    setButtonActive(fpsIndicatorButton, state.enabled, 'icon');
   }));
 
   return { element: viewContent, convergenceButton, floatingWindowButton };

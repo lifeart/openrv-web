@@ -38,6 +38,7 @@ function createMockSession() {
     goToFrame: vi.fn(),
     toggleAB: vi.fn(),
     toggleMute: vi.fn(),
+    togglePlaybackMode: vi.fn(),
     noteManager: {
       getNextNoteFrame: vi.fn().mockReturnValue(20),
       getPreviousNoteFrame: vi.fn().mockReturnValue(5),
@@ -48,18 +49,24 @@ function createMockSession() {
 function createMockViewer() {
   return {
     smoothFitToWindow: vi.fn(),
+    smoothFitToWidth: vi.fn(),
+    smoothFitToHeight: vi.fn(),
     smoothSetZoom: vi.fn(),
+    smoothSetPixelRatio: vi.fn(),
     refresh: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     getPixelProbe: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getFalseColor: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getTimecodeOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
+    getInfoStripOverlay: vi.fn().mockReturnValue({ toggle: vi.fn(), togglePathMode: vi.fn() }),
+    getFPSIndicator: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getZebraStripes: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getColorWheels: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getSpotlightOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getHSLQualifier: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getLuminanceVisualization: vi.fn().mockReturnValue({ cycleMode: vi.fn() }),
     getImageData: vi.fn().mockReturnValue({ width: 100, height: 100, data: new Uint8ClampedArray(100 * 100 * 4) }),
+    toggleFilterMode: vi.fn(),
   };
 }
 
@@ -97,6 +104,7 @@ function createMockControls() {
       rotateRight: vi.fn(),
       toggleFlipH: vi.fn(),
       toggleFlipV: vi.fn(),
+      setRotation: vi.fn(),
     },
     toneMappingControl: { toggle: vi.fn() },
     colorInversionToggle: { toggle: vi.fn() },
@@ -152,6 +160,8 @@ function createMockControls() {
     hideTimelineEditorPanel: vi.fn(),
     isSlateEditorPanelVisible: vi.fn().mockReturnValue(false),
     hideSlateEditorPanel: vi.fn(),
+    timelineMagnifier: { toggle: vi.fn() },
+    gotoFrameOverlay: { show: vi.fn() },
   };
 }
 
@@ -180,7 +190,10 @@ function createMockDeps(): KeyboardActionDeps & { session: ReturnType<typeof cre
       goToPreviousMarkOrBoundary: vi.fn(),
       goToNextShot: vi.fn(),
       goToPreviousShot: vi.fn(),
+      shiftRangeToNext: vi.fn().mockReturnValue(null),
+      shiftRangeToPrevious: vi.fn().mockReturnValue(null),
     },
+    ariaAnnouncer: { announce: vi.fn() },
   };
 }
 
@@ -368,6 +381,16 @@ describe('buildActionHandlers', () => {
   it('view.fitToWindow calls viewer.smoothFitToWindow', () => {
     handlers['view.fitToWindow']!();
     expect(deps.viewer.smoothFitToWindow).toHaveBeenCalledOnce();
+  });
+
+  it('view.fitToWidth calls viewer.smoothFitToWidth', () => {
+    handlers['view.fitToWidth']!();
+    expect(deps.viewer.smoothFitToWidth).toHaveBeenCalledOnce();
+  });
+
+  it('view.fitToHeight calls viewer.smoothFitToHeight', () => {
+    handlers['view.fitToHeight']!();
+    expect(deps.viewer.smoothFitToHeight).toHaveBeenCalledOnce();
   });
 
   it('view.zoom50 calls viewer.smoothSetZoom(0.5) when on view tab', () => {
@@ -667,5 +690,135 @@ describe('buildActionHandlers', () => {
   it('paint.eraser delegates to paintToolbar with e', () => {
     handlers['paint.eraser']!();
     expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('e');
+  });
+
+  // =================================================================
+  // Playback mode
+  // =================================================================
+
+  it('KAM-PAF-001: playback.togglePlaybackMode calls session.togglePlaybackMode()', () => {
+    handlers['playback.togglePlaybackMode']!();
+    expect(deps.session.togglePlaybackMode).toHaveBeenCalledTimes(1);
+  });
+
+  // =================================================================
+  // Transform: reset rotation (Ctrl+0)
+  // =================================================================
+
+  it('KAM-TRR-001: transform.resetRotation handler is registered', () => {
+    expect(handlers['transform.resetRotation']).toBeDefined();
+    expect(typeof handlers['transform.resetRotation']).toBe('function');
+  });
+
+  it('KAM-TRR-002: transform.resetRotation calls transformControl.setRotation(0)', () => {
+    handlers['transform.resetRotation']!();
+    expect(deps.controls.transformControl.setRotation).toHaveBeenCalledWith(0);
+  });
+
+  it('KAM-TRR-003: transform.resetRotation calls setRotation exactly once', () => {
+    handlers['transform.resetRotation']!();
+    expect(deps.controls.transformControl.setRotation).toHaveBeenCalledTimes(1);
+  });
+
+  // -- Scale presets (magnification) -------------------------------------
+
+  it('includes all magnification scale preset handlers', () => {
+    const keys = Object.keys(handlers);
+    expect(keys).toContain('view.zoom1to1');
+    expect(keys).toContain('view.zoom2to1');
+    expect(keys).toContain('view.zoom3to1');
+    expect(keys).toContain('view.zoom4to1');
+    expect(keys).toContain('view.zoom5to1');
+    expect(keys).toContain('view.zoom6to1');
+    expect(keys).toContain('view.zoom7to1');
+    expect(keys).toContain('view.zoom8to1');
+  });
+
+  it('view.zoom1to1 calls viewer.smoothSetPixelRatio(1)', () => {
+    handlers['view.zoom1to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(1);
+  });
+
+  it('view.zoom2to1 calls viewer.smoothSetPixelRatio(2)', () => {
+    handlers['view.zoom2to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(2);
+  });
+
+  it('view.zoom3to1 calls viewer.smoothSetPixelRatio(3)', () => {
+    handlers['view.zoom3to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(3);
+  });
+
+  it('view.zoom4to1 calls viewer.smoothSetPixelRatio(4)', () => {
+    handlers['view.zoom4to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(4);
+  });
+
+  it('view.zoom5to1 calls viewer.smoothSetPixelRatio(5)', () => {
+    handlers['view.zoom5to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(5);
+  });
+
+  it('view.zoom6to1 calls viewer.smoothSetPixelRatio(6)', () => {
+    handlers['view.zoom6to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(6);
+  });
+
+  it('view.zoom7to1 calls viewer.smoothSetPixelRatio(7)', () => {
+    handlers['view.zoom7to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(7);
+  });
+
+  it('view.zoom8to1 calls viewer.smoothSetPixelRatio(8)', () => {
+    handlers['view.zoom8to1']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(8);
+  });
+
+  // -- Scale presets (reduction) -----------------------------------------
+
+  it('includes all reduction scale preset handlers', () => {
+    const keys = Object.keys(handlers);
+    expect(keys).toContain('view.zoom1to2');
+    expect(keys).toContain('view.zoom1to3');
+    expect(keys).toContain('view.zoom1to4');
+    expect(keys).toContain('view.zoom1to5');
+    expect(keys).toContain('view.zoom1to6');
+    expect(keys).toContain('view.zoom1to7');
+    expect(keys).toContain('view.zoom1to8');
+  });
+
+  it('view.zoom1to2 calls viewer.smoothSetPixelRatio(0.5)', () => {
+    handlers['view.zoom1to2']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.5);
+  });
+
+  it('view.zoom1to3 calls viewer.smoothSetPixelRatio(1/3)', () => {
+    handlers['view.zoom1to3']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(1 / 3);
+  });
+
+  it('view.zoom1to4 calls viewer.smoothSetPixelRatio(0.25)', () => {
+    handlers['view.zoom1to4']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.25);
+  });
+
+  it('view.zoom1to5 calls viewer.smoothSetPixelRatio(0.2)', () => {
+    handlers['view.zoom1to5']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.2);
+  });
+
+  it('view.zoom1to6 calls viewer.smoothSetPixelRatio(1/6)', () => {
+    handlers['view.zoom1to6']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(1 / 6);
+  });
+
+  it('view.zoom1to7 calls viewer.smoothSetPixelRatio(1/7)', () => {
+    handlers['view.zoom1to7']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(1 / 7);
+  });
+
+  it('view.zoom1to8 calls viewer.smoothSetPixelRatio(0.125)', () => {
+    handlers['view.zoom1to8']!();
+    expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.125);
   });
 });

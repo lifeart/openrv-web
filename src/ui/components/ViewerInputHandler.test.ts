@@ -803,3 +803,210 @@ describe('ViewerInputHandler – Case-insensitive drop extensions', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Rotation Scrub (Ctrl+Shift+Drag) Tests
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+  let mockTransformData: { rotation: number; flipH: boolean; flipV: boolean; scale: { x: number; y: number }; translate: { x: number; y: number } };
+
+  beforeEach(() => {
+    mockTransformData = {
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      scale: { x: 1, y: 1 },
+      translate: { x: 0, y: 0 },
+    };
+
+    const mockTransformManager = {
+      panX: 0,
+      panY: 0,
+      zoom: 1,
+      initialPinchDistance: 0,
+      initialZoom: 1,
+      cancelZoomAnimation: vi.fn(),
+      transform: mockTransformData,
+      getTransform: vi.fn(() => ({ ...mockTransformData, scale: { ...mockTransformData.scale }, translate: { ...mockTransformData.translate } })),
+      setTransform: vi.fn((t: typeof mockTransformData) => {
+        mockTransformData.rotation = t.rotation;
+        mockTransformData.flipH = t.flipH;
+        mockTransformData.flipV = t.flipV;
+        mockTransformData.scale = { ...t.scale };
+        mockTransformData.translate = { ...t.translate };
+      }),
+    } as unknown as TransformManager;
+
+    ctx = createMockContext({
+      getTransformManager: () => mockTransformManager,
+    });
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+
+    // Ensure paint tool is 'none' (pan/navigation mode)
+    ctx.getPaintEngine().tool = 'none';
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  it('RSCRUB-001: Ctrl+Shift+pointerdown activates rotation scrubbing', () => {
+    const container = ctx.getContainer();
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    // Cursor should be ew-resize (rotation scrub)
+    expect(container.style.cursor).toBe('ew-resize');
+
+    // isInteracting should return true
+    expect(handler.isInteracting()).toBe(true);
+
+    // Clean up
+    container.dispatchEvent(createPointerEvent('pointerup', 400, 300));
+  });
+
+  it('RSCRUB-002: Ctrl+Shift+drag changes rotation based on horizontal movement', () => {
+    const container = ctx.getContainer();
+    const tm = ctx.getTransformManager();
+
+    // Start rotation scrub at x=400
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    // Move 100px to the right: 100 * 0.5 = 50 degrees
+    container.dispatchEvent(createPointerEvent('pointermove', 500, 300));
+
+    // setTransform should have been called with rotation near 50
+    expect(tm.setTransform).toHaveBeenCalled();
+    const lastCall = (tm.setTransform as any).mock.calls[(tm.setTransform as any).mock.calls.length - 1][0];
+    expect(lastCall.rotation).toBeCloseTo(50, 0);
+
+    // scheduleRender should have been called
+    expect(ctx.scheduleRender).toHaveBeenCalled();
+
+    // Clean up
+    container.dispatchEvent(createPointerEvent('pointerup', 500, 300));
+  });
+
+  it('RSCRUB-003: Dragging left produces negative angle delta (wraps correctly)', () => {
+    const container = ctx.getContainer();
+    const tm = ctx.getTransformManager();
+
+    // Start rotation scrub at x=400
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    // Move 100px to the left: -100 * 0.5 = -50 degrees => (360 - 50) = 310
+    container.dispatchEvent(createPointerEvent('pointermove', 300, 300));
+
+    const lastCall = (tm.setTransform as any).mock.calls[(tm.setTransform as any).mock.calls.length - 1][0];
+    expect(lastCall.rotation).toBeCloseTo(310, 0);
+
+    container.dispatchEvent(createPointerEvent('pointerup', 300, 300));
+  });
+
+  it('RSCRUB-004: Releasing pointer deactivates rotation scrubbing', () => {
+    const container = ctx.getContainer();
+
+    // Start rotation scrub
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    expect(handler.isInteracting()).toBe(true);
+
+    // Release
+    container.dispatchEvent(createPointerEvent('pointerup', 400, 300));
+
+    expect(handler.isInteracting()).toBe(false);
+    // Cursor should revert to 'grab' when tool is 'none'
+    expect(container.style.cursor).toBe('grab');
+  });
+
+  it('RSCRUB-005: Rotation scrub preserves start angle from current transform', () => {
+    const container = ctx.getContainer();
+    const tm = ctx.getTransformManager();
+
+    // Set initial rotation to 90 degrees
+    mockTransformData.rotation = 90;
+
+    // Start rotation scrub at x=400
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    // Move 40px right: 40 * 0.5 = 20 degrees added to 90 = 110
+    container.dispatchEvent(createPointerEvent('pointermove', 440, 300));
+
+    const lastCall = (tm.setTransform as any).mock.calls[(tm.setTransform as any).mock.calls.length - 1][0];
+    expect(lastCall.rotation).toBeCloseTo(110, 0);
+
+    container.dispatchEvent(createPointerEvent('pointerup', 440, 300));
+  });
+
+  it('RSCRUB-006: Without Ctrl+Shift, pointerdown enters pan mode instead', () => {
+    const container = ctx.getContainer();
+
+    // Normal click without Ctrl+Shift
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300));
+
+    // Should be in pan mode (cursor = grabbing), not rotation scrub (ew-resize)
+    expect(container.style.cursor).toBe('grabbing');
+
+    container.dispatchEvent(createPointerEvent('pointerup', 400, 300));
+  });
+
+  it('RSCRUB-007: Rotation scrub with rapid movement still computes correctly', () => {
+    const container = ctx.getContainer();
+    const tm = ctx.getTransformManager();
+
+    // Start scrub
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    // Rapid large movement: 720px right = 360 degrees = wraps to 0
+    container.dispatchEvent(createPointerEvent('pointermove', 1120, 300));
+
+    const lastCall = (tm.setTransform as any).mock.calls[(tm.setTransform as any).mock.calls.length - 1][0];
+    expect(lastCall.rotation).toBeCloseTo(0, 0);
+
+    container.dispatchEvent(createPointerEvent('pointerup', 1120, 300));
+  });
+
+  it('RSCRUB-008: Pointer capture is set during rotation scrub', () => {
+    const container = ctx.getContainer();
+
+    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
+      ctrlKey: true,
+      shiftKey: true,
+    } as any));
+
+    // setPointerCapture should have been called (as it is for all pointerdown events)
+    expect(container.setPointerCapture).toHaveBeenCalled();
+
+    container.dispatchEvent(createPointerEvent('pointerup', 400, 300));
+
+    // releasePointerCapture should have been called on pointerup
+    expect(container.releasePointerCapture).toHaveBeenCalled();
+  });
+});

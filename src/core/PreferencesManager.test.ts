@@ -4,10 +4,12 @@ import {
   DEFAULT_COLOR_DEFAULTS,
   DEFAULT_EXPORT_DEFAULTS,
   DEFAULT_GENERAL_PREFS,
+  DEFAULT_FPS_INDICATOR_PREFS,
   CORE_PREFERENCE_STORAGE_KEYS,
   getCorePreferencesManager,
   resetCorePreferencesManagerForTests,
   type ColorDefaults,
+  type FPSIndicatorPrefs,
   type PreferencesExportPayload,
 } from './PreferencesManager';
 import {
@@ -662,5 +664,106 @@ describe('getCorePreferencesManager singleton', () => {
     resetCorePreferencesManagerForTests();
     const b = getCorePreferencesManager();
     expect(a).not.toBe(b);
+  });
+});
+
+// =================================================================
+// FPS Indicator Preferences
+// =================================================================
+
+describe('FPS Indicator Preferences', () => {
+  afterEach(() => {
+    resetCorePreferencesManagerForTests();
+  });
+
+  it('CPRF-FPS-001: returns defaults when no data is stored', () => {
+    const { manager } = createManager();
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs).toEqual(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-002: persists and retrieves FPS indicator prefs', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs.enabled).toBe(false);
+    expect(prefs.position).toBe('bottom-left');
+    // Other fields should remain at default
+    expect(prefs.showDroppedFrames).toBe(true);
+    expect(prefs.backgroundOpacity).toBe(0.6);
+  });
+
+  it('CPRF-FPS-003: emits fpsIndicatorPrefsChanged on set', () => {
+    const { manager } = createManager();
+    const handler = vi.fn();
+    manager.on('fpsIndicatorPrefsChanged', handler);
+    manager.setFPSIndicatorPrefs({ warningThreshold: 0.90 });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ warningThreshold: 0.90 }));
+  });
+
+  it('CPRF-FPS-004: clamps backgroundOpacity to 0-1', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ backgroundOpacity: 1.5 });
+    expect(manager.getFPSIndicatorPrefs().backgroundOpacity).toBe(1);
+    manager.setFPSIndicatorPrefs({ backgroundOpacity: -0.5 });
+    expect(manager.getFPSIndicatorPrefs().backgroundOpacity).toBe(0);
+  });
+
+  it('CPRF-FPS-005: clamps warningThreshold to 0-1', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ warningThreshold: 2 });
+    expect(manager.getFPSIndicatorPrefs().warningThreshold).toBe(1);
+    // Setting warningThreshold below criticalThreshold triggers swap
+    manager.setFPSIndicatorPrefs({ warningThreshold: -1, criticalThreshold: 0 });
+    expect(manager.getFPSIndicatorPrefs().warningThreshold).toBe(0);
+    expect(manager.getFPSIndicatorPrefs().criticalThreshold).toBe(0);
+  });
+
+  it('CPRF-FPS-006: clamps criticalThreshold to 0-1', () => {
+    const { manager } = createManager();
+    // Setting criticalThreshold above warningThreshold triggers swap
+    manager.setFPSIndicatorPrefs({ criticalThreshold: 1.5, warningThreshold: 1 });
+    expect(manager.getFPSIndicatorPrefs().criticalThreshold).toBe(1);
+    expect(manager.getFPSIndicatorPrefs().warningThreshold).toBe(1);
+    manager.setFPSIndicatorPrefs({ criticalThreshold: -2, warningThreshold: 0 });
+    expect(manager.getFPSIndicatorPrefs().criticalThreshold).toBe(0);
+    expect(manager.getFPSIndicatorPrefs().warningThreshold).toBe(0);
+  });
+
+  it('CPRF-FPS-007: invalid position values are sanitized to default', () => {
+    const { manager, storage } = createManager();
+    // Store invalid data directly
+    storage.setItem(
+      CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator,
+      JSON.stringify({ position: 'invalid-position' })
+    );
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs.position).toBe('top-right'); // default
+  });
+
+  it('CPRF-FPS-008: partial set merges with existing prefs', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false });
+    manager.setFPSIndicatorPrefs({ position: 'bottom-right' });
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs.enabled).toBe(false);
+    expect(prefs.position).toBe('bottom-right');
+  });
+
+  it('CPRF-FPS-009: all valid positions are accepted', () => {
+    const { manager } = createManager();
+    const positions: FPSIndicatorPrefs['position'][] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+    for (const pos of positions) {
+      manager.setFPSIndicatorPrefs({ position: pos });
+      expect(manager.getFPSIndicatorPrefs().position).toBe(pos);
+    }
+  });
+
+  it('CPRF-FPS-010: corrupt JSON returns defaults', () => {
+    const { manager, storage } = createManager();
+    storage.setItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator, 'not-valid-json{{{');
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs).toEqual(DEFAULT_FPS_INDICATOR_PREFS);
   });
 });

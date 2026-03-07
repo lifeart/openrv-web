@@ -1,27 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RenderLoopService, type RenderLoopDeps } from './RenderLoopService';
+import { createMockSession, createMockViewer } from '../../test/mocks';
 
 // ---------------------------------------------------------------------------
 // Lightweight test doubles
 // ---------------------------------------------------------------------------
 
-function createMockSession() {
-  return {
+function createDeps() {
+  const session = createMockSession({
     isPlaying: false,
     currentFrame: 0,
-    currentSource: null as { type: string } | null,
-    update: vi.fn(),
-  };
-}
-
-function createMockViewer() {
-  return {
-    renderDirect: vi.fn(),
-  };
-}
-
-function createDeps() {
-  const session = createMockSession();
+    currentSource: null,
+  });
   const viewer = createMockViewer();
   return { session, viewer };
 }

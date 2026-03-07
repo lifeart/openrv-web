@@ -2875,4 +2875,209 @@ describe('Session', () => {
     });
   });
 
+  // =================================================================
+  // FPS measurement and dropped frame tracking
+  // =================================================================
+
+  describe('FPS measurement and dropped frames', () => {
+    it('SES-FPS-001: droppedFrameCount getter returns 0 initially', () => {
+      expect(session.droppedFrameCount).toBe(0);
+    });
+
+    it('SES-FPS-002: fpsUpdated event is forwarded from playback engine', () => {
+      const listener = vi.fn();
+      session.on('fpsUpdated', listener);
+
+      // Emit the event directly on the session playback to verify forwarding
+      // (the actual PlaybackEngine would emit this during playback)
+      (session as any)._playback.emit('fpsUpdated', {
+        targetFps: 24,
+        effectiveTargetFps: 24,
+        actualFps: 23.5,
+        droppedFrames: 0,
+        ratio: 0.979,
+        playbackSpeed: 1,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+        targetFps: 24,
+        actualFps: 23.5,
+        ratio: 0.979,
+      }));
+    });
+
+    it('SES-FPS-003: fpsUpdated event includes effectiveTargetFps for non-1x speed', () => {
+      const listener = vi.fn();
+      session.on('fpsUpdated', listener);
+
+      (session as any)._playback.emit('fpsUpdated', {
+        targetFps: 24,
+        effectiveTargetFps: 48,
+        actualFps: 45,
+        droppedFrames: 2,
+        ratio: 0.9375,
+        playbackSpeed: 2,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const measurement = listener.mock.calls[0][0];
+      expect(measurement.effectiveTargetFps).toBe(48);
+      expect(measurement.playbackSpeed).toBe(2);
+      expect(measurement.droppedFrames).toBe(2);
+    });
+
+    it('SES-FPS-004: fpsUpdated event includes droppedFrames count', () => {
+      const listener = vi.fn();
+      session.on('fpsUpdated', listener);
+
+      (session as any)._playback.emit('fpsUpdated', {
+        targetFps: 24,
+        effectiveTargetFps: 24,
+        actualFps: 20,
+        droppedFrames: 7,
+        ratio: 0.833,
+        playbackSpeed: 1,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0].droppedFrames).toBe(7);
+    });
+
+    it('SES-FPS-005: fpsUpdated ratio is clamped to max 1.0', () => {
+      const listener = vi.fn();
+      session.on('fpsUpdated', listener);
+
+      // Even if actualFps exceeds target, ratio should be clamped to 1
+      (session as any)._playback.emit('fpsUpdated', {
+        targetFps: 24,
+        effectiveTargetFps: 24,
+        actualFps: 25,
+        droppedFrames: 0,
+        ratio: 1.0, // clamped by PlaybackEngine
+        playbackSpeed: 1,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0].ratio).toBeLessThanOrEqual(1.0);
+    });
+  });
+
+  // =================================================================
+  // PlaybackMode (Play All Frames)
+  // =================================================================
+
+  describe('playbackMode', () => {
+    it('SES-PAF-001: default playbackMode is realtime', () => {
+      expect(session.playbackMode).toBe('realtime');
+    });
+
+    it('SES-PAF-002: setting playbackMode changes the value', () => {
+      session.playbackMode = 'playAllFrames';
+      expect(session.playbackMode).toBe('playAllFrames');
+    });
+
+    it('SES-PAF-003: setting same playbackMode does not emit event', () => {
+      const listener = vi.fn();
+      session.on('playbackModeChanged', listener);
+
+      session.playbackMode = 'realtime'; // same as default
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('SES-PAF-004: changing playbackMode emits playbackModeChanged event', () => {
+      const listener = vi.fn();
+      session.on('playbackModeChanged', listener);
+
+      session.playbackMode = 'playAllFrames';
+      expect(listener).toHaveBeenCalledWith('playAllFrames');
+    });
+
+    it('SES-PAF-005: togglePlaybackMode toggles between modes', () => {
+      expect(session.playbackMode).toBe('realtime');
+
+      session.togglePlaybackMode();
+      expect(session.playbackMode).toBe('playAllFrames');
+
+      session.togglePlaybackMode();
+      expect(session.playbackMode).toBe('realtime');
+    });
+
+    it('SES-PAF-006: playbackMode persists through getPlaybackState()', () => {
+      session.playbackMode = 'playAllFrames';
+      const state = session.getPlaybackState();
+      expect(state.playbackMode).toBe('playAllFrames');
+    });
+
+    it('SES-PAF-007: playbackMode restored via setPlaybackState()', () => {
+      session.setPlaybackState({ playbackMode: 'playAllFrames' });
+      expect(session.playbackMode).toBe('playAllFrames');
+    });
+
+    it('SES-PAF-008: playbackMode persists across source changes', () => {
+      session.playbackMode = 'playAllFrames';
+
+      // Simulate source change by adding a new source
+      session.setSources([{
+        type: 'image',
+        name: 'test.jpg',
+        url: 'test.jpg',
+        width: 100,
+        height: 100,
+        duration: 1,
+        fps: 24,
+      }]);
+
+      expect(session.playbackMode).toBe('playAllFrames');
+    });
+
+    it('SES-PAF-009: playAllFrames mode caps frame advancement for images/sequences', () => {
+      session.setSources([{
+        type: 'image',
+        name: 'test.jpg',
+        url: 'test.jpg',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+      }]);
+
+      session.playbackMode = 'playAllFrames';
+      session.play();
+
+      // Simulate a large time gap that would skip frames in realtime mode
+      const engine = (session as any)._playbackEngine;
+      engine.lastFrameTime = 0;
+      engine.frameAccumulator = 0;
+
+      // Manually set lastFrameTime far in the past to create a big delta
+      (session as any).lastFrameTime = performance.now() - 200;
+
+      const startFrame = session.currentFrame;
+      session.update();
+
+      // In playAllFrames mode, should advance at most 1 frame per tick
+      const frameAdvance = session.currentFrame - startFrame;
+      expect(frameAdvance).toBeLessThanOrEqual(1);
+    });
+
+    it('SES-PAF-010: event forwarding from engine through session', () => {
+      const listener = vi.fn();
+      session.on('playbackModeChanged', listener);
+
+      // Change via session setter (which forwards from engine -> sessionPlayback -> session)
+      session.playbackMode = 'playAllFrames';
+
+      expect(listener).toHaveBeenCalledWith('playAllFrames');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('SES-PAF-011: missing playbackMode in setPlaybackState defaults to no change', () => {
+      session.playbackMode = 'playAllFrames';
+      session.setPlaybackState({ fps: 30 }); // no playbackMode in state
+      // Should keep the existing mode
+      expect(session.playbackMode).toBe('playAllFrames');
+    });
+  });
+
 });

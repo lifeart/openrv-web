@@ -10,6 +10,8 @@ import {
 } from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
+import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
+import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import { Logger } from '../../utils/Logger';
@@ -215,6 +217,105 @@ export class MediaManager implements ManagerBase {
       this._host?.setInPointInternal(1);
       this._host?.emitDurationChanged(newSource.duration);
     }
+  }
+
+  // ---------------------------------------------------------------
+  // Procedural source loading
+  // ---------------------------------------------------------------
+
+  private _proceduralCounter = 0;
+
+  private generateUniqueSourceName(pattern: string, width: number, height: number): string {
+    this._proceduralCounter++;
+    if (this._proceduralCounter === 1) {
+      return `${pattern} (${width}x${height})`;
+    }
+    return `${pattern} #${this._proceduralCounter} (${width}x${height})`;
+  }
+
+  /**
+   * Load a procedural test pattern as a source.
+   */
+  loadProceduralSource(
+    pattern: PatternName,
+    options?: {
+      width?: number;
+      height?: number;
+      color?: [number, number, number, number];
+      direction?: GradientDirection;
+      cellSize?: number;
+      steps?: number;
+      fps?: number;
+      duration?: number;
+    },
+  ): void {
+    const fps = options?.fps ?? this._host?.getFps() ?? 24;
+    const duration = options?.duration ?? 1;
+    const width = options?.width ?? 1920;
+    const height = options?.height ?? 1080;
+
+    const node = new ProceduralSourceNode();
+    node.loadPattern(pattern, width, height, {
+      color: options?.color,
+      direction: options?.direction,
+      cellSize: options?.cellSize,
+      steps: options?.steps,
+      fps,
+      duration,
+    });
+
+    const metadata = node.getMetadata();
+    const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
+
+    const source: MediaSource = {
+      type: 'image',
+      name: sourceName,
+      url: `movieproc://${pattern}`,
+      width: metadata.width,
+      height: metadata.height,
+      duration,
+      fps,
+      proceduralSourceNode: node,
+    };
+
+    this.addSource(source);
+    this._host?.setInPointInternal(1);
+    this._host?.setOutPointInternal(duration);
+    this._host?.setCurrentFrameInternal(1);
+
+    this._host?.emitSourceLoaded(source);
+    this._host?.emitDurationChanged(duration);
+  }
+
+  /**
+   * Load a procedural source from a .movieproc URL string.
+   */
+  loadMovieProc(url: string): void {
+    const params = parseMovieProc(url);
+    const node = new ProceduralSourceNode();
+    node.loadFromMovieProc(url);
+
+    const metadata = node.getMetadata();
+    const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
+
+    const source: MediaSource = {
+      type: 'image',
+      name: sourceName,
+      url,
+      width: metadata.width,
+      height: metadata.height,
+      duration: metadata.duration,
+      fps: metadata.fps,
+      proceduralSourceNode: node,
+    };
+
+    this.addSource(source);
+    this._host?.setInPointInternal(1);
+    this._host?.setOutPointInternal(metadata.duration);
+    this._host?.setCurrentFrameInternal(1);
+
+    this._host?.emitSourceLoaded(source);
+    this._host?.emitDurationChanged(metadata.duration);
   }
 
   // ---------------------------------------------------------------
@@ -971,6 +1072,9 @@ export class MediaManager implements ManagerBase {
     for (const source of this._sources) {
       this.disposeSequenceSource(source);
       this.disposeVideoSource(source);
+      if (source.proceduralSourceNode) {
+        source.proceduralSourceNode.dispose();
+      }
     }
     this._sources = [];
   }

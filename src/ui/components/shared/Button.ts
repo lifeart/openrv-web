@@ -246,6 +246,19 @@ export function createIconButton(
 }
 
 /**
+ * Apply hover background effect to an element.
+ * Sets `hoverBg` on pointerenter and `defaultBg` on pointerleave.
+ */
+export function applyHoverEffect(
+  element: HTMLElement,
+  hoverBg = 'var(--bg-hover)',
+  defaultBg = 'transparent'
+): void {
+  element.addEventListener('pointerenter', () => { element.style.background = hoverBg; });
+  element.addEventListener('pointerleave', () => { element.style.background = defaultBg; });
+}
+
+/**
  * Apply A11Y focus handling to any button element.
  * Shows focus ring only for keyboard navigation (tab), not mouse clicks.
  *

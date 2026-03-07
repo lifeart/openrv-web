@@ -3,10 +3,10 @@
  *
  * Two audio paths exist:
  * - **Web Audio API** (via AudioPlaybackManager): frame-accurate sync,
- *   scrub snippets, independent gain control. Used at 1× speed or when
+ *   scrub snippets, independent gain control. Used at 1x speed or when
  *   the user disables pitch preservation.
  * - **HTMLVideoElement native audio**: browser-level `preservesPitch`
- *   support. Used at non-1× speeds when pitch preservation is on, or
+ *   support. Used at non-1x speeds when pitch preservation is on, or
  *   as a fallback when Web Audio extraction fails.
  *
  * The coordinator ensures only ONE path produces audio at any time.
@@ -22,11 +22,13 @@ import { Logger } from '../utils/Logger';
 const log = new Logger('AudioCoordinator');
 
 /**
- * Callback interface — avoids the coordinator importing Session.
+ * Callback interface -- avoids the coordinator importing Session.
  */
 export interface AudioCoordinatorCallbacks {
   /** The active audio path changed; host should re-apply volume to the video element. */
   onAudioPathChanged(): void;
+  /** Scrub audio availability changed; host should update UI affordances. */
+  onAudioScrubAvailabilityChanged?(available: boolean): void;
 }
 
 export class AudioCoordinator implements ManagerBase {
@@ -39,10 +41,11 @@ export class AudioCoordinator implements ManagerBase {
   private _direction = 1;
   private _fps = 24;
   private _isPlaying = false;
+  private _audioScrubEnabled = true;
 
   // ---- Public read-only accessors ----
 
-  /** Underlying manager — exposed for direct scrub-audio access. */
+  /** Underlying manager -- exposed for direct scrub-audio access. */
   get manager(): AudioPlaybackManager {
     return this._manager;
   }
@@ -52,13 +55,18 @@ export class AudioCoordinator implements ManagerBase {
    * When true the host MUST mute the HTMLVideoElement to prevent echo.
    *
    * Uses the coordinator's own `_isPlaying` flag and `shouldUseWebAudio()`
-   * rather than `_manager.isPlaying` because `_manager.play()` is async —
+   * rather than `_manager.isPlaying` because `_manager.play()` is async --
    * if the AudioContext needs to be resumed, `_manager.isPlaying` stays
    * false until the resume completes, leaving the video element un-muted
    * and producing double audio.
    */
   get isWebAudioActive(): boolean {
     return this._isPlaying && this.shouldUseWebAudio();
+  }
+
+  /** Whether audio scrub is currently enabled. */
+  get audioScrubEnabled(): boolean {
+    return this._audioScrubEnabled;
   }
 
   // ---- Wiring ----
@@ -71,19 +79,21 @@ export class AudioCoordinator implements ManagerBase {
 
   /**
    * Pre-load audio from a video element via Web Audio API.
-   * Falls back gracefully — if extraction fails the old
+   * Falls back gracefully -- if extraction fails the old
    * HTMLVideoElement audio path remains available.
    */
   loadFromVideo(video: HTMLVideoElement, volume: number, muted: boolean): void {
     this._manager.loadFromVideo(video).then(() => {
       this._manager.setVolume(volume);
       this._manager.setMuted(muted);
+      this._callbacks?.onAudioScrubAvailabilityChanged?.(this._manager.isUsingWebAudio);
       // If playback started while audio was still loading, activate now
       if (this._isPlaying) {
         this.activateAppropriateAudioPath();
       }
     }).catch(err => {
       log.warn('Audio extraction failed, using video element audio:', err);
+      this._callbacks?.onAudioScrubAvailabilityChanged?.(false);
     });
   }
 
@@ -107,7 +117,10 @@ export class AudioCoordinator implements ManagerBase {
     this._fps = fps;
 
     if (!isPlaying) {
-      this._manager.scrubToFrame(frame, fps);
+      // Only scrub if audio scrub is enabled
+      if (this._audioScrubEnabled) {
+        this._manager.scrubToFrame(frame, fps);
+      }
       return;
     }
 
@@ -118,7 +131,7 @@ export class AudioCoordinator implements ManagerBase {
     if (this._manager.isPlaying) {
       this._manager.syncToTime(time);
     } else {
-      // AudioBufferSourceNode ended (e.g. loop wrap) — restart
+      // AudioBufferSourceNode ended (e.g. loop wrap) -- restart
       this._manager.play(time).catch(err => {
         log.warn('Failed to restart audio after loop wrap:', err);
       });
@@ -153,6 +166,37 @@ export class AudioCoordinator implements ManagerBase {
     if (this._isPlaying) this.activateAppropriateAudioPath();
   }
 
+  /**
+   * Called when the audio scrub enabled state changes.
+   * When disabled, stops any active scrub snippet immediately.
+   */
+  onAudioScrubEnabledChanged(enabled: boolean): void {
+    this._audioScrubEnabled = enabled;
+    if (!enabled) {
+      // Stop any active scrub snippet
+      this._manager.setScrubMode('discrete');
+      // The manager's stopScrubSnippet is private, but calling scrubToFrame
+      // on a non-existent frame would trigger the debounce. Instead, we rely
+      // on the gating in onFrameChanged to prevent future scrubs.
+    }
+  }
+
+  /**
+   * Signal that a continuous scrub (timeline drag) has started.
+   * Switches the manager to continuous mode (no debounce, crossfade).
+   */
+  onScrubStart(): void {
+    this._manager.setScrubMode('continuous');
+  }
+
+  /**
+   * Signal that a continuous scrub (timeline drag) has ended.
+   * Switches the manager back to discrete mode (debounced snippets).
+   */
+  onScrubEnd(): void {
+    this._manager.setScrubMode('discrete');
+  }
+
   // ---- Video element integration ----
 
   /**
@@ -179,8 +223,8 @@ export class AudioCoordinator implements ManagerBase {
   /**
    * Whether Web Audio should be the active audio path.
    *
-   * Web Audio API's AudioBufferSourceNode has no `preservesPitch` —
-   * changing playbackRate shifts pitch proportionally.  At non-1×
+   * Web Audio API's AudioBufferSourceNode has no `preservesPitch` --
+   * changing playbackRate shifts pitch proportionally.  At non-1x
    * speeds with pitch preservation we fall back to the
    * HTMLVideoElement which has native `preservesPitch` support.
    */

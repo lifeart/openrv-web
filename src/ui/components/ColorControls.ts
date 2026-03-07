@@ -40,6 +40,13 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   private _pendingAdjustments: ColorAdjustments | null = null;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
+  /**
+   * When true, external systems (e.g., VirtualSliderController) are managing
+   * history recording. AppColorWiring should skip its debounced history
+   * recording while this flag is set.
+   */
+  public suppressHistory = false;
+
   constructor() {
     super();
 

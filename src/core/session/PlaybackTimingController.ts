@@ -1,5 +1,5 @@
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
-import type { LoopMode } from '../types/session';
+import type { LoopMode, PlaybackMode } from '../types/session';
 
 // Re-export for backward compatibility
 export { MAX_CONSECUTIVE_STARVATION_SKIPS, MAX_REVERSE_SPEED } from '../../config/PlaybackConfig';
@@ -27,6 +27,7 @@ export interface TimingState {
   fpsLastTime: number;
   effectiveFps: number;
   subFramePosition: SubFramePosition | null;
+  droppedFrameCount: number;
 }
 
 /**
@@ -79,6 +80,7 @@ export class PlaybackTimingController {
     state.fpsFrameCount = 0;
     state.fpsLastTime = now;
     state.effectiveFps = 0;
+    state.droppedFrameCount = 0;
   }
 
   // -----------------------------------------------------------------
@@ -106,6 +108,9 @@ export class PlaybackTimingController {
    * This is the simple (non-gated) path used for sequences/images
    * where every frame is always available.
    *
+   * In play-all-frames mode, at most 1 frame is advanced per tick to
+   * guarantee every frame is displayed.
+   *
    * @returns The number of frames to advance and the frame duration used.
    */
   accumulateFrames(
@@ -113,6 +118,7 @@ export class PlaybackTimingController {
     fps: number,
     playbackSpeed: number,
     playDirection: number,
+    playbackMode: PlaybackMode = 'realtime',
     now: number = performance.now(),
   ): { framesToAdvance: number; frameDuration: number } {
     const delta = now - state.lastFrameTime;
@@ -128,7 +134,26 @@ export class PlaybackTimingController {
       framesToAdvance++;
     }
 
+    if (playbackMode === 'playAllFrames') {
+      // Never skip frames: advance at most 1 per tick
+      framesToAdvance = Math.min(framesToAdvance, 1);
+      // Don't let accumulator grow unbounded (prevents burst on resume)
+      if (framesToAdvance > 0) {
+        state.frameAccumulator = Math.min(state.frameAccumulator, frameDuration);
+      }
+    }
+
     return { framesToAdvance, frameDuration };
+  }
+
+  /**
+   * Determine whether a starved frame should be skipped.
+   * In realtime mode, frames are skipped after starvation timeout.
+   * In play-all-frames mode, frames are never skipped (the absolute
+   * timeout safety net is handled separately by PlaybackEngine).
+   */
+  shouldSkipStarvedFrame(playbackMode: PlaybackMode): boolean {
+    return playbackMode === 'realtime';
   }
 
   /**
@@ -322,6 +347,15 @@ export class PlaybackTimingController {
     }
 
     return state.effectiveFps;
+  }
+
+  /**
+   * Record one or more dropped (skipped) frames.
+   * Call this when frames are skipped due to starvation timeout or
+   * accumulator overflow.
+   */
+  trackDroppedFrame(state: TimingState, count: number = 1): void {
+    state.droppedFrameCount += count;
   }
 
   // -----------------------------------------------------------------

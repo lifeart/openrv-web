@@ -16,6 +16,7 @@ import { StackControl } from '../../ui/components/StackControl';
 import { PARControl } from '../../ui/components/PARControl';
 import { BackgroundPatternControl } from '../../ui/components/BackgroundPatternControl';
 import { DisplayProfileControl } from '../../ui/components/DisplayProfileControl';
+import { MultiSourceLayoutControl } from '../../ui/components/MultiSourceLayoutControl';
 import type { ViewControlGroup } from './ControlGroups';
 
 export function createViewControls(): ViewControlGroup {
@@ -35,5 +36,6 @@ export function createViewControls(): ViewControlGroup {
     parControl: new PARControl(),
     backgroundPatternControl: new BackgroundPatternControl(),
     displayProfileControl: new DisplayProfileControl(),
+    layoutControl: new MultiSourceLayoutControl(),
   };
 }

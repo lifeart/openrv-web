@@ -84,6 +84,8 @@ export interface GTOParseResult {
     statuses?: StatusEntry[];
     /** Background color as RGBA float array (0-1 range) */
     bgColor?: [number, number, number, number];
+    /** Whether audio scrub is enabled (defaults to true when not present) */
+    audioScrubEnabled?: boolean;
   };
 }
 
@@ -329,6 +331,12 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           sessionInfo.bgColor = [r, g, b, a];
         }
       }
+
+      // Audio scrub enabled (int: 0 or 1, defaults to true when absent)
+      const audioScrubEnabled = sessionComp.property('audioScrubEnabled').value() as number;
+      if (typeof audioScrubEnabled === 'number') {
+        sessionInfo.audioScrubEnabled = audioScrubEnabled !== 0;
+      }
     }
 
     // Internal component (creation context)
@@ -556,7 +564,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const children: string[] = [];
       for (const child of allObjects) {
         if (child.name.startsWith(groupName + '_') &&
-            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource')) {
+            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource' || child.protocol === 'RVMovieProc')) {
           children.push(child.name);
         }
       }
@@ -771,6 +779,17 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           if (typeof channels === 'string') nodeInfo.properties.imageChannels = channels;
           if (typeof bitsPerChannel === 'number') nodeInfo.properties.imageBitsPerChannel = bitsPerChannel;
           if (typeof isFloat === 'number') nodeInfo.properties.imageIsFloat = isFloat !== 0;
+        }
+      }
+    }
+
+    // Parse procedural source (movieproc) properties
+    if (protocol === 'RVMovieProc') {
+      const movieComp = obj.component('movie');
+      if (movieComp?.exists()) {
+        const url = movieComp.property('url').value() as string;
+        if (typeof url === 'string' && url.endsWith('.movieproc')) {
+          nodeInfo.properties.movieProcUrl = url;
         }
       }
     }

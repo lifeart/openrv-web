@@ -5,6 +5,8 @@
  * - Better sync with frame-accurate video playback (mediabunny)
  * - Muting during reverse playback
  * - Better error handling and recovery
+ * - Audio scrubbing with velocity-adaptive duration, Hann window envelopes,
+ *   reverse direction support, and crossfade in continuous mode
  */
 
 import { EventEmitter, EventMap } from '../utils/EventEmitter';
@@ -24,6 +26,9 @@ export interface AudioPlaybackError {
 }
 
 export type AudioPlaybackState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'error';
+
+/** Scrub mode: 'discrete' for keyboard stepping, 'continuous' for timeline drag */
+export type ScrubMode = 'discrete' | 'continuous';
 
 export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> implements ManagerBase {
   private audioContext: AudioContext | null = null;
@@ -47,9 +52,39 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
   // For audio scrubbing
   private scrubSourceNode: AudioBufferSourceNode | null = null;
+  private scrubEnvelopeNode: GainNode | null = null;
   private scrubDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly SCRUB_SNIPPET_DURATION = 0.05; // 50ms
-  private static readonly SCRUB_DEBOUNCE_MS = 30; // 30ms debounce
+  private _scrubMode: ScrubMode = 'discrete';
+
+  // Velocity tracking for adaptive snippet duration
+  private lastScrubTime = 0;
+  private lastScrubFrame = 0;
+  private _smoothedScrubFps = 0;
+
+  // Scrub constants
+  static readonly SCRUB_SNIPPET_DURATION_MIN = 0.045;  // 45ms - fast scrub
+  static readonly SCRUB_SNIPPET_DURATION_DEFAULT = 0.08; // 80ms - single step
+  static readonly SCRUB_SNIPPET_DURATION_MAX = 0.12;  // 120ms - slow scrub
+  static readonly SCRUB_DEBOUNCE_MS = 16; // ~1 frame at 60Hz
+  static readonly SCRUB_FADE_DURATION = 0.005; // 5ms fade in/out
+  static readonly SCRUB_CROSSFADE_DURATION = 0.004; // 4ms crossfade overlap
+
+  // Pre-computed Hann window curves (shared across all snippets)
+  static readonly HANN_WINDOW_SIZE = 64;
+  static readonly hannFadeIn: Float32Array = (() => {
+    const curve = new Float32Array(AudioPlaybackManager.HANN_WINDOW_SIZE);
+    for (let i = 0; i < curve.length; i++) {
+      curve[i] = 0.5 * (1 - Math.cos(Math.PI * i / (curve.length - 1)));
+    }
+    return curve;
+  })();
+  static readonly hannFadeOut: Float32Array = (() => {
+    const curve = new Float32Array(AudioPlaybackManager.HANN_WINDOW_SIZE);
+    for (let i = 0; i < curve.length; i++) {
+      curve[i] = 0.5 * (1 + Math.cos(Math.PI * i / (curve.length - 1)));
+    }
+    return curve;
+  })();
 
   get state(): AudioPlaybackState {
     return this._state;
@@ -79,6 +114,11 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
 
   get muted(): boolean {
     return this._muted;
+  }
+
+  /** Current scrub mode: 'discrete' for keyboard stepping, 'continuous' for timeline drag */
+  get scrubMode(): ScrubMode {
+    return this._scrubMode;
   }
 
   /**
@@ -429,37 +469,105 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   }
 
   /**
+   * Set the scrub mode. 'continuous' bypasses debounce and enables crossfade
+   * (used during timeline drag). 'discrete' uses debounced snippets
+   * (used during keyboard frame stepping).
+   */
+  setScrubMode(mode: ScrubMode): void {
+    this._scrubMode = mode;
+  }
+
+  /**
    * Play a short audio snippet at the corresponding timestamp for scrub feedback.
-   * Debounces rapid calls so only the last scrub position produces sound.
+   * In discrete mode, debounces rapid calls so only the last scrub position produces sound.
+   * In continuous mode, crossfades immediately for smooth timeline drag audio.
    *
    * @param frame - The 1-based frame number to scrub to
    * @param fps - The frames-per-second of the current source
    */
   scrubToFrame(frame: number, fps: number): void {
-    // No audio loaded — silently return
+    // No audio loaded -- silently return
     if (!this.audioBuffer || !this.audioContext || !this.gainNode) {
       return;
     }
 
-    // Context suspended (autoplay policy) — silently return
+    // Handle suspended AudioContext on first interaction
     if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume().then(() => {
+        this.playScrubSnippet(frame, fps);
+      });
       return;
     }
 
-    // Cancel any pending debounce timer
-    if (this.scrubDebounceTimer !== null) {
-      clearTimeout(this.scrubDebounceTimer);
-      this.scrubDebounceTimer = null;
+    if (this._scrubMode === 'continuous') {
+      // No debounce in continuous mode -- crossfade immediately
+      this.playScrubSnippetWithCrossfade(frame, fps);
+    } else {
+      // Discrete mode -- debounce with timer
+      // Cancel any pending debounce timer
+      if (this.scrubDebounceTimer !== null) {
+        clearTimeout(this.scrubDebounceTimer);
+        this.scrubDebounceTimer = null;
+      }
+
+      // Stop any currently-playing scrub snippet
+      this.stopScrubSnippet();
+
+      // Debounce: schedule the actual snippet playback
+      this.scrubDebounceTimer = setTimeout(() => {
+        this.scrubDebounceTimer = null;
+        this.playScrubSnippet(frame, fps);
+      }, AudioPlaybackManager.SCRUB_DEBOUNCE_MS);
+    }
+  }
+
+  /**
+   * Compute velocity-adaptive snippet duration using exponential smoothing
+   * and non-linear (quadratic ease-in) mapping.
+   */
+  private computeSnippetDuration(frame: number, fps: number): number {
+    const now = Date.now();
+    const dt = now - this.lastScrubTime; // ms since last scrub call
+
+    this.lastScrubTime = now;
+    // lastScrubFrame is updated after computeSnippetOffset uses it
+    void fps; // fps parameter reserved for future use
+
+    if (dt <= 0 || dt > 500) {
+      // First scrub or long pause between scrubs -> reset smoothing, standard duration
+      this._smoothedScrubFps = 0;
+      void frame;
+      return AudioPlaybackManager.SCRUB_SNIPPET_DURATION_DEFAULT;
     }
 
-    // Stop any currently-playing scrub snippet
-    this.stopScrubSnippet();
+    // Exponential smoothing of scrub velocity (alpha=0.3)
+    const instantFps = 1000 / dt;
+    this._smoothedScrubFps = this._smoothedScrubFps * 0.7 + instantFps * 0.3;
 
-    // Debounce: schedule the actual snippet playback
-    this.scrubDebounceTimer = setTimeout(() => {
-      this.scrubDebounceTimer = null;
-      this.playScrubSnippet(frame, fps);
-    }, AudioPlaybackManager.SCRUB_DEBOUNCE_MS);
+    // Non-linear (quadratic ease-in) mapping: moderate scrub speeds (5-15 fps)
+    // stay at longer durations, only dropping sharply above ~20 fps.
+    const t = clamp((this._smoothedScrubFps - 5) / 25, 0, 1);
+    const eased = t * t; // quadratic ease-in
+    // lerp(max, min, eased)
+    return AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX +
+      (AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MIN - AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX) * eased;
+  }
+
+  /**
+   * Compute the snippet start offset, adjusting for reverse scrub direction.
+   * When scrubbing backward, plays audio leading up to the target frame.
+   */
+  private computeSnippetOffset(frame: number, fps: number, snippetDuration: number): number {
+    const timestamp = (frame - 1) / fps;
+    const isReverse = frame < this.lastScrubFrame;
+
+    if (isReverse) {
+      // Backward scrub: play audio region leading up to the target frame
+      return Math.max(0, timestamp - snippetDuration);
+    } else {
+      // Forward scrub: play audio starting from the target frame
+      return clamp(timestamp, 0, this.audioBuffer!.duration);
+    }
   }
 
   private playScrubSnippet(frame: number, fps: number): void {
@@ -467,34 +575,99 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       return;
     }
 
-    // Compute audio timestamp (1-based frame → 0-based time)
-    const timestamp = (frame - 1) / fps;
+    const snippetDuration = this.computeSnippetDuration(frame, fps);
+    const offset = this.computeSnippetOffset(frame, fps, snippetDuration);
 
-    // Clamp to valid range
-    const clampedTime = clamp(timestamp, 0, this.audioBuffer.duration);
+    // Update lastScrubFrame after offset computation (which depends on the previous value)
+    this.lastScrubFrame = frame;
 
-    // Create a short snippet source node
+    const effectiveDuration = Math.min(snippetDuration, this.audioBuffer.duration - offset);
+    if (effectiveDuration <= 0) return;
+
     const snippetNode = this.audioContext.createBufferSource();
     snippetNode.buffer = this.audioBuffer;
-    snippetNode.connect(this.gainNode);
 
-    // Schedule start and stop for the snippet duration
-    const snippetDuration = Math.min(
-      AudioPlaybackManager.SCRUB_SNIPPET_DURATION,
-      this.audioBuffer.duration - clampedTime
-    );
+    // Create per-snippet gain node for Hann window envelope
+    const envelopeGain = this.audioContext.createGain();
+    const now = this.audioContext.currentTime;
+    const fadeDuration = AudioPlaybackManager.SCRUB_FADE_DURATION;
 
-    if (snippetDuration <= 0) return;
+    // Hann window fade-in
+    envelopeGain.gain.setValueAtTime(0, now);
+    try {
+      envelopeGain.gain.setValueCurveAtTime(
+        AudioPlaybackManager.hannFadeIn, now, fadeDuration
+      );
+    } catch {
+      // Fallback for browsers that don't support setValueCurveAtTime well
+      envelopeGain.gain.linearRampToValueAtTime(1, now + fadeDuration);
+    }
 
-    snippetNode.start(0, clampedTime, snippetDuration);
+    // Hann window fade-out
+    const fadeOutStart = now + effectiveDuration - fadeDuration;
+    if (fadeOutStart > now + fadeDuration) {
+      try {
+        envelopeGain.gain.setValueCurveAtTime(
+          AudioPlaybackManager.hannFadeOut, fadeOutStart, fadeDuration
+        );
+      } catch {
+        // Fallback
+        envelopeGain.gain.setValueAtTime(1, fadeOutStart);
+        envelopeGain.gain.linearRampToValueAtTime(0, now + effectiveDuration);
+      }
+    }
+
+    snippetNode.connect(envelopeGain);
+    envelopeGain.connect(this.gainNode);
+
+    snippetNode.start(0, offset, effectiveDuration);
+
+    // Store as current scrub snippet (for crossfade or cleanup)
     this.scrubSourceNode = snippetNode;
+    this.scrubEnvelopeNode = envelopeGain;
 
-    // Clean up reference when snippet ends naturally
     snippetNode.onended = () => {
       if (this.scrubSourceNode === snippetNode) {
         this.scrubSourceNode = null;
+        try { envelopeGain.disconnect(); } catch { /* already disconnected */ }
+        this.scrubEnvelopeNode = null;
       }
     };
+  }
+
+  /**
+   * Crossfade from the outgoing scrub snippet to a new one (continuous mode).
+   * The outgoing snippet fades out over SCRUB_CROSSFADE_DURATION while the
+   * new snippet fades in via its Hann window envelope.
+   */
+  private playScrubSnippetWithCrossfade(frame: number, fps: number): void {
+    // If there is an outgoing snippet, fade it out instead of stopping abruptly
+    if (this.scrubSourceNode && this.scrubEnvelopeNode && this.audioContext) {
+      const now = this.audioContext.currentTime;
+      const fadeOut = AudioPlaybackManager.SCRUB_CROSSFADE_DURATION;
+      try {
+        this.scrubEnvelopeNode.gain.cancelScheduledValues(now);
+        this.scrubEnvelopeNode.gain.setValueAtTime(
+          this.scrubEnvelopeNode.gain.value, now
+        );
+        this.scrubEnvelopeNode.gain.linearRampToValueAtTime(0, now + fadeOut);
+        // Schedule stop after fade completes
+        this.scrubSourceNode.stop(now + fadeOut);
+      } catch {
+        // If scheduling fails, just stop immediately
+        try { this.scrubSourceNode.stop(); } catch { /* ignore */ }
+      }
+
+      // Move outgoing references to allow GC after stop
+      const outgoing = this.scrubSourceNode;
+      const outgoingEnvelope = this.scrubEnvelopeNode;
+      outgoing.onended = () => {
+        try { outgoingEnvelope.disconnect(); } catch { /* ignore */ }
+      };
+    }
+
+    // Start new snippet (fades in via Hann window)
+    this.playScrubSnippet(frame, fps);
   }
 
   private stopScrubSnippet(): void {
@@ -506,6 +679,14 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         // Ignore errors from already stopped nodes
       }
       this.scrubSourceNode = null;
+    }
+    if (this.scrubEnvelopeNode) {
+      try {
+        this.scrubEnvelopeNode.disconnect();
+      } catch {
+        // Ignore errors from already disconnected nodes
+      }
+      this.scrubEnvelopeNode = null;
     }
   }
 
@@ -561,6 +742,12 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       this.scrubDebounceTimer = null;
     }
 
+    // Reset velocity tracking
+    this.lastScrubTime = 0;
+    this.lastScrubFrame = 0;
+    this._smoothedScrubFps = 0;
+    this._scrubMode = 'discrete';
+
     if (this.gainNode) {
       this.gainNode.disconnect();
       this.gainNode = null;
@@ -574,5 +761,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     this.audioBuffer = null;
     this.videoElement = null;
     this._state = 'idle';
+
+    this.removeAllListeners();
   }
 }

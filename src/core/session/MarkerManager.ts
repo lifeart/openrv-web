@@ -286,6 +286,21 @@ export class MarkerManager {
     return Array.from(this._marks.values()).map(m => ({ ...m }));
   }
 
+  /**
+   * Get all mark boundary frame numbers, sorted ascending.
+   * Includes both start frames and end frames of duration markers.
+   */
+  getMarkBoundaries(): number[] {
+    const boundaries = new Set<number>();
+    for (const marker of this._marks.values()) {
+      boundaries.add(marker.frame);
+      if (marker.endFrame !== undefined) {
+        boundaries.add(marker.endFrame);
+      }
+    }
+    return Array.from(boundaries).sort((a, b) => a - b);
+  }
+
   dispose(): void {
     this._callbacks = null;
   }

@@ -936,4 +936,502 @@ describe('Timeline', () => {
       expect(Timeline.PLAYHEAD_HIT_AREA_WIDTH).toBe(20);
     });
   });
+
+  // =================================================================
+  // Color-coded FPS display in timeline
+  // =================================================================
+
+  describe('Color-coded FPS display', () => {
+    it('TML-FPS-001: draws green color when FPS ratio >= 0.97', () => {
+      // Set session to playing state with good FPS
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 24.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastValue = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { lastValue = v; fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // Green (#4ade80) should appear in the fill styles
+      expect(fillStyleValues).toContain('#4ade80');
+
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-FPS-002: draws yellow color when FPS ratio between 0.85 and 0.97', () => {
+      // effectiveFps = 22 / targetFps = 24 => ratio = 0.917
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 22.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastValue = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { lastValue = v; fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // Yellow (#facc15) should appear
+      expect(fillStyleValues).toContain('#facc15');
+
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-FPS-003: draws red color when FPS ratio < 0.85', () => {
+      // effectiveFps = 18 / targetFps = 24 => ratio = 0.75
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 18.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastValue = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { lastValue = v; fillStyleValues.push(v); },
+        get() { return lastValue; },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // Red color should appear (resolved from --error CSS variable; dark theme = #f87171, fallback = #ef4444)
+      const themeError = getThemeManager().getColors().error;
+      expect(fillStyleValues).toContain(themeError);
+
+      delete (ctx as any).fillStyle;
+    });
+
+    it('TML-FPS-004: FPS text shows target only (no color coding) when paused', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => false, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      // When paused, the FPS text should show target fps only, without actual/target format
+      const fpsText = textCalls.find(t => t.includes('fps'));
+      expect(fpsText).toBeDefined();
+      // Should show "Paused" status, not "Playing"
+      const statusText = textCalls.find(t => t.includes('Paused'));
+      expect(statusText).toBeDefined();
+      // Should NOT show the actual/target format (e.g., "24.0/24 fps")
+      const dualFpsText = textCalls.find(t => /\d+\.\d+\/\d+/.test(t));
+      expect(dualFpsText).toBeUndefined();
+    });
+
+    it('TML-FPS-005: fillText includes skipped count when droppedFrames > 0', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 20.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 5, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      const fpsText = textCalls.find(t => t.includes('skipped'));
+      expect(fpsText).toBeDefined();
+      expect(fpsText).toContain('5 skipped');
+    });
+
+    it('TML-FPS-006: fillText shows effective target at non-1x speed', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 45.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 2, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      // Should show effective target fps and speed multiplier
+      const fpsText = textCalls.find(t => t.includes('eff. fps') && t.includes('2x'));
+      expect(fpsText).toBeDefined();
+    });
+
+    it('TML-FPS-007: fillText does not include skipped when droppedFrames is 0', () => {
+      Object.defineProperty(session, 'isPlaying', { get: () => true, configurable: true });
+      Object.defineProperty(session, 'effectiveFps', { get: () => 24.0, configurable: true });
+      Object.defineProperty(session, 'playbackSpeed', { get: () => 1, configurable: true });
+      Object.defineProperty(session, 'droppedFrameCount', { get: () => 0, configurable: true });
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const textCalls: string[] = [];
+      vi.spyOn(ctx, 'fillText').mockImplementation((text: string) => {
+        textCalls.push(text);
+      });
+
+      (timeline as any).draw();
+
+      const fpsText = textCalls.find(t => t.includes('skipped'));
+      expect(fpsText).toBeUndefined();
+    });
+  });
+
+  describe('context menu integration', () => {
+    function getCanvas(tl: TestTimeline): HTMLCanvasElement {
+      const container = tl.render();
+      return container.querySelector('canvas')!;
+    }
+
+    function mockCanvasRect(canvas: HTMLCanvasElement): void {
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+    }
+
+    afterEach(() => {
+      // Clean up any context menus left in the DOM
+      document.querySelectorAll('.timeline-main-context-menu').forEach(el => el.remove());
+    });
+
+    it('TML-CTX-001: right-click on canvas creates a context menu', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+
+      const event = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(event);
+
+      const menuEl = document.querySelector('.timeline-main-context-menu');
+      expect(menuEl).not.toBeNull();
+    });
+
+    it('TML-CTX-002: right-click when no source is loaded does not create a context menu', () => {
+      const noSourceSession = new Session();
+      const tl = new TestTimeline(noSourceSession);
+      const container = tl.render();
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        width: 1000, height: 100, top: 0, left: 0,
+        bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+      } as DOMRect);
+      tl.setSize(1000, 100);
+      flushRaf();
+
+      const canvas = container.querySelector('canvas')!;
+      mockCanvasRect(canvas);
+
+      const event = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(event);
+
+      const menuEl = document.querySelector('.timeline-main-context-menu');
+      expect(menuEl).toBeNull();
+      tl.dispose();
+    });
+
+    it('TML-CTX-003: context menu shows correct frame for click position', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+
+      // Click at middle of the track: padding=60, trackWidth=880, midpoint=500
+      // progress = (500 - 0 - 60) / 880 = 440/880 = 0.5
+      // frame = round(1 + 0.5 * 99) = round(50.5) = 51 (with 100 frames)
+      const event = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(event);
+
+      const menuEl = document.querySelector('.timeline-main-context-menu');
+      expect(menuEl!.textContent).toContain('Frame 51');
+    });
+
+    it('TML-CTX-004: "Go to Frame" calls session.goToFrame with the correct frame', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      const goToSpy = vi.spyOn(session, 'goToFrame');
+
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      const menuEl = document.querySelector('.timeline-main-context-menu')!;
+      const goToItem = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
+        i => i.textContent!.includes('Go to')
+      ) as HTMLElement;
+      goToItem.click();
+
+      expect(goToSpy).toHaveBeenCalledWith(51);
+    });
+
+    it('TML-CTX-005: "Set In Point Here" calls session.setInPoint with the correct frame', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      const setInSpy = vi.spyOn(session, 'setInPoint');
+
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      const menuEl = document.querySelector('.timeline-main-context-menu')!;
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
+        i => i.textContent!.includes('Set In Point Here')
+      ) as HTMLElement;
+      item.click();
+
+      expect(setInSpy).toHaveBeenCalledWith(51);
+    });
+
+    it('TML-CTX-006: "Set Out Point Here" calls session.setOutPoint with the correct frame', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      const setOutSpy = vi.spyOn(session, 'setOutPoint');
+
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      const menuEl = document.querySelector('.timeline-main-context-menu')!;
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
+        i => i.textContent!.includes('Set Out Point Here')
+      ) as HTMLElement;
+      item.click();
+
+      expect(setOutSpy).toHaveBeenCalledWith(51);
+    });
+
+    it('TML-CTX-007: "Clear In/Out Range" calls session.resetInOutPoints', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+
+      // Set custom in/out so the "Clear In/Out Range" item appears
+      session.setInPoint(10);
+      session.setOutPoint(50);
+
+      const resetSpy = vi.spyOn(session, 'resetInOutPoints');
+
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      const menuEl = document.querySelector('.timeline-main-context-menu')!;
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
+        i => i.textContent!.includes('Clear In/Out Range')
+      ) as HTMLElement;
+      expect(item).toBeTruthy();
+      item.click();
+
+      expect(resetSpy).toHaveBeenCalled();
+    });
+
+    it('TML-CTX-008: "Add Mark" calls session.toggleMark with the correct frame', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      const toggleSpy = vi.spyOn(session, 'toggleMark');
+
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      const menuEl = document.querySelector('.timeline-main-context-menu')!;
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
+        i => i.textContent!.includes('Add Mark')
+      ) as HTMLElement;
+      item.click();
+
+      expect(toggleSpy).toHaveBeenCalledWith(51);
+    });
+
+    it('TML-CTX-009: "Remove Mark" on a duration marker calls session.removeMark with marker start frame', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+
+      // Add a duration marker from frame 40 to frame 60
+      session.setMarker(40, 'test marker', '#ff0000', 60);
+      const removeSpy = vi.spyOn(session, 'removeMark');
+
+      // Right-click at frame 51 (which falls within the 40-60 range)
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      const menuEl = document.querySelector('.timeline-main-context-menu')!;
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
+        i => i.textContent!.includes('Remove Mark')
+      ) as HTMLElement;
+      expect(item).toBeTruthy();
+      item.click();
+
+      // Should remove using the marker's start frame (40), not the clicked frame (51)
+      expect(removeSpy).toHaveBeenCalledWith(40);
+    });
+
+    it('TML-CTX-010: context menu is removed on dispose()', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      expect(document.querySelector('.timeline-main-context-menu')).not.toBeNull();
+      timeline.dispose();
+      expect(document.querySelector('.timeline-main-context-menu')).toBeNull();
+    });
+
+    it('TML-CTX-011: right-click does not trigger seeking (button guard)', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      const goToSpy = vi.spyOn(session, 'goToFrame');
+      const initialFrame = session.currentFrame;
+
+      // Dispatch a right-click pointerdown (button=2)
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 50,
+        button: 2,
+        pointerId: 1,
+        bubbles: true,
+      }));
+
+      // goToFrame should NOT have been called from pointerdown
+      expect(goToSpy).not.toHaveBeenCalled();
+      expect(session.currentFrame).toBe(initialFrame);
+    });
+
+    it('TML-CTX-012: right-click during active drag cancels the drag', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      // Start a left-click drag
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        clientX: 300,
+        clientY: 50,
+        button: 0,
+        pointerId: 1,
+        bubbles: true,
+      }));
+      expect((timeline as any).isDragging).toBe(true);
+
+      // Right-click during drag shows context menu and cancels drag
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+      }));
+
+      expect((timeline as any).isDragging).toBe(false);
+      expect(document.querySelector('.timeline-main-context-menu')).not.toBeNull();
+    });
+
+    it('TML-CTX-013: right-click does not interfere with subsequent left-click seeking', () => {
+      const canvas = getCanvas(timeline);
+      mockCanvasRect(canvas);
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      // Right-click (does nothing to isDragging)
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 50,
+        button: 2,
+        pointerId: 1,
+        bubbles: true,
+      }));
+
+      expect((timeline as any).isDragging).toBe(false);
+
+      // Hide the context menu
+      const contextMenu = (timeline as any).contextMenu;
+      contextMenu.hide();
+
+      // Left-click should still work
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        clientX: 300,
+        clientY: 50,
+        button: 0,
+        pointerId: 2,
+        bubbles: true,
+      }));
+
+      expect((timeline as any).isDragging).toBe(true);
+    });
+
+    it('TML-CTX-014: contextmenu event is registered in bindEvents', () => {
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      const addEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const registeredEvents = addEventSpy.mock.calls.map(call => call[0]);
+      expect(registeredEvents).toContain('contextmenu');
+
+      addEventSpy.mockRestore();
+      tl.dispose();
+    });
+  });
 });

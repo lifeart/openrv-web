@@ -21,6 +21,8 @@ import {
   DIRTY_PREMULT,
   DIRTY_DITHER,
   DIRTY_COLOR_PRIMARIES,
+  DIRTY_CONTOUR,
+  DIRTY_FALSE_COLOR,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -404,6 +406,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -432,6 +436,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -460,6 +466,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -494,6 +502,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -525,6 +535,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -553,6 +565,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -699,6 +713,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -732,6 +748,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -944,6 +962,8 @@ describe('ShaderStateManager', () => {
         bindCurvesLUTTexture: () => {},
         bindFalseColorLUTTexture: () => {},
         bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => { inlineLUTBound = true; },
         getCanvasSize: () => ({ width: 100, height: 100 }),
@@ -971,6 +991,8 @@ describe('ShaderStateManager', () => {
         bindCurvesLUTTexture: () => {},
         bindFalseColorLUTTexture: () => {},
         bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => { inlineLUTBound = true; },
         getCanvasSize: () => ({ width: 100, height: 100 }),
@@ -1076,6 +1098,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1106,6 +1130,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1153,6 +1179,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1306,6 +1334,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1329,6 +1359,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1497,6 +1529,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1520,6 +1554,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1543,6 +1579,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1660,6 +1698,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1702,6 +1742,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1844,7 +1886,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
       expect(uploaded['u_outputPrimariesEnabled']).toBe(0);
     });
@@ -1858,7 +1900,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
       expect(mat).toBeInstanceOf(Float32Array);
@@ -1876,7 +1918,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
       expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
@@ -1892,7 +1934,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
       expect(mat[0]).toBeCloseTo(0.6274, 3);
@@ -1911,7 +1953,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
       expect(mat).toBeInstanceOf(Float32Array);
@@ -1931,7 +1973,7 @@ describe('ShaderStateManager', () => {
         setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
         setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
       // Input: bt2020 → sRGB (REC2020_TO_SRGB)
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const inMat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
@@ -1963,6 +2005,8 @@ describe('ShaderStateManager', () => {
         bindLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
         bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -2129,6 +2173,304 @@ describe('ShaderStateManager', () => {
       expect(swizzle2[1]).toBe(2);
       expect(swizzle2[2]).toBe(1);
       expect(swizzle2[3]).toBe(0);
+    });
+  });
+
+  // ===================================================================
+  // Feature 14: Contour visualization state tests
+  // ===================================================================
+
+  describe('Contour visualization state', () => {
+    it('SSM-CONT-001: DIRTY_CONTOUR exists in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_CONTOUR);
+    });
+
+    it('SSM-CONT-002: contour defaults are off', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'off', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.applyRenderState(rs);
+      // contour mode is off, state is default, should not mark dirty
+      expect(flags.has(DIRTY_CONTOUR)).toBe(false);
+    });
+
+    it('SSM-CONT-003: enabling contour mode marks DIRTY_CONTOUR', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(true);
+    });
+
+    it('SSM-CONT-004: changing contour levels marks DIRTY_CONTOUR', () => {
+      // First enable contour
+      const rs1 = createDefaultRenderState();
+      rs1.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change levels
+      const rs2 = createDefaultRenderState();
+      rs2.luminanceVis = { mode: 'contour', contourLevels: 20, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(true);
+    });
+
+    it('SSM-CONT-005: changing contour desaturate marks DIRTY_CONTOUR', () => {
+      const rs1 = createDefaultRenderState();
+      rs1.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: false, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(true);
+    });
+
+    it('SSM-CONT-006: changing contour line color marks DIRTY_CONTOUR', () => {
+      const rs1 = createDefaultRenderState();
+      rs1.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 0, 0] };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(true);
+    });
+
+    it('SSM-CONT-007: same contour state does not mark dirty', () => {
+      const rs1 = createDefaultRenderState();
+      rs1.luminanceVis = { mode: 'contour', contourLevels: 15, contourDesaturate: false, contourLineColor: [0.5, 0.5, 0.5] };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.luminanceVis = { mode: 'contour', contourLevels: 15, contourDesaturate: false, contourLineColor: [0.5, 0.5, 0.5] };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(false);
+    });
+
+    it('SSM-CONT-008: switching from contour to off marks DIRTY_CONTOUR', () => {
+      const rs1 = createDefaultRenderState();
+      rs1.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.luminanceVis = { mode: 'off', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(true);
+    });
+
+    it('SSM-CONT-009: missing luminanceVis disables contour if enabled', () => {
+      const rs1 = createDefaultRenderState();
+      rs1.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      // no luminanceVis field
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(true);
+    });
+
+    it('SSM-CONT-010: missing luminanceVis with contour already off does not mark dirty', () => {
+      const rs = createDefaultRenderState();
+      // no luminanceVis field, contour is already off by default
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CONTOUR)).toBe(false);
+    });
+  });
+
+  // ===================================================================
+  // Feature 14: Contour uniform upload tests
+  // ===================================================================
+
+  describe('Contour uniform upload', () => {
+    function createMockShaderAndTexCb() {
+      const uniformCalls: Record<string, unknown> = {};
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      return { uniformCalls, intCalls, mockShader, mockTexCb };
+    }
+
+    it('SSM-CONT-U001: contour enabled sets u_contourEnabled=1', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs);
+
+      const { intCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_contourEnabled']).toBe(1);
+    });
+
+    it('SSM-CONT-U002: contour disabled sets u_contourEnabled=0', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'off', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs);
+
+      const { intCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_contourEnabled']).toBe(0);
+    });
+
+    it('SSM-CONT-U003: contour levels uploaded correctly', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'contour', contourLevels: 25, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs);
+
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_contourLevels']).toBe(25);
+    });
+
+    it('SSM-CONT-U004: contour desaturate uploaded correctly', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: false, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs);
+
+      const { intCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_contourDesaturate']).toBe(0);
+    });
+
+    it('SSM-CONT-U005: contour line color uploaded correctly', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'contour', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 0, 0] };
+      mgr.applyRenderState(rs);
+
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_contourLineColor']).toEqual([1, 0, 0]);
+    });
+
+    it('SSM-CONT-U006: contour uniforms not uploaded when disabled', () => {
+      const rs = createDefaultRenderState();
+      rs.luminanceVis = { mode: 'off', contourLevels: 10, contourDesaturate: true, contourLineColor: [1, 1, 1] };
+      mgr.applyRenderState(rs);
+
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      // u_contourEnabled should be set to 0, but levels/desaturate/color should not be uploaded
+      expect(uniformCalls['u_contourLevels']).toBeUndefined();
+      expect(uniformCalls['u_contourLineColor']).toBeUndefined();
+    });
+  });
+
+  // ===================================================================
+  // Feature 14: False color LUT update guard fix tests
+  // ===================================================================
+
+  describe('False color LUT update guard', () => {
+    it('SSM-LUT-001: switching enabled false -> true triggers setFalseColor', () => {
+      const rs1 = createDefaultRenderState();
+      rs1.falseColor = { enabled: false, lut: null };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.falseColor = { enabled: true, lut: new Uint8Array(256 * 3) };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_FALSE_COLOR)).toBe(true);
+    });
+
+    it('SSM-LUT-002: same enabled=true but different LUT reference triggers re-upload', () => {
+      const lut1 = new Uint8Array(256 * 3);
+      const rs1 = createDefaultRenderState();
+      rs1.falseColor = { enabled: true, lut: lut1 };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const lut2 = new Uint8Array(256 * 3);
+      const rs2 = createDefaultRenderState();
+      rs2.falseColor = { enabled: true, lut: lut2 };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_FALSE_COLOR)).toBe(true);
+    });
+
+    it('SSM-LUT-003: same enabled=true and same LUT reference does not trigger re-upload', () => {
+      const lut = new Uint8Array(256 * 3);
+      const rs1 = createDefaultRenderState();
+      rs1.falseColor = { enabled: true, lut };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.falseColor = { enabled: true, lut };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_FALSE_COLOR)).toBe(false);
+    });
+
+    it('SSM-LUT-004: HSV to random-color mode triggers LUT re-upload (different references)', () => {
+      // Simulates HSV mode: enabled=true, lut=hsvLUT
+      const hsvLUT = new Uint8Array(256 * 3);
+      hsvLUT[0] = 255; // fill with something
+      const rs1 = createDefaultRenderState();
+      rs1.falseColor = { enabled: true, lut: hsvLUT };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Simulates random-color mode: enabled=true, lut=randomLUT
+      const randomLUT = new Uint8Array(256 * 3);
+      randomLUT[0] = 128;
+      const rs2 = createDefaultRenderState();
+      rs2.falseColor = { enabled: true, lut: randomLUT };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_FALSE_COLOR)).toBe(true);
+    });
+
+    it('SSM-LUT-005: disabling false color after it was enabled triggers update', () => {
+      const lut = new Uint8Array(256 * 3);
+      const rs1 = createDefaultRenderState();
+      rs1.falseColor = { enabled: true, lut };
+      mgr.applyRenderState(rs1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs2 = createDefaultRenderState();
+      rs2.falseColor = { enabled: false, lut: null };
+      mgr.applyRenderState(rs2);
+      expect(flags.has(DIRTY_FALSE_COLOR)).toBe(true);
     });
   });
 });

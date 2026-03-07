@@ -64,6 +64,16 @@ The markers and annotations feature is **fully implemented** in openrv-web with 
 **Keyboard Shortcuts:**
 - `M` - Add/toggle marker at current frame
 - `Shift+Alt+M` - Toggle marker list panel visibility
+- `Shift+Down` / `Ctrl+Right` - Shift in/out range to next mark pair
+- `Shift+Up` / `Ctrl+Left` - Shift in/out range to previous mark pair
+
+**Mark-to-Mark Range Shifting:**
+Two consecutive marks define a range segment. Pressing Shift+Down (or Ctrl+Right) snaps the
+in/out range to the next segment and moves the playhead to the new in point. Shift+Up
+(or Ctrl+Left) shifts to the previous segment. In `loop` and `pingpong` modes, shifting past
+the last/first segment wraps around. In `once` mode, shifting stops at the boundary.
+Duration markers with `endFrame` contribute both their start and end frames as boundaries,
+creating natural segments. Playlist clip boundaries are also merged as implicit marks.
 
 ### Annotations (Drawing/Paint Tools)
 

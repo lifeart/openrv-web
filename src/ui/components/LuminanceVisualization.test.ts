@@ -524,4 +524,176 @@ describe('LuminanceVisualization', () => {
       expect(falseColor.isEnabled()).toBe(false);
     });
   });
+
+  // ===================================================================
+  // GPU LUT accessor tests (Feature 14)
+  // ===================================================================
+
+  describe('GPU LUT accessors', () => {
+    describe('getHsvLUT', () => {
+      it('LV-GPU-001: returns a Uint8Array of length 256*3', () => {
+        const lut = lumVis.getHsvLUT();
+        expect(lut).toBeInstanceOf(Uint8Array);
+        expect(lut.length).toBe(256 * 3);
+      });
+
+      it('LV-GPU-002: returns the same instance on repeated calls', () => {
+        const lut1 = lumVis.getHsvLUT();
+        const lut2 = lumVis.getHsvLUT();
+        expect(lut1).toBe(lut2);
+      });
+
+      it('LV-GPU-003: index 0 maps to red (hue 0)', () => {
+        const lut = lumVis.getHsvLUT();
+        // Hue 0 = red: R=255, G=0, B=0
+        expect(lut[0]).toBe(255);
+        expect(lut[1]).toBe(0);
+        expect(lut[2]).toBe(0);
+      });
+
+      it('LV-GPU-004: index 255 maps to magenta (hue ~300)', () => {
+        const lut = lumVis.getHsvLUT();
+        const idx = 255 * 3;
+        // Hue 300 = magenta: R=255, G=0, B=255
+        expect(lut[idx]).toBe(255);
+        expect(lut[idx + 1]).toBe(0);
+        expect(lut[idx + 2]).toBe(255);
+      });
+
+      it('LV-GPU-005: mid-range index maps to cyan/green hue region', () => {
+        const lut = lumVis.getHsvLUT();
+        // Index 128: lum = 128/255 ~ 0.502, hue ~ 150.6 degrees (cyan-green)
+        const idx = 128 * 3;
+        expect(lut[idx]).toBeLessThan(50); // low red
+        expect(lut[idx + 1]).toBeGreaterThan(200); // high green
+      });
+
+      it('LV-GPU-006: LUT has monotonically increasing hue', () => {
+        const lut = lumVis.getHsvLUT();
+        // Check that colors change across the LUT range
+        let distinctColors = 0;
+        let prevR = lut[0], prevG = lut[1], prevB = lut[2];
+        for (let i = 1; i < 256; i++) {
+          const r = lut[i * 3], g = lut[i * 3 + 1], b = lut[i * 3 + 2];
+          if (r !== prevR || g !== prevG || b !== prevB) {
+            distinctColors++;
+          }
+          prevR = r; prevG = g; prevB = b;
+        }
+        expect(distinctColors).toBeGreaterThan(100);
+      });
+    });
+
+    describe('getRandomLUT', () => {
+      it('LV-GPU-007: returns a Uint8Array of length bandCount*3', () => {
+        const lut = lumVis.getRandomLUT();
+        expect(lut).toBeInstanceOf(Uint8Array);
+        expect(lut.length).toBe(16 * 3); // default bandCount=16
+      });
+
+      it('LV-GPU-008: returns updated LUT after band count change', () => {
+        const lut1 = lumVis.getRandomLUT();
+        lumVis.setRandomBandCount(8);
+        const lut2 = lumVis.getRandomLUT();
+        expect(lut2.length).toBe(8 * 3);
+        expect(lut1).not.toBe(lut2);
+      });
+    });
+
+    describe('buildRandomLUT256', () => {
+      it('LV-GPU-010: returns Uint8Array of length 256*3', () => {
+        const lut = lumVis.buildRandomLUT256();
+        expect(lut).toBeInstanceOf(Uint8Array);
+        expect(lut.length).toBe(256 * 3);
+      });
+
+      it('LV-GPU-011: returns cached instance on repeated calls', () => {
+        const lut1 = lumVis.buildRandomLUT256();
+        const lut2 = lumVis.buildRandomLUT256();
+        expect(lut1).toBe(lut2);
+      });
+
+      it('LV-GPU-012: cache invalidated after setRandomBandCount', () => {
+        const lut1 = lumVis.buildRandomLUT256();
+        lumVis.setRandomBandCount(32);
+        const lut2 = lumVis.buildRandomLUT256();
+        expect(lut1).not.toBe(lut2);
+      });
+
+      it('LV-GPU-013: cache invalidated after reseedRandom', () => {
+        const lut1 = lumVis.buildRandomLUT256();
+        lumVis.reseedRandom();
+        const lut2 = lumVis.buildRandomLUT256();
+        expect(lut1).not.toBe(lut2);
+      });
+
+      it('LV-GPU-014: expansion maps luminance indices to correct bands', () => {
+        lumVis.setRandomBandCount(4);
+        const lut256 = lumVis.buildRandomLUT256();
+        const palette = lumVis.getRandomLUT();
+
+        // For 4 bands: band 0 covers lum 0-63, band 1 covers 64-127, etc.
+        // Check index 0 maps to band 0
+        expect(lut256[0]).toBe(palette[0]);
+        expect(lut256[1]).toBe(palette[1]);
+        expect(lut256[2]).toBe(palette[2]);
+
+        // Check index 128 maps to band 2 (floor(128/255 * 4) = floor(2.007) = 2)
+        expect(lut256[128 * 3]).toBe(palette[2 * 3]);
+        expect(lut256[128 * 3 + 1]).toBe(palette[2 * 3 + 1]);
+        expect(lut256[128 * 3 + 2]).toBe(palette[2 * 3 + 2]);
+      });
+
+      it('LV-GPU-015: all indices within a band have the same color', () => {
+        lumVis.setRandomBandCount(4);
+        const lut256 = lumVis.buildRandomLUT256();
+        // Band 0: indices 0 through ~63
+        const bandColor = [lut256[0], lut256[1], lut256[2]];
+        for (let i = 0; i < 64; i++) {
+          // floor(i/255 * 4) should be 0 for i < 64 (since 63/255*4 = 0.988)
+          const band = Math.min(Math.floor((i / 255) * 4), 3);
+          if (band === 0) {
+            expect(lut256[i * 3]).toBe(bandColor[0]);
+            expect(lut256[i * 3 + 1]).toBe(bandColor[1]);
+            expect(lut256[i * 3 + 2]).toBe(bandColor[2]);
+          }
+        }
+      });
+
+      it('LV-GPU-016: index 255 maps to last band', () => {
+        lumVis.setRandomBandCount(4);
+        const lut256 = lumVis.buildRandomLUT256();
+        const palette = lumVis.getRandomLUT();
+        // Index 255: floor(255/255 * 4) = floor(4) => clamped to 3
+        expect(lut256[255 * 3]).toBe(palette[3 * 3]);
+        expect(lut256[255 * 3 + 1]).toBe(palette[3 * 3 + 1]);
+        expect(lut256[255 * 3 + 2]).toBe(palette[3 * 3 + 2]);
+      });
+
+      it('LV-GPU-017: different band counts produce different LUTs', () => {
+        lumVis.setRandomBandCount(4);
+        const lut4 = lumVis.buildRandomLUT256();
+        const lut4Copy = new Uint8Array(lut4);
+
+        lumVis.setRandomBandCount(8);
+        const lut8 = lumVis.buildRandomLUT256();
+
+        let differences = 0;
+        for (let i = 0; i < 256 * 3; i++) {
+          if (lut4Copy[i] !== lut8[i]) differences++;
+        }
+        expect(differences).toBeGreaterThan(0);
+      });
+
+      it('LV-GPU-018: cache works correctly across mode switches', () => {
+        lumVis.setMode('random-color');
+        const lut1 = lumVis.buildRandomLUT256();
+        lumVis.setMode('hsv');
+        lumVis.setMode('random-color');
+        const lut2 = lumVis.buildRandomLUT256();
+        // Cache should still be valid since band count and seed didn't change
+        expect(lut1).toBe(lut2);
+      });
+    });
+  });
 });

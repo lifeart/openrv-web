@@ -18,6 +18,7 @@
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type { TextureFilterMode } from '../core/types/filter';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { CDLValues } from '../color/CDL';
@@ -175,8 +176,17 @@ export interface RendererHDR {
   /** Set background pattern for alpha compositing in HDR mode. */
   setBackgroundPattern(state: BackgroundPatternState): void;
 
-  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. */
+  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. (Deprecated: routes to Look LUT) */
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
+
+  /** Set File LUT (per-source, applied after EOTF, before input primaries). */
+  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+
+  /** Set Look LUT (per-source creative grade). */
+  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+
+  /** Set Display LUT (session-wide, after output primaries, before display transfer). */
+  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +222,14 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
    * @param tiles - Array of { image, viewport } entries to render
    */
   renderTiledImages(tiles: { image: IPImage; viewport: TileViewport }[]): void;
+
+  // --- Texture filter mode ---
+
+  /** Set the texture filtering mode for the primary image texture. */
+  setTextureFilterMode(mode: TextureFilterMode): void;
+
+  /** Get the current texture filtering mode. */
+  getTextureFilterMode(): TextureFilterMode;
 
   // --- Texture management ---
 

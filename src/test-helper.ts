@@ -417,7 +417,7 @@ export interface InfoPanelState {
 }
 
 export interface TransformState {
-  rotation: 0 | 90 | 180 | 270;
+  rotation: number;
   flipH: boolean;
   flipV: boolean;
 }

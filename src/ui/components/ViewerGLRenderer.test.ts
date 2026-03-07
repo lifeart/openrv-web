@@ -65,6 +65,21 @@ function createMockContext(): GLRendererContext {
     getPerspectiveParams: vi.fn(() => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' })),
     getGamutMappingState: vi.fn(() => ({ mode: 'off' as const, sourceGamut: 'srgb' as const, targetGamut: 'srgb' as const })),
     getNoiseReductionParams: vi.fn(() => ({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 })),
+    getLuminanceVisualization: vi.fn(() => ({
+      getMode: () => 'off' as const,
+      getState: () => ({
+        mode: 'off' as const,
+        falseColorPreset: 'standard' as const,
+        randomBandCount: 16,
+        randomSeed: 42,
+        contourLevels: 10,
+        contourDesaturate: true,
+        contourLineColor: [255, 255, 255] as [number, number, number],
+      }),
+      getHsvLUT: () => new Uint8Array(256 * 3),
+      getRandomLUT: () => new Uint8Array(16 * 3),
+      buildRandomLUT256: () => new Uint8Array(256 * 3),
+    })) as unknown as () => import('./LuminanceVisualization').LuminanceVisualization,
   };
 }
 
@@ -1459,6 +1474,141 @@ describe('ViewerGLRenderer', () => {
 
       const r = new ViewerGLRenderer(effectsCtx);
       expect(r.hasGPUShaderEffectsActive()).toBe(false);
+    });
+  });
+
+  // ===================================================================
+  // Feature 14: Luminance vis integration in buildRenderState
+  // ===================================================================
+
+  describe('buildRenderState luminance visualization', () => {
+    function setupBuildRenderStateCtx(lumVisOverrides?: {
+      mode?: string;
+      contourLevels?: number;
+      contourDesaturate?: boolean;
+      contourLineColor?: [number, number, number];
+    }) {
+      const effectsCtx = createMockContext();
+      (effectsCtx.getColorPipeline as ReturnType<typeof vi.fn>).mockReturnValue({
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversionEnabled: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        cdlValues: JSON.parse(JSON.stringify(DEFAULT_CDL)),
+        curvesData: { master: [], red: [], green: [], blue: [] },
+        currentLUT: null,
+        lutIntensity: 0,
+        displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
+      });
+      (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.getBackgroundPatternState as ReturnType<typeof vi.fn>).mockReturnValue({ ...DEFAULT_BACKGROUND_PATTERN_STATE });
+      (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' });
+
+      const hsvLUT = new Uint8Array(256 * 3);
+      hsvLUT[0] = 255; // red at index 0
+      const randomLUT256 = new Uint8Array(256 * 3);
+      randomLUT256[0] = 42;
+
+      const mode = lumVisOverrides?.mode ?? 'off';
+      const contourLevels = lumVisOverrides?.contourLevels ?? 10;
+      const contourDesaturate = lumVisOverrides?.contourDesaturate ?? true;
+      const contourLineColor = lumVisOverrides?.contourLineColor ?? [255, 255, 255] as [number, number, number];
+
+      (effectsCtx.getLuminanceVisualization as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        getMode: () => mode,
+        getState: () => ({
+          mode,
+          falseColorPreset: 'standard',
+          randomBandCount: 16,
+          randomSeed: 42,
+          contourLevels,
+          contourDesaturate,
+          contourLineColor,
+        }),
+        getHsvLUT: () => hsvLUT,
+        getRandomLUT: () => new Uint8Array(16 * 3),
+        buildRandomLUT256: () => randomLUT256,
+      });
+
+      return { ctx: effectsCtx, hsvLUT, randomLUT256 };
+    }
+
+    it('VGLR-LV-001: off mode does not override falseColor', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'off' });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.falseColor.enabled).toBe(false);
+      expect(state.luminanceVis?.mode).toBe('off');
+    });
+
+    it('VGLR-LV-002: hsv mode sets falseColor.enabled=true with hsvLUT', () => {
+      const { ctx, hsvLUT } = setupBuildRenderStateCtx({ mode: 'hsv' });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.falseColor.enabled).toBe(true);
+      expect(state.falseColor.lut).toBe(hsvLUT);
+    });
+
+    it('VGLR-LV-003: random-color mode sets falseColor.enabled=true with randomLUT256', () => {
+      const { ctx, randomLUT256 } = setupBuildRenderStateCtx({ mode: 'random-color' });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.falseColor.enabled).toBe(true);
+      expect(state.falseColor.lut).toBe(randomLUT256);
+    });
+
+    it('VGLR-LV-004: contour mode does not override falseColor', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'contour' });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.falseColor.enabled).toBe(false);
+      expect(state.luminanceVis?.mode).toBe('contour');
+    });
+
+    it('VGLR-LV-005: contour levels passed correctly', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'contour', contourLevels: 25 });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.luminanceVis?.contourLevels).toBe(25);
+    });
+
+    it('VGLR-LV-006: contour desaturate passed correctly', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'contour', contourDesaturate: false });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.luminanceVis?.contourDesaturate).toBe(false);
+    });
+
+    it('VGLR-LV-007: contour line color normalized from 0-255 to 0-1', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'contour', contourLineColor: [255, 128, 0] });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.luminanceVis?.contourLineColor[0]).toBeCloseTo(1.0, 4);
+      expect(state.luminanceVis?.contourLineColor[1]).toBeCloseTo(128 / 255, 4);
+      expect(state.luminanceVis?.contourLineColor[2]).toBeCloseTo(0, 4);
+    });
+
+    it('VGLR-LV-008: false-color mode mapped to off in luminanceVis', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'false-color' });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      // false-color mode handled by existing path, luminanceVis.mode = 'off'
+      expect(state.luminanceVis?.mode).toBe('off');
+    });
+
+    it('VGLR-LV-009: luminanceVis field always present in state', () => {
+      const { ctx } = setupBuildRenderStateCtx({ mode: 'off' });
+      const r = new ViewerGLRenderer(ctx);
+      const state = r.buildRenderState();
+      expect(state.luminanceVis).toBeDefined();
     });
   });
 });

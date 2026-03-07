@@ -10,7 +10,10 @@ import type { AppWiringContext } from './AppWiringContext';
 function createMockContext() {
   const viewer = {
     smoothFitToWindow: vi.fn(),
+    smoothFitToWidth: vi.fn(),
+    smoothFitToHeight: vi.fn(),
     smoothSetZoom: vi.fn(),
+    smoothSetPixelRatio: vi.fn(),
     setWipeState: vi.fn(),
     setDifferenceMatteState: vi.fn(),
     setBlendModeState: vi.fn(),
@@ -64,8 +67,26 @@ function createMockContext() {
 
   const compareControl = Object.assign(new EventEmitter(), {
     getWipePosition: vi.fn().mockReturnValue(0.5),
-    getWipeMode: vi.fn().mockReturnValue('horizontal'),
+    getWipeMode: vi.fn().mockReturnValue('off'),
     getFlickerFrame: vi.fn().mockReturnValue(1),
+    isDifferenceMatteEnabled: vi.fn().mockReturnValue(false),
+    getBlendMode: vi.fn().mockReturnValue('off'),
+    isQuadViewEnabled: vi.fn().mockReturnValue(false),
+    setWipeMode: vi.fn(),
+    setDifferenceMatteEnabled: vi.fn(),
+    setBlendMode: vi.fn(),
+    setQuadViewEnabled: vi.fn(),
+  });
+
+  const layoutManager = {
+    enabled: false,
+    setDeactivateCompareCallback: vi.fn(),
+    on: vi.fn().mockReturnValue(() => {}),
+    disable: vi.fn(),
+  };
+
+  const layoutControl = Object.assign(new EventEmitter(), {
+    getManager: vi.fn().mockReturnValue(layoutManager),
   });
 
   const toneMappingControl = new EventEmitter();
@@ -93,6 +114,7 @@ function createMockContext() {
     vectorscope,
     gamutDiagram,
     compareControl,
+    layoutControl,
     toneMappingControl,
     ghostFrameControl,
     parControl,
@@ -152,13 +174,13 @@ describe('wireViewControls', () => {
   it('VW-001: zoomChanged "fit" calls viewer.smoothFitToWindow()', () => {
     (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit');
     expect(viewer.smoothFitToWindow).toHaveBeenCalledOnce();
-    expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
+    expect(viewer.smoothSetPixelRatio).not.toHaveBeenCalled();
   });
 
-  // VW-002
-  it('VW-002: zoomChanged with numeric value calls viewer.smoothSetZoom()', () => {
+  // VW-002 - ZoomControl now emits pixel ratio values (industry standard semantics)
+  it('VW-002: zoomChanged with numeric value calls viewer.smoothSetPixelRatio()', () => {
     (controls.zoomControl as EventEmitter).emit('zoomChanged', 2);
-    expect(viewer.smoothSetZoom).toHaveBeenCalledWith(2);
+    expect(viewer.smoothSetPixelRatio).toHaveBeenCalledWith(2);
     expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
   });
 
@@ -299,6 +321,22 @@ describe('wireViewControls', () => {
     expect(viewer.resetStereoEyeTransforms).toHaveBeenCalledOnce();
     expect(viewer.resetStereoAlignMode).toHaveBeenCalledOnce();
     expect(controls.updateStereoEyeControlsVisibility).toHaveBeenCalledOnce();
+  });
+
+  // VW-020: fit-width zoom level
+  it('VW-020: zoomChanged "fit-width" calls viewer.smoothFitToWidth()', () => {
+    (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit-width');
+    expect(viewer.smoothFitToWidth).toHaveBeenCalledOnce();
+    expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
+    expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
+  });
+
+  // VW-021: fit-height zoom level
+  it('VW-021: zoomChanged "fit-height" calls viewer.smoothFitToHeight()', () => {
+    (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit-height');
+    expect(viewer.smoothFitToHeight).toHaveBeenCalledOnce();
+    expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
+    expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
   });
 
   describe('disposal', () => {

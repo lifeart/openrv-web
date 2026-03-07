@@ -12,6 +12,7 @@ import {
   getPreferencesManager,
   PREFERENCE_STORAGE_KEYS,
 } from '../utils/preferences/PreferencesManager';
+import { clamp } from '../utils/math';
 import type { ThemeManager } from '../utils/ui/ThemeManager';
 import type { LayoutStore } from '../ui/layout/LayoutStore';
 import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsManager';
@@ -72,6 +73,7 @@ export const CORE_PREFERENCE_STORAGE_KEYS = {
   color: 'openrv-prefs-color',
   export: 'openrv-prefs-export',
   general: 'openrv-prefs-general',
+  fpsIndicator: 'openrv-prefs-fps-indicator',
 } as const;
 
 export const DEFAULT_COLOR_DEFAULTS: ColorDefaults = {
@@ -96,20 +98,37 @@ export const DEFAULT_GENERAL_PREFS: GeneralPrefs = {
   showWelcome: true,
 };
 
+export interface FPSIndicatorPrefs {
+  enabled: boolean;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  showDroppedFrames: boolean;
+  showTargetFps: boolean;
+  backgroundOpacity: number;
+  warningThreshold: number;
+  criticalThreshold: number;
+}
+
+export const DEFAULT_FPS_INDICATOR_PREFS: FPSIndicatorPrefs = {
+  enabled: true,
+  position: 'top-right',
+  showDroppedFrames: true,
+  showTargetFps: true,
+  backgroundOpacity: 0.6,
+  warningThreshold: 0.97,
+  criticalThreshold: 0.85,
+};
+
 export interface CorePreferencesEvents extends EventMap {
   colorDefaultsChanged: ColorDefaults;
   exportDefaultsChanged: ExportDefaults;
   generalPrefsChanged: GeneralPrefs;
+  fpsIndicatorPrefsChanged: FPSIndicatorPrefs;
   imported: PreferencesExportPayload;
   reset: void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function sanitizeColorDefaults(value: unknown): ColorDefaults {
@@ -176,6 +195,43 @@ function sanitizeGeneralPrefs(value: unknown): GeneralPrefs {
   }
   if (typeof value.showWelcome === 'boolean') {
     out.showWelcome = value.showWelcome;
+  }
+
+  return out;
+}
+
+function sanitizeFPSIndicatorPrefs(value: unknown): FPSIndicatorPrefs {
+  const out: FPSIndicatorPrefs = { ...DEFAULT_FPS_INDICATOR_PREFS };
+  if (!isRecord(value)) return out;
+
+  if (typeof value.enabled === 'boolean') {
+    out.enabled = value.enabled;
+  }
+  const validPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+  if (typeof value.position === 'string' && validPositions.includes(value.position)) {
+    out.position = value.position as FPSIndicatorPrefs['position'];
+  }
+  if (typeof value.showDroppedFrames === 'boolean') {
+    out.showDroppedFrames = value.showDroppedFrames;
+  }
+  if (typeof value.showTargetFps === 'boolean') {
+    out.showTargetFps = value.showTargetFps;
+  }
+  if (typeof value.backgroundOpacity === 'number' && Number.isFinite(value.backgroundOpacity)) {
+    out.backgroundOpacity = clamp(value.backgroundOpacity, 0, 1);
+  }
+  if (typeof value.warningThreshold === 'number' && Number.isFinite(value.warningThreshold)) {
+    out.warningThreshold = clamp(value.warningThreshold, 0, 1);
+  }
+  if (typeof value.criticalThreshold === 'number' && Number.isFinite(value.criticalThreshold)) {
+    out.criticalThreshold = clamp(value.criticalThreshold, 0, 1);
+  }
+
+  // Enforce warningThreshold >= criticalThreshold; swap if inverted
+  if (out.warningThreshold < out.criticalThreshold) {
+    const tmp = out.warningThreshold;
+    out.warningThreshold = out.criticalThreshold;
+    out.criticalThreshold = tmp;
   }
 
   return out;
@@ -269,6 +325,17 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     const merged = sanitizeExportDefaults({ ...current, ...defaults });
     this.storage.setJSON(CORE_PREFERENCE_STORAGE_KEYS.export, merged);
     this.emit('exportDefaultsChanged', merged);
+  }
+
+  getFPSIndicatorPrefs(): FPSIndicatorPrefs {
+    return sanitizeFPSIndicatorPrefs(this.storage.getJSON<unknown>(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator));
+  }
+
+  setFPSIndicatorPrefs(prefs: Partial<FPSIndicatorPrefs>): void {
+    const current = this.getFPSIndicatorPrefs();
+    const merged = sanitizeFPSIndicatorPrefs({ ...current, ...prefs });
+    this.storage.setJSON(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator, merged);
+    this.emit('fpsIndicatorPrefsChanged', merged);
   }
 
   getGeneralPrefs(): GeneralPrefs {

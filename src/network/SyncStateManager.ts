@@ -36,6 +36,7 @@ export interface ViewState {
   panY: number;
   zoom: number;
   channelMode: string;
+  fitMode: string | null;
 }
 
 export interface ColorState {
@@ -62,6 +63,7 @@ const DEFAULT_VIEW_STATE: ViewState = {
   panY: 0,
   zoom: 1,
   channelMode: 'rgb',
+  fitMode: null,
 };
 
 const DEFAULT_COLOR_STATE: ColorState = {
@@ -189,6 +191,7 @@ export class SyncStateManager {
       panY: payload.panY,
       zoom: payload.zoom,
       channelMode: payload.channelMode,
+      fitMode: (payload as unknown as Record<string, unknown>).fitMode as string | null ?? null,
     };
   }
 

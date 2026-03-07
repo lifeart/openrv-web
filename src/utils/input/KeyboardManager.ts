@@ -28,6 +28,18 @@ export class KeyboardManager {
   private enabled = true;
   private contextualResolver?: ContextualKeyboardManager;
 
+  /**
+   * Set of key codes currently suppressed by external systems (e.g., virtual slider).
+   * When a key code is in this set, handleKeydown will skip both the contextual
+   * resolver and the direct binding lookup for that key.
+   */
+  private suppressedKeys: Set<string> = new Set();
+
+  /**
+   * When true, ALL keys are suppressed (used during virtual slider ACTIVE/LOCKED states).
+   */
+  private allKeysSuppressed = false;
+
   constructor() {
     this.eventHandler = this.handleKeydown.bind(this);
   }
@@ -106,6 +118,36 @@ export class KeyboardManager {
   }
 
   /**
+   * Suppress a specific key code so that handleKeydown skips it.
+   * Used by the virtual slider system during the ARMED window.
+   */
+  suppressKey(code: string): void {
+    this.suppressedKeys.add(code);
+  }
+
+  /**
+   * Release a previously suppressed key code.
+   */
+  releaseKey(code: string): void {
+    this.suppressedKeys.delete(code);
+  }
+
+  /**
+   * Suppress or release ALL keys. When enabled, handleKeydown skips
+   * every key event. Used during virtual slider ACTIVE/LOCKED states.
+   */
+  suppressAllKeys(suppress: boolean): void {
+    this.allKeysSuppressed = suppress;
+  }
+
+  /**
+   * Check whether a specific key code is currently suppressed.
+   */
+  isKeySuppressed(code: string): boolean {
+    return this.allKeysSuppressed || this.suppressedKeys.has(code);
+  }
+
+  /**
    * Start listening for keyboard events on the given element (defaults to document)
    */
   attach(element: EventTarget = document): void {
@@ -124,6 +166,13 @@ export class KeyboardManager {
    */
   private handleKeydown(e: KeyboardEvent): void {
     if (!this.enabled) return;
+
+    // Check key suppression FIRST, before any other processing.
+    // This allows the virtual slider (and other external systems) to
+    // prevent specific keys from triggering bindings.
+    if (this.allKeysSuppressed || this.suppressedKeys.has(e.code)) {
+      return;
+    }
 
     // Skip if typing in input fields (except for specific global keys)
     if (this.shouldSkipEvent(e)) return;

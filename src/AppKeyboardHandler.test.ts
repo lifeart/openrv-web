@@ -131,4 +131,74 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
     const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
     expect(document.activeElement).toBe(searchInput);
   });
+
+  it('SK-M25f: conflicting default scope shortcuts are hidden when not actually registered', () => {
+    handler.showShortcutsDialog();
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
+    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
+
+    expect(descriptions).not.toContain('toggle waveform scope');
+    expect(descriptions).not.toContain('toggle histogram');
+  });
+
+  it('SK-M25g: conflicting shortcuts reappear once the user sets a custom binding', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    ckm.setCustomBinding('panel.waveform', { code: 'KeyU', ctrl: true });
+
+    const customHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => ({}),
+      getContainer: () => document.body,
+    });
+
+    customHandler.showShortcutsDialog();
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
+    const waveformRow = rows.find((row) => row.getAttribute('data-shortcut-desc') === 'toggle waveform scope');
+
+    expect(waveformRow).toBeTruthy();
+    expect(waveformRow?.getAttribute('data-shortcut-key')).toContain('ctrl');
+    expect(waveformRow?.getAttribute('data-shortcut-key')).toContain('u');
+  });
+
+  it('SK-M25h: context-managed KeyG actions remain visible in the shortcut dialog', () => {
+    handler.showShortcutsDialog();
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
+    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
+
+    expect(descriptions).toContain('go to frame (open frame entry)');
+    expect(descriptions).toContain('toggle ghost mode');
+    expect(descriptions).toContain('toggle cie gamut diagram');
+  });
+
+  it('SK-M25i: newly added playback and transform shortcuts are listed', () => {
+    handler.showShortcutsDialog();
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
+    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
+
+    expect(descriptions).toContain('toggle between realtime and play all frames');
+    expect(descriptions).toContain('reset rotation to 0');
+  });
+
+  it('SK-M25j: context-managed KeyG actions are skipped from direct keyboard registration', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'navigation.gotoFrame': () => undefined,
+      'paint.toggleGhost': () => undefined,
+      'panel.gamutDiagram': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    const keyGBindings = km.getBindings().filter((binding) => binding.combo.code === 'KeyG');
+    expect(keyGBindings).toHaveLength(0);
+  });
 });

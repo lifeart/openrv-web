@@ -17,6 +17,7 @@
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
+import { TimelineMagnifier } from './ui/components/TimelineMagnifier';
 import { HeaderBar } from './ui/components/layout/HeaderBar';
 import { TabBar, TabId } from './ui/components/layout/TabBar';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
@@ -50,6 +51,7 @@ import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
 import { wireDCCBridge } from './AppDCCWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
+import { GotoFrameOverlay } from './ui/components/GotoFrameOverlay';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
@@ -60,6 +62,8 @@ import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { VirtualSliderController } from './ui/components/VirtualSliderController';
+import { getCurrentSourceStartFrame } from './utils/media/SourceUIState';
 
 const log = new Logger('App');
 
@@ -73,12 +77,14 @@ export class App {
   private session: Session;
   private viewer: Viewer;
   private timeline: Timeline;
+  private timelineMagnifier: TimelineMagnifier;
   private headerBar: HeaderBar;
   private tabBar: TabBar;
   private contextToolbar: ContextToolbar;
   private paintEngine: PaintEngine;
   private controls: AppControlRegistry;
   private noteOverlay: NoteOverlay;
+  private gotoFrameOverlay: GotoFrameOverlay;
   private renderLoop!: RenderLoopService;
   private frameNavigation!: FrameNavigationService;
   private timelineEditorService!: TimelineEditorService;
@@ -99,6 +105,7 @@ export class App {
   private cacheManager: MediaCacheManager;
   private audioOrchestrator: AudioOrchestrator;
   private dccBridge: DCCBridge | null = null;
+  private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
   private layoutOrchestrator!: LayoutOrchestrator;
 
@@ -137,6 +144,16 @@ export class App {
     this.renderLoop = new RenderLoopService({ session: this.session, viewer: this.viewer });
     this.timeline = new Timeline(this.session, this.paintEngine);
 
+    // Create timeline magnifier (zoomed-in timeline sub-view)
+    this.timelineMagnifier = new TimelineMagnifier(
+      this.session,
+      this.timeline.getWaveformRenderer(),
+      this.paintEngine,
+    );
+
+    // Wire magnifier toggle button on main timeline
+    this.timeline.setMagnifierToggle(() => this.timelineMagnifier.toggle());
+
     // Create OPFS media cache manager
     this.cacheManager = new MediaCacheManager();
 
@@ -150,11 +167,18 @@ export class App {
 
     // Wire NoteOverlay into timeline for note visualization
     this.noteOverlay = new NoteOverlay(this.session);
+
+    // Create goto-frame overlay (inline text entry for frame navigation)
+    this.gotoFrameOverlay = new GotoFrameOverlay(this.session);
     this.timeline.setNoteOverlay(this.noteOverlay);
     this.timeline.setPlaylistManagers(this.controls.playlistManager, this.controls.transitionManager);
 
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
+    this.syncCurrentSourceTimecodeOffsets();
+    this.wiringSubscriptions.add(this.session.on('sourceLoaded', () => this.syncCurrentSourceTimecodeOffsets()));
+    this.wiringSubscriptions.add(this.session.on('durationChanged', () => this.syncCurrentSourceTimecodeOffsets()));
+    this.wiringSubscriptions.add(this.session.on('representationChanged', () => this.syncCurrentSourceTimecodeOffsets()));
 
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
@@ -246,6 +270,29 @@ export class App {
       () => this.controls.paintToolbar.handleKeyboard('l'),
       'paint',
       'Select line tool',
+    );
+
+    // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint) vs panel.gamutDiagram (panel)
+    this.contextualKeyboardManager.register(
+      'navigation.gotoFrame',
+      { code: 'KeyG' },
+      () => this.gotoFrameOverlay.show(),
+      'global',
+      'Go to frame (open frame entry)',
+    );
+    this.contextualKeyboardManager.register(
+      'paint.toggleGhost',
+      { code: 'KeyG' },
+      () => this.controls.paintToolbar.handleKeyboard('g'),
+      'paint',
+      'Toggle ghost mode',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.gamutDiagram',
+      { code: 'KeyG' },
+      () => this.controls.scopesControl.toggleScope('gamutDiagram'),
+      'panel',
+      'Toggle CIE gamut diagram',
     );
 
     // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
@@ -495,6 +542,15 @@ export class App {
     const stackState = wireStackControls(wiringCtx);
     this.wiringSubscriptions.add(() => stackState?.subscriptions?.dispose());
 
+    // Virtual slider controller (key-hold-to-adjust color parameters)
+    this.virtualSliderController = new VirtualSliderController({
+      colorControls: this.controls.colorControls,
+      container: this.viewer.getContainer(),
+      keyboardManager: this.keyboardManager,
+      viewerQuery: { isInteracting: () => this.viewer.isInteracting() },
+    });
+    this.wiringSubscriptions.add(() => this.virtualSliderController?.dispose());
+
     // Timeline editor wiring (EDL/SequenceGroup integration)
     this.timelineEditorService.bindEvents();
   }
@@ -516,13 +572,16 @@ export class App {
       timeline: this.timeline,
       layoutManager: this.layoutManager,
       layoutStore: this.layoutStore,
-      controls: this.controls,
+      controls: Object.assign(this.controls, { timelineMagnifier: this.timelineMagnifier }),
       sessionBridge: this.sessionBridge,
       clientMode: this.clientMode,
       paintEngine: this.paintEngine,
       customKeyBindingsManager: this.customKeyBindingsManager,
     });
     this.layoutOrchestrator.createLayout();
+
+    // Mount goto-frame overlay into the viewer slot (position: relative parent)
+    this.layoutManager.getViewerSlot().appendChild(this.gotoFrameOverlay.getElement());
 
     // Re-register keyboard shortcuts now that focusManager and other
     // layout-dependent objects (fullscreenManager, shortcutCheatSheet) are
@@ -645,7 +704,7 @@ export class App {
       viewer: this.viewer,
       paintEngine: this.paintEngine,
       tabBar: this.tabBar,
-      controls: this.controls,
+      controls: Object.assign(this.controls, { timelineMagnifier: this.timelineMagnifier, gotoFrameOverlay: this.gotoFrameOverlay }),
       activeContextManager: this.activeContextManager,
       fullscreenManager: this.fullscreenManager,
       focusManager: this.focusManager,
@@ -657,6 +716,12 @@ export class App {
       headerBar: this.headerBar,
       frameNavigation: this.frameNavigation,
     });
+  }
+
+  private syncCurrentSourceTimecodeOffsets(): void {
+    const startFrame = getCurrentSourceStartFrame(this.session.currentSource);
+    this.gotoFrameOverlay.setStartFrame(startFrame);
+    this.headerBar.getTimecodeDisplay().setStartFrame(startFrame);
   }
 
   /**
@@ -695,6 +760,8 @@ export class App {
 
     this.viewer.dispose();
     this.noteOverlay.dispose();
+    this.timelineMagnifier.dispose();
+    this.gotoFrameOverlay.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();

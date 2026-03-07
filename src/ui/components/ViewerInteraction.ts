@@ -75,19 +75,32 @@ export function calculateZoomPan(
   currentPanX: number,
   currentPanY: number,
   oldZoom: number,
-  newZoom: number
+  newZoom: number,
+  fitMode: 'all' | 'width' | 'height' = 'all'
 ): { panX: number; panY: number } {
   // Guard against zero dimensions
   if (sourceWidth <= 0 || sourceHeight <= 0) {
     return { panX: currentPanX, panY: currentPanY };
   }
 
-  // Calculate fit scale
-  const fitScale = Math.min(
-    containerWidth / sourceWidth,
-    containerHeight / sourceHeight,
-    1
-  );
+  // Calculate fit scale based on active fit mode
+  let fitScale: number;
+  switch (fitMode) {
+    case 'width':
+      fitScale = containerWidth / sourceWidth;
+      break;
+    case 'height':
+      fitScale = containerHeight / sourceHeight;
+      break;
+    case 'all':
+    default:
+      fitScale = Math.min(
+        containerWidth / sourceWidth,
+        containerHeight / sourceHeight,
+        1
+      );
+      break;
+  }
 
   const oldDisplayWidth = sourceWidth * fitScale * oldZoom;
   const oldDisplayHeight = sourceHeight * fitScale * oldZoom;

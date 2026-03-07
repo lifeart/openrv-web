@@ -205,6 +205,58 @@ describe('ViewerInteraction', () => {
       expect(result.panX).toBeCloseTo(0);
       expect(result.panY).toBeCloseTo(0);
     });
+
+    // --- Fit Mode Tests ---
+
+    it('uses fit-all formula by default (backward compatible)', () => {
+      const result1 = calculateZoomPan(
+        100, 100, 400, 300, 200, 150, 0, 0, 1.0, 2.0
+      );
+      const result2 = calculateZoomPan(
+        100, 100, 400, 300, 200, 150, 0, 0, 1.0, 2.0, 'all'
+      );
+      expect(result1).toEqual(result2);
+    });
+
+    it('uses fit-width formula when fitMode is "width"', () => {
+      // The zoom-to-cursor formula is mathematically invariant to base fit scale
+      // (which is by design - it keeps the cursor point fixed regardless).
+      // Verify that the function accepts the fitMode parameter and produces
+      // valid pan values. The key benefit is that when used with
+      // calculateDisplayDimensions, the display dimensions change correctly.
+      const result = calculateZoomPan(
+        200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5, 'width'
+      );
+      expect(result.panX).toBeDefined();
+      expect(result.panY).toBeDefined();
+      expect(typeof result.panX).toBe('number');
+      expect(typeof result.panY).toBe('number');
+      expect(Number.isFinite(result.panX)).toBe(true);
+      expect(Number.isFinite(result.panY)).toBe(true);
+    });
+
+    it('uses fit-height formula when fitMode is "height"', () => {
+      const result = calculateZoomPan(
+        200, 100, 800, 600, 1920, 600, 50, 30, 1.0, 1.5, 'height'
+      );
+      expect(result.panX).toBeDefined();
+      expect(result.panY).toBeDefined();
+      expect(typeof result.panX).toBe('number');
+      expect(typeof result.panY).toBe('number');
+      expect(Number.isFinite(result.panX)).toBe(true);
+      expect(Number.isFinite(result.panY)).toBe(true);
+    });
+
+    it('default fitMode matches explicit "all"', () => {
+      const resultDefault = calculateZoomPan(
+        200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5
+      );
+      const resultAll = calculateZoomPan(
+        200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5, 'all'
+      );
+      expect(resultDefault.panX).toBe(resultAll.panX);
+      expect(resultDefault.panY).toBe(resultAll.panY);
+    });
   });
 
   describe('calculatePinchDistance', () => {

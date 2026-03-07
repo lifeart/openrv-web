@@ -8,6 +8,7 @@ import { Transform2D } from './TransformControl';
 import { CropState, CropRegion } from './CropControl';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { VIEWER_PLACEHOLDER_SUPPORT_LINES } from '../../utils/media/SupportedMediaFormats';
+import { MAX_CANVAS_DIMENSION } from './ScalePresets';
 
 function getFontSizePx(font: string, fallback: number): number {
   const match = font.match(/(\d+(?:\.\d+)?)px/);
@@ -57,19 +58,20 @@ function wrapTextToWidth(
 
 /**
  * Draw image/video with rotation and flip transforms applied.
- * Uses high-quality image smoothing for best picture quality.
+ * Image smoothing defaults to enabled (bilinear) but can be disabled for nearest-neighbor QC.
  */
 export function drawWithTransform(
   ctx: CanvasRenderingContext2D,
   element: CanvasImageSource,
   displayWidth: number,
   displayHeight: number,
-  transform: Transform2D
+  transform: Transform2D,
+  smoothingEnabled = true
 ): void {
   const { rotation, flipH, flipV } = transform;
 
-  // Enable high-quality image smoothing for best picture quality
-  ctx.imageSmoothingEnabled = true;
+  // Image smoothing: bilinear when true, nearest-neighbor when false
+  ctx.imageSmoothingEnabled = smoothingEnabled;
   ctx.imageSmoothingQuality = 'high';
 
   // If no transforms, just draw normally
@@ -95,14 +97,16 @@ export function drawWithTransform(
     ctx.scale(scaleX, scaleY);
   }
 
-  // For 90/270 rotation, draw in swapped dimensions before rotation so the
-  // rotated bounds match the already-rotated layout box.
-  let drawWidth = displayWidth;
-  let drawHeight = displayHeight;
-  if (rotation === 90 || rotation === 270) {
-    drawWidth = displayHeight;
-    drawHeight = displayWidth;
-  }
+  // Compute draw dimensions using AABB: scale the source so the rotated
+  // bounding box fits within the display area.
+  const sourceW = (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || displayWidth;
+  const sourceH = (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || displayHeight;
+  const { width: bbW, height: bbH } = getEffectiveDimensions(sourceW, sourceH, rotation);
+  const fitScaleX = displayWidth / bbW;
+  const fitScaleY = displayHeight / bbH;
+  const fitScale = Math.min(fitScaleX, fitScaleY);
+  const drawWidth = sourceW * fitScale;
+  const drawHeight = sourceH * fitScale;
 
   // Draw centered
   ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -415,31 +419,59 @@ export function drawPlaceholder(
 /**
  * Calculate display dimensions for a source at a given zoom level.
  * Applies fit-to-container scaling with zoom factor.
+ *
+ * @param fitMode - The fit mode to use for scaling:
+ *   - 'all' (default): fit both dimensions, no upscale
+ *   - 'width': fill container width (may upscale)
+ *   - 'height': fill container height (may upscale)
  */
 export function calculateDisplayDimensions(
   sourceWidth: number,
   sourceHeight: number,
   containerWidth: number,
   containerHeight: number,
-  zoom: number
+  zoom: number,
+  fitMode: 'all' | 'width' | 'height' = 'all'
 ): { width: number; height: number } {
   // Guard against zero/negative dimensions
   if (sourceWidth <= 0 || sourceHeight <= 0 || containerWidth <= 0 || containerHeight <= 0) {
     return { width: 1, height: 1 };
   }
 
-  // Calculate fit scale: scale down to fit the container while preserving aspect ratio.
-  // Only scale down images larger than the viewport; smaller images stay at native size.
-  const fitScale = Math.min(
-    containerWidth / sourceWidth,
-    containerHeight / sourceHeight,
-    1
-  );
+  // Calculate fit scale based on the active fit mode
+  let fitScale: number;
+  switch (fitMode) {
+    case 'width':
+      fitScale = containerWidth / sourceWidth;
+      break;
+    case 'height':
+      fitScale = containerHeight / sourceHeight;
+      break;
+    case 'all':
+    default:
+      // Scale down to fit the container while preserving aspect ratio.
+      // Only scale down images larger than the viewport; smaller images stay at native size.
+      fitScale = Math.min(
+        containerWidth / sourceWidth,
+        containerHeight / sourceHeight,
+        1
+      );
+      break;
+  }
 
   // Apply zoom
   const scale = fitScale * zoom;
-  const width = Math.max(1, Math.floor(sourceWidth * scale));
-  const height = Math.max(1, Math.floor(sourceHeight * scale));
+  let width = Math.max(1, Math.floor(sourceWidth * scale));
+  let height = Math.max(1, Math.floor(sourceHeight * scale));
+
+  // Cap dimensions to prevent GPU buffer overflow at high magnification.
+  // The remaining magnification beyond the cap is achieved via CSS scaling.
+  const maxDim = MAX_CANVAS_DIMENSION;
+  if (width > maxDim || height > maxDim) {
+    const scaleFactor = Math.min(maxDim / width, maxDim / height);
+    width = Math.max(1, Math.floor(width * scaleFactor));
+    height = Math.max(1, Math.floor(height * scaleFactor));
+  }
 
   return { width, height };
 }
@@ -459,19 +491,20 @@ export function isFullCropRegion(region: CropRegion): boolean {
  * Unlike drawWithTransform (for display), this function draws to fill the entire
  * canvas without letterboxing, used for exports where we want pixel-perfect output.
  * For 90/270 rotation, the canvas should already be sized with swapped dimensions.
- * Uses high-quality image smoothing for best picture quality.
+ * Image smoothing defaults to enabled (bilinear) but can be disabled for nearest-neighbor QC.
  */
 export function drawWithTransformFill(
   ctx: CanvasRenderingContext2D,
   element: CanvasImageSource,
   canvasWidth: number,
   canvasHeight: number,
-  transform: Transform2D
+  transform: Transform2D,
+  smoothingEnabled = true
 ): void {
   const { rotation, flipH, flipV } = transform;
 
-  // Enable high-quality image smoothing for best picture quality
-  ctx.imageSmoothingEnabled = true;
+  // Image smoothing: bilinear when true, nearest-neighbor when false
+  ctx.imageSmoothingEnabled = smoothingEnabled;
   ctx.imageSmoothingQuality = 'high';
 
   // If no transforms, just draw normally
@@ -497,15 +530,16 @@ export function drawWithTransformFill(
     ctx.scale(scaleX, scaleY);
   }
 
-  // For 90/270 rotation, swap draw dimensions since the canvas is already swapped
-  let drawWidth = canvasWidth;
-  let drawHeight = canvasHeight;
-  if (rotation === 90 || rotation === 270) {
-    // Canvas dimensions are swapped (height x width), so we draw with swapped dimensions
-    // to fill the canvas after rotation
-    drawWidth = canvasHeight;
-    drawHeight = canvasWidth;
-  }
+  // Compute draw dimensions from AABB: the canvas is sized to the bounding box,
+  // so we need to figure out the source dimensions to draw at.
+  const sourceW = (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || canvasWidth;
+  const sourceH = (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || canvasHeight;
+  const { width: bbW, height: bbH } = getEffectiveDimensions(sourceW, sourceH, rotation);
+  const fitScaleX = canvasWidth / bbW;
+  const fitScaleY = canvasHeight / bbH;
+  const fitScale = Math.min(fitScaleX, fitScaleY);
+  const drawWidth = sourceW * fitScale;
+  const drawHeight = sourceH * fitScale;
 
   // Draw centered (will fill canvas after transform)
   ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -515,15 +549,29 @@ export function drawWithTransformFill(
 
 /**
  * Get effective dimensions after rotation transform.
- * For 90/270 rotation, width and height are swapped.
+ * Computes the axis-aligned bounding box (AABB) of the rotated rectangle.
+ * For cardinal angles (0, 90, 180, 270), this produces exact results
+ * identical to the previous swap-based implementation.
  */
 export function getEffectiveDimensions(
   width: number,
   height: number,
-  rotation: 0 | 90 | 180 | 270
+  rotation: number
 ): { width: number; height: number } {
-  if (rotation === 90 || rotation === 270) {
-    return { width: height, height: width };
-  }
-  return { width, height };
+  const rad = (rotation * Math.PI) / 180;
+  let absCos = Math.abs(Math.cos(rad));
+  let absSin = Math.abs(Math.sin(rad));
+
+  // Epsilon snap for cardinal angles: Math.cos(PI/2) is ~6.12e-17, not 0.
+  // Without this, ceil() can produce off-by-one dimensions at 90/180/270.
+  const EPSILON = 1e-10;
+  if (absCos < EPSILON) absCos = 0;
+  if (absSin < EPSILON) absSin = 0;
+  if (Math.abs(absCos - 1) < EPSILON) absCos = 1;
+  if (Math.abs(absSin - 1) < EPSILON) absSin = 1;
+
+  return {
+    width: Math.ceil(width * absCos + height * absSin),
+    height: Math.ceil(width * absSin + height * absCos),
+  };
 }

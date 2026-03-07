@@ -41,6 +41,12 @@ function createMockSession() {
     session.currentFrame = Math.max(1, session._currentFrame - 1);
   });
 
+  session._playbackMode = 'realtime';
+  Object.defineProperty(session, 'playbackMode', {
+    get: () => session._playbackMode,
+    set: (v: string) => { session._playbackMode = v; },
+  });
+
   return session;
 }
 
@@ -246,6 +252,36 @@ describe('PlaybackAPI.step() optimization', () => {
       api.step(-100);
       expect(session.stepBackward).not.toHaveBeenCalled();
       expect(session.goToFrame).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // =================================================================
+  // PlaybackMode API
+  // =================================================================
+
+  describe('playbackMode API', () => {
+    it('PAPI-PAF-001: getPlaybackMode() returns default realtime', () => {
+      expect(api.getPlaybackMode()).toBe('realtime');
+    });
+
+    it('PAPI-PAF-002: setPlaybackMode() sets the mode', () => {
+      api.setPlaybackMode('playAllFrames');
+      expect(session.playbackMode).toBe('playAllFrames');
+    });
+
+    it('PAPI-PAF-003: setPlaybackMode() with invalid value throws ValidationError', () => {
+      expect(() => api.setPlaybackMode('invalid' as any)).toThrow(ValidationError);
+    });
+
+    it('PAPI-PAF-004: getPlaybackMode() returns updated value after set', () => {
+      api.setPlaybackMode('playAllFrames');
+      expect(api.getPlaybackMode()).toBe('playAllFrames');
+    });
+
+    it('PAPI-PAF-005: setPlaybackMode(realtime) sets back to realtime', () => {
+      api.setPlaybackMode('playAllFrames');
+      api.setPlaybackMode('realtime');
+      expect(api.getPlaybackMode()).toBe('realtime');
     });
   });
 });

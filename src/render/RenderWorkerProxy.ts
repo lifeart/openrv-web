@@ -21,6 +21,7 @@ import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
+import type { TextureFilterMode } from '../core/types/filter';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
@@ -95,6 +96,7 @@ export class RenderWorkerProxy implements RendererBackend {
   private premultMode = 0;
   private ditherMode = 0;
   private quantizeBits = 0;
+  private _textureFilterMode: TextureFilterMode = 'linear';
 
   // --- Batch state optimization ---
   private dirtyState: Partial<RendererSyncState> = {};
@@ -635,6 +637,21 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
+  setFileLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+    // TODO: implement multi-point LUT pipeline for worker proxy
+    this.hasDirtyState = true;
+  }
+
+  setLookLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+    // TODO: implement multi-point LUT pipeline for worker proxy
+    this.hasDirtyState = true;
+  }
+
+  setDisplayLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+    // TODO: implement multi-point LUT pipeline for worker proxy
+    this.hasDirtyState = true;
+  }
+
   setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void {
     this.dirtyState.displayColorState = state;
     this.hasDirtyState = true;
@@ -700,6 +717,17 @@ export class RenderWorkerProxy implements RendererBackend {
     return this.quantizeBits;
   }
 
+  setTextureFilterMode(mode: TextureFilterMode): void {
+    this._textureFilterMode = mode;
+    // Texture filter mode is applied locally by the Renderer instance in the worker.
+    // It is not part of the sync state protocol since it only affects texParameteri
+    // calls at render time, not shader uniforms.
+  }
+
+  getTextureFilterMode(): TextureFilterMode {
+    return this._textureFilterMode;
+  }
+
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
     this.setColorInversion(state.colorInversion);
@@ -724,6 +752,9 @@ export class RenderWorkerProxy implements RendererBackend {
     this.setPremultMode(state.premultMode ?? 0);
     this.setDitherMode(state.ditherMode ?? 0);
     this.setQuantizeBits(state.quantizeBits ?? 0);
+    if (state.textureFilterMode !== undefined) {
+      this.setTextureFilterMode(state.textureFilterMode);
+    }
   }
 
   // ==========================================================================

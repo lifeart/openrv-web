@@ -33,6 +33,7 @@ export interface ActionSession {
   goToFrame(frame: number): void;
   toggleAB(): void;
   toggleMute(): void;
+  togglePlaybackMode(): void;
   noteManager: {
     getNextNoteFrame(sourceIndex: number, currentFrame: number): number;
     getPreviousNoteFrame(sourceIndex: number, currentFrame: number): number;
@@ -42,18 +43,24 @@ export interface ActionSession {
 /** Subset of Viewer used by keyboard actions. */
 export interface ActionViewer {
   smoothFitToWindow(): void;
+  smoothFitToWidth(): void;
+  smoothFitToHeight(): void;
   smoothSetZoom(level: number): void;
+  smoothSetPixelRatio(ratio: number): void;
   refresh(): void;
   copyFrameToClipboard(includeAnnotations: boolean): void;
   getPixelProbe(): { toggle(): void };
   getFalseColor(): { toggle(): void };
   getTimecodeOverlay(): { toggle(): void };
+  getInfoStripOverlay(): { toggle(): void; togglePathMode(): void };
+  getFPSIndicator(): { toggle(): void };
   getZebraStripes(): { toggle(): void };
   getColorWheels(): { toggle(): void };
   getSpotlightOverlay(): { toggle(): void };
   getHSLQualifier(): { toggle(): void };
   getLuminanceVisualization(): { cycleMode(): void };
   getImageData(): { width: number; height: number; data: Uint8ClampedArray } | null;
+  toggleFilterMode(): void;
 }
 
 /** Subset of PaintEngine used by keyboard actions. */
@@ -102,6 +109,7 @@ export interface ActionControls {
     rotateRight(): void;
     toggleFlipH(): void;
     toggleFlipV(): void;
+    setRotation(degrees: number): void;
   };
   toneMappingControl: { toggle(): void };
   colorInversionToggle: { toggle(): void };
@@ -157,6 +165,8 @@ export interface ActionControls {
   hideTimelineEditorPanel(): void;
   isSlateEditorPanelVisible(): boolean;
   hideSlateEditorPanel(): void;
+  timelineMagnifier: { toggle(): void };
+  gotoFrameOverlay: { show(): void };
 }
 
 export interface ActionActiveContextManager {
@@ -207,6 +217,12 @@ export interface ActionFrameNavigation {
   goToPreviousMarkOrBoundary(): void;
   goToNextShot(): void;
   goToPreviousShot(): void;
+  shiftRangeToNext(): { inPoint: number; outPoint: number } | null;
+  shiftRangeToPrevious(): { inPoint: number; outPoint: number } | null;
+}
+
+export interface ActionAriaAnnouncer {
+  announce(message: string, priority?: 'polite' | 'assertive'): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +245,7 @@ export interface KeyboardActionDeps {
   externalPresentation: ActionExternalPresentation;
   headerBar: ActionHeaderBar;
   frameNavigation: ActionFrameNavigation;
+  ariaAnnouncer?: ActionAriaAnnouncer | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +275,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     externalPresentation,
     headerBar,
     frameNavigation,
+    ariaAnnouncer,
   } = deps;
 
   return {
@@ -321,10 +339,37 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       const currentIndex = modes.indexOf(session.loopMode);
       session.loopMode = modes[(currentIndex + 1) % modes.length]!;
     },
+    'timeline.toggleMagnifier': () => controls.timelineMagnifier.toggle(),
+    'timeline.shiftRangeNext': () => {
+      const result = frameNavigation.shiftRangeToNext();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
+    'timeline.shiftRangePrevious': () => {
+      const result = frameNavigation.shiftRangeToPrevious();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
+    'timeline.shiftRangeNextAlt': () => {
+      const result = frameNavigation.shiftRangeToNext();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
+    'timeline.shiftRangePreviousAlt': () => {
+      const result = frameNavigation.shiftRangeToPrevious();
+      if (result) {
+        ariaAnnouncer?.announce(`Range shifted to frames ${result.inPoint} - ${result.outPoint}`);
+      }
+    },
 
     // -- View ------------------------------------------------------------
     'view.fitToWindow': () => viewer.smoothFitToWindow(),
     'view.fitToWindowAlt': () => viewer.smoothFitToWindow(),
+    'view.fitToWidth': () => viewer.smoothFitToWidth(),
+    'view.fitToHeight': () => viewer.smoothFitToHeight(),
     'view.zoom50': () => {
       if (tabBar.activeTab === 'view') {
         viewer.smoothSetZoom(0.5);
@@ -345,6 +390,9 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'view.toggleFalseColor': () => viewer.getFalseColor().toggle(),
     'view.toggleToneMapping': () => controls.toneMappingControl.toggle(),
     'view.toggleTimecodeOverlay': () => viewer.getTimecodeOverlay().toggle(),
+    'view.toggleInfoStrip': () => viewer.getInfoStripOverlay().toggle(),
+    'view.toggleInfoStripPath': () => viewer.getInfoStripOverlay().togglePathMode(),
+    'view.toggleFPSIndicator': () => viewer.getFPSIndicator().toggle(),
     'view.toggleZebraStripes': () => {
       const zebras = viewer.getZebraStripes();
       zebras.toggle();
@@ -490,6 +538,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'transform.rotateRight': () => controls.transformControl.rotateRight(),
     'transform.flipHorizontal': () => controls.transformControl.toggleFlipH(),
     'transform.flipVertical': () => controls.transformControl.toggleFlipV(),
+    'transform.resetRotation': () => controls.transformControl.setRotation(0),
 
     // -- Export ----------------------------------------------------------
     'export.quickExport': () => headerBar.getExportControl().quickExport('png'),
@@ -531,6 +580,9 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'paint.toggleBrush': () => controls.paintToolbar.handleKeyboard('b'),
     'paint.toggleGhost': () => controls.paintToolbar.handleKeyboard('g'),
     'paint.toggleHold': () => controls.paintToolbar.handleKeyboard('x'),
+
+    // -- Navigation -------------------------------------------------------
+    'navigation.gotoFrame': () => controls.gotoFrameOverlay.show(),
 
     // -- Annotations -----------------------------------------------------
     'annotation.previous': () => frameNavigation.goToPreviousAnnotation(),
@@ -578,6 +630,11 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     // -- Snapshots / Persistence -----------------------------------------
     'snapshot.create': () => {
       persistenceManager.createQuickSnapshot();
+    },
+
+    // -- Texture filter mode -----------------------------------------------
+    'view.toggleFilterMode': () => {
+      viewer.toggleFilterMode();
     },
 
     // -- Notes -----------------------------------------------------------
@@ -635,5 +692,27 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
 
     // -- Audio -----------------------------------------------------------
     'audio.toggleMute': () => session.toggleMute(),
+
+    // -- Playback mode ---------------------------------------------------
+    'playback.togglePlaybackMode': () => session.togglePlaybackMode(),
+
+    // -- Scale presets (magnification) -----------------------------------
+    'view.zoom1to1': () => viewer.smoothSetPixelRatio(1),
+    'view.zoom2to1': () => viewer.smoothSetPixelRatio(2),
+    'view.zoom3to1': () => viewer.smoothSetPixelRatio(3),
+    'view.zoom4to1': () => viewer.smoothSetPixelRatio(4),
+    'view.zoom5to1': () => viewer.smoothSetPixelRatio(5),
+    'view.zoom6to1': () => viewer.smoothSetPixelRatio(6),
+    'view.zoom7to1': () => viewer.smoothSetPixelRatio(7),
+    'view.zoom8to1': () => viewer.smoothSetPixelRatio(8),
+
+    // -- Scale presets (reduction) ----------------------------------------
+    'view.zoom1to2': () => viewer.smoothSetPixelRatio(0.5),
+    'view.zoom1to3': () => viewer.smoothSetPixelRatio(1 / 3),
+    'view.zoom1to4': () => viewer.smoothSetPixelRatio(0.25),
+    'view.zoom1to5': () => viewer.smoothSetPixelRatio(0.2),
+    'view.zoom1to6': () => viewer.smoothSetPixelRatio(1 / 6),
+    'view.zoom1to7': () => viewer.smoothSetPixelRatio(1 / 7),
+    'view.zoom1to8': () => viewer.smoothSetPixelRatio(0.125),
   };
 }

@@ -12,10 +12,11 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import type { LoopMode } from '../types/session';
+import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource, AudioPlaybackError } from './Session';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackEngine } from './PlaybackEngine';
+import type { FPSMeasurement } from './PlaybackEngine';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
 import { AudioCoordinator } from '../../audio/AudioCoordinator';
@@ -55,6 +56,7 @@ export interface SessionPlaybackEvents extends EventMap {
   playDirectionChanged: number;
   playbackSpeedChanged: number;
   loopModeChanged: LoopMode;
+  playbackModeChanged: PlaybackMode;
   fpsChanged: number;
   frameIncrementChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
@@ -64,8 +66,12 @@ export interface SessionPlaybackEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
   preservesPitchChanged: boolean;
+  audioScrubEnabledChanged: boolean;
+  audioScrubAvailabilityChanged: boolean;
   audioError: AudioPlaybackError;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
+  fpsUpdated: FPSMeasurement;
+  frameDecodeTimeout: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +132,12 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   get effectiveFps(): number { return this._playbackEngine.effectiveFps; }
   get frameCount(): number { return this._playbackEngine.frameCount; }
 
+  get playbackMode(): PlaybackMode { return this._playbackEngine.playbackMode; }
+  set playbackMode(mode: PlaybackMode) { this._playbackEngine.playbackMode = mode; }
+  togglePlaybackMode(): void { this._playbackEngine.togglePlaybackMode(); }
+
+  get droppedFrameCount(): number { return this._playbackEngine.droppedFrameCount; }
+
   get interpolationEnabled(): boolean { return this._playbackEngine.interpolationEnabled; }
   set interpolationEnabled(value: boolean) { this._playbackEngine.interpolationEnabled = value; }
 
@@ -143,6 +155,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
 
   get preservesPitch(): boolean { return this._volumeManager.preservesPitch; }
   set preservesPitch(value: boolean) { this._volumeManager.preservesPitch = value; }
+
+  get audioScrubEnabled(): boolean { return this._volumeManager.audioScrubEnabled; }
+  set audioScrubEnabled(value: boolean) { this._volumeManager.audioScrubEnabled = value; }
 
   // ---- A/B Compare public accessors (delegation) ----
 
@@ -186,9 +201,15 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   setInPoint(frame?: number): void { this._playbackEngine.setInPoint(frame); }
   setOutPoint(frame?: number): void { this._playbackEngine.setOutPoint(frame); }
   resetInOutPoints(): void { this._playbackEngine.resetInOutPoints(); }
+  setInOutRange(inPoint: number, outPoint: number): void { this._playbackEngine.setInOutRange(inPoint, outPoint); }
 
   update(): void { this._playbackEngine.update(); }
   advanceFrame(direction: number): void { this._playbackEngine.advanceFrame(direction); }
+
+  /** Signal that a continuous scrub (timeline drag) has started. */
+  onScrubStart(): void { this._audioCoordinator.onScrubStart(); }
+  /** Signal that a continuous scrub (timeline drag) has ended. */
+  onScrubEnd(): void { this._audioCoordinator.onScrubEnd(); }
 
   increaseSpeed(): void { this._playbackEngine.increaseSpeed(); }
   decreaseSpeed(): void { this._playbackEngine.decreaseSpeed(); }
@@ -414,6 +435,10 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
         this._audioCoordinator.onPreservesPitchChanged(p);
         this.emit('preservesPitchChanged', p);
       },
+      onAudioScrubEnabledChanged: (enabled) => {
+        this._audioCoordinator.onAudioScrubEnabledChanged(enabled);
+        this.emit('audioScrubEnabledChanged', enabled);
+      },
     });
   }
 
@@ -426,6 +451,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   private wireAudioCoordinator(): void {
     this._audioCoordinator.setCallbacks({
       onAudioPathChanged: () => this.applyVolumeToVideo(),
+      onAudioScrubAvailabilityChanged: (available) => this.emit('audioScrubAvailabilityChanged', available),
     });
   }
 
@@ -457,12 +483,15 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     });
 
     pe.on('loopModeChanged', (mode) => this.emit('loopModeChanged', mode));
+    pe.on('playbackModeChanged', (mode) => this.emit('playbackModeChanged', mode));
     pe.on('fpsChanged', (fps) => this.emit('fpsChanged', fps));
     pe.on('frameIncrementChanged', (inc) => this.emit('frameIncrementChanged', inc));
     pe.on('inOutChanged', (range) => this.emit('inOutChanged', range));
     pe.on('interpolationEnabledChanged', (enabled) => this.emit('interpolationEnabledChanged', enabled));
     pe.on('subFramePositionChanged', (pos) => this.emit('subFramePositionChanged', pos));
     pe.on('buffering', (buffering) => this.emit('buffering', buffering));
+    pe.on('fpsUpdated', (measurement) => this.emit('fpsUpdated', measurement));
+    pe.on('frameDecodeTimeout', (frame) => this.emit('frameDecodeTimeout', frame));
   }
 
   // ---- Dispose ----

@@ -26,11 +26,18 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
   const subs = new DisposableSubscriptionManager();
 
   // Zoom control -> viewer
+  // ZoomControl now emits pixel ratio values (industry standard: 100% = 1:1).
+  // 'fit' is a special zoom mode; numeric values are pixel ratios.
   subs.add(controls.zoomControl.on('zoomChanged', (zoom) => {
     if (zoom === 'fit') {
       viewer.smoothFitToWindow();
+    } else if (zoom === 'fit-width') {
+      viewer.smoothFitToWidth();
+    } else if (zoom === 'fit-height') {
+      viewer.smoothFitToHeight();
     } else {
-      viewer.smoothSetZoom(zoom);
+      // zoom is a pixel ratio (e.g. 1 = 1:1, 2 = 2:1, 0.25 = 1:4)
+      viewer.smoothSetPixelRatio(zoom);
     }
   }));
 
@@ -104,6 +111,35 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
       ...state,
       flickerFrame: controls.compareControl.getFlickerFrame(),
     });
+  }));
+
+  // Layout control -> viewer (mutual exclusion with compare)
+  const layoutManager = controls.layoutControl.getManager();
+
+  // Wire mutual exclusion: when layout is enabled, deactivate compare modes
+  layoutManager.setDeactivateCompareCallback(() => {
+    const cc = controls.compareControl;
+    if (cc.getWipeMode() !== 'off') cc.setWipeMode('off');
+    if (cc.isDifferenceMatteEnabled()) cc.setDifferenceMatteEnabled(false);
+    if (cc.getBlendMode() !== 'off') cc.setBlendMode('off');
+    if (cc.isQuadViewEnabled()) cc.setQuadViewEnabled(false);
+  });
+
+  // Wire mutual exclusion: when a compare mode is activated, deactivate layout
+  subs.add(controls.compareControl.on('wipeModeChanged', (mode) => {
+    if (mode !== 'off' && layoutManager.enabled) {
+      layoutManager.disable();
+    }
+  }));
+  subs.add(controls.compareControl.on('differenceMatteChanged', (state) => {
+    if (state.enabled && layoutManager.enabled) {
+      layoutManager.disable();
+    }
+  }));
+  subs.add(controls.compareControl.on('blendModeChanged', (state) => {
+    if (state.mode !== 'off' && layoutManager.enabled) {
+      layoutManager.disable();
+    }
   }));
 
   // Tone mapping control -> viewer

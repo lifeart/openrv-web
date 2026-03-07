@@ -114,17 +114,13 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
   }
 
   rotateRight(): void {
-    const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
-    const currentIndex = rotations.indexOf(this.transform.rotation);
-    this.transform.rotation = rotations[(currentIndex + 1) % 4]!;
+    this.transform.rotation = ((this.transform.rotation + 90) % 360 + 360) % 360;
     this.updateRotationIndicator();
     this.emitChange();
   }
 
   rotateLeft(): void {
-    const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
-    const currentIndex = rotations.indexOf(this.transform.rotation);
-    this.transform.rotation = rotations[(currentIndex + 3) % 4]!; // +3 is same as -1 mod 4
+    this.transform.rotation = ((this.transform.rotation - 90) % 360 + 360) % 360;
     this.updateRotationIndicator();
     this.emitChange();
   }
@@ -138,6 +134,16 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
   toggleFlipV(): void {
     this.transform.flipV = !this.transform.flipV;
     this.updateAllButtons();
+    this.emitChange();
+  }
+
+  /**
+   * Set the rotation to an arbitrary angle (in degrees).
+   * The value is normalized to [0, 360).
+   */
+  setRotation(degrees: number): void {
+    this.transform.rotation = ((degrees % 360) + 360) % 360;
+    this.updateRotationIndicator();
     this.emitChange();
   }
 

@@ -602,6 +602,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
       uniform3iv: noop,
       uniform4iv: noop,
       uniformMatrix3fv: noop,
+      uniformMatrix2fv: noop,
       uniformMatrix4fv: noop,
       activeTexture: noop,
       bindTexture: noop,
@@ -798,7 +799,8 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
         uniform3iv: noop,
         uniform4iv: noop,
         uniformMatrix3fv: noop,
-        uniformMatrix4fv: noop,
+        uniformMatrix2fv: noop,
+      uniformMatrix4fv: noop,
         activeTexture: noop,
         bindTexture: noop,
         pixelStorei: noop,
@@ -936,7 +938,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
  */
 describe('Renderer Sampler Unit Assignment (regression)', () => {
   /** The four sampler uniforms that must each have a unique texture unit. */
-  const SAMPLER_UNIFORMS = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT', 'u_lut3D'] as const;
+  const SAMPLER_UNIFORMS = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT', 'u_lookLUT3D', 'u_fileLUT3D', 'u_displayLUT3D'] as const;
 
   /**
    * Create a mock GL context that tracks uniform1i calls with named locations.
@@ -1000,6 +1002,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
       uniform3iv: noop,
       uniform4iv: noop,
       uniformMatrix3fv: noop,
+      uniformMatrix2fv: noop,
       uniformMatrix4fv: noop,
       activeTexture: noop,
       bindTexture: noop,
@@ -1124,10 +1127,12 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     expect(assignments.has('u_texture'), 'u_texture must be assigned when all features disabled').toBe(true);
     expect(assignments.has('u_curvesLUT'), 'u_curvesLUT must be assigned when curves disabled').toBe(true);
     expect(assignments.has('u_falseColorLUT'), 'u_falseColorLUT must be assigned when false color disabled').toBe(true);
-    expect(assignments.has('u_lut3D'), 'u_lut3D must be assigned when 3D LUT disabled').toBe(true);
+    expect(assignments.has('u_lookLUT3D'), 'u_lookLUT3D must be assigned when Look LUT disabled').toBe(true);
+    expect(assignments.has('u_fileLUT3D'), 'u_fileLUT3D must be assigned when File LUT disabled').toBe(true);
+    expect(assignments.has('u_displayLUT3D'), 'u_displayLUT3D must be assigned when Display LUT disabled').toBe(true);
   });
 
-  it('REN-SAM-003: u_lut3D (sampler3D) never shares a unit with any sampler2D uniform', () => {
+  it('REN-SAM-003: sampler3D uniforms never share a unit with any sampler2D uniform', () => {
     const renderer = new Renderer();
     const { getSamplerUnitAssignments } = initWithTrackingGL(renderer);
     const sourceCanvas = document.createElement('canvas');
@@ -1136,23 +1141,25 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     renderer.renderSDRFrame(sourceCanvas);
 
     const assignments = getSamplerUnitAssignments();
-    const lut3DUnit = assignments.get('u_lut3D');
 
-    expect(lut3DUnit, 'u_lut3D must have a texture unit assigned').not.toBeUndefined();
-
-    // u_lut3D (sampler3D) must not share a unit with any sampler2D uniform
+    // All three sampler3D uniforms must not share units with sampler2D uniforms
+    const sampler3DUniforms = ['u_lookLUT3D', 'u_fileLUT3D', 'u_displayLUT3D'] as const;
     const sampler2DUniforms = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT'] as const;
-    for (const name of sampler2DUniforms) {
-      const unit = assignments.get(name);
-      expect(
-        unit,
-        `${name} must have a texture unit assigned`,
-      ).not.toBeUndefined();
-      expect(
-        unit,
-        `u_lut3D (sampler3D, unit ${lut3DUnit}) must not share a texture unit ` +
-        `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
-      ).not.toBe(lut3DUnit);
+    for (const lut3DName of sampler3DUniforms) {
+      const lut3DUnit = assignments.get(lut3DName);
+      expect(lut3DUnit, `${lut3DName} must have a texture unit assigned`).not.toBeUndefined();
+      for (const name of sampler2DUniforms) {
+        const unit = assignments.get(name);
+        expect(
+          unit,
+          `${name} must have a texture unit assigned`,
+        ).not.toBeUndefined();
+        expect(
+          unit,
+          `${lut3DName} (sampler3D, unit ${lut3DUnit}) must not share a texture unit ` +
+          `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
+        ).not.toBe(lut3DUnit);
+      }
     }
   });
 });
@@ -1501,6 +1508,7 @@ describe('Renderer HDR Headroom Uniform', () => {
       uniform3iv: noop,
       uniform4iv: noop,
       uniformMatrix3fv: noop,
+      uniformMatrix2fv: noop,
       uniformMatrix4fv: noop,
       activeTexture: noop,
       bindTexture: noop,
@@ -2475,16 +2483,16 @@ describe('Renderer detached ImageBitmap guard', () => {
 });
 
 // =============================================================================
-// Texture rotation uniform (u_texRotation) in renderImage
+// Texture rotation uniform (u_texRotationMatrix) in renderImage
 // =============================================================================
 
-describe('Renderer texture rotation (u_texRotation)', () => {
+describe('Renderer texture rotation (u_texRotationMatrix)', () => {
   /**
-   * Create a mock GL that tracks uniform1i calls by name.
+   * Create a mock GL that tracks uniformMatrix2fv calls by name.
    * getUniformLocation returns the uniform name for easy tracking.
    */
   function createRotationTrackingGL() {
-    const uniformCalls: Array<{ name: string; value: number }> = [];
+    const matrixCalls: Array<{ name: string; value: Float32Array }> = [];
     const gl = createMockGL();
 
     // Override getUniformLocation to return name-tagged objects
@@ -2492,16 +2500,16 @@ describe('Renderer texture rotation (u_texRotation)', () => {
       (_program: unknown, name: string) => ({ __name: name })
     );
 
-    // Track uniform1i calls with their location name
-    (gl.uniform1i as ReturnType<typeof vi.fn>).mockImplementation(
-      (location: { __name: string } | null, value: number) => {
+    // Track uniformMatrix2fv calls with their location name
+    gl.uniformMatrix2fv = vi.fn().mockImplementation(
+      (location: { __name: string } | null, _transpose: boolean, value: Float32Array) => {
         if (location && '__name' in location) {
-          uniformCalls.push({ name: location.__name, value });
+          matrixCalls.push({ name: location.__name, value: new Float32Array(value) });
         }
       }
     );
 
-    return { gl, uniformCalls };
+    return { gl, matrixCalls };
   }
 
   function initWithTrackingGL(renderer: Renderer): ReturnType<typeof createRotationTrackingGL> {
@@ -2516,22 +2524,30 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     return tracking;
   }
 
-  it('REN-ROT-001: renderImage sets u_texRotation=0 when no videoRotation', () => {
+  /** Identity rotation matrix (0 degrees): [1, 0, 0, 1] */
+  function expectIdentityMatrix(mat: Float32Array): void {
+    expect(mat[0]).toBeCloseTo(1, 5);
+    expect(mat[1]).toBeCloseTo(0, 5);
+    expect(mat[2]).toBeCloseTo(0, 5);
+    expect(mat[3]).toBeCloseTo(1, 5);
+  }
+
+  it('REN-ROT-001: renderImage sets identity rotation matrix when no videoRotation', () => {
     const renderer = new Renderer();
-    const { uniformCalls } = initWithTrackingGL(renderer);
+    const { matrixCalls } = initWithTrackingGL(renderer);
     renderer.resize(100, 100);
 
     const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
     renderer.renderImage(image);
 
-    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
-    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+    expectIdentityMatrix(rotationCalls[rotationCalls.length - 1]!.value);
   });
 
-  it('REN-ROT-002: renderImage sets u_texRotation=1 for 90° rotation', () => {
+  it('REN-ROT-002: renderImage sets 90° rotation matrix for videoRotation=90', () => {
     const renderer = new Renderer();
-    const { uniformCalls } = initWithTrackingGL(renderer);
+    const { matrixCalls } = initWithTrackingGL(renderer);
     renderer.resize(100, 100);
 
     const image = new IPImage({
@@ -2540,14 +2556,19 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     });
     renderer.renderImage(image);
 
-    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
-    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(1);
+    const mat = rotationCalls[rotationCalls.length - 1]!.value;
+    // 90° CW: cos(-90°)=0, sin(-90°)=-1 → [0, -1, 1, 0]
+    expect(mat[0]).toBeCloseTo(0, 5);
+    expect(mat[1]).toBeCloseTo(-1, 5);
+    expect(mat[2]).toBeCloseTo(1, 5);
+    expect(mat[3]).toBeCloseTo(0, 5);
   });
 
-  it('REN-ROT-003: renderImage sets u_texRotation=2 for 180° rotation', () => {
+  it('REN-ROT-003: renderImage sets 180° rotation matrix for videoRotation=180', () => {
     const renderer = new Renderer();
-    const { uniformCalls } = initWithTrackingGL(renderer);
+    const { matrixCalls } = initWithTrackingGL(renderer);
     renderer.resize(100, 100);
 
     const image = new IPImage({
@@ -2556,14 +2577,19 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     });
     renderer.renderImage(image);
 
-    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
-    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(2);
+    const mat = rotationCalls[rotationCalls.length - 1]!.value;
+    // 180°: cos(-180°)=-1, sin(-180°)=0 → [-1, 0, 0, -1]
+    expect(mat[0]).toBeCloseTo(-1, 5);
+    expect(mat[1]).toBeCloseTo(0, 5);
+    expect(mat[2]).toBeCloseTo(0, 5);
+    expect(mat[3]).toBeCloseTo(-1, 5);
   });
 
-  it('REN-ROT-004: renderImage sets u_texRotation=3 for 270° rotation', () => {
+  it('REN-ROT-004: renderImage sets 270° rotation matrix for videoRotation=270', () => {
     const renderer = new Renderer();
-    const { uniformCalls } = initWithTrackingGL(renderer);
+    const { matrixCalls } = initWithTrackingGL(renderer);
     renderer.resize(100, 100);
 
     const image = new IPImage({
@@ -2572,27 +2598,32 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     });
     renderer.renderImage(image);
 
-    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
-    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(3);
+    const mat = rotationCalls[rotationCalls.length - 1]!.value;
+    // 270° CW: cos(-270°)=0, sin(-270°)=1 → [0, 1, -1, 0]
+    expect(mat[0]).toBeCloseTo(0, 5);
+    expect(mat[1]).toBeCloseTo(1, 5);
+    expect(mat[2]).toBeCloseTo(-1, 5);
+    expect(mat[3]).toBeCloseTo(0, 5);
   });
 
-  it('REN-ROT-005: renderSDRFrame sets u_texRotation=0 (no rotation for SDR)', () => {
+  it('REN-ROT-005: renderSDRFrame sets identity rotation matrix (no rotation for SDR)', () => {
     const renderer = new Renderer();
-    const { uniformCalls } = initWithTrackingGL(renderer);
+    const { matrixCalls } = initWithTrackingGL(renderer);
     renderer.resize(100, 100);
 
     const sourceCanvas = document.createElement('canvas');
     renderer.renderSDRFrame(sourceCanvas);
 
-    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
-    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+    expectIdentityMatrix(rotationCalls[rotationCalls.length - 1]!.value);
   });
 
-  it('REN-ROT-006: renderImage wraps rotation at 360°', () => {
+  it('REN-ROT-006: renderImage wraps rotation at 360° (identity)', () => {
     const renderer = new Renderer();
-    const { uniformCalls } = initWithTrackingGL(renderer);
+    const { matrixCalls } = initWithTrackingGL(renderer);
     renderer.resize(100, 100);
 
     const image = new IPImage({
@@ -2601,10 +2632,52 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     });
     renderer.renderImage(image);
 
-    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
-    // 360 / 90 = 4, 4 % 4 = 0
-    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+    // 360° normalizes to 0° → identity matrix
+    expectIdentityMatrix(rotationCalls[rotationCalls.length - 1]!.value);
+  });
+
+  it('REN-ROT-007: setUserTransform accepts arbitrary angle', () => {
+    const renderer = new Renderer();
+    const { matrixCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    renderer.setUserTransform(45, false, false);
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    const mat = rotationCalls[rotationCalls.length - 1]!.value;
+    // 45° CW: cos(-45°)=sqrt(2)/2, sin(-45°)=-sqrt(2)/2
+    const s2 = Math.SQRT2 / 2;
+    expect(mat[0]).toBeCloseTo(s2, 5);
+    expect(mat[1]).toBeCloseTo(-s2, 5);
+    expect(mat[2]).toBeCloseTo(s2, 5);
+    expect(mat[3]).toBeCloseTo(s2, 5);
+  });
+
+  it('REN-ROT-008: user rotation combines with video rotation', () => {
+    const renderer = new Renderer();
+    const { matrixCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    renderer.setUserTransform(90, false, false);
+    const image = new IPImage({
+      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      metadata: { attributes: { videoRotation: 90 } },
+    });
+    renderer.renderImage(image);
+
+    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    const mat = rotationCalls[rotationCalls.length - 1]!.value;
+    // 90 + 90 = 180° → [-1, 0, 0, -1]
+    expect(mat[0]).toBeCloseTo(-1, 5);
+    expect(mat[1]).toBeCloseTo(0, 5);
+    expect(mat[2]).toBeCloseTo(0, 5);
+    expect(mat[3]).toBeCloseTo(-1, 5);
   });
 });
 

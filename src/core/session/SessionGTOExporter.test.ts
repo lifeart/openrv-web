@@ -3464,16 +3464,16 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
             expect(sessionComp.properties.realtime.data).toEqual([30]);
         });
 
-        it('exports realtime=0 when session has no explicit realtime (backward compat)', () => {
+        it('exports realtime=fps when session is in realtime mode (default)', () => {
             session.fps = 24;
-            // Default metadata has realtime=0
+            // Default playbackMode is 'realtime', so realtime exports as fps value
 
             const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
             const sessionComp = components['session'];
 
             expect(sessionComp.properties.fps.data).toEqual([24]);
-            expect(sessionComp.properties.realtime.data).toEqual([0]);
+            expect(sessionComp.properties.realtime.data).toEqual([24]);
         });
 
         it('round-trip: load session with realtime=30, export, verify realtime=30', () => {
