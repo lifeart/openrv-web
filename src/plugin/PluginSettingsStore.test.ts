@@ -65,7 +65,7 @@ describe('PluginSettingsStore', () => {
 
     it('PSET-013: set validates number type', () => {
       store.registerSchema('test.plugin', testSchema);
-      expect(() => store.setSetting('test.plugin', 'count', 'not-a-number')).toThrow('must be a number');
+      expect(() => store.setSetting('test.plugin', 'count', 'not-a-number')).toThrow('must be a finite number');
     });
 
     it('PSET-014: set validates number range', () => {
@@ -207,6 +207,26 @@ describe('PluginSettingsStore', () => {
       store.importAll({ 'unknown.plugin': { key: 'val' } });
       // No error thrown
     });
+
+    it('PSET-053: import validates values and falls back to defaults for invalid', () => {
+      store.registerSchema('test.plugin', testSchema);
+      store.importAll({ 'test.plugin': { name: 123, count: 'bad', enabled: true } });
+
+      // Invalid values fall back to defaults
+      expect(store.getSetting('test.plugin', 'name')).toBe('default-name');
+      expect(store.getSetting('test.plugin', 'count')).toBe(10);
+      // Valid value preserved
+      expect(store.getSetting('test.plugin', 'enabled')).toBe(true);
+    });
+
+    it('PSET-054: import fires onChange notifications', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const cb = vi.fn();
+      store.onChange('test.plugin', 'name', cb);
+
+      store.importAll({ 'test.plugin': { name: 'imported' } });
+      expect(cb).toHaveBeenCalledWith('imported', 'default-name');
+    });
   });
 
   describe('unregisterSchema', () => {
@@ -216,6 +236,105 @@ describe('PluginSettingsStore', () => {
       store.unregisterSchema('test.plugin');
 
       expect(store.getSetting('test.plugin', 'name')).toBeUndefined();
+    });
+  });
+
+  describe('range type validation', () => {
+    it('PSET-070: rejects non-number for range', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'opacity', 'high')).toThrow('must be a finite number');
+    });
+
+    it('PSET-071: validates range min/max', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'opacity', -0.5)).toThrow('>= 0');
+      expect(() => store.setSetting('test.plugin', 'opacity', 1.5)).toThrow('<= 1');
+    });
+
+    it('PSET-072: accepts valid range value', () => {
+      store.registerSchema('test.plugin', testSchema);
+      store.setSetting('test.plugin', 'opacity', 0.5);
+      expect(store.getSetting('test.plugin', 'opacity')).toBe(0.5);
+    });
+  });
+
+  describe('color type validation', () => {
+    it('PSET-080: rejects non-string for color', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'accent', 123)).toThrow('must be a string');
+    });
+
+    it('PSET-081: accepts valid color string', () => {
+      store.registerSchema('test.plugin', testSchema);
+      store.setSetting('test.plugin', 'accent', '#00ff00');
+      expect(store.getSetting('test.plugin', 'accent')).toBe('#00ff00');
+    });
+  });
+
+  describe('number edge cases', () => {
+    it('PSET-019: rejects NaN', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'count', NaN)).toThrow('must be a finite number');
+    });
+
+    it('PSET-019b: rejects Infinity', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'count', Infinity)).toThrow('must be a finite number');
+    });
+
+    it('PSET-019c: rejects -Infinity', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'count', -Infinity)).toThrow('must be a finite number');
+    });
+  });
+
+  describe('getSettings edge cases', () => {
+    it('PSET-120: getSetting returns undefined for unregistered plugin', () => {
+      expect(store.getSetting('nonexistent', 'key')).toBeUndefined();
+    });
+
+    it('PSET-121: getSettings returns empty object for unregistered plugin', () => {
+      expect(store.getSettings('nonexistent')).toEqual({});
+    });
+
+    it('PSET-130: getSettings returns a shallow copy', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const settings1 = store.getSettings('test.plugin');
+      settings1.name = 'mutated';
+      const settings2 = store.getSettings('test.plugin');
+      expect(settings2.name).toBe('default-name');
+    });
+  });
+
+  describe('listener error isolation', () => {
+    it('PSET-034: listener error does not break other listeners', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const cb1 = vi.fn(() => {
+        throw new Error('listener error');
+      });
+      const cb2 = vi.fn();
+      store.onChange('test.plugin', 'count', cb1);
+      store.onChange('test.plugin', 'count', cb2);
+
+      store.setSetting('test.plugin', 'count', 42);
+      expect(cb2).toHaveBeenCalledWith(42, 10);
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('multi-plugin isolation', () => {
+    it('PSET-140: settings for different plugins are isolated', () => {
+      const schema2: PluginSettingsSchema = {
+        settings: [{ key: 'name', label: 'Name', type: 'string', default: 'other-default' }],
+      };
+      store.registerSchema('test.plugin', testSchema);
+      store.registerSchema('other.plugin', schema2);
+
+      store.setSetting('test.plugin', 'name', 'changed');
+      expect(store.getSetting('other.plugin', 'name')).toBe('other-default');
     });
   });
 });

@@ -210,17 +210,31 @@ export class PluginSettingsStore {
       const schema = this.schemas.get(pluginId);
       if (!schema) continue;
 
-      // Only import keys that exist in the schema
+      const oldSettings = this.cache.get(pluginId) ?? {};
+      // Only import keys that exist in the schema, validate each value
       const validSettings: Record<string, unknown> = {};
       for (const setting of schema.settings) {
         if (setting.key in settings) {
-          validSettings[setting.key] = settings[setting.key];
+          try {
+            this.validateValue(pluginId, setting, settings[setting.key]);
+            validSettings[setting.key] = settings[setting.key];
+          } catch {
+            // Invalid value — fall back to default
+            validSettings[setting.key] = setting.default;
+          }
         } else {
           validSettings[setting.key] = setting.default;
         }
       }
       this.cache.set(pluginId, validSettings);
       this.saveSettings(pluginId);
+
+      // Notify listeners for changed values
+      for (const setting of schema.settings) {
+        if (oldSettings[setting.key] !== validSettings[setting.key]) {
+          this.notifyChange(pluginId, setting.key, validSettings[setting.key], oldSettings[setting.key]);
+        }
+      }
     }
   }
 
@@ -264,10 +278,15 @@ export class PluginSettingsStore {
       const stored = localStorage.getItem(storageKey(pluginId));
       if (stored) {
         const parsed = JSON.parse(stored) as Record<string, unknown>;
-        // Merge: stored values override defaults (but only for known keys)
+        // Merge: stored values override defaults (but only for known keys, validated)
         for (const setting of schema.settings) {
           if (setting.key in parsed) {
-            defaults[setting.key] = parsed[setting.key];
+            try {
+              this.validateValue(pluginId, setting, parsed[setting.key]);
+              defaults[setting.key] = parsed[setting.key];
+            } catch {
+              // Invalid stored value — keep default
+            }
           }
         }
       }
@@ -295,14 +314,14 @@ export class PluginSettingsStore {
         if (typeof value !== 'string') {
           throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be a string`);
         }
-        if (setting.maxLength && (value as string).length > setting.maxLength) {
+        if (setting.maxLength !== undefined && (value as string).length > setting.maxLength) {
           throw new Error(`Plugin "${pluginId}": setting "${setting.key}" exceeds max length ${setting.maxLength}`);
         }
         break;
       case 'number':
       case 'range':
-        if (typeof value !== 'number' || isNaN(value)) {
-          throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be a number`);
+        if (typeof value !== 'number' || isNaN(value) || !isFinite(value)) {
+          throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be a finite number`);
         }
         if (setting.min !== undefined && value < setting.min) {
           throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be >= ${setting.min}`);

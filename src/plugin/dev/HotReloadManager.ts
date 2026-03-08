@@ -13,6 +13,9 @@ export class HotReloadManager {
   /** Track URL -> pluginId for reload */
   private pluginURLs = new Map<PluginId, string>();
 
+  /** Guard against concurrent reloads */
+  private reloading = new Set<PluginId>();
+
   /** Reference to the plugin registry */
   private registry: PluginRegistry;
 
@@ -44,45 +47,61 @@ export class HotReloadManager {
       throw new Error(`No URL tracked for plugin "${pluginId}". Use trackURL() first.`);
     }
 
-    // 1. Capture state if available
-    const plugin = this.registry.getPlugin(pluginId);
-    let savedState: unknown = undefined;
-    if (plugin && 'getState' in plugin && typeof plugin.getState === 'function') {
-      try {
-        savedState = plugin.getState();
-      } catch (err) {
-        console.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
-      }
+    if (this.reloading.has(pluginId)) {
+      throw new Error(`Plugin "${pluginId}" is already being reloaded`);
     }
 
-    // 2. Deactivate and dispose
-    await this.registry.dispose(pluginId);
-
-    // 3. Unregister (need this to re-register with same ID)
-    this.registry.unregister(pluginId);
-
-    // 4. Re-import with cache-busting
-    const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-    const newId = await this.registry.loadFromURL(cacheBustUrl);
-
-    // 5. Activate
-    await this.registry.activate(newId);
-
-    // 6. Restore state if available
-    if (savedState !== undefined) {
-      const newPlugin = this.registry.getPlugin(newId);
-      if (newPlugin && 'restoreState' in newPlugin && typeof newPlugin.restoreState === 'function') {
+    this.reloading.add(pluginId);
+    try {
+      // 1. Capture state if available
+      const plugin = this.registry.getPlugin(pluginId);
+      let savedState: unknown = undefined;
+      if (plugin && 'getState' in plugin && typeof plugin.getState === 'function') {
         try {
-          newPlugin.restoreState(savedState);
+          savedState = plugin.getState();
         } catch (err) {
-          console.warn(`[hot-reload:${pluginId}] restoreState() threw:`, err);
+          console.warn(`[hot-reload:${pluginId}] getState() threw:`, err);
         }
       }
-    }
 
-    // Update tracked URL (same base, new plugin version)
-    this.pluginURLs.delete(pluginId);
-    this.pluginURLs.set(newId, url);
+      // 2. Deactivate and dispose
+      await this.registry.dispose(pluginId);
+
+      // 3. Unregister (need this to re-register with same ID)
+      this.registry.unregister(pluginId);
+
+      // 4. Re-import with cache-busting
+      const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      let newId: PluginId;
+      try {
+        newId = await this.registry.loadFromURL(cacheBustUrl);
+      } catch (err) {
+        // Plugin is already disposed/unregistered — clean up tracking
+        this.pluginURLs.delete(pluginId);
+        throw err;
+      }
+
+      // 5. Activate
+      await this.registry.activate(newId);
+
+      // 6. Restore state if available
+      if (savedState !== undefined) {
+        const newPlugin = this.registry.getPlugin(newId);
+        if (newPlugin && 'restoreState' in newPlugin && typeof newPlugin.restoreState === 'function') {
+          try {
+            newPlugin.restoreState(savedState);
+          } catch (err) {
+            console.warn(`[hot-reload:${pluginId}] restoreState() threw:`, err);
+          }
+        }
+      }
+
+      // Update tracked URL (same base, new plugin version)
+      this.pluginURLs.delete(pluginId);
+      this.pluginURLs.set(newId, url);
+    } finally {
+      this.reloading.delete(pluginId);
+    }
   }
 
   /**

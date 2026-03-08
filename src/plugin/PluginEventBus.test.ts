@@ -152,8 +152,109 @@ describe('PluginEventBus', () => {
     });
   });
 
+  describe('auto-cleanup (extended)', () => {
+    it('PEVT-032: disposePlugin removes custom event subscriptions', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onPlugin('test.plugin:myEvent', cb);
+
+      bus.disposePlugin('test.plugin');
+
+      // Emit custom event after dispose — should not fire
+      const sub2 = bus.createSubscription('test.plugin');
+      sub2.emitPlugin('myEvent', 'data');
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('PEVT-033: disposePlugin unsubscribes from EventsAPI-bridged events', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('app:frameChange', cb);
+
+      bus.disposePlugin('test.plugin');
+
+      mockAPI._emit('frameChange', { frame: 1 });
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('PEVT-034: disposing one plugin does not affect another', () => {
+      const sub1 = bus.createSubscription('plugin.a');
+      const sub2 = bus.createSubscription('plugin.b');
+      const cb1 = vi.fn();
+      const cb2 = vi.fn();
+      sub1.onApp('plugin:activated', cb1);
+      sub2.onApp('plugin:activated', cb2);
+
+      bus.disposePlugin('plugin.a');
+
+      bus.emitPluginLifecycle('plugin:activated', { id: 'x' });
+      expect(cb1).not.toHaveBeenCalled();
+      expect(cb2).toHaveBeenCalledWith({ id: 'x' });
+    });
+  });
+
+  describe('edge cases', () => {
+    it('PEVT-005: double unsubscribe is safe', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      const unsub = sub.onApp('plugin:activated', cb);
+
+      unsub();
+      expect(() => unsub()).not.toThrow();
+    });
+
+    it('PEVT-006: onceApp callback fires exactly once on repeated emissions', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onceApp('app:frameChange', cb);
+
+      mockAPI._emit('frameChange', { frame: 1 });
+      mockAPI._emit('frameChange', { frame: 2 });
+      expect(cb).toHaveBeenCalledTimes(1);
+      expect(cb).toHaveBeenCalledWith({ frame: 1 });
+    });
+
+    it('PEVT-007: onceApp for lifecycle events fires once', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onceApp('plugin:activated', cb);
+
+      bus.emitPluginLifecycle('plugin:activated', { id: 'a' });
+      bus.emitPluginLifecycle('plugin:activated', { id: 'b' });
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it('PEVT-050: subscribing without EventsAPI logs warning', () => {
+      const noApiBus = new PluginEventBus();
+      const sub = noApiBus.createSubscription('test.plugin');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const unsub = sub.onApp('app:frameChange', vi.fn());
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('EventsAPI not available'));
+      expect(() => unsub()).not.toThrow();
+      warnSpy.mockRestore();
+    });
+
+    it('PEVT-051: warns at max listeners threshold', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      for (let i = 0; i < 51; i++) {
+        sub.onApp('plugin:activated', vi.fn());
+      }
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Maximum listeners'));
+      warnSpy.mockRestore();
+    });
+
+    it('PEVT-022: emitPlugin with no listeners does not throw', () => {
+      const sub = bus.createSubscription('test.plugin');
+      expect(() => sub.emitPlugin('noListeners', { data: 1 })).not.toThrow();
+    });
+  });
+
   describe('error handling', () => {
-    it('PEVT-040: catches errors in event callbacks', () => {
+    it('PEVT-040: catches errors in lifecycle event callbacks', () => {
       const sub = bus.createSubscription('test.plugin');
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -164,6 +265,48 @@ describe('PluginEventBus', () => {
 
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Error in event listener'), expect.any(Error));
       errorSpy.mockRestore();
+    });
+
+    it('PEVT-041: catches errors in custom event callbacks', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      sub.onPlugin('test.plugin:evt', () => {
+        throw new Error('custom error');
+      });
+      sub.emitPlugin('evt', 'data');
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error in custom event listener'),
+        expect.any(Error),
+      );
+      errorSpy.mockRestore();
+    });
+
+    it('PEVT-042: catches errors in EventsAPI-bridged callbacks', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      sub.onApp('app:frameChange', () => {
+        throw new Error('bridged error');
+      });
+      mockAPI._emit('frameChange', { frame: 1 });
+
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Error in event listener'), expect.any(Error));
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('bus dispose', () => {
+    it('PEVT-060: dispose clears all subscriptions and emitters', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('plugin:activated', cb);
+
+      bus.dispose();
+
+      bus.emitPluginLifecycle('plugin:activated', { id: 'x' });
+      expect(cb).not.toHaveBeenCalled();
     });
   });
 });

@@ -167,6 +167,18 @@ export class PluginEventBus {
     }
   }
 
+  /**
+   * Dispose the entire event bus (application shutdown).
+   */
+  dispose(): void {
+    for (const pluginId of this.pluginSubscriptions.keys()) {
+      this.disposePlugin(pluginId);
+    }
+    this.customEmitter.removeAllListeners();
+    this.appEmitter.removeAllListeners();
+    this.eventsAPI = null;
+  }
+
   // -----------------------------------------------------------------------
   // Internal
   // -----------------------------------------------------------------------
@@ -218,7 +230,11 @@ export class PluginEventBus {
 
     // Application events: bridge via EventsAPI
     const apiEvent = APP_EVENT_TO_API[event];
-    if (!apiEvent || !this.eventsAPI) {
+    if (!apiEvent) {
+      console.warn(`[plugin:${pluginId}] Unknown app event "${event}"`);
+      return () => {};
+    }
+    if (!this.eventsAPI) {
       console.warn(`[plugin:${pluginId}] Cannot subscribe to "${event}": EventsAPI not available`);
       return () => {};
     }
