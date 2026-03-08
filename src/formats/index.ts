@@ -43,9 +43,11 @@ export {
 export {
   DecoderRegistry,
   decoderRegistry,
+  decodeAs,
   type FormatName,
   type FormatDecoder,
   type DecodeResult,
+  type DecoderOptionsMap,
 } from './DecoderRegistry';
 export {
   isGainmapJPEG,

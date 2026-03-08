@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DecoderRegistry, decoderRegistry, type FormatDecoder } from './DecoderRegistry';
+import { DecoderRegistry, decoderRegistry, decodeAs, type FormatDecoder, type DecoderOptionsMap } from './DecoderRegistry';
 
 // Magic numbers
 const EXR_MAGIC = 0x01312f76;
@@ -507,6 +507,206 @@ describe('DecoderRegistry', () => {
     it('DREG-UNREG-002: returns false for unknown format name', () => {
       const reg = new DecoderRegistry();
       expect(reg.unregisterDecoder('nonexistent-format')).toBe(false);
+    });
+  });
+
+  describe('getDecoderByName', () => {
+    it('should return the decoder object when found by format name', () => {
+      const registry = new DecoderRegistry();
+      const decoder = registry.getDecoderByName('exr');
+      expect(decoder).not.toBeNull();
+      expect(decoder!.formatName).toBe('exr');
+    });
+
+    it('should return null when format name does not exist', () => {
+      const registry = new DecoderRegistry();
+      const decoder = registry.getDecoderByName('nonexistent-format');
+      expect(decoder).toBeNull();
+    });
+
+    it('should find a custom registered decoder by name', () => {
+      const registry = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'my-custom',
+        canDecode: () => false,
+        decode: async () => ({
+          width: 1, height: 1, data: new Float32Array(4),
+          channels: 4, colorSpace: 'linear', metadata: {},
+        }),
+      };
+      registry.registerDecoder(customDecoder);
+      const found = registry.getDecoderByName('my-custom');
+      expect(found).not.toBeNull();
+      expect(found!.formatName).toBe('my-custom');
+    });
+
+    it('should return null after a decoder is unregistered', () => {
+      const registry = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'temp-format',
+        canDecode: () => false,
+        decode: async () => ({
+          width: 1, height: 1, data: new Float32Array(4),
+          channels: 4, colorSpace: 'linear', metadata: {},
+        }),
+      };
+      registry.registerDecoder(customDecoder);
+      expect(registry.getDecoderByName('temp-format')).not.toBeNull();
+      registry.unregisterDecoder('temp-format');
+      expect(registry.getDecoderByName('temp-format')).toBeNull();
+    });
+  });
+
+  describe('decodeAs', () => {
+    it('should throw Error with format name when no decoder is registered', async () => {
+      const registry = new DecoderRegistry();
+      // Unregister all built-ins won't help; use a name that doesn't exist
+      await expect(
+        decodeAs(registry, 'nonexistent-fmt' as keyof DecoderOptionsMap, new ArrayBuffer(4))
+      ).rejects.toThrow('No decoder registered for format: nonexistent-fmt');
+    });
+
+    it('should return decode result with formatName property', async () => {
+      const registry = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'decodeAs-test',
+        canDecode: () => false,
+        decode: async () => ({
+          width: 5, height: 10, data: new Float32Array(200),
+          channels: 4, colorSpace: 'linear', metadata: { source: 'test' },
+        }),
+      };
+      registry.registerDecoder(customDecoder);
+
+      const result = await decodeAs(
+        registry,
+        'decodeAs-test' as keyof DecoderOptionsMap,
+        new ArrayBuffer(4)
+      );
+      expect(result.formatName).toBe('decodeAs-test');
+      expect(result.width).toBe(5);
+      expect(result.height).toBe(10);
+      expect(result.channels).toBe(4);
+      expect(result.colorSpace).toBe('linear');
+      expect(result.metadata).toEqual({ source: 'test' });
+    });
+
+    it('should work end-to-end: register decoder, call decodeAs, verify result', async () => {
+      const registry = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'e2e-format',
+        canDecode: (buffer: ArrayBuffer) => {
+          if (buffer.byteLength < 4) return false;
+          return new DataView(buffer).getUint32(0, false) === 0x12345678;
+        },
+        decode: async (buffer: ArrayBuffer) => ({
+          width: 8, height: 8, data: new Float32Array(256),
+          channels: 4, colorSpace: 'srgb',
+          metadata: { size: buffer.byteLength },
+        }),
+      };
+      registry.registerDecoder(customDecoder);
+
+      const buffer = new ArrayBuffer(16);
+      new DataView(buffer).setUint32(0, 0x12345678, false);
+
+      const result = await decodeAs(
+        registry,
+        'e2e-format' as keyof DecoderOptionsMap,
+        buffer
+      );
+      expect(result.formatName).toBe('e2e-format');
+      expect(result.width).toBe(8);
+      expect(result.height).toBe(8);
+      expect(result.colorSpace).toBe('srgb');
+      expect(result.metadata).toEqual({ size: 16 });
+    });
+
+    it('should pass typed options through to the decoder', async () => {
+      const registry = new DecoderRegistry();
+      let receivedOptions: Record<string, unknown> | undefined;
+      const customDecoder: FormatDecoder = {
+        formatName: 'opts-pass-test',
+        canDecode: () => false,
+        decode: async (_buffer: ArrayBuffer, options?: Record<string, unknown>) => {
+          receivedOptions = options;
+          return {
+            width: 1, height: 1, data: new Float32Array(4),
+            channels: 4, colorSpace: 'linear', metadata: {},
+          };
+        },
+      };
+      registry.registerDecoder(customDecoder);
+
+      await decodeAs(
+        registry,
+        'opts-pass-test' as keyof DecoderOptionsMap,
+        new ArrayBuffer(4),
+        { quality: 90, progressive: true } as unknown as DecoderOptionsMap[keyof DecoderOptionsMap]
+      );
+      expect(receivedOptions).toEqual({ quality: 90, progressive: true });
+    });
+  });
+
+  describe('DecoderOptionsMap type', () => {
+    it('should be importable as a type (compile-time check)', () => {
+      // This test verifies that DecoderOptionsMap is a valid exported type.
+      // The type import at the top of the file is the real assertion;
+      // if it fails to compile, the test suite won't run.
+      const _typeCheck: DecoderOptionsMap | undefined = undefined;
+      expect(_typeCheck).toBeUndefined();
+    });
+  });
+
+  describe('FormatDecoder<T> generic', () => {
+    it('should allow creating a typed decoder with custom options', () => {
+      const typedDecoder: FormatDecoder<{ quality: number }> = {
+        formatName: 'typed-format',
+        canDecode: (buffer: ArrayBuffer) => {
+          if (buffer.byteLength < 4) return false;
+          return new DataView(buffer).getUint32(0, false) === 0xaabbccdd;
+        },
+        decode: async (_buffer: ArrayBuffer, options?: { quality: number }) => ({
+          width: 2, height: 2, data: new Float32Array(16),
+          channels: 4, colorSpace: 'linear',
+          metadata: { quality: options?.quality ?? 75 },
+        }),
+      };
+
+      expect(typedDecoder.formatName).toBe('typed-format');
+      expect(typeof typedDecoder.canDecode).toBe('function');
+      expect(typeof typedDecoder.decode).toBe('function');
+    });
+
+    it('should register and use a typed decoder with the registry', async () => {
+      const registry = new DecoderRegistry();
+      const typedDecoder: FormatDecoder<{ quality: number }> = {
+        formatName: 'typed-quality',
+        canDecode: (buffer: ArrayBuffer) => {
+          if (buffer.byteLength < 4) return false;
+          return new DataView(buffer).getUint32(0, false) === 0x11223344;
+        },
+        decode: async (_buffer: ArrayBuffer, options?: { quality: number }) => ({
+          width: 4, height: 4, data: new Float32Array(64),
+          channels: 4, colorSpace: 'linear',
+          metadata: { appliedQuality: options?.quality ?? 50 },
+        }),
+      };
+
+      registry.registerDecoder(typedDecoder);
+
+      const buffer = new ArrayBuffer(4);
+      new DataView(buffer).setUint32(0, 0x11223344, false);
+
+      // Verify detection works
+      expect(registry.detectFormat(buffer)).toBe('typed-quality');
+      expect(registry.getDecoderByName('typed-quality')).not.toBeNull();
+
+      // Verify decode works with options
+      const result = await registry.detectAndDecode(buffer, { quality: 95 });
+      expect(result).not.toBeNull();
+      expect(result!.formatName).toBe('typed-quality');
+      expect(result!.metadata).toEqual({ appliedQuality: 95 });
     });
   });
 });

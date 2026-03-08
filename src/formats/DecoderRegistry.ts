@@ -10,10 +10,33 @@
  * to initial bundle cost.
  */
 
+import type { DPXDecodeOptions } from './DPXDecoder';
+import type { CineonDecodeOptions } from './CineonDecoder';
+import type { EXRDecodeOptions } from './EXRDecoder';
+import type { JP2DecodeOptions } from './JP2Decoder';
+
 /** Built-in format names (autocomplete-friendly) */
 export type BuiltinFormatName = 'exr' | 'DPX' | 'Cineon' | 'TIFF' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf';
 /** Format name type: includes built-in names plus any string for plugin formats */
 export type FormatName = BuiltinFormatName | (string & {}) | null;
+
+/** Map from format name to its decoder-specific options type.
+ *  Extensible via declaration merging for plugins. */
+export interface DecoderOptionsMap {
+  'exr': EXRDecodeOptions;
+  'DPX': DPXDecodeOptions;
+  'Cineon': CineonDecodeOptions;
+  'TIFF': Record<string, never>;
+  'jpeg-gainmap': Record<string, never>;
+  'heic-gainmap': Record<string, never>;
+  'avif-gainmap': Record<string, never>;
+  'avif': Record<string, never>;
+  'raw-preview': Record<string, never>;
+  'hdr': Record<string, never>;
+  'jxl': Record<string, never>;
+  'jp2': JP2DecodeOptions;
+  'mxf': Record<string, never>;
+}
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -25,12 +48,12 @@ export interface DecodeResult {
   metadata: Record<string, unknown>;
 }
 
-export interface FormatDecoder {
+export interface FormatDecoder<TOptions = Record<string, unknown>> {
   formatName: string;
   canDecode(buffer: ArrayBuffer): boolean;
   decode(
     buffer: ArrayBuffer,
-    options?: Record<string, unknown>
+    options?: TOptions
   ): Promise<DecodeResult>;
 }
 
@@ -412,12 +435,12 @@ function isMXFFile(buffer: ArrayBuffer): boolean {
 /**
  * EXR format decoder adapter
  */
-const exrDecoder: FormatDecoder = {
+const exrDecoder: FormatDecoder<EXRDecodeOptions> = {
   formatName: 'exr',
   canDecode: isEXRFile,
-  async decode(buffer: ArrayBuffer) {
+  async decode(buffer: ArrayBuffer, options?: EXRDecodeOptions) {
     const { decodeEXR } = await import('./EXRDecoder');
-    const result = await decodeEXR(buffer);
+    const result = await decodeEXR(buffer, options);
     return {
       width: result.width,
       height: result.height,
@@ -435,13 +458,14 @@ const exrDecoder: FormatDecoder = {
 /**
  * DPX format decoder adapter
  */
-const dpxDecoder: FormatDecoder = {
+const dpxDecoder: FormatDecoder<DPXDecodeOptions> = {
   formatName: 'DPX',
   canDecode: isDPXFile,
-  async decode(buffer: ArrayBuffer, options?: Record<string, unknown>) {
+  async decode(buffer: ArrayBuffer, options?: DPXDecodeOptions) {
     const { decodeDPX } = await import('./DPXDecoder');
     const result = await decodeDPX(buffer, {
-      applyLogToLinear: (options?.applyLogToLinear as boolean) ?? false,
+      applyLogToLinear: options?.applyLogToLinear ?? false,
+      logLinearOptions: options?.logLinearOptions,
     });
     return {
       width: result.width,
@@ -457,13 +481,14 @@ const dpxDecoder: FormatDecoder = {
 /**
  * Cineon format decoder adapter
  */
-const cineonDecoder: FormatDecoder = {
+const cineonDecoder: FormatDecoder<CineonDecodeOptions> = {
   formatName: 'Cineon',
   canDecode: isCineonFile,
-  async decode(buffer: ArrayBuffer, options?: Record<string, unknown>) {
+  async decode(buffer: ArrayBuffer, options?: CineonDecodeOptions) {
     const { decodeCineon } = await import('./CineonDecoder');
     const result = await decodeCineon(buffer, {
-      applyLogToLinear: (options?.applyLogToLinear as boolean) ?? true,
+      applyLogToLinear: options?.applyLogToLinear ?? true,
+      logLinearOptions: options?.logLinearOptions,
     });
     return {
       width: result.width,
@@ -669,13 +694,13 @@ const jxlDecoder: FormatDecoder = {
 /**
  * JPEG 2000 / HTJ2K format decoder adapter
  */
-const jp2Decoder: FormatDecoder = {
+const jp2Decoder: FormatDecoder<JP2DecodeOptions> = {
   formatName: 'jp2',
   canDecode: isJP2File,
-  async decode(buffer: ArrayBuffer) {
+  async decode(buffer: ArrayBuffer, options?: JP2DecodeOptions) {
     const { decodeJP2, getJP2WasmDecoder } = await import('./JP2Decoder');
     const wasmDecoder = getJP2WasmDecoder() ?? undefined;
-    const result = await decodeJP2(buffer, undefined, wasmDecoder);
+    const result = await decodeJP2(buffer, options, wasmDecoder);
     return {
       width: result.width,
       height: result.height,
@@ -813,6 +838,13 @@ export class DecoderRegistry {
   }
 
   /**
+   * Get a decoder by its format name.
+   */
+  getDecoderByName(name: string): FormatDecoder | null {
+    return this.decoders.find(d => d.formatName === name) ?? null;
+  }
+
+  /**
    * Detect the format and decode in one step.
    * Iterates registered decoders, calls each decoder's canDecode() check,
    * and returns the first match's decode result.
@@ -859,6 +891,24 @@ export class DecoderRegistry {
     }
     return false;
   }
+}
+
+/**
+ * Type-safe decode: infers the correct options type from the format name.
+ * Use when the format is known at compile time for full autocomplete support.
+ */
+export async function decodeAs<F extends keyof DecoderOptionsMap>(
+  registry: DecoderRegistry,
+  formatName: F,
+  buffer: ArrayBuffer,
+  options?: DecoderOptionsMap[F]
+): Promise<DecodeResult & { formatName: F }> {
+  const decoder = registry.getDecoderByName(formatName);
+  if (!decoder) {
+    throw new Error(`No decoder registered for format: ${formatName}`);
+  }
+  const result = await decoder.decode(buffer, options as Record<string, unknown>);
+  return { ...result, formatName };
 }
 
 /** Pre-populated singleton registry with all built-in format decoders */
