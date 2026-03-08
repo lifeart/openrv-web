@@ -606,6 +606,49 @@ describe('WebGPUTextureManager', () => {
       expect(textures[1]!.destroy).toHaveBeenCalled();
     });
 
+    it('WGPU-TEX-090: upload3DLUT with RGBA data passes through correctly', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      // size=2 -> 2*2*2=8 pixels, 4 floats per pixel (RGBA)
+      const data = new Float32Array(8 * 4);
+      data[0] = 0.1;
+      data[1] = 0.2;
+      data[2] = 0.3;
+      data[3] = 0.75; // custom alpha
+      data[4] = 0.4;
+      data[5] = 0.5;
+      data[6] = 0.6;
+      data[7] = 0.9;
+      manager.upload3DLUT(device, 'file3D', data, 2);
+
+      const uploadedData = device.queue.writeTexture.mock.calls[0]![1] as Float32Array;
+      // First pixel: RGBA preserved exactly
+      expect(uploadedData[0]).toBeCloseTo(0.1);
+      expect(uploadedData[1]).toBeCloseTo(0.2);
+      expect(uploadedData[2]).toBeCloseTo(0.3);
+      expect(uploadedData[3]).toBeCloseTo(0.75);
+      // Second pixel: RGBA preserved exactly
+      expect(uploadedData[4]).toBeCloseTo(0.4);
+      expect(uploadedData[5]).toBeCloseTo(0.5);
+      expect(uploadedData[6]).toBeCloseTo(0.6);
+      expect(uploadedData[7]).toBeCloseTo(0.9);
+    });
+
+    it('WGPU-TEX-091: upload3DLUT with invalid data length throws', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      // size=2 -> 8 texels, valid lengths are 24 (RGB) or 32 (RGBA), but we pass 20
+      expect(() => manager.upload3DLUT(device, 'file3D', new Float32Array(20), 2)).toThrow(
+        /Invalid 3D LUT data length/,
+      );
+      // Also test a length that is too short
+      expect(() => manager.upload3DLUT(device, 'file3D', new Float32Array(10), 2)).toThrow(
+        /Invalid 3D LUT data length/,
+      );
+    });
+
     it('WGPU-TEX-085: upload3DLUT with size < 2 throws', () => {
       const device = createMockDevice();
       const manager = new WebGPUTextureManager();

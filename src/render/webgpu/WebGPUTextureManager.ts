@@ -263,9 +263,12 @@ export class WebGPUTextureManager {
     if (size < 2) {
       throw new Error(`Invalid 3D LUT size: ${size}. Size must be at least 2.`);
     }
-    if (data.length < size * size * size * 3) {
+    const totalTexels = size * size * size;
+    const isRGB = data.length === totalTexels * 3;
+    const isRGBA = data.length === totalTexels * 4;
+    if (!isRGB && !isRGBA) {
       throw new Error(
-        `3D LUT data too short: got ${data.length} elements, expected at least ${size * size * size * 3} (${size}x${size}x${size}x3).`,
+        `Invalid 3D LUT data length: got ${data.length} elements, expected ${totalTexels * 3} (RGB) or ${totalTexels * 4} (RGBA) for size=${size}.`,
       );
     }
 
@@ -281,14 +284,19 @@ export class WebGPUTextureManager {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
     });
 
-    // Pack RGB data into RGBA
-    const pixelCount = size * size * size;
-    const rgba = new Float32Array(pixelCount * 4);
-    for (let i = 0; i < pixelCount; i++) {
-      rgba[i * 4] = data[i * 3]!;
-      rgba[i * 4 + 1] = data[i * 3 + 1]!;
-      rgba[i * 4 + 2] = data[i * 3 + 2]!;
-      rgba[i * 4 + 3] = 1.0;
+    let rgba: Float32Array;
+    if (isRGBA) {
+      // RGBA data: copy directly
+      rgba = new Float32Array(data);
+    } else {
+      // RGB data: expand to RGBA with alpha=1.0
+      rgba = new Float32Array(totalTexels * 4);
+      for (let i = 0; i < totalTexels; i++) {
+        rgba[i * 4] = data[i * 3]!;
+        rgba[i * 4 + 1] = data[i * 3 + 1]!;
+        rgba[i * 4 + 2] = data[i * 3 + 2]!;
+        rgba[i * 4 + 3] = 1.0;
+      }
     }
 
     device.queue.writeTexture(

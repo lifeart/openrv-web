@@ -48,6 +48,34 @@ function createMockDevice() {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: create a DataView from the uploaded buffer data
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the raw buffer data from a writeBuffer mock call and return a DataView
+ * for reading both float and integer fields with correct types.
+ */
+function getUploadedView(device: ReturnType<typeof createMockDevice>, callIndex = 0): DataView {
+  const rawData = device.queue.writeBuffer.mock.calls[callIndex]![2] as Uint8Array;
+  return new DataView(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+}
+
+/** Read a float at the given 4-byte slot index from a DataView. */
+function readFloat(view: DataView, slotIndex: number): number {
+  return view.getFloat32(slotIndex * 4, true);
+}
+
+/** Read a signed int32 at the given 4-byte slot index from a DataView. */
+function readI32(view: DataView, slotIndex: number): number {
+  return view.getInt32(slotIndex * 4, true);
+}
+
+/** Read an unsigned int32 at the given 4-byte slot index from a DataView. */
+function readU32(view: DataView, slotIndex: number): number {
+  return view.getUint32(slotIndex * 4, true);
+}
+
+// ---------------------------------------------------------------------------
 // All 11 stage IDs
 // ---------------------------------------------------------------------------
 
@@ -154,7 +182,7 @@ describe('WebGPUStateUploader', () => {
       const [buffer, offset, data] = device.queue.writeBuffer.mock.calls[0]!;
       expect(buffer).toBeDefined();
       expect(offset).toBe(0);
-      expect(data).toBeInstanceOf(Float32Array);
+      expect(data).toBeInstanceOf(Uint8Array);
     });
 
     it('WGPU-SU-102: returns the created GPU buffer', () => {
@@ -218,102 +246,102 @@ describe('WebGPUStateUploader', () => {
       }
     });
 
-    it('WGPU-SU-121: uploaded Float32Array length matches buffer size / 4', () => {
+    it('WGPU-SU-121: uploaded Uint8Array length matches buffer size', () => {
       uploader.uploadStageUniforms(device, 'compositing', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data.length).toBe(512 / 4);
+      const data = device.queue.writeBuffer.mock.calls[0]![2] as Uint8Array;
+      expect(data.length).toBe(512);
     });
   });
 
   // ─── Data packing correctness ────────────────────────────────────────
 
   describe('data packing', () => {
-    it('WGPU-SU-130: compositing packs premultMode, bgPatternCode, bgCheckerSize', () => {
+    it('WGPU-SU-130: compositing packs premultMode (u32), bgPatternCode (u32), bgCheckerSize (f32)', () => {
       state.premultMode = 2;
       state.bgPatternCode = 3;
       state.bgCheckerSize = 16;
 
       uploader.uploadStageUniforms(device, 'compositing', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(2); // premultMode
-      expect(data[1]).toBe(3); // bgPatternCode
-      expect(data[2]).toBe(16); // bgCheckerSize
+      const view = getUploadedView(device);
+      expect(readU32(view, 0)).toBe(2); // premultMode as u32
+      expect(readU32(view, 1)).toBe(3); // bgPatternCode as u32
+      expect(readFloat(view, 2)).toBe(16); // bgCheckerSize as f32
     });
 
-    it('WGPU-SU-131: spatialEffects packs clarityEnabled and clarityValue', () => {
+    it('WGPU-SU-131: spatialEffects packs clarityEnabled (u32) and clarityValue (f32)', () => {
       state.clarityEnabled = true;
       state.clarityValue = 0.75;
 
       uploader.uploadStageUniforms(device, 'spatialEffects', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(1); // clarityEnabled as float
-      expect(data[1]).toBeCloseTo(0.75);
+      const view = getUploadedView(device);
+      expect(readU32(view, 0)).toBe(1); // clarityEnabled as u32
+      expect(readFloat(view, 1)).toBeCloseTo(0.75);
     });
 
-    it('WGPU-SU-132: spatialEffectsPost packs sharpenEnabled and sharpenAmount', () => {
+    it('WGPU-SU-132: spatialEffectsPost packs sharpenEnabled (u32) and sharpenAmount (f32)', () => {
       state.sharpenEnabled = true;
       state.sharpenAmount = 0.5;
 
       uploader.uploadStageUniforms(device, 'spatialEffectsPost', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(1); // sharpenEnabled
-      expect(data[1]).toBeCloseTo(0.5);
+      const view = getUploadedView(device);
+      expect(readU32(view, 0)).toBe(1); // sharpenEnabled as u32
+      expect(readFloat(view, 1)).toBeCloseTo(0.5);
     });
 
-    it('WGPU-SU-133: boolean fields are packed as 0.0 or 1.0', () => {
+    it('WGPU-SU-133: boolean fields are packed as i32 0 or 1', () => {
       state.deinterlaceEnabled = false;
       uploader.uploadStageUniforms(device, 'inputDecode', state);
 
-      const data1 = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data1[0]).toBe(0); // deinterlaceEnabled = false -> 0
+      const view1 = getUploadedView(device, 0);
+      expect(readI32(view1, 0)).toBe(0); // deinterlaceEnabled = false -> 0
 
       state.deinterlaceEnabled = true;
       uploader.uploadStageUniforms(device, 'inputDecode', state);
 
-      const data2 = device.queue.writeBuffer.mock.calls[1]![2] as Float32Array;
-      expect(data2[0]).toBe(1); // deinterlaceEnabled = true -> 1
+      const view2 = getUploadedView(device, 1);
+      expect(readI32(view2, 0)).toBe(1); // deinterlaceEnabled = true -> 1
     });
 
-    it('WGPU-SU-134: primaryGrade packs colorAdjustments fields', () => {
+    it('WGPU-SU-134: primaryGrade packs colorAdjustments fields as f32', () => {
       state.colorAdjustments.exposure = 2.0;
       state.colorAdjustments.gamma = 1.5;
       state.colorAdjustments.contrast = 0.8;
 
       uploader.uploadStageUniforms(device, 'primaryGrade', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBeCloseTo(2.0); // exposure
-      expect(data[1]).toBeCloseTo(1.5); // gamma
-      expect(data[2]).toBeCloseTo(0.8); // contrast
+      const view = getUploadedView(device);
+      expect(readFloat(view, 0)).toBeCloseTo(2.0); // exposure
+      expect(readFloat(view, 1)).toBeCloseTo(1.5); // gamma
+      expect(readFloat(view, 2)).toBeCloseTo(0.8); // contrast
     });
 
-    it('WGPU-SU-135: diagnostics packs channelModeCode and falseColorEnabled', () => {
+    it('WGPU-SU-135: diagnostics packs channelModeCode (i32) and falseColorEnabled (i32)', () => {
       state.channelModeCode = 5;
       state.falseColorEnabled = true;
 
       uploader.uploadStageUniforms(device, 'diagnostics', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(5); // channelModeCode
-      expect(data[1]).toBe(1); // falseColorEnabled
+      const view = getUploadedView(device);
+      expect(readI32(view, 0)).toBe(5); // channelModeCode as i32
+      expect(readI32(view, 1)).toBe(1); // falseColorEnabled as i32
     });
 
-    it('WGPU-SU-136: linearize packs logType and matrix', () => {
+    it('WGPU-SU-136: linearize packs logType (i32) and sRGB2linear (i32)', () => {
       state.linearizeLogType = 3;
       state.linearizeSRGB2linear = true;
 
       uploader.uploadStageUniforms(device, 'linearize', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(3); // linearizeLogType
-      expect(data[1]).toBe(1); // linearizeSRGB2linear
+      const view = getUploadedView(device);
+      expect(readI32(view, 0)).toBe(3); // linearizeLogType as i32
+      expect(readI32(view, 1)).toBe(1); // linearizeSRGB2linear as i32
     });
 
-    it('WGPU-SU-137: sceneAnalysis packs outOfRange and toneMappingState', () => {
+    it('WGPU-SU-137: sceneAnalysis packs outOfRange (i32) and toneMappingState (i32)', () => {
       state.outOfRange = 2;
       state.toneMappingState.enabled = true;
       state.gamutMappingEnabled = true;
@@ -321,11 +349,11 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'sceneAnalysis', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(2); // outOfRange
-      expect(data[1]).toBe(1); // toneMappingState.enabled
-      expect(data[2]).toBe(1); // gamutMappingEnabled
-      expect(data[3]).toBe(1); // gamutMappingModeCode
+      const view = getUploadedView(device);
+      expect(readI32(view, 0)).toBe(2); // outOfRange as i32
+      expect(readI32(view, 1)).toBe(1); // toneMappingState.enabled as i32
+      expect(readI32(view, 2)).toBe(1); // gamutMappingEnabled as i32
+      expect(readI32(view, 3)).toBe(1); // gamutMappingModeCode as i32
     });
   });
 
@@ -335,31 +363,31 @@ describe('WebGPUStateUploader', () => {
     it('WGPU-SU-140: default state produces zeroed/default data for compositing', () => {
       uploader.uploadStageUniforms(device, 'compositing', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(0); // premultMode default is 0
+      const view = getUploadedView(device);
+      expect(readU32(view, 0)).toBe(0); // premultMode default is 0
       // bgPatternCode default = BG_PATTERN_NONE
     });
 
     it('WGPU-SU-141: default state produces identity matrix for inputDecode perspectiveInvH', () => {
       uploader.uploadStageUniforms(device, 'inputDecode', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // perspectiveInvH is packed as mat3 starting at offset 16 (after 4 floats: deinterlace fields)
+      const view = getUploadedView(device);
+      // perspectiveInvH is packed as mat3 starting at offset 16 (after 4 i32s: deinterlace fields)
       // deinterlaceEnabled(0), deinterlaceMethod(4), deinterlaceFieldOrder(8), perspectiveEnabled(12)
       // then mat3 at align(16, 16) = 16
-      expect(data[4]).toBe(1); // mat[0] = 1 (identity)
-      expect(data[5]).toBe(0); // mat[1] = 0
-      expect(data[6]).toBe(0); // mat[2] = 0
-      // pad at data[7]
-      expect(data[8]).toBe(0); // mat[3] = 0
-      expect(data[9]).toBe(1); // mat[4] = 1 (identity)
+      expect(readFloat(view, 4)).toBe(1); // mat[0] = 1 (identity)
+      expect(readFloat(view, 5)).toBe(0); // mat[1] = 0
+      expect(readFloat(view, 6)).toBe(0); // mat[2] = 0
+      // pad at slot 7
+      expect(readFloat(view, 8)).toBe(0); // mat[3] = 0
+      expect(readFloat(view, 9)).toBe(1); // mat[4] = 1 (identity)
     });
 
     it('WGPU-SU-142: default state has all boolean-enabled flags as 0', () => {
       uploader.uploadStageUniforms(device, 'spatialEffects', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(0); // clarityEnabled = false -> 0
+      const view = getUploadedView(device);
+      expect(readU32(view, 0)).toBe(0); // clarityEnabled = false -> 0
     });
   });
 
@@ -376,9 +404,9 @@ describe('WebGPUStateUploader', () => {
       const defaultState = createDefaultInternalState();
       uploader.uploadStageUniforms(device, 'spatialEffects', defaultState);
 
-      const data = device.queue.writeBuffer.mock.calls[1]![2] as Float32Array;
-      expect(data[0]).toBe(0); // clarityEnabled zeroed
-      expect(data[1]).toBe(0); // clarityValue zeroed
+      const view = getUploadedView(device, 1);
+      expect(readU32(view, 0)).toBe(0); // clarityEnabled zeroed
+      expect(readFloat(view, 1)).toBe(0); // clarityValue zeroed
     });
   });
 
@@ -623,12 +651,12 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'spatialEffects', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // packFloat(clarityEnabled) @ 0 -> next = 4
+      const view = getUploadedView(device);
+      // packU32(clarityEnabled) @ 0 -> next = 4
       // packFloat(clarityValue) @ 4 -> next = 8
-      // packVec2(texelSize) @ align(8, 8) = 8 -> data[2], data[3]
-      expect(data[2]).toBeCloseTo(1 / 1920);
-      expect(data[3]).toBeCloseTo(1 / 1080);
+      // packVec2(texelSize) @ align(8, 8) = 8 -> slot 2, slot 3
+      expect(readFloat(view, 2)).toBeCloseTo(1 / 1920);
+      expect(readFloat(view, 3)).toBeCloseTo(1 / 1080);
     });
 
     it('WGPU-SU-601: vec3 bgColor is correctly aligned to 16 bytes in compositing', () => {
@@ -636,15 +664,15 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'compositing', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // packFloat(premultMode) @ 0 -> 4
-      // packFloat(bgPatternCode) @ 4 -> 8
+      const view = getUploadedView(device);
+      // packU32(premultMode) @ 0 -> 4
+      // packU32(bgPatternCode) @ 4 -> 8
       // packFloat(bgCheckerSize) @ 8 -> 12
       // packFloat(0 padding) @ 12 -> 16
-      // packVec3(bgColor1) @ align(16, 16) = 16 -> data[4], data[5], data[6]
-      expect(data[4]).toBeCloseTo(0.2);
-      expect(data[5]).toBeCloseTo(0.4);
-      expect(data[6]).toBeCloseTo(0.6);
+      // packVec3(bgColor1) @ align(16, 16) = 16 -> slot 4, 5, 6
+      expect(readFloat(view, 4)).toBeCloseTo(0.2);
+      expect(readFloat(view, 5)).toBeCloseTo(0.4);
+      expect(readFloat(view, 6)).toBeCloseTo(0.6);
     });
 
     it('WGPU-SU-602: mat3 perspectiveInvH packs 3 columns with padding', () => {
@@ -653,87 +681,87 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'inputDecode', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // After 4 floats (deinterlace×3 + perspEnabled), mat3 starts at align(16, 16) = 16
-      // Column 0: data[4]=1, data[5]=2, data[6]=3, data[7]=0(pad)
-      // Column 1: data[8]=4, data[9]=5, data[10]=6, data[11]=0(pad)
-      // Column 2: data[12]=7, data[13]=8, data[14]=9, data[15]=0(pad)
-      expect(data[4]).toBe(1);
-      expect(data[5]).toBe(2);
-      expect(data[6]).toBe(3);
-      expect(data[7]).toBe(0); // padding
-      expect(data[8]).toBe(4);
-      expect(data[9]).toBe(5);
-      expect(data[10]).toBe(6);
-      expect(data[11]).toBe(0); // padding
-      expect(data[12]).toBe(7);
-      expect(data[13]).toBe(8);
-      expect(data[14]).toBe(9);
-      expect(data[15]).toBe(0); // padding
+      const view = getUploadedView(device);
+      // After 4 i32s (deinterlace*3 + perspEnabled), mat3 starts at align(16, 16) = 16
+      // Column 0: slot 4=1, slot 5=2, slot 6=3, slot 7=0(pad)
+      // Column 1: slot 8=4, slot 9=5, slot 10=6, slot 11=0(pad)
+      // Column 2: slot 12=7, slot 13=8, slot 14=9, slot 15=0(pad)
+      expect(readFloat(view, 4)).toBe(1);
+      expect(readFloat(view, 5)).toBe(2);
+      expect(readFloat(view, 6)).toBe(3);
+      expect(readFloat(view, 7)).toBe(0); // padding
+      expect(readFloat(view, 8)).toBe(4);
+      expect(readFloat(view, 9)).toBe(5);
+      expect(readFloat(view, 10)).toBe(6);
+      expect(readFloat(view, 11)).toBe(0); // padding
+      expect(readFloat(view, 12)).toBe(7);
+      expect(readFloat(view, 13)).toBe(8);
+      expect(readFloat(view, 14)).toBe(9);
+      expect(readFloat(view, 15)).toBe(0); // padding
     });
 
-    it('WGPU-SU-603: vec4 channelSwizzle is aligned to 16 bytes', () => {
+    it('WGPU-SU-603: vec4i channelSwizzle is aligned to 16 bytes', () => {
       state.channelSwizzle = [3, 2, 1, 0];
 
       uploader.uploadStageUniforms(device, 'inputDecode', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // After mat3 (ends at byte 64 = float index 16), then perspectiveQuality at 64 -> 68
+      const view = getUploadedView(device);
+      // After mat3 (ends at byte 64 = slot 16), then perspectiveQuality at 64 -> 68
       // sphericalEnabled at 68 -> 72, sphericalFov at 72 -> 76, sphericalAspect 76 -> 80,
       // sphericalYaw 80 -> 84, sphericalPitch 84 -> 88
-      // vec4 at align(88, 16) = 96 -> float index 24
-      expect(data[24]).toBe(3);
-      expect(data[25]).toBe(2);
-      expect(data[26]).toBe(1);
-      expect(data[27]).toBe(0);
+      // vec4i at align(88, 16) = 96 -> slot 24
+      expect(readI32(view, 24)).toBe(3);
+      expect(readI32(view, 25)).toBe(2);
+      expect(readI32(view, 26)).toBe(1);
+      expect(readI32(view, 27)).toBe(0);
     });
   });
 
   // ─── colorPipeline packing (complex stage) ──────────────────────────
 
   describe('colorPipeline packing', () => {
-    it('WGPU-SU-700: packs colorWheelsEnabled at offset 0', () => {
+    it('WGPU-SU-700: packs colorWheelsEnabled (i32) at offset 0', () => {
       state.colorWheelsEnabled = true;
       uploader.uploadStageUniforms(device, 'colorPipeline', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(1);
+      const view = getUploadedView(device);
+      expect(readI32(view, 0)).toBe(1);
     });
 
-    it('WGPU-SU-701: packs wheelLift as vec4 at offset 16', () => {
+    it('WGPU-SU-701: packs wheelLift as vec4f at offset 16', () => {
       state.wheelLift = [0.1, 0.2, 0.3, 0.4];
       uploader.uploadStageUniforms(device, 'colorPipeline', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // 4 floats (colorWheelsEnabled + 3 padding) = 16 bytes
-      // vec4 wheelLift at align(16, 16) = 16 -> float index 4
-      expect(data[4]).toBeCloseTo(0.1);
-      expect(data[5]).toBeCloseTo(0.2);
-      expect(data[6]).toBeCloseTo(0.3);
-      expect(data[7]).toBeCloseTo(0.4);
+      const view = getUploadedView(device);
+      // 4 i32s (colorWheelsEnabled + 3 padding) = 16 bytes
+      // vec4 wheelLift at align(16, 16) = 16 -> slot 4
+      expect(readFloat(view, 4)).toBeCloseTo(0.1);
+      expect(readFloat(view, 5)).toBeCloseTo(0.2);
+      expect(readFloat(view, 6)).toBeCloseTo(0.3);
+      expect(readFloat(view, 7)).toBeCloseTo(0.4);
     });
 
-    it('WGPU-SU-702: packs cdlEnabled after wheel vec4s', () => {
+    it('WGPU-SU-702: packs cdlEnabled (i32) after wheel vec4s', () => {
       state.cdlEnabled = true;
       state.cdlSaturation = 1.2;
       uploader.uploadStageUniforms(device, 'colorPipeline', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      // 4 floats + 3 vec4s = 4 + 12 = 16 floats -> index 16
-      expect(data[16]).toBe(1); // cdlEnabled
-      expect(data[17]).toBeCloseTo(1.2); // cdlSaturation
+      const view = getUploadedView(device);
+      // 4 i32s + 3 vec4s = 4 + 12 = 16 slots -> slot 16
+      expect(readI32(view, 16)).toBe(1); // cdlEnabled as i32
+      expect(readFloat(view, 17)).toBeCloseTo(1.2); // cdlSaturation as f32
     });
   });
 
   // ─── displayOutput packing ───────────────────────────────────────────
 
   describe('displayOutput packing', () => {
-    it('WGPU-SU-800: packs outputPrimariesEnabled at offset 0', () => {
+    it('WGPU-SU-800: packs outputPrimariesEnabled (i32) at offset 0', () => {
       state.outputPrimariesEnabled = true;
       uploader.uploadStageUniforms(device, 'displayOutput', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(1);
+      const view = getUploadedView(device);
+      expect(readI32(view, 0)).toBe(1);
     });
 
     it('WGPU-SU-801: packs display transfer fields', () => {
@@ -743,10 +771,10 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'displayOutput', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[1]).toBe(2); // displayTransferCode
-      expect(data[2]).toBeCloseTo(2.4); // displayGammaOverride
-      expect(data[3]).toBeCloseTo(1.5); // displayBrightnessMultiplier
+      const view = getUploadedView(device);
+      expect(readI32(view, 1)).toBe(2); // displayTransferCode as i32
+      expect(readFloat(view, 2)).toBeCloseTo(2.4); // displayGammaOverride as f32
+      expect(readFloat(view, 3)).toBeCloseTo(1.5); // displayBrightnessMultiplier as f32
     });
   });
 
@@ -762,12 +790,12 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'secondaryGrade', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[0]).toBe(1); // hsEnabled
-      expect(data[1]).toBeCloseTo(0.3); // highlightsValue
-      expect(data[2]).toBeCloseTo(-0.2); // shadowsValue
-      expect(data[3]).toBeCloseTo(0.1); // whitesValue
-      expect(data[4]).toBeCloseTo(-0.1); // blacksValue
+      const view = getUploadedView(device);
+      expect(readI32(view, 0)).toBe(1); // hsEnabled as i32
+      expect(readFloat(view, 1)).toBeCloseTo(0.3); // highlightsValue
+      expect(readFloat(view, 2)).toBeCloseTo(-0.2); // shadowsValue
+      expect(readFloat(view, 3)).toBeCloseTo(0.1); // whitesValue
+      expect(readFloat(view, 4)).toBeCloseTo(-0.1); // blacksValue
     });
 
     it('WGPU-SU-901: packs vibrance and hueRotation', () => {
@@ -778,11 +806,11 @@ describe('WebGPUStateUploader', () => {
 
       uploader.uploadStageUniforms(device, 'secondaryGrade', state);
 
-      const data = device.queue.writeBuffer.mock.calls[0]![2] as Float32Array;
-      expect(data[5]).toBe(1); // vibranceEnabled
-      expect(data[6]).toBeCloseTo(0.5); // vibranceValue
-      expect(data[7]).toBe(0); // vibranceSkinProtection = false
-      expect(data[8]).toBeCloseTo(45); // hueRotation
+      const view = getUploadedView(device);
+      expect(readI32(view, 5)).toBe(1); // vibranceEnabled as i32
+      expect(readFloat(view, 6)).toBeCloseTo(0.5); // vibranceValue
+      expect(readI32(view, 7)).toBe(0); // vibranceSkinProtection = false as i32
+      expect(readFloat(view, 8)).toBeCloseTo(45); // hueRotation
     });
   });
 });

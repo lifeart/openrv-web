@@ -24,6 +24,84 @@ function makeCaps(overrides: Partial<DisplayCapabilities> = {}): DisplayCapabili
   return { ...DEFAULT_CAPABILITIES, ...overrides };
 }
 
+/** Create a full mock GPU device with all methods needed by initAsync */
+function createFullMockDevice() {
+  const mockTextureView = {};
+  const mockTexture = {
+    createView: vi.fn().mockReturnValue(mockTextureView),
+    destroy: vi.fn(),
+  };
+  const mockBindGroupLayout = {};
+  const mockPipeline = {
+    getBindGroupLayout: vi.fn().mockReturnValue(mockBindGroupLayout),
+  };
+  const mockBuffer = {
+    getMappedRange: vi.fn().mockReturnValue(new ArrayBuffer(16)),
+    unmap: vi.fn(),
+    destroy: vi.fn(),
+  };
+  const mockPassEncoder = {
+    setPipeline: vi.fn(),
+    setBindGroup: vi.fn(),
+    draw: vi.fn(),
+    end: vi.fn(),
+  };
+  const mockCommandEncoder = {
+    beginRenderPass: vi.fn().mockReturnValue(mockPassEncoder),
+    finish: vi.fn().mockReturnValue({}),
+  };
+  return {
+    destroy: vi.fn(),
+    createShaderModule: vi.fn().mockReturnValue({}),
+    createRenderPipeline: vi.fn().mockReturnValue(mockPipeline),
+    createSampler: vi.fn().mockReturnValue({}),
+    createTexture: vi.fn().mockReturnValue(mockTexture),
+    createBindGroup: vi.fn().mockReturnValue({}),
+    createBuffer: vi.fn().mockReturnValue(mockBuffer),
+    createCommandEncoder: vi.fn().mockReturnValue(mockCommandEncoder),
+    queue: {
+      writeTexture: vi.fn(),
+      writeBuffer: vi.fn(),
+      submit: vi.fn(),
+      copyExternalImageToTexture: vi.fn(),
+    },
+  };
+}
+
+/** Set up a WebGPU backend with full mock device, initialize + initAsync */
+async function initWebGPUBackend(
+  overrides?: { configureFn?: ReturnType<typeof vi.fn>; unconfigureFn?: ReturnType<typeof vi.fn>; device?: ReturnType<typeof createFullMockDevice> },
+) {
+  const backend = new WebGPUBackend();
+  const canvas = document.createElement('canvas');
+
+  const mockDevice = overrides?.device ?? createFullMockDevice();
+  const mockContext = {
+    configure: overrides?.configureFn ?? vi.fn(),
+    unconfigure: overrides?.unconfigureFn ?? vi.fn(),
+    getCurrentTexture: vi.fn(),
+  };
+  const mockAdapter = {
+    requestDevice: vi.fn().mockResolvedValue(mockDevice),
+  };
+
+  const originalGpu = (navigator as unknown as Record<string, unknown>).gpu;
+  (navigator as unknown as Record<string, unknown>).gpu = {
+    requestAdapter: vi.fn().mockResolvedValue(mockAdapter),
+  };
+
+  const originalGetContext = canvas.getContext.bind(canvas);
+  canvas.getContext = vi.fn((id: string, opts?: unknown) => {
+    if (id === 'webgpu') return mockContext;
+    return originalGetContext(id, opts as CanvasRenderingContext2DSettings);
+  }) as typeof canvas.getContext;
+
+  backend.initialize(canvas);
+  await backend.initAsync();
+
+  return { backend, mockDevice, mockContext, originalGpu };
+}
+
 // =============================================================================
 // RendererBackend interface
 // =============================================================================
@@ -239,11 +317,20 @@ describe('WebGPUBackend state management', () => {
     expect(backend.getHDROutputMode()).toBe('sdr');
   });
 
-  it('P4-029: setHDROutputMode stores the mode', () => {
+  it('P4-029: setHDROutputMode stores the mode', async () => {
     const caps = makeCaps({ webgpuAvailable: true, webgpuHDR: true });
-    const result = backend.setHDROutputMode('hlg', caps);
-    expect(result).toBe(true);
-    expect(backend.getHDROutputMode()).toBe('hlg');
+    const { backend: initBackend, originalGpu } = await initWebGPUBackend();
+    try {
+      const result = initBackend.setHDROutputMode('hlg', caps);
+      expect(result).toBe(true);
+      expect(initBackend.getHDROutputMode()).toBe('hlg');
+    } finally {
+      if (originalGpu === undefined) {
+        delete (navigator as unknown as Record<string, unknown>).gpu;
+      } else {
+        (navigator as unknown as Record<string, unknown>).gpu = originalGpu;
+      }
+    }
   });
 
   it('P4-030: getContext returns null (no WebGL2 in WebGPU backend)', () => {
@@ -342,36 +429,11 @@ describe('WebGPUBackend initialization', () => {
   });
 
   it('P4-039: initAsync configures context with extended tone mapping', async () => {
-    const backend = new WebGPUBackend();
-    const canvas = document.createElement('canvas');
-
     const configureFn = vi.fn();
-    const mockContext = {
-      configure: configureFn,
-      unconfigure: vi.fn(),
-      getCurrentTexture: vi.fn(),
-    };
-
-    const mockDevice = { destroy: vi.fn() };
-    const mockAdapter = {
-      requestDevice: vi.fn().mockResolvedValue(mockDevice),
-    };
-
-    const originalGpu = (navigator as unknown as Record<string, unknown>).gpu;
-    (navigator as unknown as Record<string, unknown>).gpu = {
-      requestAdapter: vi.fn().mockResolvedValue(mockAdapter),
-    };
+    const mockDevice = createFullMockDevice();
+    const { backend, originalGpu } = await initWebGPUBackend({ configureFn, device: mockDevice });
 
     try {
-      const originalGetContext = canvas.getContext.bind(canvas);
-      canvas.getContext = vi.fn((id: string, opts?: unknown) => {
-        if (id === 'webgpu') return mockContext;
-        return originalGetContext(id, opts as CanvasRenderingContext2DSettings);
-      }) as typeof canvas.getContext;
-
-      backend.initialize(canvas);
-      await backend.initAsync();
-
       expect(configureFn).toHaveBeenCalledWith({
         device: mockDevice,
         format: 'rgba16float',
@@ -391,9 +453,6 @@ describe('WebGPUBackend initialization', () => {
   });
 
   it('P4-040: initAsync falls back to standard tone mapping when extended fails', async () => {
-    const backend = new WebGPUBackend();
-    const canvas = document.createElement('canvas');
-
     let callCount = 0;
     const configureFn = vi.fn((config: { toneMapping?: { mode: string } }) => {
       callCount++;
@@ -402,32 +461,10 @@ describe('WebGPUBackend initialization', () => {
       }
     });
 
-    const mockContext = {
-      configure: configureFn,
-      unconfigure: vi.fn(),
-      getCurrentTexture: vi.fn(),
-    };
-
-    const mockDevice = { destroy: vi.fn() };
-    const mockAdapter = {
-      requestDevice: vi.fn().mockResolvedValue(mockDevice),
-    };
-
-    const originalGpu = (navigator as unknown as Record<string, unknown>).gpu;
-    (navigator as unknown as Record<string, unknown>).gpu = {
-      requestAdapter: vi.fn().mockResolvedValue(mockAdapter),
-    };
+    const mockDevice = createFullMockDevice();
+    const { backend, originalGpu } = await initWebGPUBackend({ configureFn, device: mockDevice });
 
     try {
-      const originalGetContext = canvas.getContext.bind(canvas);
-      canvas.getContext = vi.fn((id: string, opts?: unknown) => {
-        if (id === 'webgpu') return mockContext;
-        return originalGetContext(id, opts as CanvasRenderingContext2DSettings);
-      }) as typeof canvas.getContext;
-
-      backend.initialize(canvas);
-      await backend.initAsync();
-
       // First call with 'extended', second call with 'standard'
       expect(callCount).toBe(2);
       expect(configureFn).toHaveBeenLastCalledWith({
@@ -483,42 +520,17 @@ describe('WebGPUBackend initialization', () => {
   });
 
   it('P4-042: dispose cleans up GPU resources after initAsync', async () => {
-    const backend = new WebGPUBackend();
-    const canvas = document.createElement('canvas');
-
     const unconfigureFn = vi.fn();
-    const destroyFn = vi.fn();
-    const mockContext = {
-      configure: vi.fn(),
-      unconfigure: unconfigureFn,
-      getCurrentTexture: vi.fn(),
-    };
-    const mockDevice = { destroy: destroyFn };
-    const mockAdapter = {
-      requestDevice: vi.fn().mockResolvedValue(mockDevice),
-    };
-
-    const originalGpu = (navigator as unknown as Record<string, unknown>).gpu;
-    (navigator as unknown as Record<string, unknown>).gpu = {
-      requestAdapter: vi.fn().mockResolvedValue(mockAdapter),
-    };
+    const mockDevice = createFullMockDevice();
+    const { backend, originalGpu } = await initWebGPUBackend({ unconfigureFn, device: mockDevice });
 
     try {
-      const originalGetContext = canvas.getContext.bind(canvas);
-      canvas.getContext = vi.fn((id: string, opts?: unknown) => {
-        if (id === 'webgpu') return mockContext;
-        return originalGetContext(id, opts as CanvasRenderingContext2DSettings);
-      }) as typeof canvas.getContext;
-
-      backend.initialize(canvas);
-      await backend.initAsync();
-
       expect(backend.getDevice()).toBe(mockDevice);
 
       backend.dispose();
 
       expect(unconfigureFn).toHaveBeenCalled();
-      expect(destroyFn).toHaveBeenCalled();
+      expect(mockDevice.destroy).toHaveBeenCalled();
       expect(backend.getDevice()).toBeNull();
     } finally {
       if (originalGpu === undefined) {

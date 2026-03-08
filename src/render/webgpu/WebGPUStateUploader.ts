@@ -35,7 +35,7 @@ export const STAGE_FIELDS: Record<StageId, readonly string[]> = {
   ],
   linearize: [
     'linearizeLogType', 'linearizeSRGB2linear', 'linearizeRec709ToLinear',
-    'linearizeFileGamma', 'linearizeAlphaType',
+    'linearizeFileGamma', 'linearizeInputTransfer', 'linearizeAlphaType',
     'inputPrimariesEnabled', 'inputPrimariesMatrix',
   ],
   primaryGrade: [
@@ -158,6 +158,26 @@ function packFloat(view: DataView, offset: number, value: number): number {
 }
 
 /**
+ * Pack a signed 32-bit integer into a buffer at the given byte offset.
+ * Use for WGSL fields declared as `i32`.
+ */
+function packI32(view: DataView, offset: number, value: number): number {
+  const aligned = align(offset, 4);
+  view.setInt32(aligned, value, true);
+  return aligned + 4;
+}
+
+/**
+ * Pack an unsigned 32-bit integer into a buffer at the given byte offset.
+ * Use for WGSL fields declared as `u32`.
+ */
+function packU32(view: DataView, offset: number, value: number): number {
+  const aligned = align(offset, 4);
+  view.setUint32(aligned, value, true);
+  return aligned + 4;
+}
+
+/**
  * Pack a vec2f into a buffer at the given byte offset.
  */
 function packVec2(view: DataView, offset: number, x: number, y: number): number {
@@ -263,8 +283,8 @@ export class WebGPUStateUploader {
     const view = new DataView(cpuBuffer);
     this.packStageData(view, stageId, state);
 
-    // Upload to GPU
-    device.queue.writeBuffer(gpuBuffer, 0, new Float32Array(cpuBuffer));
+    // Upload to GPU — use Uint8Array to preserve raw bytes (mixed f32/i32/u32)
+    device.queue.writeBuffer(gpuBuffer, 0, new Uint8Array(cpuBuffer));
 
     return gpuBuffer;
   }
@@ -396,7 +416,7 @@ export class WebGPUStateUploader {
   private packStageData(view: DataView, stageId: StageId, state: Readonly<InternalShaderState>): void {
     // Zero out buffer first
     for (let i = 0; i < view.byteLength; i += 4) {
-      view.setFloat32(i, 0, true);
+      view.setUint32(i, 0, true);
     }
 
     switch (stageId) {
@@ -436,39 +456,53 @@ export class WebGPUStateUploader {
     }
   }
 
+  // WGSL struct: deinterlaceEnabled: i32, deinterlaceMethod: i32, deinterlaceFieldOrder: i32,
+  //   _pad0: i32, perspectiveEnabled: i32, perspectiveQuality: i32, _pad1: vec2f,
+  //   perspectiveInvH (mat3 as 3xvec4f), sphericalEnabled: i32, _pad2: f32,
+  //   sphericalFov: f32, sphericalAspect: f32, sphericalYaw: f32, sphericalPitch: f32,
+  //   _pad3: vec2f, channelSwizzle: vec4i, premultMode: i32, _pad4: i32
   private packInputDecode(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.deinterlaceEnabled ? 1 : 0);
-    off = packFloat(view, off, state.deinterlaceMethod);
-    off = packFloat(view, off, state.deinterlaceFieldOrder);
-    off = packFloat(view, off, state.perspectiveEnabled ? 1 : 0);
+    off = packI32(view, off, state.deinterlaceEnabled ? 1 : 0);
+    off = packI32(view, off, state.deinterlaceMethod);
+    off = packI32(view, off, state.deinterlaceFieldOrder);
+    off = packI32(view, off, state.perspectiveEnabled ? 1 : 0);
     off = packMat3(view, off, state.perspectiveInvH);
-    off = packFloat(view, off, state.perspectiveQuality);
-    off = packFloat(view, off, state.sphericalEnabled ? 1 : 0);
+    off = packI32(view, off, state.perspectiveQuality);
+    off = packI32(view, off, state.sphericalEnabled ? 1 : 0);
     off = packFloat(view, off, state.sphericalFov);
     off = packFloat(view, off, state.sphericalAspect);
     off = packFloat(view, off, state.sphericalYaw);
     off = packFloat(view, off, state.sphericalPitch);
-    off = packVec4(view, off,
-      state.channelSwizzle[0], state.channelSwizzle[1],
-      state.channelSwizzle[2], state.channelSwizzle[3]);
-    packFloat(view, off, state.premultMode);
+    // channelSwizzle is vec4i in WGSL — align to 16, pack as 4 x i32
+    off = align(off, 16);
+    view.setInt32(off, state.channelSwizzle[0], true);
+    view.setInt32(off + 4, state.channelSwizzle[1], true);
+    view.setInt32(off + 8, state.channelSwizzle[2], true);
+    view.setInt32(off + 12, state.channelSwizzle[3], true);
+    off += 16;
+    packI32(view, off, state.premultMode);
   }
 
+  // WGSL struct: logType: i32, sRGB2linear: i32, rec709ToLinear: i32, fileGamma: f32,
+  //   inputTransfer: i32, alphaType: i32
   private packLinearize(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.linearizeLogType);
-    off = packFloat(view, off, state.linearizeSRGB2linear ? 1 : 0);
-    off = packFloat(view, off, state.linearizeRec709ToLinear ? 1 : 0);
+    off = packI32(view, off, state.linearizeLogType);
+    off = packI32(view, off, state.linearizeSRGB2linear ? 1 : 0);
+    off = packI32(view, off, state.linearizeRec709ToLinear ? 1 : 0);
     off = packFloat(view, off, state.linearizeFileGamma);
-    off = packFloat(view, off, state.linearizeInputTransfer);
-    off = packFloat(view, off, state.linearizeAlphaType);
-    off = packFloat(view, off, state.inputPrimariesEnabled ? 1 : 0);
+    off = packI32(view, off, state.linearizeInputTransfer);
+    off = packI32(view, off, state.linearizeAlphaType);
+    off = packI32(view, off, state.inputPrimariesEnabled ? 1 : 0);
     // Align to 16 for mat3
     off = align(off, 16);
     packMat3(view, off, state.inputPrimariesMatrix);
   }
 
+  // WGSL struct: exposureRGB: vec4f, scaleRGB: vec4f, offsetRGB: vec4f, gammaRGB: vec4f,
+  //   contrastRGB: vec4f, temperature: f32, tint: f32, brightness: f32, saturation: f32,
+  //   inlineLUTEnabled: i32, inlineLUTChannels: i32, inlineLUTSize: f32, curvesEnabled: i32
   private packPrimaryGrade(view: DataView, state: Readonly<InternalShaderState>): void {
     const ca = state.colorAdjustments;
     let off = 0;
@@ -482,54 +516,63 @@ export class WebGPUStateUploader {
     off = packFloat(view, off, ca.scale ?? 1.0);
     off = packFloat(view, off, ca.offset ?? 0.0);
     off = packVec2(view, off, state.texelSize[0], state.texelSize[1]);
-    off = packFloat(view, off, state.inlineLUTEnabled ? 1 : 0);
-    off = packFloat(view, off, state.inlineLUTChannels);
+    off = packI32(view, off, state.inlineLUTEnabled ? 1 : 0);
+    off = packI32(view, off, state.inlineLUTChannels);
     packFloat(view, off, state.inlineLUTSize);
   }
 
+  // WGSL struct: highlights: f32, shadows: f32, whites: f32, blacks: f32,
+  //   vibrance: f32, vibranceSkinProtection: i32, hueRotationEnabled: i32, _pad0: f32,
+  //   hueRotationMatrix: mat3x3f
   private packSecondaryGrade(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.hsEnabled ? 1 : 0);
+    off = packI32(view, off, state.hsEnabled ? 1 : 0);
     off = packFloat(view, off, state.highlightsValue);
     off = packFloat(view, off, state.shadowsValue);
     off = packFloat(view, off, state.whitesValue);
     off = packFloat(view, off, state.blacksValue);
-    off = packFloat(view, off, state.vibranceEnabled ? 1 : 0);
+    off = packI32(view, off, state.vibranceEnabled ? 1 : 0);
     off = packFloat(view, off, state.vibranceValue);
-    off = packFloat(view, off, state.vibranceSkinProtection ? 1 : 0);
+    off = packI32(view, off, state.vibranceSkinProtection ? 1 : 0);
     packFloat(view, off, state.colorAdjustments.hueRotation);
   }
 
+  // WGSL struct: clarityEnabled: u32, clarityValue: f32, texelSize: vec2f
   private packSpatialEffects(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.clarityEnabled ? 1 : 0);
+    off = packU32(view, off, state.clarityEnabled ? 1 : 0);
     off = packFloat(view, off, state.clarityValue);
     packVec2(view, off, state.texelSize[0], state.texelSize[1]);
   }
 
+  // WGSL struct: colorWheelsEnabled: i32, _pad0-2: i32, wheelLift/Gamma/Gain: vec4f,
+  //   cdlEnabled: i32, cdlColorspace: i32, cdlSaturation: f32, _pad3: f32,
+  //   cdlSlope/Offset/Power: vec4f, hslQualifierEnabled: i32, hslInvert: i32,
+  //   hslMattePreview: i32, ..., filmEmulationEnabled: i32, ...,
+  //   fileLUT3DEnabled: i32, ..., lookLUT3DEnabled: i32, ...
   private packColorPipeline(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.colorWheelsEnabled ? 1 : 0);
-    off = packFloat(view, off, 0); // padding to align
-    off = packFloat(view, off, 0); // padding
-    off = packFloat(view, off, 0); // padding
+    off = packI32(view, off, state.colorWheelsEnabled ? 1 : 0);
+    off = packI32(view, off, 0); // padding to align
+    off = packI32(view, off, 0); // padding
+    off = packI32(view, off, 0); // padding
     off = packVec4(view, off, state.wheelLift[0], state.wheelLift[1], state.wheelLift[2], state.wheelLift[3]);
     off = packVec4(view, off, state.wheelGamma[0], state.wheelGamma[1], state.wheelGamma[2], state.wheelGamma[3]);
     off = packVec4(view, off, state.wheelGain[0], state.wheelGain[1], state.wheelGain[2], state.wheelGain[3]);
-    off = packFloat(view, off, state.cdlEnabled ? 1 : 0);
+    off = packI32(view, off, state.cdlEnabled ? 1 : 0);
     off = packFloat(view, off, state.cdlSaturation);
-    off = packFloat(view, off, state.cdlColorspace);
+    off = packI32(view, off, state.cdlColorspace);
     off = packFloat(view, off, 0); // padding
     off = packVec3(view, off, state.cdlSlope[0], state.cdlSlope[1], state.cdlSlope[2]);
     off = packVec3(view, off, state.cdlOffset[0], state.cdlOffset[1], state.cdlOffset[2]);
     off = packVec3(view, off, state.cdlPower[0], state.cdlPower[1], state.cdlPower[2]);
-    off = packFloat(view, off, state.curvesEnabled ? 1 : 0);
-    off = packFloat(view, off, state.lut3DEnabled ? 1 : 0);
+    off = packI32(view, off, state.curvesEnabled ? 1 : 0);
+    off = packI32(view, off, state.lut3DEnabled ? 1 : 0);
     off = packFloat(view, off, state.lut3DIntensity);
     off = packFloat(view, off, state.lut3DSize);
     off = packVec3(view, off, state.lookLUT3DDomainMin[0], state.lookLUT3DDomainMin[1], state.lookLUT3DDomainMin[2]);
     off = packVec3(view, off, state.lookLUT3DDomainMax[0], state.lookLUT3DDomainMax[1], state.lookLUT3DDomainMax[2]);
-    off = packFloat(view, off, state.hslQualifierEnabled ? 1 : 0);
+    off = packI32(view, off, state.hslQualifierEnabled ? 1 : 0);
     off = packFloat(view, off, state.hslHueCenter);
     off = packFloat(view, off, state.hslHueWidth);
     off = packFloat(view, off, state.hslHueSoftness);
@@ -542,30 +585,35 @@ export class WebGPUStateUploader {
     off = packFloat(view, off, state.hslCorrHueShift);
     off = packFloat(view, off, state.hslCorrSatScale);
     off = packFloat(view, off, state.hslCorrLumScale);
-    off = packFloat(view, off, state.hslInvert ? 1 : 0);
-    off = packFloat(view, off, state.hslMattePreview ? 1 : 0);
-    off = packFloat(view, off, state.filmEnabled ? 1 : 0);
+    off = packI32(view, off, state.hslInvert ? 1 : 0);
+    off = packI32(view, off, state.hslMattePreview ? 1 : 0);
+    off = packI32(view, off, state.filmEnabled ? 1 : 0);
     off = packFloat(view, off, state.filmIntensity);
     off = packFloat(view, off, state.filmSaturation);
     off = packFloat(view, off, state.filmGrainIntensity);
     off = packFloat(view, off, state.filmGrainSeed);
-    off = packFloat(view, off, state.fileLUT3DEnabled ? 1 : 0);
+    off = packI32(view, off, state.fileLUT3DEnabled ? 1 : 0);
     off = packFloat(view, off, state.fileLUT3DIntensity);
     off = packFloat(view, off, state.fileLUT3DSize);
     off = packVec3(view, off, state.fileLUT3DDomainMin[0], state.fileLUT3DDomainMin[1], state.fileLUT3DDomainMin[2]);
     packVec3(view, off, state.fileLUT3DDomainMax[0], state.fileLUT3DDomainMax[1], state.fileLUT3DDomainMax[2]);
   }
 
+  // WGSL struct: outOfRange: i32, toneMappingEnabled: i32, toneMappingOperator: i32,
+  //   hdrHeadroom: f32, tmReinhardWhitePoint: f32, _pad0: f32, tmFilmicExposureBias: f32,
+  //   tmFilmicWhitePoint: f32, tmDragoBias: f32, tmDragoLwa: f32, tmDragoLmax: f32,
+  //   tmDragoBrightness: f32, gamutMappingEnabled: i32, gamutMappingModeCode: i32,
+  //   gamutSourceCode: i32, gamutTargetCode: i32, gamutHighlightEnabled: i32, ...
   private packSceneAnalysis(view: DataView, state: Readonly<InternalShaderState>): void {
     const tm = state.toneMappingState;
     let off = 0;
-    off = packFloat(view, off, state.outOfRange);
-    off = packFloat(view, off, tm.enabled ? 1 : 0);
-    off = packFloat(view, off, state.gamutMappingEnabled ? 1 : 0);
-    off = packFloat(view, off, state.gamutMappingModeCode);
-    off = packFloat(view, off, state.gamutSourceCode);
-    off = packFloat(view, off, state.gamutTargetCode);
-    off = packFloat(view, off, state.gamutHighlightEnabled ? 1 : 0);
+    off = packI32(view, off, state.outOfRange);
+    off = packI32(view, off, tm.enabled ? 1 : 0);
+    off = packI32(view, off, state.gamutMappingEnabled ? 1 : 0);
+    off = packI32(view, off, state.gamutMappingModeCode);
+    off = packI32(view, off, state.gamutSourceCode);
+    off = packI32(view, off, state.gamutTargetCode);
+    off = packI32(view, off, state.gamutHighlightEnabled ? 1 : 0);
     // Tone mapping params follow
     off = packFloat(view, off, tm.reinhardWhitePoint ?? 4.0);
     off = packFloat(view, off, tm.filmicExposureBias ?? 2.0);
@@ -576,22 +624,27 @@ export class WebGPUStateUploader {
     packFloat(view, off, tm.dragoBrightness ?? 2.0);
   }
 
+  // WGSL struct: sharpenEnabled: u32, sharpenAmount: f32, texelSize: vec2f
   private packSpatialEffectsPost(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.sharpenEnabled ? 1 : 0);
+    off = packU32(view, off, state.sharpenEnabled ? 1 : 0);
     off = packFloat(view, off, state.sharpenAmount);
     packVec2(view, off, state.texelSize[0], state.texelSize[1]);
   }
 
+  // WGSL struct: outputPrimariesEnabled: i32, displayLUT3DEnabled: i32,
+  //   displayTransferCode: i32, colorInversionEnabled: i32,
+  //   displayGammaOverride: f32, displayBrightnessMultiplier: f32,
+  //   displayCustomGamma: f32, displayLUT3DIntensity: f32, displayLUT3DSize: f32, ...
   private packDisplayOutput(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.outputPrimariesEnabled ? 1 : 0);
-    off = packFloat(view, off, state.displayTransferCode);
+    off = packI32(view, off, state.outputPrimariesEnabled ? 1 : 0);
+    off = packI32(view, off, state.displayTransferCode);
     off = packFloat(view, off, state.displayGammaOverride);
     off = packFloat(view, off, state.displayBrightnessMultiplier);
     off = packFloat(view, off, state.displayCustomGamma);
-    off = packFloat(view, off, state.colorInversionEnabled ? 1 : 0);
-    off = packFloat(view, off, state.displayLUT3DEnabled ? 1 : 0);
+    off = packI32(view, off, state.colorInversionEnabled ? 1 : 0);
+    off = packI32(view, off, state.displayLUT3DEnabled ? 1 : 0);
     off = packFloat(view, off, state.displayLUT3DIntensity);
     off = packFloat(view, off, state.displayLUT3DSize);
     off = packFloat(view, off, 0); // padding
@@ -603,31 +656,38 @@ export class WebGPUStateUploader {
     packMat3(view, off, state.outputPrimariesMatrix);
   }
 
+  // WGSL struct: channelModeCode: i32, falseColorEnabled: i32, contourEnabled: i32,
+  //   contourDesaturate: i32, ditherMode: i32, quantizeBits: i32,
+  //   zebraEnabled: i32, zebraHighEnabled: i32, zebraLowEnabled: i32,
+  //   _pad0-2: i32, zebraHighThreshold: f32, zebraLowThreshold: f32,
+  //   zebraTime: f32, contourLevels: f32, contourLineColor: vec3f, ...
   private packDiagnostics(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.channelModeCode);
-    off = packFloat(view, off, state.falseColorEnabled ? 1 : 0);
-    off = packFloat(view, off, state.zebraEnabled ? 1 : 0);
+    off = packI32(view, off, state.channelModeCode);
+    off = packI32(view, off, state.falseColorEnabled ? 1 : 0);
+    off = packI32(view, off, state.zebraEnabled ? 1 : 0);
     off = packFloat(view, off, state.zebraHighThreshold);
     off = packFloat(view, off, state.zebraLowThreshold);
-    off = packFloat(view, off, state.zebraHighEnabled ? 1 : 0);
-    off = packFloat(view, off, state.zebraLowEnabled ? 1 : 0);
+    off = packI32(view, off, state.zebraHighEnabled ? 1 : 0);
+    off = packI32(view, off, state.zebraLowEnabled ? 1 : 0);
     off = packFloat(view, off, state.zebraTime);
-    off = packFloat(view, off, state.ditherMode);
-    off = packFloat(view, off, state.quantizeBits);
-    off = packFloat(view, off, state.contourEnabled ? 1 : 0);
+    off = packI32(view, off, state.ditherMode);
+    off = packI32(view, off, state.quantizeBits);
+    off = packI32(view, off, state.contourEnabled ? 1 : 0);
     off = packFloat(view, off, state.contourLevels);
-    off = packFloat(view, off, state.contourDesaturate ? 1 : 0);
-    off = packFloat(view, off, 0); // padding
-    off = packFloat(view, off, 0); // padding
-    off = packFloat(view, off, 0); // padding
+    off = packI32(view, off, state.contourDesaturate ? 1 : 0);
+    off = packI32(view, off, 0); // padding
+    off = packI32(view, off, 0); // padding
+    off = packI32(view, off, 0); // padding
     packVec3(view, off, state.contourLineColor[0], state.contourLineColor[1], state.contourLineColor[2]);
   }
 
+  // WGSL struct: premultMode: u32, bgPatternCode: u32, bgCheckerSize: f32,
+  //   _pad0: f32, bgColor1: vec4f, bgColor2: vec4f
   private packCompositing(view: DataView, state: Readonly<InternalShaderState>): void {
     let off = 0;
-    off = packFloat(view, off, state.premultMode);
-    off = packFloat(view, off, state.bgPatternCode);
+    off = packU32(view, off, state.premultMode);
+    off = packU32(view, off, state.bgPatternCode);
     off = packFloat(view, off, state.bgCheckerSize);
     off = packFloat(view, off, 0); // padding
     off = packVec3(view, off, state.bgColor1[0], state.bgColor1[1], state.bgColor1[2]);

@@ -15,6 +15,15 @@ function createMockBuffer(data?: Float32Array) {
   };
 }
 
+function createMockBufferRaw(arrayBuffer: ArrayBuffer) {
+  return {
+    getMappedRange: vi.fn().mockReturnValue(arrayBuffer),
+    unmap: vi.fn(),
+    destroy: vi.fn(),
+    mapAsync: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function createMockTexture() {
   return {
     createView: vi.fn().mockReturnValue({}),
@@ -407,6 +416,172 @@ describe('WebGPUReadback', () => {
       readback.dispose();
       readback.dispose();
       // No error means success — destroy on null buffers is a no-op
+    });
+  });
+
+  describe('float16 readback (bytesPerPixel=8)', () => {
+    /**
+     * Helper: create an ArrayBuffer sized for 1 pixel with 256-byte row alignment,
+     * writing 4 float16 channel values (as Uint16) at the start.
+     */
+    function makeFloat16PixelBuffer(r: number, g: number, b: number, a: number): ArrayBuffer {
+      // 1 pixel * 8 bytes = 8, aligned to 256 bytes
+      const buf = new ArrayBuffer(256);
+      const view = new Uint16Array(buf);
+      view[0] = r;
+      view[1] = g;
+      view[2] = b;
+      view[3] = a;
+      return buf;
+    }
+
+    it('WGPU-RB-060: readPixelFloat with bytesPerPixel=8 converts float16 to float32', async () => {
+      // 0x3C00=1.0, 0x4000=2.0, 0x4200=3.0, 0x3800=0.5
+      const buf = makeFloat16PixelBuffer(0x3c00, 0x4000, 0x4200, 0x3800);
+      const mockBuf = createMockBufferRaw(buf);
+      const device = createMockDevice(mockBuf);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      const result = await readback.readPixelFloat(device, 0, 0, texture, 8);
+
+      expect(result[0]).toBeCloseTo(1.0, 5);
+      expect(result[1]).toBeCloseTo(2.0, 5);
+      expect(result[2]).toBeCloseTo(3.0, 5);
+      expect(result[3]).toBeCloseTo(0.5, 5);
+    });
+
+    it('WGPU-RB-061: readPixelFloat with bytesPerPixel=8 handles zero (0x0000)', async () => {
+      const buf = makeFloat16PixelBuffer(0x0000, 0x0000, 0x0000, 0x0000);
+      const mockBuf = createMockBufferRaw(buf);
+      const device = createMockDevice(mockBuf);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      const result = await readback.readPixelFloat(device, 0, 0, texture, 8);
+
+      expect(result[0]).toBe(0);
+      expect(result[1]).toBe(0);
+      expect(result[2]).toBe(0);
+      expect(result[3]).toBe(0);
+    });
+
+    it('WGPU-RB-062: readPixelFloat with bytesPerPixel=8 handles negative values (0xBC00 = -1.0)', async () => {
+      const buf = makeFloat16PixelBuffer(0xbc00, 0xbc00, 0xbc00, 0xbc00);
+      const mockBuf = createMockBufferRaw(buf);
+      const device = createMockDevice(mockBuf);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      const result = await readback.readPixelFloat(device, 0, 0, texture, 8);
+
+      expect(result[0]).toBeCloseTo(-1.0, 5);
+      expect(result[1]).toBeCloseTo(-1.0, 5);
+      expect(result[2]).toBeCloseTo(-1.0, 5);
+      expect(result[3]).toBeCloseTo(-1.0, 5);
+    });
+
+    it('WGPU-RB-063: readPixelFloat with bytesPerPixel=8 handles infinity (0x7C00 = +Inf)', async () => {
+      const buf = makeFloat16PixelBuffer(0x7c00, 0xfc00, 0x7c00, 0x3c00);
+      const mockBuf = createMockBufferRaw(buf);
+      const device = createMockDevice(mockBuf);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      const result = await readback.readPixelFloat(device, 0, 0, texture, 8);
+
+      expect(result[0]).toBe(Infinity);
+      expect(result[1]).toBe(-Infinity);
+      expect(result[2]).toBe(Infinity);
+      expect(result[3]).toBeCloseTo(1.0, 5);
+    });
+
+    it('WGPU-RB-064: readPixelFloat with bytesPerPixel=8 handles NaN (0x7E00)', async () => {
+      const buf = makeFloat16PixelBuffer(0x7e00, 0x7e00, 0x7e00, 0x7e00);
+      const mockBuf = createMockBufferRaw(buf);
+      const device = createMockDevice(mockBuf);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      const result = await readback.readPixelFloat(device, 0, 0, texture, 8);
+
+      expect(result[0]).toBeNaN();
+      expect(result[1]).toBeNaN();
+      expect(result[2]).toBeNaN();
+      expect(result[3]).toBeNaN();
+    });
+
+    it('WGPU-RB-065: readRegion with bytesPerPixel=8, 2x2 region', async () => {
+      // 2 pixels wide * 8 bytes/pixel = 16 bytes unaligned, aligned to 256
+      // 2 rows -> total 512 bytes = 256 Uint16 elements
+      const buf = new ArrayBuffer(512);
+      const view = new Uint16Array(buf);
+
+      // Row 0, pixel (0,0): R=1.0, G=0.0, B=0.0, A=1.0
+      view[0] = 0x3c00; // 1.0
+      view[1] = 0x0000; // 0.0
+      view[2] = 0x0000; // 0.0
+      view[3] = 0x3c00; // 1.0
+
+      // Row 0, pixel (1,0): R=0.0, G=1.0, B=0.0, A=1.0
+      view[4] = 0x0000; // 0.0
+      view[5] = 0x3c00; // 1.0
+      view[6] = 0x0000; // 0.0
+      view[7] = 0x3c00; // 1.0
+
+      // Row 1 starts at byte offset 256 -> Uint16 offset 128
+      // Row 1, pixel (0,1): R=0.0, G=0.0, B=1.0, A=0.5
+      view[128] = 0x0000; // 0.0
+      view[129] = 0x0000; // 0.0
+      view[130] = 0x3c00; // 1.0
+      view[131] = 0x3800; // 0.5
+
+      // Row 1, pixel (1,1): R=2.0, G=3.0, B=0.5, A=1.0
+      view[132] = 0x4000; // 2.0
+      view[133] = 0x4200; // 3.0
+      view[134] = 0x3800; // 0.5
+      view[135] = 0x3c00; // 1.0
+
+      const mockBuf = createMockBufferRaw(buf);
+      const device = createMockDevice(mockBuf);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      const result = await readback.readRegion(device, 0, 0, 2, 2, texture, 8);
+
+      // Output: 2*2*4 = 16 floats, compacted without row padding
+      expect(result.length).toBe(16);
+
+      // Row 0, pixel 0: red
+      expect(result[0]).toBeCloseTo(1.0, 5);
+      expect(result[1]).toBeCloseTo(0.0, 5);
+      expect(result[2]).toBeCloseTo(0.0, 5);
+      expect(result[3]).toBeCloseTo(1.0, 5);
+
+      // Row 0, pixel 1: green
+      expect(result[4]).toBeCloseTo(0.0, 5);
+      expect(result[5]).toBeCloseTo(1.0, 5);
+      expect(result[6]).toBeCloseTo(0.0, 5);
+      expect(result[7]).toBeCloseTo(1.0, 5);
+
+      // Row 1, pixel 0: blue with alpha=0.5
+      expect(result[8]).toBeCloseTo(0.0, 5);
+      expect(result[9]).toBeCloseTo(0.0, 5);
+      expect(result[10]).toBeCloseTo(1.0, 5);
+      expect(result[11]).toBeCloseTo(0.5, 5);
+
+      // Row 1, pixel 1: mixed values
+      expect(result[12]).toBeCloseTo(2.0, 5);
+      expect(result[13]).toBeCloseTo(3.0, 5);
+      expect(result[14]).toBeCloseTo(0.5, 5);
+      expect(result[15]).toBeCloseTo(1.0, 5);
+
+      // Verify bytesPerRow alignment: 2*8=16 aligned to 256
+      expect(device._mockCommandEncoder.copyTextureToBuffer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ bytesPerRow: 256 }),
+        expect.anything(),
+      );
     });
   });
 });

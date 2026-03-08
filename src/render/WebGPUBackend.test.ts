@@ -348,15 +348,29 @@ describe('WebGPUBackend', () => {
       expect(backend.getHDROutputMode()).toBe('sdr');
     });
 
-    it('setHDROutputMode changes mode and returns true', () => {
+    it('setHDROutputMode changes mode and returns true', async () => {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
       const backend = new WebGPUBackend();
+      const canvas = createWebGPUCanvas(gpuCtx);
+      backend.initialize(canvas);
+      await backend.initAsync();
+
       const result = backend.setHDROutputMode('hlg', DEFAULT_CAPABILITIES);
       expect(result).toBe(true);
       expect(backend.getHDROutputMode()).toBe('hlg');
     });
 
-    it('supports pq mode', () => {
+    it('supports pq mode', async () => {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
       const backend = new WebGPUBackend();
+      const canvas = createWebGPUCanvas(gpuCtx);
+      backend.initialize(canvas);
+      await backend.initAsync();
+
       backend.setHDROutputMode('pq', DEFAULT_CAPABILITIES);
       expect(backend.getHDROutputMode()).toBe('pq');
     });
@@ -530,7 +544,8 @@ describe('WebGPUBackend', () => {
       };
       backend.renderImage(image as any, 0.5, -0.5, 2.0, 2.0);
 
-      expect(device.queue.writeBuffer).toHaveBeenCalled();
+      // Float32 HDR images are uploaded via writeTexture (through TextureManager)
+      expect(device.queue.writeTexture).toHaveBeenCalled();
       expect(device.queue.submit).toHaveBeenCalled();
     });
 

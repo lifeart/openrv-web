@@ -40,8 +40,6 @@ import type { RenderState } from './RenderState';
 import type { WGPUDevice, WGPUCanvasContext, WGPUNavigatorGPU, WGPUTexture } from './webgpu/WebGPUTypes';
 import { WebGPURenderPipelineManager } from './webgpu/WebGPURenderPipeline';
 import { WebGPUShaderPipeline } from './webgpu/WebGPUShaderPipeline';
-import { WebGPUPingPong } from './webgpu/WebGPUPingPong';
-import { WebGPUStateUploader } from './webgpu/WebGPUStateUploader';
 import { WebGPUTextureManager } from './webgpu/WebGPUTextureManager';
 import { ShaderStateManager } from './ShaderStateManager';
 import { WebGPU3DLUT } from './webgpu/WebGPU3DLUT';
@@ -69,8 +67,6 @@ export class WebGPUBackend implements RendererBackend {
 
   // --- Shader pipeline (Phase 2) ---
   private shaderPipeline = new WebGPUShaderPipeline();
-  private shaderPingPong = new WebGPUPingPong();
-  private stateUploader = new WebGPUStateUploader();
   private stateManager = new ShaderStateManager();
 
   // --- State (mirrors WebGL2Backend for identical behavior) ---
@@ -92,6 +88,7 @@ export class WebGPUBackend implements RendererBackend {
   private inputTransferCode = 0;
 
   // Texture filter mode
+  // TODO: _textureFilterMode is stored but not yet wired to GPU samplers
   private _textureFilterMode: TextureFilterMode = 'linear';
 
   // --- Phase 4: Advanced features ---
@@ -201,6 +198,7 @@ export class WebGPUBackend implements RendererBackend {
       this.extendedToneMapping = toneMappingMode === 'extended';
     } catch {
       if (toneMappingMode === 'extended') {
+        console.warn('Extended tone mapping not supported, falling back to standard');
         this.configureContext(device, 'standard');
       } else {
         throw new Error('WebGPU canvas configuration failed');
@@ -222,8 +220,6 @@ export class WebGPUBackend implements RendererBackend {
 
     // Clean up shader pipeline (Phase 2)
     this.shaderPipeline.dispose();
-    this.shaderPingPong.dispose();
-    this.stateUploader.dispose();
     this.stateManager.dispose();
 
     // Clean up Phase 4 resources
@@ -551,16 +547,20 @@ export class WebGPUBackend implements RendererBackend {
    */
   async readPixelFloatAsync(x: number, y: number, width: number, height: number): Promise<Float32Array | null> {
     if (this._deviceLost || !this.device || !this.gpuContext) return null;
+    // SDR canvas uses rgba8unorm which WebGPUReadback cannot interpret as float data.
+    // Readback is only supported in HDR mode (rgba16float canvas texture).
+    if (!this.hdrOutputEnabled) return null;
     try {
       const canvasTexture = this.gpuContext.getCurrentTexture();
-      // rgba16float = 8 bytes/pixel, rgba32float = 16 bytes/pixel
-      const bytesPerPixel = this.hdrOutputEnabled ? 8 : 16;
+      // rgba16float = 8 bytes/pixel
+      const bytesPerPixel = 8;
       if (width === 1 && height === 1) {
         const pixel = await this.readbackHelper.readPixelFloat(this.device, x, y, canvasTexture, bytesPerPixel);
         return new Float32Array(pixel);
       }
       return await this.readbackHelper.readRegion(this.device, x, y, width, height, canvasTexture, bytesPerPixel);
-    } catch {
+    } catch (e) {
+      console.warn('WebGPU readback failed:', e);
       return null;
     }
   }
