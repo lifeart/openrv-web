@@ -14,6 +14,7 @@ import type { TabBar } from './ui/components/layout/TabBar';
 import type { AppControlRegistry } from './AppControlRegistry';
 import type { AppSessionBridge } from './AppSessionBridge';
 import type { AppPersistenceManager } from './AppPersistenceManager';
+import type { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 /**
  * The wiring context provides all the components that event wiring modules
@@ -28,4 +29,18 @@ export interface AppWiringContext {
   controls: AppControlRegistry;
   sessionBridge: AppSessionBridge;
   persistenceManager: AppPersistenceManager;
+}
+
+/**
+ * Standardized return type for stateless wiring modules.
+ */
+export interface WiringResult {
+  subscriptions: DisposableSubscriptionManager;
+}
+
+/**
+ * Standardized return type for wiring modules that maintain mutable state.
+ */
+export interface StatefulWiringResult<S> extends WiringResult {
+  state: S;
 }

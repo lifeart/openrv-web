@@ -11,11 +11,12 @@
  * - Display profile control -> viewer
  */
 
-import type { AppWiringContext } from './AppWiringContext';
+import type { AppWiringContext, StatefulWiringResult } from './AppWiringContext';
 import type { ColorControls } from './ui/components/ColorControls';
 import type { OCIOState } from './color/OCIOConfig';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
 export const DEFAULT_OCIO_BAKE_SIZE = 33;
 export const ACES_OCIO_BAKE_SIZE = 65;
@@ -45,35 +46,33 @@ export function resolveOCIOBakeSize(state: OCIOState): number {
 export interface ColorWiringState {
   colorHistoryTimer: ReturnType<typeof setTimeout> | null;
   colorHistoryPrevious: ReturnType<ColorControls['getAdjustments']> | null;
-  subscriptions: DisposableSubscriptionManager;
 }
 
 /**
  * Wire all color-related controls to the viewer and bridges.
  * Returns mutable state that the caller must clean up on dispose.
  */
-export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
+export function wireColorControls(ctx: AppWiringContext): StatefulWiringResult<ColorWiringState> {
   const { viewer, controls, sessionBridge, persistenceManager } = ctx;
 
   const subs = new DisposableSubscriptionManager();
+  const fx: WiringSideEffects = {
+    scheduleUpdateScopes: () => sessionBridge.scheduleUpdateScopes(),
+    syncGTOStore: () => persistenceManager.syncGTOStore(),
+  };
 
   const state: ColorWiringState = {
     colorHistoryTimer: null,
     colorHistoryPrevious: controls.colorControls.getAdjustments(),
-    subscriptions: subs,
   };
 
   // Color inversion toggle -> viewer
-  subs.add(controls.colorInversionToggle.on('inversionChanged', (enabled) => {
-    viewer.setColorInversion(enabled);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.colorInversionToggle.on('inversionChanged',
+    withSideEffects(fx, (enabled) => viewer.setColorInversion(enabled), { scopes: true })));
 
   // Premult control -> viewer
-  subs.add(controls.premultControl.on('premultChanged', (mode) => {
-    viewer.setPremultMode(mode);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.premultControl.on('premultChanged',
+    withSideEffects(fx, (mode) => viewer.setPremultMode(mode), { scopes: true })));
 
   // Color controls adjustments -> viewer with debounced history recording
   subs.add(controls.colorControls.on('adjustmentsChanged', (adjustments) => {
@@ -137,26 +136,18 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
   }));
 
   // LUT events -> viewer
-  subs.add(controls.colorControls.on('lutLoaded', (lut) => {
-    viewer.setLUT(lut);
-    sessionBridge.scheduleUpdateScopes();
-  }));
-  subs.add(controls.colorControls.on('lutIntensityChanged', (intensity) => {
-    viewer.setLUTIntensity(intensity);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.colorControls.on('lutLoaded',
+    withSideEffects(fx, (lut) => viewer.setLUT(lut), { scopes: true })));
+  subs.add(controls.colorControls.on('lutIntensityChanged',
+    withSideEffects(fx, (intensity) => viewer.setLUTIntensity(intensity), { scopes: true })));
 
   // CDL control -> viewer
-  subs.add(controls.cdlControl.on('cdlChanged', (cdl) => {
-    viewer.setCDL(cdl);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.cdlControl.on('cdlChanged',
+    withSideEffects(fx, (cdl) => viewer.setCDL(cdl), { scopes: true })));
 
   // Curves control -> viewer
-  subs.add(controls.curvesControl.on('curvesChanged', (curves) => {
-    viewer.setCurves(curves);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.curvesControl.on('curvesChanged',
+    withSideEffects(fx, (curves) => viewer.setCurves(curves), { scopes: true })));
 
   // OCIO control -> viewer (baked 3D LUT)
   subs.add(controls.ocioControl.on('stateChanged', (state) => {
@@ -172,29 +163,21 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
   }));
 
   // Display profile control -> viewer
-  subs.add(controls.displayProfileControl.on('stateChanged', (state) => {
-    viewer.setDisplayColorState(state);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.displayProfileControl.on('stateChanged',
+    withSideEffects(fx, (state) => viewer.setDisplayColorState(state), { scopes: true })));
 
   // Gamut mapping control -> viewer
-  subs.add(controls.gamutMappingControl.on('gamutMappingChanged', (state) => {
-    viewer.setGamutMappingState(state);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.gamutMappingControl.on('gamutMappingChanged',
+    withSideEffects(fx, (state) => viewer.setGamutMappingState(state), { scopes: true, gto: true })));
 
   // LUT pipeline panel -> viewer
-  subs.add(controls.lutPipelinePanel.on('pipelineChanged', () => {
-    viewer.syncLUTPipeline();
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.lutPipelinePanel.on('pipelineChanged',
+    withSideEffects(fx, () => viewer.syncLUTPipeline(), { scopes: true, gto: true })));
 
   // Ensure GPU LUT chain state matches panel defaults at startup
   viewer.syncLUTPipeline();
 
-  return state;
+  return { subscriptions: subs, state };
 }
 
 /**

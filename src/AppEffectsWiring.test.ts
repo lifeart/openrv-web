@@ -298,7 +298,7 @@ describe('wireEffectsControls', () => {
     });
 
     it('EW-DISP-002: callbacks do not fire after dispose', () => {
-      subs.dispose();
+      subs.subscriptions.dispose();
 
       mock.viewer.setFilterSettings.mockClear();
       mock.filterControl.emit('filtersChanged', { blur: 1 });

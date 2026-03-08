@@ -14,16 +14,21 @@
  * - Presentation mode -> headerBar
  */
 
-import type { AppWiringContext } from './AppWiringContext';
+import type { AppWiringContext, WiringResult } from './AppWiringContext';
 import { detectFloatingWindowViolations } from './stereo/FloatingWindowDetector';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
 /**
  * Wire all view-related controls to the viewer and bridges.
  */
-export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionManager {
+export function wireViewControls(ctx: AppWiringContext): WiringResult {
   const { session, viewer, controls, sessionBridge, persistenceManager } = ctx;
   const subs = new DisposableSubscriptionManager();
+  const fx: WiringSideEffects = {
+    scheduleUpdateScopes: () => sessionBridge.scheduleUpdateScopes(),
+    syncGTOStore: () => persistenceManager.syncGTOStore(),
+  };
 
   // Zoom control -> viewer
   // ZoomControl now emits pixel ratio values (industry standard: 100% = 1:1).
@@ -143,10 +148,8 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
   }));
 
   // Tone mapping control -> viewer
-  subs.add(controls.toneMappingControl.on('stateChanged', (state) => {
-    viewer.setToneMappingState(state);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.toneMappingControl.on('stateChanged',
+    withSideEffects(fx, (state) => viewer.setToneMappingState(state), { scopes: true })));
   subs.add(controls.toneMappingControl.on('hdrModeChanged', (mode) => {
     viewer.setHDROutputMode(mode);
   }));
@@ -167,11 +170,8 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
   }));
 
   // Channel select -> viewer
-  subs.add(controls.channelSelect.on('channelChanged', (channel) => {
-    viewer.setChannelMode(channel);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.channelSelect.on('channelChanged',
+    withSideEffects(fx, (channel) => viewer.setChannelMode(channel), { scopes: true, gto: true })));
   subs.add(controls.channelSelect.on('layerChanged', async (event) => {
     // Handle EXR layer change
     await sessionBridge.handleEXRLayerChange(event.layer, event.remapping);
@@ -195,17 +195,12 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
   }));
 
   // Stereo eye transform control -> viewer
-  subs.add(controls.stereoEyeTransformControl.on('transformChanged', (state) => {
-    viewer.setStereoEyeTransforms(state);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.stereoEyeTransformControl.on('transformChanged',
+    withSideEffects(fx, (state) => viewer.setStereoEyeTransforms(state), { scopes: true, gto: true })));
 
   // Stereo alignment control -> viewer
-  subs.add(controls.stereoAlignControl.on('alignModeChanged', (mode) => {
-    viewer.setStereoAlignMode(mode);
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  subs.add(controls.stereoAlignControl.on('alignModeChanged',
+    withSideEffects(fx, (mode) => viewer.setStereoAlignMode(mode), { scopes: true })));
 
   // Convergence measurement: wire viewer mousemove -> convergence cursor + disparity
   const viewerContainer = viewer.getContainer();
@@ -252,5 +247,5 @@ export function wireViewControls(ctx: AppWiringContext): DisposableSubscriptionM
     ctx.headerBar.setPresentationState(state.enabled);
   }));
 
-  return subs;
+  return { subscriptions: subs };
 }

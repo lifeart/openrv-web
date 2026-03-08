@@ -7,39 +7,37 @@
  * - Lens distortion control -> viewer
  */
 
-import type { AppWiringContext } from './AppWiringContext';
+import type { AppWiringContext, WiringResult } from './AppWiringContext';
 import { effectRegistry, noiseReductionEffect } from './effects';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
 /**
  * Wire all effect-related controls to the viewer and bridges.
  */
-export function wireEffectsControls(ctx: AppWiringContext): DisposableSubscriptionManager {
+export function wireEffectsControls(ctx: AppWiringContext): WiringResult {
   const { viewer, controls, sessionBridge, persistenceManager } = ctx;
   const subs = new DisposableSubscriptionManager();
+  const fx: WiringSideEffects = {
+    scheduleUpdateScopes: () => sessionBridge.scheduleUpdateScopes(),
+    syncGTOStore: () => persistenceManager.syncGTOStore(),
+  };
 
   // Filter control -> viewer
-  subs.add(controls.filterControl.on('filtersChanged', (settings) => {
-    viewer.setFilterSettings(settings);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.filterControl.on('filtersChanged',
+    withSideEffects(fx, (settings) => viewer.setFilterSettings(settings), { scopes: true, gto: true })));
 
   // Crop control -> viewer
-  subs.add(controls.cropControl.on('cropStateChanged', (state) => {
-    viewer.setCropState(state);
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.cropControl.on('cropStateChanged',
+    withSideEffects(fx, (state) => viewer.setCropState(state), { scopes: false, gto: true })));
   subs.add(controls.cropControl.on('cropModeToggled', (enabled) => {
     viewer.setCropEnabled(enabled);
   }));
   subs.add(controls.cropControl.on('panelToggled', (isOpen) => {
     viewer.setCropPanelOpen(isOpen);
   }));
-  subs.add(controls.cropControl.on('uncropStateChanged', (state) => {
-    viewer.setUncropState(state);
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.cropControl.on('uncropStateChanged',
+    withSideEffects(fx, (state) => viewer.setUncropState(state), { scopes: false, gto: true })));
 
   // Handle crop region changes from Viewer (when user drags crop handles)
   viewer.setOnCropRegionChanged((region) => {
@@ -49,52 +47,32 @@ export function wireEffectsControls(ctx: AppWiringContext): DisposableSubscripti
   subs.add(() => viewer.setOnCropRegionChanged(null));
 
   // Lens distortion control -> viewer
-  subs.add(controls.lensControl.on('lensChanged', (params) => {
-    viewer.setLensParams(params);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.lensControl.on('lensChanged',
+    withSideEffects(fx, (params) => viewer.setLensParams(params), { scopes: true, gto: true })));
 
   // Deinterlace control -> viewer
-  subs.add(controls.deinterlaceControl.on('deinterlaceChanged', (params) => {
-    viewer.setDeinterlaceParams(params);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.deinterlaceControl.on('deinterlaceChanged',
+    withSideEffects(fx, (params) => viewer.setDeinterlaceParams(params), { scopes: true, gto: true })));
 
   // Film emulation control -> viewer
-  subs.add(controls.filmEmulationControl.on('filmEmulationChanged', (params) => {
-    viewer.setFilmEmulationParams(params);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.filmEmulationControl.on('filmEmulationChanged',
+    withSideEffects(fx, (params) => viewer.setFilmEmulationParams(params), { scopes: true, gto: true })));
 
   // Perspective correction control -> viewer + overlay
-  subs.add(controls.perspectiveCorrectionControl.on('perspectiveChanged', (params) => {
-    viewer.setPerspectiveParams(params);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.perspectiveCorrectionControl.on('perspectiveChanged',
+    withSideEffects(fx, (params) => viewer.setPerspectiveParams(params), { scopes: true, gto: true })));
 
   // Stabilization control -> viewer
-  subs.add(controls.stabilizationControl.on('stabilizationChanged', (params) => {
-    viewer.setStabilizationParams(params);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.stabilizationControl.on('stabilizationChanged',
+    withSideEffects(fx, (params) => viewer.setStabilizationParams(params), { scopes: true, gto: true })));
 
   // Noise reduction control -> viewer
-  subs.add(controls.noiseReductionControl.on('paramsChanged', (params) => {
-    viewer.setNoiseReductionParams(params);
-    sessionBridge.scheduleUpdateScopes();
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.noiseReductionControl.on('paramsChanged',
+    withSideEffects(fx, (params) => viewer.setNoiseReductionParams(params), { scopes: true, gto: true })));
 
   // Watermark control -> viewer
-  subs.add(controls.watermarkControl.on('stateChanged', (state) => {
-    viewer.setWatermarkState(state);
-    persistenceManager.syncGTOStore();
-  }));
+  subs.add(controls.watermarkControl.on('stateChanged',
+    withSideEffects(fx, (state) => viewer.setWatermarkState(state), { scopes: false, gto: true })));
 
   // Perspective grid overlay -> control + viewer (bidirectional)
   subs.add(viewer.getPerspectiveGridOverlay().on('cornersChanged', (params) => {
@@ -113,5 +91,5 @@ export function wireEffectsControls(ctx: AppWiringContext): DisposableSubscripti
   viewer.setNoiseReductionParams(controls.noiseReductionControl.getParams());
   viewer.setWatermarkState(controls.watermarkControl.getState());
 
-  return subs;
+  return { subscriptions: subs };
 }

@@ -43,7 +43,9 @@ import { LayoutOrchestrator } from './services/LayoutOrchestrator';
 import type { AppWiringContext } from './AppWiringContext';
 
 // Wiring modules
-import { wireColorControls, updateOCIOPipeline, type ColorWiringState } from './AppColorWiring';
+import { wireColorControls, updateOCIOPipeline } from './AppColorWiring';
+import type { StatefulWiringResult } from './AppWiringContext';
+import type { ColorWiringState } from './AppColorWiring';
 import { wireViewControls } from './AppViewWiring';
 import { wireEffectsControls } from './AppEffectsWiring';
 import { wireTransformControls } from './AppTransformWiring';
@@ -117,7 +119,7 @@ export class App {
   private displayCapabilities: DisplayCapabilities;
 
   // Wiring state (managed by wiring modules, cleaned up on dispose)
-  private colorWiringState!: ColorWiringState;
+  private colorWiringState!: StatefulWiringResult<ColorWiringState>;
   private wiringSubscriptions = new DisposableSubscriptionManager();
 
   constructor() {
@@ -519,28 +521,23 @@ export class App {
       persistenceManager: this.persistenceManager,
     };
 
-    // Wire all control groups via focused wiring modules
-    this.colorWiringState = wireColorControls(wiringCtx);
-    this.wiringSubscriptions.add(() => this.colorWiringState?.subscriptions?.dispose());
-
-    const viewSubs = wireViewControls(wiringCtx);
-    this.wiringSubscriptions.add(() => viewSubs?.dispose());
-
-    const effectsSubs = wireEffectsControls(wiringCtx);
-    this.wiringSubscriptions.add(() => effectsSubs?.dispose());
-
-    const transformState = wireTransformControls(wiringCtx);
-    this.wiringSubscriptions.add(() => transformState?.subscriptions?.dispose());
-
-    const playbackSubs = wirePlaybackControls(wiringCtx, {
-      getKeyboardHandler: () => this.keyboardHandler,
-      getFullscreenManager: () => this.fullscreenManager ?? undefined,
-      getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
-    });
-    this.wiringSubscriptions.add(() => playbackSubs?.dispose());
-
-    const stackState = wireStackControls(wiringCtx);
-    this.wiringSubscriptions.add(() => stackState?.subscriptions?.dispose());
+    // Wire all control groups via focused wiring modules.
+    // Each module returns a WiringResult (or StatefulWiringResult) with subscriptions.
+    const wiringResults = [
+      (this.colorWiringState = wireColorControls(wiringCtx)),
+      wireViewControls(wiringCtx),
+      wireEffectsControls(wiringCtx),
+      wireTransformControls(wiringCtx),
+      wirePlaybackControls(wiringCtx, {
+        getKeyboardHandler: () => this.keyboardHandler,
+        getFullscreenManager: () => this.fullscreenManager ?? undefined,
+        getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
+      }),
+      wireStackControls(wiringCtx),
+    ];
+    for (const result of wiringResults) {
+      this.wiringSubscriptions.add(() => result.subscriptions.dispose());
+    }
 
     // Virtual slider controller (key-hold-to-adjust color parameters)
     this.virtualSliderController = new VirtualSliderController({
@@ -748,9 +745,9 @@ export class App {
     // Dispose all wiring subscriptions first (before component disposal)
     this.wiringSubscriptions.dispose();
 
-    if (this.colorWiringState.colorHistoryTimer) {
-      clearTimeout(this.colorWiringState.colorHistoryTimer);
-      this.colorWiringState.colorHistoryTimer = null;
+    if (this.colorWiringState.state.colorHistoryTimer) {
+      clearTimeout(this.colorWiringState.state.colorHistoryTimer);
+      this.colorWiringState.state.colorHistoryTimer = null;
     }
 
     // Dispose layout orchestrator (cleans up fullscreen, focus, a11y, cheat sheet, timers)

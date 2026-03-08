@@ -60,7 +60,7 @@ describe('wireTransformControls', () => {
     const { ctx } = createMockContext();
     const state = wireTransformControls(ctx);
 
-    expect(state.transformHistoryPrevious).toBeNull();
+    expect(state.state.transformHistoryPrevious).toBeNull();
     expect(state.subscriptions).toBeDefined();
     expect(state.subscriptions.isDisposed).toBe(false);
   });

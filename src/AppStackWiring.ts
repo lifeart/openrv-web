@@ -6,7 +6,7 @@
  * - Layer source changed -> viewer
  */
 
-import type { AppWiringContext } from './AppWiringContext';
+import type { AppWiringContext, StatefulWiringResult } from './AppWiringContext';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 /**
@@ -14,21 +14,24 @@ import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionMan
  */
 export interface StackWiringState {
   nextLayerNumber: number;
-  subscriptions: DisposableSubscriptionManager;
 }
 
 /**
  * Wire the stack/composite control to the viewer and session bridge.
  * Returns mutable state that tracks the next layer number.
  */
-export function wireStackControls(ctx: AppWiringContext): StackWiringState {
+export function wireStackControls(ctx: AppWiringContext): StatefulWiringResult<StackWiringState> {
   const { session, viewer, controls, sessionBridge } = ctx;
 
   const subs = new DisposableSubscriptionManager();
 
   const state: StackWiringState = {
     nextLayerNumber: 1,
-    subscriptions: subs,
+  };
+
+  const syncLayers = () => {
+    viewer.setStackLayers(controls.stackControl.getLayers());
+    sessionBridge.scheduleUpdateScopes();
   };
 
   subs.add(controls.stackControl.on('layerAdded', (layer) => {
@@ -38,31 +41,18 @@ export function wireStackControls(ctx: AppWiringContext): StackWiringState {
     layer.name = `Layer ${state.nextLayerNumber++}`;
     controls.stackControl.updateLayerSource(layer.id, layer.sourceIndex);
     controls.stackControl.updateLayerName(layer.id, layer.name);
-    viewer.setStackLayers(controls.stackControl.getLayers());
-    sessionBridge.scheduleUpdateScopes();
+    syncLayers();
   }));
 
-  subs.add(controls.stackControl.on('layerChanged', () => {
-    viewer.setStackLayers(controls.stackControl.getLayers());
-    sessionBridge.scheduleUpdateScopes();
-  }));
-
-  subs.add(controls.stackControl.on('layerRemoved', () => {
-    viewer.setStackLayers(controls.stackControl.getLayers());
-    sessionBridge.scheduleUpdateScopes();
-  }));
-
-  subs.add(controls.stackControl.on('layerReordered', () => {
-    viewer.setStackLayers(controls.stackControl.getLayers());
-    sessionBridge.scheduleUpdateScopes();
-  }));
+  for (const event of ['layerChanged', 'layerRemoved', 'layerReordered'] as const) {
+    subs.add(controls.stackControl.on(event, syncLayers));
+  }
 
   subs.add(controls.stackControl.on('layerSourceChanged', ({ layerId, sourceIndex }) => {
     controls.stackControl.updateLayerSource(layerId, sourceIndex);
     // Don't update layer name - keep the original "Layer N" name
-    viewer.setStackLayers(controls.stackControl.getLayers());
-    sessionBridge.scheduleUpdateScopes();
+    syncLayers();
   }));
 
-  return state;
+  return { subscriptions: subs, state };
 }

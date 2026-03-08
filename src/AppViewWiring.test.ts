@@ -346,7 +346,7 @@ describe('wireViewControls', () => {
     });
 
     it('VW-DISP-002: callbacks do not fire after dispose', () => {
-      subs.dispose();
+      subs.subscriptions.dispose();
 
       viewer.smoothFitToWindow.mockClear();
       (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit');

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
-import { wireStackControls, type StackWiringState } from './AppStackWiring';
+import { wireStackControls } from './AppStackWiring';
 import type { AppWiringContext } from './AppWiringContext';
 
 /**
@@ -51,7 +51,7 @@ describe('wireStackControls', () => {
   let session: ReturnType<typeof createMockContext>['session'];
   let sessionBridge: ReturnType<typeof createMockContext>['sessionBridge'];
   let stackControl: ReturnType<typeof createMockContext>['stackControl'];
-  let state: StackWiringState;
+  let state: ReturnType<typeof wireStackControls>;
 
   beforeEach(() => {
     const mock = createMockContext();
@@ -113,7 +113,7 @@ describe('wireStackControls', () => {
 
     expect(layer1.name).toBe('Layer 1');
     expect(layer2.name).toBe('Layer 2');
-    expect(state.nextLayerNumber).toBe(3);
+    expect(state.state.nextLayerNumber).toBe(3);
   });
 
   describe('disposal', () => {

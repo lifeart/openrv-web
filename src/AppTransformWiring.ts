@@ -5,7 +5,7 @@
  * - Transform control (rotation, flip) -> viewer with undo/redo history
  */
 
-import type { AppWiringContext } from './AppWiringContext';
+import type { AppWiringContext, StatefulWiringResult } from './AppWiringContext';
 import type { TransformControl } from './ui/components/TransformControl';
 import { DEFAULT_TRANSFORM } from './ui/components/TransformControl';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
@@ -16,21 +16,19 @@ import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionMan
  */
 export interface TransformWiringState {
   transformHistoryPrevious: ReturnType<TransformControl['getTransform']> | null;
-  subscriptions: DisposableSubscriptionManager;
 }
 
 /**
  * Wire the transform control to the viewer with history recording.
  * Returns mutable state that tracks the previous transform for undo/redo.
  */
-export function wireTransformControls(ctx: AppWiringContext): TransformWiringState {
+export function wireTransformControls(ctx: AppWiringContext): StatefulWiringResult<TransformWiringState> {
   const { viewer, controls, persistenceManager } = ctx;
 
   const subs = new DisposableSubscriptionManager();
 
   const state: TransformWiringState = {
     transformHistoryPrevious: null,
-    subscriptions: subs,
   };
 
   subs.add(controls.transformControl.on('transformChanged', (transform) => {
@@ -81,5 +79,5 @@ export function wireTransformControls(ctx: AppWiringContext): TransformWiringSta
     state.transformHistoryPrevious = currentTransform;
   }));
 
-  return state;
+  return { subscriptions: subs, state };
 }

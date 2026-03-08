@@ -360,9 +360,9 @@ describe('wireColorControls', () => {
   it('CW-010: returns ColorWiringState with null timer initially', () => {
     const state = wireColorControls(ctx as any);
 
-    expect(state).toHaveProperty('colorHistoryTimer');
-    expect(state.colorHistoryTimer).toBeNull();
-    expect(state).toHaveProperty('colorHistoryPrevious');
+    expect(state.state).toHaveProperty('colorHistoryTimer');
+    expect(state.state.colorHistoryTimer).toBeNull();
+    expect(state.state).toHaveProperty('colorHistoryPrevious');
   });
 
   describe('disposal', () => {
@@ -404,11 +404,11 @@ describe('wireColorControls', () => {
       ctx._controls.colorControls.setAdjustments(adjustments);
       ctx._controls.colorControls.emit('adjustmentsChanged', adjustments);
 
-      expect(state.colorHistoryTimer).not.toBeNull();
+      expect(state.state.colorHistoryTimer).not.toBeNull();
 
       vi.advanceTimersByTime(500);
 
-      expect(state.colorHistoryTimer).toBeNull();
+      expect(state.state.colorHistoryTimer).toBeNull();
     });
   });
 });

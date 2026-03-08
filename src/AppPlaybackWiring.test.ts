@@ -505,7 +505,7 @@ describe('wirePlaybackControls', () => {
     });
 
     it('PW-DISP-002: callbacks do not fire after dispose', () => {
-      subs.dispose();
+      subs.subscriptions.dispose();
 
       session.volume = 1; // reset
       const volumeControl = headerBar.getVolumeControl();

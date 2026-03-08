@@ -10,7 +10,7 @@
  * - Playlist panel events
  */
 
-import type { AppWiringContext } from './AppWiringContext';
+import type { AppWiringContext, WiringResult } from './AppWiringContext';
 import type { AppKeyboardHandler } from './AppKeyboardHandler';
 import type { FullscreenManager } from './utils/ui/FullscreenManager';
 import type { AudioMixer } from './audio/AudioMixer';
@@ -48,7 +48,7 @@ export interface PlaybackWiringDeps {
 /**
  * Wire all playback-related controls (headerbar, volume, export, snapshots, playlists).
  */
-export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiringDeps): DisposableSubscriptionManager {
+export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiringDeps): WiringResult {
   const { session, viewer, headerBar, controls, persistenceManager } = ctx;
   const subs = new DisposableSubscriptionManager();
   let videoExportInProgress = false;
@@ -192,7 +192,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   // Playlist runtime integration (playback/loop/source switching while enabled)
   wirePlaylistRuntime(session, controls, subs);
 
-  return subs;
+  return { subscriptions: subs };
 }
 
 /**
