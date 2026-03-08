@@ -7,16 +7,11 @@
  * non-square pixel content at correct proportions.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
-import {
-  PARState,
-  DEFAULT_PAR_STATE,
-  PAR_PRESETS,
-  isPARActive,
-} from '../../utils/media/PixelAspectRatio';
+import { type PARState, DEFAULT_PAR_STATE, PAR_PRESETS, isPARActive } from '../../utils/media/PixelAspectRatio';
 
 export interface PARControlEvents extends EventMap {
   stateChanged: PARState;

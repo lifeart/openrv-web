@@ -430,7 +430,15 @@ describe('GamutMappingControl', () => {
         control.render().querySelector('[data-testid="gamut-mapping-control-button"]')!,
         'getBoundingClientRect',
       ).mockReturnValue({
-        top: 100, bottom: 130, left: 200, right: 300, width: 100, height: 30, x: 200, y: 100, toJSON: () => ({}),
+        top: 100,
+        bottom: 130,
+        left: 200,
+        right: 300,
+        width: 100,
+        height: 30,
+        x: 200,
+        y: 100,
+        toJSON: () => ({}),
       });
 
       window.dispatchEvent(new Event('resize'));
@@ -576,7 +584,9 @@ describe('GamutMappingControl', () => {
     it('GM-M18b: when the panel closes, focus should return to the toggle button', () => {
       control.show();
       control.hide();
-      const button = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+      const button = control
+        .render()
+        .querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
       expect(document.activeElement).toBe(button);
     });
   });

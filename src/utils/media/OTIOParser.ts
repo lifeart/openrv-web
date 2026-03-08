@@ -164,10 +164,7 @@ export interface OTIOMultiTrackParseResult {
  *   frames = Math.round(rt.value * targetRate / rt.rate)
  * When rates match, this simplifies to Math.round(rt.value).
  */
-export function rationalTimeToFrames(
-  rt: OTIORationalTime,
-  targetRate: number
-): number {
+export function rationalTimeToFrames(rt: OTIORationalTime, targetRate: number): number {
   if (rt.rate <= 0 || targetRate <= 0) return 0;
   if (rt.rate === targetRate) {
     return Math.round(rt.value);
@@ -178,10 +175,7 @@ export function rationalTimeToFrames(
 /**
  * Get duration in frames from a time range at the given target rate.
  */
-export function timeRangeDurationFrames(
-  range: OTIOTimeRange,
-  targetRate: number
-): number {
+export function timeRangeDurationFrames(range: OTIOTimeRange, targetRate: number): number {
   return rationalTimeToFrames(range.duration, targetRate);
 }
 
@@ -231,14 +225,8 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
         inFrame = rationalTimeToFrames(sourceRange.start_time, fps);
         duration = timeRangeDurationFrames(sourceRange, fps);
       } else if (clip.media_reference?.available_range) {
-        inFrame = rationalTimeToFrames(
-          clip.media_reference.available_range.start_time,
-          fps
-        );
-        duration = timeRangeDurationFrames(
-          clip.media_reference.available_range,
-          fps
-        );
+        inFrame = rationalTimeToFrames(clip.media_reference.available_range.start_time, fps);
+        duration = timeRangeDurationFrames(clip.media_reference.available_range, fps);
       }
 
       const outFrame = inFrame + duration - 1;
@@ -256,9 +244,7 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
 
       // Resolve any pending transition now that we know the incoming clip
       if (pendingTransition && pendingTransitionOutgoingClipIndex >= 0) {
-        const transInOffset = pendingTransition.in_offset
-          ? rationalTimeToFrames(pendingTransition.in_offset, fps)
-          : 0;
+        const transInOffset = pendingTransition.in_offset ? rationalTimeToFrames(pendingTransition.in_offset, fps) : 0;
         const transOutOffset = pendingTransition.out_offset
           ? rationalTimeToFrames(pendingTransition.out_offset, fps)
           : 0;
@@ -338,7 +324,7 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
 
   // Process only video tracks
   const videoTracks = (timeline.tracks.children || []).filter(
-    (t: OTIOTrack) => t.OTIO_SCHEMA === 'Track.1' && t.kind === 'Video'
+    (t: OTIOTrack) => t.OTIO_SCHEMA === 'Track.1' && t.kind === 'Video',
   );
 
   // Use first video track for linear playlist
@@ -370,7 +356,7 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
 
   // Process only video tracks
   const videoTracks = (timeline.tracks.children || []).filter(
-    (t: OTIOTrack) => t.OTIO_SCHEMA === 'Track.1' && t.kind === 'Video'
+    (t: OTIOTrack) => t.OTIO_SCHEMA === 'Track.1' && t.kind === 'Video',
   );
 
   const tracks: ParsedOTIOTrack[] = [];

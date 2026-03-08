@@ -1,7 +1,10 @@
 import type { MediaSource } from '../../core/session/Session';
 import type { MediaRepresentation } from '../../core/types/representation';
 
-type SourceWithStartFrame = Pick<MediaSource, 'type' | 'sequenceInfo' | 'representations' | 'activeRepresentationIndex'> | null;
+type SourceWithStartFrame = Pick<
+  MediaSource,
+  'type' | 'sequenceInfo' | 'representations' | 'activeRepresentationIndex'
+> | null;
 type AudioPlaybackState = { isUsingWebAudio: boolean } | null | undefined;
 
 function getActiveRepresentation(source: SourceWithStartFrame): MediaRepresentation | null {

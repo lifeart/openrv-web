@@ -89,12 +89,8 @@ export class LayoutProcessor implements NodeProcessor {
       return { columns: 1, rows: count };
     } else {
       // Grid mode
-      const columns = this.config.columns > 0
-        ? this.config.columns
-        : Math.ceil(Math.sqrt(count));
-      const rows = this.config.rows > 0
-        ? this.config.rows
-        : Math.ceil(count / columns);
+      const columns = this.config.columns > 0 ? this.config.columns : Math.ceil(Math.sqrt(count));
+      const rows = this.config.rows > 0 ? this.config.rows : Math.ceil(count / columns);
       return { columns, rows };
     }
   }

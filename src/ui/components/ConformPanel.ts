@@ -102,7 +102,7 @@ export function matchScore(targetFilename: string, candidateName: string): numbe
   if (cLower.includes(tStem) || tLower.includes(cStem)) return 50;
 
   // Any 3+ char word overlap
-  const tWords = tStem.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+  const tWords = tStem.split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
   for (const word of tWords) {
     if (cLower.includes(word)) return 20;
   }
@@ -113,19 +113,15 @@ export function matchScore(targetFilename: string, candidateName: string): numbe
 /**
  * Find suggested sources for an unresolved clip, sorted by match quality.
  */
-export function findSuggestions(
-  clip: UnresolvedClip,
-  sources: ConformSource[],
-  maxResults = 5,
-): ConformSource[] {
+export function findSuggestions(clip: UnresolvedClip, sources: ConformSource[], maxResults = 5): ConformSource[] {
   const filename = extractFilename(clip.originalUrl);
 
   const scored = sources
-    .map(s => ({ source: s, score: matchScore(filename, s.name) }))
-    .filter(s => s.score > 0)
+    .map((s) => ({ source: s, score: matchScore(filename, s.name) }))
+    .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  return scored.slice(0, maxResults).map(s => s.source);
+  return scored.slice(0, maxResults).map((s) => s.source);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +132,7 @@ export function buildConformEntries(manager: ConformPanelManager): ConformEntry[
   const clips = manager.getUnresolvedClips();
   const sources = manager.getAvailableSources();
 
-  return clips.map(clip => ({
+  return clips.map((clip) => ({
     clip,
     filename: extractFilename(clip.originalUrl),
     suggestions: findSuggestions(clip, sources),
@@ -180,16 +176,13 @@ export function batchRelinkByName(manager: ConformPanelManager): number {
  * a folder URL prefix. Sources whose URL starts with the folder prefix are
  * candidates, matched by filename.
  */
-export function batchRelinkByFolder(
-  manager: ConformPanelManager,
-  folderUrl: string,
-): number {
+export function batchRelinkByFolder(manager: ConformPanelManager, folderUrl: string): number {
   const clips = manager.getUnresolvedClips();
   const sources = manager.getAvailableSources();
   const prefix = folderUrl.endsWith('/') ? folderUrl : folderUrl + '/';
 
   // Filter sources to those in the target folder
-  const folderSources = sources.filter(s => s.url.startsWith(prefix));
+  const folderSources = sources.filter((s) => s.url.startsWith(prefix));
   if (folderSources.length === 0) return 0;
 
   let count = 0;

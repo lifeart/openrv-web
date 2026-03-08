@@ -139,9 +139,25 @@ describe('RenderState', () => {
       state.colorInversion = true;
       state.toneMappingState = { enabled: true, operator: 'aces' };
       state.backgroundPattern = { ...DEFAULT_BACKGROUND_PATTERN_STATE, pattern: 'checker' };
-      state.cdl = { slope: { r: 2, g: 2, b: 2 }, offset: { r: 0.1, g: 0.1, b: 0.1 }, power: { r: 1, g: 1, b: 1 }, saturation: 1 };
-      state.curvesLUT = { red: new Uint8Array(256), green: new Uint8Array(256), blue: new Uint8Array(256), master: new Uint8Array(256) };
-      state.colorWheels = { lift: { r: 0.1, g: 0, b: 0, y: 0 }, gamma: { r: 0, g: 0, b: 0, y: 0 }, gain: { r: 0, g: 0, b: 0, y: 0 }, master: { r: 0, g: 0, b: 0, y: 0 }, linked: false };
+      state.cdl = {
+        slope: { r: 2, g: 2, b: 2 },
+        offset: { r: 0.1, g: 0.1, b: 0.1 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      };
+      state.curvesLUT = {
+        red: new Uint8Array(256),
+        green: new Uint8Array(256),
+        blue: new Uint8Array(256),
+        master: new Uint8Array(256),
+      };
+      state.colorWheels = {
+        lift: { r: 0.1, g: 0, b: 0, y: 0 },
+        gamma: { r: 0, g: 0, b: 0, y: 0 },
+        gain: { r: 0, g: 0, b: 0, y: 0 },
+        master: { r: 0, g: 0, b: 0, y: 0 },
+        linked: false,
+      };
       state.falseColor = { enabled: true, lut: new Uint8Array(256 * 3) };
       state.zebraStripes = { ...DEFAULT_ZEBRA_STATE, enabled: true, highEnabled: true };
       state.channelMode = 'red';
@@ -180,9 +196,7 @@ describe('RenderState', () => {
       state.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 2.5, gamma: 0.8 };
       mgr.applyRenderState(state);
 
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ exposure: 2.5, gamma: 0.8 }),
-      );
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ exposure: 2.5, gamma: 0.8 }));
     });
 
     it('passes color inversion correctly', () => {
@@ -200,9 +214,7 @@ describe('RenderState', () => {
       state.toneMappingState = { enabled: true, operator: 'aces' };
       mgr.applyRenderState(state);
 
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true, operator: 'aces' }),
-      );
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, operator: 'aces' }));
     });
 
     it('passes false color as state object', () => {
@@ -303,13 +315,9 @@ describe('RenderState', () => {
       mgr.applyRenderState(state);
 
       // Gamma should be overridden to 1, but exposure preserved
-      expect(setColorAdj).toHaveBeenCalledWith(
-        expect.objectContaining({ exposure: 1.5, gamma: 1 }),
-      );
+      expect(setColorAdj).toHaveBeenCalledWith(expect.objectContaining({ exposure: 1.5, gamma: 1 }));
       // Tone mapping should reflect the final override value
-      expect(setToneMap).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true, operator: 'reinhard' }),
-      );
+      expect(setToneMap).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, operator: 'reinhard' }));
     });
   });
 
@@ -323,7 +331,9 @@ describe('RenderState', () => {
 
       expect(spy).toHaveBeenCalledOnce();
       expect(spy).toHaveBeenCalledWith({
-        mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb',
+        mode: 'clip',
+        sourceGamut: 'rec2020',
+        targetGamut: 'srgb',
       });
     });
 
@@ -345,7 +355,9 @@ describe('RenderState', () => {
       mgr.applyRenderState(state);
 
       expect(spy).toHaveBeenCalledWith({
-        mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3',
+        mode: 'compress',
+        sourceGamut: 'rec2020',
+        targetGamut: 'display-p3',
       });
     });
   });

@@ -283,7 +283,7 @@ describe('EDLWriter', () => {
 
     it('EDL-018: with multiple clips', () => {
       const edl = generateEDL(sampleClips);
-      const editLines = edl.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const editLines = edl.split('\n').filter((l) => /^\d{3}\s/.test(l));
       expect(editLines).toHaveLength(2);
     });
 
@@ -308,7 +308,7 @@ describe('EDLWriter', () => {
       expect(lines[0]).toBe('TITLE: Untitled');
       expect(lines[1]).toBe('FCM: NON-DROP FRAME');
       expect(lines[2]).toBe('');
-      const editLines = edl.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const editLines = edl.split('\n').filter((l) => /^\d{3}\s/.test(l));
       expect(editLines).toHaveLength(0);
     });
 
@@ -336,7 +336,7 @@ describe('EDLWriter', () => {
         recordOut: (i + 1) * 24,
       }));
       const edl = generateEDL(clips);
-      const editLines = edl.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const editLines = edl.split('\n').filter((l) => /^\d{3}\s/.test(l));
       expect(editLines).toHaveLength(5);
       expect(editLines[0]).toMatch(/^001\s/);
       expect(editLines[1]).toMatch(/^002\s/);
@@ -356,7 +356,7 @@ describe('EDLWriter', () => {
         },
       ];
       const edl = generateEDL(clips);
-      const editLine = edl.split('\n').find(l => /^\d{3}\s/.test(l))!;
+      const editLine = edl.split('\n').find((l) => /^\d{3}\s/.test(l))!;
       // Reel name field starts after "001  " (5 chars), 8 chars wide
       const reelSection = editLine.slice(5, 13);
       expect(reelSection).toBe('MY_LONG_');
@@ -371,7 +371,7 @@ describe('EDLWriter', () => {
         recordOut: (i + 1) * 24,
       }));
       const edl = generateEDL(clips);
-      const editLines = edl.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const editLines = edl.split('\n').filter((l) => /^\d{3}\s/.test(l));
       expect(editLines).toHaveLength(999);
       expect(editLines[998]).toMatch(/^999\s/);
     });
@@ -394,7 +394,7 @@ describe('EDLWriter', () => {
         },
       ];
       const edl = generateEDL(clips);
-      const commentLine = edl.split('\n').find(l => l.startsWith('*'))!;
+      const commentLine = edl.split('\n').find((l) => l.startsWith('*'))!;
       expect(commentLine).toBe('* FROM CLIP NAME: line1 line2');
     });
 
@@ -443,8 +443,12 @@ describe('EDLWriter', () => {
       vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
       vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
       vi.spyOn(document, 'createElement').mockReturnValue({
-        set href(_v: string) { /* no-op */ },
-        set download(_v: string) { /* no-op */ },
+        set href(_v: string) {
+          /* no-op */
+        },
+        set download(_v: string) {
+          /* no-op */
+        },
         click: mockClick,
       } as unknown as HTMLAnchorElement);
       vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -456,9 +460,7 @@ describe('EDLWriter', () => {
     });
 
     it('EDL-043: triggers download and cleans up', () => {
-      const clips: EDLClip[] = [
-        { sourceName: 'TEST', sourceIn: 0, sourceOut: 24, recordIn: 0, recordOut: 24 },
-      ];
+      const clips: EDLClip[] = [{ sourceName: 'TEST', sourceIn: 0, sourceOut: 24, recordIn: 0, recordOut: 24 }];
 
       downloadEDL(clips, 'test.edl');
 
@@ -467,11 +469,11 @@ describe('EDLWriter', () => {
     });
 
     it('EDL-046: revokeObjectURL called even when click throws', () => {
-      mockClick.mockImplementation(() => { throw new Error('click failed'); });
+      mockClick.mockImplementation(() => {
+        throw new Error('click failed');
+      });
 
-      const clips: EDLClip[] = [
-        { sourceName: 'TEST', sourceIn: 0, sourceOut: 24, recordIn: 0, recordOut: 24 },
-      ];
+      const clips: EDLClip[] = [{ sourceName: 'TEST', sourceIn: 0, sourceOut: 24, recordIn: 0, recordOut: 24 }];
 
       expect(() => downloadEDL(clips, 'test.edl')).toThrow('click failed');
       expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test');

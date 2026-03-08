@@ -15,4 +15,9 @@ export { OCIOWasmBridge } from './OCIOWasmBridge';
 export type { OCIOWasmBridgeEvents, OCIOWasmBridgeConfig, WasmPipelineState } from './OCIOWasmBridge';
 
 export { OCIOWasmPipeline } from './OCIOWasmPipeline';
-export type { OCIOPipelineResult, OCIOPipelineMode, OCIOWasmPipelineEvents, OCIOWasmPipelineConfig } from './OCIOWasmPipeline';
+export type {
+  OCIOPipelineResult,
+  OCIOPipelineMode,
+  OCIOWasmPipelineEvents,
+  OCIOWasmPipelineConfig,
+} from './OCIOWasmPipeline';

@@ -8,12 +8,38 @@
  * plus common browser-native image formats.
  */
 export const SUPPORTED_IMAGE_EXTENSIONS = [
-  'png', 'jpg', 'jpeg', 'jpe', 'webp', 'gif', 'bmp', 'svg',
-  'tif', 'tiff',
-  'exr', 'sxr', 'dpx', 'cin', 'cineon', 'hdr', 'pic',
-  'avif', 'jxl', 'heic', 'heif',
+  'png',
+  'jpg',
+  'jpeg',
+  'jpe',
+  'webp',
+  'gif',
+  'bmp',
+  'svg',
+  'tif',
+  'tiff',
+  'exr',
+  'sxr',
+  'dpx',
+  'cin',
+  'cineon',
+  'hdr',
+  'pic',
+  'avif',
+  'jxl',
+  'heic',
+  'heif',
   // RAW formats (preview extraction)
-  'cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw',
+  'cr2',
+  'cr3',
+  'nef',
+  'arw',
+  'dng',
+  'raf',
+  'orf',
+  'rw2',
+  'pef',
+  'srw',
 ] as const;
 
 /**
@@ -22,32 +48,34 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
  */
 export const MEDIABUNNY_VIDEO_EXTENSIONS = [
   // MP4 (ISOBMFF)
-  'mp4', 'm4v', '3gp', '3g2',
+  'mp4',
+  'm4v',
+  '3gp',
+  '3g2',
   // QTFF (QuickTime / MOV)
-  'mov', 'qt',
+  'mov',
+  'qt',
   // Matroska / WebM
-  'mkv', 'mk3d', 'webm',
+  'mkv',
+  'mk3d',
+  'webm',
   // Ogg
-  'ogg', 'ogv', 'ogm', 'ogx',
+  'ogg',
+  'ogv',
+  'ogm',
+  'ogx',
 ] as const;
 
 /**
  * Browser video fallback extensions (outside mediabunny ALL_FORMATS).
  */
-export const HTML_VIDEO_FALLBACK_EXTENSIONS = [
-  'avi',
-] as const;
+export const HTML_VIDEO_FALLBACK_EXTENSIONS = ['avi'] as const;
 
-export const SUPPORTED_VIDEO_EXTENSIONS = [
-  ...MEDIABUNNY_VIDEO_EXTENSIONS,
-  ...HTML_VIDEO_FALLBACK_EXTENSIONS,
-] as const;
+export const SUPPORTED_VIDEO_EXTENSIONS = [...MEDIABUNNY_VIDEO_EXTENSIONS, ...HTML_VIDEO_FALLBACK_EXTENSIONS] as const;
 
 const IMAGE_EXTENSION_SET = new Set<string>(SUPPORTED_IMAGE_EXTENSIONS);
 const VIDEO_EXTENSION_SET = new Set<string>(SUPPORTED_VIDEO_EXTENSIONS);
-const VIDEO_MIME_ALIASES = new Set<string>([
-  'application/ogg',
-]);
+const VIDEO_MIME_ALIASES = new Set<string>(['application/ogg']);
 
 function getFileExtension(filename: string): string {
   const dotIdx = filename.lastIndexOf('.');
@@ -86,8 +114,8 @@ export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'ima
 }
 
 const acceptExtensions = Array.from(
-  new Set<string>([...SUPPORTED_IMAGE_EXTENSIONS, ...SUPPORTED_VIDEO_EXTENSIONS])
-).map(ext => `.${ext}`);
+  new Set<string>([...SUPPORTED_IMAGE_EXTENSIONS, ...SUPPORTED_VIDEO_EXTENSIONS]),
+).map((ext) => `.${ext}`);
 
 /**
  * File input accept string for all image/video formats we can attempt.

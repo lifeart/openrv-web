@@ -9,7 +9,7 @@ export type SplitScreenMode = 'off' | 'splitscreen-h' | 'splitscreen-v';
 
 export interface SplitScreenState {
   mode: SplitScreenMode;
-  position: number;  // 0-1, position of split line
+  position: number; // 0-1, position of split line
 }
 
 export const DEFAULT_SPLIT_SCREEN_STATE: SplitScreenState = {
@@ -27,9 +27,12 @@ const LABEL_HIDE_THRESHOLD_LOW = 0.1;
 const LABEL_HIDE_THRESHOLD_HIGH = 0.9;
 
 // Base styles from createSplitScreenUIElements (minus display, cursor, and mode-varying properties)
-const SPLIT_LINE_BASE = 'position: absolute; z-index: 52; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);';
-const SPLIT_LABEL_A_BASE = 'position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
-const SPLIT_LABEL_B_BASE = 'position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
+const SPLIT_LINE_BASE =
+  'position: absolute; z-index: 52; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);';
+const SPLIT_LABEL_A_BASE =
+  'position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
+const SPLIT_LABEL_B_BASE =
+  'position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
 
 /**
  * Batch-update split screen label styles (internal helper)
@@ -39,7 +42,7 @@ function batchSplitLabelStyle(
   baseStyles: string,
   shouldHide: boolean,
   left: number,
-  top: number
+  top: number,
 ): void {
   if (shouldHide) {
     label.style.display = 'none';
@@ -118,7 +121,7 @@ export function updateSplitScreenPosition(
   containerRect: DOMRect,
   canvasRect: DOMRect,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): void {
   const { splitLine, labelA, labelB } = elements;
 
@@ -144,7 +147,7 @@ export function updateSplitScreenPosition(
       SPLIT_LABEL_A_BASE,
       position < LABEL_HIDE_THRESHOLD_LOW,
       canvasLeft + 12,
-      canvasTop + displayHeight - 40
+      canvasTop + displayHeight - 40,
     );
 
     // Position B label in bottom-right corner
@@ -153,7 +156,7 @@ export function updateSplitScreenPosition(
       SPLIT_LABEL_B_BASE,
       position > LABEL_HIDE_THRESHOLD_HIGH,
       canvasLeft + displayWidth - 40,
-      canvasTop + displayHeight - 40
+      canvasTop + displayHeight - 40,
     );
   } else if (state.mode === 'splitscreen-v') {
     // Horizontal line for vertical split (A on top, B on bottom)
@@ -166,7 +169,7 @@ export function updateSplitScreenPosition(
       SPLIT_LABEL_A_BASE,
       position < LABEL_HIDE_THRESHOLD_LOW,
       canvasLeft + 12,
-      canvasTop + 12
+      canvasTop + 12,
     );
 
     // Position B label in bottom-left corner
@@ -175,7 +178,7 @@ export function updateSplitScreenPosition(
       SPLIT_LABEL_B_BASE,
       position > LABEL_HIDE_THRESHOLD_HIGH,
       canvasLeft + 12,
-      canvasTop + displayHeight - 40
+      canvasTop + displayHeight - 40,
     );
   }
 }
@@ -187,7 +190,7 @@ export function isPointerOnSplitLine(
   e: PointerEvent,
   state: SplitScreenState,
   splitLineRect: DOMRect,
-  tolerance: number = 12
+  tolerance: number = 12,
 ): boolean {
   if (state.mode === 'off') return false;
 
@@ -208,7 +211,7 @@ export function calculateSplitPosition(
   state: SplitScreenState,
   canvasRect: DOMRect,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): number {
   if (state.mode === 'splitscreen-h') {
     const x = e.clientX - canvasRect.left;

@@ -5,14 +5,11 @@ import {
   renderFrameToCanvas,
   renderSourceToImageData,
 } from './ViewerExport';
-import { Session, MediaSource } from '../../core/session/Session';
+import { type Session, type MediaSource } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
-import { Transform2D } from './TransformControl';
-import {
-  createMockImage,
-  createMockMediaSource,
-} from '../../../test/mocks';
+import { type Transform2D } from './TransformControl';
+import { createMockImage, createMockMediaSource } from '../../../test/mocks';
 
 // Session requires too many subsystems to construct for real; a partial mock is appropriate.
 function createMockSession(source: MediaSource | null = null): Session {
@@ -78,13 +75,7 @@ describe('ViewerExport', () => {
     it('should return null when no source', () => {
       mockSession = createMockSession(null);
 
-      const result = createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        false
-      );
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).toBeNull();
     });
@@ -94,13 +85,7 @@ describe('ViewerExport', () => {
       source.element = undefined as any;
       mockSession = createMockSession(source);
 
-      const result = createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        false
-      );
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).toBeNull();
     });
@@ -109,13 +94,7 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
 
-      const result = createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        false
-      );
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(1920);
@@ -126,13 +105,7 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
 
-      const result = createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'brightness(1.5)',
-        false
-      );
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'brightness(1.5)', false);
 
       // Canvas should be created successfully with filter applied
       expect(result).not.toBeNull();
@@ -145,13 +118,7 @@ describe('ViewerExport', () => {
       mockSession = createMockSession(source);
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: '1' }]);
 
-      createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        true
-      );
+      createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', true);
 
       expect(mockPaintEngine.getAnnotationsWithGhost).toHaveBeenCalled();
       expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
@@ -161,13 +128,7 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
 
-      createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        false
-      );
+      createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(mockPaintRenderer.renderAnnotations).not.toHaveBeenCalled();
     });
@@ -175,16 +136,15 @@ describe('ViewerExport', () => {
     it('should apply transform when provided', () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
-      const result = createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        false,
-        transform
-      );
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
       expect(result).not.toBeNull();
     });
@@ -193,13 +153,7 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('video', 1280, 720);
       mockSession = createMockSession(source);
 
-      const result = createExportCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        'none',
-        false
-      );
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(1280);
@@ -228,7 +182,7 @@ describe('ViewerExport', () => {
           frame: 1,
           totalFrames: 100,
           fps: 24,
-        }
+        },
       );
 
       const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
@@ -322,7 +276,7 @@ describe('ViewerExport', () => {
         5,
         defaultTransform(),
         'none',
-        false
+        false,
       );
 
       expect(result).toBeNull();
@@ -333,15 +287,7 @@ describe('ViewerExport', () => {
       mockSession = createMockSession(source);
       mockSession.currentFrame = 10;
 
-      await renderFrameToCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        25,
-        defaultTransform(),
-        'none',
-        false
-      );
+      await renderFrameToCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 25, defaultTransform(), 'none', false);
 
       expect(mockSession.currentFrame).toBe(10);
     });
@@ -350,15 +296,7 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('sequence', 1920, 1080);
       mockSession = createMockSession(source);
 
-      await renderFrameToCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        5,
-        defaultTransform(),
-        'none',
-        false
-      );
+      await renderFrameToCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 5, defaultTransform(), 'none', false);
 
       expect(mockSession.getSequenceFrameImage).toHaveBeenCalledWith(5);
     });
@@ -374,7 +312,7 @@ describe('ViewerExport', () => {
         25,
         defaultTransform(),
         'none',
-        false
+        false,
       );
 
       // Video seeking is async, result depends on timing
@@ -387,15 +325,7 @@ describe('ViewerExport', () => {
       mockSession = createMockSession(source);
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: '1' }]);
 
-      await renderFrameToCanvas(
-        mockSession,
-        mockPaintEngine,
-        mockPaintRenderer,
-        15,
-        defaultTransform(),
-        'none',
-        true
-      );
+      await renderFrameToCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 15, defaultTransform(), 'none', true);
 
       expect(mockPaintEngine.getAnnotationsWithGhost).toHaveBeenCalledWith(15);
     });
@@ -411,7 +341,7 @@ describe('ViewerExport', () => {
         5,
         defaultTransform(),
         'brightness(1.2) contrast(1.1)',
-        false
+        false,
       );
 
       expect(result).not.toBeNull();
@@ -420,7 +350,13 @@ describe('ViewerExport', () => {
     it('should apply transform', async () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 180, flipH: true, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 180,
+        flipH: true,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = await renderFrameToCanvas(
         mockSession,
@@ -429,7 +365,7 @@ describe('ViewerExport', () => {
         5,
         transform,
         'none',
-        false
+        false,
       );
 
       expect(result).not.toBeNull();
@@ -448,18 +384,24 @@ describe('ViewerExport', () => {
         defaultTransform(),
         'none',
         false,
-        cropRegion
+        cropRegion,
       );
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(960);  // 0.5 * 1920
+      expect(result!.width).toBe(960); // 0.5 * 1920
       expect(result!.height).toBe(540); // 0.5 * 1080
     });
 
     it('should apply crop after rotation', async () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
 
       const result = await renderFrameToCanvas(
@@ -470,7 +412,7 @@ describe('ViewerExport', () => {
         transform,
         'none',
         false,
-        cropRegion
+        cropRegion,
       );
 
       // After 90° rotation, effective dims are 1080x1920
@@ -493,7 +435,7 @@ describe('ViewerExport', () => {
         defaultTransform(),
         'none',
         false,
-        cropRegion
+        cropRegion,
       );
 
       expect(result).not.toBeNull();
@@ -515,7 +457,7 @@ describe('ViewerExport', () => {
         defaultTransform(),
         'none',
         true,
-        cropRegion
+        cropRegion,
       );
 
       expect(result).not.toBeNull();
@@ -547,7 +489,7 @@ describe('ViewerExport', () => {
           frame: 24,
           totalFrames: 100,
           fps: 24,
-        }
+        },
       );
 
       const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
@@ -577,7 +519,7 @@ describe('ViewerExport', () => {
         5,
         defaultTransform(),
         'none',
-        false
+        false,
       );
 
       expect(mockSession.fetchCurrentVideoFrame).toHaveBeenCalledWith(5);
@@ -606,7 +548,7 @@ describe('ViewerExport', () => {
         1,
         defaultTransform(),
         'none',
-        false
+        false,
       );
 
       expect(source.fileSourceNode!.getCanvas).toHaveBeenCalled();
@@ -632,7 +574,7 @@ describe('ViewerExport', () => {
         1,
         defaultTransform(),
         'none',
-        false
+        false,
       );
 
       expect(source.fileSourceNode!.getCanvas).toHaveBeenCalled();
@@ -656,7 +598,7 @@ describe('ViewerExport', () => {
         1,
         defaultTransform(),
         'none',
-        false
+        false,
       );
 
       expect(result).toBeNull();
@@ -672,7 +614,13 @@ describe('ViewerExport', () => {
     it('should handle 90° rotation by swapping dimensions', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
@@ -684,7 +632,13 @@ describe('ViewerExport', () => {
     it('should handle 270° rotation by swapping dimensions', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 270, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 270,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
@@ -696,7 +650,13 @@ describe('ViewerExport', () => {
     it('should handle 180° rotation without swapping', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 180, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 180,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
@@ -709,7 +669,13 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
       // 45° is now a valid rotation angle (no longer clamped)
-      const transform: Transform2D = { rotation: 45, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 45,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
@@ -726,7 +692,13 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
       // -90° normalizes to 270° (swaps dimensions)
-      const transform: Transform2D = { rotation: -90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: -90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
@@ -738,7 +710,13 @@ describe('ViewerExport', () => {
     it('should normalize 360 rotation to 0', () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 360, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 360,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
 
@@ -770,10 +748,18 @@ describe('ViewerExport', () => {
       mockSession = createMockSession(source);
       const cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        defaultTransform(),
+        cropRegion,
+      );
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(960);  // 0.5 * 1920
+      expect(result!.width).toBe(960); // 0.5 * 1920
       expect(result!.height).toBe(540); // 0.5 * 1080
     });
 
@@ -782,7 +768,15 @@ describe('ViewerExport', () => {
       mockSession = createMockSession(source);
       const cropRegion = { x: 0, y: 0, width: 1, height: 1 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        defaultTransform(),
+        cropRegion,
+      );
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(1920);
@@ -792,10 +786,24 @@ describe('ViewerExport', () => {
     it('should apply crop after rotation', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform, cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        transform,
+        cropRegion,
+      );
 
       // After 90° rotation, effective dims are 1080x1920
       // Crop is 0.5 of each: 540x960
@@ -810,7 +818,15 @@ describe('ViewerExport', () => {
       // Near-full crop due to floating-point imprecision
       const cropRegion = { x: 1e-10, y: 0, width: 0.9999999999, height: 1 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        defaultTransform(),
+        cropRegion,
+      );
 
       // isFullCropRegion should detect this as full-frame
       expect(result).not.toBeNull();
@@ -824,7 +840,15 @@ describe('ViewerExport', () => {
       // 1/3 crop — not exactly representable in binary
       const cropRegion = { x: 0, y: 0, width: 1 / 3, height: 1 / 3 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        defaultTransform(),
+        cropRegion,
+      );
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(Math.round(1000 / 3));
@@ -835,10 +859,24 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
       // No rotation, no flip — exercises the crop-only branch
-      const transform: Transform2D = { rotation: 0, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       const cropRegion = { x: 0.1, y: 0.2, width: 0.6, height: 0.5 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform, cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        transform,
+        cropRegion,
+      );
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(Math.round(0.6 * 1920));
@@ -849,10 +887,24 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'ann1' }]);
-      const transform: Transform2D = { rotation: 90, flipH: true, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: true,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', true, transform, cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        true,
+        transform,
+        cropRegion,
+      );
 
       // After 90° rotation, effective dims are 1080x1920
       // Crop 0.5 of each: 540x960
@@ -869,7 +921,15 @@ describe('ViewerExport', () => {
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'ann1' }]);
       const cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
 
-      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', true, defaultTransform(), cropRegion);
+      const result = createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        true,
+        defaultTransform(),
+        cropRegion,
+      );
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(400); // 0.5 * 800
@@ -985,25 +1045,13 @@ describe('ViewerExport', () => {
       source.element = pattern as any;
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
 
-      renderSourceToImageData(
-        mockSession,
-        0,
-        2,
-        1,
-        defaultTransform()
-      );
+      renderSourceToImageData(mockSession, 0, 2, 1, defaultTransform());
 
       const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
       const unrotatedCtx = getContextMock.mock.results.at(-1)?.value as { rotate: ReturnType<typeof vi.fn> };
       expect(unrotatedCtx.rotate).not.toHaveBeenCalled();
 
-      renderSourceToImageData(
-        mockSession,
-        0,
-        2,
-        1,
-        { ...defaultTransform(), rotation: 90 }
-      );
+      renderSourceToImageData(mockSession, 0, 2, 1, { ...defaultTransform(), rotation: 90 });
       const rotatedCtx = getContextMock.mock.results.at(-1)?.value as { rotate: ReturnType<typeof vi.fn> };
       expect(rotatedCtx.rotate).toHaveBeenCalled();
     });
@@ -1049,8 +1097,13 @@ describe('ViewerExport', () => {
       const session = createMediabunnySession(source);
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        12, defaultTransform(), 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        12,
+        defaultTransform(),
+        'none',
+        false,
       );
 
       // 1) frame was fetched via mediabunny
@@ -1070,11 +1123,22 @@ describe('ViewerExport', () => {
     it('renderFrameToCanvas: applies rotation to mediabunny frame', async () => {
       const source = createMediabunnySource();
       const session = createMediabunnySession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, transform, 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        transform,
+        'none',
+        false,
       );
 
       // After 90° rotation, dimensions swap
@@ -1089,13 +1153,19 @@ describe('ViewerExport', () => {
       const crop = { x: 0, y: 0, width: 0.5, height: 0.5 };
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', false, crop
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        crop,
       );
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(640);   // 0.5 * 1280
-      expect(result!.height).toBe(360);  // 0.5 * 720
+      expect(result!.width).toBe(640); // 0.5 * 1280
+      expect(result!.height).toBe(360); // 0.5 * 720
     });
 
     it('renderFrameToCanvas: composites annotations on mediabunny frame', async () => {
@@ -1104,8 +1174,13 @@ describe('ViewerExport', () => {
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'a1' }]);
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        7, defaultTransform(), 'none', true
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        7,
+        defaultTransform(),
+        'none',
+        true,
       );
 
       expect(result).not.toBeNull();
@@ -1118,10 +1193,7 @@ describe('ViewerExport', () => {
       const session = createMediabunnySession(source);
       session.currentFrame = 50;
 
-      await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        12, defaultTransform(), 'none', false
-      );
+      await renderFrameToCanvas(session, mockPaintEngine, mockPaintRenderer, 12, defaultTransform(), 'none', false);
 
       expect(session.currentFrame).toBe(50);
     });
@@ -1132,10 +1204,7 @@ describe('ViewerExport', () => {
       const video = source.element as HTMLVideoElement;
       const session = createMediabunnySession(source);
 
-      await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        25, defaultTransform(), 'none', false
-      );
+      await renderFrameToCanvas(session, mockPaintEngine, mockPaintRenderer, 25, defaultTransform(), 'none', false);
 
       // The HTMLVideoElement should NOT be seeked — mediabunny handles frame extraction
       expect(video.currentTime).toBe(0);
@@ -1145,9 +1214,7 @@ describe('ViewerExport', () => {
       const source = createMediabunnySource();
       const session = createMediabunnySession(source);
 
-      const result = createExportCanvas(
-        session, mockPaintEngine, mockPaintRenderer, 'none', false
-      );
+      const result = createExportCanvas(session, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(session.getVideoFrameCanvas).toHaveBeenCalled();
       expect(result).not.toBeNull();
@@ -1202,7 +1269,10 @@ describe('ViewerExport', () => {
       mockPaintRenderer = createRealPaintRenderer();
     });
 
-    function createFileSourceNodeSource(opts?: { canvasResult?: HTMLCanvasElement | null; elementResult?: HTMLImageElement | null }): MediaSource {
+    function createFileSourceNodeSource(opts?: {
+      canvasResult?: HTMLCanvasElement | null;
+      elementResult?: HTMLImageElement | null;
+    }): MediaSource {
       const source = createMockMediaSource('image', 2048, 1024);
       // FileSourceNode sources may have no element (e.g. EXR decoded to Float32Array)
       source.element = undefined;
@@ -1218,8 +1288,13 @@ describe('ViewerExport', () => {
       const session = createMockSession(source);
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
       );
 
       expect(source.fileSourceNode!.getCanvas).toHaveBeenCalled();
@@ -1238,8 +1313,13 @@ describe('ViewerExport', () => {
       const session = createMockSession(source);
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
       );
 
       expect(source.fileSourceNode!.getCanvas).toHaveBeenCalled();
@@ -1256,8 +1336,13 @@ describe('ViewerExport', () => {
       const session = createMockSession(source);
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
       );
 
       expect(result).toBeNull();
@@ -1266,15 +1351,26 @@ describe('ViewerExport', () => {
     it('renderFrameToCanvas: applies rotation to FileSourceNode canvas', async () => {
       const source = createFileSourceNodeSource();
       const session = createMockSession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, transform, 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        transform,
+        'none',
+        false,
       );
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(1024);   // swapped
+      expect(result!.width).toBe(1024); // swapped
       expect(result!.height).toBe(2048);
     });
 
@@ -1284,13 +1380,19 @@ describe('ViewerExport', () => {
       const crop = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', false, crop
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        crop,
       );
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(1024);  // 0.5 * 2048
-      expect(result!.height).toBe(512);  // 0.5 * 1024
+      expect(result!.width).toBe(1024); // 0.5 * 2048
+      expect(result!.height).toBe(512); // 0.5 * 1024
     });
 
     it('renderFrameToCanvas: composites annotations on FileSourceNode canvas', async () => {
@@ -1299,28 +1401,45 @@ describe('ViewerExport', () => {
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'ann-exr' }]);
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', true
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        true,
       );
 
       expect(result).not.toBeNull();
       expect(mockPaintEngine.getAnnotationsWithGhost).toHaveBeenCalledWith(1);
-      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalledWith(
-        [{ id: 'ann-exr' }],
-        { width: 2048, height: 1024 }
-      );
+      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalledWith([{ id: 'ann-exr' }], {
+        width: 2048,
+        height: 1024,
+      });
     });
 
     it('renderFrameToCanvas: applies crop + rotation + annotations on FileSourceNode', async () => {
       const source = createFileSourceNodeSource();
       const session = createMockSession(source);
       (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'ann1' }]);
-      const transform: Transform2D = { rotation: 90, flipH: true, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: true,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       const crop = { x: 0, y: 0, width: 0.5, height: 0.5 };
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, transform, 'none', true, crop
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        transform,
+        'none',
+        true,
+        crop,
       );
 
       // After 90° rotation of 2048x1024: effective 1024x2048
@@ -1336,9 +1455,15 @@ describe('ViewerExport', () => {
       const session = createMockSession(source);
 
       await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        5, defaultTransform(), 'none', false,
-        undefined, undefined,
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        5,
+        defaultTransform(),
+        'none',
+        false,
+        undefined,
+        undefined,
         {
           enabled: true,
           position: 'top-left',
@@ -1348,7 +1473,7 @@ describe('ViewerExport', () => {
           frame: 5,
           totalFrames: 50,
           fps: 24,
-        }
+        },
       );
 
       const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
@@ -1362,9 +1487,7 @@ describe('ViewerExport', () => {
       const source = createFileSourceNodeSource();
       const session = createMockSession(source);
 
-      const result = createExportCanvas(
-        session, mockPaintEngine, mockPaintRenderer, 'none', false
-      );
+      const result = createExportCanvas(session, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(source.fileSourceNode!.getCanvas).toHaveBeenCalled();
       expect(result).not.toBeNull();
@@ -1381,9 +1504,7 @@ describe('ViewerExport', () => {
       const source = createFileSourceNodeSource({ canvasResult: null, elementResult: mockImg });
       const session = createMockSession(source);
 
-      const result = createExportCanvas(
-        session, mockPaintEngine, mockPaintRenderer, 'none', false
-      );
+      const result = createExportCanvas(session, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).not.toBeNull();
       expect(source.fileSourceNode!.getElement).toHaveBeenCalledWith(0);
@@ -1393,9 +1514,7 @@ describe('ViewerExport', () => {
       const source = createFileSourceNodeSource({ canvasResult: null, elementResult: null });
       const session = createMockSession(source);
 
-      const result = createExportCanvas(
-        session, mockPaintEngine, mockPaintRenderer, 'none', false
-      );
+      const result = createExportCanvas(session, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).toBeNull();
     });
@@ -1403,16 +1522,20 @@ describe('ViewerExport', () => {
     it('createExportCanvas: applies transform + crop to FileSourceNode canvas', () => {
       const source = createFileSourceNodeSource();
       const session = createMockSession(source);
-      const transform: Transform2D = { rotation: 180, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const transform: Transform2D = {
+        rotation: 180,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       const crop = { x: 0, y: 0, width: 0.5, height: 0.5 };
 
-      const result = createExportCanvas(
-        session, mockPaintEngine, mockPaintRenderer, 'none', false, transform, crop
-      );
+      const result = createExportCanvas(session, mockPaintEngine, mockPaintRenderer, 'none', false, transform, crop);
 
       expect(result).not.toBeNull();
-      expect(result!.width).toBe(1024);   // 0.5 * 2048
-      expect(result!.height).toBe(512);   // 0.5 * 1024
+      expect(result!.width).toBe(1024); // 0.5 * 2048
+      expect(result!.height).toBe(512); // 0.5 * 1024
     });
 
     it('createSourceExportCanvas: uses FileSourceNode canvas', () => {
@@ -1458,8 +1581,13 @@ describe('ViewerExport', () => {
       const video = source.element as HTMLVideoElement;
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        25, defaultTransform(), 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        25,
+        defaultTransform(),
+        'none',
+        false,
       );
 
       // The mock video fires 'seeked' on currentTime set, so it should complete
@@ -1481,8 +1609,13 @@ describe('ViewerExport', () => {
       (video as any)._currentTime = 0;
 
       const result = await renderFrameToCanvas(
-        session, mockPaintEngine, mockPaintRenderer,
-        1, defaultTransform(), 'none', false
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
       );
 
       expect(result).not.toBeNull();
@@ -1492,9 +1625,7 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('video', 1280, 720);
       const session = createMockSession(source);
 
-      const result = createExportCanvas(
-        session, mockPaintEngine, mockPaintRenderer, 'none', false
-      );
+      const result = createExportCanvas(session, mockPaintEngine, mockPaintRenderer, 'none', false);
 
       expect(result).not.toBeNull();
       expect(result!.width).toBe(1280);

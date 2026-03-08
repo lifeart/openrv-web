@@ -2,7 +2,7 @@
  * DisplayProfileControl - Display color management transfer function selector
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   type DisplayTransferFunction,
   type DisplayColorState,
@@ -67,7 +67,10 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
       font-size: 12px; cursor: pointer; transition: all 0.12s ease;
     `;
 
-    this.toggleButton.addEventListener('click', (e) => { e.stopPropagation(); this.toggleDropdown(); });
+    this.toggleButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDropdown();
+    });
     this.toggleButton.addEventListener('pointerenter', () => {
       if (!isDisplayStateActive(this.state)) {
         this.toggleButton.style.background = 'var(--bg-hover)';
@@ -112,7 +115,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
     const label = document.createElement('div');
     label.textContent = 'Transfer Function';
-    label.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; margin-bottom: 6px;';
+    label.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; margin-bottom: 6px;';
     section.appendChild(label);
 
     const list = document.createElement('div');
@@ -182,7 +186,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     // Display gamma slider
     const gammaSection = document.createElement('div');
     gammaSection.dataset.testid = 'display-gamma-section';
-    gammaSection.style.cssText = 'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
+    gammaSection.style.cssText =
+      'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
     this.gammaLabel = document.createElement('div');
     this.gammaLabel.dataset.testid = 'display-gamma-value';
     this.gammaLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
@@ -243,7 +248,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
     const colorSpaceSection = document.createElement('div');
     colorSpaceSection.dataset.testid = 'display-colorspace-info';
-    colorSpaceSection.style.cssText = 'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
+    colorSpaceSection.style.cssText =
+      'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
 
     const browserInfo = detectBrowserColorSpace();
 
@@ -288,21 +294,27 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.persistAndEmit();
   }
 
-  getState(): DisplayColorState { return { ...this.state }; }
+  getState(): DisplayColorState {
+    return { ...this.state };
+  }
 
   setState(state: Partial<DisplayColorState>): void {
     let changed = false;
     if (state.transferFunction !== undefined && state.transferFunction !== this.state.transferFunction) {
-      this.state.transferFunction = state.transferFunction; changed = true;
+      this.state.transferFunction = state.transferFunction;
+      changed = true;
     }
     if (state.displayGamma !== undefined && state.displayGamma !== this.state.displayGamma) {
-      this.state.displayGamma = state.displayGamma; changed = true;
+      this.state.displayGamma = state.displayGamma;
+      changed = true;
     }
     if (state.displayBrightness !== undefined && state.displayBrightness !== this.state.displayBrightness) {
-      this.state.displayBrightness = state.displayBrightness; changed = true;
+      this.state.displayBrightness = state.displayBrightness;
+      changed = true;
     }
     if (state.customGamma !== undefined && state.customGamma !== this.state.customGamma) {
-      this.state.customGamma = state.customGamma; changed = true;
+      this.state.customGamma = state.customGamma;
+      changed = true;
     }
     if (changed) {
       this.updateProfileButtons();
@@ -354,7 +366,9 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     return false;
   }
 
-  render(): HTMLElement { return this.container; }
+  render(): HTMLElement {
+    return this.container;
+  }
 
   dispose(): void {
     this.closeDropdown();
@@ -378,7 +392,9 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     if (this.gammaLabel) this.gammaLabel.textContent = `Display Gamma: ${this.state.displayGamma.toFixed(1)}`;
     if (this.brightnessSlider) this.brightnessSlider.value = String(this.state.displayBrightness);
     if (this.brightnessSlider) this.brightnessSlider.setAttribute('aria-valuenow', this.brightnessSlider.value);
-    if (this.brightnessLabel) this.brightnessLabel.textContent = `Display Brightness: ${this.state.displayBrightness.toFixed(1)}`;
+    if (this.brightnessLabel) {
+      this.brightnessLabel.textContent = `Display Brightness: ${this.state.displayBrightness.toFixed(1)}`;
+    }
     if (this.customGammaSlider) this.customGammaSlider.value = String(this.state.customGamma);
     if (this.customGammaLabel) this.customGammaLabel.textContent = `Custom Gamma: ${this.state.customGamma.toFixed(1)}`;
   }

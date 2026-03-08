@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventEmitter, EventMap } from './EventEmitter';
+import { EventEmitter, type EventMap } from './EventEmitter';
 
 interface TestEvents extends EventMap {
   message: string;
@@ -283,6 +283,7 @@ describe('EventEmitter', () => {
     });
 
     it('handles listener that removes itself', () => {
+      // eslint-disable-next-line prefer-const -- circular reference: listener uses unsubscribe before it's assigned
       let unsubscribe: () => void;
       const listener = vi.fn(() => {
         unsubscribe();

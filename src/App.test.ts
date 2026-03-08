@@ -75,7 +75,9 @@ import { App } from './App';
 class MockBroadcastChannel {
   name: string;
   onmessage: ((event: MessageEvent) => void) | null = null;
-  constructor(name: string) { this.name = name; }
+  constructor(name: string) {
+    this.name = name;
+  }
   postMessage = vi.fn();
   close = vi.fn();
 }

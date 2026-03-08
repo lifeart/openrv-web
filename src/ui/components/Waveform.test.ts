@@ -203,7 +203,7 @@ describe('Waveform', () => {
       const imageData = new ImageData(100, 100);
       // Fill with some data
       for (let i = 0; i < imageData.data.length; i += 4) {
-        imageData.data[i] = 128;     // R
+        imageData.data[i] = 128; // R
         imageData.data[i + 1] = 128; // G
         imageData.data[i + 2] = 128; // B
         imageData.data[i + 3] = 255; // A
@@ -234,11 +234,11 @@ describe('Waveform', () => {
         for (let x = 0; x < 100; x++) {
           const i = (y * 100 + x) * 4;
           // Horizontal gradient for testing waveform
-          const value = Math.floor(x * 255 / 99);
-          imageData.data[i] = value;     // R
+          const value = Math.floor((x * 255) / 99);
+          imageData.data[i] = value; // R
           imageData.data[i + 1] = value; // G
           imageData.data[i + 2] = value; // B
-          imageData.data[i + 3] = 255;   // A
+          imageData.data[i + 3] = 255; // A
         }
       }
     });
@@ -265,7 +265,7 @@ describe('Waveform', () => {
         for (let x = 0; x < 99; x++) {
           const i = (y * 99 + x) * 4;
           if (x < 33) {
-            rgbImage.data[i] = 255;     // Red region
+            rgbImage.data[i] = 255; // Red region
             rgbImage.data[i + 1] = 0;
             rgbImage.data[i + 2] = 0;
           } else if (x < 66) {
@@ -293,7 +293,7 @@ describe('Waveform', () => {
       // Create simple image data for testing
       imageData = new ImageData(10, 10);
       for (let i = 0; i < imageData.data.length; i += 4) {
-        imageData.data[i] = 128;     // R
+        imageData.data[i] = 128; // R
         imageData.data[i + 1] = 128; // G
         imageData.data[i + 2] = 128; // B
         imageData.data[i + 3] = 255; // A
@@ -825,9 +825,9 @@ describe('Waveform RGB Overlay Controls', () => {
       // Create test image data with distinct RGB values
       imageData = new ImageData(10, 10);
       for (let i = 0; i < imageData.data.length; i += 4) {
-        imageData.data[i] = 200;     // R
+        imageData.data[i] = 200; // R
         imageData.data[i + 1] = 100; // G
-        imageData.data[i + 2] = 50;  // B
+        imageData.data[i + 2] = 50; // B
         imageData.data[i + 3] = 255; // A
       }
     });

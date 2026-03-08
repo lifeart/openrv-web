@@ -145,7 +145,7 @@ export function applyHighlightsShadowsHDR(
   params: HighlightsShadowsParams,
   hdrData: Float32Array,
   channels: number,
-  peak: number = 1.0
+  peak: number = 1.0,
 ): void {
   const highlights = params.highlights / 100; // -1 to +1
   const shadows = params.shadows / 100; // -1 to +1
@@ -312,11 +312,7 @@ export function applyVibrance(imageData: ImageData, params: VibranceParams): voi
  * Uses separable convolution (horizontal + vertical) for O(n*k) instead of O(n*k^2).
  * Kernel: [1, 4, 6, 4, 1] / 16 (approximation of Gaussian)
  */
-function applyGaussianBlur5x5(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number
-): Uint8ClampedArray {
+function applyGaussianBlur5x5(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
   const result = new Uint8ClampedArray(data.length);
   const temp = new Uint8ClampedArray(data.length);
 
@@ -449,7 +445,7 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
  * while preserving perceptual detail and contrast.
  */
 
-import { ToneMappingOperator, ToneMappingState } from './ToneMappingControl';
+import { type ToneMappingOperator, type ToneMappingState } from './ToneMappingControl';
 import { applyToneMappingToRGB, type ToneMappingParams } from '../../utils/effects/effectProcessing.shared';
 
 /**
@@ -479,7 +475,9 @@ export function applyToneMapping(imageData: ImageData, operator: ToneMappingOper
 
     // Apply tone mapping (cross-channel for agx, pbrNeutral, acesHill)
     const tm = applyToneMappingToRGB(r, g, b, operator);
-    r = tm.r; g = tm.g; b = tm.b;
+    r = tm.r;
+    g = tm.g;
+    b = tm.b;
 
     // Convert back to 8-bit with safe clamping
     // Handle NaN that could have slipped through by treating it as 0
@@ -517,7 +515,9 @@ export function applyToneMappingWithParams(imageData: ImageData, state: ToneMapp
     let b = data[i + 2]! / 255;
 
     const tm = applyToneMappingToRGB(r, g, b, state.operator, params);
-    r = tm.r; g = tm.g; b = tm.b;
+    r = tm.r;
+    g = tm.g;
+    b = tm.b;
 
     data[i] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);
     data[i + 1] = clamp(Math.round(Number.isFinite(g) ? g * 255 : 0), 0, 255);
@@ -533,7 +533,7 @@ export function applyToneMappingHDR(
   imageData: ImageData,
   operator: ToneMappingOperator,
   hdrData: Float32Array,
-  channels: number
+  channels: number,
 ): void {
   if (operator === 'off') return;
 
@@ -551,7 +551,9 @@ export function applyToneMappingHDR(
 
     // Apply tone mapping to compress HDR to SDR range (cross-channel for agx, pbrNeutral, acesHill)
     const tm = applyToneMappingToRGB(r, g, b, operator);
-    r = tm.r; g = tm.g; b = tm.b;
+    r = tm.r;
+    g = tm.g;
+    b = tm.b;
 
     // Convert to 8-bit
     data[dataIndex] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);
@@ -564,10 +566,7 @@ export function applyToneMappingHDR(
 /**
  * CPU-based sharpen filter (fallback when GPU is unavailable)
  */
-export function applySharpenCPU(
-  imageData: ImageData,
-  amount: number
-): void {
+export function applySharpenCPU(imageData: ImageData, amount: number): void {
   const data = imageData.data;
   const width = imageData.width;
   const height = imageData.height;

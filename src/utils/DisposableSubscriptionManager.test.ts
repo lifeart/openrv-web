@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DisposableSubscriptionManager } from './DisposableSubscriptionManager';
 import { Signal } from '../core/graph/Signal';
-import { EventEmitter, EventMap } from './EventEmitter';
+import { EventEmitter, type EventMap } from './EventEmitter';
 
 describe('DisposableSubscriptionManager', () => {
   let manager: DisposableSubscriptionManager;

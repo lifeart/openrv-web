@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { CurveEditor, CurveChannelType } from './CurveEditor';
+import { CurveEditor, type CurveChannelType } from './CurveEditor';
 import { type ColorCurvesData, createDefaultCurve } from '../../color/ColorProcessingFacade';
 
 // Polyfill PointerEvent for jsdom which does not support it
@@ -76,7 +76,14 @@ describe('CurveEditor', () => {
 
     it('CURVE-U005: should accept initial curves in constructor', () => {
       const customCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.7 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -135,10 +142,35 @@ describe('CurveEditor', () => {
 
     it('CURVE-U021: setCurves updates all channels', () => {
       const newCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] },
-        red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }] },
-        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0.1 },
+            { x: 1, y: 0.9 },
+          ],
+        },
+        red: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.6 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
       };
 
       editor.setCurves(newCurves);
@@ -150,7 +182,13 @@ describe('CurveEditor', () => {
 
     it('CURVE-U022: setCurves deep copies the data', () => {
       const newCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -211,7 +249,14 @@ describe('CurveEditor', () => {
     it('CURVE-U050: resetActiveChannel resets current channel to default', () => {
       // First modify the master curve
       const modified: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.3, y: 0.5 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.3, y: 0.5 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -229,10 +274,38 @@ describe('CurveEditor', () => {
   describe('resetAll', () => {
     it('CURVE-U060: resetAll resets all channels', () => {
       const modified: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.3, y: 0.5 }, { x: 1, y: 1 }] },
-        red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
-        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.6, y: 0.4 }, { x: 1, y: 1 }] },
-        blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.4, y: 0.6 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.3, y: 0.5 },
+            { x: 1, y: 1 },
+          ],
+        },
+        red: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.7 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.6, y: 0.4 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.4, y: 0.6 },
+            { x: 1, y: 1 },
+          ],
+        },
       };
       editor.setCurves(modified);
 
@@ -308,12 +381,12 @@ describe('CurveEditor', () => {
       // Track added handlers
       const addedHandlers: Map<string, Function> = new Map();
       const originalAddEventListener = canvas.addEventListener.bind(canvas);
-      const addSpy = vi.spyOn(canvas, 'addEventListener').mockImplementation(
-        (type: string, handler: EventListenerOrEventListenerObject) => {
+      const addSpy = vi
+        .spyOn(canvas, 'addEventListener')
+        .mockImplementation((type: string, handler: EventListenerOrEventListenerObject) => {
           addedHandlers.set(type, handler as Function);
           originalAddEventListener(type, handler);
-        }
-      );
+        });
 
       // Create a new editor so we can track the handlers
       const newEditor = new CurveEditor();
@@ -322,11 +395,11 @@ describe('CurveEditor', () => {
 
       // Track removed handlers
       const removedHandlers: Map<string, Function> = new Map();
-      const removeSpy = vi.spyOn(newCanvas, 'removeEventListener').mockImplementation(
-        (type: string, handler: EventListenerOrEventListenerObject) => {
+      const removeSpy = vi
+        .spyOn(newCanvas, 'removeEventListener')
+        .mockImplementation((type: string, handler: EventListenerOrEventListenerObject) => {
           removedHandlers.set(type, handler as Function);
-        }
-      );
+        });
 
       newEditor.dispose();
 
@@ -430,10 +503,35 @@ describe('CurveEditor hi-DPI support', () => {
 
     // Should be able to modify curves at high DPR
     const newCurves = {
-      master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
-      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      master: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.7 },
+          { x: 1, y: 1 },
+        ],
+      },
+      red: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      green: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      blue: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
     };
 
     expect(() => editor.setCurves(newCurves)).not.toThrow();
@@ -464,10 +562,34 @@ describe('CurveEditor curve modifications', () => {
 
   it('CURVE-U100: curves preserve enabled state', () => {
     const curves: ColorCurvesData = {
-      master: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      green: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      master: {
+        enabled: false,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      red: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      green: {
+        enabled: false,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      blue: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
     };
 
     editor.setCurves(curves);
@@ -581,8 +703,15 @@ describe('CurveEditor pointer events (H-03)', () => {
 
     // Mock getBoundingClientRect to return known canvas position
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
-      x: 0, y: 0, toJSON: () => {},
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
 
     // The second point (1,1) maps to canvas position (190, 10)
@@ -611,8 +740,15 @@ describe('CurveEditor pointer events (H-03)', () => {
 
     // Mock getBoundingClientRect
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
-      x: 0, y: 0, toJSON: () => {},
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
 
     // First, pointerdown on a control point to start dragging
@@ -649,8 +785,15 @@ describe('CurveEditor pointer events (H-03)', () => {
 
     // Mock getBoundingClientRect
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
-      x: 0, y: 0, toJSON: () => {},
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
 
     const curveChangedSpy = vi.fn();
@@ -747,8 +890,15 @@ describe('CurveEditor keyboard accessibility (L-39)', () => {
 
     // Mock getBoundingClientRect for pointer events
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
-      x: 0, y: 0, toJSON: () => {},
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
     canvas.setPointerCapture = vi.fn();
     canvas.releasePointerCapture = vi.fn();
@@ -793,7 +943,14 @@ describe('CurveEditor keyboard accessibility (L-39)', () => {
   it('CE-L39c: Pressing Delete on focused canvas should remove the selected control point', () => {
     // Set up a curve with a middle point that can be removed
     const curvesWithMidpoint: ColorCurvesData = {
-      master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }] },
+      master: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.5 },
+          { x: 1, y: 1 },
+        ],
+      },
       red: createDefaultCurve(),
       green: createDefaultCurve(),
       blue: createDefaultCurve(),
@@ -805,8 +962,15 @@ describe('CurveEditor keyboard accessibility (L-39)', () => {
 
     // Mock getBoundingClientRect
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
-      x: 0, y: 0, toJSON: () => {},
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
     });
     canvas.setPointerCapture = vi.fn();
     canvas.releasePointerCapture = vi.fn();

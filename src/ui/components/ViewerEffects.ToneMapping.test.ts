@@ -92,7 +92,7 @@ describe('applyToneMapping', () => {
 
     it('TONEMAPFN-012: reinhard preserves relative brightness ordering', () => {
       const imageData = createMultiPixelImageData([
-        [64, 64, 64, 255],  // dark
+        [64, 64, 64, 255], // dark
         [128, 128, 128, 255], // mid
         [255, 255, 255, 255], // bright
       ]);
@@ -420,7 +420,8 @@ describe('applyToneMapping', () => {
 
       // Test all possible 8-bit values
       for (const operator of operators) {
-        for (let v = 0; v <= 255; v += 17) { // Sample every 17th value
+        for (let v = 0; v <= 255; v += 17) {
+          // Sample every 17th value
           const imageData = createTestImageData(v, v, v);
           applyToneMapping(imageData, operator);
 
@@ -525,7 +526,12 @@ describe('applyToneMapping', () => {
  * Tests for HDR tone mapping function
  */
 describe('applyToneMappingHDR', () => {
-  function createHDRTestData(width: number, height: number, channels: number, values: number[]): {
+  function createHDRTestData(
+    width: number,
+    height: number,
+    channels: number,
+    values: number[],
+  ): {
     imageData: ImageData;
     hdrData: Float32Array;
   } {
@@ -723,18 +729,18 @@ describe('GPU/CPU Parity', () => {
     // GPU: x * (1 + x / wp²) / (1 + x) with wp=5.0 (default), headroom=1.0 (SDR)
     const wp = 5.0;
     const wp2 = wp * wp;
-    return x * (1.0 + x / wp2) / (1.0 + x);
+    return (x * (1.0 + x / wp2)) / (1.0 + x);
   }
 
   function gpuFilmicCurve(x: number): number {
     // GPU filmic curve matching shader constants
     const A = 0.15;
-    const B = 0.50;
-    const C = 0.10;
-    const D = 0.20;
+    const B = 0.5;
+    const C = 0.1;
+    const D = 0.2;
     const E = 0.02;
-    const F = 0.30;
-    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+    const F = 0.3;
+    return (x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F) - E / F;
   }
 
   function gpuFilmic(x: number): number {
@@ -867,7 +873,8 @@ describe('GPU/CPU Parity', () => {
       };
 
       for (const op of operators) {
-        for (let i = 0; i <= 255; i += 51) { // Test 0, 51, 102, 153, 204, 255
+        for (let i = 0; i <= 255; i += 51) {
+          // Test 0, 51, 102, 153, 204, 255
           const imageData = createTestImageData(i, i, i);
           applyToneMapping(imageData, op);
           const cpuResult = imageData.data[0]! / 255;

@@ -337,10 +337,7 @@ export class TimelineEditorService {
         const mappedMode = this.session.loopMode === 'once' ? 'none' : 'all';
         this.playlistManager.setLoopMode(mappedMode as 'none' | 'single' | 'all');
         this.playlistManager.setEnabled(true);
-      } else if (
-        this.playlistManager.getLoopMode() === 'none' &&
-        this.session.loopMode !== 'once'
-      ) {
+      } else if (this.playlistManager.getLoopMode() === 'none' && this.session.loopMode !== 'once') {
         // Preserve expected looping when user loop mode is not "once".
         this.playlistManager.setLoopMode('all');
       }

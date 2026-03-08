@@ -27,10 +27,7 @@ interface MockHeifImage {
   get_width: () => number;
   get_height: () => number;
   is_primary: () => boolean;
-  display: (
-    imageData: { data: Uint8ClampedArray },
-    callback: (r: unknown) => void
-  ) => void;
+  display: (imageData: { data: Uint8ClampedArray }, callback: (r: unknown) => void) => void;
   free: ReturnType<typeof vi.fn>;
 }
 
@@ -38,15 +35,17 @@ interface MockHeifImage {
  * Create a mock HeifImage with sensible defaults.
  * The display() callback fills the buffer with `fillValue` (async by default).
  */
-function createMockImage(opts: {
-  width?: number;
-  height?: number;
-  primary?: boolean;
-  fillValue?: number;
-  sync?: boolean;
-  displayReturnsNull?: boolean;
-  isPrimaryThrows?: boolean;
-} = {}): MockHeifImage {
+function createMockImage(
+  opts: {
+    width?: number;
+    height?: number;
+    primary?: boolean;
+    fillValue?: number;
+    sync?: boolean;
+    displayReturnsNull?: boolean;
+    isPrimaryThrows?: boolean;
+  } = {},
+): MockHeifImage {
   const {
     width = 2,
     height = 2,
@@ -61,7 +60,9 @@ function createMockImage(opts: {
     get_width: () => width,
     get_height: () => height,
     is_primary: isPrimaryThrows
-      ? () => { throw new ReferenceError('heif_image_handle_is_primary_image is not defined'); }
+      ? () => {
+          throw new ReferenceError('heif_image_handle_is_primary_image is not defined');
+        }
       : () => primary,
     display: displayReturnsNull
       ? (_imageData: unknown, callback: (r: null) => void) => {
@@ -83,7 +84,9 @@ function createMockImage(opts: {
  */
 function mockLibheif(images: MockHeifImage[] | null) {
   const decodeFn = vi.fn().mockReturnValue(images);
-  const HeifDecoderMock = class { decode = decodeFn; };
+  const HeifDecoderMock = class {
+    decode = decodeFn;
+  };
   vi.doMock('libheif-js', () => ({ HeifDecoder: HeifDecoderMock }));
   return { decodeFn, HeifDecoderMock };
 }
@@ -232,7 +235,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICToImageData(new ArrayBuffer(16)).catch(e => e);
+      const error = await decodeHEICToImageData(new ArrayBuffer(16)).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('libheif decoded no images');
 
@@ -244,7 +247,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICToImageData(new ArrayBuffer(16)).catch(e => e);
+      const error = await decodeHEICToImageData(new ArrayBuffer(16)).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('libheif decoded no images');
 
@@ -257,7 +260,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICToImageData(new ArrayBuffer(16)).catch(e => e);
+      const error = await decodeHEICToImageData(new ArrayBuffer(16)).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('display() callback returned null');
 
@@ -269,14 +272,14 @@ describe('HEICWasmDecoder', () => {
         throw new Error('Corrupt HEIC bitstream');
       });
       vi.doMock('libheif-js', () => ({
-        HeifDecoder: class { decode = decodeFn; },
+        HeifDecoder: class {
+          decode = decodeFn;
+        },
       }));
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
-      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow(
-        'Corrupt HEIC bitstream'
-      );
+      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow('Corrupt HEIC bitstream');
 
       unmockLibheif();
     });
@@ -287,9 +290,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
-      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow(
-        'Invalid HEIC dimensions'
-      );
+      await expect(decodeHEICToImageData(new ArrayBuffer(16))).rejects.toThrow('Invalid HEIC dimensions');
 
       unmockLibheif();
     });
@@ -321,7 +322,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICItemToImageData(new ArrayBuffer(16), 5).catch(e => e);
+      const error = await decodeHEICItemToImageData(new ArrayBuffer(16), 5).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('out of range');
 
@@ -334,7 +335,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICItemToImageData(new ArrayBuffer(16), -1).catch(e => e);
+      const error = await decodeHEICItemToImageData(new ArrayBuffer(16), -1).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('out of range');
 
@@ -347,7 +348,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICItemToImageData(new ArrayBuffer(16), 7).catch(e => e);
+      const error = await decodeHEICItemToImageData(new ArrayBuffer(16), 7).catch((e) => e);
       expect(error.message).toContain('7');
       expect(error.message).toContain('2 images');
 
@@ -397,7 +398,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICAuxImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICAuxImageData(new ArrayBuffer(16)).catch(e => e);
+      const error = await decodeHEICAuxImageData(new ArrayBuffer(16)).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('No auxiliary image found');
 
@@ -409,7 +410,7 @@ describe('HEICWasmDecoder', () => {
 
       const { decodeHEICAuxImageData } = await import('./HEICWasmDecoder');
 
-      const error = await decodeHEICAuxImageData(new ArrayBuffer(16)).catch(e => e);
+      const error = await decodeHEICAuxImageData(new ArrayBuffer(16)).catch((e) => e);
       expect(error).toBeInstanceOf(DecoderError);
       expect(error.message).toContain('No auxiliary image found');
 
@@ -496,17 +497,12 @@ describe('HEICWasmDecoder', () => {
     });
 
     it('frees all images when index is out of range', async () => {
-      const imgs = [
-        createMockImage({ primary: true }),
-        createMockImage({ primary: false }),
-      ];
+      const imgs = [createMockImage({ primary: true }), createMockImage({ primary: false })];
       mockLibheif(imgs);
 
       const { decodeHEICItemToImageData } = await import('./HEICWasmDecoder');
 
-      await expect(decodeHEICItemToImageData(new ArrayBuffer(16), 5)).rejects.toThrow(
-        'out of range'
-      );
+      await expect(decodeHEICItemToImageData(new ArrayBuffer(16), 5)).rejects.toThrow('out of range');
 
       for (const img of imgs) {
         expect(img.free).toHaveBeenCalledOnce();

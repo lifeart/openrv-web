@@ -80,7 +80,7 @@ vi.mock('./ShotGridBridge', async () => {
   const actual = await vi.importActual('./ShotGridBridge');
   return {
     ...actual,
-    ShotGridBridge: vi.fn(function(this: any) {
+    ShotGridBridge: vi.fn(function (this: any) {
       this.authenticate = vi.fn().mockResolvedValue(undefined);
       this.getVersionsForPlaylist = vi.fn().mockResolvedValue([makeVersion()]);
       this.getVersionsForShot = vi.fn().mockResolvedValue([makeVersion()]);
@@ -257,9 +257,7 @@ describe('ShotGridIntegrationBridge', () => {
     panel.emit('pushNotes', { versionId: 101, sourceIndex: 0 });
 
     await vi.waitFor(() => {
-      expect(panel.setError).toHaveBeenCalledWith(
-        expect.stringContaining('failed')
-      );
+      expect(panel.setError).toHaveBeenCalledWith(expect.stringContaining('failed'));
     });
   });
 
@@ -342,7 +340,7 @@ describe('ShotGridIntegrationBridge', () => {
     panel.emit('loadVersion', { version: makeVersion(), mediaUrl: null });
 
     // Give it a tick
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 10));
 
     expect(session.loadVideo).not.toHaveBeenCalled();
     expect(session.loadImage).not.toHaveBeenCalled();
@@ -361,9 +359,12 @@ describe('ShotGridIntegrationBridge', () => {
     });
 
     // Make loadVideo slow so we can disconnect during it
-    session.loadVideo.mockImplementation(() => new Promise(resolve => {
-      setTimeout(resolve, 50);
-    }));
+    session.loadVideo.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(resolve, 50);
+        }),
+    );
 
     panel.emit('loadVersion', {
       version: makeVersion(),
@@ -374,7 +375,7 @@ describe('ShotGridIntegrationBridge', () => {
     configUI.emit('disconnect', undefined);
 
     // Wait for loadVideo to complete
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 100));
 
     // mapVersionToSource should NOT have been called (generation mismatch)
     expect(panel.mapVersionToSource).not.toHaveBeenCalled();
@@ -416,7 +417,7 @@ describe('ShotGridIntegrationBridge', () => {
 
     panel.emit('pushNotes', { versionId: 101, sourceIndex: 0 });
 
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 50));
 
     // Only the first push should have been attempted before bridge was nulled
     if (mockBridgeInstance) {

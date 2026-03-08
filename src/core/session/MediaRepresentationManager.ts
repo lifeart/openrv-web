@@ -15,9 +15,7 @@ import type {
   SwitchRepresentationOptions,
   RepresentationManagerEvents,
 } from '../types/representation';
-import {
-  createRepresentation,
-} from '../types/representation';
+import { createRepresentation } from '../types/representation';
 import { createRepresentationLoader } from './loaders/RepresentationLoaderFactory';
 import type { RepresentationLoader } from './loaders/RepresentationLoader';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
@@ -58,10 +56,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
    * @param config - Configuration for the new representation
    * @returns The created MediaRepresentation, or null if the source is invalid
    */
-  addRepresentation(
-    sourceIndex: number,
-    config: AddRepresentationConfig
-  ): MediaRepresentation | null {
+  addRepresentation(sourceIndex: number, config: AddRepresentationConfig): MediaRepresentation | null {
     if (!this._accessor) return null;
     const representations = this._accessor.getRepresentations(sourceIndex);
     if (!representations) return null;
@@ -95,7 +90,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
     const representations = this._accessor.getRepresentations(sourceIndex);
     if (!representations) return false;
 
-    const index = representations.findIndex(r => r.id === repId);
+    const index = representations.findIndex((r) => r.id === repId);
     if (index === -1) return false;
 
     // Dispose the loader if one exists
@@ -111,7 +106,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
 
     if (activeIndex === index) {
       // Find next ready representation
-      const nextReady = representations.findIndex(r => r.status === 'ready');
+      const nextReady = representations.findIndex((r) => r.status === 'ready');
       const nextRep = nextReady !== -1 ? representations[nextReady] : undefined;
       if (nextReady !== -1 && nextRep) {
         this._accessor.setActiveRepresentationIndex(sourceIndex, nextReady);
@@ -138,13 +133,13 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
   async switchRepresentation(
     sourceIndex: number,
     repId: string,
-    options?: SwitchRepresentationOptions
+    options?: SwitchRepresentationOptions,
   ): Promise<boolean> {
     if (!this._accessor) return false;
     const representations = this._accessor.getRepresentations(sourceIndex);
     if (!representations) return false;
 
-    const repIndex = representations.findIndex(r => r.id === repId);
+    const repIndex = representations.findIndex((r) => r.id === repId);
     if (repIndex === -1) return false;
 
     const representation = representations[repIndex];
@@ -154,9 +149,10 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
 
     // Get the previous active representation
     const prevActiveIndex = this._accessor.getActiveRepresentationIndex(sourceIndex);
-    const prevRepId = prevActiveIndex >= 0 && prevActiveIndex < representations.length
-      ? representations[prevActiveIndex]?.id ?? null
-      : null;
+    const prevRepId =
+      prevActiveIndex >= 0 && prevActiveIndex < representations.length
+        ? (representations[prevActiveIndex]?.id ?? null)
+        : null;
 
     // If already active and ready, nothing to do
     if (prevActiveIndex === repIndex && representation.status === 'ready') {
@@ -250,10 +246,10 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
     // Find a non-error representation to fall back to (sorted by priority)
     const fallbackCandidates = [...representations]
       .sort((a, b) => a.priority - b.priority)
-      .filter(r => r.id !== failedRepId && r.status !== 'error');
+      .filter((r) => r.id !== failedRepId && r.status !== 'error');
 
     // Prefer a ready representation, otherwise try idle ones
-    const readyFallback = fallbackCandidates.find(r => r.status === 'ready');
+    const readyFallback = fallbackCandidates.find((r) => r.status === 'ready');
     if (readyFallback) {
       const fallbackIndex = representations.indexOf(readyFallback);
       this._accessor.setActiveRepresentationIndex(sourceIndex, fallbackIndex);
@@ -270,7 +266,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
     }
 
     // Try loading an idle fallback
-    const idleFallback = fallbackCandidates.find(r => r.status === 'idle');
+    const idleFallback = fallbackCandidates.find((r) => r.status === 'idle');
     if (idleFallback) {
       // Attempt to load the fallback asynchronously
       void this.switchRepresentation(sourceIndex, idleFallback.id, { userInitiated: false });
@@ -307,12 +303,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
    * @param maxFrame - Maximum valid frame in the target representation (for clamping)
    * @returns The mapped frame number
    */
-  mapFrame(
-    currentFrame: number,
-    fromRep: MediaRepresentation,
-    toRep: MediaRepresentation,
-    maxFrame?: number
-  ): number {
+  mapFrame(currentFrame: number, fromRep: MediaRepresentation, toRep: MediaRepresentation, maxFrame?: number): number {
     // Convert to absolute frame
     const absoluteFrame = currentFrame + fromRep.startFrame;
     // Convert to target frame

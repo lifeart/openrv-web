@@ -20,7 +20,7 @@ import type { StereoState } from '../core/types/stereo';
 function createTestImageData(
   width: number,
   height: number,
-  fill?: (x: number, y: number) => [number, number, number, number]
+  fill?: (x: number, y: number) => [number, number, number, number],
 ): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
@@ -44,11 +44,7 @@ function createTestImageData(
 }
 
 // Helper to get pixel at x,y
-function getPixel(
-  img: ImageData,
-  x: number,
-  y: number
-): [number, number, number, number] {
+function getPixel(img: ImageData, x: number, y: number): [number, number, number, number] {
   const idx = (y * img.width + x) * 4;
   return [img.data[idx]!, img.data[idx + 1]!, img.data[idx + 2]!, img.data[idx + 3]!];
 }

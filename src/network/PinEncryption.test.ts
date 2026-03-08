@@ -33,9 +33,7 @@ describe('PinEncryption', () => {
     const plaintext = 'state';
     const encrypted = await encryptSessionStateWithPin(plaintext, '123456');
 
-    await expect(decryptSessionStateWithPin(encrypted, '654321'))
-      .rejects
-      .toThrow('Failed to decrypt state payload');
+    await expect(decryptSessionStateWithPin(encrypted, '654321')).rejects.toThrow('Failed to decrypt state payload');
   });
 
   // ---------------------------------------------------------------------------
@@ -91,13 +89,11 @@ describe('PinEncryption', () => {
   // ---------------------------------------------------------------------------
 
   it('PEN-015: encrypt rejects PIN shorter than 4 digits', async () => {
-    await expect(encryptSessionStateWithPin('state', '123'))
-      .rejects.toThrow('PIN code must be 4 to 10 digits');
+    await expect(encryptSessionStateWithPin('state', '123')).rejects.toThrow('PIN code must be 4 to 10 digits');
   });
 
   it('PEN-016: encrypt rejects PIN with letters', async () => {
-    await expect(encryptSessionStateWithPin('state', 'abcd'))
-      .rejects.toThrow('PIN code must be 4 to 10 digits');
+    await expect(encryptSessionStateWithPin('state', 'abcd')).rejects.toThrow('PIN code must be 4 to 10 digits');
   });
 
   // ---------------------------------------------------------------------------
@@ -166,16 +162,18 @@ describe('PinEncryption', () => {
     const encrypted = await encryptSessionStateWithPin('test', '1234');
     const tampered = { ...encrypted, algorithm: 'AES-CBC' as 'AES-GCM' };
 
-    await expect(decryptSessionStateWithPin(tampered, '1234'))
-      .rejects.toThrow('Unsupported encrypted state payload format');
+    await expect(decryptSessionStateWithPin(tampered, '1234')).rejects.toThrow(
+      'Unsupported encrypted state payload format',
+    );
   });
 
   it('PEN-023: decrypt rejects unsupported version', async () => {
     const encrypted = await encryptSessionStateWithPin('test', '1234');
     const tampered = { ...encrypted, version: 2 as 1 };
 
-    await expect(decryptSessionStateWithPin(tampered, '1234'))
-      .rejects.toThrow('Unsupported encrypted state payload format');
+    await expect(decryptSessionStateWithPin(tampered, '1234')).rejects.toThrow(
+      'Unsupported encrypted state payload format',
+    );
   });
 
   it('PEN-024: decrypt with tampered ciphertext fails', async () => {
@@ -186,8 +184,7 @@ describe('PinEncryption', () => {
       ciphertext: encrypted.ciphertext.slice(0, -4) + 'AAAA',
     };
 
-    await expect(decryptSessionStateWithPin(tampered, '1234'))
-      .rejects.toThrow('Failed to decrypt state payload');
+    await expect(decryptSessionStateWithPin(tampered, '1234')).rejects.toThrow('Failed to decrypt state payload');
   });
 
   // ---------------------------------------------------------------------------
@@ -199,14 +196,10 @@ describe('PinEncryption', () => {
     const states = ['state-a', 'state-b', 'state-c', 'state-d', 'state-e'];
 
     // Encrypt all concurrently
-    const encryptedAll = await Promise.all(
-      states.map(s => encryptSessionStateWithPin(s, pin))
-    );
+    const encryptedAll = await Promise.all(states.map((s) => encryptSessionStateWithPin(s, pin)));
 
     // Decrypt all concurrently
-    const decryptedAll = await Promise.all(
-      encryptedAll.map(e => decryptSessionStateWithPin(e, pin))
-    );
+    const decryptedAll = await Promise.all(encryptedAll.map((e) => decryptSessionStateWithPin(e, pin)));
 
     expect(decryptedAll).toEqual(states);
   });

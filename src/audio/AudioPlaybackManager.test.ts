@@ -4,11 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlaybackManager, type AudioPlaybackError } from './AudioPlaybackManager';
-import {
-  createMockAudioContext,
-  createMockGainNode,
-  createMockSourceNode,
-} from '../../test/mocks';
+import { createMockAudioContext, type createMockGainNode, type createMockSourceNode } from '../../test/mocks';
 
 describe('AudioPlaybackManager', () => {
   let manager: AudioPlaybackManager;
@@ -29,11 +25,19 @@ describe('AudioPlaybackManager', () => {
     createdGainNodes = audioMock.createdGainNodes;
     createdSourceNodes = audioMock.createdSourceNodes;
 
-    vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
-    }));
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function () {
+        return mockAudioContext;
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      }),
+    );
 
     manager = new AudioPlaybackManager();
   });
@@ -273,7 +277,7 @@ describe('AudioPlaybackManager', () => {
       expect(playSourceNode.stop).toHaveBeenCalled();
 
       // Wait for the async play() to complete
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Manager should still be in a valid state after resync
       expect(manager.isPlaying).toBe(true);
@@ -522,10 +526,13 @@ describe('AudioPlaybackManager', () => {
       await manager.loadFromVideo(video);
 
       expect(fetch).toHaveBeenCalledTimes(1);
-      expect(fetch).toHaveBeenCalledWith('https://cdn.example.com/test.mp4', expect.objectContaining({
-        cache: 'force-cache',
-        mode: 'cors',
-      }));
+      expect(fetch).toHaveBeenCalledWith(
+        'https://cdn.example.com/test.mp4',
+        expect.objectContaining({
+          cache: 'force-cache',
+          mode: 'cors',
+        }),
+      );
     });
 
     it('APM-131: Blob URL fetch does NOT use force-cache and uses same-origin mode', async () => {
@@ -535,12 +542,18 @@ describe('AudioPlaybackManager', () => {
       await manager.loadFromVideo(video);
 
       expect(fetch).toHaveBeenCalledTimes(1);
-      expect(fetch).toHaveBeenCalledWith('blob:http://localhost:3000/abc-123', expect.objectContaining({
-        mode: 'same-origin',
-      }));
-      expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-        cache: expect.anything(),
-      }));
+      expect(fetch).toHaveBeenCalledWith(
+        'blob:http://localhost:3000/abc-123',
+        expect.objectContaining({
+          mode: 'same-origin',
+        }),
+      );
+      expect(fetch).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          cache: expect.anything(),
+        }),
+      );
     });
 
     it('APM-132: Data URL fetch does NOT use force-cache and uses same-origin mode', async () => {
@@ -550,12 +563,18 @@ describe('AudioPlaybackManager', () => {
       await manager.loadFromVideo(video);
 
       expect(fetch).toHaveBeenCalledTimes(1);
-      expect(fetch).toHaveBeenCalledWith('data:video/mp4;base64,AAAA', expect.objectContaining({
-        mode: 'same-origin',
-      }));
-      expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-        cache: expect.anything(),
-      }));
+      expect(fetch).toHaveBeenCalledWith(
+        'data:video/mp4;base64,AAAA',
+        expect.objectContaining({
+          mode: 'same-origin',
+        }),
+      );
+      expect(fetch).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          cache: expect.anything(),
+        }),
+      );
     });
   });
 
@@ -626,9 +645,9 @@ describe('AudioPlaybackManager', () => {
 
       expect(mockAudioContext.createBufferSource).toHaveBeenCalled();
 
-      const scrubSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const scrubSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
 
       // Scrub again -- should stop the previous snippet
       manager.scrubToFrame(60, 24);
@@ -666,9 +685,9 @@ describe('AudioPlaybackManager', () => {
       vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
       // The snippet should have been started with a duration
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       // At slow speed, duration should be close to max
       const startArgs = lastSource.start.mock.calls[0];
       const snippetDuration = startArgs[2];
@@ -687,9 +706,9 @@ describe('AudioPlaybackManager', () => {
         vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
       }
 
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       const startArgs = lastSource.start.mock.calls[0];
       const snippetDuration = startArgs[2];
       expect(snippetDuration).toBeLessThan(AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX);
@@ -738,9 +757,9 @@ describe('AudioPlaybackManager', () => {
       vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
       // Get the snippet source node and trigger onended
-      const scrubSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const scrubSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
 
       const envelopeGain = createdGainNodes[createdGainNodes.length - 1]!;
 
@@ -776,9 +795,9 @@ describe('AudioPlaybackManager', () => {
       manager.scrubToFrame(40, 24);
       vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       const startArgs = lastSource.start.mock.calls[0];
       const offset = startArgs[1];
       const timestamp = (40 - 1) / 24;
@@ -799,9 +818,9 @@ describe('AudioPlaybackManager', () => {
       manager.scrubToFrame(20, 24);
       vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       const startArgs = lastSource.start.mock.calls[0];
       const offset = startArgs[1];
       const timestamp = (20 - 1) / 24;
@@ -823,9 +842,9 @@ describe('AudioPlaybackManager', () => {
         manager.scrubToFrame(10 + i, 24);
         vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
-        const lastSource = mockAudioContext.createBufferSource.mock.results[
-          mockAudioContext.createBufferSource.mock.results.length - 1
-        ]!.value;
+        const lastSource =
+          mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+            .value;
         const startArgs = lastSource.start.mock.calls[0];
         durations.push(startArgs[2]);
       }
@@ -854,15 +873,16 @@ describe('AudioPlaybackManager', () => {
         vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
       }
 
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       const startArgs = lastSource.start.mock.calls[0];
       const duration = startArgs[2];
 
       // At moderate speed (~10fps), quadratic easing should keep duration
       // closer to max than linear mapping would
-      const midpoint = (AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX + AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MIN) / 2;
+      const midpoint =
+        (AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX + AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MIN) / 2;
       expect(duration).toBeGreaterThan(midpoint);
     });
 
@@ -955,9 +975,9 @@ describe('AudioPlaybackManager', () => {
       manager.scrubToFrame(1, 24);
       vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       const startArgs = lastSource.start.mock.calls[0];
       const offset = startArgs[1];
 
@@ -981,9 +1001,9 @@ describe('AudioPlaybackManager', () => {
       vi.advanceTimersByTime(AudioPlaybackManager.SCRUB_DEBOUNCE_MS + 1);
 
       // After long pause, should use default duration
-      const lastSource = mockAudioContext.createBufferSource.mock.results[
-        mockAudioContext.createBufferSource.mock.results.length - 1
-      ]!.value;
+      const lastSource =
+        mockAudioContext.createBufferSource.mock.results[mockAudioContext.createBufferSource.mock.results.length - 1]!
+          .value;
       const startArgs = lastSource.start.mock.calls[0];
       const duration = startArgs[2];
 

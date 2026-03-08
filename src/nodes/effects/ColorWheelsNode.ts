@@ -2,7 +2,7 @@ import { RegisterNode } from '../base/NodeFactory';
 import { defineNodeProperty } from '../base/defineNodeProperty';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { luminanceRec709 } from '../../color/PixelMath';
 
@@ -70,10 +70,22 @@ export class ColorWheelsNode extends EffectNode {
 
   isIdentity(): boolean {
     return (
-      this.liftR === 0 && this.liftG === 0 && this.liftB === 0 && this.liftY === 0 &&
-      this.gammaR === 0 && this.gammaG === 0 && this.gammaB === 0 && this.gammaY === 0 &&
-      this.gainR === 0 && this.gainG === 0 && this.gainB === 0 && this.gainY === 0 &&
-      this.masterR === 0 && this.masterG === 0 && this.masterB === 0 && this.masterY === 0
+      this.liftR === 0 &&
+      this.liftG === 0 &&
+      this.liftB === 0 &&
+      this.liftY === 0 &&
+      this.gammaR === 0 &&
+      this.gammaG === 0 &&
+      this.gammaB === 0 &&
+      this.gammaY === 0 &&
+      this.gainR === 0 &&
+      this.gainG === 0 &&
+      this.gainB === 0 &&
+      this.gainY === 0 &&
+      this.masterR === 0 &&
+      this.masterG === 0 &&
+      this.masterB === 0 &&
+      this.masterY === 0
     );
   }
 
@@ -100,8 +112,7 @@ export class ColorWheelsNode extends EffectNode {
       b += masterB * 0.5 + masterY;
 
       // Lift (shadows: luma < 0.33)
-      const liftWeight =
-        this.smoothstep(0.5, 0.33, luma) * this.smoothstep(0, 0.15, luma);
+      const liftWeight = this.smoothstep(0.5, 0.33, luma) * this.smoothstep(0, 0.15, luma);
       r += liftR * 0.5 * liftWeight + liftY * liftWeight;
       g += liftG * 0.5 * liftWeight + liftY * liftWeight;
       b += liftB * 0.5 * liftWeight + liftY * liftWeight;
@@ -113,8 +124,7 @@ export class ColorWheelsNode extends EffectNode {
       b += gammaB * 0.5 * gammaWeight + gammaY * gammaWeight;
 
       // Gain (highlights: luma > 0.67)
-      const gainWeight =
-        this.smoothstep(0.5, 0.67, luma) * this.smoothstep(1.0, 0.85, luma);
+      const gainWeight = this.smoothstep(0.5, 0.67, luma) * this.smoothstep(1.0, 0.85, luma);
       r += gainR * 0.5 * gainWeight + gainY * gainWeight;
       g += gainG * 0.5 * gainWeight + gainY * gainWeight;
       b += gainB * 0.5 * gainWeight + gainY * gainWeight;

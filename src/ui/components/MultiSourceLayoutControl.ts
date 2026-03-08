@@ -8,12 +8,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import {
-  createSeparator,
-  createSectionHeader,
-  createCheckboxRow,
-  createSliderRow,
-} from './shared/FormElements';
+import { createSeparator, createSectionHeader, createCheckboxRow, createSliderRow } from './shared/FormElements';
 import {
   type MultiSourceLayoutMode,
   type MultiSourceLayoutState,
@@ -262,9 +257,17 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
 
     // Spacing slider
     const state = this.manager.getState();
-    const spacingResult = createSliderRow('Spacing', state.spacing, 0, 20, 1, (val) => {
-      this.manager.setSpacing(val);
-    }, (val) => `Spacing: ${val}px`);
+    const spacingResult = createSliderRow(
+      'Spacing',
+      state.spacing,
+      0,
+      20,
+      1,
+      (val) => {
+        this.manager.setSpacing(val);
+      },
+      (val) => `Spacing: ${val}px`,
+    );
     spacingResult.container.dataset.testid = 'layout-spacing-slider';
     this.dropdown.appendChild(spacingResult.container);
 
@@ -401,5 +404,4 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
 
     return option;
   }
-
 }

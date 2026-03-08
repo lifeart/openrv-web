@@ -4,7 +4,7 @@
  * Canvas-based UI for editing color curves with draggable control points.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   type CurveChannel,
   type ColorCurvesData,
@@ -97,7 +97,8 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     channels.forEach((channel) => {
       const btn = document.createElement('button');
       btn.textContent = channel === 'master' ? 'RGB' : channel.charAt(0).toUpperCase();
-      btn.title = channel === 'master' ? 'Master (RGB)' : `${channel.charAt(0).toUpperCase()}${channel.slice(1)} channel`;
+      btn.title =
+        channel === 'master' ? 'Master (RGB)' : `${channel.charAt(0).toUpperCase()}${channel.slice(1)} channel`;
       btn.dataset.testid = `curve-channel-${channel}`;
       btn.style.cssText = `
         flex: 1;
@@ -226,13 +227,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   private handlePointerDown(e: PointerEvent): void {
     // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
-    const { x, y } = clientToCanvasCoordinates(
-      this.canvas,
-      e.clientX,
-      e.clientY,
-      this.size,
-      this.size
-    );
+    const { x, y } = clientToCanvasCoordinates(this.canvas, e.clientX, e.clientY, this.size, this.size);
 
     const pointIndex = this.findPointNear(x, y);
     if (pointIndex !== null) {
@@ -246,22 +241,11 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   private handlePointerMove(e: PointerEvent): void {
     // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
-    const { x, y } = clientToCanvasCoordinates(
-      this.canvas,
-      e.clientX,
-      e.clientY,
-      this.size,
-      this.size
-    );
+    const { x, y } = clientToCanvasCoordinates(this.canvas, e.clientX, e.clientY, this.size, this.size);
 
     if (this.draggingPointIndex !== null) {
       const norm = this.canvasToNormalized(x, y);
-      const newCurve = updatePointInCurve(
-        this.getActiveCurve(),
-        this.draggingPointIndex,
-        norm.x,
-        norm.y
-      );
+      const newCurve = updatePointInCurve(this.getActiveCurve(), this.draggingPointIndex, norm.x, norm.y);
       this.setActiveCurve(newCurve);
       this.render();
     } else {
@@ -284,13 +268,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   private handleDoubleClick(e: MouseEvent): void {
     // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
-    const { x, y } = clientToCanvasCoordinates(
-      this.canvas,
-      e.clientX,
-      e.clientY,
-      this.size,
-      this.size
-    );
+    const { x, y } = clientToCanvasCoordinates(this.canvas, e.clientX, e.clientY, this.size, this.size);
 
     const norm = this.canvasToNormalized(x, y);
 
@@ -312,13 +290,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
   private handleContextMenu(e: MouseEvent): void {
     e.preventDefault();
     // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
-    const { x, y } = clientToCanvasCoordinates(
-      this.canvas,
-      e.clientX,
-      e.clientY,
-      this.size,
-      this.size
-    );
+    const { x, y } = clientToCanvasCoordinates(this.canvas, e.clientX, e.clientY, this.size, this.size);
 
     const pointIndex = this.findPointNear(x, y);
     if (pointIndex !== null && pointIndex > 0 && pointIndex < this.getActiveCurve().points.length - 1) {
@@ -374,12 +346,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     const pt = curve.points[this.selectedPointIndex];
     if (!pt) return;
 
-    const newCurve = updatePointInCurve(
-      curve,
-      this.selectedPointIndex,
-      pt.x + dx,
-      pt.y + dy
-    );
+    const newCurve = updatePointInCurve(curve, this.selectedPointIndex, pt.x + dx, pt.y + dy);
     this.setActiveCurve(newCurve);
     this.render();
   }
@@ -464,7 +431,11 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
         // Outer circle
         ctx.beginPath();
         ctx.arc(canvasPt.x, canvasPt.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = isDragging ? color : (isHovered || isSelected ? '#ffffff' : getCSSColor('--bg-secondary', '#1a1a1a'));
+        ctx.fillStyle = isDragging
+          ? color
+          : isHovered || isSelected
+            ? '#ffffff'
+            : getCSSColor('--bg-secondary', '#1a1a1a');
         ctx.fill();
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
@@ -482,7 +453,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
     // Draw inactive channel curves faintly
     const inactiveChannels: CurveChannelType[] = ['master', 'red', 'green', 'blue'].filter(
-      (c) => c !== this.activeChannel
+      (c) => c !== this.activeChannel,
     ) as CurveChannelType[];
 
     inactiveChannels.forEach((channel) => {

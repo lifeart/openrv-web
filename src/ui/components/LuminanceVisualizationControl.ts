@@ -5,17 +5,17 @@
  * with mode-specific sub-controls (band count, contour levels, etc.)
  */
 
-import { LuminanceVisualization, LuminanceVisMode } from './LuminanceVisualization';
+import { type LuminanceVisualization, type LuminanceVisMode } from './LuminanceVisualization';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
 
 const MODE_LABELS: Record<LuminanceVisMode, string> = {
-  'off': 'Off',
+  off: 'Off',
   'false-color': 'False Color',
-  'hsv': 'HSV',
+  hsv: 'HSV',
   'random-color': 'Random Color',
-  'contour': 'Contour',
+  contour: 'Contour',
 };
 
 export class LuminanceVisualizationControl {
@@ -126,10 +126,12 @@ export class LuminanceVisualizationControl {
     this.createDropdownContent();
 
     // Listen for state changes
-    this.unsubscribers.push(this.luminanceVis.on('stateChanged', () => {
-      this.updateButtonState();
-      this.updateSubControls();
-    }));
+    this.unsubscribers.push(
+      this.luminanceVis.on('stateChanged', () => {
+        this.updateButtonState();
+        this.updateSubControls();
+      }),
+    );
   }
 
   private createDropdownContent(): void {
@@ -467,21 +469,23 @@ export class LuminanceVisualizationControl {
       display: none;
     `;
 
-    this.unsubscribers.push(this.luminanceVis.on('stateChanged', (state) => {
-      if (!this.badgeElement) return;
-      if (state.mode === 'off') {
-        this.badgeElement.style.display = 'none';
-      } else {
-        this.badgeElement.style.display = 'block';
-        let text = MODE_LABELS[state.mode];
-        if (state.mode === 'random-color') {
-          text = `Random (${state.randomBandCount})`;
-        } else if (state.mode === 'contour') {
-          text = `Contour (${state.contourLevels})`;
+    this.unsubscribers.push(
+      this.luminanceVis.on('stateChanged', (state) => {
+        if (!this.badgeElement) return;
+        if (state.mode === 'off') {
+          this.badgeElement.style.display = 'none';
+        } else {
+          this.badgeElement.style.display = 'block';
+          let text = MODE_LABELS[state.mode];
+          if (state.mode === 'random-color') {
+            text = `Random (${state.randomBandCount})`;
+          } else if (state.mode === 'contour') {
+            text = `Contour (${state.contourLevels})`;
+          }
+          this.badgeElement.textContent = text;
         }
-        this.badgeElement.textContent = text;
-      }
-    }));
+      }),
+    );
 
     return this.badgeElement;
   }

@@ -14,10 +14,7 @@ import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
-import {
-  createMockRendererGL as createMockGL,
-  initRendererWithMockGL,
-} from '../../test/mocks';
+import { createMockRendererGL as createMockGL, initRendererWithMockGL } from '../../test/mocks';
 
 // =============================================================================
 // Test helpers
@@ -572,7 +569,9 @@ describe('createRenderer factory', () => {
   it('P4-059: falls back to WebGL2Backend when WebGPUBackend constructor throws', () => {
     // Temporarily make WebGPUBackend constructor throw
     const OriginalWebGPUBackend = WebGPUBackend;
-    const throwingCtor = vi.fn(() => { throw new Error('Simulated constructor failure'); });
+    const throwingCtor = vi.fn(() => {
+      throw new Error('Simulated constructor failure');
+    });
     // Monkey-patch the module-level reference used by createRenderer
     // Since createRenderer imports WebGPUBackend directly, we can't easily mock it.
     // Instead, verify the fallback path by confirming the catch works with appropriate caps.

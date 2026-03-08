@@ -7,9 +7,9 @@
  */
 
 export interface ScalePreset {
-  ratio: number;       // e.g. 1.0 for 1:1, 2.0 for 2:1, 0.5 for 1:2
-  label: string;       // e.g. "1:1", "2:1", "1:2"
-  percentage: string;  // e.g. "100%", "200%", "50%"
+  ratio: number; // e.g. 1.0 for 1:1, 2.0 for 2:1, 0.5 for 1:2
+  label: string; // e.g. "1:1", "2:1", "1:2"
+  percentage: string; // e.g. "100%", "200%", "50%"
 }
 
 export const MAGNIFICATION_PRESETS: ScalePreset[] = [
@@ -24,21 +24,18 @@ export const MAGNIFICATION_PRESETS: ScalePreset[] = [
 ];
 
 export const REDUCTION_PRESETS: ScalePreset[] = [
-  { ratio: 0.5,           label: '1:2', percentage: '50%' },
-  { ratio: 1 / 3,         label: '1:3', percentage: '33.3%' },
-  { ratio: 0.25,          label: '1:4', percentage: '25%' },
-  { ratio: 0.2,           label: '1:5', percentage: '20%' },
-  { ratio: 1 / 6,         label: '1:6', percentage: '16.7%' },
-  { ratio: 1 / 7,         label: '1:7', percentage: '14.3%' },
-  { ratio: 0.125,         label: '1:8', percentage: '12.5%' },
+  { ratio: 0.5, label: '1:2', percentage: '50%' },
+  { ratio: 1 / 3, label: '1:3', percentage: '33.3%' },
+  { ratio: 0.25, label: '1:4', percentage: '25%' },
+  { ratio: 0.2, label: '1:5', percentage: '20%' },
+  { ratio: 1 / 6, label: '1:6', percentage: '16.7%' },
+  { ratio: 1 / 7, label: '1:7', percentage: '14.3%' },
+  { ratio: 0.125, label: '1:8', percentage: '12.5%' },
 ];
 
 // IMPORTANT: Use spread+reverse to avoid mutating REDUCTION_PRESETS.
 // Array.prototype.reverse() mutates in place, which would corrupt REDUCTION_PRESETS.
-export const ALL_PRESETS: ScalePreset[] = [
-  ...[...REDUCTION_PRESETS].reverse(),
-  ...MAGNIFICATION_PRESETS,
-];
+export const ALL_PRESETS: ScalePreset[] = [...[...REDUCTION_PRESETS].reverse(), ...MAGNIFICATION_PRESETS];
 
 /**
  * Maximum canvas dimension (CSS pixels) to prevent GPU buffer overflow.
@@ -71,10 +68,7 @@ export function calculateFitScale(
  * Convert a pixel ratio to the internal zoom multiplier.
  * zoom = ratio / fitScale
  */
-export function ratioToZoom(
-  ratio: number,
-  fitScale: number,
-): number {
+export function ratioToZoom(ratio: number, fitScale: number): number {
   if (fitScale <= 0) return ratio;
   return ratio / fitScale;
 }
@@ -83,10 +77,7 @@ export function ratioToZoom(
  * Convert the internal zoom multiplier to an approximate pixel ratio.
  * ratio = zoom * fitScale
  */
-export function zoomToRatio(
-  zoom: number,
-  fitScale: number,
-): number {
+export function zoomToRatio(zoom: number, fitScale: number): number {
   return zoom * fitScale;
 }
 

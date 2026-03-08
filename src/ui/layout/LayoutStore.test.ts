@@ -151,14 +151,17 @@ describe('LayoutStore', () => {
     });
 
     it('LAYOUT-003b: restores layout from localStorage on init', () => {
-      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({
-        version: 1,
-        panels: {
-          left: { size: 280, collapsed: false, activeTab: 0 },
-          right: { size: 350, collapsed: true, activeTab: 2 },
-          bottom: { size: 160, collapsed: false, activeTab: 0 },
-        },
-      }));
+      localStorage.setItem(
+        LAYOUT_STORAGE_KEY,
+        JSON.stringify({
+          version: 1,
+          panels: {
+            left: { size: 280, collapsed: false, activeTab: 0 },
+            right: { size: 350, collapsed: true, activeTab: 2 },
+            bottom: { size: 160, collapsed: false, activeTab: 0 },
+          },
+        }),
+      );
 
       const store2 = new LayoutStore();
       expect(store2.panels.left.size).toBe(280);
@@ -184,10 +187,13 @@ describe('LayoutStore', () => {
     });
 
     it('LAYOUT-003d: falls back on missing panels in stored data', () => {
-      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({
-        version: 1,
-        panels: {}, // Missing all panels
-      }));
+      localStorage.setItem(
+        LAYOUT_STORAGE_KEY,
+        JSON.stringify({
+          version: 1,
+          panels: {}, // Missing all panels
+        }),
+      );
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store2 = new LayoutStore();
@@ -260,7 +266,7 @@ describe('LayoutStore', () => {
       const presets = store.getPresets();
       expect(presets.length).toBeGreaterThanOrEqual(3);
 
-      const ids = presets.map(p => p.id);
+      const ids = presets.map((p) => p.id);
       expect(ids).toContain('review');
       expect(ids).toContain('color');
       expect(ids).toContain('paint');
@@ -333,7 +339,7 @@ describe('LayoutStore', () => {
 
     it('LAYOUT-004i: all four presets have unique panel configurations', () => {
       const presets = store.getPresets();
-      const configs = presets.map(p => JSON.stringify(p.data.panels));
+      const configs = presets.map((p) => JSON.stringify(p.data.panels));
       const unique = new Set(configs);
       expect(unique.size).toBe(presets.length);
     });

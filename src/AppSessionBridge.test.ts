@@ -81,7 +81,7 @@ vi.mock('./handlers/sourceLoadedHandlers', () => ({
       updateInfoPanel();
       updateStackControlSources();
       updateEXRLayers();
-    }
+    },
   ),
   updateStackControlSources: vi.fn(),
   updateEXRLayers: vi.fn(),
@@ -165,15 +165,29 @@ function createContext() {
     show: vi.fn(),
     hide: vi.fn(),
   };
-  const waveform = { isVisible: vi.fn(() => false), update: vi.fn(), setPlaybackMode: vi.fn(), show: vi.fn(), hide: vi.fn() };
-  const vectorscope = { isVisible: vi.fn(() => false), update: vi.fn(), setPlaybackMode: vi.fn(), show: vi.fn(), hide: vi.fn() };
+  const waveform = {
+    isVisible: vi.fn(() => false),
+    update: vi.fn(),
+    setPlaybackMode: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
+  };
+  const vectorscope = {
+    isVisible: vi.fn(() => false),
+    update: vi.fn(),
+    setPlaybackMode: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
+  };
   const gamutDiagram = { isVisible: vi.fn(() => false), update: vi.fn(), show: vi.fn(), hide: vi.fn() };
   const scopesControl = { setScopeVisible: vi.fn(), getState: vi.fn() };
   const infoPanel = { update: vi.fn() };
   const channelSelect = { setEXRLayers: vi.fn(), clearEXRLayers: vi.fn(), setChannel: vi.fn() };
   const stackControl = { setAvailableSources: vi.fn() };
   const cropControl = { setSourceDimensions: vi.fn(), setState: vi.fn(), setUncropState: vi.fn() };
-  const ocioControl = { getProcessor: vi.fn(() => ({ setActiveSource: vi.fn(), detectColorSpaceFromExtension: vi.fn() })) };
+  const ocioControl = {
+    getProcessor: vi.fn(() => ({ setActiveSource: vi.fn(), detectColorSpaceFromExtension: vi.fn() })),
+  };
   const toneMappingControl = { setState: vi.fn() };
   const colorControls = { setAdjustments: vi.fn() };
   const compareControl = { setABAvailable: vi.fn(), setABSource: vi.fn() };
@@ -284,7 +298,10 @@ describe('AppSessionBridge', () => {
     it('ASB-003: unsupportedCodec triggers showUnsupportedCodecModal', () => {
       bridge.bindSessionEvents();
 
-      const codecInfo = { filename: 'test.mov', error: { title: 'Unsupported Codec', message: 'ProRes', codecInfo: { displayName: 'ProRes' } } };
+      const codecInfo = {
+        filename: 'test.mov',
+        error: { title: 'Unsupported Codec', message: 'ProRes', codecInfo: { displayName: 'ProRes' } },
+      };
       ctx._session.emit('unsupportedCodec', codecInfo);
 
       expect(showUnsupportedCodecModal).toHaveBeenCalledTimes(1);
@@ -303,7 +320,7 @@ describe('AppSessionBridge', () => {
         expect.any(Function),
         expect.any(Function),
         expect.any(Function),
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -315,7 +332,7 @@ describe('AppSessionBridge', () => {
         ctx.context,
         expect.anything(), // session
         expect.any(Function), // on helper
-        expect.any(Function)  // updateEXRLayers
+        expect.any(Function), // updateEXRLayers
       );
     });
 
@@ -330,7 +347,7 @@ describe('AppSessionBridge', () => {
         expect.any(Function), // updateHistogram
         expect.any(Function), // updateWaveform
         expect.any(Function), // updateVectorscope
-        expect.any(Function)  // updateGamutDiagram
+        expect.any(Function), // updateGamutDiagram
       );
     });
   });
@@ -433,12 +450,7 @@ describe('AppSessionBridge', () => {
       await bridge.handleEXRLayerChange('diffuse', remapping as any);
 
       expect(_handleEXRLayerChange).toHaveBeenCalledTimes(1);
-      expect(_handleEXRLayerChange).toHaveBeenCalledWith(
-        ctx.context,
-        'diffuse',
-        remapping,
-        expect.any(Function)
-      );
+      expect(_handleEXRLayerChange).toHaveBeenCalledWith(ctx.context, 'diffuse', remapping, expect.any(Function));
     });
   });
 
@@ -480,7 +492,10 @@ describe('AppSessionBridge', () => {
 
       bridge.dispose();
 
-      const codecInfo = { filename: 'test.mov', error: { title: 'Unsupported', message: 'test', codecInfo: { displayName: 'test' } } };
+      const codecInfo = {
+        filename: 'test.mov',
+        error: { title: 'Unsupported', message: 'test', codecInfo: { displayName: 'test' } },
+      };
       ctx._session.emit('unsupportedCodec', codecInfo);
       expect(showUnsupportedCodecModal).not.toHaveBeenCalled();
     });
@@ -534,9 +549,12 @@ describe('AppSessionBridge', () => {
   describe('constructor', () => {
     it('ASB-050: creates scope scheduler on construction', () => {
       expect(createScopeScheduler).toHaveBeenCalledTimes(1);
-      expect(createScopeScheduler).toHaveBeenCalledWith(ctx.context, expect.objectContaining({
-        onHistogramData: expect.any(Function),
-      }));
+      expect(createScopeScheduler).toHaveBeenCalledWith(
+        ctx.context,
+        expect.objectContaining({
+          onHistogramData: expect.any(Function),
+        }),
+      );
     });
   });
 });

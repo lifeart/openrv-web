@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { ColorPipelineManager } from './ColorPipelineManager';
-import { DEFAULT_COLOR_ADJUSTMENTS, ColorAdjustments } from './ColorControls';
+import { DEFAULT_COLOR_ADJUSTMENTS, type ColorAdjustments } from './ColorControls';
 import {
   DEFAULT_CDL,
   type CDLValues,
@@ -14,7 +14,7 @@ import {
   type DisplayColorState,
   type LUT3D,
 } from '../../color/ColorProcessingFacade';
-import { DEFAULT_TONE_MAPPING_STATE, ToneMappingState } from './ToneMappingControl';
+import { DEFAULT_TONE_MAPPING_STATE, type ToneMappingState } from './ToneMappingControl';
 
 /** Helper: create a minimal LUT3D for testing */
 function createMockLUT(title = 'TestLUT'): LUT3D {
@@ -270,10 +270,35 @@ describe('ColorPipelineManager', () => {
     it('CPM-U029: setCurves() stores a deep copy with point arrays', () => {
       const manager = new ColorPipelineManager();
       const curves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }] },
-        red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        blue: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.6 },
+            { x: 1, y: 1 },
+          ],
+        },
+        red: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
       };
       manager.setCurves(curves);
 
@@ -286,10 +311,35 @@ describe('ColorPipelineManager', () => {
     it('CPM-U030: getCurves() returns a deep copy', () => {
       const manager = new ColorPipelineManager();
       const curves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
-        red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.7 },
+            { x: 1, y: 1 },
+          ],
+        },
+        red: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
       };
       manager.setCurves(curves);
 
@@ -301,10 +351,34 @@ describe('ColorPipelineManager', () => {
     it('CPM-U031: resetCurves() restores defaults', () => {
       const manager = new ColorPipelineManager();
       manager.setCurves({
-        master: { enabled: true, points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] },
-        red: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        green: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        blue: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0.1 },
+            { x: 1, y: 0.9 },
+          ],
+        },
+        red: {
+          enabled: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
       });
       manager.resetCurves();
       expect(manager.getCurves()).toEqual(createDefaultCurvesData());
@@ -313,10 +387,34 @@ describe('ColorPipelineManager', () => {
     it('CPM-U032: setCurves() preserves enabled flag per channel', () => {
       const manager = new ColorPipelineManager();
       manager.setCurves({
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        red: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        blue: { enabled: false, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        red: {
+          enabled: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
       });
       const result = manager.getCurves();
       expect(result.master.enabled).toBe(true);

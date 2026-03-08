@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   createSequenceInfo,
   loadFrameImage,
@@ -18,7 +18,11 @@ import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';
 import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 import { MediaRepresentationManager } from './MediaRepresentationManager';
-import type { AddRepresentationConfig, MediaRepresentation, SwitchRepresentationOptions } from '../types/representation';
+import type {
+  AddRepresentationConfig,
+  MediaRepresentation,
+  SwitchRepresentationOptions,
+} from '../types/representation';
 
 const log = new Logger('SessionMedia');
 
@@ -388,7 +392,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       const fileSourceNode = new FileSourceNode(file.name);
       await fileSourceNode.loadFile(file);
 
-      log.info(`Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`);
+      log.info(
+        `Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`,
+      );
 
       const source: MediaSource = {
         type: 'image',
@@ -563,7 +569,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     this._host!.setCurrentFrame(1);
 
     if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1).catch(err => {
+      videoSourceNode.preloadFrames(1).catch((err) => {
         log.warn('Initial frame preload error:', err);
       });
 
@@ -702,7 +708,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
           };
 
           if (node.isUsingMediabunny()) {
-            node.preloadFrames(1).catch(err => {
+            node.preloadFrames(1).catch((err) => {
               log.warn('Initial frame preload error:', err);
             });
           }
@@ -875,13 +881,16 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     return source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny() === true;
   }
 
-  getSourceBFrameCanvas(sourceB: MediaSource | null, frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
+  getSourceBFrameCanvas(
+    sourceB: MediaSource | null,
+    frameIndex?: number,
+  ): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     return this.getFrameCanvasForSource(sourceB, frameIndex);
   }
 
   private getFrameCanvasForSource(
     source: MediaSource | null,
-    frameIndex?: number
+    frameIndex?: number,
   ): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
       return null;
@@ -910,7 +919,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
 
     const frame = centerFrame ?? this._host!.getCurrentFrame();
-    source.videoSourceNode.preloadFrames(frame).catch(err => {
+    source.videoSourceNode.preloadFrames(frame).catch((err) => {
       log.warn('Video frame preload error:', err);
     });
   }
@@ -976,10 +985,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
    * @param config - Configuration for the new representation
    * @returns The created MediaRepresentation, or null if the source is invalid
    */
-  addRepresentationToSource(
-    sourceIndex: number,
-    config: AddRepresentationConfig
-  ): MediaRepresentation | null {
+  addRepresentationToSource(sourceIndex: number, config: AddRepresentationConfig): MediaRepresentation | null {
     const source = this._sources[sourceIndex];
     if (!source) return null;
 
@@ -1012,7 +1018,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   async switchRepresentation(
     sourceIndex: number,
     repId: string,
-    options?: SwitchRepresentationOptions
+    options?: SwitchRepresentationOptions,
   ): Promise<boolean> {
     // Pause playback before switching to avoid stale state
     if (this._host?.getIsPlaying()) {

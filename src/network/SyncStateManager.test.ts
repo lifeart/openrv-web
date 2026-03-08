@@ -95,8 +95,13 @@ describe('SyncStateManager', () => {
 
     it('SSM-002c: stores remote color state', () => {
       const payload: ColorSyncPayload = {
-        exposure: 2.0, gamma: 0.9, saturation: 1.1,
-        contrast: 1.2, temperature: 10, tint: -5, brightness: 0.1,
+        exposure: 2.0,
+        gamma: 0.9,
+        saturation: 1.1,
+        contrast: 1.2,
+        temperature: 10,
+        tint: -5,
+        brightness: 0.1,
       };
       manager.updateRemoteColor(payload);
 
@@ -110,8 +115,12 @@ describe('SyncStateManager', () => {
     it('SSM-003: detects playback state conflict', () => {
       manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 10,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 10,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       expect(manager.hasPlaybackConflict()).toBe(true);
@@ -120,8 +129,12 @@ describe('SyncStateManager', () => {
     it('SSM-003b: detects frame position conflict beyond threshold', () => {
       manager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 15,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 15,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       expect(manager.hasPlaybackConflict()).toBe(true);
@@ -130,8 +143,12 @@ describe('SyncStateManager', () => {
     it('SSM-003c: no conflict when within threshold', () => {
       manager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 11,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 11,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       expect(manager.hasPlaybackConflict()).toBe(false);
@@ -149,8 +166,12 @@ describe('SyncStateManager', () => {
     it('SSM-004: resolves conflict with last-write-wins', () => {
       manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10, timestamp: 1000 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 20,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: 2000,
+        isPlaying: false,
+        currentFrame: 20,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: 2000,
       });
 
       const resolved = manager.resolvePlaybackConflict('last-write-wins');
@@ -162,8 +183,12 @@ describe('SyncStateManager', () => {
       manager.setHost(true);
       manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 20,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 20,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       const resolved = manager.resolvePlaybackConflict('host-authority');
@@ -175,8 +200,12 @@ describe('SyncStateManager', () => {
       manager.setHost(false);
       manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 20,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 20,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       const resolved = manager.resolvePlaybackConflict('host-authority');
@@ -221,7 +250,7 @@ describe('SyncStateManager', () => {
 
     it('SSM-012: skips update within threshold', () => {
       expect(manager.shouldApplyFrameSync(10, 11)).toBe(false); // diff 1 <= threshold 2
-      expect(manager.shouldApplyFrameSync(10, 13)).toBe(true);  // diff 3 > threshold 2
+      expect(manager.shouldApplyFrameSync(10, 13)).toBe(true); // diff 3 > threshold 2
       expect(manager.shouldApplyFrameSync(10, 10)).toBe(false);
     });
   });
@@ -365,8 +394,12 @@ describe('SyncStateManager', () => {
       manager.setFrameSyncThreshold(2);
       manager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 12, // diff = 2, exactly at threshold
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 12, // diff = 2, exactly at threshold
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       // Diff of exactly 2 should NOT be a conflict (uses > not >=)
@@ -377,8 +410,12 @@ describe('SyncStateManager', () => {
       manager.setFrameSyncThreshold(2);
       manager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 13, // diff = 3, above threshold
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: Date.now(),
+        isPlaying: false,
+        currentFrame: 13, // diff = 3, above threshold
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
       });
 
       expect(manager.hasPlaybackConflict()).toBe(true);
@@ -390,8 +427,12 @@ describe('SyncStateManager', () => {
       const ts = Date.now();
       manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10, timestamp: ts });
       manager.updateRemotePlayback({
-        isPlaying: false, currentFrame: 20,
-        playbackSpeed: 1, playDirection: 1, loopMode: 'loop', timestamp: ts,
+        isPlaying: false,
+        currentFrame: 20,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: ts,
       });
 
       const resolved = manager.resolvePlaybackConflict('last-write-wins');
@@ -424,12 +465,12 @@ describe('SyncStateManager', () => {
     it('SSM-060: shouldApplyFrameSync at exact threshold', () => {
       manager.setFrameSyncThreshold(5);
       expect(manager.shouldApplyFrameSync(10, 15)).toBe(false); // diff = 5, not > 5
-      expect(manager.shouldApplyFrameSync(10, 16)).toBe(true);  // diff = 6, > 5
+      expect(manager.shouldApplyFrameSync(10, 16)).toBe(true); // diff = 6, > 5
     });
 
     it('SSM-061: shouldApplyFrameSync with negative differences', () => {
       manager.setFrameSyncThreshold(2);
-      expect(manager.shouldApplyFrameSync(15, 10)).toBe(true);  // diff = 5
+      expect(manager.shouldApplyFrameSync(15, 10)).toBe(true); // diff = 5
       expect(manager.shouldApplyFrameSync(12, 10)).toBe(false); // diff = 2
     });
   });

@@ -13,15 +13,22 @@
  * Used by both Viewer (live rendering) and PrerenderBufferManager (background pre-rendering)
  */
 
-import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../../ui/components/ColorControls';
-import { CDLValues, DEFAULT_CDL, isDefaultCDL } from '../../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, CurveChannel, CurveLUTs } from '../../color/ColorCurves';
-import { FilterSettings, DEFAULT_FILTER_SETTINGS } from '../../ui/components/FilterControl';
-import { ChannelMode } from '../../ui/components/ChannelSelect';
+import { type ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../../ui/components/ColorControls';
+import { type CDLValues, DEFAULT_CDL, isDefaultCDL } from '../../color/CDL';
+import {
+  type ColorCurvesData,
+  createDefaultCurvesData,
+  isDefaultCurves,
+  CurveLUTCache,
+  type CurveChannel,
+  type CurveLUTs,
+} from '../../color/ColorCurves';
+import { type FilterSettings, DEFAULT_FILTER_SETTINGS } from '../../ui/components/FilterControl';
+import { type ChannelMode } from '../../ui/components/ChannelSelect';
 import { isIdentityHueRotation } from '../../color/HueRotation';
-import { ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../../ui/components/ColorWheels';
-import { HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../../ui/components/HSLQualifier';
-import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../../ui/components/ToneMappingControl';
+import { type ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../../ui/components/ColorWheels';
+import { type HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../../ui/components/HSLQualifier';
+import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../../ui/components/ToneMappingControl';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
@@ -72,7 +79,7 @@ export function yieldToMain(): Promise<void> {
   ) {
     return ((globalThis as Record<string, unknown>).scheduler as { yield: () => Promise<void> }).yield();
   }
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 /**
@@ -167,9 +174,15 @@ export function computeEffectsHash(state: AllEffectsState): string {
 
   // CDL values
   const cdl = state.cdlValues;
-  hashNum(cdl.slope.r); hashNum(cdl.slope.g); hashNum(cdl.slope.b);
-  hashNum(cdl.offset.r); hashNum(cdl.offset.g); hashNum(cdl.offset.b);
-  hashNum(cdl.power.r); hashNum(cdl.power.g); hashNum(cdl.power.b);
+  hashNum(cdl.slope.r);
+  hashNum(cdl.slope.g);
+  hashNum(cdl.slope.b);
+  hashNum(cdl.offset.r);
+  hashNum(cdl.offset.g);
+  hashNum(cdl.offset.b);
+  hashNum(cdl.power.r);
+  hashNum(cdl.power.g);
+  hashNum(cdl.power.b);
   hashNum(cdl.saturation);
 
   // Curves data
@@ -188,7 +201,10 @@ export function computeEffectsHash(state: AllEffectsState): string {
   // Color wheels
   const wheels = state.colorWheelsState;
   for (const wheel of [wheels.lift, wheels.gamma, wheels.gain, wheels.master] as const) {
-    hashNum(wheel.r); hashNum(wheel.g); hashNum(wheel.b); hashNum(wheel.y);
+    hashNum(wheel.r);
+    hashNum(wheel.g);
+    hashNum(wheel.b);
+    hashNum(wheel.y);
   }
   hashBool(wheels.linked);
 
@@ -196,11 +212,17 @@ export function computeEffectsHash(state: AllEffectsState): string {
   const hsl = state.hslQualifierState;
   hashBool(hsl.enabled);
   // Hue range
-  hashNum(hsl.hue.center); hashNum(hsl.hue.width); hashNum(hsl.hue.softness);
+  hashNum(hsl.hue.center);
+  hashNum(hsl.hue.width);
+  hashNum(hsl.hue.softness);
   // Saturation range
-  hashNum(hsl.saturation.center); hashNum(hsl.saturation.width); hashNum(hsl.saturation.softness);
+  hashNum(hsl.saturation.center);
+  hashNum(hsl.saturation.width);
+  hashNum(hsl.saturation.softness);
   // Luminance range
-  hashNum(hsl.luminance.center); hashNum(hsl.luminance.width); hashNum(hsl.luminance.softness);
+  hashNum(hsl.luminance.center);
+  hashNum(hsl.luminance.width);
+  hashNum(hsl.luminance.softness);
   // Correction
   hashNum(hsl.correction.hueShift);
   hashNum(hsl.correction.saturationScale);
@@ -248,10 +270,11 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
   const hasCurves = !isDefaultCurves(state.curvesData);
   const hasSharpen = state.filterSettings.sharpen > 0;
   const hasChannel = state.channelMode !== 'rgb';
-  const hasHighlightsShadows = state.colorAdjustments.highlights !== 0 ||
-                               state.colorAdjustments.shadows !== 0 ||
-                               state.colorAdjustments.whites !== 0 ||
-                               state.colorAdjustments.blacks !== 0;
+  const hasHighlightsShadows =
+    state.colorAdjustments.highlights !== 0 ||
+    state.colorAdjustments.shadows !== 0 ||
+    state.colorAdjustments.whites !== 0 ||
+    state.colorAdjustments.blacks !== 0;
   const hasVibrance = state.colorAdjustments.vibrance !== 0;
   const hasClarity = state.colorAdjustments.clarity !== 0;
   const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
@@ -262,10 +285,22 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
   const hasDeinterlace = state.deinterlaceParams.enabled && state.deinterlaceParams.method !== 'weave';
   const hasFilmEmulation = state.filmEmulationParams.enabled && state.filmEmulationParams.intensity > 0;
 
-  return hasCDL || hasCurves || hasSharpen || hasChannel ||
-         hasHighlightsShadows || hasVibrance || hasClarity || hasHueRotation ||
-         hasColorWheels || hasHSLQualifier || hasToneMapping || hasInversion ||
-         hasDeinterlace || hasFilmEmulation;
+  return (
+    hasCDL ||
+    hasCurves ||
+    hasSharpen ||
+    hasChannel ||
+    hasHighlightsShadows ||
+    hasVibrance ||
+    hasClarity ||
+    hasHueRotation ||
+    hasColorWheels ||
+    hasHSLQualifier ||
+    hasToneMapping ||
+    hasInversion ||
+    hasDeinterlace ||
+    hasFilmEmulation
+  );
 }
 
 /**
@@ -274,8 +309,7 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
 function hasColorWheelAdjustments(state: ColorWheelsState): boolean {
   const isDefault = (w: { r: number; g: number; b: number; y: number }) =>
     w.r === 0 && w.g === 0 && w.b === 0 && w.y === 0;
-  return !isDefault(state.lift) || !isDefault(state.gamma) ||
-         !isDefault(state.gain) || !isDefault(state.master);
+  return !isDefault(state.lift) || !isDefault(state.gamma) || !isDefault(state.gain) || !isDefault(state.master);
 }
 
 /**
@@ -334,9 +368,12 @@ export class EffectProcessor {
    * Get cached vibrance 3D LUT. Builds/rebuilds if parameters change.
    */
   static getVibrance3DLUT(vibrance: number, skinProtection: boolean): Float32Array {
-    if (EffectProcessor.vibrance3DLUT && EffectProcessor.vibrance3DLUTParams &&
-        EffectProcessor.vibrance3DLUTParams.vibrance === vibrance &&
-        EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection) {
+    if (
+      EffectProcessor.vibrance3DLUT &&
+      EffectProcessor.vibrance3DLUTParams &&
+      EffectProcessor.vibrance3DLUTParams.vibrance === vibrance &&
+      EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection
+    ) {
       return EffectProcessor.vibrance3DLUT;
     }
 
@@ -387,16 +424,18 @@ export class EffectProcessor {
 
           let outR: number, outG: number, outB: number;
           if (Math.abs(newS - s) < 0.001) {
-            outR = r; outG = g; outB = b;
+            outR = r;
+            outG = g;
+            outB = b;
           } else if (newS === 0) {
             outR = outG = outB = l;
           } else {
             const q = l < 0.5 ? l * (1 + newS) : l + newS - l * newS;
             const p = 2 * l - q;
             const hNorm = h / 360;
-            outR = sharedHueToRgb(p, q, hNorm + 1/3);
+            outR = sharedHueToRgb(p, q, hNorm + 1 / 3);
             outG = sharedHueToRgb(p, q, hNorm);
-            outB = sharedHueToRgb(p, q, hNorm - 1/3);
+            outB = sharedHueToRgb(p, q, hNorm - 1 / 3);
           }
 
           const idx = (ri * size * size + gi * size + bi) * 3;
@@ -420,21 +459,16 @@ export class EffectProcessor {
    * keeping only clarity (5x5 Gaussian) and sharpen (3x3 convolution)
    * as separate passes due to their inter-pixel dependencies.
    */
-  applyEffects(
-    imageData: ImageData,
-    width: number,
-    height: number,
-    state: AllEffectsState,
-    halfRes = false
-  ): void {
+  applyEffects(imageData: ImageData, width: number, height: number, state: AllEffectsState, halfRes = false): void {
     const hasCDL = !isDefaultCDL(state.cdlValues);
     const hasCurves = !isDefaultCurves(state.curvesData);
     const hasSharpen = state.filterSettings.sharpen > 0;
     const hasChannel = state.channelMode !== 'rgb';
-    const hasHighlightsShadows = state.colorAdjustments.highlights !== 0 ||
-                                 state.colorAdjustments.shadows !== 0 ||
-                                 state.colorAdjustments.whites !== 0 ||
-                                 state.colorAdjustments.blacks !== 0;
+    const hasHighlightsShadows =
+      state.colorAdjustments.highlights !== 0 ||
+      state.colorAdjustments.shadows !== 0 ||
+      state.colorAdjustments.whites !== 0 ||
+      state.colorAdjustments.blacks !== 0;
     const hasVibrance = state.colorAdjustments.vibrance !== 0;
     const hasClarity = state.colorAdjustments.clarity !== 0;
     const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
@@ -446,9 +480,18 @@ export class EffectProcessor {
     const hasFilmEmulation = isFilmEmulationActive(state.filmEmulationParams);
 
     // Check if any per-pixel effects are active
-    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
-      hasInversion || hasChannel || hasFilmEmulation;
+    const hasPerPixelEffects =
+      hasHighlightsShadows ||
+      hasVibrance ||
+      hasHueRotation ||
+      hasColorWheels ||
+      hasCDL ||
+      hasCurves ||
+      hasHSLQualifier ||
+      hasToneMapping ||
+      hasInversion ||
+      hasChannel ||
+      hasFilmEmulation;
 
     // Early return if no pixel effects are active
     if (!hasPerPixelEffects && !hasSharpen && !hasClarity && !hasDeinterlace) {
@@ -464,10 +507,24 @@ export class EffectProcessor {
     // When the only active per-pixel effects are color inversion and/or channel
     // isolation (without clarity or sharpen), we can use optimized Uint32Array
     // operations that avoid the expensive per-pixel float conversion loop.
-    const hasComplexEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
+    const hasComplexEffects =
+      hasHighlightsShadows ||
+      hasVibrance ||
+      hasHueRotation ||
+      hasColorWheels ||
+      hasCDL ||
+      hasCurves ||
+      hasHSLQualifier ||
+      hasToneMapping;
 
-    if (!hasComplexEffects && !hasClarity && !hasSharpen && !hasDeinterlace && !hasFilmEmulation && (hasInversion || hasChannel)) {
+    if (
+      !hasComplexEffects &&
+      !hasClarity &&
+      !hasSharpen &&
+      !hasDeinterlace &&
+      !hasFilmEmulation &&
+      (hasInversion || hasChannel)
+    ) {
       // Apply inversion first (step 9 in pipeline order)
       if (hasInversion) {
         applyColorInversionSIMD(imageData.data);
@@ -530,16 +587,17 @@ export class EffectProcessor {
     width: number,
     height: number,
     state: AllEffectsState,
-    halfRes = false
+    halfRes = false,
   ): Promise<void> {
     const hasCDL = !isDefaultCDL(state.cdlValues);
     const hasCurves = !isDefaultCurves(state.curvesData);
     const hasSharpen = state.filterSettings.sharpen > 0;
     const hasChannel = state.channelMode !== 'rgb';
-    const hasHighlightsShadows = state.colorAdjustments.highlights !== 0 ||
-                                 state.colorAdjustments.shadows !== 0 ||
-                                 state.colorAdjustments.whites !== 0 ||
-                                 state.colorAdjustments.blacks !== 0;
+    const hasHighlightsShadows =
+      state.colorAdjustments.highlights !== 0 ||
+      state.colorAdjustments.shadows !== 0 ||
+      state.colorAdjustments.whites !== 0 ||
+      state.colorAdjustments.blacks !== 0;
     const hasVibrance = state.colorAdjustments.vibrance !== 0;
     const hasClarity = state.colorAdjustments.clarity !== 0;
     const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
@@ -551,9 +609,18 @@ export class EffectProcessor {
     const hasFilmEmulation = isFilmEmulationActive(state.filmEmulationParams);
 
     // Check if any per-pixel effects are active
-    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
-      hasInversion || hasChannel || hasFilmEmulation;
+    const hasPerPixelEffects =
+      hasHighlightsShadows ||
+      hasVibrance ||
+      hasHueRotation ||
+      hasColorWheels ||
+      hasCDL ||
+      hasCurves ||
+      hasHSLQualifier ||
+      hasToneMapping ||
+      hasInversion ||
+      hasChannel ||
+      hasFilmEmulation;
 
     // Early return if no pixel effects are active
     if (!hasPerPixelEffects && !hasSharpen && !hasClarity && !hasDeinterlace) {
@@ -567,10 +634,24 @@ export class EffectProcessor {
     }
 
     // ---- SIMD fast-path (same as sync version) ----
-    const hasComplexEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
+    const hasComplexEffects =
+      hasHighlightsShadows ||
+      hasVibrance ||
+      hasHueRotation ||
+      hasColorWheels ||
+      hasCDL ||
+      hasCurves ||
+      hasHSLQualifier ||
+      hasToneMapping;
 
-    if (!hasComplexEffects && !hasClarity && !hasSharpen && !hasDeinterlace && !hasFilmEmulation && (hasInversion || hasChannel)) {
+    if (
+      !hasComplexEffects &&
+      !hasClarity &&
+      !hasSharpen &&
+      !hasDeinterlace &&
+      !hasFilmEmulation &&
+      (hasInversion || hasChannel)
+    ) {
       if (hasInversion) {
         applyColorInversionSIMD(imageData.data);
       }
@@ -641,15 +722,14 @@ export class EffectProcessor {
     imageData: ImageData,
     _width: number,
     _height: number,
-    state: AllEffectsState
+    state: AllEffectsState,
   ): void {
     const data = imageData.data;
     const len = data.length;
 
     // ---- Pre-compute flags ----
     const ca = state.colorAdjustments;
-    const hasHS = ca.highlights !== 0 || ca.shadows !== 0 ||
-                  ca.whites !== 0 || ca.blacks !== 0;
+    const hasHS = ca.highlights !== 0 || ca.shadows !== 0 || ca.whites !== 0 || ca.blacks !== 0;
     const hasVibrance = ca.vibrance !== 0;
     const hasHueRotation = !isIdentityHueRotation(ca.hueRotation);
     const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
@@ -672,8 +752,7 @@ export class EffectProcessor {
     const hsRange = hasWhitesBlacks ? whitePoint - blackPoint : 0;
 
     // ---- Pre-compute vibrance 3D LUT ----
-    const vibrance3DLUT = hasVibrance ?
-      EffectProcessor.getVibrance3DLUT(ca.vibrance, ca.vibranceSkinProtection) : null;
+    const vibrance3DLUT = hasVibrance ? EffectProcessor.getVibrance3DLUT(ca.vibrance, ca.vibranceSkinProtection) : null;
     const lutSize = EffectProcessor.VIBRANCE_LUT_SIZE;
     const lutScale = lutSize - 1;
 
@@ -682,24 +761,37 @@ export class EffectProcessor {
 
     // ---- Pre-compute color wheels state ----
     const wheels = state.colorWheelsState;
-    const hasMaster = hasColorWheels && (wheels.master.r !== 0 || wheels.master.g !== 0 ||
-                      wheels.master.b !== 0 || wheels.master.y !== 0);
-    const hasLift = hasColorWheels && (wheels.lift.r !== 0 || wheels.lift.g !== 0 ||
-                    wheels.lift.b !== 0 || wheels.lift.y !== 0);
-    const hasGamma = hasColorWheels && (wheels.gamma.r !== 0 || wheels.gamma.g !== 0 ||
-                     wheels.gamma.b !== 0 || wheels.gamma.y !== 0);
-    const hasGain = hasColorWheels && (wheels.gain.r !== 0 || wheels.gain.g !== 0 ||
-                    wheels.gain.b !== 0 || wheels.gain.y !== 0);
+    const hasMaster =
+      hasColorWheels &&
+      (wheels.master.r !== 0 || wheels.master.g !== 0 || wheels.master.b !== 0 || wheels.master.y !== 0);
+    const hasLift =
+      hasColorWheels && (wheels.lift.r !== 0 || wheels.lift.g !== 0 || wheels.lift.b !== 0 || wheels.lift.y !== 0);
+    const hasGamma =
+      hasColorWheels && (wheels.gamma.r !== 0 || wheels.gamma.g !== 0 || wheels.gamma.b !== 0 || wheels.gamma.y !== 0);
+    const hasGain =
+      hasColorWheels && (wheels.gain.r !== 0 || wheels.gain.g !== 0 || wheels.gain.b !== 0 || wheels.gain.y !== 0);
 
     // Pre-compute gamma exponents (only if gamma wheel is active)
-    const gammaR = hasGamma ? 1.0 - wheels.gamma.r * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
-    const gammaG = hasGamma ? 1.0 - wheels.gamma.g * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
-    const gammaB = hasGamma ? 1.0 - wheels.gamma.b * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
+    const gammaR = hasGamma
+      ? 1.0 - wheels.gamma.r * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR
+      : 1.0;
+    const gammaG = hasGamma
+      ? 1.0 - wheels.gamma.g * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR
+      : 1.0;
+    const gammaB = hasGamma
+      ? 1.0 - wheels.gamma.b * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR
+      : 1.0;
 
     // Pre-compute gain multipliers
-    const gainR = hasGain ? 1.0 + wheels.gain.r * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
-    const gainG = hasGain ? 1.0 + wheels.gain.g * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
-    const gainB = hasGain ? 1.0 + wheels.gain.b * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
+    const gainR = hasGain
+      ? 1.0 + wheels.gain.r * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR
+      : 1.0;
+    const gainG = hasGain
+      ? 1.0 + wheels.gain.g * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR
+      : 1.0;
+    const gainB = hasGain
+      ? 1.0 + wheels.gain.b * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR
+      : 1.0;
 
     // ---- Pre-compute CDL values ----
     const cdl = state.cdlValues;
@@ -713,15 +805,17 @@ export class EffectProcessor {
 
     // ---- Pre-compute tone mapping params ----
     const tmOperator = hasToneMapping ? state.toneMappingState.operator : '';
-    const tmParams = hasToneMapping ? {
-      reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
-      filmicExposureBias: state.toneMappingState.filmicExposureBias,
-      filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
-      dragoBias: state.toneMappingState.dragoBias,
-      dragoLwa: state.toneMappingState.dragoLwa,
-      dragoLmax: state.toneMappingState.dragoLmax,
-      dragoBrightness: state.toneMappingState.dragoBrightness,
-    } : undefined;
+    const tmParams = hasToneMapping
+      ? {
+          reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
+          filmicExposureBias: state.toneMappingState.filmicExposureBias,
+          filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+          dragoBias: state.toneMappingState.dragoBias,
+          dragoLwa: state.toneMappingState.dragoLwa,
+          dragoLmax: state.toneMappingState.dragoLmax,
+          dragoBrightness: state.toneMappingState.dragoBrightness,
+        }
+      : undefined;
 
     // ---- Pre-compute channel mode ----
     const channelMode = state.channelMode;
@@ -909,8 +1003,12 @@ export class EffectProcessor {
         const hsl = sharedRgbToHsl(r, g, b);
 
         let matte = this.calculateHSLMatte(
-          hsl.h, hsl.s * 100, hsl.l * 100,
-          hslState.hue, hslState.saturation, hslState.luminance
+          hsl.h,
+          hsl.s * 100,
+          hsl.l * 100,
+          hslState.hue,
+          hslState.saturation,
+          hslState.luminance,
         );
 
         if (hslState.invert) {
@@ -920,9 +1018,7 @@ export class EffectProcessor {
         if (hslState.mattePreview) {
           r = g = b = matte;
         } else if (matte > 0.001) {
-          const correctedHsl = this.applyHSLCorrection(
-            hsl.h, hsl.s, hsl.l, hslState.correction, matte
-          );
+          const correctedHsl = this.applyHSLCorrection(hsl.h, hsl.s, hsl.l, hslState.correction, matte);
           const corrected = sharedHslToRgb(correctedHsl.h, correctedHsl.s, correctedHsl.l);
           r = corrected.r;
           g = corrected.g;
@@ -933,7 +1029,9 @@ export class EffectProcessor {
       // ---- 8. Tone Mapping ----
       if (hasToneMapping) {
         const tm = applyToneMappingToRGB(r, g, b, tmOperator, tmParams);
-        r = tm.r; g = tm.g; b = tm.b;
+        r = tm.r;
+        g = tm.g;
+        b = tm.b;
       }
 
       // ---- 9. Color Inversion ----
@@ -1032,7 +1130,13 @@ export class EffectProcessor {
    * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
    * processes at half resolution for ~4x speedup with minimal quality loss.
    */
-  applyClarity(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments, halfRes = false): void {
+  applyClarity(
+    imageData: ImageData,
+    width: number,
+    height: number,
+    colorAdjustments: ColorAdjustments,
+    halfRes = false,
+  ): void {
     // Half-resolution path: downsample, apply clarity at half-res, blend result
     if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
       this.applyClarityHalfRes(imageData, width, height, colorAdjustments);
@@ -1085,7 +1189,12 @@ export class EffectProcessor {
    * upsample the blurred result, then apply high-pass blend at full-res.
    * This gives ~4x speedup for the expensive Gaussian blur pass.
    */
-  private applyClarityHalfRes(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments): void {
+  private applyClarityHalfRes(
+    imageData: ImageData,
+    width: number,
+    height: number,
+    colorAdjustments: ColorAdjustments,
+  ): void {
     const data = imageData.data;
     const clarity = colorAdjustments.clarity / 100;
     const len = data.length;
@@ -1211,11 +1320,7 @@ export class EffectProcessor {
     const data = imageData.data;
     const original = new Uint8ClampedArray(data);
 
-    const kernel = [
-      0, -1, 0,
-      -1, 5, -1,
-      0, -1, 0
-    ];
+    const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
 
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
@@ -1271,11 +1376,7 @@ export class EffectProcessor {
     halfSharpened.set(half.data);
 
     // Apply sharpen kernel at half-res
-    const kernel = [
-      0, -1, 0,
-      -1, 5, -1,
-      0, -1, 0
-    ];
+    const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
 
     for (let y = 1; y < halfH - 1; y++) {
       for (let x = 1; x < halfW - 1; x++) {
@@ -1340,8 +1441,11 @@ export class EffectProcessor {
         const d11 = (y1 * halfW + x1) * 3;
 
         for (let c = 0; c < 3; c++) {
-          const delta = halfDelta[d00 + c]! * w00 + halfDelta[d10 + c]! * w10 +
-                        halfDelta[d01 + c]! * w01 + halfDelta[d11 + c]! * w11;
+          const delta =
+            halfDelta[d00 + c]! * w00 +
+            halfDelta[d10 + c]! * w10 +
+            halfDelta[d01 + c]! * w01 +
+            halfDelta[d11 + c]! * w11;
           data[dstIdx + c] = Math.max(0, Math.min(255, Math.round(data[dstIdx + c]! + delta * amount)));
         }
       }
@@ -1367,7 +1471,7 @@ export class EffectProcessor {
     width: number,
     height: number,
     colorAdjustments: ColorAdjustments,
-    halfRes = false
+    halfRes = false,
   ): Promise<void> {
     // For half-res or small images, fall back to the sync version (fast enough)
     if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
@@ -1441,7 +1545,7 @@ export class EffectProcessor {
     width: number,
     height: number,
     amount: number,
-    halfRes = false
+    halfRes = false,
   ): Promise<void> {
     // For half-res, fall back to the sync version (already fast enough)
     if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
@@ -1452,11 +1556,7 @@ export class EffectProcessor {
     const data = imageData.data;
     const original = new Uint8ClampedArray(data);
 
-    const kernel = [
-      0, -1, 0,
-      -1, 5, -1,
-      0, -1, 0
-    ];
+    const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
 
     // Process in row-based chunks (skip first and last rows as they have no neighbors)
     const chunkRows = EffectProcessor.CHUNK_ROWS;
@@ -1505,7 +1605,7 @@ export class EffectProcessor {
     l: number,
     hueRange: { center: number; width: number; softness: number },
     satRange: { center: number; width: number; softness: number },
-    lumRange: { center: number; width: number; softness: number }
+    lumRange: { center: number; width: number; softness: number },
   ): number {
     const hueMatch = this.calculateHueMatch(h, hueRange);
     const satMatch = this.calculateLinearMatch(s, satRange);
@@ -1554,7 +1654,7 @@ export class EffectProcessor {
     s: number,
     l: number,
     correction: { hueShift: number; saturationScale: number; luminanceScale: number },
-    matte: number
+    matte: number,
   ): { h: number; s: number; l: number } {
     let newH = h + correction.hueShift * matte;
     while (newH < 0) newH += 360;

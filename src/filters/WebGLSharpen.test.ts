@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  WebGLSharpenProcessor,
-  getSharedSharpenProcessor,
-  disposeSharedSharpenProcessor,
-} from './WebGLSharpen';
+import { WebGLSharpenProcessor, getSharedSharpenProcessor, disposeSharedSharpenProcessor } from './WebGLSharpen';
 import { createMockWebGL2Context } from '../../test/mocks';
 
 describe('WebGLSharpenProcessor', () => {
@@ -128,10 +124,7 @@ describe('WebGLSharpenProcessor', () => {
 
       expect(mockGl.uniform1i).toHaveBeenCalled(); // u_image
       expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.anything(), 0.5); // u_amount = 50/100
-      expect(mockGl.uniform2fv).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(Array),
-      ); // u_texelSize via ShaderProgram.setUniform
+      expect(mockGl.uniform2fv).toHaveBeenCalledWith(expect.anything(), expect.any(Array)); // u_texelSize via ShaderProgram.setUniform
     });
 
     it('WGS-012: uploads texture with correct parameters', () => {
@@ -141,11 +134,7 @@ describe('WebGLSharpenProcessor', () => {
       processor.apply(imageData, 50);
 
       expect(mockGl.texImage2D).toHaveBeenCalled();
-      expect(mockGl.texParameteri).toHaveBeenCalledWith(
-        mockGl.TEXTURE_2D,
-        mockGl.TEXTURE_MIN_FILTER,
-        mockGl.LINEAR
-      );
+      expect(mockGl.texParameteri).toHaveBeenCalledWith(mockGl.TEXTURE_2D, mockGl.TEXTURE_MIN_FILTER, mockGl.LINEAR);
     });
 
     it('WGS-013: reads pixels back from framebuffer', () => {
@@ -235,7 +224,7 @@ describe('WebGLSharpenProcessor', () => {
 
     it('WGS-024: isReady() returns false during parallel compilation', () => {
       // Override getShaderParameter to return false for COMPLETION_STATUS_KHR
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true; // COMPILE_STATUS
@@ -246,7 +235,7 @@ describe('WebGLSharpenProcessor', () => {
     });
 
     it('WGS-025: apply() returns original imageData when shader not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true;
@@ -317,7 +306,7 @@ describe('WebGLSharpenProcessor', () => {
     });
 
     it('WGS-031: attributes are NOT set up if shader is not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true;
@@ -336,7 +325,7 @@ describe('WebGLSharpenProcessor', () => {
 
   describe('not-ready to ready transition', () => {
     it('WGS-032: apply works after transitioning from not-ready to ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       let compilationComplete = false;
 
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
@@ -411,10 +400,10 @@ describe('WebGLSharpenProcessor', () => {
       // Bottom row (y=1): blue pixels
       const imageData = new ImageData(2, 2);
       // Top-left (0,0): Red
-      imageData.data[0] = 255;   // R
-      imageData.data[1] = 0;     // G
-      imageData.data[2] = 0;     // B
-      imageData.data[3] = 255;   // A
+      imageData.data[0] = 255; // R
+      imageData.data[1] = 0; // G
+      imageData.data[2] = 0; // B
+      imageData.data[3] = 255; // A
       // Top-right (1,0): Red
       imageData.data[4] = 255;
       imageData.data[5] = 0;
@@ -434,11 +423,11 @@ describe('WebGLSharpenProcessor', () => {
       const result = processor.apply(imageData, 50);
 
       // Verify top row is still red (not flipped)
-      expect(result.data[0]).toBe(255);  // R at top-left
-      expect(result.data[2]).toBe(0);    // B at top-left
+      expect(result.data[0]).toBe(255); // R at top-left
+      expect(result.data[2]).toBe(0); // B at top-left
 
       // Verify bottom row is still blue (not flipped)
-      expect(result.data[8]).toBe(0);    // R at bottom-left
+      expect(result.data[8]).toBe(0); // R at bottom-left
       expect(result.data[10]).toBe(255); // B at bottom-left
     });
 
@@ -462,21 +451,33 @@ describe('WebGLSharpenProcessor', () => {
       // Create vertically asymmetric image: green at top, yellow at bottom
       const imageData = new ImageData(2, 2);
       // Top row: green
-      imageData.data[0] = 0; imageData.data[1] = 255; imageData.data[2] = 0; imageData.data[3] = 255;
-      imageData.data[4] = 0; imageData.data[5] = 255; imageData.data[6] = 0; imageData.data[7] = 255;
+      imageData.data[0] = 0;
+      imageData.data[1] = 255;
+      imageData.data[2] = 0;
+      imageData.data[3] = 255;
+      imageData.data[4] = 0;
+      imageData.data[5] = 255;
+      imageData.data[6] = 0;
+      imageData.data[7] = 255;
       // Bottom row: yellow
-      imageData.data[8] = 255; imageData.data[9] = 255; imageData.data[10] = 0; imageData.data[11] = 255;
-      imageData.data[12] = 255; imageData.data[13] = 255; imageData.data[14] = 0; imageData.data[15] = 255;
+      imageData.data[8] = 255;
+      imageData.data[9] = 255;
+      imageData.data[10] = 0;
+      imageData.data[11] = 255;
+      imageData.data[12] = 255;
+      imageData.data[13] = 255;
+      imageData.data[14] = 0;
+      imageData.data[15] = 255;
 
       processor.applyInPlace(imageData, 50);
 
       // Top row should still be green
-      expect(imageData.data[0]).toBe(0);   // R at top
+      expect(imageData.data[0]).toBe(0); // R at top
       expect(imageData.data[1]).toBe(255); // G at top
 
       // Bottom row should still be yellow
-      expect(imageData.data[8]).toBe(255);  // R at bottom
-      expect(imageData.data[9]).toBe(255);  // G at bottom
+      expect(imageData.data[8]).toBe(255); // R at bottom
+      expect(imageData.data[9]).toBe(255); // G at bottom
     });
   });
 });

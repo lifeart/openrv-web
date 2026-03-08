@@ -5,9 +5,9 @@
  * the currently selected or most recently created text annotation.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
-import { TextAnnotation } from '../../paint/types';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type PaintEngine, type PaintTool } from '../../paint/PaintEngine';
+import { type TextAnnotation } from '../../paint/types';
 import { getIconSvg } from './shared/Icons';
 import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
@@ -86,7 +86,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   private createToggleButton(
     icon: 'bold' | 'italic' | 'underline',
     title: string,
-    onClick: () => void
+    onClick: () => void,
   ): HTMLButtonElement {
     return sharedCreateIconButton(getIconSvg(icon, 'sm'), onClick, {
       variant: 'icon',
@@ -129,9 +129,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
     const annotations = this.paintEngine.getAnnotationsForFrame(frame);
 
     // Find the most recent text annotation on this frame
-    const textAnnotations = annotations.filter(
-      (a): a is TextAnnotation => a.type === 'text'
-    );
+    const textAnnotations = annotations.filter((a): a is TextAnnotation => a.type === 'text');
 
     if (textAnnotations.length > 0) {
       // Use the most recent one (last in array)
@@ -171,12 +169,10 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
       return;
     }
 
-    const annotations = this.paintEngine.getAnnotationsForFrame(
-      this.activeTextAnnotationFrame
-    );
-    const annotation = annotations.find(
-      (a) => a.id === this.activeTextAnnotationId && a.type === 'text'
-    ) as TextAnnotation | undefined;
+    const annotations = this.paintEngine.getAnnotationsForFrame(this.activeTextAnnotationFrame);
+    const annotation = annotations.find((a) => a.id === this.activeTextAnnotationId && a.type === 'text') as
+      | TextAnnotation
+      | undefined;
 
     if (annotation) {
       this.state = {
@@ -203,15 +199,11 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
       return;
     }
 
-    this.paintEngine.updateTextAnnotation(
-      this.activeTextAnnotationFrame,
-      this.activeTextAnnotationId,
-      {
-        bold: this.state.bold,
-        italic: this.state.italic,
-        underline: this.state.underline,
-      }
-    );
+    this.paintEngine.updateTextAnnotation(this.activeTextAnnotationFrame, this.activeTextAnnotationId, {
+      bold: this.state.bold,
+      italic: this.state.italic,
+      underline: this.state.underline,
+    });
 
     this.emit('formattingChanged', { ...this.state });
   }
@@ -248,9 +240,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
    */
   setActiveAnnotation(id: string, frame: number): void {
     const annotations = this.paintEngine.getAnnotationsForFrame(frame);
-    const annotation = annotations.find(
-      (a) => a.id === id && a.type === 'text'
-    ) as TextAnnotation | undefined;
+    const annotation = annotations.find((a) => a.id === id && a.type === 'text') as TextAnnotation | undefined;
 
     if (annotation) {
       this.setActiveTextAnnotation(annotation);

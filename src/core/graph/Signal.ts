@@ -63,7 +63,7 @@ export class ComputedSignal<T> {
 
   constructor(
     private compute: () => T,
-    dependencies: Signal<any>[] = []
+    dependencies: Signal<any>[] = [],
   ) {
     this.cachedValue = compute();
 

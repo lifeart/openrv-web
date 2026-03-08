@@ -11,9 +11,9 @@ import {
   DEFAULT_STEREO_STATE,
   DEFAULT_STEREO_EYE_TRANSFORM_STATE,
   DEFAULT_STEREO_ALIGN_MODE,
-  StereoState,
-  StereoEyeTransformState,
-  StereoAlignMode,
+  type StereoState,
+  type StereoEyeTransformState,
+  type StereoAlignMode,
 } from '../../stereo/StereoRenderer';
 
 describe('StereoManager', () => {

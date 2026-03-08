@@ -10,9 +10,15 @@ import { ManagedVideoFrame } from './ManagedVideoFrame';
 /** Create a mock VideoFrame with a working format property for ManagedVideoFrame compatibility */
 function createMockVideoFrame(overrides?: Partial<{ close: () => void }>): VideoFrame {
   let closed = false;
-  const closeFn = overrides?.close ?? (() => { closed = true; });
+  const closeFn =
+    overrides?.close ??
+    (() => {
+      closed = true;
+    });
   return {
-    get format() { return closed ? null : 'RGBA'; },
+    get format() {
+      return closed ? null : 'RGBA';
+    },
     close: closeFn,
     displayWidth: 1920,
     displayHeight: 1080,
@@ -185,10 +191,22 @@ describe('IPImage', () => {
   describe('getPixel', () => {
     it('returns pixel values at given coordinates', () => {
       const data = new Uint8Array([
-        255, 0, 0, 255,   // (0,0) red
-        0, 255, 0, 255,   // (1,0) green
-        0, 0, 255, 255,   // (0,1) blue
-        255, 255, 0, 255, // (1,1) yellow
+        255,
+        0,
+        0,
+        255, // (0,0) red
+        0,
+        255,
+        0,
+        255, // (1,0) green
+        0,
+        0,
+        255,
+        255, // (0,1) blue
+        255,
+        255,
+        0,
+        255, // (1,1) yellow
       ]);
 
       const image = new IPImage({
@@ -207,8 +225,12 @@ describe('IPImage', () => {
 
     it('handles different channel counts', () => {
       const data = new Uint8Array([
-        100, 150, 200,  // (0,0)
-        50, 75, 100,    // (1,0)
+        100,
+        150,
+        200, // (0,0)
+        50,
+        75,
+        100, // (1,0)
       ]);
 
       const image = new IPImage({
@@ -224,9 +246,7 @@ describe('IPImage', () => {
     });
 
     it('works with float32 data', () => {
-      const data = new Float32Array([
-        1.0, 0.5, 0.25, 1.0,
-      ]);
+      const data = new Float32Array([1.0, 0.5, 0.25, 1.0]);
 
       const image = new IPImage({
         width: 1,
@@ -569,7 +589,7 @@ describe('IPImage', () => {
       const imageData = new ImageData(2, 1);
       imageData.data[0] = 255; // R
       imageData.data[1] = 128; // G
-      imageData.data[2] = 64;  // B
+      imageData.data[2] = 64; // B
       imageData.data[3] = 255; // A
 
       const image = IPImage.fromImageData(imageData);
@@ -763,7 +783,9 @@ describe('IPImage', () => {
 
     it('close() handles already-closed videoFrame gracefully', () => {
       const mockVideoFrame = createMockVideoFrame({
-        close: () => { throw new Error('Already closed'); },
+        close: () => {
+          throw new Error('Already closed');
+        },
       });
 
       const image = new IPImage({
@@ -892,7 +914,9 @@ describe('IPImage', () => {
       expect(ManagedVideoFrame.activeCount).toBe(1);
 
       // Setting a closed frame should throw but leave consistent state
-      expect(() => { image.videoFrame = closedFrame; }).toThrow('already-closed');
+      expect(() => {
+        image.videoFrame = closedFrame;
+      }).toThrow('already-closed');
 
       // The old frame was released, managedVideoFrame should be null
       expect(image.managedVideoFrame).toBeNull();

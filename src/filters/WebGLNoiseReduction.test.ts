@@ -7,11 +7,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  WebGLNoiseReductionProcessor,
-  createNoiseReductionProcessor,
-} from './WebGLNoiseReduction';
-import { DEFAULT_NOISE_REDUCTION_PARAMS, NoiseReductionParams } from './NoiseReduction';
+import { WebGLNoiseReductionProcessor, createNoiseReductionProcessor } from './WebGLNoiseReduction';
+import { DEFAULT_NOISE_REDUCTION_PARAMS, type NoiseReductionParams } from './NoiseReduction';
 import { createMockWebGL2Context } from '../../test/mocks';
 
 describe('WebGLNoiseReductionProcessor', () => {
@@ -59,9 +56,7 @@ describe('WebGLNoiseReductionProcessor', () => {
     it('WGNR-002: throws error when WebGL2 is not supported', () => {
       mockCanvas.getContext = vi.fn(() => null);
 
-      expect(() => new WebGLNoiseReductionProcessor(mockCanvas)).toThrow(
-        'WebGL2 not supported'
-      );
+      expect(() => new WebGLNoiseReductionProcessor(mockCanvas)).toThrow('WebGL2 not supported');
     });
 
     it('WGNR-003: initializes shader program via ShaderProgram', () => {
@@ -96,35 +91,17 @@ describe('WebGLNoiseReductionProcessor', () => {
       const processor = new WebGLNoiseReductionProcessor(mockCanvas);
 
       // Uniforms should NOT be resolved yet in the constructor
-      expect(mockGl.getUniformLocation).not.toHaveBeenCalledWith(
-        expect.anything(),
-        'u_image'
-      );
+      expect(mockGl.getUniformLocation).not.toHaveBeenCalledWith(expect.anything(), 'u_image');
 
       // Trigger process to force lazy uniform resolution
       const imageData = new ImageData(10, 10);
       processor.process(imageData, { strength: 50, radius: 3, luminanceStrength: 50, chromaStrength: 75 });
 
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_image'
-      );
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_strength'
-      );
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_rangeSigma'
-      );
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_radius'
-      );
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_resolution'
-      );
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_image');
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_strength');
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_rangeSigma');
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_radius');
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_resolution');
     });
 
     it('WGNR-008: throws error when shader compilation fails (synchronous path)', () => {
@@ -133,9 +110,7 @@ describe('WebGLNoiseReductionProcessor', () => {
       mockGl.getShaderParameter.mockImplementation(() => false);
       mockGl.getShaderInfoLog.mockImplementation(() => 'compile error');
 
-      expect(() => new WebGLNoiseReductionProcessor(mockCanvas)).toThrow(
-        'Shader compile error'
-      );
+      expect(() => new WebGLNoiseReductionProcessor(mockCanvas)).toThrow('Shader compile error');
     });
 
     it('WGNR-009: throws error when program linking fails (synchronous path)', () => {
@@ -144,9 +119,7 @@ describe('WebGLNoiseReductionProcessor', () => {
       mockGl.getProgramParameter.mockImplementation(() => false);
       mockGl.getProgramInfoLog.mockImplementation(() => 'link error');
 
-      expect(() => new WebGLNoiseReductionProcessor(mockCanvas)).toThrow(
-        'Shader program link error'
-      );
+      expect(() => new WebGLNoiseReductionProcessor(mockCanvas)).toThrow('Shader program link error');
     });
 
     it('WGNR-008b: probes KHR_parallel_shader_compile extension', () => {
@@ -204,10 +177,7 @@ describe('WebGLNoiseReductionProcessor', () => {
       processor.process(imageData, { ...defaultParams, strength: 50 });
 
       // strength / 100 = 0.5
-      expect(mockGl.uniform1f).toHaveBeenCalledWith(
-        expect.anything(),
-        0.5
-      );
+      expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.anything(), 0.5);
     });
 
     it('WGNR-014: sets resolution uniform to image dimensions', () => {
@@ -216,11 +186,7 @@ describe('WebGLNoiseReductionProcessor', () => {
 
       processor.process(imageData, defaultParams);
 
-      expect(mockGl.uniform2f).toHaveBeenCalledWith(
-        expect.anything(),
-        320,
-        240
-      );
+      expect(mockGl.uniform2f).toHaveBeenCalledWith(expect.anything(), 320, 240);
     });
 
     it('WGNR-015: clamps radius to MAX_FILTER_RADIUS (5)', () => {
@@ -231,10 +197,7 @@ describe('WebGLNoiseReductionProcessor', () => {
       processor.process(imageData, params);
 
       // Radius should be clamped to 5
-      expect(mockGl.uniform1i).toHaveBeenCalledWith(
-        expect.anything(),
-        5
-      );
+      expect(mockGl.uniform1i).toHaveBeenCalledWith(expect.anything(), 5);
     });
 
     it('WGNR-016: uploads source texture', () => {
@@ -303,8 +266,8 @@ describe('WebGLNoiseReductionProcessor', () => {
 
       // gl.TRIANGLE_STRIP may be undefined in mock, so just check offset and count
       const call = mockGl.drawArrays.mock.calls[0];
-      expect(call[1]).toBe(0);  // offset
-      expect(call[2]).toBe(4);  // vertex count
+      expect(call[1]).toBe(0); // offset
+      expect(call[2]).toBe(4); // vertex count
     });
   });
 
@@ -399,7 +362,7 @@ describe('WebGLNoiseReductionProcessor', () => {
 
     it('WGNR-062: isReady() returns false during parallel compilation', () => {
       // Override to return false for COMPLETION_STATUS_KHR but true for COMPILE_STATUS
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true; // COMPILE_STATUS
@@ -415,7 +378,7 @@ describe('WebGLNoiseReductionProcessor', () => {
     });
 
     it('WGNR-063: process() returns original imageData when shader is not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true;
@@ -444,7 +407,7 @@ describe('WebGLNoiseReductionProcessor', () => {
     });
 
     it('WGNR-065a: process() returns original data when not ready (via processInPlace path)', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true;
@@ -468,7 +431,7 @@ describe('WebGLNoiseReductionProcessor', () => {
     });
 
     it('WGNR-065: process() works after isReady() becomes true', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       let compilationComplete = false;
 
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {

@@ -19,8 +19,8 @@
  */
 export interface DisplayCapabilities {
   // Wide Color Gamut
-  canvasP3: boolean;          // 2D canvas supports colorSpace:'display-p3'
-  webglP3: boolean;           // WebGL2 supports drawingBufferColorSpace='display-p3'
+  canvasP3: boolean; // 2D canvas supports colorSpace:'display-p3'
+  webglP3: boolean; // WebGL2 supports drawingBufferColorSpace='display-p3'
   displayGamut: 'srgb' | 'p3' | 'rec2020';
 
   // HDR (detected but not used in Phase 1)
@@ -32,7 +32,7 @@ export interface DisplayCapabilities {
 
   // WebGPU (detected but not used in Phase 1)
   webgpuAvailable: boolean;
-  webgpuHDR: boolean;         // webgpuHDR requires async adapter request, deferred to Phase 4
+  webgpuHDR: boolean; // webgpuHDR requires async adapter request, deferred to Phase 4
 
   // Extended HDR capabilities
   /** True if WebGL2 supports drawingBufferStorage() for half-float backbuffer */
@@ -123,14 +123,18 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
         caps.displayGamut = 'p3';
       }
     }
-  } catch { /* stays srgb */ }
+  } catch {
+    /* stays srgb */
+  }
 
   // --- Display HDR via matchMedia ---
   try {
     if (typeof matchMedia !== 'undefined') {
       caps.displayHDR = matchMedia('(dynamic-range: high)').matches;
     }
-  } catch { /* stays false */ }
+  } catch {
+    /* stays false */
+  }
 
   // --- Reuse a single probe canvas for all 2D context tests ---
   // Each getContext('2d', ...) with different options requires a fresh canvas
@@ -141,7 +145,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   try {
     probeCanvas = document.createElement('canvas');
     probeCanvas.width = probeCanvas.height = 1;
-  } catch { /* probeCanvas stays null, all canvas tests will be skipped */ }
+  } catch {
+    /* probeCanvas stays null, all canvas tests will be skipped */
+  }
 
   // --- 2D canvas P3 support ---
   // Use getContextAttributes() for strict check — Firefox returns a non-null
@@ -153,7 +159,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
         const attrs = ctx.getContextAttributes();
         caps.canvasP3 = attrs?.colorSpace === 'display-p3';
       }
-    } catch { /* stays false */ }
+    } catch {
+      /* stays false */
+    }
   }
 
   // --- 2D canvas HLG support (needs fresh canvas - context params locked on first getContext) ---
@@ -161,14 +169,20 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   try {
     probeCanvas2d2 = document.createElement('canvas');
     probeCanvas2d2.width = probeCanvas2d2.height = 1;
-  } catch { /* stays null */ }
+  } catch {
+    /* stays null */
+  }
 
   if (probeCanvas2d2) {
     try {
       // rec2100-hlg is not in PredefinedColorSpace (see src/types/webgl-hdr.d.ts)
-      const ctx = probeCanvas2d2.getContext('2d', { colorSpace: 'rec2100-hlg' } as unknown as CanvasRenderingContext2DSettings);
+      const ctx = probeCanvas2d2.getContext('2d', {
+        colorSpace: 'rec2100-hlg',
+      } as unknown as CanvasRenderingContext2DSettings);
       caps.canvasHLG = ctx !== null;
-    } catch { /* stays false */ }
+    } catch {
+      /* stays false */
+    }
   }
 
   // --- 2D canvas float16 support (needs fresh canvas) ---
@@ -176,7 +190,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   try {
     probeCanvas2d3 = document.createElement('canvas');
     probeCanvas2d3.width = probeCanvas2d3.height = 1;
-  } catch { /* stays null */ }
+  } catch {
+    /* stays null */
+  }
 
   if (probeCanvas2d3) {
     try {
@@ -186,7 +202,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
         pixelFormat: 'float16',
       } as unknown as CanvasRenderingContext2DSettings);
       caps.canvasFloat16 = ctx !== null;
-    } catch { /* stays false */ }
+    } catch {
+      /* stays false */
+    }
   }
 
   // --- HDR canvas resize tier detection (OffscreenCanvas with float16) ---
@@ -199,10 +217,7 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   //   - Chrome 137+: colorType: 'float16' (stable)
   // We try colorType first (newer), then pixelFormat (older).
   if (typeof OffscreenCanvas !== 'undefined') {
-    const float16Options = [
-      { colorType: 'float16' },
-      { pixelFormat: 'float16' },
-    ] as const;
+    const float16Options = [{ colorType: 'float16' }, { pixelFormat: 'float16' }] as const;
 
     // Tier 1: try rec2100-hlg + float16
     for (const opt of float16Options) {
@@ -217,7 +232,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
           caps.canvasHDRResizeTier = 'rec2100';
           caps.canvasHDRResize = true;
         }
-      } catch { /* not available with this option */ }
+      } catch {
+        /* not available with this option */
+      }
     }
 
     // Tier 2: try display-p3 + float16 (only if tier 1 failed)
@@ -233,7 +250,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
           caps.canvasHDRResizeTier = 'display-p3-float16';
           caps.canvasHDRResize = true;
         }
-      } catch { /* not available with this option */ }
+      } catch {
+        /* not available with this option */
+      }
     }
   }
 
@@ -245,7 +264,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   try {
     glProbeCanvas = document.createElement('canvas');
     glProbeCanvas.width = glProbeCanvas.height = 1;
-  } catch { /* stays null */ }
+  } catch {
+    /* stays null */
+  }
 
   if (glProbeCanvas) {
     try {
@@ -273,14 +294,18 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
         const loseCtx = gl?.getExtension('WEBGL_lose_context');
         loseCtx?.loseContext();
       }
-    } catch { /* stays false */ }
+    } catch {
+      /* stays false */
+    }
   }
 
   // --- canvasExtendedHDR: check if configureHighDynamicRange is available ---
   if (glProbeCanvas) {
     try {
       caps.canvasExtendedHDR = typeof glProbeCanvas.configureHighDynamicRange === 'function';
-    } catch { /* stays false */ }
+    } catch {
+      /* stays false */
+    }
   }
 
   // --- Cleanup all probe canvases: set dimensions to 0 and nullify references to help GC ---
@@ -304,7 +329,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   // --- WebGPU availability ---
   try {
     caps.webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
-  } catch { /* stays false */ }
+  } catch {
+    /* stays false */
+  }
 
   // --- HEIC decode availability (HEVC image support, Safari 17+) ---
   try {
@@ -312,12 +339,16 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
       const video = document.createElement('video');
       caps.heicDecode = video.canPlayType('video/mp4; codecs="hvc1"') !== '';
     }
-  } catch { /* stays false */ }
+  } catch {
+    /* stays false */
+  }
 
   // --- VideoFrame availability ---
   try {
     caps.videoFrameTexImage = typeof VideoFrame !== 'undefined';
-  } catch { /* stays false */ }
+  } catch {
+    /* stays false */
+  }
 
   // --- Derived: activeColorSpace ---
   // Use P3 if both the display supports it and the canvas/webgl can output it
@@ -374,15 +405,19 @@ export function isHDROutputAvailable(caps: DisplayCapabilities): boolean {
   // WebGPU HDR (async-detected)
   if (caps.webgpuHDR) return true;
   // Display is HDR + wide gamut, WebGPU can provide the rendering path
-  if (caps.webgpuAvailable && caps.displayHDR &&
-      (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) return true;
+  if (caps.webgpuAvailable && caps.displayHDR && (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) {
+    return true;
+  }
   return false;
 }
 
 /**
  * Same as isHDROutputAvailable but logs the detection result with full diagnostics.
  */
-export function isHDROutputAvailableWithLog(caps: DisplayCapabilities, extraInfo?: { webgpuBlitReady?: boolean }): boolean {
+export function isHDROutputAvailableWithLog(
+  caps: DisplayCapabilities,
+  extraInfo?: { webgpuBlitReady?: boolean },
+): boolean {
   const blitReady = extraInfo?.webgpuBlitReady ?? false;
 
   console.log('[HDR Display]', {
@@ -405,8 +440,7 @@ export function isHDROutputAvailableWithLog(caps: DisplayCapabilities, extraInfo
     return true;
   }
   // Display HDR + wide gamut + WebGPU available (blit detection may be in-flight)
-  if (caps.webgpuAvailable && caps.displayHDR &&
-      (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) {
+  if (caps.webgpuAvailable && caps.displayHDR && (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) {
     console.log('[HDR Display] Capable via display HDR + wide gamut + WebGPU');
     return true;
   }
@@ -458,7 +492,9 @@ export function resolveActiveColorSpace(
 export async function detectWebGPUHDR(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
   try {
-    const gpu = (navigator as unknown as { gpu: { requestAdapter(opts?: { powerPreference?: string }): Promise<object | null> } }).gpu;
+    const gpu = (
+      navigator as unknown as { gpu: { requestAdapter(opts?: { powerPreference?: string }): Promise<object | null> } }
+    ).gpu;
     const adapter = await gpu.requestAdapter();
     return adapter !== null;
   } catch {

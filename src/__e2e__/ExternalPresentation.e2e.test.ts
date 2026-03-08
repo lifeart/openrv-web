@@ -141,11 +141,7 @@ describe('ExternalPresentation E2E', () => {
       const features = 'width=800,height=600';
       presenter.openWindow(features);
 
-      expect(openFn).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(String),
-        features,
-      );
+      expect(openFn).toHaveBeenCalledWith(expect.any(String), expect.any(String), features);
     });
   });
 

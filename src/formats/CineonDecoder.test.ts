@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  isCineonFile,
-  getCineonInfo,
-  decodeCineon,
-  cineonLogToLinear,
-} from './CineonDecoder';
+import { isCineonFile, getCineonInfo, decodeCineon, cineonLogToLinear } from './CineonDecoder';
 
 const CINEON_MAGIC = 0x802a5fd7;
 
@@ -16,11 +11,13 @@ const CINEON_MAGIC = 0x802a5fd7;
  * Create a minimal valid Cineon file buffer for testing.
  * Cineon is always big-endian, 10-bit packed, RGB.
  */
-function createTestCineon(options: {
-  width?: number;
-  height?: number;
-  dataOffset?: number;
-} = {}): ArrayBuffer {
+function createTestCineon(
+  options: {
+    width?: number;
+    height?: number;
+    dataOffset?: number;
+  } = {},
+): ArrayBuffer {
   const {
     width = 2,
     height = 2,
@@ -273,7 +270,7 @@ describe('CineonDecoder', () => {
       // Create a 1x1 Cineon with known packed pixel values
       const dataOffset = 1024;
       const channels = 3;
-      const totalWords = Math.ceil(1 * 1 * channels / 3);
+      const totalWords = Math.ceil((1 * 1 * channels) / 3);
       const pixelDataSize = totalWords * 4;
       const totalSize = dataOffset + pixelDataSize;
       const buffer = new ArrayBuffer(totalSize);
@@ -284,7 +281,7 @@ describe('CineonDecoder', () => {
       view.setUint32(4, dataOffset, false);
       view.setUint32(200, 1, false); // width
       view.setUint32(204, 1, false); // height
-      view.setUint8(213, 10);        // bit depth
+      view.setUint8(213, 10); // bit depth
 
       // Pack known 10-bit values: R=512, G=256, B=768
       const word = (512 << 22) | (256 << 12) | (768 << 2);
@@ -295,7 +292,7 @@ describe('CineonDecoder', () => {
       expect(result.data[0]).toBeCloseTo(512 / 1023, 4); // R
       expect(result.data[1]).toBeCloseTo(256 / 1023, 4); // G
       expect(result.data[2]).toBeCloseTo(768 / 1023, 4); // B
-      expect(result.data[3]).toBe(1.0);                   // A
+      expect(result.data[3]).toBe(1.0); // A
     });
 
     it('should produce Float32Array output', async () => {

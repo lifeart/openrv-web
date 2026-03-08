@@ -12,14 +12,16 @@ import * as Modal from '../ui/components/shared/Modal';
 
 const showModalSpy = vi.spyOn(Modal, 'showModal');
 
-function createCodecInfo(overrides: Partial<{
-  filename: string;
-  codec: string | null;
-  title: string;
-  message: string;
-  displayName: string;
-  fourcc: string | null;
-}> = {}): UnsupportedCodecInfo {
+function createCodecInfo(
+  overrides: Partial<{
+    filename: string;
+    codec: string | null;
+    title: string;
+    message: string;
+    displayName: string;
+    fourcc: string | null;
+  }> = {},
+): UnsupportedCodecInfo {
   return {
     filename: overrides.filename ?? 'test_video.mov',
     codec: overrides.codec ?? 'prores',
@@ -72,10 +74,12 @@ describe('showUnsupportedCodecModal', () => {
   });
 
   it('UCM-U004: displays error title and message in warning section', () => {
-    showUnsupportedCodecModal(createCodecInfo({
-      title: 'Custom Title',
-      message: 'Custom message text',
-    }));
+    showUnsupportedCodecModal(
+      createCodecInfo({
+        title: 'Custom Title',
+        message: 'Custom message text',
+      }),
+    );
 
     const [content] = showModalSpy.mock.calls[0]!;
     expect(content.textContent).toContain('Custom Title');
@@ -111,9 +115,11 @@ describe('showUnsupportedCodecModal', () => {
   });
 
   it('UCM-U009: escapes HTML entities in filename to prevent XSS', () => {
-    showUnsupportedCodecModal(createCodecInfo({
-      filename: '<script>alert("xss")</script>',
-    }));
+    showUnsupportedCodecModal(
+      createCodecInfo({
+        filename: '<script>alert("xss")</script>',
+      }),
+    );
 
     const [content] = showModalSpy.mock.calls[0]!;
     expect(content.innerHTML).not.toContain('<script>');
@@ -121,9 +127,11 @@ describe('showUnsupportedCodecModal', () => {
   });
 
   it('UCM-U010: safely handles quotes in filename without breaking HTML', () => {
-    showUnsupportedCodecModal(createCodecInfo({
-      filename: 'file"with\'quotes.mov',
-    }));
+    showUnsupportedCodecModal(
+      createCodecInfo({
+        filename: 'file"with\'quotes.mov',
+      }),
+    );
 
     const [content] = showModalSpy.mock.calls[0]!;
     // The escaped filename should appear in text content without breaking the HTML structure
@@ -170,9 +178,11 @@ describe('showUnsupportedCodecModal', () => {
   });
 
   it('UCM-U015: escapes ampersand in filename', () => {
-    showUnsupportedCodecModal(createCodecInfo({
-      filename: 'file&name.mov',
-    }));
+    showUnsupportedCodecModal(
+      createCodecInfo({
+        filename: 'file&name.mov',
+      }),
+    );
 
     const [content] = showModalSpy.mock.calls[0]!;
     expect(content.innerHTML).toContain('file&amp;name.mov');

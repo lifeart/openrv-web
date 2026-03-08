@@ -7,16 +7,25 @@
  * - Real-time preview of HDR content
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
 
-
-export type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
+export type {
+  ToneMappingOperator,
+  ToneMappingState,
+  ToneMappingOperatorInfo,
+  HDROutputMode,
+} from '../../core/types/effects';
 export { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
-import type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
+import type {
+  ToneMappingOperator,
+  ToneMappingState,
+  ToneMappingOperatorInfo,
+  HDROutputMode,
+} from '../../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
 /**
@@ -137,7 +146,6 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     `;
 
     this.createDropdownContent();
-
   }
 
   private createDropdownContent(): void {
@@ -376,7 +384,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     max: number,
     step: number,
     value: number,
-    onChange: (value: number) => void
+    onChange: (value: number) => void,
   ): HTMLElement {
     // Derive display precision from step value (e.g. step=0.1 → 1 decimal, step=0.01 → 2 decimals)
     const stepStr = String(step);
@@ -455,15 +463,16 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
       const whitePointSlider = this.createSlider(
         'White Point',
-        0.5, 10.0, 0.1,
+        0.5,
+        10.0,
+        0.1,
         this.state.reinhardWhitePoint ?? 4.0,
         (value) => {
           this.state.reinhardWhitePoint = value;
           this.emit('stateChanged', { ...this.state });
-        }
+        },
       );
       this.parameterSection.appendChild(whitePointSlider);
-
     } else if (op === 'filmic') {
       this.parameterSection.style.display = 'block';
 
@@ -479,26 +488,29 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
       const exposureBiasSlider = this.createSlider(
         'Exposure Bias',
-        0.5, 8.0, 0.1,
+        0.5,
+        8.0,
+        0.1,
         this.state.filmicExposureBias ?? 2.0,
         (value) => {
           this.state.filmicExposureBias = value;
           this.emit('stateChanged', { ...this.state });
-        }
+        },
       );
       this.parameterSection.appendChild(exposureBiasSlider);
 
       const whitePointSlider = this.createSlider(
         'White Point',
-        2.0, 20.0, 0.1,
+        2.0,
+        20.0,
+        0.1,
         this.state.filmicWhitePoint ?? 11.2,
         (value) => {
           this.state.filmicWhitePoint = value;
           this.emit('stateChanged', { ...this.state });
-        }
+        },
       );
       this.parameterSection.appendChild(whitePointSlider);
-
     } else if (op === 'drago') {
       this.parameterSection.style.display = 'block';
 
@@ -512,28 +524,24 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       `;
       this.parameterSection.appendChild(paramLabel);
 
-      const biasSlider = this.createSlider(
-        'Bias',
-        0.5, 1.0, 0.01,
-        this.state.dragoBias ?? 0.85,
-        (value) => {
-          this.state.dragoBias = value;
-          this.emit('stateChanged', { ...this.state });
-        }
-      );
+      const biasSlider = this.createSlider('Bias', 0.5, 1.0, 0.01, this.state.dragoBias ?? 0.85, (value) => {
+        this.state.dragoBias = value;
+        this.emit('stateChanged', { ...this.state });
+      });
       this.parameterSection.appendChild(biasSlider);
 
       const brightnessSlider = this.createSlider(
         'Brightness',
-        0.5, 5.0, 0.1,
+        0.5,
+        5.0,
+        0.1,
         this.state.dragoBrightness ?? 2.0,
         (value) => {
           this.state.dragoBrightness = value;
           this.emit('stateChanged', { ...this.state });
-        }
+        },
       );
       this.parameterSection.appendChild(brightnessSlider);
-
     } else {
       // Other operators (aces, agx, pbrNeutral, gt, acesHill, off): hide the section
       this.parameterSection.style.display = 'none';

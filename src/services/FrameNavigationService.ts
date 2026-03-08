@@ -148,9 +148,7 @@ export class FrameNavigationService {
     if (!mapping) return;
 
     const currentClipStart = mapping.clip.globalStartFrame;
-    const targetIndex = globalFrame > currentClipStart
-      ? mapping.clipIndex
-      : mapping.clipIndex - 1;
+    const targetIndex = globalFrame > currentClipStart ? mapping.clipIndex : mapping.clipIndex - 1;
     if (targetIndex < 0) return;
 
     const clip = this.playlistManager.getClipByIndex(targetIndex);
@@ -162,9 +160,7 @@ export class FrameNavigationService {
   goToNextShot(): void {
     if (!this.playlistManager.isEnabled()) return;
 
-    const result = this.playlistManager.goToNextClip(
-      this.playlistManager.getCurrentFrame()
-    );
+    const result = this.playlistManager.goToNextClip(this.playlistManager.getCurrentFrame());
     if (result) this.jumpToPlaylistGlobalFrame(result.frame);
   }
 
@@ -172,9 +168,7 @@ export class FrameNavigationService {
   goToPreviousShot(): void {
     if (!this.playlistManager.isEnabled()) return;
 
-    const result = this.playlistManager.goToPreviousClip(
-      this.playlistManager.getCurrentFrame()
-    );
+    const result = this.playlistManager.goToPreviousClip(this.playlistManager.getCurrentFrame());
     if (result) this.jumpToPlaylistGlobalFrame(result.frame);
   }
 
@@ -364,7 +358,7 @@ export class FrameNavigationService {
     const currentFrame = this.session.currentFrame;
 
     // First, try to find a segment matching the current in point exactly
-    const exactMatch = segments.findIndex(s => s.inPoint === currentInPoint);
+    const exactMatch = segments.findIndex((s) => s.inPoint === currentInPoint);
     if (exactMatch !== -1) return exactMatch;
 
     // Fall back to finding which segment contains the current frame

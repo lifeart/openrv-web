@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  buildActionHandlers,
-  type KeyboardActionDeps,
-} from './KeyboardActionMap';
+import { buildActionHandlers, type KeyboardActionDeps } from './KeyboardActionMap';
 
 // ---------------------------------------------------------------------------
 // Mock getThemeManager (module-level singleton)
@@ -165,7 +162,11 @@ function createMockControls() {
   };
 }
 
-function createMockDeps(): KeyboardActionDeps & { session: ReturnType<typeof createMockSession>; viewer: ReturnType<typeof createMockViewer>; controls: ReturnType<typeof createMockControls> } {
+function createMockDeps(): KeyboardActionDeps & {
+  session: ReturnType<typeof createMockSession>;
+  viewer: ReturnType<typeof createMockViewer>;
+  controls: ReturnType<typeof createMockControls>;
+} {
   return {
     session: createMockSession(),
     viewer: createMockViewer(),

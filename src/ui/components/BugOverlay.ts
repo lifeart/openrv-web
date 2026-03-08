@@ -272,12 +272,7 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
     const clampedMargin = Math.min(margin, maxMarginX, maxMarginY);
 
     // Calculate position
-    const { x, y } = this.calculatePosition(
-      position,
-      renderWidth,
-      renderHeight,
-      clampedMargin,
-    );
+    const { x, y } = this.calculatePosition(position, renderWidth, renderHeight, clampedMargin);
 
     ctx.save();
     ctx.globalAlpha = opacity;

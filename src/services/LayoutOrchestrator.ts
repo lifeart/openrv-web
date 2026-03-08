@@ -36,7 +36,11 @@ export interface LayoutViewer {
   getElement(): HTMLElement;
   getContainer(): HTMLElement;
   resize(): void;
-  onCursorColorChange(callback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null): void;
+  onCursorColorChange(
+    callback:
+      | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+      | null,
+  ): void;
 }
 
 export interface LayoutHeaderBar {
@@ -305,7 +309,7 @@ export class LayoutOrchestrator {
       return true;
     };
     const getVisibleButtons = (root: HTMLElement): HTMLElement[] =>
-      Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled])')).filter(el => isVisible(el, root));
+      Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled])')).filter((el) => isVisible(el, root));
 
     // Register focus zones (order defines F6 cycling order)
     this._focusManager.addZone({
@@ -335,7 +339,10 @@ export class LayoutOrchestrator {
     this._focusManager.addZone({
       name: 'timeline',
       container: timelineEl,
-      getItems: () => Array.from(timelineEl.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]')).filter(el => isVisible(el, timelineEl)),
+      getItems: () =>
+        Array.from(timelineEl.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]')).filter(
+          (el) => isVisible(el, timelineEl),
+        ),
       orientation: 'horizontal',
     } as FocusZone);
 
@@ -351,8 +358,12 @@ export class LayoutOrchestrator {
     // Announce tab changes
     const unsubTabChanged = tabBar.on('tabChanged', (tabId: unknown) => {
       const tabLabels: Record<string, string> = {
-        view: 'View', color: 'Color', effects: 'Effects',
-        transform: 'Transform', annotate: 'Annotate', qc: 'QC',
+        view: 'View',
+        color: 'Color',
+        effects: 'Effects',
+        transform: 'Transform',
+        annotate: 'Annotate',
+        qc: 'QC',
       };
       this._ariaAnnouncer!.announce(`${tabLabels[tabId as string]} tab`);
     });
@@ -410,13 +421,7 @@ export class LayoutOrchestrator {
     });
 
     // Set elements to hide in presentation mode
-    const elementsToHide = [
-      headerBarEl,
-      tabBarEl,
-      contextToolbarEl,
-      cacheIndicatorEl,
-      timelineEl,
-    ];
+    const elementsToHide = [headerBarEl, tabBarEl, contextToolbarEl, cacheIndicatorEl, timelineEl];
     if (magnifierEl) {
       elementsToHide.push(magnifierEl);
     }

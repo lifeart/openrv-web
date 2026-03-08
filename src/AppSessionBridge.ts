@@ -9,8 +9,7 @@
  * under src/handlers/.
  */
 
-import { Session } from './core/session/Session';
-import type { SessionEvents } from './core/session/Session';
+import type { Session, SessionEvents } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { Histogram } from './ui/components/Histogram';
 import type { Waveform } from './ui/components/Waveform';
@@ -147,7 +146,7 @@ export class AppSessionBridge {
         () => this.updateWaveform(),
         () => this.updateVectorscope(),
         () => this.updateGamutDiagram(),
-        loadedSource
+        loadedSource,
       );
     });
 
@@ -166,7 +165,7 @@ export class AppSessionBridge {
         () => this.updateHistogram(),
         () => this.updateWaveform(),
         () => this.updateVectorscope(),
-        () => this.updateGamutDiagram()
+        () => this.updateGamutDiagram(),
       );
     });
 
@@ -176,7 +175,7 @@ export class AppSessionBridge {
       this.context,
       session,
       (s, e, h) => this.on(s, e, h),
-      () => this.updateEXRLayers()
+      () => this.updateEXRLayers(),
     );
 
     // --- From bindEvents(): GTO/annotation handlers ---
@@ -188,7 +187,7 @@ export class AppSessionBridge {
       () => this.updateHistogram(),
       () => this.updateWaveform(),
       () => this.updateVectorscope(),
-      () => this.updateGamutDiagram()
+      () => this.updateGamutDiagram(),
     );
   }
 
@@ -211,9 +210,7 @@ export class AppSessionBridge {
     if (this._onHistogramData) {
       const histogram = this.context.getHistogram();
       // If full histogram was visible, it already computed fresh data
-      const histData = histogram.isVisible()
-        ? histogram.getData()
-        : _computeHistogramData(this.context);
+      const histData = histogram.isVisible() ? histogram.getData() : _computeHistogramData(this.context);
       if (histData) {
         this._onHistogramData(histData);
       }
@@ -280,16 +277,8 @@ export class AppSessionBridge {
   /**
    * Handle EXR layer change from ChannelSelect
    */
-  async handleEXRLayerChange(
-    layerName: string | null,
-    remapping: EXRChannelRemapping | null
-  ): Promise<void> {
-    return _handleEXRLayerChange(
-      this.context,
-      layerName,
-      remapping,
-      () => this.scheduleUpdateScopes()
-    );
+  async handleEXRLayerChange(layerName: string | null, remapping: EXRChannelRemapping | null): Promise<void> {
+    return _handleEXRLayerChange(this.context, layerName, remapping, () => this.scheduleUpdateScopes());
   }
 
   /**
@@ -299,7 +288,7 @@ export class AppSessionBridge {
   private on<K extends keyof SessionEvents>(
     session: Session,
     event: K,
-    handler: (data: SessionEvents[K]) => void
+    handler: (data: SessionEvents[K]) => void,
   ): void {
     const unsubscribe = session.on(event, handler);
     this.unsubscribers.push(unsubscribe);

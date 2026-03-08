@@ -9,8 +9,13 @@ const context: EvalContext = { frame: 1, width: 4, height: 4, quality: 'full' };
 
 class TestSourceNode extends IPNode {
   private image: IPImage;
-  constructor(image: IPImage) { super('TestSource'); this.image = image; }
-  protected process(): IPImage | null { return this.image; }
+  constructor(image: IPImage) {
+    super('TestSource');
+    this.image = image;
+  }
+  protected process(): IPImage | null {
+    return this.image;
+  }
 }
 
 function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {
@@ -82,7 +87,7 @@ describe('ColorWheelsNode', () => {
       const h = halfData[i]!;
       const lo = Math.min(s, f);
       const hi = Math.max(s, f);
-      if (h >= lo - 1 && h <= hi + 1) betweenCount++;  // tolerance of 1 for rounding
+      if (h >= lo - 1 && h <= hi + 1) betweenCount++; // tolerance of 1 for rounding
     }
     expect(betweenCount).toBe(srcData.length);
   });
@@ -142,10 +147,10 @@ describe('ColorWheelsNode', () => {
       const expectedB = bIn;
 
       // Tolerance of 1 for rounding differences between Math.round and Uint8ClampedArray
-      expect(Math.abs(resData[i]! - expectedR)).toBeLessThanOrEqual(1);    // R
-      expect(resData[i + 1]).toBe(expectedG);                               // G: unchanged
-      expect(resData[i + 2]).toBe(expectedB);                               // B: unchanged
-      expect(resData[i + 3]).toBe(aIn);                                     // A: preserved exactly
+      expect(Math.abs(resData[i]! - expectedR)).toBeLessThanOrEqual(1); // R
+      expect(resData[i + 1]).toBe(expectedG); // G: unchanged
+      expect(resData[i + 2]).toBe(expectedB); // B: unchanged
+      expect(resData[i + 3]).toBe(aIn); // A: preserved exactly
     }
   });
 
@@ -183,13 +188,13 @@ describe('ColorWheelsNode', () => {
       const bU8 = Math.round(Math.max(0, Math.min(1, bFloat)) * 255);
       const expectedB = bU8 / 255;
 
-      expect(resData[i]!).toBeCloseTo(expectedR, 2);       // R: masterR applied
-      expect(resData[i + 1]!).toBeCloseTo(expectedG, 2);   // G: roundtrip only
-      expect(resData[i + 2]!).toBeCloseTo(expectedB, 2);   // B: roundtrip only
+      expect(resData[i]!).toBeCloseTo(expectedR, 2); // R: masterR applied
+      expect(resData[i + 1]!).toBeCloseTo(expectedG, 2); // G: roundtrip only
+      expect(resData[i + 2]!).toBeCloseTo(expectedB, 2); // B: roundtrip only
       // Alpha should survive the roundtrip with minimal error
       const aU8 = Math.round(Math.max(0, Math.min(1, aFloat)) * 255);
       const expectedA = aU8 / 255;
-      expect(resData[i + 3]!).toBeCloseTo(expectedA, 2);   // A: roundtrip only
+      expect(resData[i + 3]!).toBeCloseTo(expectedA, 2); // A: roundtrip only
     }
   });
 

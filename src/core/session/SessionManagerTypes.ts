@@ -7,12 +7,7 @@
 
 import type { IPNode } from '../../nodes/base/IPNode';
 
-export type GroupNodeType =
-  | 'RVSequenceGroup'
-  | 'RVStackGroup'
-  | 'RVSwitchGroup'
-  | 'RVLayoutGroup'
-  | 'RVRetimeGroup';
+export type GroupNodeType = 'RVSequenceGroup' | 'RVStackGroup' | 'RVSwitchGroup' | 'RVLayoutGroup' | 'RVRetimeGroup';
 
 /**
  * Tree node representation for the Session Manager panel.

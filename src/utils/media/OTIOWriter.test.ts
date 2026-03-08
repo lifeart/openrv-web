@@ -81,8 +81,8 @@ describe('OTIOWriter', () => {
 
     it('OTIO-W003: gaps between clips produce Gap.1 entries', () => {
       const clips = [
-        createClip('shot_A', 'file:///A.exr', 1, 48, 1),      // frames 1-48
-        createClip('shot_B', 'file:///B.exr', 1, 24, 73),      // frames 73-96 (gap at 49-72 = 24 frames)
+        createClip('shot_A', 'file:///A.exr', 1, 48, 1), // frames 1-48
+        createClip('shot_B', 'file:///B.exr', 1, 24, 73), // frames 73-96 (gap at 49-72 = 24 frames)
       ];
       const json = exportOTIO(clips, { fps: 24 });
       const parsed = JSON.parse(json);
@@ -161,9 +161,7 @@ describe('OTIOWriter', () => {
     });
 
     it('OTIO-W008: media_reference uses source URL', () => {
-      const clips = [
-        createClip('shot', 'file:///path/to/shot_v3.exr', 1, 48, 1),
-      ];
+      const clips = [createClip('shot', 'file:///path/to/shot_v3.exr', 1, 48, 1)];
       const json = exportOTIO(clips);
       const parsed = JSON.parse(json);
 
@@ -243,11 +241,7 @@ describe('OTIOWriter', () => {
         { sourceName: 'clip30', sourceIndex: 0, inPoint: 1, outPoint: 60, globalStartFrame: 1, duration: 60 },
       ];
 
-      const result = buildExportClips(
-        playlistClips,
-        () => ({ url: 'file:///clip.mov', fps: 30 }),
-        24,
-      );
+      const result = buildExportClips(playlistClips, () => ({ url: 'file:///clip.mov', fps: 30 }), 24);
 
       expect(result[0]!.fps).toBe(30);
     });
@@ -291,10 +285,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'Video 1',
-            clips: [
-              createClip('shot_A', 'file:///A.exr', 1, 48, 1),
-              createClip('shot_B', 'file:///B.exr', 1, 24, 49),
-            ],
+            clips: [createClip('shot_A', 'file:///A.exr', 1, 48, 1), createClip('shot_B', 'file:///B.exr', 1, 24, 49)],
           },
           {
             name: 'Video 2',
@@ -353,10 +344,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'V1',
-            clips: [
-              createClip('A', 'file:///A.exr', 1, 48, 1),
-              createClip('B', 'file:///B.exr', 1, 48, 49),
-            ],
+            clips: [createClip('A', 'file:///A.exr', 1, 48, 1), createClip('B', 'file:///B.exr', 1, 48, 49)],
             transitions,
           },
         ],
@@ -443,10 +431,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'V1',
-            clips: [
-              createClip('A', 'file:///A.exr', 1, 48, 1),
-              createClip('B', 'file:///B.exr', 1, 48, 49),
-            ],
+            clips: [createClip('A', 'file:///A.exr', 1, 48, 1), createClip('B', 'file:///B.exr', 1, 48, 49)],
             transitions,
           },
         ],
@@ -472,10 +457,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'V1',
-            clips: [
-              createClip('A', 'file:///A.exr', 1, 48, 1),
-              createClip('B', 'file:///B.exr', 1, 48, 49),
-            ],
+            clips: [createClip('A', 'file:///A.exr', 1, 48, 1), createClip('B', 'file:///B.exr', 1, 48, 49)],
             transitions,
           },
         ],
@@ -514,9 +496,7 @@ describe('OTIOWriter', () => {
 
     it('OTIO-MW010: default name and fps when not specified', () => {
       const json = exportOTIOMultiTrack({
-        tracks: [
-          { clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] },
-        ],
+        tracks: [{ clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] }],
       });
 
       const parsed = JSON.parse(json);
@@ -526,9 +506,7 @@ describe('OTIOWriter', () => {
 
     it('OTIO-MW011: produces pretty-printed JSON', () => {
       const json = exportOTIOMultiTrack({
-        tracks: [
-          { clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] },
-        ],
+        tracks: [{ clips: [createClip('A', 'file:///A.exr', 1, 24, 1)] }],
       });
 
       expect(json).toContain('\n');
@@ -548,10 +526,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'Video 1',
-            clips: [
-              createClip('v1_a', 'file:///v1a.exr', 1, 48, 1),
-              createClip('v1_b', 'file:///v1b.exr', 1, 24, 49),
-            ],
+            clips: [createClip('v1_a', 'file:///v1a.exr', 1, 48, 1), createClip('v1_b', 'file:///v1b.exr', 1, 24, 49)],
           },
           {
             name: 'Video 2',
@@ -587,10 +562,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'Video 1',
-            clips: [
-              createClip('A', 'file:///A.exr', 0, 47, 1),
-              createClip('B', 'file:///B.exr', 0, 47, 49),
-            ],
+            clips: [createClip('A', 'file:///A.exr', 0, 47, 1), createClip('B', 'file:///B.exr', 0, 47, 49)],
             transitions,
           },
         ],
@@ -625,9 +597,9 @@ describe('OTIOWriter', () => {
           {
             name: 'V1',
             clips: [
-              createClip('A', 'file:///A.exr', 1, 24, 1),      // 24 frames
-              createClip('B', 'file:///B.exr', 1, 48, 49),      // gap of 24 frames before, then 48 frames
-              createClip('C', 'file:///C.exr', 1, 24, 97),      // 24 frames
+              createClip('A', 'file:///A.exr', 1, 24, 1), // 24 frames
+              createClip('B', 'file:///B.exr', 1, 48, 49), // gap of 24 frames before, then 48 frames
+              createClip('C', 'file:///C.exr', 1, 24, 97), // 24 frames
             ],
             transitions,
           },
@@ -657,10 +629,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'V1',
-            clips: [
-              createClip('A', 'file:///A.exr', 1, 48, 1),
-              createClip('B', 'file:///B.exr', 1, 48, 49),
-            ],
+            clips: [createClip('A', 'file:///A.exr', 1, 48, 1), createClip('B', 'file:///B.exr', 1, 48, 49)],
             transitions,
           },
         ],
@@ -694,10 +663,7 @@ describe('OTIOWriter', () => {
         tracks: [
           {
             name: 'Video 1',
-            clips: [
-              createClip('v1_a', 'file:///v1a.exr', 1, 48, 1),
-              createClip('v1_b', 'file:///v1b.exr', 1, 48, 49),
-            ],
+            clips: [createClip('v1_a', 'file:///v1a.exr', 1, 48, 1), createClip('v1_b', 'file:///v1b.exr', 1, 48, 49)],
             transitions: t1,
           },
           {

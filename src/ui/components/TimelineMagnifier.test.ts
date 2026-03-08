@@ -63,7 +63,7 @@ let nextRafId: number;
 
 function flushRaf() {
   const cbs = rafCallbacks.splice(0);
-  cbs.forEach(cb => cb(performance.now()));
+  cbs.forEach((cb) => cb(performance.now()));
 }
 
 // ---------------------------------------------------------------------------
@@ -209,8 +209,15 @@ describe('TimelineMagnifier', () => {
 
       const canvas = el.querySelector('[data-testid="magnifier-canvas"]') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        width: 800, height: 100, top: 0, left: 0,
-        bottom: 100, right: 800, x: 0, y: 0, toJSON: () => {},
+        width: 800,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 800,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
 
       // Force width so framing works
@@ -275,8 +282,15 @@ describe('TimelineMagnifier', () => {
 
       const canvas = el.querySelector('[data-testid="magnifier-canvas"]') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        width: 800, height: 100, top: 0, left: 0,
-        bottom: 100, right: 800, x: 0, y: 0, toJSON: () => {},
+        width: 800,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 800,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       (magnifier as any).width = 800;
       (magnifier as any).height = 100;
@@ -307,8 +321,15 @@ describe('TimelineMagnifier', () => {
 
       const canvas = el.querySelector('[data-testid="magnifier-canvas"]') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        width: 800, height: 100, top: 0, left: 0,
-        bottom: 100, right: 800, x: 0, y: 0, toJSON: () => {},
+        width: 800,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 800,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       (mag as any).width = 800;
       (mag as any).height = 100;
@@ -325,21 +346,36 @@ describe('TimelineMagnifier', () => {
       const initialCenter = magnifier.centerFrame;
 
       // Pointer down
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 400, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 400,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       // Move beyond threshold (>5px)
-      canvas.dispatchEvent(new PointerEvent('pointermove', {
-        clientX: 420, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', {
+          clientX: 420,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       // Center should have shifted
       expect(magnifier.centerFrame).not.toBe(initialCenter);
 
-      canvas.dispatchEvent(new PointerEvent('pointerup', {
-        clientX: 420, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerup', {
+          clientX: 420,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       document.body.removeChild(el);
     });
@@ -348,19 +384,34 @@ describe('TimelineMagnifier', () => {
       const { el, canvas } = setupForInteraction(magnifier);
       expect(magnifier.followPlayhead).toBe(true);
 
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 400, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 400,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
-      canvas.dispatchEvent(new PointerEvent('pointermove', {
-        clientX: 420, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', {
+          clientX: 420,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       expect(magnifier.followPlayhead).toBe(false);
 
-      canvas.dispatchEvent(new PointerEvent('pointerup', {
-        clientX: 420, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerup', {
+          clientX: 420,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       document.body.removeChild(el);
     });
@@ -368,22 +419,37 @@ describe('TimelineMagnifier', () => {
     it('MAG-032: movement under 5px does not trigger pan (treats as click)', () => {
       const { el, canvas } = setupForInteraction(magnifier);
 
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 400, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 400,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       // Move only 3px (under threshold)
-      canvas.dispatchEvent(new PointerEvent('pointermove', {
-        clientX: 403, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', {
+          clientX: 403,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       // followPlayhead should still be true (no pan started)
       expect(magnifier.followPlayhead).toBe(true);
 
       // Pointer up should trigger seek
-      canvas.dispatchEvent(new PointerEvent('pointerup', {
-        clientX: 403, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerup', {
+          clientX: 403,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       expect(session.goToFrame).toHaveBeenCalled();
 
@@ -402,20 +468,37 @@ describe('TimelineMagnifier', () => {
 
       const canvas = el.querySelector('[data-testid="magnifier-canvas"]') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        width: 800, height: 100, top: 0, left: 0,
-        bottom: 100, right: 800, x: 0, y: 0, toJSON: () => {},
+        width: 800,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 800,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       (magnifier as any).width = 800;
       (magnifier as any).height = 100;
       canvas.setPointerCapture = vi.fn();
       canvas.releasePointerCapture = vi.fn();
 
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 400, clientY: 50, pointerId: 1, bubbles: true,
-      }));
-      canvas.dispatchEvent(new PointerEvent('pointerup', {
-        clientX: 400, clientY: 50, pointerId: 1, bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 400,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
+      canvas.dispatchEvent(
+        new PointerEvent('pointerup', {
+          clientX: 400,
+          clientY: 50,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       expect(session.goToFrame).toHaveBeenCalled();
 
@@ -826,7 +909,10 @@ describe('TimelineMagnifier', () => {
 
   describe('setPaintEngine', () => {
     it('MAG-170: accepts paint engine for late binding', () => {
-      const pe = { on: vi.fn().mockReturnValue(() => {}), getAnnotatedFrames: vi.fn().mockReturnValue(new Set()) } as any;
+      const pe = {
+        on: vi.fn().mockReturnValue(() => {}),
+        getAnnotatedFrames: vi.fn().mockReturnValue(new Set()),
+      } as any;
       expect(() => magnifier.setPaintEngine(pe)).not.toThrow();
     });
   });

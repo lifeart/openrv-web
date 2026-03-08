@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  WebGLLUTProcessor,
-  getSharedLUTProcessor,
-  disposeSharedLUTProcessor,
-} from './WebGLLUT';
+import { WebGLLUTProcessor, getSharedLUTProcessor, disposeSharedLUTProcessor } from './WebGLLUT';
 import type { LUT3D } from './LUTLoader';
 import { createMockWebGL2Context } from '../../test/mocks';
 
@@ -155,9 +151,7 @@ describe('WebGLLUTProcessor', () => {
 
       // texParameteri should have been called for both output texture and image texture
       const texParamCalls = mockGl.texParameteri.mock.calls;
-      const minFilterCalls = texParamCalls.filter(
-        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER
-      );
+      const minFilterCalls = texParamCalls.filter((call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER);
       expect(minFilterCalls.length).toBeGreaterThan(0);
     });
 
@@ -216,7 +210,7 @@ describe('WebGLLUTProcessor', () => {
       // Since applyFloat uses NEAREST vs LINEAR, texParameteri must be called
       const texParamCalls = mockGl.texParameteri.mock.calls;
       const nearestCalls = texParamCalls.filter(
-        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER && call[2] === mockGl.NEAREST
+        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER && call[2] === mockGl.NEAREST,
       );
       expect(nearestCalls.length).toBeGreaterThan(0);
     });
@@ -239,7 +233,7 @@ describe('WebGLLUTProcessor', () => {
 
       const texParamCalls = mockGl.texParameteri.mock.calls;
       const linearCalls = texParamCalls.filter(
-        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER && call[2] === mockGl.LINEAR
+        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER && call[2] === mockGl.LINEAR,
       );
       expect(linearCalls.length).toBeGreaterThan(0);
     });
@@ -254,7 +248,7 @@ describe('WebGLLUTProcessor', () => {
 
     it('WLUT-018: apply() returns original when shader not ready', () => {
       // Make COMPLETION_STATUS_KHR return false to simulate compilation in progress
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true; // COMPILE_STATUS
@@ -274,7 +268,7 @@ describe('WebGLLUTProcessor', () => {
     });
 
     it('WLUT-019: applyFloat() returns original data when shader not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true;
@@ -306,7 +300,7 @@ describe('WebGLLUTProcessor', () => {
     });
 
     it('WLUT-021: apply() works after shader becomes ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       let compilationComplete = false;
 
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
@@ -377,7 +371,7 @@ describe('WebGLLUTProcessor', () => {
     });
 
     it('WLUT-026: attributes are NOT set up when shader is not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
         if (pname === COMPLETION_STATUS_KHR) return false;
         return true;
@@ -403,10 +397,7 @@ describe('WebGLLUTProcessor', () => {
       new WebGLLUTProcessor();
 
       // getUniformLocation should NOT have been called with LUT-specific uniform names
-      expect(mockGl.getUniformLocation).not.toHaveBeenCalledWith(
-        expect.anything(),
-        'u_image'
-      );
+      expect(mockGl.getUniformLocation).not.toHaveBeenCalledWith(expect.anything(), 'u_image');
     });
 
     it('WLUT-028: uniforms are resolved on first apply()', () => {
@@ -416,18 +407,9 @@ describe('WebGLLUTProcessor', () => {
 
       processor.apply(imageData, 1.0);
 
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_image'
-      );
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_lut'
-      );
-      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_intensity'
-      );
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_image');
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_lut');
+      expect(mockGl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_intensity');
     });
   });
 
@@ -475,22 +457,34 @@ describe('WebGLLUTProcessor', () => {
       // Bottom row (y=1): blue pixels
       const imageData = new ImageData(2, 2);
       // Top-left (0,0): Red
-      imageData.data[0] = 255; imageData.data[1] = 0; imageData.data[2] = 0; imageData.data[3] = 255;
+      imageData.data[0] = 255;
+      imageData.data[1] = 0;
+      imageData.data[2] = 0;
+      imageData.data[3] = 255;
       // Top-right (1,0): Red
-      imageData.data[4] = 255; imageData.data[5] = 0; imageData.data[6] = 0; imageData.data[7] = 255;
+      imageData.data[4] = 255;
+      imageData.data[5] = 0;
+      imageData.data[6] = 0;
+      imageData.data[7] = 255;
       // Bottom-left (0,1): Blue
-      imageData.data[8] = 0; imageData.data[9] = 0; imageData.data[10] = 255; imageData.data[11] = 255;
+      imageData.data[8] = 0;
+      imageData.data[9] = 0;
+      imageData.data[10] = 255;
+      imageData.data[11] = 255;
       // Bottom-right (1,1): Blue
-      imageData.data[12] = 0; imageData.data[13] = 0; imageData.data[14] = 255; imageData.data[15] = 255;
+      imageData.data[12] = 0;
+      imageData.data[13] = 0;
+      imageData.data[14] = 255;
+      imageData.data[15] = 255;
 
       const result = processor.apply(imageData, 1.0);
 
       // Verify top row is still red (not flipped)
-      expect(result.data[0]).toBe(255);  // R at top-left
-      expect(result.data[2]).toBe(0);    // B at top-left
+      expect(result.data[0]).toBe(255); // R at top-left
+      expect(result.data[2]).toBe(0); // B at top-left
 
       // Verify bottom row is still blue (not flipped)
-      expect(result.data[8]).toBe(0);    // R at bottom-left
+      expect(result.data[8]).toBe(0); // R at bottom-left
       expect(result.data[10]).toBe(255); // B at bottom-left
     });
   });

@@ -14,7 +14,7 @@
  * - Generates a SlateConfig object compatible with SlateRenderer
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { SlateConfig, SlateField, SlateMetadata, LogoPosition } from '../../export/SlateRenderer';
 import { buildSlateFields, renderSlate } from '../../export/SlateRenderer';
 
@@ -143,7 +143,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
    * Get custom fields
    */
   getCustomFields(): CustomField[] {
-    return this.state.customFields.map(f => ({ ...f }));
+    return this.state.customFields.map((f) => ({ ...f }));
   }
 
   /**
@@ -170,9 +170,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
    */
   updateCustomField(index: number, field: Partial<CustomField>): void {
     if (index < 0 || index >= this.state.customFields.length) return;
-    const fields = this.state.customFields.map((f, i) =>
-      i === index ? { ...f, ...field } : { ...f }
-    );
+    const fields = this.state.customFields.map((f, i) => (i === index ? { ...f, ...field } : { ...f }));
     this.setState({ customFields: fields });
   }
 
@@ -456,7 +454,7 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
    */
   buildFields(): SlateField[] {
     const metadataFields = buildSlateFields(this.state.metadata);
-    const customFields: SlateField[] = this.state.customFields.map(f => ({
+    const customFields: SlateField[] = this.state.customFields.map((f) => ({
       label: f.label,
       value: f.value,
       size: f.size,
@@ -558,35 +556,155 @@ function deepCopy<T>(obj: T): T {
  * A canonical lower-case set used for validation.
  */
 const CSS_NAMED_COLORS = new Set([
-  'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige',
-  'bisque', 'black', 'blanchedalmond', 'blue', 'blueviolet', 'brown',
-  'burlywood', 'cadetblue', 'chartreuse', 'chocolate', 'coral',
-  'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan',
-  'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey', 'darkkhaki',
-  'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid', 'darkred',
-  'darksalmon', 'darkseagreen', 'darkslateblue', 'darkslategray',
-  'darkslategrey', 'darkturquoise', 'darkviolet', 'deeppink', 'deepskyblue',
-  'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite',
-  'forestgreen', 'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod',
-  'gray', 'green', 'greenyellow', 'grey', 'honeydew', 'hotpink',
-  'indianred', 'indigo', 'ivory', 'khaki', 'lavender', 'lavenderblush',
-  'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan',
-  'lightgoldenrodyellow', 'lightgray', 'lightgreen', 'lightgrey',
-  'lightpink', 'lightsalmon', 'lightseagreen', 'lightskyblue',
-  'lightslategray', 'lightslategrey', 'lightsteelblue', 'lightyellow',
-  'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine',
-  'mediumblue', 'mediumorchid', 'mediumpurple', 'mediumseagreen',
-  'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
-  'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose', 'moccasin',
-  'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab', 'orange',
-  'orangered', 'orchid', 'palegoldenrod', 'palegreen', 'paleturquoise',
-  'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink', 'plum',
-  'powderblue', 'purple', 'rebeccapurple', 'red', 'rosybrown', 'royalblue',
-  'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'seashell', 'sienna',
-  'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow',
-  'springgreen', 'steelblue', 'tan', 'teal', 'thistle', 'tomato',
-  'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow',
-  'yellowgreen', 'transparent',
+  'aliceblue',
+  'antiquewhite',
+  'aqua',
+  'aquamarine',
+  'azure',
+  'beige',
+  'bisque',
+  'black',
+  'blanchedalmond',
+  'blue',
+  'blueviolet',
+  'brown',
+  'burlywood',
+  'cadetblue',
+  'chartreuse',
+  'chocolate',
+  'coral',
+  'cornflowerblue',
+  'cornsilk',
+  'crimson',
+  'cyan',
+  'darkblue',
+  'darkcyan',
+  'darkgoldenrod',
+  'darkgray',
+  'darkgreen',
+  'darkgrey',
+  'darkkhaki',
+  'darkmagenta',
+  'darkolivegreen',
+  'darkorange',
+  'darkorchid',
+  'darkred',
+  'darksalmon',
+  'darkseagreen',
+  'darkslateblue',
+  'darkslategray',
+  'darkslategrey',
+  'darkturquoise',
+  'darkviolet',
+  'deeppink',
+  'deepskyblue',
+  'dimgray',
+  'dimgrey',
+  'dodgerblue',
+  'firebrick',
+  'floralwhite',
+  'forestgreen',
+  'fuchsia',
+  'gainsboro',
+  'ghostwhite',
+  'gold',
+  'goldenrod',
+  'gray',
+  'green',
+  'greenyellow',
+  'grey',
+  'honeydew',
+  'hotpink',
+  'indianred',
+  'indigo',
+  'ivory',
+  'khaki',
+  'lavender',
+  'lavenderblush',
+  'lawngreen',
+  'lemonchiffon',
+  'lightblue',
+  'lightcoral',
+  'lightcyan',
+  'lightgoldenrodyellow',
+  'lightgray',
+  'lightgreen',
+  'lightgrey',
+  'lightpink',
+  'lightsalmon',
+  'lightseagreen',
+  'lightskyblue',
+  'lightslategray',
+  'lightslategrey',
+  'lightsteelblue',
+  'lightyellow',
+  'lime',
+  'limegreen',
+  'linen',
+  'magenta',
+  'maroon',
+  'mediumaquamarine',
+  'mediumblue',
+  'mediumorchid',
+  'mediumpurple',
+  'mediumseagreen',
+  'mediumslateblue',
+  'mediumspringgreen',
+  'mediumturquoise',
+  'mediumvioletred',
+  'midnightblue',
+  'mintcream',
+  'mistyrose',
+  'moccasin',
+  'navajowhite',
+  'navy',
+  'oldlace',
+  'olive',
+  'olivedrab',
+  'orange',
+  'orangered',
+  'orchid',
+  'palegoldenrod',
+  'palegreen',
+  'paleturquoise',
+  'palevioletred',
+  'papayawhip',
+  'peachpuff',
+  'peru',
+  'pink',
+  'plum',
+  'powderblue',
+  'purple',
+  'rebeccapurple',
+  'red',
+  'rosybrown',
+  'royalblue',
+  'saddlebrown',
+  'salmon',
+  'sandybrown',
+  'seagreen',
+  'seashell',
+  'sienna',
+  'silver',
+  'skyblue',
+  'slateblue',
+  'slategray',
+  'slategrey',
+  'snow',
+  'springgreen',
+  'steelblue',
+  'tan',
+  'teal',
+  'thistle',
+  'tomato',
+  'turquoise',
+  'violet',
+  'wheat',
+  'white',
+  'whitesmoke',
+  'yellow',
+  'yellowgreen',
+  'transparent',
 ]);
 
 /**
@@ -626,16 +744,13 @@ function isValidLogoUrl(url: string): boolean {
   );
 }
 
-function mergeState(
-  base: SlateEditorState,
-  partial: Partial<SlateEditorState>,
-): SlateEditorState {
+function mergeState(base: SlateEditorState, partial: Partial<SlateEditorState>): SlateEditorState {
   const result = { ...base };
   if (partial.metadata !== undefined) {
     result.metadata = { ...base.metadata, ...partial.metadata };
   }
   if (partial.customFields !== undefined) {
-    result.customFields = partial.customFields.map(f => ({ ...f }));
+    result.customFields = partial.customFields.map((f) => ({ ...f }));
   }
   if (partial.colors !== undefined) {
     result.colors = { ...base.colors, ...partial.colors };

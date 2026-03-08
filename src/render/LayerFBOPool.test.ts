@@ -14,32 +14,32 @@ function createMockGL(): WebGL2RenderingContext {
   const deletedFBOs: number[] = [];
 
   return {
-    TEXTURE_2D: 0x0DE1,
+    TEXTURE_2D: 0x0de1,
     RGBA: 0x1908,
     RGBA8: 0x8058,
-    RGBA16F: 0x881A,
+    RGBA16F: 0x881a,
     UNSIGNED_BYTE: 0x1401,
-    HALF_FLOAT: 0x140B,
+    HALF_FLOAT: 0x140b,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
     LINEAR: 0x2601,
-    CLAMP_TO_EDGE: 0x812F,
-    FRAMEBUFFER: 0x8D40,
-    COLOR_ATTACHMENT0: 0x8CE0,
-    FRAMEBUFFER_COMPLETE: 0x8CD5,
+    CLAMP_TO_EDGE: 0x812f,
+    FRAMEBUFFER: 0x8d40,
+    COLOR_ATTACHMENT0: 0x8ce0,
+    FRAMEBUFFER_COMPLETE: 0x8cd5,
 
-    createTexture: vi.fn(() => (textureId++) as unknown as WebGLTexture),
+    createTexture: vi.fn(() => textureId++ as unknown as WebGLTexture),
     bindTexture: vi.fn(),
     texImage2D: vi.fn(),
     texParameteri: vi.fn(),
     deleteTexture: vi.fn((tex) => deletedTextures.push(tex as unknown as number)),
 
-    createFramebuffer: vi.fn(() => (fboId++) as unknown as WebGLFramebuffer),
+    createFramebuffer: vi.fn(() => fboId++ as unknown as WebGLFramebuffer),
     bindFramebuffer: vi.fn(),
     framebufferTexture2D: vi.fn(),
-    checkFramebufferStatus: vi.fn(() => 0x8CD5), // FRAMEBUFFER_COMPLETE
+    checkFramebufferStatus: vi.fn(() => 0x8cd5), // FRAMEBUFFER_COMPLETE
     deleteFramebuffer: vi.fn((fbo) => deletedFBOs.push(fbo as unknown as number)),
 
     // For testing

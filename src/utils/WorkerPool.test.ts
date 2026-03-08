@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { WorkerPool, WorkerPoolConfig, WorkerTaskData } from './WorkerPool';
+import { WorkerPool, type WorkerPoolConfig, type WorkerTaskData } from './WorkerPool';
 
 // Mock Worker for testing
 class MockWorker {
@@ -22,9 +22,9 @@ class MockWorker {
 
   removeEventListener(type: string, handler: (event: unknown) => void): void {
     if (type === 'message') {
-      this.messageHandlers = this.messageHandlers.filter(h => h !== handler);
+      this.messageHandlers = this.messageHandlers.filter((h) => h !== handler);
     } else if (type === 'error') {
-      this.errorHandlers = this.errorHandlers.filter(h => h !== handler);
+      this.errorHandlers = this.errorHandlers.filter((h) => h !== handler);
     }
   }
 
@@ -38,7 +38,7 @@ class MockWorker {
           id: (message as { id: number }).id,
           data: 'processed',
         };
-        this.messageHandlers.forEach(h => h(new MessageEvent('message', { data: response })));
+        this.messageHandlers.forEach((h) => h(new MessageEvent('message', { data: response })));
       }
     }, 10);
   }
@@ -49,13 +49,13 @@ class MockWorker {
 
   // Helper to simulate ready signal
   simulateReady(): void {
-    this.messageHandlers.forEach(h => h(new MessageEvent('message', { data: { type: 'ready' } })));
+    this.messageHandlers.forEach((h) => h(new MessageEvent('message', { data: { type: 'ready' } })));
   }
 
   // Helper to simulate error
   simulateError(message: string): void {
     const errorEvent = new ErrorEvent('error', { message });
-    this.errorHandlers.forEach(h => h(errorEvent));
+    this.errorHandlers.forEach((h) => h(errorEvent));
   }
 }
 
@@ -81,7 +81,7 @@ describe('WorkerPool', () => {
   afterEach(async () => {
     // Dispose and wait a tick for any pending rejections to be handled
     pool.dispose();
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   describe('init', () => {
@@ -124,15 +124,11 @@ describe('WorkerPool', () => {
     });
 
     it('WP-007: handles multiple concurrent tasks', async () => {
-      const promises = [
-        pool.submit({ type: 'task1' }),
-        pool.submit({ type: 'task2' }),
-        pool.submit({ type: 'task3' }),
-      ];
+      const promises = [pool.submit({ type: 'task1' }), pool.submit({ type: 'task2' }), pool.submit({ type: 'task3' })];
 
       const results = await Promise.all(promises);
       expect(results.length).toBe(3);
-      results.forEach(r => expect(r.type).toBe('result'));
+      results.forEach((r) => expect(r.type).toBe('result'));
     });
 
     it('WP-008: respects priority ordering', async () => {
@@ -247,7 +243,7 @@ describe('WorkerPool', () => {
 
       // Wait for all promises to settle (some may complete, some may reject)
       const results = await Promise.allSettled(promises);
-      const rejected = results.filter(r => r.status === 'rejected');
+      const rejected = results.filter((r) => r.status === 'rejected');
       // At least the queued ones should be rejected
       expect(rejected.length).toBeGreaterThanOrEqual(0);
 
@@ -271,8 +267,9 @@ describe('WorkerPool', () => {
                   id: (message as { id: number }).id,
                   data: 'processed',
                 };
-                (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers
-                  .forEach(h => h(new MessageEvent('message', { data: response })));
+                (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers.forEach(
+                  (h) => h(new MessageEvent('message', { data: response })),
+                );
               }
             }, 100); // Slow response
           };
@@ -286,7 +283,7 @@ describe('WorkerPool', () => {
       const inProgressTask = slowWorkerPool.submit({ type: 'inProgress' });
 
       // Wait a bit to ensure it's assigned to a worker
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Clear the queue - should not affect in-progress task
       slowWorkerPool.clearQueue();
@@ -315,8 +312,9 @@ describe('WorkerPool', () => {
                   id: (message as { id: number }).id,
                   data: 'processed',
                 };
-                (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers
-                  .forEach(h => h(new MessageEvent('message', { data: response })));
+                (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers.forEach(
+                  (h) => h(new MessageEvent('message', { data: response })),
+                );
               }
             }, 50);
           };
@@ -332,7 +330,7 @@ describe('WorkerPool', () => {
       const task3 = slowWorkerPool.submit({ type: 'task3' });
 
       // Wait a bit for first task to start processing
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Clear the queue
       slowWorkerPool.clearQueue();
@@ -361,7 +359,7 @@ describe('WorkerPool', () => {
 
     it('WP-012: terminates all workers', () => {
       pool.dispose();
-      mockWorkers.forEach(w => expect(w.terminated).toBe(true));
+      mockWorkers.forEach((w) => expect(w.terminated).toBe(true));
     });
 
     it('WP-013: rejects pending tasks', async () => {
@@ -400,8 +398,9 @@ describe('WorkerPool', () => {
                 id: (message as { id: number }).id,
                 error: 'Test error',
               };
-              (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers
-                .forEach(h => h(new MessageEvent('message', { data: errorResponse })));
+              (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers.forEach(
+                (h) => h(new MessageEvent('message', { data: errorResponse })),
+              );
             }, 10);
           };
           setTimeout(() => worker.simulateReady(), 5);
@@ -534,8 +533,9 @@ describe('WorkerPool', () => {
                   id: (message as { id: number }).id,
                   data: 'processed',
                 };
-                (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers
-                  .forEach(h => h(new MessageEvent('message', { data: response })));
+                (worker as unknown as { messageHandlers: ((event: MessageEvent) => void)[] }).messageHandlers.forEach(
+                  (h) => h(new MessageEvent('message', { data: response })),
+                );
               }
             }, 10);
           };
@@ -578,7 +578,7 @@ describe('WorkerPool', () => {
       await expect(firstTask).rejects.toThrow('timed out');
 
       // Wait for worker restart
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // A new worker should have been created
       expect(workerCount).toBe(2);
@@ -604,7 +604,7 @@ describe('WorkerPool', () => {
       expect(result.type).toBe('result');
 
       // Wait past the timeout period - should not cause any errors
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Pool should still be functional
       const result2 = await clearTimeoutPool.submit({ type: 'quick2' });
@@ -644,7 +644,7 @@ describe('WorkerPool', () => {
       }
 
       // Wait for restart
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Worker count should have increased (restart created new worker)
       expect(workerCount).toBe(2);
@@ -687,7 +687,7 @@ describe('WorkerPool', () => {
       await expect(firstTask).rejects.toThrow();
 
       // Wait for worker restart
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Second task should succeed with restarted worker
       const secondTask = await testPool.submit({ type: 'task2' });
@@ -726,7 +726,7 @@ describe('WorkerPool', () => {
       expect(stats.totalWorkers).toBe(1);
 
       // Wait past the timeout period
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Ready should have only been triggered once
       expect(workerReadyCount).toBe(1);
@@ -739,7 +739,7 @@ describe('WorkerPool', () => {
       }
 
       // Wait for restart and timeout period
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Should have 2 workers created total (initial + restart)
       // but each should only trigger ready once

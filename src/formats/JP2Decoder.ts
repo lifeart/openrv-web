@@ -250,7 +250,7 @@ function parseSIZMarker(
   offset += 4;
 
   // Tile sizes -- JP2-R05
-  const tileWidth = view.getUint32(offset, false);  // XTsiz
+  const tileWidth = view.getUint32(offset, false); // XTsiz
   offset += 4;
   const tileHeight = view.getUint32(offset, false); // YTsiz
   offset += 4;
@@ -651,10 +651,7 @@ export class JP2WasmDecoder extends EventEmitter<JP2WasmDecoderEvents> {
     // In a real implementation, this would call into the WASM module.
     // The test environment replaces _wasmModule with a mock that exposes decode().
     const mod = this._wasmModule as {
-      decode: (
-        buf: ArrayBuffer,
-        opts?: JP2DecodeOptions,
-      ) => JP2DecodeResult | Promise<JP2DecodeResult>;
+      decode: (buf: ArrayBuffer, opts?: JP2DecodeOptions) => JP2DecodeResult | Promise<JP2DecodeResult>;
     };
 
     const result = await mod.decode(buffer, options);
@@ -705,11 +702,7 @@ export class JP2WasmDecoder extends EventEmitter<JP2WasmDecoderEvents> {
  * - Unsigned: value / (2^bpc - 1)
  * - Signed: (value + 2^(bpc-1)) / (2^bpc - 1)
  */
-function normalizeToFloat32(
-  data: Float32Array,
-  bitsPerComponent: number,
-  isSigned: boolean,
-): Float32Array {
+function normalizeToFloat32(data: Float32Array, bitsPerComponent: number, isSigned: boolean): Float32Array {
   if (bitsPerComponent < 1 || bitsPerComponent > 16) {
     return data; // Only normalize for supported bit depths (1–16)
   }
@@ -806,6 +799,8 @@ export async function decodeJP2(
   }
 
   // No WASM available -- throw helpful error
-  throw new DecoderError('JP2', 'JP2 WASM module not loaded. Call JP2WasmDecoder.init() first or provide a loaded decoder instance.');
+  throw new DecoderError(
+    'JP2',
+    'JP2 WASM module not loaded. Call JP2WasmDecoder.init() first or provide a loaded decoder instance.',
+  );
 }
-

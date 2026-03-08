@@ -243,13 +243,18 @@ export class VirtualSliderHUD {
     this.numericInputEl = null;
   }
 
-  private updateContent(
-    param: VirtualSliderParam,
-    value: number,
-    locked: boolean,
-    numericInput: string | null,
-  ): void {
-    if (!this.root || !this.labelEl || !this.valueEl || !this.lockBadge || !this.trackContainer || !this.trackFill || !this.numericInputEl) return;
+  private updateContent(param: VirtualSliderParam, value: number, locked: boolean, numericInput: string | null): void {
+    if (
+      !this.root ||
+      !this.labelEl ||
+      !this.valueEl ||
+      !this.lockBadge ||
+      !this.trackContainer ||
+      !this.trackFill ||
+      !this.numericInputEl
+    ) {
+      return;
+    }
 
     this.labelEl.textContent = param.label;
 
@@ -275,9 +280,10 @@ export class VirtualSliderHUD {
     this.lockBadge.style.display = locked ? 'inline-block' : 'none';
 
     // Aria label
-    const ariaText = numericInput !== null
-      ? `${param.label}: entering value ${numericInput}`
-      : `${param.label}: ${param.format(value)}${locked ? ' (locked)' : ''}`;
+    const ariaText =
+      numericInput !== null
+        ? `${param.label}: entering value ${numericInput}`
+        : `${param.label}: ${param.format(value)}${locked ? ' (locked)' : ''}`;
     this.root.setAttribute('aria-label', ariaText);
 
     // Switch to polite updates after first show

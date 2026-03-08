@@ -30,10 +30,13 @@ describe('RenderLoopService', () => {
     rafId = 0;
     rafCallback = null;
 
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      rafCallback = cb;
-      return ++rafId;
-    }));
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((cb: FrameRequestCallback) => {
+        rafCallback = cb;
+        return ++rafId;
+      }),
+    );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
 
     deps = createDeps();

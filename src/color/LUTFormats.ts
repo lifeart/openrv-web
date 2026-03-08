@@ -25,7 +25,10 @@ function parseFloats(line: string): number[] {
 
 /** Parse a line of space-separated integers */
 function parseInts(line: string): number[] {
-  return line.trim().split(/\s+/).map((v) => parseInt(v, 10));
+  return line
+    .trim()
+    .split(/\s+/)
+    .map((v) => parseInt(v, 10));
 }
 
 // ─── 1. Autodesk .3dl (Lustre / Flame) ────────────────────────────────
@@ -86,7 +89,7 @@ export function parse3DLLUT(content: string): LUT {
       size = cubeRoot;
     } else {
       throw new Error(
-        `3DL: Cannot determine LUT type. Data count ${triplets.length} is neither ${size} (1D) nor ${size}^3=${size * size * size} (3D)`
+        `3DL: Cannot determine LUT type. Data count ${triplets.length} is neither ${size} (1D) nor ${size}^3=${size * size * size} (3D)`,
       );
     }
   }
@@ -394,7 +397,10 @@ export function parseLookLUT(content: string): LUT {
 
   // Parse data
   const dataText = dataEl.textContent.trim();
-  const dataLinesList = dataText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  const dataLinesList = dataText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
   const expectedCount = size * size * size;
   if (dataLinesList.length !== expectedCount) {
@@ -570,7 +576,10 @@ function parseNukeVectorfieldNode(content: string): LUT3D {
   }
 
   const dataText = dataMatch[1]!.trim();
-  const dataLines = dataText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  const dataLines = dataText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
   const expectedCount = size * size * size;
   if (dataLines.length !== expectedCount) {

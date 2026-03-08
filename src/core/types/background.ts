@@ -1,11 +1,4 @@
-export type BackgroundPatternType =
-  | 'black'
-  | 'grey18'
-  | 'grey50'
-  | 'white'
-  | 'checker'
-  | 'crosshatch'
-  | 'custom';
+export type BackgroundPatternType = 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
 
 export interface BackgroundPatternState {
   pattern: BackgroundPatternType;

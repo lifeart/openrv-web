@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import type { GamutMappingState, GamutMappingMode, GamutIdentifier } from '../../core/types/effects';
@@ -19,7 +19,7 @@ const MODE_LABELS: Record<GamutMappingMode, string> = {
 
 const GAMUT_LABELS: Record<GamutIdentifier, string> = {
   srgb: 'sRGB / Rec.709',
-  'rec2020': 'Rec.2020',
+  rec2020: 'Rec.2020',
   'display-p3': 'Display P3',
 };
 
@@ -32,7 +32,7 @@ const GAMUT_LABELS: Record<GamutIdentifier, string> = {
 const GAMUT_WIDTH: Record<GamutIdentifier, number> = {
   srgb: 0,
   'display-p3': 1,
-  'rec2020': 2,
+  rec2020: 2,
 };
 
 /**
@@ -41,9 +41,7 @@ const GAMUT_WIDTH: Record<GamutIdentifier, number> = {
  */
 export function getValidTargetGamuts(source: GamutIdentifier): GamutIdentifier[] {
   const sourceWidth = GAMUT_WIDTH[source];
-  return (Object.keys(GAMUT_WIDTH) as GamutIdentifier[]).filter(
-    (g) => GAMUT_WIDTH[g] < sourceWidth,
-  );
+  return (Object.keys(GAMUT_WIDTH) as GamutIdentifier[]).filter((g) => GAMUT_WIDTH[g] < sourceWidth);
 }
 
 export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents> {
@@ -190,8 +188,12 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -208,11 +210,16 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.panel.appendChild(modeRow.container);
 
     // Source gamut dropdown
-    const sourceRow = this.createSelectRow('Source Gamut', Object.entries(GAMUT_LABELS), this.state.sourceGamut, (value) => {
-      this.state.sourceGamut = value as GamutIdentifier;
-      this.updateTargetGamutOptions();
-      this.emitChange();
-    });
+    const sourceRow = this.createSelectRow(
+      'Source Gamut',
+      Object.entries(GAMUT_LABELS),
+      this.state.sourceGamut,
+      (value) => {
+        this.state.sourceGamut = value as GamutIdentifier;
+        this.updateTargetGamutOptions();
+        this.emitChange();
+      },
+    );
     this.sourceSelect = sourceRow.select;
     this.sourceSelect.dataset.testid = 'gamut-mapping-source-select';
     this.panel.appendChild(sourceRow.container);
@@ -258,7 +265,12 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.updateGamutSelectsEnabled();
   }
 
-  private createSelectRow(label: string, options: [string, string][], initialValue: string, onChange: (value: string) => void): { container: HTMLElement; select: HTMLSelectElement } {
+  private createSelectRow(
+    label: string,
+    options: [string, string][],
+    initialValue: string,
+    onChange: (value: string) => void,
+  ): { container: HTMLElement; select: HTMLSelectElement } {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 12px;';
 
@@ -304,7 +316,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
       const validTargets = getValidTargetGamuts(this.state.sourceGamut);
       const noTargets = validTargets.length === 0;
       this.targetSelect.disabled = disabled || noTargets;
-      this.targetSelect.style.opacity = (disabled || noTargets) ? '0.5' : '1';
+      this.targetSelect.style.opacity = disabled || noTargets ? '0.5' : '1';
     }
     if (this.highlightCheckbox) {
       this.highlightCheckbox.disabled = disabled;

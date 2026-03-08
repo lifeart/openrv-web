@@ -264,79 +264,57 @@ describe('KeyBindings', () => {
 
   describe('binding categories', () => {
     it('KB-U050: has playback bindings', () => {
-      const playbackBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('playback.')
-      );
+      const playbackBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('playback.'));
       expect(playbackBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U051: has timeline bindings', () => {
-      const timelineBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('timeline.')
-      );
+      const timelineBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('timeline.'));
       expect(timelineBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U052: has view bindings', () => {
-      const viewBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('view.')
-      );
+      const viewBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('view.'));
       expect(viewBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U053: has panel bindings', () => {
-      const panelBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('panel.')
-      );
+      const panelBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('panel.'));
       expect(panelBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U054: has transform bindings', () => {
-      const transformBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('transform.')
-      );
+      const transformBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('transform.'));
       expect(transformBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U055: has export bindings', () => {
-      const exportBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('export.')
-      );
+      const exportBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('export.'));
       expect(exportBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U056: has edit bindings', () => {
-      const editBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('edit.')
-      );
+      const editBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('edit.'));
       expect(editBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U057: has tab bindings', () => {
-      const tabBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('tab.')
-      );
+      const tabBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('tab.'));
       expect(tabBindings.length).toBe(6); // 6 tabs
     });
 
     it('KB-U070: has layout bindings', () => {
-      const layoutBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('layout.')
-      );
+      const layoutBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('layout.'));
       expect(layoutBindings.length).toBe(4); // 4 presets
     });
 
     it('KB-U058: has paint bindings', () => {
-      const paintBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('paint.')
-      );
+      const paintBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('paint.'));
       expect(paintBindings.length).toBeGreaterThan(0);
     });
 
     it('KB-U059: has channel bindings', () => {
-      const channelBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
-        k.startsWith('channel.')
-      );
+      const channelBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) => k.startsWith('channel.'));
       expect(channelBindings.length).toBeGreaterThan(0);
     });
   });

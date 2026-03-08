@@ -12,13 +12,15 @@ const EXR_MAGIC = 0x01312f76;
 /**
  * Create a minimal valid EXR file buffer for testing
  */
-function createTestEXR(options: {
-  width?: number;
-  height?: number;
-  compression?: EXRCompression;
-  channels?: string[];
-  pixelType?: EXRPixelType;
-} = {}): ArrayBuffer {
+function createTestEXR(
+  options: {
+    width?: number;
+    height?: number;
+    compression?: EXRCompression;
+    channels?: string[];
+    pixelType?: EXRPixelType;
+  } = {},
+): ArrayBuffer {
   const {
     width = 2,
     height = 2,
@@ -90,7 +92,7 @@ function createTestEXR(options: {
     floatView[0] = value;
     const f = int32View[0]!;
     const sign = (f >> 16) & 0x8000;
-    let exponent = ((f >> 23) & 0xff) - 127 + 15;
+    const exponent = ((f >> 23) & 0xff) - 127 + 15;
     let mantissa = (f >> 13) & 0x3ff;
     if (exponent <= 0) {
       if (exponent < -10) return sign;
@@ -448,7 +450,7 @@ describe('FileSourceNode', () => {
       // Create a file with .exr extension but invalid content
       const invalidBuffer = new ArrayBuffer(100);
       const view = new DataView(invalidBuffer);
-      view.setUint32(0, 0xDEADBEEF, true); // Wrong magic
+      view.setUint32(0, 0xdeadbeef, true); // Wrong magic
 
       const file = new File([invalidBuffer], 'invalid.exr', { type: 'image/x-exr' });
 
@@ -588,7 +590,7 @@ describe('FileSourceNode', () => {
       const layers = node.getEXRLayers();
       expect(layers.length).toBeGreaterThan(0);
       // Should have RGBA layer (default) and diffuse layer
-      const layerNames = layers.map(l => l.name);
+      const layerNames = layers.map((l) => l.name);
       expect(layerNames).toContain('RGBA');
       expect(layerNames).toContain('diffuse');
     });
@@ -659,12 +661,14 @@ describe('FileSourceNode', () => {
      * Create a minimal AVIF ISOBMFF buffer for testing.
      * Builds: ftyp + meta(iprp(ipco(colr(nclx)))) with configurable color params.
      */
-    function createTestAVIFBuffer(options: {
-      brand?: string;
-      transferCharacteristics?: number;
-      colourPrimaries?: number;
-      includeColrBox?: boolean;
-    } = {}): ArrayBuffer {
+    function createTestAVIFBuffer(
+      options: {
+        brand?: string;
+        transferCharacteristics?: number;
+        colourPrimaries?: number;
+        includeColrBox?: boolean;
+      } = {},
+    ): ArrayBuffer {
       const {
         brand = 'avif',
         transferCharacteristics = 16, // PQ by default
@@ -1039,21 +1043,19 @@ describe('FileSourceNode', () => {
      * Create a minimal AVIF ISOBMFF buffer with gainmap auxiliary image.
      * Builds: ftyp + meta(pitm, iinf, iprp/ipco/auxC, ipma, iloc) + mdat
      */
-    function createTestAVIFGainmapBuffer(options: {
-      brand?: string;
-      includeGainmapAuxC?: boolean;
-      includeNclxHDR?: boolean;
-    } = {}): ArrayBuffer {
-      const {
-        brand = 'avif',
-        includeGainmapAuxC = true,
-        includeNclxHDR = false,
-      } = options;
+    function createTestAVIFGainmapBuffer(
+      options: {
+        brand?: string;
+        includeGainmapAuxC?: boolean;
+        includeNclxHDR?: boolean;
+      } = {},
+    ): ArrayBuffer {
+      const { brand = 'avif', includeGainmapAuxC = true, includeNclxHDR = false } = options;
 
       const parts: number[] = [];
 
       function pushUint32BE(value: number): void {
-        parts.push((value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+        parts.push((value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
       }
       function pushString(str: string): void {
         for (let i = 0; i < str.length; i++) parts.push(str.charCodeAt(i));
@@ -1132,7 +1134,7 @@ describe('FileSourceNode', () => {
       // mdat
       pushUint32BE(8 + 150);
       pushString('mdat');
-      for (let i = 0; i < 150; i++) parts.push(0xCC);
+      for (let i = 0; i < 150; i++) parts.push(0xcc);
 
       const buf = new ArrayBuffer(parts.length);
       new Uint8Array(buf).set(parts);
@@ -1163,10 +1165,10 @@ describe('FileSourceNode', () => {
         out.push(...u32(ipmaSize), ...s('ipma'), 0, 0, 0, 0, ...u32(1), ...u16(2), 1, 0x81);
       }
       function u32(v: number): number[] {
-        return [(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF];
+        return [(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff];
       }
       function u16(v: number): number[] {
-        return [(v >> 8) & 0xFF, v & 0xFF];
+        return [(v >> 8) & 0xff, v & 0xff];
       }
       function s(str: string): number[] {
         const r: number[] = [];
@@ -1240,7 +1242,6 @@ describe('FileSourceNode', () => {
       // Default headroom is 2.0 (fallback when no XMP/tmap)
       expect(infoDefault!.headroom).toBe(2.0);
     });
-
 
     it('FSN-AVIF-GM-005: AVIF gainmap takes priority over nclx HDR path', async () => {
       // When both gainmap auxC and nclx PQ are present, gainmap should be detected
@@ -1363,7 +1364,7 @@ describe('FileSourceNode', () => {
       const parts: number[] = [];
 
       function pushUint32BE(value: number): void {
-        parts.push((value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+        parts.push((value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
       }
       function pushString(str: string): void {
         for (let i = 0; i < str.length; i++) parts.push(str.charCodeAt(i));
@@ -1413,7 +1414,7 @@ describe('FileSourceNode', () => {
       return buf;
 
       function uint32BEHelper(v: number): number[] {
-        return [(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF];
+        return [(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff];
       }
       function strBytesHelper(str: string): number[] {
         const r: number[] = [];
@@ -1520,18 +1521,19 @@ describe('FileSourceNode', () => {
     });
   });
 
-
   describe('JXL support', () => {
     /**
      * Create a minimal JXL ISOBMFF container buffer with configurable nclx color info.
      * Builds: ftyp(jxl ) + colr(nclx) at top level (per ISO 18181-2).
      * Unlike AVIF, JXL places colr boxes at the top level, not nested in meta/iprp/ipco.
      */
-    function createTestJXLBuffer(options: {
-      transferCharacteristics?: number;
-      colourPrimaries?: number;
-      includeColrBox?: boolean;
-    } = {}): ArrayBuffer {
+    function createTestJXLBuffer(
+      options: {
+        transferCharacteristics?: number;
+        colourPrimaries?: number;
+        includeColrBox?: boolean;
+      } = {},
+    ): ArrayBuffer {
       const {
         transferCharacteristics = 16, // PQ by default
         colourPrimaries = 9, // BT.2020 by default
@@ -1559,7 +1561,7 @@ describe('FileSourceNode', () => {
       writeUint32BE(16);
       writeString('ftyp');
       writeString('jxl '); // JXL brand
-      writeUint32BE(0);    // minor version
+      writeUint32BE(0); // minor version
 
       // colr(nclx) box at top level (per JXL ISOBMFF spec)
       if (includeColrBox) {
@@ -1661,13 +1663,9 @@ describe('FileSourceNode', () => {
       const buffer = createTestJXLBuffer({ includeColrBox: false });
       // Verify magic bytes are present (ftyp + 'jxl ' brand)
       const view = new DataView(buffer);
-      const boxType = String.fromCharCode(
-        view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-      );
+      const boxType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
       expect(boxType).toBe('ftyp');
-      const brand = String.fromCharCode(
-        view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)
-      );
+      const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
       expect(brand).toBe('jxl ');
     });
 

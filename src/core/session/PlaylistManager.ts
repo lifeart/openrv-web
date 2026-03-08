@@ -8,7 +8,7 @@
  * - Loop and auto-advance options
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { parseOTIO } from '../../utils/media/OTIOParser';
 import type { ManagerBase } from '../ManagerBase';
 import type { TransitionConfig, TransitionFrameInfo } from '../types/transition';
@@ -130,12 +130,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Add a clip to the playlist
    */
-  addClip(
-    sourceIndex: number,
-    sourceName: string,
-    inPoint: number,
-    outPoint: number
-  ): PlaylistClip {
+  addClip(sourceIndex: number, sourceName: string, inPoint: number, outPoint: number): PlaylistClip {
     const duration = outPoint - inPoint + 1;
     const globalStartFrame = this.getTotalDuration() + 1;
 
@@ -192,7 +187,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Remove a clip by ID
    */
   removeClip(clipId: string): boolean {
-    const index = this.clips.findIndex(c => c.id === clipId);
+    const index = this.clips.findIndex((c) => c.id === clipId);
     if (index === -1) return false;
 
     this.clips.splice(index, 1);
@@ -205,7 +200,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Move a clip to a new position
    */
   moveClip(clipId: string, newIndex: number): boolean {
-    const currentIndex = this.clips.findIndex(c => c.id === clipId);
+    const currentIndex = this.clips.findIndex((c) => c.id === clipId);
     if (currentIndex === -1) return false;
 
     newIndex = Math.max(0, Math.min(newIndex, this.clips.length - 1));
@@ -228,7 +223,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Update clip in/out points
    */
   updateClipPoints(clipId: string, inPoint: number, outPoint: number): boolean {
-    const clip = this.clips.find(c => c.id === clipId);
+    const clip = this.clips.find((c) => c.id === clipId);
     if (!clip) return false;
 
     clip.inPoint = inPoint;
@@ -305,8 +300,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
     // Normal frame advance
     const nextMapping = this.getClipAtFrame(nextGlobal);
-    const clipChanged = currentMapping && nextMapping &&
-      currentMapping.clipIndex !== nextMapping.clipIndex;
+    const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
 
     return { frame: nextGlobal, clipChanged: !!clipChanged };
   }
@@ -407,7 +401,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Returns the first matching clip, or null if not found.
    */
   getClipForSource(sourceIndex: number): PlaylistClip | null {
-    return this.clips.find(c => c.sourceIndex === sourceIndex) ?? null;
+    return this.clips.find((c) => c.sourceIndex === sourceIndex) ?? null;
   }
 
   /**
@@ -452,7 +446,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Get clip by ID
    */
   getClip(clipId: string): PlaylistClip | undefined {
-    return this.clips.find(c => c.id === clipId);
+    return this.clips.find((c) => c.id === clipId);
   }
 
   /**
@@ -584,11 +578,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Export as EDL (Edit Decision List) format
    */
   toEDL(title = 'OpenRV Playlist'): string {
-    const lines: string[] = [
-      'TITLE: ' + title,
-      'FCM: NON-DROP FRAME',
-      '',
-    ];
+    const lines: string[] = ['TITLE: ' + title, 'FCM: NON-DROP FRAME', ''];
 
     let editNum = 1;
     for (const clip of this.clips) {
@@ -600,7 +590,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       const recordOut = this.framesToTimecode(clip.globalStartFrame + clip.duration);
 
       lines.push(
-        `${String(editNum).padStart(3, '0')}  ${clip.sourceName.padEnd(8).slice(0, 8)} V     C        ${sourceIn} ${sourceOut} ${recordIn} ${recordOut}`
+        `${String(editNum).padStart(3, '0')}  ${clip.sourceName.padEnd(8).slice(0, 8)} V     C        ${sourceIn} ${sourceOut} ${recordIn} ${recordOut}`,
       );
       lines.push(`* FROM CLIP NAME: ${clip.sourceName}`);
       lines.push('');
@@ -683,7 +673,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    */
   fromOTIO(
     otioJson: string,
-    sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null
+    sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null,
   ): number {
     const result = parseOTIO(otioJson);
     if (!result) return 0;
@@ -723,7 +713,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Returns true if the clip was found and re-linked successfully.
    */
   relinkUnresolvedClip(clipId: string, sourceIndex: number, sourceName: string, frameCount: number): boolean {
-    const idx = this._unresolvedClips.findIndex(c => c.id === clipId);
+    const idx = this._unresolvedClips.findIndex((c) => c.id === clipId);
     if (idx === -1) return false;
 
     const clip = this._unresolvedClips[idx]!;

@@ -19,8 +19,30 @@ describe('LUTUtils', () => {
       // [r=0,g=0,b=0], [r=1,g=0,b=0], [r=0,g=1,b=0], [r=1,g=1,b=0],
       // [r=0,g=0,b=1], [r=1,g=0,b=1], [r=0,g=1,b=1], [r=1,g=1,b=1]
       const input = new Float32Array([
-        0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, // b=0
-        0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, // b=1
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0, // b=0
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1, // b=1
       ]);
 
       const result = reorderRFastestToBFastest(input, 2);
@@ -28,10 +50,7 @@ describe('LUTUtils', () => {
       // B-fastest order: iterate r, g, b
       // [r=0,g=0,b=0], [r=0,g=0,b=1], [r=0,g=1,b=0], [r=0,g=1,b=1],
       // [r=1,g=0,b=0], [r=1,g=0,b=1], [r=1,g=1,b=0], [r=1,g=1,b=1]
-      expect(Array.from(result)).toEqual([
-        0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1,
-        1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1,
-      ]);
+      expect(Array.from(result)).toEqual([0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1]);
     });
 
     it('LUTU-002: correctly transposes size-4 cube', () => {
@@ -98,10 +117,8 @@ describe('LUTUtils', () => {
 
     it('LUTU-004: reordering is deterministic', () => {
       const original = new Float32Array([
-        0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
-        0.7, 0.8, 0.9, 1.0, 0.0, 0.1,
-        0.2, 0.3, 0.4, 0.5, 0.6, 0.7,
-        0.8, 0.9, 1.0, 0.0, 0.1, 0.2,
+        0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0,
+        0.1, 0.2,
       ]);
 
       const reordered1 = reorderRFastestToBFastest(original, 2);
@@ -131,12 +148,7 @@ describe('LUTUtils', () => {
 
     // LUT-MAT-002: Scale matrix [2,0,0,0; 0,2,0,0; 0,0,2,0; 0,0,0,1] -> input doubled
     it('LUT-MAT-002: scale matrix doubles input color via applyColorMatrix', () => {
-      const scale2x = new Float32Array([
-        2, 0, 0, 0,
-        0, 2, 0, 0,
-        0, 0, 2, 0,
-        0, 0, 0, 1,
-      ]);
+      const scale2x = new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
       const [r, g, b] = applyColorMatrix(0.25, 0.3, 0.4, scale2x);
       expect(r).toBeCloseTo(0.5);
       expect(g).toBeCloseTo(0.6);
@@ -146,12 +158,7 @@ describe('LUTUtils', () => {
     // LUT-MAT-003: Offset matrix (translation in 4th row) adds offset
     it('LUT-MAT-003: offset matrix adds offset via 4th row', () => {
       // Row-major: 4th row [0.1, 0.2, 0.3, 1] provides translation
-      const offsetMatrix = new Float32Array([
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0.1, 0.2, 0.3, 1,
-      ]);
+      const offsetMatrix = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, 0.2, 0.3, 1]);
       const [r, g, b] = applyColorMatrix(0.0, 0.0, 0.0, offsetMatrix);
       expect(r).toBeCloseTo(0.1);
       expect(g).toBeCloseTo(0.2);
@@ -160,24 +167,14 @@ describe('LUTUtils', () => {
 
     // LUT-MAT-004: Identity outMatrix -> output unchanged after transform
     it('LUT-MAT-004: sanitizeLUTMatrix returns null for identity (optimization)', () => {
-      const identity = new Float32Array([
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-      ]);
+      const identity = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
       const result = sanitizeLUTMatrix(identity);
       expect(result).toBeNull(); // null means identity, skip matrix application
     });
 
     // LUT-MAT-005: Scale outMatrix -> output scaled
     it('LUT-MAT-005: sanitizeLUTMatrix preserves non-identity scale matrix', () => {
-      const scaleMatrix = new Float32Array([
-        0.5, 0, 0, 0,
-        0, 0.5, 0, 0,
-        0, 0, 0.5, 0,
-        0, 0, 0, 1,
-      ]);
+      const scaleMatrix = new Float32Array([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]);
       const result = sanitizeLUTMatrix(scaleMatrix);
       expect(result).not.toBeNull();
       expect(result!.length).toBe(16);
@@ -189,18 +186,8 @@ describe('LUTUtils', () => {
 
     // LUT-MAT-006: Round-trip with inMatrix and inverse outMatrix
     it('LUT-MAT-006: scale then inverse scale produces original values', () => {
-      const scale2x = new Float32Array([
-        2, 0, 0, 0,
-        0, 2, 0, 0,
-        0, 0, 2, 0,
-        0, 0, 0, 1,
-      ]);
-      const scale0_5x = new Float32Array([
-        0.5, 0, 0, 0,
-        0, 0.5, 0, 0,
-        0, 0, 0.5, 0,
-        0, 0, 0, 1,
-      ]);
+      const scale2x = new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
+      const scale0_5x = new Float32Array([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]);
 
       // Apply inMatrix (scale 2x)
       const [r1, g1, b1] = applyColorMatrix(0.25, 0.3, 0.4, scale2x);
@@ -214,12 +201,7 @@ describe('LUTUtils', () => {
 
     // LUT-MAT-007: NaN matrix entries handled gracefully (sanitized to identity)
     it('LUT-MAT-007: NaN entries cause sanitizeLUTMatrix to return identity', () => {
-      const nanMatrix = new Float32Array([
-        NaN, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-      ]);
+      const nanMatrix = new Float32Array([NaN, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
       const result = sanitizeLUTMatrix(nanMatrix);
       // Should be sanitized to identity, which means returns a copy of identity
       expect(result).not.toBeNull();
@@ -227,12 +209,7 @@ describe('LUTUtils', () => {
     });
 
     it('LUT-MAT-007b: Infinity entries cause sanitizeLUTMatrix to return identity', () => {
-      const infMatrix = new Float32Array([
-        1, 0, 0, 0,
-        0, Infinity, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-      ]);
+      const infMatrix = new Float32Array([1, 0, 0, 0, 0, Infinity, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
       const result = sanitizeLUTMatrix(infMatrix);
       expect(result).not.toBeNull();
       expect(isIdentityMatrix(result!)).toBe(true);
@@ -257,7 +234,12 @@ describe('LUTUtils', () => {
 
     it('LUT-MAT-008b: nested array from GTO is correctly flattened', () => {
       // GTO may provide as nested array [[1,0,0,0],[0,2,0,0],[0,0,3,0],[0,0,0,1]]
-      const nested = [[1, 0, 0, 0], [0, 2, 0, 0], [0, 0, 3, 0], [0, 0, 0, 1]];
+      const nested = [
+        [1, 0, 0, 0],
+        [0, 2, 0, 0],
+        [0, 0, 3, 0],
+        [0, 0, 0, 1],
+      ];
       const sanitized = sanitizeLUTMatrix(nested);
       expect(sanitized).not.toBeNull();
 
@@ -290,10 +272,22 @@ describe('LUTUtils', () => {
     it('applyColorMatrix correctly handles off-diagonal elements', () => {
       // Channel swap matrix: R->G, G->B, B->R
       const swapMatrix = new Float32Array([
-        0, 1, 0, 0,  // row0: r maps to g
-        0, 0, 1, 0,  // row1: g maps to b
-        1, 0, 0, 0,  // row2: b maps to r
-        0, 0, 0, 1,
+        0,
+        1,
+        0,
+        0, // row0: r maps to g
+        0,
+        0,
+        1,
+        0, // row1: g maps to b
+        1,
+        0,
+        0,
+        0, // row2: b maps to r
+        0,
+        0,
+        0,
+        1,
       ]);
       const [r, g, b] = applyColorMatrix(1, 0, 0, swapMatrix);
       expect(r).toBeCloseTo(0); // r*0 + g*0 + b*1 + 0 = 0

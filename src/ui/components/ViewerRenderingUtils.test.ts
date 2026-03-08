@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   drawWithTransform,
   drawWithTransformFill,
-  FilterStringCache,
+  type FilterStringCache,
   getCanvasFilterString,
   buildContainerFilterString,
   renderCropOverlay,
@@ -11,9 +11,9 @@ import {
   isFullCropRegion,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
-import { ColorAdjustments } from './ColorControls';
-import { Transform2D } from './TransformControl';
-import { CropState, CropRegion } from './CropControl';
+import { type ColorAdjustments } from './ColorControls';
+import { type Transform2D } from './TransformControl';
+import { type CropState, type CropRegion } from './CropControl';
 
 // Mock canvas context
 function createMockContext(): CanvasRenderingContext2D {
@@ -209,7 +209,7 @@ describe('ViewerRenderingUtils', () => {
       const drawWidth = drawCall[3] as number;
       const drawHeight = drawCall[4] as number;
       expect(drawWidth).toBeCloseTo(560, 0);
-      expect(drawHeight).toBeCloseTo(1920 * 560 / 1080, 0);
+      expect(drawHeight).toBeCloseTo((1920 * 560) / 1080, 0);
       // Verify centered positioning
       expect(drawCall[1]).toBeCloseTo(-drawWidth / 2, 5);
       expect(drawCall[2]).toBeCloseTo(-drawHeight / 2, 5);
@@ -983,8 +983,8 @@ describe('ViewerRenderingUtils', () => {
       const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
       expect(drawCalls[0]![1]).toBe(-400); // -canvasWidth/2
       expect(drawCalls[0]![2]).toBe(-300); // -canvasHeight/2
-      expect(drawCalls[0]![3]).toBe(800);  // drawWidth = canvasWidth
-      expect(drawCalls[0]![4]).toBe(600);  // drawHeight = canvasHeight
+      expect(drawCalls[0]![3]).toBe(800); // drawWidth = canvasWidth
+      expect(drawCalls[0]![4]).toBe(600); // drawHeight = canvasHeight
       expect(ctx.restore).toHaveBeenCalled();
     });
 

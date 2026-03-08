@@ -225,13 +225,17 @@ describe('NotePanel E2E Integration', () => {
       editBtn.click();
 
       // Type and save
-      const textarea = panel.getElement().querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
       textarea.value = 'After edit';
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        ctrlKey: true,
-        bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
 
       // Verify text updated in both NoteManager and Panel
       expect(session.noteManager.getNote(note.id)?.text).toBe('After edit');
@@ -246,13 +250,17 @@ describe('NotePanel E2E Integration', () => {
       const editBtn = panel.getElement().querySelector(`[data-testid="note-edit-${note.id}"]`) as HTMLElement;
       editBtn.click();
 
-      const textarea = panel.getElement().querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
       textarea.value = '   '; // whitespace only
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        ctrlKey: true,
-        bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
 
       expect(session.noteManager.getNote(note.id)).toBeUndefined();
       expect(panel.getElement().querySelectorAll('.note-entry').length).toBe(0);
@@ -269,13 +277,17 @@ describe('NotePanel E2E Integration', () => {
       replyBtn.click();
 
       // Submit reply
-      const textarea = panel.getElement().querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
       textarea.value = 'My reply';
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        ctrlKey: true,
-        bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
 
       // Verify in manager
       const replies = session.noteManager.getReplies(parent.id);

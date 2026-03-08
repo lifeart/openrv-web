@@ -5,25 +5,25 @@ import type { LUT3D } from '../LUTLoader';
 // Mock WebGL2 context
 function createMockGL(): WebGL2RenderingContext {
   return {
-    TEXTURE_2D: 0x0DE1,
-    TEXTURE_3D: 0x806F,
-    TEXTURE0: 0x84C0,
-    TEXTURE1: 0x84C1,
-    TEXTURE2: 0x84C2,
-    TEXTURE3: 0x84C3,
+    TEXTURE_2D: 0x0de1,
+    TEXTURE_3D: 0x806f,
+    TEXTURE0: 0x84c0,
+    TEXTURE1: 0x84c1,
+    TEXTURE2: 0x84c2,
+    TEXTURE3: 0x84c3,
     RGBA: 0x1908,
     RGB: 0x1907,
     RGB32F: 0x8815,
     UNSIGNED_BYTE: 0x1401,
     FLOAT: 0x1406,
-    FRAMEBUFFER: 0x8D40,
-    COLOR_ATTACHMENT0: 0x8CE0,
+    FRAMEBUFFER: 0x8d40,
+    COLOR_ATTACHMENT0: 0x8ce0,
     TRIANGLE_STRIP: 0x0005,
-    VERTEX_SHADER: 0x8B31,
-    FRAGMENT_SHADER: 0x8B30,
-    LINK_STATUS: 0x8B82,
-    COMPILE_STATUS: 0x8B81,
-    CLAMP_TO_EDGE: 0x812F,
+    VERTEX_SHADER: 0x8b31,
+    FRAGMENT_SHADER: 0x8b30,
+    LINK_STATUS: 0x8b82,
+    COMPILE_STATUS: 0x8b81,
+    CLAMP_TO_EDGE: 0x812f,
     LINEAR: 0x2601,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
@@ -31,7 +31,7 @@ function createMockGL(): WebGL2RenderingContext {
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800,
     ARRAY_BUFFER: 0x8892,
-    STATIC_DRAW: 0x88E4,
+    STATIC_DRAW: 0x88e4,
 
     createTexture: vi.fn(() => ({})),
     deleteTexture: vi.fn(),
@@ -248,12 +248,7 @@ describe('GPULUTChain', () => {
   describe('LUT Matrix Support', () => {
     it('GCHAIN-U015: render uploads matrix uniforms with uniformMatrix4fv', () => {
       chain.setFileLUT(createTestLUT3D());
-      chain.setFileLUTInMatrix(new Float32Array([
-        2, 0, 0, 0,
-        0, 2, 0, 0,
-        0, 0, 2, 0,
-        0, 0, 0, 1,
-      ]));
+      chain.setFileLUTInMatrix(new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]));
 
       chain.render(100, 100);
 
@@ -263,12 +258,7 @@ describe('GPULUTChain', () => {
 
     it('GCHAIN-U016: render sets hasInMatrix/hasOutMatrix flags', () => {
       chain.setFileLUT(createTestLUT3D());
-      chain.setFileLUTInMatrix(new Float32Array([
-        2, 0, 0, 0,
-        0, 2, 0, 0,
-        0, 0, 2, 0,
-        0, 0, 0, 1,
-      ]));
+      chain.setFileLUTInMatrix(new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]));
 
       chain.render(100, 100);
 
@@ -277,12 +267,7 @@ describe('GPULUTChain', () => {
     });
 
     it('GCHAIN-U017: setting identity matrix is optimized to null', () => {
-      chain.setFileLUTInMatrix(new Float32Array([
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-      ]));
+      chain.setFileLUTInMatrix(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
 
       // Identity matrix should be optimized away (stored as null)
       chain.setFileLUT(createTestLUT3D());
@@ -292,9 +277,7 @@ describe('GPULUTChain', () => {
     });
 
     it('GCHAIN-U018: matrices can be set and cleared for all stages', () => {
-      const scaleMatrix = new Float32Array([
-        2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
-      ]);
+      const scaleMatrix = new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
 
       chain.setFileLUTInMatrix(scaleMatrix);
       chain.setFileLUTOutMatrix(scaleMatrix);
@@ -318,9 +301,7 @@ describe('GPULUTChain', () => {
     });
 
     it('GCHAIN-U019: NaN matrix is sanitized to identity', () => {
-      const nanMatrix = new Float32Array([
-        NaN, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
-      ]);
+      const nanMatrix = new Float32Array([NaN, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
       // Should not throw - NaN is sanitized
       chain.setFileLUTInMatrix(nanMatrix);
@@ -330,9 +311,7 @@ describe('GPULUTChain', () => {
     });
 
     it('GCHAIN-U020: dispose cleans up stage matrix state', () => {
-      chain.setFileLUTInMatrix(new Float32Array([
-        2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
-      ]));
+      chain.setFileLUTInMatrix(new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]));
       chain.dispose();
 
       // After dispose, no errors when re-initializing
@@ -366,20 +345,16 @@ describe('GPULUTChain', () => {
     });
 
     it('GCHAIN-U027: attributes are NOT set up when shader is not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       const gl2 = createMockGL();
-      vi.mocked(gl2.getShaderParameter).mockImplementation(
-        (_shader: unknown, pname: number) => {
-          if (pname === COMPLETION_STATUS_KHR) return false;
-          return true;
-        },
-      );
-      vi.mocked(gl2.getProgramParameter).mockImplementation(
-        (_prog: unknown, pname: number) => {
-          if (pname === COMPLETION_STATUS_KHR) return false;
-          return true;
-        },
-      );
+      vi.mocked(gl2.getShaderParameter).mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+      vi.mocked(gl2.getProgramParameter).mockImplementation((_prog: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
 
       const chain2 = new GPULUTChain(gl2, {});
       chain2.setFileLUT(createTestLUT3D());
@@ -395,45 +370,32 @@ describe('GPULUTChain', () => {
   describe('lazy uniform resolution', () => {
     it('GCHAIN-U028: uniforms are NOT resolved during construction', () => {
       // getUniformLocation should NOT have been called with LUT uniform names during construction
-      expect(gl.getUniformLocation).not.toHaveBeenCalledWith(
-        expect.anything(),
-        'u_image'
-      );
+      expect(gl.getUniformLocation).not.toHaveBeenCalledWith(expect.anything(), 'u_image');
     });
 
     it('GCHAIN-U029: uniforms are resolved on first render()', () => {
       chain.setFileLUT(createTestLUT3D());
       chain.render(100, 100);
 
-      expect(gl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_image'
-      );
-      expect(gl.getUniformLocation).toHaveBeenCalledWith(
-        expect.anything(),
-        'u_fileLUT'
-      );
+      expect(gl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_image');
+      expect(gl.getUniformLocation).toHaveBeenCalledWith(expect.anything(), 'u_fileLUT');
     });
   });
 
   describe('not-ready to ready transition', () => {
     it('GCHAIN-U030: render works after transitioning from not-ready to ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       const gl2 = createMockGL();
       let compilationComplete = false;
 
-      vi.mocked(gl2.getShaderParameter).mockImplementation(
-        (_shader: unknown, pname: number) => {
-          if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
-          return true;
-        },
-      );
-      vi.mocked(gl2.getProgramParameter).mockImplementation(
-        (_prog: unknown, pname: number) => {
-          if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
-          return true;
-        },
-      );
+      vi.mocked(gl2.getShaderParameter).mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+        return true;
+      });
+      vi.mocked(gl2.getProgramParameter).mockImplementation((_prog: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return compilationComplete;
+        return true;
+      });
 
       const chain2 = new GPULUTChain(gl2, {});
       chain2.setFileLUT(createTestLUT3D());
@@ -486,25 +448,21 @@ describe('GPULUTChain', () => {
     });
 
     it('GCHAIN-U023: render() is no-op when shader not ready', () => {
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
       const gl2 = createMockGL();
 
       // Override getProgramParameter to return false for COMPLETION_STATUS_KHR
       // and true for everything else (LINK_STATUS, COMPILE_STATUS, etc.)
-      vi.mocked(gl2.getProgramParameter).mockImplementation(
-        (_prog: unknown, pname: number) => {
-          if (pname === COMPLETION_STATUS_KHR) return false;
-          return true;
-        },
-      );
+      vi.mocked(gl2.getProgramParameter).mockImplementation((_prog: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
       // Override getShaderParameter to return false for COMPLETION_STATUS_KHR
       // and true for COMPILE_STATUS
-      vi.mocked(gl2.getShaderParameter).mockImplementation(
-        (_shader: unknown, pname: number) => {
-          if (pname === COMPLETION_STATUS_KHR) return false;
-          return true;
-        },
-      );
+      vi.mocked(gl2.getShaderParameter).mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
 
       // Pass a non-null ext to enable the parallel compile path
       const chain2 = new GPULUTChain(gl2, {});

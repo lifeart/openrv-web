@@ -68,15 +68,8 @@ export interface UniformInfo {
  * @param options - Translation options
  * @returns Translated shader with metadata
  */
-export function translateOCIOShader(
-  ocioGLSL: string,
-  options: ShaderTranslateOptions = {},
-): TranslatedShader {
-  const {
-    floatPrecision = 'highp',
-    functionName = 'OCIODisplay',
-    standalone = false,
-  } = options;
+export function translateOCIOShader(ocioGLSL: string, options: ShaderTranslateOptions = {}): TranslatedShader {
+  const { floatPrecision = 'highp', functionName = 'OCIODisplay', standalone = false } = options;
 
   let code = ocioGLSL;
 
@@ -107,9 +100,7 @@ export function translateOCIOShader(
   const uniforms = extractUniforms(code);
 
   // 7. Detect if 3D LUT is required
-  const requires3DLUT = uniforms.some(
-    u => u.isSampler && u.type === 'sampler3D'
-  );
+  const requires3DLUT = uniforms.some((u) => u.isSampler && u.type === 'sampler3D');
 
   // 8. Detect/extract the OCIO function name
   const detectedName = detectFunctionName(code) ?? functionName;
@@ -148,9 +139,7 @@ export function translateOCIOShader(
  * @param functionName - Name of the OCIO function
  */
 export function generateOCIOCallSnippet(functionName: string = 'OCIODisplay'): string {
-  return `vec4 applyOCIO(vec4 inColor) {\n` +
-         `  return ${functionName}(inColor);\n` +
-         `}\n`;
+  return `vec4 applyOCIO(vec4 inColor) {\n` + `  return ${functionName}(inColor);\n` + `}\n`;
 }
 
 /**
@@ -158,15 +147,10 @@ export function generateOCIOCallSnippet(functionName: string = 'OCIODisplay'): s
  * Inserts them after the precision qualifiers and before the first
  * uniform/in/out declaration.
  */
-export function injectOCIOUniforms(
-  shaderSource: string,
-  uniforms: UniformInfo[],
-): string {
+export function injectOCIOUniforms(shaderSource: string, uniforms: UniformInfo[]): string {
   if (uniforms.length === 0) return shaderSource;
 
-  const declarations = uniforms.map(u =>
-    `uniform ${u.type} ${u.name};`
-  ).join('\n');
+  const declarations = uniforms.map((u) => `uniform ${u.type} ${u.name};`).join('\n');
 
   const marker = '// --- OCIO uniforms ---';
   const block = `\n${marker}\n${declarations}\n${marker}\n`;
@@ -232,11 +216,7 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildStandaloneShader(
-  code: string,
-  floatPrecision: string,
-  usesFragColor: boolean,
-): string {
+function buildStandaloneShader(code: string, floatPrecision: string, usesFragColor: boolean): string {
   let header = `#version 300 es\nprecision ${floatPrecision} float;\nprecision ${floatPrecision} sampler2D;\nprecision ${floatPrecision} sampler3D;\n`;
 
   if (usesFragColor) {
@@ -249,6 +229,5 @@ function buildStandaloneShader(
 function buildFunctionSnippet(code: string, _floatPrecision: string): string {
   // For embedding, we don't add version/precision — the host shader has those.
   // Just clean up and return the function code with uniform declarations.
-  return `// OCIO-generated shader code (translated to GLSL ES 300 es)\n` +
-         code.trim() + '\n';
+  return `// OCIO-generated shader code (translated to GLSL ES 300 es)\n` + code.trim() + '\n';
 }

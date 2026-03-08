@@ -8,7 +8,7 @@
  * - Configurable start timecode offset
  */
 
-import { Session } from '../../core/session/Session';
+import { type Session } from '../../core/session/Session';
 
 export interface TimecodeOptions {
   /** Start timecode offset in frames (default: 0) */
@@ -25,7 +25,7 @@ const DROP_FRAME_EPSILON = 0.01;
  * Check if a frame rate should use drop-frame timecode
  */
 function isDropFrame(fps: number): boolean {
-  return DROP_FRAME_RATES.some(df => Math.abs(fps - df) < DROP_FRAME_EPSILON);
+  return DROP_FRAME_RATES.some((df) => Math.abs(fps - df) < DROP_FRAME_EPSILON);
 }
 
 /**
@@ -35,7 +35,7 @@ function isDropFrame(fps: number): boolean {
 export function frameToTimecode(
   frame: number,
   fps: number,
-  startFrame: number = 0
+  startFrame: number = 0,
 ): { hours: number; minutes: number; seconds: number; frames: number; dropFrame: boolean } {
   const totalFrame = Math.max(0, frame + startFrame - 1); // Convert to 0-based, clamp negative
   const dropFrame = isDropFrame(fps);
@@ -55,7 +55,8 @@ export function frameToTimecode(
     if (m < dropFrames) {
       adjustedFrame = totalFrame + dropFrames * 9 * d;
     } else {
-      adjustedFrame = totalFrame + dropFrames * 9 * d + dropFrames * Math.floor((m - dropFrames) / (framesPerMinute - dropFrames));
+      adjustedFrame =
+        totalFrame + dropFrames * 9 * d + dropFrames * Math.floor((m - dropFrames) / (framesPerMinute - dropFrames));
     }
 
     const framesPerHour = Math.round(fps * 3600);
@@ -86,9 +87,13 @@ export function frameToTimecode(
 /**
  * Format timecode as string (HH:MM:SS:FF or HH:MM:SS;FF for drop-frame)
  */
-export function formatTimecode(
-  tc: { hours: number; minutes: number; seconds: number; frames: number; dropFrame: boolean }
-): string {
+export function formatTimecode(tc: {
+  hours: number;
+  minutes: number;
+  seconds: number;
+  frames: number;
+  dropFrame: boolean;
+}): string {
   const pad = (n: number, width: number = 2) => n.toString().padStart(width, '0');
   const separator = tc.dropFrame ? ';' : ':';
   return `${pad(tc.hours)}:${pad(tc.minutes)}:${pad(tc.seconds)}${separator}${pad(tc.frames)}`;

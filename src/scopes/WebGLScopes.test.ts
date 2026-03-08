@@ -28,12 +28,12 @@ function createMockWebGL2Context() {
     ONE: 1,
     BLEND: 3042,
     FLOAT: 5126,
-    RGBA16F: 0x881A,
+    RGBA16F: 0x881a,
     RGBA32F: 0x8814,
     SRC_ALPHA: 0x0302,
     ONE_MINUS_SRC_ALPHA: 0x0303,
     TRIANGLES: 4,
-    COMPLETION_STATUS_KHR: 0x91B1,
+    COMPLETION_STATUS_KHR: 0x91b1,
 
     createShader: vi.fn((_type: number) => ({})),
     shaderSource: vi.fn(),
@@ -109,8 +109,9 @@ describe('WebGLScopesProcessor', () => {
       restore: vi.fn(),
       setTransform: vi.fn(),
       // Return ImageData with the requested dimensions
-      getImageData: vi.fn((_x: number, _y: number, w: number, h: number) =>
-        new ImageData(w || canvas.width || 100, h || canvas.height || 100)
+      getImageData: vi.fn(
+        (_x: number, _y: number, w: number, h: number) =>
+          new ImageData(w || canvas.width || 100, h || canvas.height || 100),
       ),
     });
 
@@ -214,7 +215,7 @@ describe('WebGLScopesProcessor', () => {
     it('WGS-007: returns false when shader compilation is still pending', () => {
       // Make COMPLETION_STATUS_KHR return false (shaders still compiling)
       mockGl.getShaderParameter.mockImplementation((_shader: unknown, param: number) => {
-        if (param === 0x91B1) return false; // COMPLETION_STATUS_KHR
+        if (param === 0x91b1) return false; // COMPLETION_STATUS_KHR
         return true; // COMPILE_STATUS
       });
 
@@ -226,7 +227,8 @@ describe('WebGLScopesProcessor', () => {
       // First two programs complete, third still compiling
       let programParamCallCount = 0;
       mockGl.getProgramParameter.mockImplementation((_program: unknown, param: number) => {
-        if (param === 0x91B1) { // COMPLETION_STATUS_KHR
+        if (param === 0x91b1) {
+          // COMPLETION_STATUS_KHR
           programParamCallCount++;
           // 3rd call: the vectorscope program is not ready
           return programParamCallCount <= 2;
@@ -283,9 +285,7 @@ describe('WebGLScopesProcessor', () => {
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
       // 1920x1080 should be downscaled to fit within paused target (640x360)
-      const imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      const imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       expect(imageSizeCall![1]).toBeLessThanOrEqual(640);
       expect(imageSizeCall![2]).toBeLessThanOrEqual(360);
     });
@@ -336,10 +336,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderHistogram(mockOutputCanvas, histData, 'rgb');
 
-      expect(mockGl.uniform1f).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'u_maxValue' }),
-        5000
-      );
+      expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.objectContaining({ name: 'u_maxValue' }), 5000);
     });
 
     it('WGS-015b: respects logScale parameter', () => {
@@ -348,10 +345,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderHistogram(mockOutputCanvas, histData, 'luminance', true);
 
-      expect(mockGl.uniform1i).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'u_logScale' }),
-        1
-      );
+      expect(mockGl.uniform1i).toHaveBeenCalledWith(expect.objectContaining({ name: 'u_logScale' }), 1);
     });
   });
 
@@ -423,10 +417,7 @@ describe('WebGLScopesProcessor', () => {
       processor.renderVectorscope(mockOutputCanvas, 2);
 
       expect(mockGl.drawArrays).toHaveBeenCalledTimes(1);
-      expect(mockGl.uniform1f).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'u_zoom' }),
-        2
-      );
+      expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.objectContaining({ name: 'u_zoom' }), 2);
     });
   });
 
@@ -522,9 +513,7 @@ describe('WebGLScopesProcessor', () => {
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
       // 1080p exceeds paused target (640x360), should downscale
-      const imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      const imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       // Should be downscaled to fit within 640x360 while maintaining aspect ratio
       expect(imageSizeCall![1]).toBeLessThanOrEqual(640);
       expect(imageSizeCall![2]).toBeLessThanOrEqual(360);
@@ -538,9 +527,7 @@ describe('WebGLScopesProcessor', () => {
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
       // 4K should be downscaled significantly
-      const imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      const imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       expect(imageSizeCall![1]).toBeLessThanOrEqual(640);
       expect(imageSizeCall![2]).toBeLessThanOrEqual(360);
     });
@@ -553,9 +540,7 @@ describe('WebGLScopesProcessor', () => {
       processor.setImage(imageData);
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      let imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      let imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       const pausedWidth = imageSizeCall![1];
 
       // With playback mode, uses smaller target (320x180)
@@ -564,9 +549,7 @@ describe('WebGLScopesProcessor', () => {
       processor.setImage(imageData);
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       // Playback mode should use smaller dimensions than paused
       expect(imageSizeCall![1]).toBeLessThanOrEqual(320);
       expect(imageSizeCall![1]).toBeLessThan(pausedWidth);
@@ -581,9 +564,7 @@ describe('WebGLScopesProcessor', () => {
       processor.setImage(imageData);
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      let imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      let imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       const playbackWidth = imageSizeCall![1];
 
       // Disable playback mode - should restore higher quality
@@ -592,9 +573,7 @@ describe('WebGLScopesProcessor', () => {
       processor.setImage(imageData);
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      imageSizeCall = mockGl.uniform2f.mock.calls.find(
-        (call) => call[0]?.name === 'u_imageSize'
-      );
+      imageSizeCall = mockGl.uniform2f.mock.calls.find((call) => call[0]?.name === 'u_imageSize');
       // Paused mode should use larger dimensions than playback
       expect(imageSizeCall![1]).toBeGreaterThan(playbackWidth);
     });
@@ -679,7 +658,7 @@ describe('WebGLScopesProcessor', () => {
       expect(mockGl.texImage2D).toHaveBeenCalled();
       const call = mockGl.texImage2D.mock.calls[0];
       // Internal format should be RGBA16F
-      expect(call![2]).toBe(0x881A); // gl.RGBA16F
+      expect(call![2]).toBe(0x881a); // gl.RGBA16F
       // Type should be FLOAT (gl.FLOAT = 0x1406 = 5126)
       expect(call![7]).toBe(0x1406); // gl.FLOAT
     });
@@ -805,7 +784,7 @@ describe('WebGLScopesProcessor', () => {
       for (let y = 0; y < 2; y++) {
         for (let x = 0; x < 2; x++) {
           const i = (y * 4 + x) * 4;
-          floatData[i] = 1.0;     // R
+          floatData[i] = 1.0; // R
           floatData[i + 1] = 0.0; // G
           floatData[i + 2] = 0.0; // B
           floatData[i + 3] = 1.0; // A
@@ -867,7 +846,7 @@ describe('WebGLScopesProcessor', () => {
       // Create 1920x1080 image that is all red = 2.0 (HDR)
       const floatData = new Float32Array(1920 * 1080 * 4);
       for (let i = 0; i < floatData.length; i += 4) {
-        floatData[i] = 2.0;     // R
+        floatData[i] = 2.0; // R
         floatData[i + 1] = 0.0; // G
         floatData[i + 2] = 0.0; // B
         floatData[i + 3] = 1.0; // A
@@ -882,9 +861,9 @@ describe('WebGLScopesProcessor', () => {
       // All pixels should average to R=2.0 since input is uniform
       // Check first few pixels
       for (let i = 0; i < Math.min(20, uploadedData.length); i += 4) {
-        expect(uploadedData[i]).toBeCloseTo(2.0, 1);     // R should be ~2.0
-        expect(uploadedData[i + 1]).toBeCloseTo(0.0, 1);  // G should be ~0.0
-        expect(uploadedData[i + 2]).toBeCloseTo(0.0, 1);  // B should be ~0.0
+        expect(uploadedData[i]).toBeCloseTo(2.0, 1); // R should be ~2.0
+        expect(uploadedData[i + 1]).toBeCloseTo(0.0, 1); // G should be ~0.0
+        expect(uploadedData[i + 2]).toBeCloseTo(0.0, 1); // B should be ~0.0
       }
     });
   });
@@ -926,9 +905,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      const maxValueCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_waveformMaxValue'
-      );
+      const maxValueCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_waveformMaxValue');
       expect(maxValueCall).toBeDefined();
       expect(maxValueCall![1]).toBe(1.0);
     });
@@ -941,9 +918,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      const maxValueCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_waveformMaxValue'
-      );
+      const maxValueCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_waveformMaxValue');
       expect(maxValueCall).toBeDefined();
       expect(maxValueCall![1]).toBe(4.0);
     });
@@ -955,9 +930,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderVectorscope(mockOutputCanvas, 1.0);
 
-      const satScaleCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_saturationScale'
-      );
+      const satScaleCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_saturationScale');
       expect(satScaleCall).toBeDefined();
       expect(satScaleCall![1]).toBe(1.0);
     });
@@ -970,9 +943,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderVectorscope(mockOutputCanvas, 1.0);
 
-      const satScaleCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_saturationScale'
-      );
+      const satScaleCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_saturationScale');
       expect(satScaleCall).toBeDefined();
       // saturationScale = 1.0 / maxValue = 1.0 / 4.0 = 0.25
       expect(satScaleCall![1]).toBeCloseTo(0.25, 6);
@@ -989,18 +960,14 @@ describe('WebGLScopesProcessor', () => {
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
       // u_waveformMaxValue should be 1.0 (no scaling)
-      const waveformMaxCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_waveformMaxValue'
-      );
+      const waveformMaxCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_waveformMaxValue');
       expect(waveformMaxCall![1]).toBe(1.0);
 
       mockGl.uniform1f.mockClear();
       processor.renderVectorscope(mockOutputCanvas, 1.0);
 
       // u_saturationScale should be 1.0 (no scaling)
-      const satScaleCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_saturationScale'
-      );
+      const satScaleCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_saturationScale');
       expect(satScaleCall![1]).toBe(1.0);
     });
 
@@ -1008,18 +975,13 @@ describe('WebGLScopesProcessor', () => {
       const processor = new WebGLScopesProcessor();
       processor.setHDRMode(true, 4.0);
       processor.setHDRAutoFit(true);
-      const floatData = new Float32Array([
-        1.0, 0.8, 0.6, 1.0,
-        1.0, 0.9, 0.7, 1.0,
-      ]);
+      const floatData = new Float32Array([1.0, 0.8, 0.6, 1.0, 1.0, 0.9, 0.7, 1.0]);
       processor.setFloatImage(floatData, 2, 1);
       mockGl.uniform1f.mockClear();
 
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      const maxValueCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_waveformMaxValue'
-      );
+      const maxValueCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_waveformMaxValue');
       expect(maxValueCall).toBeDefined();
       // Peak is 1.0, so auto-fit should avoid compressing to headroom (4.0)
       expect(maxValueCall![1]).toBe(1.0);
@@ -1035,9 +997,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderWaveform(mockOutputCanvas, 'luma');
 
-      const maxValueCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_waveformMaxValue'
-      );
+      const maxValueCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_waveformMaxValue');
       expect(maxValueCall).toBeDefined();
       // Peak is above configured headroom, so clamp to headroom
       expect(maxValueCall![1]).toBe(4.0);
@@ -1053,9 +1013,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderVectorscope(mockOutputCanvas, 1.0);
 
-      const satScaleCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_saturationScale'
-      );
+      const satScaleCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_saturationScale');
       expect(satScaleCall).toBeDefined();
       // Neutral highlights have no chroma; keep full vectorscope width.
       expect(satScaleCall![1]).toBe(1.0);
@@ -1071,9 +1029,7 @@ describe('WebGLScopesProcessor', () => {
 
       processor.renderVectorscope(mockOutputCanvas, 1.0);
 
-      const satScaleCall = mockGl.uniform1f.mock.calls.find(
-        (call) => call[0]?.name === 'u_saturationScale'
-      );
+      const satScaleCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_saturationScale');
       expect(satScaleCall).toBeDefined();
       // Pure red at 2.0 yields Cr ~= 1.0, so auto-fit scale should be 0.5.
       expect(satScaleCall![1]).toBeCloseTo(0.5, 6);
@@ -1094,7 +1050,8 @@ describe('WebGLScopesProcessor', () => {
       // Make the 3rd getProgramParameter(COMPLETION_STATUS_KHR) return false
       let programCompletionCallCount = 0;
       mockGl.getProgramParameter.mockImplementation((_program: unknown, param: number) => {
-        if (param === 0x91B1) { // COMPLETION_STATUS_KHR
+        if (param === 0x91b1) {
+          // COMPLETION_STATUS_KHR
           programCompletionCallCount++;
           // 3rd program not ready
           return programCompletionCallCount !== 3;
@@ -1176,11 +1133,11 @@ describe('WebGLScopesProcessor', () => {
     it('WGS-067: a scope can render even if another scope shader is still compiling', () => {
       // Make the 3rd ShaderProgram (vectorscope) not ready,
       // but the 1st (histogram) and 2nd (waveform) are ready.
-      const COMPLETION_STATUS_KHR = 0x91B1;
+      const COMPLETION_STATUS_KHR = 0x91b1;
 
       // Track which programs are created; make the 3rd one "not ready"
       const programs: object[] = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       mockGl.createProgram.mockImplementation(() => {
         const prog = { _idx: programs.length };
         programs.push(prog);

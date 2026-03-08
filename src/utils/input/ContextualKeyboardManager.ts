@@ -14,8 +14,7 @@
  */
 
 import type { KeyCombination } from './KeyboardManager';
-import type { BindingContext } from './ActiveContextManager';
-import { ActiveContextManager } from './ActiveContextManager';
+import type { BindingContext, ActiveContextManager } from './ActiveContextManager';
 import { DEFAULT_KEY_BINDINGS, type KeyBindingEntry } from './KeyBindings';
 
 export interface ContextualBinding {
@@ -42,10 +41,10 @@ export class ContextualKeyboardManager {
     combo: KeyCombination,
     handler: () => void,
     context: BindingContext = 'global',
-    description?: string
+    description?: string,
   ): void {
     // Remove any existing binding for this action
-    this.bindings = this.bindings.filter(b => b.action !== action);
+    this.bindings = this.bindings.filter((b) => b.action !== action);
 
     this.bindings.push({
       action,
@@ -75,7 +74,7 @@ export class ContextualKeyboardManager {
    * Unregister a binding by action name.
    */
   unregister(action: string): void {
-    this.bindings = this.bindings.filter(b => b.action !== action);
+    this.bindings = this.bindings.filter((b) => b.action !== action);
   }
 
   /**
@@ -94,7 +93,7 @@ export class ContextualKeyboardManager {
     // First: look for a match in the active context (if not global)
     if (activeContext !== 'global') {
       const contextMatch = this.bindings.find(
-        b => b.context === activeContext && this.comboToId(b.combo) === comboId
+        (b) => b.context === activeContext && this.comboToId(b.combo) === comboId,
       );
       if (contextMatch) {
         return contextMatch;
@@ -102,9 +101,7 @@ export class ContextualKeyboardManager {
     }
 
     // Second: fall back to global bindings
-    const globalMatch = this.bindings.find(
-      b => b.context === 'global' && this.comboToId(b.combo) === comboId
-    );
+    const globalMatch = this.bindings.find((b) => b.context === 'global' && this.comboToId(b.combo) === comboId);
     return globalMatch ?? null;
   }
 
@@ -112,7 +109,7 @@ export class ContextualKeyboardManager {
    * Get all bindings for a specific context.
    */
   getBindingsForContext(context: BindingContext): ContextualBinding[] {
-    return this.bindings.filter(b => b.context === context);
+    return this.bindings.filter((b) => b.context === context);
   }
 
   /**
@@ -128,7 +125,7 @@ export class ContextualKeyboardManager {
    */
   findAllMatches(combo: KeyCombination): ContextualBinding[] {
     const comboId = this.comboToId(combo);
-    return this.bindings.filter(b => this.comboToId(b.combo) === comboId);
+    return this.bindings.filter((b) => this.comboToId(b.combo) === comboId);
   }
 
   /**

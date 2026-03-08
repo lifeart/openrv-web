@@ -257,9 +257,7 @@ export class FocusManager {
 
   private getTrapFocusable(): HTMLElement[] {
     if (!this.trapContainer) return [];
-    return Array.from(
-      this.trapContainer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    ).filter(el => {
+    return Array.from(this.trapContainer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => {
       // Skip explicitly hidden elements
       if (el.hidden || el.style.display === 'none' || el.style.visibility === 'hidden') return false;
       return true;
@@ -270,7 +268,14 @@ export class FocusManager {
     if (el instanceof HTMLTextAreaElement) return true;
     if (el instanceof HTMLInputElement) {
       const type = el.type.toLowerCase();
-      return type === 'text' || type === 'search' || type === 'url' || type === 'email' || type === 'password' || type === 'number';
+      return (
+        type === 'text' ||
+        type === 'search' ||
+        type === 'url' ||
+        type === 'email' ||
+        type === 'password' ||
+        type === 'number'
+      );
     }
     if (el.isContentEditable) return true;
     return false;

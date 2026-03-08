@@ -5,12 +5,7 @@
  * objects without any side effects or class instance dependencies.
  */
 import type { GTODTO } from 'gto-js';
-import {
-  getNumberValue,
-  getNumberArray,
-  getStringValue,
-  getStringArray,
-} from './AnnotationStore';
+import { getNumberValue, getNumberArray, getStringValue, getStringArray } from './AnnotationStore';
 import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import { DEFAULT_LINEARIZE_STATE, SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
@@ -116,30 +111,14 @@ export function parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
   const radius = getNumberValue(nodeComp.property('radius').value());
   const threshold = getNumberValue(nodeComp.property('threshold').value());
 
-  if (
-    active === undefined &&
-    amount === undefined &&
-    radius === undefined &&
-    threshold === undefined
-  ) {
+  if (active === undefined && amount === undefined && radius === undefined && threshold === undefined) {
     return null;
   }
 
-  const strength = active === 0
-    ? 0
-    : Math.max(0, Math.min(100, Math.round((amount ?? 0) * 100)));
-  const radiusPx = Math.max(
-    1,
-    Math.min(5, Math.round(radius ?? DEFAULT_NOISE_REDUCTION_PARAMS.radius))
-  );
-  const luminanceStrength = Math.max(
-    0,
-    Math.min(100, Math.round(100 - ((threshold ?? 5) * 10)))
-  );
-  const chromaStrength = Math.max(
-    0,
-    Math.min(100, Math.round(Math.min(100, luminanceStrength * 1.5)))
-  );
+  const strength = active === 0 ? 0 : Math.max(0, Math.min(100, Math.round((amount ?? 0) * 100)));
+  const radiusPx = Math.max(1, Math.min(5, Math.round(radius ?? DEFAULT_NOISE_REDUCTION_PARAMS.radius)));
+  const luminanceStrength = Math.max(0, Math.min(100, Math.round(100 - (threshold ?? 5) * 10)));
+  const chromaStrength = Math.max(0, Math.min(100, Math.round(Math.min(100, luminanceStrength * 1.5))));
 
   return {
     strength,
@@ -316,7 +295,7 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
       if (active != null && active !== 0) {
         const lutArray = getNumberArray(lumLutComp.property('lut').value());
         if (lutArray && lutArray.length > 0) {
-          const channels: 1 | 3 = (lutArray.length % 3 === 0) ? 3 : 1;
+          const channels: 1 | 3 = lutArray.length % 3 === 0 ? 3 : 1;
           adjustments.inlineLUT = new Float32Array(lutArray);
           adjustments.lutChannels = channels;
         }
@@ -342,7 +321,12 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
  * Parse CDL values from RVColor or RVLinearize protocol nodes.
  */
 export function parseCDL(dto: GTODTO): CDLValues | null {
-  const buildCDL = (values: { slope?: number[]; offset?: number[]; power?: number[]; saturation?: number }): CDLValues | null => {
+  const buildCDL = (values: {
+    slope?: number[];
+    offset?: number[];
+    power?: number[];
+    saturation?: number;
+  }): CDLValues | null => {
     const slope = values.slope ?? [];
     const offset = values.offset ?? [];
     const power = values.power ?? [];
@@ -469,9 +453,16 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   const cropRatioX = getNumberValue(warpComp.property('cropRatioX').value());
   const cropRatioY = getNumberValue(warpComp.property('cropRatioY').value());
 
-  const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic', '3de4_anamorphic_degree_6'] as const;
-  const parsedModel = validModels.includes(model as typeof validModels[number])
-    ? (model as typeof validModels[number])
+  const validModels = [
+    'brown',
+    'opencv',
+    'pfbarrel',
+    '3de4_radial_standard',
+    '3de4_anamorphic',
+    '3de4_anamorphic_degree_6',
+  ] as const;
+  const parsedModel = validModels.includes(model as (typeof validModels)[number])
+    ? (model as (typeof validModels)[number])
     : 'brown';
 
   const params: LensDistortionParams = {
@@ -556,10 +547,7 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
 /**
  * Parse crop state from RVFormat protocol nodes.
  */
-export function parseCrop(
-  dto: GTODTO,
-  sourceInfo: { width: number; height: number },
-): CropState | null {
+export function parseCrop(dto: GTODTO, sourceInfo: { width: number; height: number }): CropState | null {
   const nodes = dto.byProtocol('RVFormat');
   if (nodes.length === 0) return null;
 
@@ -781,15 +769,22 @@ export function parseOutOfRange(dto: GTODTO): number | undefined {
  */
 export function channelNameToSwizzleIndex(name: string, defaultIndex: number): number {
   switch (name.toUpperCase()) {
-    case 'R': return 0;
-    case 'G': return 1;
-    case 'B': return 2;
-    case 'A': return 3;
+    case 'R':
+      return 0;
+    case 'G':
+      return 1;
+    case 'B':
+      return 2;
+    case 'A':
+      return 3;
     case '0':
-    case 'ZERO': return SWIZZLE_ZERO;
+    case 'ZERO':
+      return SWIZZLE_ZERO;
     case '1':
-    case 'ONE': return SWIZZLE_ONE;
-    default: return defaultIndex;
+    case 'ONE':
+      return SWIZZLE_ONE;
+    default:
+      return defaultIndex;
   }
 }
 

@@ -12,7 +12,7 @@
  * an additional layer selector appears allowing users to switch between render passes.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
@@ -59,13 +59,13 @@ export const CHANNEL_SHORT_LABELS: Record<ChannelMode, string> = {
 };
 
 export const CHANNEL_SHORTCUTS: Record<string, ChannelMode> = {
-  'R': 'red',
-  'G': 'green',
-  'B': 'blue',
-  'A': 'alpha',
-  'L': 'luminance',
-  'Y': 'luminance', // Y for "graY" - alias for grayscale/luminance
-  'N': 'rgb', // N for "normal" or neutral
+  R: 'red',
+  G: 'green',
+  B: 'blue',
+  A: 'alpha',
+  L: 'luminance',
+  Y: 'luminance', // Y for "graY" - alias for grayscale/luminance
+  N: 'rgb', // N for "normal" or neutral
 };
 
 const CHANNEL_COLORS: Record<ChannelMode, string> = {
@@ -133,7 +133,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
         color: CHANNEL_COLORS[channel],
         // Show L/Y for grayscale (luminance) to indicate both shortcuts work
         shortcut: channel === 'rgb' ? 'N' : channel === 'luminance' ? 'L/Y' : CHANNEL_SHORT_LABELS[channel],
-      }))
+      })),
     );
 
     this.dropdown.getElement().dataset.testid = 'channel-dropdown';
@@ -296,8 +296,8 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
 
     // Reset selected layer when loading a different file (layer list changed)
     // This prevents stale layer selection from a previous file
-    const layersChanged = previousLayers.length !== layers.length ||
-      previousLayers.some((l, i) => layers[i]?.name !== l.name);
+    const layersChanged =
+      previousLayers.length !== layers.length || previousLayers.some((l, i) => layers[i]?.name !== l.name);
 
     if (layersChanged) {
       this.exrLayerState.selectedLayer = null;
@@ -503,10 +503,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
  * Apply channel isolation to ImageData
  * This is the core channel isolation algorithm
  */
-export function applyChannelIsolation(
-  imageData: ImageData,
-  channel: ChannelMode
-): void {
+export function applyChannelIsolation(imageData: ImageData, channel: ChannelMode): void {
   if (channel === 'rgb') return; // No modification needed
 
   const data = imageData.data;
@@ -517,7 +514,7 @@ export function applyChannelIsolation(
       // Show red channel as grayscale
       for (let i = 0; i < len; i += 4) {
         const r = data[i]!;
-        data[i] = r;     // R
+        data[i] = r; // R
         data[i + 1] = r; // G
         data[i + 2] = r; // B
         // Alpha unchanged
@@ -528,7 +525,7 @@ export function applyChannelIsolation(
       // Show green channel as grayscale
       for (let i = 0; i < len; i += 4) {
         const g = data[i + 1]!;
-        data[i] = g;     // R
+        data[i] = g; // R
         data[i + 1] = g; // G
         data[i + 2] = g; // B
       }
@@ -538,7 +535,7 @@ export function applyChannelIsolation(
       // Show blue channel as grayscale
       for (let i = 0; i < len; i += 4) {
         const b = data[i + 2]!;
-        data[i] = b;     // R
+        data[i] = b; // R
         data[i + 1] = b; // G
         data[i + 2] = b; // B
       }
@@ -548,7 +545,7 @@ export function applyChannelIsolation(
       // Show alpha channel as grayscale (white = opaque, black = transparent)
       for (let i = 0; i < len; i += 4) {
         const a = data[i + 3]!;
-        data[i] = a;     // R
+        data[i] = a; // R
         data[i + 1] = a; // G
         data[i + 2] = a; // B
         data[i + 3] = 255; // Make fully opaque so we can see the alpha values
@@ -560,10 +557,10 @@ export function applyChannelIsolation(
       for (let i = 0; i < len; i += 4) {
         const luma = Math.round(
           LUMINANCE_COEFFICIENTS.r * data[i]! +
-          LUMINANCE_COEFFICIENTS.g * data[i + 1]! +
-          LUMINANCE_COEFFICIENTS.b * data[i + 2]!
+            LUMINANCE_COEFFICIENTS.g * data[i + 1]! +
+            LUMINANCE_COEFFICIENTS.b * data[i + 2]!,
         );
-        data[i] = luma;     // R
+        data[i] = luma; // R
         data[i + 1] = luma; // G
         data[i + 2] = luma; // B
       }
@@ -574,12 +571,7 @@ export function applyChannelIsolation(
 /**
  * Get channel value at a specific pixel
  */
-export function getChannelValue(
-  imageData: ImageData,
-  x: number,
-  y: number,
-  channel: ChannelMode
-): number {
+export function getChannelValue(imageData: ImageData, x: number, y: number, channel: ChannelMode): number {
   const idx = (y * imageData.width + x) * 4;
   const data = imageData.data;
 
@@ -595,16 +587,16 @@ export function getChannelValue(
     case 'luminance':
       return Math.round(
         LUMINANCE_COEFFICIENTS.r * data[idx]! +
-        LUMINANCE_COEFFICIENTS.g * data[idx + 1]! +
-        LUMINANCE_COEFFICIENTS.b * data[idx + 2]!
+          LUMINANCE_COEFFICIENTS.g * data[idx + 1]! +
+          LUMINANCE_COEFFICIENTS.b * data[idx + 2]!,
       );
     case 'rgb':
     default:
       // Return perceived brightness for RGB mode
       return Math.round(
         LUMINANCE_COEFFICIENTS.r * data[idx]! +
-        LUMINANCE_COEFFICIENTS.g * data[idx + 1]! +
-        LUMINANCE_COEFFICIENTS.b * data[idx + 2]!
+          LUMINANCE_COEFFICIENTS.g * data[idx + 1]! +
+          LUMINANCE_COEFFICIENTS.b * data[idx + 2]!,
       );
   }
 }

@@ -28,11 +28,13 @@ describe('CustomKeyBindingsManager', () => {
     });
 
     it('CKBM-002: loads custom bindings from localStorage', () => {
-      const testData = [{
-        action: 'playback.toggle',
-        originalCombo: { code: 'Space' },
-        customCombo: { code: 'KeyP', ctrl: true }
-      }];
+      const testData = [
+        {
+          action: 'playback.toggle',
+          originalCombo: { code: 'Space' },
+          customCombo: { code: 'KeyP', ctrl: true },
+        },
+      ];
       localStorage.setItem('openrv-custom-keybindings', JSON.stringify(testData));
 
       const newManager = new CustomKeyBindingsManager();
@@ -94,11 +96,13 @@ describe('CustomKeyBindingsManager', () => {
     });
 
     it('CKBM-008: loads custom bindings from localStorage on initialization', () => {
-      const testData = [{
-        action: 'playback.toggle',
-        originalCombo: { code: 'Space' },
-        customCombo: { code: 'KeyP', ctrl: true }
-      }];
+      const testData = [
+        {
+          action: 'playback.toggle',
+          originalCombo: { code: 'Space' },
+          customCombo: { code: 'KeyP', ctrl: true },
+        },
+      ];
       localStorage.setItem('openrv-custom-keybindings', JSON.stringify(testData));
 
       const newManager = new CustomKeyBindingsManager();
@@ -214,7 +218,7 @@ describe('CustomKeyBindingsManager', () => {
       manager.setCustomBinding('playback.toggle', customCombo);
 
       const actions = manager.getAvailableActions();
-      const toggleAction = actions.find(a => a.action === 'playback.toggle');
+      const toggleAction = actions.find((a) => a.action === 'playback.toggle');
       expect(toggleAction?.currentCombo).toEqual(customCombo);
     });
   });

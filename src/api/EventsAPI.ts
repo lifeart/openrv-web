@@ -163,9 +163,7 @@ export class EventsAPI {
 
   private validateEventName(event: string): asserts event is OpenRVEventName {
     if (typeof event !== 'string' || !VALID_EVENTS.has(event as OpenRVEventName)) {
-      throw new ValidationError(
-        `Invalid event name: "${event}". Valid events: ${Array.from(VALID_EVENTS).join(', ')}`
-      );
+      throw new ValidationError(`Invalid event name: "${event}". Valid events: ${Array.from(VALID_EVENTS).join(', ')}`);
     }
   }
 

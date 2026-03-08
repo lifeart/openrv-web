@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { KeyboardManager, KeyCombination } from './KeyboardManager';
+import { KeyboardManager, type KeyCombination } from './KeyboardManager';
 
 describe('KeyboardManager', () => {
   let keyboardManager: KeyboardManager;
@@ -34,7 +34,7 @@ describe('KeyboardManager', () => {
       const binding = {
         code: 'KeyB',
         shift: true,
-        description: 'Bold'
+        description: 'Bold',
       };
       keyboardManager.register(binding, mockHandler);
 
@@ -68,7 +68,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -181,7 +181,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -201,7 +201,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -224,7 +224,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -247,7 +247,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -270,7 +270,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockDiv
+        target: mockDiv,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -290,7 +290,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: true, // Meta key pressed instead of Ctrl
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -304,9 +304,9 @@ describe('KeyboardManager', () => {
       keyboardManager.register({ code: 'KeyR' }, globalHandler, 'Global R');
 
       const mockContextualManager = {
-        resolve: vi.fn().mockReturnValue({ handler: contextualHandler, description: 'Context R' })
+        resolve: vi.fn().mockReturnValue({ handler: contextualHandler, description: 'Context R' }),
       };
-      
+
       keyboardManager.setContextualManager(mockContextualManager as any);
 
       const mockEvent = {
@@ -317,7 +317,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -327,7 +327,7 @@ describe('KeyboardManager', () => {
         ctrl: false,
         shift: false,
         alt: false,
-        meta: false
+        meta: false,
       });
       expect(contextualHandler).toHaveBeenCalled();
       expect(globalHandler).not.toHaveBeenCalled();
@@ -348,7 +348,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -369,7 +369,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -389,7 +389,7 @@ describe('KeyboardManager', () => {
       const bindings = keyboardManager.getBindings();
       expect(bindings).toHaveLength(2);
 
-      const bindingIds = bindings.map(b => keyboardManager['comboToId'](b.combo));
+      const bindingIds = bindings.map((b) => keyboardManager['comboToId'](b.combo));
       expect(bindingIds).toContain('keya');
       expect(bindingIds).toContain('ctrl+keyb');
     });
@@ -399,7 +399,7 @@ describe('KeyboardManager', () => {
       keyboardManager.register({ code: 'KeyT' }, mockHandler, description);
 
       const bindings = keyboardManager.getBindings();
-      const binding = bindings.find(b => b.combo.code === 'KeyT');
+      const binding = bindings.find((b) => b.combo.code === 'KeyT');
       expect(binding?.description).toBe(description);
     });
   });
@@ -409,20 +409,14 @@ describe('KeyboardManager', () => {
       const mockElement = { addEventListener: vi.fn() } as any;
       keyboardManager.attach(mockElement);
 
-      expect(mockElement.addEventListener).toHaveBeenCalledWith(
-        'keydown',
-        expect.any(Function)
-      );
+      expect(mockElement.addEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
     });
 
     it('KBM-030: detaches from specified element', () => {
       const mockElement = { removeEventListener: vi.fn() } as any;
       keyboardManager.detach(mockElement);
 
-      expect(mockElement.removeEventListener).toHaveBeenCalledWith(
-        'keydown',
-        expect.any(Function)
-      );
+      expect(mockElement.removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
     });
 
     it('KBM-031: attaches to document by default', () => {
@@ -500,7 +494,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -524,7 +518,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       const leftEvent = {
@@ -535,7 +529,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](rightEvent);
@@ -560,7 +554,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       const endEvent = {
@@ -571,7 +565,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](homeEvent);
@@ -596,7 +590,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent1);
@@ -613,7 +607,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent2);
@@ -643,7 +637,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       // Home should be skipped in input (let input handle cursor movement)
@@ -655,7 +649,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       // End should be skipped in input (let input handle cursor movement)
@@ -667,7 +661,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](spaceEvent);
@@ -692,7 +686,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -734,7 +728,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -756,7 +750,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -778,7 +772,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -800,7 +794,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -822,7 +816,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -844,7 +838,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -865,7 +859,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockTextarea
+        target: mockTextarea,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -887,7 +881,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -909,7 +903,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -932,7 +926,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -955,7 +949,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -978,7 +972,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -1003,7 +997,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       const endEvent = {
@@ -1014,7 +1008,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockInput
+        target: mockInput,
       } as any;
 
       keyboardManager['handleKeydown'](homeEvent);
@@ -1037,7 +1031,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockButton
+        target: mockButton,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -1058,7 +1052,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockDiv
+        target: mockDiv,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -1081,7 +1075,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockSelect
+        target: mockSelect,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -1105,7 +1099,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockSelect
+        target: mockSelect,
       } as any;
 
       const upEvent = {
@@ -1116,7 +1110,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockSelect
+        target: mockSelect,
       } as any;
 
       keyboardManager['handleKeydown'](downEvent);
@@ -1140,7 +1134,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockSelect
+        target: mockSelect,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -1162,7 +1156,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: true,
         preventDefault: vi.fn(),
-        target: mockSelect
+        target: mockSelect,
       } as any;
 
       keyboardManager['handleKeydown'](mockEvent);
@@ -1184,7 +1178,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: mockSelect
+        target: mockSelect,
       } as any;
 
       keyboardManager['handleKeydown'](eventOnSelect);
@@ -1199,7 +1193,7 @@ describe('KeyboardManager', () => {
         altKey: false,
         metaKey: false,
         preventDefault: vi.fn(),
-        target: document.body
+        target: document.body,
       } as any;
 
       keyboardManager['handleKeydown'](eventOnBody);

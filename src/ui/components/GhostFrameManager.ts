@@ -8,7 +8,7 @@
  * context and the target canvas for rendering.
  */
 
-import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
+import { type GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 
 export class GhostFrameManager {

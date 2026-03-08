@@ -32,9 +32,15 @@ export class LayerFBOPool {
   }
 
   /** Get the current FBO dimensions. */
-  get width(): number { return this._width; }
-  get height(): number { return this._height; }
-  get format(): 'rgba16f' | 'rgba8' { return this._format; }
+  get width(): number {
+    return this._width;
+  }
+  get height(): number {
+    return this._height;
+  }
+  get format(): 'rgba16f' | 'rgba8' {
+    return this._format;
+  }
 
   /**
    * Ensure at least `count` FBOs are available at the given dimensions.

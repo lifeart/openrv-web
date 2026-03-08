@@ -206,8 +206,8 @@ describe('OCIOWasmModule', () => {
     it('WASM-CONC-002: concurrent init failure shares single rejection', async () => {
       const failFactory = vi.fn(() => Promise.reject(new Error('fail')));
       const failMod = new OCIOWasmModule(failFactory);
-      const p1 = failMod.init().catch(e => e);
-      const p2 = failMod.init().catch(e => e);
+      const p1 = failMod.init().catch((e) => e);
+      const p2 = failMod.init().catch((e) => e);
       const [e1, e2] = await Promise.all([p1, p2]);
       expect(failFactory).toHaveBeenCalledTimes(1);
       expect(e1).toBeInstanceOf(Error);

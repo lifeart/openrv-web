@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  CDLValues,
+  type CDLValues,
   DEFAULT_CDL,
   isDefaultCDL,
   applyCDLToValue,
@@ -224,7 +224,7 @@ describe('CDL', () => {
         { r: 1.2, g: 1.0, b: 0.8 },
         { r: 0.05, g: 0, b: -0.02 },
         { r: 1.1, g: 1.0, b: 0.9 },
-        1.2
+        1.2,
       );
 
       const result = parseCDLXML(xml);
@@ -380,9 +380,9 @@ describe('CDL', () => {
     it('CDL-HDR-008: CPU CDL matches GPU formula for HDR inputs [0, 4.0]', () => {
       // Test with values that produce HDR output (>1.0 normalized, >255 in 0-255 range)
       const testCases = [
-        { input: 255, slope: 2.0, offset: 0.5, power: 1.0 },   // → ~2.5 normalized
-        { input: 200, slope: 3.0, offset: 0.0, power: 0.8 },   // → high HDR
-        { input: 255, slope: 4.0, offset: 0.0, power: 1.2 },   // → ~4.0^1.2
+        { input: 255, slope: 2.0, offset: 0.5, power: 1.0 }, // → ~2.5 normalized
+        { input: 200, slope: 3.0, offset: 0.0, power: 0.8 }, // → high HDR
+        { input: 255, slope: 4.0, offset: 0.0, power: 1.2 }, // → ~4.0^1.2
       ];
 
       for (const { input, slope, offset, power } of testCases) {
@@ -404,7 +404,9 @@ describe('CDL', () => {
       };
       const result = applyCDL(200, 150, 100, cdl);
       // Manually compute GPU path: SOP then saturation via mix()
-      const r = (200 / 255) * 1.5, g = (150 / 255) * 1.0, b = (100 / 255) * 0.8;
+      const r = (200 / 255) * 1.5,
+        g = (150 / 255) * 1.0,
+        b = (100 / 255) * 0.8;
       const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const expectedR = (luma + (r - luma) * 0.7) * 255;
       const expectedG = (luma + (g - luma) * 0.7) * 255;

@@ -47,10 +47,7 @@ import {
   MIN_CROP_FRACTION as MIN_CROP_ORIG,
   MAX_UNCROP_PADDING as MAX_UNCROP_ORIG,
 } from '../ui/components/CropControl';
-import {
-  RV_PEN_WIDTH_SCALE as PEN_ORIG,
-  RV_TEXT_SIZE_SCALE as TEXT_ORIG,
-} from '../paint/types';
+import { RV_PEN_WIDTH_SCALE as PEN_ORIG, RV_TEXT_SIZE_SCALE as TEXT_ORIG } from '../paint/types';
 import {
   LUMA_R as LUMA_R_ORIG,
   LUMA_G as LUMA_G_ORIG,

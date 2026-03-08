@@ -10,12 +10,7 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { ViewHistory } from './ViewHistory';
-import type {
-  TreeNode,
-  SerializedGraph,
-  SerializedGraphNode,
-  GroupNodeType,
-} from './SessionManagerTypes';
+import type { TreeNode, SerializedGraph, SerializedGraphNode, GroupNodeType } from './SessionManagerTypes';
 import type { Graph } from '../graph/Graph';
 import type { IPNode } from '../../nodes/base/IPNode';
 import { resetNodeIdCounter } from '../../nodes/base/IPNode';
@@ -295,7 +290,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     if (allNodes.length === 0) return [];
 
     // Find root nodes (no outputs / no parents)
-    const rootNodes = allNodes.filter(n => n.outputs.length === 0);
+    const rootNodes = allNodes.filter((n) => n.outputs.length === 0);
 
     // If no root nodes found (all nodes are connected), use the output node
     // or fall back to all nodes
@@ -305,7 +300,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         rootNodes.push(outputNode);
       } else {
         // Fallback: treat all nodes as roots
-        return allNodes.map(n => this._buildTreeNode(n, 0, new Set()));
+        return allNodes.map((n) => this._buildTreeNode(n, 0, new Set()));
       }
     }
 
@@ -341,12 +336,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     const allNodes = graph.getAllNodes();
     const outputNode = graph.getOutputNode();
 
-    const nodes: SerializedGraphNode[] = allNodes.map(node => ({
+    const nodes: SerializedGraphNode[] = allNodes.map((node) => ({
       id: node.id,
       type: node.type,
       name: node.name,
       properties: node.properties.toPersistentJSON(),
-      inputIds: node.inputs.map(input => input.id),
+      inputIds: node.inputs.map((input) => input.id),
     }));
 
     return {

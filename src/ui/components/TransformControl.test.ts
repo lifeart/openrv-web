@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  TransformControl,
-  Transform2D,
-  DEFAULT_TRANSFORM,
-} from './TransformControl';
+import { TransformControl, type Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 
 describe('TransformControl', () => {
   let control: TransformControl;
@@ -110,9 +106,7 @@ describe('TransformControl', () => {
 
       control.rotateRight();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ rotation: 90 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ rotation: 90 }));
     });
   });
 
@@ -146,9 +140,7 @@ describe('TransformControl', () => {
 
       control.rotateLeft();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ rotation: 270 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ rotation: 270 }));
     });
   });
 
@@ -170,9 +162,7 @@ describe('TransformControl', () => {
 
       control.toggleFlipH();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ flipH: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ flipH: true }));
     });
   });
 
@@ -194,9 +184,7 @@ describe('TransformControl', () => {
 
       control.toggleFlipV();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ flipV: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ flipV: true }));
     });
   });
 
@@ -406,9 +394,7 @@ describe('TransformControl', () => {
 
       control.setScale(2, 3);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ scale: { x: 2, y: 3 } })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ scale: { x: 2, y: 3 } }));
     });
   });
 
@@ -430,9 +416,7 @@ describe('TransformControl', () => {
 
       control.setTranslate(0.1, 0.2);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ translate: { x: 0.1, y: 0.2 } })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ translate: { x: 0.1, y: 0.2 } }));
     });
   });
 
@@ -490,9 +474,7 @@ describe('TransformControl', () => {
 
       control.setRotation(135);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ rotation: 135 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ rotation: 135 }));
     });
 
     it('TRN-063: setRotation updates rotation indicator', () => {

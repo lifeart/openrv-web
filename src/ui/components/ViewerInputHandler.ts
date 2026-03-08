@@ -9,14 +9,14 @@
  * other's concrete class.
  */
 
-import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
-import { PaintRenderer } from '../../paint/PaintRenderer';
-import { StrokePoint, ShapeType, Point } from '../../paint/types';
-import { Session } from '../../core/session/Session';
+import { type PaintEngine, type PaintTool } from '../../paint/PaintEngine';
+import { type PaintRenderer } from '../../paint/PaintRenderer';
+import { type StrokePoint, ShapeType, type Point } from '../../paint/types';
+import { type Session } from '../../core/session/Session';
 import { filterImageFiles, getBestSequence } from '../../utils/media/SequenceLoader';
 import { showAlert } from './shared/Modal';
 import {
-  PointerState,
+  type PointerState,
   getCanvasPoint as getCanvasPointUtil,
   calculateWheelZoom,
   calculateZoomPan,
@@ -210,7 +210,14 @@ export class ViewerInputHandler {
    * other interactions.
    */
   isInteracting(): boolean {
-    return this.isPanning || this.isDrawing || this.isDrawingShape || this.isAdvancedDrawing || this.isSphericalDragging || this.isRotationScrubbing;
+    return (
+      this.isPanning ||
+      this.isDrawing ||
+      this.isDrawingShape ||
+      this.isAdvancedDrawing ||
+      this.isSphericalDragging ||
+      this.isRotationScrubbing
+    );
   }
 
   get currentLivePoints(): StrokePoint[] {
@@ -258,9 +265,7 @@ export class ViewerInputHandler {
         break;
       default:
         // Plugin advanced tools get crosshair cursor
-        container.style.cursor = this.ctx.getPaintEngine().isAdvancedTool(tool)
-          ? 'crosshair'
-          : 'grab';
+        container.style.cursor = this.ctx.getPaintEngine().isAdvancedTool(tool) ? 'crosshair' : 'grab';
     }
   }
 
@@ -278,7 +283,14 @@ export class ViewerInputHandler {
 
   private getCanvasPoint(clientX: number, clientY: number, pressure = 0.5): StrokePoint | null {
     const rect = this.ctx.getImageCanvasRect();
-    return getCanvasPointUtil(clientX, clientY, rect, this.ctx.getDisplayWidth(), this.ctx.getDisplayHeight(), pressure);
+    return getCanvasPointUtil(
+      clientX,
+      clientY,
+      rect,
+      this.ctx.getDisplayWidth(),
+      this.ctx.getDisplayHeight(),
+      pressure,
+    );
   }
 
   private onPointerDown = (e: PointerEvent): void => {
@@ -362,7 +374,7 @@ export class ViewerInputHandler {
           const tm = this.ctx.getTransformManager();
           this.rotationScrubStartAngle = tm.transform.rotation;
           container.style.cursor = 'ew-resize';
-        // Spherical (360) drag mode: route to SphericalProjection when enabled
+          // Spherical (360) drag mode: route to SphericalProjection when enabled
         } else if (this.ctx.getSphericalProjection()?.enabled) {
           const sp = this.ctx.getSphericalProjection()!;
           this.isSphericalDragging = true;
@@ -387,7 +399,15 @@ export class ViewerInputHandler {
     if (wipeManager.isDragging) {
       const canvasRect = this.ctx.getCanvasContainerRect();
       const containerRect = this.ctx.getContainerRect();
-      if (wipeManager.handlePointerMove(e, canvasRect, containerRect, this.ctx.getDisplayWidth(), this.ctx.getDisplayHeight())) {
+      if (
+        wipeManager.handlePointerMove(
+          e,
+          canvasRect,
+          containerRect,
+          this.ctx.getDisplayWidth(),
+          this.ctx.getDisplayHeight(),
+        )
+      ) {
         this.ctx.scheduleRender();
       }
       return;
@@ -442,7 +462,7 @@ export class ViewerInputHandler {
       const dx = e.clientX - this.rotationScrubStartX;
       // Sensitivity: 0.5 degrees per pixel of horizontal movement
       const angleDelta = dx * 0.5;
-      const newAngle = ((this.rotationScrubStartAngle + angleDelta) % 360 + 360) % 360;
+      const newAngle = (((this.rotationScrubStartAngle + angleDelta) % 360) + 360) % 360;
       const tm = this.ctx.getTransformManager();
       const currentTransform = tm.getTransform();
       currentTransform.rotation = newAngle;
@@ -835,7 +855,8 @@ export class ViewerInputHandler {
       if (text) {
         const paintEngine = this.ctx.getPaintEngine();
         const session = this.ctx.getSession();
-        const canvasPoint = (this.activeTextOverlay as HTMLTextAreaElement & { _canvasPoint: StrokePoint })._canvasPoint;
+        const canvasPoint = (this.activeTextOverlay as HTMLTextAreaElement & { _canvasPoint: StrokePoint })
+          ._canvasPoint;
         if (canvasPoint) {
           paintEngine.addText(session.currentFrame, canvasPoint, text);
           this.ctx.renderPaint();
@@ -951,11 +972,16 @@ export class ViewerInputHandler {
 
   private getShapeType(tool: PaintTool): ShapeType {
     switch (tool) {
-      case 'rectangle': return ShapeType.Rectangle;
-      case 'ellipse': return ShapeType.Ellipse;
-      case 'line': return ShapeType.Line;
-      case 'arrow': return ShapeType.Arrow;
-      default: return ShapeType.Rectangle;
+      case 'rectangle':
+        return ShapeType.Rectangle;
+      case 'ellipse':
+        return ShapeType.Ellipse;
+      case 'line':
+        return ShapeType.Line;
+      case 'arrow':
+        return ShapeType.Arrow;
+      default:
+        return ShapeType.Rectangle;
     }
   }
 
@@ -979,12 +1005,7 @@ export class ViewerInputHandler {
     const minSize = 0.005;
 
     if (dx > minSize || dy > minSize) {
-      paintEngine.addShape(
-        frame,
-        shapeType,
-        this.shapeStartPoint,
-        this.shapeCurrentPoint,
-      );
+      paintEngine.addShape(frame, shapeType, this.shapeStartPoint, this.shapeCurrentPoint);
     }
 
     this.isDrawingShape = false;
@@ -1088,17 +1109,7 @@ export class ViewerInputHandler {
         // Upload float pixels to the currently bound GL texture (which is
         // the image texture from the last renderImage call), overwriting the
         // rendered image. This preserves HDR values in the rendering pipeline.
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,
-          gl.RGBA32F,
-          width,
-          height,
-          0,
-          gl.RGBA,
-          gl.FLOAT,
-          flipped,
-        );
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, flipped);
 
         // Invalidate the GL render cache so the next scheduleRender() forces
         // a full redraw instead of skipping (same-image optimization).

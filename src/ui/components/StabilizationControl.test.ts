@@ -22,7 +22,9 @@ describe('StabilizationControl', () => {
   describe('initialization', () => {
     it('SC-001: constructor creates DOM without throwing', () => {
       let extra: StabilizationControl | undefined;
-      expect(() => { extra = new StabilizationControl(); }).not.toThrow();
+      expect(() => {
+        extra = new StabilizationControl();
+      }).not.toThrow();
       extra!.dispose();
     });
 
@@ -97,7 +99,9 @@ describe('StabilizationControl', () => {
       });
 
       const checkbox = document.querySelector('[data-testid="stabilization-enabled-checkbox"]') as HTMLInputElement;
-      const smoothingSlider = document.querySelector('[data-testid="stabilization-smoothing-slider"]') as HTMLInputElement;
+      const smoothingSlider = document.querySelector(
+        '[data-testid="stabilization-smoothing-slider"]',
+      ) as HTMLInputElement;
       const cropSlider = document.querySelector('[data-testid="stabilization-crop-slider"]') as HTMLInputElement;
 
       expect(checkbox.checked).toBe(true);
@@ -147,7 +151,9 @@ describe('StabilizationControl', () => {
       control.reset();
 
       const checkbox = document.querySelector('[data-testid="stabilization-enabled-checkbox"]') as HTMLInputElement;
-      const smoothingSlider = document.querySelector('[data-testid="stabilization-smoothing-slider"]') as HTMLInputElement;
+      const smoothingSlider = document.querySelector(
+        '[data-testid="stabilization-smoothing-slider"]',
+      ) as HTMLInputElement;
       const cropSlider = document.querySelector('[data-testid="stabilization-crop-slider"]') as HTMLInputElement;
 
       expect(checkbox.checked).toBe(false);

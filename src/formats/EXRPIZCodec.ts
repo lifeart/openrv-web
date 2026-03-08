@@ -14,7 +14,7 @@ const BITMAP_SIZE = USHORT_RANGE >> 3; // 8192 bytes
 function hufUnpackEncTable(
   data: Uint8Array,
   offset: number,
-  dataLength: number
+  dataLength: number,
 ): { bitmap: Uint8Array; bytesRead: number } {
   const bitmap = new Uint8Array(BITMAP_SIZE);
 
@@ -91,11 +91,7 @@ export function buildLUTs(bitmap: Uint8Array): {
 /**
  * Apply reverse LUT to convert packed values back to original
  */
-export function applyReverseLUT(
-  data: Uint16Array,
-  revLut: Uint16Array,
-  lutSize: number
-): void {
+export function applyReverseLUT(data: Uint16Array, revLut: Uint16Array, lutSize: number): void {
   for (let i = 0; i < data.length; i++) {
     const val = data[i]!;
     if (val < lutSize) {
@@ -113,7 +109,7 @@ export function wav2Decode(
   ox: number, // stride between values in x
   ny: number, // number of rows (height or 1 for 1D)
   oy: number, // stride between rows
-  maxValue: number // max value for clamping
+  maxValue: number, // max value for clamping
 ): void {
   const w = Math.max(nx, ny);
   const a_b = new Int32Array(w); // Temp buffer for wavelet coefficients
@@ -121,7 +117,7 @@ export function wav2Decode(
   // Process each row
   for (let y = 0; y < ny; y++) {
     // Determine current row transform size
-    let n = nx;
+    const n = nx;
     let p = 1;
     let p2: number;
 
@@ -153,10 +149,8 @@ export function wav2Decode(
         const idx1 = 2 * i;
         const idx2 = 2 * i + 1;
 
-        if (idx1 < n)
-          buffer[offset + idx1 * ox] = (val1 & 0xffff) as number;
-        if (idx2 < n)
-          buffer[offset + idx2 * ox] = (val2 & 0xffff) as number;
+        if (idx1 < n) buffer[offset + idx1 * ox] = (val1 & 0xffff) as number;
+        if (idx2 < n) buffer[offset + idx2 * ox] = (val2 & 0xffff) as number;
       }
 
       p >>= 1;
@@ -168,10 +162,7 @@ export function wav2Decode(
  * Reverse byte reorder (de-interleave bytes)
  * PIZ stores all MSBs first, then all LSBs.
  */
-export function reverseByteReorder(
-  data: Uint8Array,
-  outSize: number
-): Uint8Array {
+export function reverseByteReorder(data: Uint8Array, outSize: number): Uint8Array {
   const result = new Uint8Array(outSize);
   const halfSize = Math.ceil(outSize / 2);
 
@@ -216,7 +207,7 @@ export function decompressPIZ(
   width: number,
   numChannels: number,
   numLines: number,
-  channelSizes: number[]
+  channelSizes: number[],
 ): Uint8Array {
   if (compressedData.length === 0 || uncompressedSize === 0) {
     return new Uint8Array(uncompressedSize);
@@ -238,11 +229,7 @@ export function decompressPIZ(
     bitmap = new Uint8Array(BITMAP_SIZE);
 
     // Copy bitmap data
-    for (
-      let i = 0;
-      i < bitmapDataLen && pos < compressedData.length;
-      i++
-    ) {
+    for (let i = 0; i < bitmapDataLen && pos < compressedData.length; i++) {
       bitmap[minNonZero + i] = compressedData[pos++]!;
     }
   } else {
@@ -281,10 +268,7 @@ export function decompressPIZ(
     const channelShorts = width * numLines * shortsPerPixel;
 
     if (channelOffset + channelShorts <= numShorts) {
-      const channelView = shorts.subarray(
-        channelOffset,
-        channelOffset + channelShorts
-      );
+      const channelView = shorts.subarray(channelOffset, channelOffset + channelShorts);
 
       // Apply 2D wavelet: first in X, then in Y
       wav2Decode(
@@ -293,7 +277,7 @@ export function decompressPIZ(
         1,
         numLines,
         width * shortsPerPixel,
-        lutSize > 0 ? lutSize : USHORT_RANGE
+        lutSize > 0 ? lutSize : USHORT_RANGE,
       );
     }
 

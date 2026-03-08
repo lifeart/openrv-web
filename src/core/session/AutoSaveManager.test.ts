@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  AutoSaveManager,
-  AutoSaveEntry,
-  DEFAULT_AUTO_SAVE_CONFIG,
-} from './AutoSaveManager';
+import { AutoSaveManager, type AutoSaveEntry, DEFAULT_AUTO_SAVE_CONFIG } from './AutoSaveManager';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
@@ -140,9 +136,7 @@ describe('AutoSaveManager', () => {
 
       manager.setConfig({ interval: 20 });
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ interval: 20 })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ interval: 20 }));
     });
 
     it('AUTOSAVE-U009: enabling auto-save updates config', () => {
@@ -471,7 +465,7 @@ describe('AutoSaveManager', () => {
       expect(warningCallback).toHaveBeenCalledWith(
         expect.objectContaining({
           percentUsed: 90,
-        })
+        }),
       );
 
       // Restore

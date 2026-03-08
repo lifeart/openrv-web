@@ -12,9 +12,9 @@
  * - Gain: affects pixels where luma > 0.67 (soft falloff from 0.5)
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
-import { createDraggableContainer, createControlButton, DraggableContainer } from './shared/DraggableContainer';
+import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -70,7 +70,8 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
   private createUI(): void {
     // Add Link toggle to header controls (before close button)
     const linkLabel = document.createElement('label');
-    linkLabel.style.cssText = 'display: flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 10px; cursor: pointer;';
+    linkLabel.style.cssText =
+      'display: flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 10px; cursor: pointer;';
     const linkCheckbox = document.createElement('input');
     linkCheckbox.type = 'checkbox';
     linkCheckbox.checked = this.state.linked;
@@ -101,10 +102,10 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
     // Create four wheels: Lift, Gamma, Gain, Master
     const wheelConfigs: Array<{ key: keyof ColorWheelsState; label: string; color: string }> = [
-      { key: 'lift', label: 'Lift', color: '#6666cc' },      // Blue-ish for shadows
-      { key: 'gamma', label: 'Gamma', color: '#66cc66' },    // Green-ish for midtones
-      { key: 'gain', label: 'Gain', color: '#cccc66' },      // Yellow-ish for highlights
-      { key: 'master', label: 'Master', color: '#cc6666' },  // Red-ish for master
+      { key: 'lift', label: 'Lift', color: '#6666cc' }, // Blue-ish for shadows
+      { key: 'gamma', label: 'Gamma', color: '#66cc66' }, // Green-ish for midtones
+      { key: 'gain', label: 'Gain', color: '#cccc66' }, // Yellow-ish for highlights
+      { key: 'master', label: 'Master', color: '#cc6666' }, // Red-ish for master
     ];
 
     for (const config of wheelConfigs) {
@@ -176,7 +177,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
         e.clientX,
         e.clientY,
         WHEEL_CANVAS_SIZE,
-        WHEEL_CANVAS_SIZE
+        WHEEL_CANVAS_SIZE,
       );
 
       // Calculate position relative to center (normalized to -1..1 range)
@@ -195,7 +196,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       values.r = clampedX;
       values.g = -clampedY; // Invert Y for intuitive control
       // Blue is derived: when pushing red/green, reduce blue (complementary)
-      values.b = -(clampedX * 0.5 + (-clampedY) * 0.5);
+      values.b = -(clampedX * 0.5 + -clampedY * 0.5);
 
       if (this.state.linked && key !== 'master') {
         // Apply same change to other non-master wheels
@@ -419,13 +420,13 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
     // Draw color wheel background
     const gradient = ctx.createConicGradient(0, center, center);
-    gradient.addColorStop(0, 'hsl(0, 50%, 35%)');      // Red
-    gradient.addColorStop(0.166, 'hsl(60, 50%, 35%)');  // Yellow
+    gradient.addColorStop(0, 'hsl(0, 50%, 35%)'); // Red
+    gradient.addColorStop(0.166, 'hsl(60, 50%, 35%)'); // Yellow
     gradient.addColorStop(0.333, 'hsl(120, 50%, 35%)'); // Green
-    gradient.addColorStop(0.5, 'hsl(180, 50%, 35%)');   // Cyan
+    gradient.addColorStop(0.5, 'hsl(180, 50%, 35%)'); // Cyan
     gradient.addColorStop(0.666, 'hsl(240, 50%, 35%)'); // Blue
     gradient.addColorStop(0.833, 'hsl(300, 50%, 35%)'); // Magenta
-    gradient.addColorStop(1, 'hsl(360, 50%, 35%)');     // Red
+    gradient.addColorStop(1, 'hsl(360, 50%, 35%)'); // Red
 
     ctx.beginPath();
     ctx.arc(center, center, wheelRadius, 0, Math.PI * 2);
@@ -639,7 +640,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
       // Reset numeric inputs
       const numInputs = wheelEl.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
-      numInputs.forEach(input => input.value = '0.00');
+      numInputs.forEach((input) => (input.value = '0.00'));
 
       // Reset value display
       const valueEl = wheelEl.querySelector('div[style*="font-family: monospace"]') as HTMLElement;
@@ -661,7 +662,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     // Reset all numeric inputs
     for (const wheelEl of this.wheels.values()) {
       const numInputs = wheelEl.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>;
-      numInputs.forEach(input => input.value = '0.00');
+      numInputs.forEach((input) => (input.value = '0.00'));
     }
 
     this.emitChange();
@@ -693,12 +694,13 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
    * Check if any values are non-default
    */
   hasAdjustments(): boolean {
-    const isDefault = (w: WheelValues) =>
-      w.r === 0 && w.g === 0 && w.b === 0 && w.y === 0;
-    return !isDefault(this.state.lift) ||
-           !isDefault(this.state.gamma) ||
-           !isDefault(this.state.gain) ||
-           !isDefault(this.state.master);
+    const isDefault = (w: WheelValues) => w.r === 0 && w.g === 0 && w.b === 0 && w.y === 0;
+    return (
+      !isDefault(this.state.lift) ||
+      !isDefault(this.state.gamma) ||
+      !isDefault(this.state.gain) ||
+      !isDefault(this.state.master)
+    );
   }
 
   /**
@@ -755,8 +757,12 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       const luma = luminanceRec709(r, g, b);
 
       // Apply Master (affects all tones equally)
-      if (this.state.master.r !== 0 || this.state.master.g !== 0 ||
-          this.state.master.b !== 0 || this.state.master.y !== 0) {
+      if (
+        this.state.master.r !== 0 ||
+        this.state.master.g !== 0 ||
+        this.state.master.b !== 0 ||
+        this.state.master.y !== 0
+      ) {
         r = r + this.state.master.r * 0.5 + this.state.master.y;
         g = g + this.state.master.g * 0.5 + this.state.master.y;
         b = b + this.state.master.b * 0.5 + this.state.master.y;
@@ -773,16 +779,20 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       const gainWeight = this.smoothstep(0.5, 0.67, luma) * this.smoothstep(1.0, 0.85, luma);
 
       // Apply Lift (shadows)
-      if (liftWeight > 0 && (this.state.lift.r !== 0 || this.state.lift.g !== 0 ||
-          this.state.lift.b !== 0 || this.state.lift.y !== 0)) {
+      if (
+        liftWeight > 0 &&
+        (this.state.lift.r !== 0 || this.state.lift.g !== 0 || this.state.lift.b !== 0 || this.state.lift.y !== 0)
+      ) {
         r += (this.state.lift.r * 0.3 + this.state.lift.y * 0.3) * liftWeight;
         g += (this.state.lift.g * 0.3 + this.state.lift.y * 0.3) * liftWeight;
         b += (this.state.lift.b * 0.3 + this.state.lift.y * 0.3) * liftWeight;
       }
 
       // Apply Gamma (midtones)
-      if (gammaWeight > 0 && (this.state.gamma.r !== 0 || this.state.gamma.g !== 0 ||
-          this.state.gamma.b !== 0 || this.state.gamma.y !== 0)) {
+      if (
+        gammaWeight > 0 &&
+        (this.state.gamma.r !== 0 || this.state.gamma.g !== 0 || this.state.gamma.b !== 0 || this.state.gamma.y !== 0)
+      ) {
         // Gamma uses power function for more natural midtone adjustment
         const gammaR = 1.0 - this.state.gamma.r * 0.5 - this.state.gamma.y * 0.3;
         const gammaG = 1.0 - this.state.gamma.g * 0.5 - this.state.gamma.y * 0.3;
@@ -794,8 +804,10 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       }
 
       // Apply Gain (highlights)
-      if (gainWeight > 0 && (this.state.gain.r !== 0 || this.state.gain.g !== 0 ||
-          this.state.gain.b !== 0 || this.state.gain.y !== 0)) {
+      if (
+        gainWeight > 0 &&
+        (this.state.gain.r !== 0 || this.state.gain.g !== 0 || this.state.gain.b !== 0 || this.state.gain.y !== 0)
+      ) {
         const gainR = 1.0 + this.state.gain.r * 0.5 + this.state.gain.y * 0.5;
         const gainG = 1.0 + this.state.gain.g * 0.5 + this.state.gain.y * 0.5;
         const gainB = 1.0 + this.state.gain.b * 0.5 + this.state.gain.y * 0.5;

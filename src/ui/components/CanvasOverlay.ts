@@ -18,14 +18,11 @@
  * own logic, but should call the super method.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import type { UIControl } from '../UIControl';
 
-export abstract class CanvasOverlay<E extends EventMap = EventMap>
-  extends EventEmitter<E>
-  implements UIControl
-{
+export abstract class CanvasOverlay<E extends EventMap = EventMap> extends EventEmitter<E> implements UIControl {
   protected canvas: HTMLCanvasElement;
   protected ctx: CanvasRenderingContext2D;
   protected canvasWidth = 0;

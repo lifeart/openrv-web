@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SpotlightOverlay, DEFAULT_SPOTLIGHT_STATE, SpotlightShape } from './SpotlightOverlay';
+import { SpotlightOverlay, DEFAULT_SPOTLIGHT_STATE, type SpotlightShape } from './SpotlightOverlay';
 
 describe('SpotlightOverlay hi-DPI support', () => {
   let spotlight: SpotlightOverlay;
@@ -533,9 +533,7 @@ describe('SpotlightOverlay', () => {
 
       spotlight.dispose();
 
-      const pointermoveCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'pointermove'
-      );
+      const pointermoveCalls = removeSpy.mock.calls.filter(([event]) => event === 'pointermove');
       expect(pointermoveCalls.length).toBeGreaterThanOrEqual(1);
       removeSpy.mockRestore();
     });
@@ -545,9 +543,7 @@ describe('SpotlightOverlay', () => {
 
       spotlight.dispose();
 
-      const pointerupCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'pointerup'
-      );
+      const pointerupCalls = removeSpy.mock.calls.filter(([event]) => event === 'pointerup');
       expect(pointerupCalls.length).toBeGreaterThanOrEqual(1);
       removeSpy.mockRestore();
     });
@@ -557,9 +553,7 @@ describe('SpotlightOverlay', () => {
 
       spotlight.dispose();
 
-      const pointercancelCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'pointercancel'
-      );
+      const pointercancelCalls = removeSpy.mock.calls.filter(([event]) => event === 'pointercancel');
       expect(pointercancelCalls.length).toBeGreaterThanOrEqual(1);
       removeSpy.mockRestore();
     });

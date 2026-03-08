@@ -1,12 +1,9 @@
 import { RegisterNode } from '../base/NodeFactory';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
-import {
-  applyHighlightsShadows,
-  type HighlightsShadowsParams,
-} from '../../ui/components/ViewerEffects';
+import { applyHighlightsShadows, type HighlightsShadowsParams } from '../../ui/components/ViewerEffects';
 import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
@@ -54,12 +51,7 @@ export class HighlightsShadowsNode extends EffectNode {
   }
 
   isIdentity(): boolean {
-    return (
-      this.highlights === 0 &&
-      this.shadows === 0 &&
-      this.whites === 0 &&
-      this.blacks === 0
-    );
+    return this.highlights === 0 && this.shadows === 0 && this.whites === 0 && this.blacks === 0;
   }
 
   protected applyEffect(_context: EvalContext, input: IPImage): IPImage {

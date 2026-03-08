@@ -14,9 +14,9 @@ import {
   detectColorPrimariesFromChromaticities,
   EXRCompression,
   EXRPixelType,
-  EXRChannel,
-  EXRHeader,
-  EXRBox2i,
+  type EXRChannel,
+  type EXRHeader,
+  type EXRBox2i,
   EXRLevelMode,
   EXRRoundingMode,
 } from './EXRDecoder';
@@ -28,13 +28,15 @@ const EXR_MAGIC = 0x01312f76;
  * Create a minimal valid EXR file buffer for testing
  * This creates an uncompressed 2x2 RGBA half-float image
  */
-function createTestEXR(options: {
-  width?: number;
-  height?: number;
-  compression?: EXRCompression;
-  channels?: string[];
-  pixelType?: EXRPixelType;
-} = {}): ArrayBuffer {
+function createTestEXR(
+  options: {
+    width?: number;
+    height?: number;
+    compression?: EXRCompression;
+    channels?: string[];
+    pixelType?: EXRPixelType;
+  } = {},
+): ArrayBuffer {
   const {
     width = 2,
     height = 2,
@@ -199,9 +201,15 @@ function createTestEXR(options: {
       for (let x = 0; x < width; x++) {
         // Generate test values based on channel and position
         let value = 0;
-        if (ch === 'R') value = (x + y * width) / (width * height); // Red gradient
-        else if (ch === 'G') value = 0.5; // Green = 0.5
-        else if (ch === 'B') value = 1.0 - (x + y * width) / (width * height); // Blue inverse gradient
+        if (ch === 'R') {
+          value = (x + y * width) / (width * height);
+        } // Red gradient
+        else if (ch === 'G') {
+          value = 0.5;
+        } // Green = 0.5
+        else if (ch === 'B') {
+          value = 1.0 - (x + y * width) / (width * height);
+        } // Blue inverse gradient
         else if (ch === 'A') value = 1.0; // Alpha = 1
 
         if (pixelType === EXRPixelType.HALF) {
@@ -236,7 +244,7 @@ function floatToHalf(value: number): number {
   const f = int32View[0]!;
 
   const sign = (f >> 16) & 0x8000;
-  let exponent = ((f >> 23) & 0xff) - 127 + 15;
+  const exponent = ((f >> 23) & 0xff) - 127 + 15;
   let mantissa = (f >> 13) & 0x3ff;
 
   if (exponent <= 0) {
@@ -511,7 +519,7 @@ describe('EXRDecoder', () => {
     it('EXR-U053: floatToHalf handles negative zero', () => {
       // Negative zero should preserve sign bit
       const negZeroHalf = floatToHalf(-0);
-      expect((negZeroHalf & 0x8000)).toBe(0x8000); // Sign bit set
+      expect(negZeroHalf & 0x8000).toBe(0x8000); // Sign bit set
     });
 
     it('EXR-U054: floatToHalf handles NaN correctly', () => {
@@ -520,7 +528,7 @@ describe('EXRDecoder', () => {
       // NaN in half-float has exponent 31 (0x7c00) with non-zero mantissa
       // Or it may map to infinity if the implementation doesn't preserve NaN mantissa
       // Both are acceptable for this test - the key is exponent is max
-      expect((nanHalf & 0x7c00)).toBe(0x7c00); // Max exponent
+      expect(nanHalf & 0x7c00).toBe(0x7c00); // Max exponent
     });
   });
 
@@ -548,7 +556,7 @@ describe('EXRDecoder', () => {
     it('EXR-U063: should reject wrong magic number', async () => {
       const buffer = new ArrayBuffer(100);
       const view = new DataView(buffer);
-      view.setUint32(0, 0xDEADBEEF, true);
+      view.setUint32(0, 0xdeadbeef, true);
 
       await expect(decodeEXR(buffer)).rejects.toThrow('wrong magic number');
     });
@@ -711,7 +719,7 @@ describe('EXRDecoder', () => {
     it('EXR-U122: should return null for non-EXR data', () => {
       const buffer = new ArrayBuffer(100);
       const view = new DataView(buffer);
-      view.setUint32(0, 0x89504E47, true); // PNG magic
+      view.setUint32(0, 0x89504e47, true); // PNG magic
 
       expect(getEXRInfo(buffer)).toBeNull();
     });
@@ -776,35 +784,34 @@ describe('EXRDecoder', () => {
      * 2. Delta-encode the byte stream
      * 3. zlib deflate
      */
-    async function createPXR24EXR(options: {
-      width?: number;
-      height?: number;
-      channels?: string[];
-      pixelType?: EXRPixelType;
-      /** Raw pixel values per channel per scanline, indexed [y][channelIndex][x] as float values */
-      pixelValues?: number[][][];
-    } = {}): Promise<ArrayBuffer> {
-      const {
-        width = 2,
-        height = 2,
-        channels = ['R', 'G', 'B', 'A'],
-        pixelType = EXRPixelType.HALF,
-      } = options;
+    async function createPXR24EXR(
+      options: {
+        width?: number;
+        height?: number;
+        channels?: string[];
+        pixelType?: EXRPixelType;
+        /** Raw pixel values per channel per scanline, indexed [y][channelIndex][x] as float values */
+        pixelValues?: number[][][];
+      } = {},
+    ): Promise<ArrayBuffer> {
+      const { width = 2, height = 2, channels = ['R', 'G', 'B', 'A'], pixelType = EXRPixelType.HALF } = options;
 
       const sortedChannels = [...channels].sort();
 
       // Generate default pixel values if not provided
-      const pixelValues = options.pixelValues ?? Array.from({ length: height }, () =>
-        sortedChannels.map((ch, ci) =>
-          Array.from({ length: width }, () => {
-            if (ch === 'R') return 0.5;
-            if (ch === 'G') return 0.25;
-            if (ch === 'B') return 0.75;
-            if (ch === 'A') return 1.0;
-            return (ci + 1) * 0.1;
-          })
-        )
-      );
+      const pixelValues =
+        options.pixelValues ??
+        Array.from({ length: height }, () =>
+          sortedChannels.map((ch, ci) =>
+            Array.from({ length: width }, () => {
+              if (ch === 'R') return 0.5;
+              if (ch === 'G') return 0.25;
+              if (ch === 'B') return 0.75;
+              if (ch === 'A') return 1.0;
+              return (ci + 1) * 0.1;
+            }),
+          ),
+        );
 
       const parts: Uint8Array[] = [];
       let offset = 0;
@@ -960,7 +967,7 @@ describe('EXRDecoder', () => {
               for (let x = 0; x < width; x++) {
                 const h = floatToHalf(channelValues[x]!);
                 plane0.push((h >> 8) & 0xff); // MSB
-                plane1.push(h & 0xff);         // LSB
+                plane1.push(h & 0xff); // LSB
               }
               bytePlaneChunks.push(...plane0, ...plane1);
             }
@@ -1044,10 +1051,10 @@ describe('EXRDecoder', () => {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const idx = (y * width + x) * 4;
-          expect(result.data[idx + 0]).toBeCloseTo(0.5, 2);   // R
-          expect(result.data[idx + 1]).toBeCloseTo(0.25, 2);  // G
-          expect(result.data[idx + 2]).toBeCloseTo(0.75, 2);  // B
-          expect(result.data[idx + 3]).toBeCloseTo(1.0, 2);   // A
+          expect(result.data[idx + 0]).toBeCloseTo(0.5, 2); // R
+          expect(result.data[idx + 1]).toBeCloseTo(0.25, 2); // G
+          expect(result.data[idx + 2]).toBeCloseTo(0.75, 2); // B
+          expect(result.data[idx + 3]).toBeCloseTo(1.0, 2); // A
         }
       }
     });
@@ -1086,10 +1093,10 @@ describe('EXRDecoder', () => {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const idx = (y * width + x) * 4;
-          expect(result.data[idx + 0]).toBeCloseTo(1.5, 2);  // R
-          expect(result.data[idx + 1]).toBeCloseTo(0.0, 2);  // G
-          expect(result.data[idx + 2]).toBeCloseTo(2.0, 2);  // B
-          expect(result.data[idx + 3]).toBeCloseTo(1.0, 2);  // A
+          expect(result.data[idx + 0]).toBeCloseTo(1.5, 2); // R
+          expect(result.data[idx + 1]).toBeCloseTo(0.0, 2); // G
+          expect(result.data[idx + 2]).toBeCloseTo(2.0, 2); // B
+          expect(result.data[idx + 3]).toBeCloseTo(1.0, 2); // A
         }
       }
     });
@@ -1101,14 +1108,16 @@ describe('EXRDecoder', () => {
       // Channels in sorted order: B, G, R
 
       // Gradient values
-      const pixelValues: number[][][] = [[
-        // B channel
-        [0.1, 0.2, 0.3, 0.4],
-        // G channel
-        [0.5, 0.6, 0.7, 0.8],
-        // R channel
-        [0.0, 0.25, 0.5, 1.0],
-      ]];
+      const pixelValues: number[][][] = [
+        [
+          // B channel
+          [0.1, 0.2, 0.3, 0.4],
+          // G channel
+          [0.5, 0.6, 0.7, 0.8],
+          // R channel
+          [0.0, 0.25, 0.5, 1.0],
+        ],
+      ];
 
       const buffer = await createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
       const result = await decodeEXR(buffer);
@@ -1119,13 +1128,13 @@ describe('EXRDecoder', () => {
 
       // Check R channel (sorted as 3rd in B,G,R)
       const idx0 = 0 * 4;
-      expect(result.data[idx0 + 0]).toBeCloseTo(0.0, 2);  // R at x=0
+      expect(result.data[idx0 + 0]).toBeCloseTo(0.0, 2); // R at x=0
       const idx1 = 1 * 4;
       expect(result.data[idx1 + 0]).toBeCloseTo(0.25, 2); // R at x=1
       const idx2 = 2 * 4;
-      expect(result.data[idx2 + 0]).toBeCloseTo(0.5, 2);  // R at x=2
+      expect(result.data[idx2 + 0]).toBeCloseTo(0.5, 2); // R at x=2
       const idx3 = 3 * 4;
-      expect(result.data[idx3 + 0]).toBeCloseTo(1.0, 2);  // R at x=3
+      expect(result.data[idx3 + 0]).toBeCloseTo(1.0, 2); // R at x=3
 
       // Check G channel (sorted as 2nd in B,G,R)
       expect(result.data[idx0 + 1]).toBeCloseTo(0.5, 2);
@@ -1153,12 +1162,14 @@ describe('EXRDecoder', () => {
 
       // Use a value that will show lossy compression: Math.PI
       const piVal = Math.PI;
-      const pixelValues: number[][][] = [[
-        sortedChannels.map(() => [piVal, piVal])[0]!,
-        sortedChannels.map(() => [piVal, piVal])[1]!,
-        sortedChannels.map(() => [piVal, piVal])[2]!,
-        sortedChannels.map(() => [piVal, piVal])[3]!,
-      ]];
+      const pixelValues: number[][][] = [
+        [
+          sortedChannels.map(() => [piVal, piVal])[0]!,
+          sortedChannels.map(() => [piVal, piVal])[1]!,
+          sortedChannels.map(() => [piVal, piVal])[2]!,
+          sortedChannels.map(() => [piVal, piVal])[3]!,
+        ],
+      ];
 
       const buffer = await createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
       const result = await decodeEXR(buffer);
@@ -1196,7 +1207,7 @@ describe('EXRDecoder', () => {
 
       // Verify we got valid data
       expect(result.data.length).toBe(4 * 4 * 4);
-      expect(result.data.every(v => !Number.isNaN(v))).toBe(true);
+      expect(result.data.every((v) => !Number.isNaN(v))).toBe(true);
     });
 
     it('EXR-U141: should produce valid float data (no NaN in normal images)', async () => {
@@ -1254,8 +1265,8 @@ describe('EXRDecoder', () => {
       // RGBA layer should be first
       expect(layers[0]!.name).toBe('RGBA');
       // Other layers should be alphabetically sorted
-      expect(layers.find(l => l.name === 'diffuse')).toBeDefined();
-      expect(layers.find(l => l.name === 'specular')).toBeDefined();
+      expect(layers.find((l) => l.name === 'diffuse')).toBeDefined();
+      expect(layers.find((l) => l.name === 'specular')).toBeDefined();
     });
 
     it('EXR-U152: should track full channel names for layers', () => {
@@ -1266,7 +1277,7 @@ describe('EXRDecoder', () => {
       ];
 
       const layers = extractLayerInfo(channels);
-      const diffuseLayer = layers.find(l => l.name === 'diffuse');
+      const diffuseLayer = layers.find((l) => l.name === 'diffuse');
 
       expect(diffuseLayer).toBeDefined();
       expect(diffuseLayer!.channels).toEqual(['R', 'G', 'B']);
@@ -1305,7 +1316,7 @@ describe('EXRDecoder', () => {
         longNames: false,
         nonImage: false,
         multiPart: false,
-        channels: channels.map(name => ({
+        channels: channels.map((name) => ({
           name,
           pixelType: EXRPixelType.HALF,
           pLinear: 0,
@@ -1457,12 +1468,7 @@ describe('EXRDecoder', () => {
 /**
  * Helper to create an EXR with specific dataWindow dimensions
  */
-function createMalformedEXRWithDimensions(
-  xMin: number,
-  yMin: number,
-  xMax: number,
-  yMax: number
-): ArrayBuffer {
+function createMalformedEXRWithDimensions(xMin: number, yMin: number, xMax: number, yMax: number): ArrayBuffer {
   const parts: Uint8Array[] = [];
   let offset = 0;
 
@@ -1895,8 +1901,8 @@ function createMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer {
    * Write a string attribute (type "string"): size is string length + null terminator
    */
   function writeStringAttribute(name: string, value: string): void {
-    writeString(name);      // attr name
-    writeString('string');   // attr type
+    writeString(name); // attr name
+    writeString('string'); // attr type
     const encoded = new TextEncoder().encode(value);
     writeInt32(encoded.length + 1); // size includes null terminator
     bufParts.push(encoded);
@@ -1907,7 +1913,7 @@ function createMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer {
   // ===== MAGIC + VERSION =====
   writeUint32(EXR_MAGIC);
   // Version 2 with multiPart bit (0x1000) set; nonImage bit (0x800) only when deep data parts exist
-  const hasDeepData = partDefs.some(p => p.type === 'deepscanline' || p.type === 'deeptile');
+  const hasDeepData = partDefs.some((p) => p.type === 'deepscanline' || p.type === 'deeptile');
   writeUint32(2 | 0x1000 | (hasDeepData ? 0x800 : 0));
 
   // ===== PART HEADERS =====
@@ -2010,8 +2016,7 @@ function createMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer {
   for (const partDef of partDefs) {
     const height = partDef.height ?? 2;
     const compression = partDef.compression ?? EXRCompression.NONE;
-    const linesPerBlock = compression === EXRCompression.PIZ ? 32
-      : compression === EXRCompression.ZIP ? 16 : 1;
+    const linesPerBlock = compression === EXRCompression.PIZ ? 32 : compression === EXRCompression.ZIP ? 16 : 1;
     const numBlocks = Math.ceil(height / linesPerBlock);
     partBlockCounts.push(numBlocks);
     totalOffsetTableSize += numBlocks * 8;
@@ -2065,14 +2070,14 @@ function createMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer {
     const sortedChannels = [...channels].sort();
 
     for (let y = 0; y < height; y++) {
-      writeInt32(p);           // Part number
-      writeInt32(y);           // Y coordinate
+      writeInt32(p); // Part number
+      writeInt32(y); // Y coordinate
       writeInt32(scanlineSize); // Packed size
 
       for (const ch of sortedChannels) {
         for (let x = 0; x < width; x++) {
           let value = 0;
-          if (ch === 'R') value = valueMult * (x + y * width) / (width * height);
+          if (ch === 'R') value = (valueMult * (x + y * width)) / (width * height);
           else if (ch === 'G') value = valueMult * 0.5;
           else if (ch === 'B') value = valueMult * (1.0 - (x + y * width) / (width * height));
           else if (ch === 'A') value = 1.0;
@@ -2179,7 +2184,7 @@ function createInterleavedMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer
 
   // ===== MAGIC + VERSION =====
   writeUint32(EXR_MAGIC);
-  const hasDeepData = partDefs.some(p => p.type === 'deepscanline' || p.type === 'deeptile');
+  const hasDeepData = partDefs.some((p) => p.type === 'deepscanline' || p.type === 'deeptile');
   writeUint32(2 | 0x1000 | (hasDeepData ? 0x800 : 0));
 
   // ===== PART HEADERS =====
@@ -2263,7 +2268,7 @@ function createInterleavedMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer
   // For interleaved layout, chunks are ordered:
   //   part0-line0, part1-line0, part0-line1, part1-line1, ...
   // We need to compute offsets for each part's chunks in this interleaved order.
-  const maxHeight = Math.max(...partDefs.map(p => p.height ?? 2));
+  const maxHeight = Math.max(...partDefs.map((p) => p.height ?? 2));
   let currentDataOffset = scanlineDataStart;
 
   // Pre-compute all chunk offsets in interleaved order
@@ -2305,14 +2310,14 @@ function createInterleavedMultiPartTestEXR(partDefs: TestPartDef[]): ArrayBuffer
       const scanlineSize = channels.length * width * bytesPerPixel;
       const sortedChannels = [...channels].sort();
 
-      writeInt32(p);             // Part number
-      writeInt32(y);             // Y coordinate
-      writeInt32(scanlineSize);  // Packed size
+      writeInt32(p); // Part number
+      writeInt32(y); // Y coordinate
+      writeInt32(scanlineSize); // Packed size
 
       for (const ch of sortedChannels) {
         for (let x = 0; x < width; x++) {
           let value = 0;
-          if (ch === 'R') value = valueMult * (x + y * width) / (width * height);
+          if (ch === 'R') value = (valueMult * (x + y * width)) / (width * height);
           else if (ch === 'G') value = valueMult * 0.5;
           else if (ch === 'B') value = valueMult * (1.0 - (x + y * width) / (width * height));
           else if (ch === 'A') value = 1.0;
@@ -2545,7 +2550,14 @@ describe('Multi-part EXR', () => {
     it('EXR-MP032: should allow selecting a non-deep part when deep part exists', async () => {
       const buffer = createMultiPartTestEXR([
         { name: 'deep_part', type: 'deepscanline', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
-        { name: 'scanline_part', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.7 },
+        {
+          name: 'scanline_part',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.7,
+        },
       ]);
 
       // Selecting the deep part will attempt to decode (supported now), but fail due to invalid test data
@@ -2562,8 +2574,24 @@ describe('Multi-part EXR', () => {
   describe('multi-part stereo views', () => {
     it('EXR-MP040: should report view names in part info', async () => {
       const buffer = createMultiPartTestEXR([
-        { name: 'left', type: 'scanlineimage', view: 'left', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 1.0 },
-        { name: 'right', type: 'scanlineimage', view: 'right', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.8 },
+        {
+          name: 'left',
+          type: 'scanlineimage',
+          view: 'left',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'right',
+          type: 'scanlineimage',
+          view: 'right',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.8,
+        },
       ]);
 
       const result = await decodeEXR(buffer);
@@ -2574,8 +2602,24 @@ describe('Multi-part EXR', () => {
 
     it('EXR-MP041: should decode right view when selected by partIndex', async () => {
       const buffer = createMultiPartTestEXR([
-        { name: 'left', type: 'scanlineimage', view: 'left', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 1.0 },
-        { name: 'right', type: 'scanlineimage', view: 'right', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2, valueMultiplier: 0.5 },
+        {
+          name: 'left',
+          type: 'scanlineimage',
+          view: 'left',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 1.0,
+        },
+        {
+          name: 'right',
+          type: 'scanlineimage',
+          view: 'right',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.5,
+        },
       ]);
 
       const resultRight = await decodeEXR(buffer, { partIndex: 1 });
@@ -2603,7 +2647,14 @@ describe('Multi-part EXR', () => {
   describe('multi-part with single part', () => {
     it('EXR-MP060: should handle multi-part file that has only one part', async () => {
       const buffer = createMultiPartTestEXR([
-        { name: 'only', type: 'scanlineimage', channels: ['R', 'G', 'B', 'A'], width: 4, height: 4, valueMultiplier: 1.0 },
+        {
+          name: 'only',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 4,
+          height: 4,
+          valueMultiplier: 1.0,
+        },
       ]);
 
       const result = await decodeEXR(buffer);
@@ -2718,7 +2769,8 @@ describe('EXR Uncrop (applyUncrop)', () => {
       const dw: EXRBox2i = { xMin: 1, yMin: 1, xMax: 2, yMax: 2 };
       const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
 
-      const dwWidth = 2, dwHeight = 2;
+      const dwWidth = 2,
+        dwHeight = 2;
       const data = new Float32Array(dwWidth * dwHeight * 4);
 
       // Fill with known values: R=1, G=0.5, B=0.25, A=1
@@ -2767,7 +2819,8 @@ describe('EXR Uncrop (applyUncrop)', () => {
       const dw: EXRBox2i = { xMin: 100, yMin: 50, xMax: 500, yMax: 400 };
       const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1919, yMax: 1079 };
 
-      const dwWidth = 401, dwHeight = 351;
+      const dwWidth = 401,
+        dwHeight = 351;
       const data = new Float32Array(dwWidth * dwHeight * 4);
 
       // Fill all data pixels with R=0.7, G=0.3, B=0.1, A=0.9
@@ -2885,18 +2938,19 @@ describe('EXR Uncrop (applyUncrop)', () => {
   describe('applyUncrop - boundary clipping', () => {
     it('EXR-UC040: data window larger than display window on all sides is clipped', () => {
       // Data window extends beyond display window on every side
-      const dw: EXRBox2i = { xMin: -2, yMin: -1, xMax: 5, yMax: 4 };   // 8x6
-      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };  // 4x4
+      const dw: EXRBox2i = { xMin: -2, yMin: -1, xMax: 5, yMax: 4 }; // 8x6
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 }; // 4x4
 
-      const dwWidth = 8, dwHeight = 6;
+      const dwWidth = 8,
+        dwHeight = 6;
       const data = new Float32Array(dwWidth * dwHeight * 4);
 
       // Fill each pixel with a recognizable pattern: R = normalized x, G = normalized y
       for (let y = 0; y < dwHeight; y++) {
         for (let x = 0; x < dwWidth; x++) {
           const i = (y * dwWidth + x) * 4;
-          data[i + 0] = (x + 1) * 0.125;  // R: 0.125..1.0
-          data[i + 1] = (y + 1) * 0.125;  // G: 0.125..0.75
+          data[i + 0] = (x + 1) * 0.125; // R: 0.125..1.0
+          data[i + 1] = (y + 1) * 0.125; // G: 0.125..0.75
           data[i + 2] = 0.5;
           data[i + 3] = 1.0;
         }
@@ -2929,10 +2983,11 @@ describe('EXR Uncrop (applyUncrop)', () => {
 
     it('EXR-UC041: data window partially outside display window with negative offsets', () => {
       // Data window starts before display window but overlaps partially
-      const dw: EXRBox2i = { xMin: -3, yMin: -2, xMax: 1, yMax: 1 };    // 5x4
-      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };   // 4x4
+      const dw: EXRBox2i = { xMin: -3, yMin: -2, xMax: 1, yMax: 1 }; // 5x4
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 }; // 4x4
 
-      const dwWidth = 5, dwHeight = 4;
+      const dwWidth = 5,
+        dwHeight = 4;
       const data = new Float32Array(dwWidth * dwHeight * 4);
 
       // Fill all with recognizable value
@@ -2974,7 +3029,7 @@ describe('EXR Uncrop (applyUncrop)', () => {
     });
 
     it('EXR-UC042: applyUncrop throws on data length mismatch', () => {
-      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1, yMax: 1 };   // 2x2 → expects 16 floats
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1, yMax: 1 }; // 2x2 → expects 16 floats
       const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
 
       // Wrong length: 3x2x4 = 24 instead of 2x2x4 = 16
@@ -2988,7 +3043,7 @@ describe('EXR Uncrop (applyUncrop)', () => {
     it('EXR-UC030: should produce display window dimensions when data window differs', async () => {
       // Create a test EXR with data window smaller than display window
       const buffer = createTestEXRWithUncrop({
-        dataWindow: { xMin: 10, yMin: 5, xMax: 29, yMax: 14 },  // 20x10
+        dataWindow: { xMin: 10, yMin: 5, xMax: 29, yMax: 14 }, // 20x10
         displayWindow: { xMin: 0, yMin: 0, xMax: 39, yMax: 19 }, // 40x20
       });
 
@@ -3002,7 +3057,7 @@ describe('EXR Uncrop (applyUncrop)', () => {
 
     it('EXR-UC031: should have transparent black padding around data', async () => {
       const buffer = createTestEXRWithUncrop({
-        dataWindow: { xMin: 1, yMin: 1, xMax: 2, yMax: 2 },   // 2x2
+        dataWindow: { xMin: 1, yMin: 1, xMax: 2, yMax: 2 }, // 2x2
         displayWindow: { xMin: 0, yMin: 0, xMax: 3, yMax: 3 }, // 4x4
       });
 
@@ -3044,12 +3099,7 @@ function createTestEXRWithUncrop(options: {
   channels?: string[];
   pixelType?: EXRPixelType;
 }): ArrayBuffer {
-  const {
-    dataWindow,
-    displayWindow,
-    channels = ['R', 'G', 'B', 'A'],
-    pixelType = EXRPixelType.HALF,
-  } = options;
+  const { dataWindow, displayWindow, channels = ['R', 'G', 'B', 'A'], pixelType = EXRPixelType.HALF } = options;
 
   const dataWidth = dataWindow.xMax - dataWindow.xMin + 1;
   const dataHeight = dataWindow.yMax - dataWindow.yMin + 1;
@@ -3224,19 +3274,21 @@ function createTestEXRWithUncrop(options: {
  * Create a tiled EXR file buffer for testing.
  * Generates uncompressed ONE_LEVEL tiled image with RGBA half-float data.
  */
-function createTiledTestEXR(options: {
-  width?: number;
-  height?: number;
-  tileXSize?: number;
-  tileYSize?: number;
-  channels?: string[];
-  pixelType?: EXRPixelType;
-  compression?: EXRCompression;
-  levelMode?: EXRLevelMode;
-  roundingMode?: EXRRoundingMode;
-  dataWindow?: EXRBox2i;
-  displayWindow?: EXRBox2i;
-} = {}): ArrayBuffer {
+function createTiledTestEXR(
+  options: {
+    width?: number;
+    height?: number;
+    tileXSize?: number;
+    tileYSize?: number;
+    channels?: string[];
+    pixelType?: EXRPixelType;
+    compression?: EXRCompression;
+    levelMode?: EXRLevelMode;
+    roundingMode?: EXRRoundingMode;
+    dataWindow?: EXRBox2i;
+    displayWindow?: EXRBox2i;
+  } = {},
+): ArrayBuffer {
   const {
     width = 4,
     height = 4,
@@ -3425,10 +3477,10 @@ function createTiledTestEXR(options: {
       const actualTileH = Math.min(tileYSize, dataHeight - ty * tileYSize);
       const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
 
-      writeInt32(tx);  // tileX
-      writeInt32(ty);  // tileY
-      writeInt32(0);   // levelX
-      writeInt32(0);   // levelY
+      writeInt32(tx); // tileX
+      writeInt32(ty); // tileY
+      writeInt32(0); // levelX
+      writeInt32(0); // levelY
       writeInt32(tileDataSize); // packedSize
 
       // Write pixel data: channels stored separately, in sorted order, line by line within tile
@@ -3469,11 +3521,13 @@ function createTiledTestEXR(options: {
 /**
  * Create a multi-part EXR file with a tiled part for testing.
  */
-function createMultiPartTiledTestEXR(partDefs: (TestPartDef & {
-  tiled?: boolean;
-  tileXSize?: number;
-  tileYSize?: number;
-})[]): ArrayBuffer {
+function createMultiPartTiledTestEXR(
+  partDefs: (TestPartDef & {
+    tiled?: boolean;
+    tileXSize?: number;
+    tileYSize?: number;
+  })[],
+): ArrayBuffer {
   const bufParts: Uint8Array[] = [];
   let offset = 0;
 
@@ -3724,11 +3778,11 @@ function createMultiPartTiledTestEXR(partDefs: (TestPartDef & {
           const actualTileH = Math.min(tys, height - ty * tys);
           const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
 
-          writeInt32(p);            // partNumber
-          writeInt32(tx);           // tileX
-          writeInt32(ty);           // tileY
-          writeInt32(0);            // levelX
-          writeInt32(0);            // levelY
+          writeInt32(p); // partNumber
+          writeInt32(tx); // tileX
+          writeInt32(ty); // tileY
+          writeInt32(0); // levelX
+          writeInt32(0); // levelY
           writeInt32(tileDataSize); // packedSize
 
           for (let line = 0; line < actualTileH; line++) {
@@ -3737,7 +3791,7 @@ function createMultiPartTiledTestEXR(partDefs: (TestPartDef & {
               for (let x = 0; x < actualTileW; x++) {
                 const globalX = tx * txs + x;
                 let value = 0;
-                if (ch === 'R') value = valueMult * (globalX + globalY * width) / (width * height);
+                if (ch === 'R') value = (valueMult * (globalX + globalY * width)) / (width * height);
                 else if (ch === 'G') value = valueMult * 0.5;
                 else if (ch === 'B') value = valueMult * (1.0 - (globalX + globalY * width) / (width * height));
                 else if (ch === 'A') value = 1.0;
@@ -3755,14 +3809,14 @@ function createMultiPartTiledTestEXR(partDefs: (TestPartDef & {
     } else {
       const scanlineSize = channels.length * width * bytesPerPixel;
       for (let y = 0; y < height; y++) {
-        writeInt32(p);            // partNumber
-        writeInt32(y);            // y coordinate
+        writeInt32(p); // partNumber
+        writeInt32(y); // y coordinate
         writeInt32(scanlineSize); // packedSize
 
         for (const ch of sortedChannels) {
           for (let x = 0; x < width; x++) {
             let value = 0;
-            if (ch === 'R') value = valueMult * (x + y * width) / (width * height);
+            if (ch === 'R') value = (valueMult * (x + y * width)) / (width * height);
             else if (ch === 'G') value = valueMult * 0.5;
             else if (ch === 'B') value = valueMult * (1.0 - (x + y * width) / (width * height));
             else if (ch === 'A') value = 1.0;
@@ -4226,7 +4280,8 @@ describe('EXR Tiled Image Support', () => {
         writeString(ch);
         writeInt32(pixelType);
         writeUint8(0); // pLinear
-        parts.push(new Uint8Array([0, 0, 0])); offset += 3; // reserved
+        parts.push(new Uint8Array([0, 0, 0]));
+        offset += 3; // reserved
         writeInt32(1); // xSampling
         writeInt32(1); // ySampling
       }
@@ -4390,24 +4445,29 @@ describe('EXR Tiled Image Support', () => {
     }
 
     it('EXR-DEEP001: should decode deep scanline with single sample per pixel', async () => {
-      const width = 2, height = 2;
+      const width = 2,
+        height = 2;
       // Each pixel has 1 sample
-      const sampleCounts = [[1, 1], [1, 1]];
+      const sampleCounts = [
+        [1, 1],
+        [1, 1],
+      ];
       // Channel order is alphabetical: A, B, G, R
       // Each sample = [A, B, G, R]
       const sampleData = [
         [
-          [[1.0, 0.0, 0.0, 1.0]],  // pixel (0,0): R=1, G=0, B=0, A=1
-          [[1.0, 0.0, 1.0, 0.0]],  // pixel (1,0): R=0, G=1, B=0, A=1
+          [[1.0, 0.0, 0.0, 1.0]], // pixel (0,0): R=1, G=0, B=0, A=1
+          [[1.0, 0.0, 1.0, 0.0]], // pixel (1,0): R=0, G=1, B=0, A=1
         ],
         [
-          [[1.0, 1.0, 0.0, 0.0]],  // pixel (0,1): R=0, G=0, B=1, A=1
-          [[0.5, 0.5, 0.5, 0.5]],  // pixel (1,1): R=0.5, G=0.5, B=0.5, A=0.5
+          [[1.0, 1.0, 0.0, 0.0]], // pixel (0,1): R=0, G=0, B=1, A=1
+          [[0.5, 0.5, 0.5, 0.5]], // pixel (1,1): R=0.5, G=0.5, B=0.5, A=0.5
         ],
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4420,16 +4480,16 @@ describe('EXR Tiled Image Support', () => {
       expect(result.data.length).toBe(width * height * 4);
 
       // Pixel (0,0): R=1, G=0, B=0, A=1
-      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R
-      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G
-      expect(result.data[2]).toBeCloseTo(0.0, 4);  // B
-      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A
+      expect(result.data[0]).toBeCloseTo(1.0, 4); // R
+      expect(result.data[1]).toBeCloseTo(0.0, 4); // G
+      expect(result.data[2]).toBeCloseTo(0.0, 4); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A
 
       // Pixel (1,0): R=0, G=1, B=0, A=1
-      expect(result.data[4]).toBeCloseTo(0.0, 4);  // R
-      expect(result.data[5]).toBeCloseTo(1.0, 4);  // G
-      expect(result.data[6]).toBeCloseTo(0.0, 4);  // B
-      expect(result.data[7]).toBeCloseTo(1.0, 4);  // A
+      expect(result.data[4]).toBeCloseTo(0.0, 4); // R
+      expect(result.data[5]).toBeCloseTo(1.0, 4); // G
+      expect(result.data[6]).toBeCloseTo(0.0, 4); // B
+      expect(result.data[7]).toBeCloseTo(1.0, 4); // A
 
       // Pixel (1,1): R=0.5, G=0.5, B=0.5, A=0.5
       expect(result.data[12]).toBeCloseTo(0.5, 4);
@@ -4439,7 +4499,8 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('EXR-DEEP002: should composite multiple deep samples front-to-back', async () => {
-      const width = 1, height = 1;
+      const width = 1,
+        height = 1;
       // 2 samples for the single pixel
       const sampleCounts = [[2]];
       // Channel order: A, B, G, R
@@ -4453,14 +4514,15 @@ describe('EXR Tiled Image Support', () => {
       const sampleData = [
         [
           [
-            [0.5, 0.0, 0.0, 1.0],  // front: A=0.5, B=0.0, G=0.0, R=1.0
-            [1.0, 1.0, 0.0, 0.0],  // back:  A=1.0, B=1.0, G=0.0, R=0.0
+            [0.5, 0.0, 0.0, 1.0], // front: A=0.5, B=0.0, G=0.0, R=1.0
+            [1.0, 1.0, 0.0, 0.0], // back:  A=1.0, B=1.0, G=0.0, R=0.0
           ],
         ],
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4471,14 +4533,15 @@ describe('EXR Tiled Image Support', () => {
       expect(result.height).toBe(1);
 
       // Composited result
-      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R = 1.0 + 0.5 * 0.0 = 1.0
-      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G = 0.0 + 0.5 * 0.0 = 0.0
-      expect(result.data[2]).toBeCloseTo(0.5, 4);  // B = 0.0 + 0.5 * 1.0 = 0.5
-      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A = 0.5 + 0.5 * 1.0 = 1.0
+      expect(result.data[0]).toBeCloseTo(1.0, 4); // R = 1.0 + 0.5 * 0.0 = 1.0
+      expect(result.data[1]).toBeCloseTo(0.0, 4); // G = 0.0 + 0.5 * 0.0 = 0.0
+      expect(result.data[2]).toBeCloseTo(0.5, 4); // B = 0.0 + 0.5 * 1.0 = 0.5
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A = 0.5 + 0.5 * 1.0 = 1.0
     });
 
     it('EXR-DEEP003: should handle pixels with zero samples (transparent)', async () => {
-      const width = 2, height = 1;
+      const width = 2,
+        height = 1;
       const sampleCounts = [[0, 1]];
       // Pixel (0,0): no samples - should remain transparent (0,0,0,0)
       // Pixel (1,0): one sample
@@ -4490,7 +4553,8 @@ describe('EXR Tiled Image Support', () => {
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4511,7 +4575,8 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('EXR-DEEP004: should early-exit compositing when fully opaque', async () => {
-      const width = 1, height = 1;
+      const width = 1,
+        height = 1;
       // 3 samples, but first is fully opaque - rest should be ignored
       const sampleCounts = [[3]];
       // Channel order: A, B, G, R
@@ -4526,7 +4591,8 @@ describe('EXR Tiled Image Support', () => {
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4534,10 +4600,10 @@ describe('EXR Tiled Image Support', () => {
       const result = await decodeEXR(buffer);
 
       // Only the first sample should matter
-      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R
-      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G
-      expect(result.data[2]).toBeCloseTo(0.0, 4);  // B
-      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A
+      expect(result.data[0]).toBeCloseTo(1.0, 4); // R
+      expect(result.data[1]).toBeCloseTo(0.0, 4); // G
+      expect(result.data[2]).toBeCloseTo(0.0, 4); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A
     });
 
     it('EXR-DEEP005: should composite three semi-transparent layers', async () => {
@@ -4586,29 +4652,31 @@ describe('EXR Tiled Image Support', () => {
       const sampleData = [
         [
           [
-            [0.25, 0.0, 0.0, 1.0],  // A=0.25, B=0, G=0, R=1
-            [0.25, 0.0, 1.0, 0.0],  // A=0.25, B=0, G=1, R=0
-            [0.5,  1.0, 0.0, 0.0],  // A=0.5,  B=1, G=0, R=0
+            [0.25, 0.0, 0.0, 1.0], // A=0.25, B=0, G=0, R=1
+            [0.25, 0.0, 1.0, 0.0], // A=0.25, B=0, G=1, R=0
+            [0.5, 1.0, 0.0, 0.0], // A=0.5,  B=1, G=0, R=0
           ],
         ],
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height: 1,
+        width,
+        height: 1,
         sampleCounts,
         sampleData,
       });
 
       const result = await decodeEXR(buffer);
 
-      expect(result.data[0]).toBeCloseTo(1.0, 4);      // R
-      expect(result.data[1]).toBeCloseTo(0.75, 4);      // G
-      expect(result.data[2]).toBeCloseTo(0.5625, 4);    // B
-      expect(result.data[3]).toBeCloseTo(0.71875, 4);   // A
+      expect(result.data[0]).toBeCloseTo(1.0, 4); // R
+      expect(result.data[1]).toBeCloseTo(0.75, 4); // G
+      expect(result.data[2]).toBeCloseTo(0.5625, 4); // B
+      expect(result.data[3]).toBeCloseTo(0.71875, 4); // A
     });
 
     it('EXR-DEEP006: should handle multi-row deep scanline image', async () => {
-      const width = 2, height = 3;
+      const width = 2,
+        height = 3;
       const sampleCounts = [
         [1, 2],
         [0, 1],
@@ -4618,24 +4686,25 @@ describe('EXR Tiled Image Support', () => {
       // Channel order: A, B, G, R
       const sampleData = [
         [
-          [[1.0, 0.0, 0.0, 1.0]],  // (0,0): R=1 G=0 B=0 A=1
+          [[1.0, 0.0, 0.0, 1.0]], // (0,0): R=1 G=0 B=0 A=1
           [
-            [0.5, 0.0, 0.0, 0.5],  // (1,0) front: R=0.5 A=0.5
-            [1.0, 1.0, 0.0, 0.0],  // (1,0) back: B=1 A=1
+            [0.5, 0.0, 0.0, 0.5], // (1,0) front: R=0.5 A=0.5
+            [1.0, 1.0, 0.0, 0.0], // (1,0) back: B=1 A=1
           ],
         ],
         [
-          [],                        // (0,1): no samples
-          [[1.0, 0.0, 1.0, 0.0]],  // (1,1): G=1 A=1
+          [], // (0,1): no samples
+          [[1.0, 0.0, 1.0, 0.0]], // (1,1): G=1 A=1
         ],
         [
-          [[0.5, 0.5, 0.5, 0.5]],  // (0,2): all 0.5
-          [[1.0, 0.3, 0.2, 0.1]],  // (1,2): R=0.1 G=0.2 B=0.3 A=1
+          [[0.5, 0.5, 0.5, 0.5]], // (0,2): all 0.5
+          [[1.0, 0.3, 0.2, 0.1]], // (1,2): R=0.1 G=0.2 B=0.3 A=1
         ],
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4654,10 +4723,10 @@ describe('EXR Tiled Image Support', () => {
       // Pixel (1,0): 2 samples composited
       // Sample 1: R=0.5, G=0, B=0, A=0.5. compR=0.5, compA=0.5
       // Sample 2: R=0, G=0, B=1, A=1.  compR=0.5+(1-0.5)*0=0.5, compB=0+(1-0.5)*1=0.5, compA=0.5+(1-0.5)*1=1.0
-      expect(result.data[4]).toBeCloseTo(0.5, 4);   // R
-      expect(result.data[5]).toBeCloseTo(0.0, 4);   // G
-      expect(result.data[6]).toBeCloseTo(0.5, 4);   // B
-      expect(result.data[7]).toBeCloseTo(1.0, 4);   // A
+      expect(result.data[4]).toBeCloseTo(0.5, 4); // R
+      expect(result.data[5]).toBeCloseTo(0.0, 4); // G
+      expect(result.data[6]).toBeCloseTo(0.5, 4); // B
+      expect(result.data[7]).toBeCloseTo(1.0, 4); // A
 
       // Pixel (0,1): no samples - transparent
       const idx01 = (1 * width + 0) * 4;
@@ -4673,15 +4742,20 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('EXR-DEEP007: should handle all-empty deep image', async () => {
-      const width = 2, height = 2;
-      const sampleCounts = [[0, 0], [0, 0]];
+      const width = 2,
+        height = 2;
+      const sampleCounts = [
+        [0, 0],
+        [0, 0],
+      ];
       const sampleData = [
         [[], []],
         [[], []],
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4695,8 +4769,14 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('EXR-DEEP008: should report correct header info for deep image', async () => {
-      const width = 4, height = 4;
-      const sampleCounts = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]];
+      const width = 4,
+        height = 4;
+      const sampleCounts = [
+        [1, 1, 1, 1],
+        [1, 1, 1, 1],
+        [1, 1, 1, 1],
+        [1, 1, 1, 1],
+      ];
       const sampleData: number[][][][] = [];
       for (let y = 0; y < height; y++) {
         const row: number[][][] = [];
@@ -4707,7 +4787,8 @@ describe('EXR Tiled Image Support', () => {
       }
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4734,7 +4815,8 @@ describe('EXR Tiled Image Support', () => {
       const sampleData = [[[...samples]]];
 
       const buffer = createDeepScanlineEXR({
-        width, height: 1,
+        width,
+        height: 1,
         sampleCounts,
         sampleData,
       });
@@ -4751,9 +4833,9 @@ describe('EXR Tiled Image Support', () => {
       // This is correct for the non-premultiplied accumulation the code uses.
       // The result will be > 1.0 for R because we accumulate non-premultiplied values.
       // (Deep compositing with non-premultiplied alpha can produce values > 1.)
-      expect(result.data[0]).toBeGreaterThan(1.0);   // R accumulated
-      expect(result.data[1]).toBeCloseTo(0.0, 4);     // G stays 0
-      expect(result.data[2]).toBeCloseTo(0.0, 4);     // B stays 0
+      expect(result.data[0]).toBeGreaterThan(1.0); // R accumulated
+      expect(result.data[1]).toBeCloseTo(0.0, 4); // G stays 0
+      expect(result.data[2]).toBeCloseTo(0.0, 4); // B stays 0
       // Alpha should be 1 - (1-0.25)^5 = 1 - 0.75^5 ≈ 0.7627
       expect(result.data[3]).toBeCloseTo(1 - Math.pow(0.75, 5), 3);
     });
@@ -4761,21 +4843,23 @@ describe('EXR Tiled Image Support', () => {
     it('EXR-DEEP011: should clamp sample alpha > 1 to valid range', async () => {
       // Fix: sA = Math.max(0, Math.min(1, sA)); clamps alpha to [0,1]
       // Non-conforming data with alpha > 1 should be clamped before compositing.
-      const width = 1, height = 1;
+      const width = 1,
+        height = 1;
       // 2 samples: first with A=1.5 (invalid, should clamp to 1.0), second with A=0.5
       const sampleCounts = [[2]];
       // Channel order: A, B, G, R
       const sampleData = [
         [
           [
-            [1.5, 0.0, 0.0, 1.0],  // front: A=1.5 (clamped to 1.0), B=0, G=0, R=1
-            [0.5, 1.0, 0.0, 0.0],  // back: A=0.5, B=1, G=0, R=0
+            [1.5, 0.0, 0.0, 1.0], // front: A=1.5 (clamped to 1.0), B=0, G=0, R=1
+            [0.5, 1.0, 0.0, 0.0], // back: A=0.5, B=1, G=0, R=0
           ],
         ],
       ];
 
       const buffer = createDeepScanlineEXR({
-        width, height,
+        width,
+        height,
         sampleCounts,
         sampleData,
       });
@@ -4785,10 +4869,10 @@ describe('EXR Tiled Image Support', () => {
       // With alpha clamped to 1.0 for front sample:
       // After front: compR=1.0, compG=0, compB=0, compA=1.0
       // Since compA >= 1.0, early exit - back sample is ignored
-      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R
-      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G
-      expect(result.data[2]).toBeCloseTo(0.0, 4);  // B
-      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A (clamped from 1.5 to 1.0)
+      expect(result.data[0]).toBeCloseTo(1.0, 4); // R
+      expect(result.data[1]).toBeCloseTo(0.0, 4); // G
+      expect(result.data[2]).toBeCloseTo(0.0, 4); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A (clamped from 1.5 to 1.0)
     });
 
     it('EXR-DEEP010: should reject deeptile type', async () => {
@@ -4799,25 +4883,30 @@ describe('EXR Tiled Image Support', () => {
       function writeUint32(value: number): void {
         const buf = new Uint8Array(4);
         new DataView(buf.buffer).setUint32(0, value, true);
-        parts.push(buf); offset += 4;
+        parts.push(buf);
+        offset += 4;
       }
       function writeInt32(value: number): void {
         const buf = new Uint8Array(4);
         new DataView(buf.buffer).setInt32(0, value, true);
-        parts.push(buf); offset += 4;
+        parts.push(buf);
+        offset += 4;
       }
       function writeUint8(value: number): void {
-        parts.push(new Uint8Array([value])); offset += 1;
+        parts.push(new Uint8Array([value]));
+        offset += 1;
       }
       function writeString(str: string): void {
         const bytes = new TextEncoder().encode(str);
-        parts.push(bytes); parts.push(new Uint8Array([0]));
+        parts.push(bytes);
+        parts.push(new Uint8Array([0]));
         offset += bytes.length + 1;
       }
       function writeFloat32(value: number): void {
         const buf = new Uint8Array(4);
         new DataView(buf.buffer).setFloat32(0, value, true);
-        parts.push(buf); offset += 4;
+        parts.push(buf);
+        offset += 4;
       }
 
       writeUint32(EXR_MAGIC);
@@ -4838,7 +4927,7 @@ describe('EXR Tiled Image Support', () => {
       writeInt32(9);
       writeInt32(32); // xSize
       writeInt32(32); // ySize
-      writeUint8(0);  // mode
+      writeUint8(0); // mode
 
       // channels
       writeString('channels');
@@ -4847,8 +4936,11 @@ describe('EXR Tiled Image Support', () => {
       writeInt32(chSize);
       writeString('R');
       writeInt32(EXRPixelType.HALF);
-      writeUint8(0); parts.push(new Uint8Array([0, 0, 0])); offset += 3;
-      writeInt32(1); writeInt32(1);
+      writeUint8(0);
+      parts.push(new Uint8Array([0, 0, 0]));
+      offset += 3;
+      writeInt32(1);
+      writeInt32(1);
       writeUint8(0);
 
       // compression
@@ -4861,13 +4953,19 @@ describe('EXR Tiled Image Support', () => {
       writeString('dataWindow');
       writeString('box2i');
       writeInt32(16);
-      writeInt32(0); writeInt32(0); writeInt32(1); writeInt32(1);
+      writeInt32(0);
+      writeInt32(0);
+      writeInt32(1);
+      writeInt32(1);
 
       // displayWindow
       writeString('displayWindow');
       writeString('box2i');
       writeInt32(16);
-      writeInt32(0); writeInt32(0); writeInt32(1); writeInt32(1);
+      writeInt32(0);
+      writeInt32(0);
+      writeInt32(1);
+      writeInt32(1);
 
       // lineOrder
       writeString('lineOrder');
@@ -4886,7 +4984,10 @@ describe('EXR Tiled Image Support', () => {
       const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
       const result = new Uint8Array(totalLength);
       let pos = 0;
-      for (const part of parts) { result.set(part, pos); pos += part.length; }
+      for (const part of parts) {
+        result.set(part, pos);
+        pos += part.length;
+      }
 
       await expect(decodeEXR(result.buffer)).rejects.toThrow(/[Dd]eep.*tiled|deeptile/);
     });
@@ -4898,7 +4999,7 @@ describe('EXR Tiled Image Support', () => {
 
   describe('detectColorPrimariesFromChromaticities', () => {
     it('should detect BT.709 chromaticities', () => {
-      const chrom = new Float32Array([0.64, 0.33, 0.30, 0.60, 0.15, 0.06, 0.3127, 0.329]);
+      const chrom = new Float32Array([0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]);
       expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt709');
     });
 
@@ -4913,12 +5014,12 @@ describe('EXR Tiled Image Support', () => {
     });
 
     it('should detect BT.709 with slightly perturbed values within tolerance', () => {
-      const chrom = new Float32Array([0.641, 0.331, 0.299, 0.601, 0.151, 0.059, 0.3130, 0.3285]);
+      const chrom = new Float32Array([0.641, 0.331, 0.299, 0.601, 0.151, 0.059, 0.313, 0.3285]);
       expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt709');
     });
 
     it('should detect BT.2020 with slightly perturbed values within tolerance', () => {
-      const chrom = new Float32Array([0.710, 0.290, 0.172, 0.795, 0.133, 0.044, 0.3130, 0.3285]);
+      const chrom = new Float32Array([0.71, 0.29, 0.172, 0.795, 0.133, 0.044, 0.313, 0.3285]);
       expect(detectColorPrimariesFromChromaticities(chrom)).toBe('bt2020');
     });
 
@@ -4930,12 +5031,12 @@ describe('EXR Tiled Image Support', () => {
 
     it('should return undefined for ACES AP1 chromaticities', () => {
       // ACES AP1: R(0.713, 0.293) G(0.165, 0.830) B(0.128, 0.044) W(0.32168, 0.33767)
-      const chrom = new Float32Array([0.713, 0.293, 0.165, 0.830, 0.128, 0.044, 0.32168, 0.33767]);
+      const chrom = new Float32Array([0.713, 0.293, 0.165, 0.83, 0.128, 0.044, 0.32168, 0.33767]);
       expect(detectColorPrimariesFromChromaticities(chrom)).toBeUndefined();
     });
 
     it('should return undefined for short array', () => {
-      const chrom = new Float32Array([0.64, 0.33, 0.30]);
+      const chrom = new Float32Array([0.64, 0.33, 0.3]);
       expect(detectColorPrimariesFromChromaticities(chrom)).toBeUndefined();
     });
 
@@ -5020,7 +5121,7 @@ describe('EXR Tiled Image Support', () => {
           compression: EXRCompression.NONE,
           dataWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
           displayWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 } as EXRBox2i,
-          chromaticities: new Float32Array([0.64, 0.33, 0.30, 0.60, 0.15, 0.06, 0.3127, 0.329]),
+          chromaticities: new Float32Array([0.64, 0.33, 0.3, 0.6, 0.15, 0.06, 0.3127, 0.329]),
         } as unknown as EXRHeader,
         layers: [],
         decodedLayer: undefined,

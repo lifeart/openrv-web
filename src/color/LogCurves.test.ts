@@ -3,13 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  LOG_CURVES,
-  getLogCurveOptions,
-  buildLogLUT,
-  buildLogToLinearGLSL,
-  applyLogCurve,
-} from './LogCurves';
+import { LOG_CURVES, getLogCurveOptions, buildLogLUT, buildLogToLinearGLSL, applyLogCurve } from './LogCurves';
 
 describe('LogCurves', () => {
   describe('LOG_CURVES', () => {

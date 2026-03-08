@@ -6,11 +6,10 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { SessionManager } from './SessionManager';
 import type { SessionManagerHost } from './SessionManager';
 import { Graph } from '../graph/Graph';
-import { IPNode } from '../../nodes/base/IPNode';
-import { getNodeIdCounter } from '../../nodes/base/IPNode';
+import { IPNode, getNodeIdCounter } from '../../nodes/base/IPNode';
 import { BaseGroupNode } from '../../nodes/groups/BaseGroupNode';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
-import { IPImage } from '../image/Image';
+import { type IPImage } from '../image/Image';
 import type { EvalContext } from '../graph/Graph';
 import type { SerializedGraph } from './SessionManagerTypes';
 
@@ -47,7 +46,7 @@ function createHost(graph: Graph | null): SessionManagerHost {
 
 // Helper to flush microtasks
 async function flushMicrotasks(): Promise<void> {
-  await new Promise<void>(resolve => queueMicrotask(resolve));
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
 }
 
 describe('SessionManager', () => {
@@ -531,8 +530,8 @@ describe('SessionManager', () => {
       manager.setViewNode(s1.id);
 
       const tree = manager.getTreeModel();
-      const viewNode = tree.find(n => n.id === s1.id);
-      const otherNode = tree.find(n => n.id === s2.id);
+      const viewNode = tree.find((n) => n.id === s1.id);
+      const otherNode = tree.find((n) => n.id === s2.id);
 
       expect(viewNode!.isViewNode).toBe(true);
       expect(otherNode!.isViewNode).toBe(false);
@@ -552,7 +551,7 @@ describe('SessionManager', () => {
 
       // Should have the group tree and the orphan s2
       expect(tree).toHaveLength(2);
-      const ids = tree.map(n => n.id);
+      const ids = tree.map((n) => n.id);
       expect(ids).toContain(group.id);
       expect(ids).toContain(s2.id);
     });
@@ -619,7 +618,7 @@ describe('SessionManager', () => {
       expect(result!.outputNodeId).toBe(group.id);
       expect(result!.viewNodeId).toBe(s1.id);
 
-      const groupSerialized = result!.nodes.find(n => n.id === group.id);
+      const groupSerialized = result!.nodes.find((n) => n.id === group.id);
       expect(groupSerialized!.inputIds).toEqual([s1.id, s2.id]);
     });
 
@@ -631,7 +630,7 @@ describe('SessionManager', () => {
       graph.addNode(node);
 
       const result = manager.toSerializedGraph();
-      const serialized = result!.nodes.find(n => n.id === node.id);
+      const serialized = result!.nodes.find((n) => n.id === node.id);
 
       expect(serialized!.properties).toHaveProperty('persistent_prop');
       expect(serialized!.properties).not.toHaveProperty('transient_prop');
@@ -665,7 +664,7 @@ describe('SessionManager', () => {
       expect(reserialized.viewNodeId).not.toBeNull();
 
       // Verify connections are preserved
-      const groupNode = reserialized.nodes.find(n => n.type === 'TestGroup');
+      const groupNode = reserialized.nodes.find((n) => n.type === 'TestGroup');
       expect(groupNode!.inputIds).toHaveLength(2);
 
       newManager.dispose();
@@ -697,9 +696,7 @@ describe('SessionManager', () => {
 
       const data: SerializedGraph = {
         version: 1,
-        nodes: [
-          { id: 'group_1', type: 'TestGroup', name: 'g', properties: {}, inputIds: ['missing_node'] },
-        ],
+        nodes: [{ id: 'group_1', type: 'TestGroup', name: 'g', properties: {}, inputIds: ['missing_node'] }],
         outputNodeId: null,
         viewNodeId: null,
       };
@@ -716,9 +713,7 @@ describe('SessionManager', () => {
     it('resets node ID counter after deserialization', () => {
       const data: SerializedGraph = {
         version: 1,
-        nodes: [
-          { id: 'TestSource_100', type: 'TestSource', name: 's1', properties: {}, inputIds: [] },
-        ],
+        nodes: [{ id: 'TestSource_100', type: 'TestSource', name: 's1', properties: {}, inputIds: [] }],
         outputNodeId: null,
         viewNodeId: null,
       };
@@ -735,9 +730,7 @@ describe('SessionManager', () => {
     it('restores view node ID', () => {
       const data: SerializedGraph = {
         version: 1,
-        nodes: [
-          { id: 'TestSource_1', type: 'TestSource', name: 's1', properties: {}, inputIds: [] },
-        ],
+        nodes: [{ id: 'TestSource_1', type: 'TestSource', name: 's1', properties: {}, inputIds: [] }],
         outputNodeId: null,
         viewNodeId: 'TestSource_1',
       };
@@ -750,9 +743,7 @@ describe('SessionManager', () => {
     it('ignores viewNodeId if node does not exist', () => {
       const data: SerializedGraph = {
         version: 1,
-        nodes: [
-          { id: 'TestSource_1', type: 'TestSource', name: 's1', properties: {}, inputIds: [] },
-        ],
+        nodes: [{ id: 'TestSource_1', type: 'TestSource', name: 's1', properties: {}, inputIds: [] }],
         outputNodeId: null,
         viewNodeId: 'NonExistent_99',
       };

@@ -16,12 +16,7 @@ class TestSourceNode extends IPNode {
   }
 }
 
-function createTestImage(
-  width = 4,
-  height = 4,
-  channels = 4,
-  dataType: 'uint8' | 'float32' = 'uint8',
-): IPImage {
+function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {
   const image = IPImage.createEmpty(width, height, channels, dataType);
   const data = image.getTypedArray();
   for (let i = 0; i < data.length; i++) {

@@ -9,14 +9,18 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyStereoMode,
-  StereoState,
+  type StereoState,
   DEFAULT_STEREO_STATE,
   isDefaultStereoState,
   getStereoModeLabel,
 } from './StereoRenderer';
 
 // Helper to create test ImageData
-function createTestImageData(width: number, height: number, fill?: (x: number, y: number) => [number, number, number, number]): ImageData {
+function createTestImageData(
+  width: number,
+  height: number,
+  fill?: (x: number, y: number) => [number, number, number, number],
+): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -145,7 +149,7 @@ describe('StereoRenderer', () => {
       const pixel = getPixel(result, 25, 25);
       expect(pixel[0]).toBe(255); // Red from left eye
       expect(pixel[1]).toBe(255); // Green from right eye
-      expect(pixel[2]).toBe(0);   // Blue from right eye (was 0)
+      expect(pixel[2]).toBe(0); // Blue from right eye (was 0)
       expect(pixel[3]).toBe(255); // Alpha
     });
 

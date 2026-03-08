@@ -184,7 +184,8 @@ export class AppControlRegistry {
     this.slateEditorPanel = createPanel({ width: '400px', maxHeight: '70vh', align: 'right' });
     this.slateEditorPanel.element.appendChild(createPanelHeader('Slate / Leader'));
     const slateEditorHost = document.createElement('div');
-    slateEditorHost.style.cssText = 'padding: 12px; font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;';
+    slateEditorHost.style.cssText =
+      'padding: 12px; font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;';
     this.slateEditorPanel.element.appendChild(slateEditorHost);
     this.buildSlateEditorForm(slateEditorHost);
 
@@ -211,89 +212,227 @@ export class AppControlRegistry {
   // ══════════════════════════════════════════════════════════════════════════
 
   // --- Annotate ---
-  get paintToolbar(): PaintToolbar { return this.annotate.paintToolbar; }
-  get textFormattingToolbar(): TextFormattingToolbar { return this.annotate.textFormattingToolbar; }
+  get paintToolbar(): PaintToolbar {
+    return this.annotate.paintToolbar;
+  }
+  get textFormattingToolbar(): TextFormattingToolbar {
+    return this.annotate.textFormattingToolbar;
+  }
 
   // --- Color ---
-  get colorControls(): ColorControls { return this.color.colorControls; }
-  get colorInversionToggle(): ColorInversionToggle { return this.color.colorInversionToggle; }
-  get premultControl(): PremultControl { return this.color.premultControl; }
-  get cdlControl(): CDLControl { return this.color.cdlControl; }
-  get curvesControl(): CurvesControl { return this.color.curvesControl; }
-  get ocioControl(): OCIOControl { return this.color.ocioControl; }
-  get lutPipelinePanel(): LUTPipelinePanel { return this.color.lutPipelinePanel; }
+  get colorControls(): ColorControls {
+    return this.color.colorControls;
+  }
+  get colorInversionToggle(): ColorInversionToggle {
+    return this.color.colorInversionToggle;
+  }
+  get premultControl(): PremultControl {
+    return this.color.premultControl;
+  }
+  get cdlControl(): CDLControl {
+    return this.color.cdlControl;
+  }
+  get curvesControl(): CurvesControl {
+    return this.color.curvesControl;
+  }
+  get ocioControl(): OCIOControl {
+    return this.color.ocioControl;
+  }
+  get lutPipelinePanel(): LUTPipelinePanel {
+    return this.color.lutPipelinePanel;
+  }
 
   // --- View ---
-  get zoomControl(): ZoomControl { return this.view.zoomControl; }
-  get channelSelect(): ChannelSelect { return this.view.channelSelect; }
-  get compareControl(): CompareControl { return this.view.compareControl; }
-  get referenceManager(): ReferenceManager { return this.view.referenceManager; }
-  get stereoControl(): StereoControl { return this.view.stereoControl; }
-  get stereoEyeTransformControl(): StereoEyeTransformControl { return this.view.stereoEyeTransformControl; }
-  get stereoAlignControl(): StereoAlignControl { return this.view.stereoAlignControl; }
-  get ghostFrameControl(): GhostFrameControl { return this.view.ghostFrameControl; }
-  get convergenceMeasure(): ConvergenceMeasure { return this.view.convergenceMeasure; }
-  get floatingWindowControl(): FloatingWindowControl { return this.view.floatingWindowControl; }
-  get sphericalProjection(): SphericalProjection { return this.view.sphericalProjection; }
-  get stackControl(): StackControl { return this.view.stackControl; }
-  get parControl(): PARControl { return this.view.parControl; }
-  get backgroundPatternControl(): BackgroundPatternControl { return this.view.backgroundPatternControl; }
-  get displayProfileControl(): DisplayProfileControl { return this.view.displayProfileControl; }
-  get layoutControl(): MultiSourceLayoutControl { return this.view.layoutControl; }
+  get zoomControl(): ZoomControl {
+    return this.view.zoomControl;
+  }
+  get channelSelect(): ChannelSelect {
+    return this.view.channelSelect;
+  }
+  get compareControl(): CompareControl {
+    return this.view.compareControl;
+  }
+  get referenceManager(): ReferenceManager {
+    return this.view.referenceManager;
+  }
+  get stereoControl(): StereoControl {
+    return this.view.stereoControl;
+  }
+  get stereoEyeTransformControl(): StereoEyeTransformControl {
+    return this.view.stereoEyeTransformControl;
+  }
+  get stereoAlignControl(): StereoAlignControl {
+    return this.view.stereoAlignControl;
+  }
+  get ghostFrameControl(): GhostFrameControl {
+    return this.view.ghostFrameControl;
+  }
+  get convergenceMeasure(): ConvergenceMeasure {
+    return this.view.convergenceMeasure;
+  }
+  get floatingWindowControl(): FloatingWindowControl {
+    return this.view.floatingWindowControl;
+  }
+  get sphericalProjection(): SphericalProjection {
+    return this.view.sphericalProjection;
+  }
+  get stackControl(): StackControl {
+    return this.view.stackControl;
+  }
+  get parControl(): PARControl {
+    return this.view.parControl;
+  }
+  get backgroundPatternControl(): BackgroundPatternControl {
+    return this.view.backgroundPatternControl;
+  }
+  get displayProfileControl(): DisplayProfileControl {
+    return this.view.displayProfileControl;
+  }
+  get layoutControl(): MultiSourceLayoutControl {
+    return this.view.layoutControl;
+  }
 
   // --- Effects ---
-  get filterControl(): FilterControl { return this.effects.filterControl; }
-  get slateEditor(): SlateEditor { return this.effects.slateEditor; }
-  get lensControl(): LensControl { return this.effects.lensControl; }
-  get deinterlaceControl(): DeinterlaceControl { return this.effects.deinterlaceControl; }
-  get filmEmulationControl(): FilmEmulationControl { return this.effects.filmEmulationControl; }
-  get perspectiveCorrectionControl(): PerspectiveCorrectionControl { return this.effects.perspectiveCorrectionControl; }
-  get stabilizationControl(): StabilizationControl { return this.effects.stabilizationControl; }
-  get noiseReductionControl(): NoiseReductionControl { return this.effects.noiseReductionControl; }
-  get watermarkControl(): WatermarkControl { return this.effects.watermarkControl; }
-  get timelineEditor(): TimelineEditor { return this.effects.timelineEditor; }
+  get filterControl(): FilterControl {
+    return this.effects.filterControl;
+  }
+  get slateEditor(): SlateEditor {
+    return this.effects.slateEditor;
+  }
+  get lensControl(): LensControl {
+    return this.effects.lensControl;
+  }
+  get deinterlaceControl(): DeinterlaceControl {
+    return this.effects.deinterlaceControl;
+  }
+  get filmEmulationControl(): FilmEmulationControl {
+    return this.effects.filmEmulationControl;
+  }
+  get perspectiveCorrectionControl(): PerspectiveCorrectionControl {
+    return this.effects.perspectiveCorrectionControl;
+  }
+  get stabilizationControl(): StabilizationControl {
+    return this.effects.stabilizationControl;
+  }
+  get noiseReductionControl(): NoiseReductionControl {
+    return this.effects.noiseReductionControl;
+  }
+  get watermarkControl(): WatermarkControl {
+    return this.effects.watermarkControl;
+  }
+  get timelineEditor(): TimelineEditor {
+    return this.effects.timelineEditor;
+  }
 
   // --- Transform ---
-  get transformControl(): TransformControl { return this.transform.transformControl; }
-  get cropControl(): CropControl { return this.transform.cropControl; }
+  get transformControl(): TransformControl {
+    return this.transform.transformControl;
+  }
+  get cropControl(): CropControl {
+    return this.transform.cropControl;
+  }
 
   // --- Analysis ---
-  get scopesControl(): ScopesControl { return this.analysis.scopesControl; }
-  get safeAreasControl(): SafeAreasControl { return this.analysis.safeAreasControl; }
-  get falseColorControl(): FalseColorControl { return this.analysis.falseColorControl; }
-  get luminanceVisControl(): LuminanceVisualizationControl { return this.analysis.luminanceVisControl; }
-  get toneMappingControl(): ToneMappingControl { return this.analysis.toneMappingControl; }
-  get zebraControl(): ZebraControl { return this.analysis.zebraControl; }
-  get hslQualifierControl(): HSLQualifierControl { return this.analysis.hslQualifierControl; }
-  get gamutMappingControl(): GamutMappingControl { return this.analysis.gamutMappingControl; }
-  get gamutDiagram(): GamutDiagram { return this.analysis.gamutDiagram; }
-  get histogram(): Histogram { return this.analysis.histogram; }
-  get waveform(): Waveform { return this.analysis.waveform; }
-  get vectorscope(): Vectorscope { return this.analysis.vectorscope; }
+  get scopesControl(): ScopesControl {
+    return this.analysis.scopesControl;
+  }
+  get safeAreasControl(): SafeAreasControl {
+    return this.analysis.safeAreasControl;
+  }
+  get falseColorControl(): FalseColorControl {
+    return this.analysis.falseColorControl;
+  }
+  get luminanceVisControl(): LuminanceVisualizationControl {
+    return this.analysis.luminanceVisControl;
+  }
+  get toneMappingControl(): ToneMappingControl {
+    return this.analysis.toneMappingControl;
+  }
+  get zebraControl(): ZebraControl {
+    return this.analysis.zebraControl;
+  }
+  get hslQualifierControl(): HSLQualifierControl {
+    return this.analysis.hslQualifierControl;
+  }
+  get gamutMappingControl(): GamutMappingControl {
+    return this.analysis.gamutMappingControl;
+  }
+  get gamutDiagram(): GamutDiagram {
+    return this.analysis.gamutDiagram;
+  }
+  get histogram(): Histogram {
+    return this.analysis.histogram;
+  }
+  get waveform(): Waveform {
+    return this.analysis.waveform;
+  }
+  get vectorscope(): Vectorscope {
+    return this.analysis.vectorscope;
+  }
 
   // --- Panels ---
-  get historyPanel(): HistoryPanel { return this.panel.historyPanel; }
-  get infoPanel(): InfoPanel { return this.panel.infoPanel; }
-  get markerListPanel(): MarkerListPanel { return this.panel.markerListPanel; }
-  get notePanel(): NotePanel { return this.panel.notePanel; }
-  get rightPanelContent(): RightPanelContent { return this.panel.rightPanelContent; }
-  get leftPanelContent(): LeftPanelContent { return this.panel.leftPanelContent; }
-  get cacheIndicator(): CacheIndicator { return this.panel.cacheIndicator; }
-  get snapshotPanel(): SnapshotPanel { return this.panel.snapshotPanel; }
-  get playlistPanel(): PlaylistPanel { return this.panel.playlistPanel; }
-  get shotGridConfig(): ShotGridConfigUI { return this.panel.shotGridConfig; }
-  get shotGridPanel(): ShotGridPanel { return this.panel.shotGridPanel; }
-  get conformPanel(): ConformPanel { return this.panel.conformPanel; }
+  get historyPanel(): HistoryPanel {
+    return this.panel.historyPanel;
+  }
+  get infoPanel(): InfoPanel {
+    return this.panel.infoPanel;
+  }
+  get markerListPanel(): MarkerListPanel {
+    return this.panel.markerListPanel;
+  }
+  get notePanel(): NotePanel {
+    return this.panel.notePanel;
+  }
+  get rightPanelContent(): RightPanelContent {
+    return this.panel.rightPanelContent;
+  }
+  get leftPanelContent(): LeftPanelContent {
+    return this.panel.leftPanelContent;
+  }
+  get cacheIndicator(): CacheIndicator {
+    return this.panel.cacheIndicator;
+  }
+  get snapshotPanel(): SnapshotPanel {
+    return this.panel.snapshotPanel;
+  }
+  get playlistPanel(): PlaylistPanel {
+    return this.panel.playlistPanel;
+  }
+  get shotGridConfig(): ShotGridConfigUI {
+    return this.panel.shotGridConfig;
+  }
+  get shotGridPanel(): ShotGridPanel {
+    return this.panel.shotGridPanel;
+  }
+  get conformPanel(): ConformPanel {
+    return this.panel.conformPanel;
+  }
 
   // --- Playback ---
-  get autoSaveManager(): AutoSaveManager { return this.playback.autoSaveManager; }
-  get autoSaveIndicator(): AutoSaveIndicator { return this.playback.autoSaveIndicator; }
-  get snapshotManager(): SnapshotManager { return this.playback.snapshotManager; }
-  get playlistManager(): PlaylistManager { return this.playback.playlistManager; }
-  get transitionManager(): TransitionManager { return this.playback.transitionManager; }
-  get presentationMode(): PresentationMode { return this.playback.presentationMode; }
-  get networkSyncManager(): NetworkSyncManager { return this.playback.networkSyncManager; }
-  get networkControl(): NetworkControl { return this.playback.networkControl; }
+  get autoSaveManager(): AutoSaveManager {
+    return this.playback.autoSaveManager;
+  }
+  get autoSaveIndicator(): AutoSaveIndicator {
+    return this.playback.autoSaveIndicator;
+  }
+  get snapshotManager(): SnapshotManager {
+    return this.playback.snapshotManager;
+  }
+  get playlistManager(): PlaylistManager {
+    return this.playback.playlistManager;
+  }
+  get transitionManager(): TransitionManager {
+    return this.playback.transitionManager;
+  }
+  get presentationMode(): PresentationMode {
+    return this.playback.presentationMode;
+  }
+  get networkSyncManager(): NetworkSyncManager {
+    return this.playback.networkSyncManager;
+  }
+  get networkControl(): NetworkControl {
+    return this.playback.networkControl;
+  }
 
   /**
    * Build tab panel DOM content for all tabs.
@@ -330,20 +469,25 @@ export class AppControlRegistry {
     contextToolbar.setTabContent('color', buildColorTab({ registry: this, viewer, addUnsubscriber }));
 
     // === PANEL TOGGLES -> HeaderBar utility area ===
-    headerBar.setPanelToggles(buildPanelToggles({
-      registry: this,
-      sessionBridge,
-      conformPanelElement: this.panel.conformPanelElement,
-      addUnsubscriber,
-    }));
+    headerBar.setPanelToggles(
+      buildPanelToggles({
+        registry: this,
+        sessionBridge,
+        conformPanelElement: this.panel.conformPanelElement,
+        addUnsubscriber,
+      }),
+    );
 
     // === EFFECTS TAB ===
-    contextToolbar.setTabContent('effects', buildEffectsTab({
-      registry: this,
-      noiseReductionPanel: this.noiseReductionPanel,
-      watermarkPanel: this.watermarkPanel,
-      slateEditorPanel: this.slateEditorPanel,
-    }));
+    contextToolbar.setTabContent(
+      'effects',
+      buildEffectsTab({
+        registry: this,
+        noiseReductionPanel: this.noiseReductionPanel,
+        watermarkPanel: this.watermarkPanel,
+        slateEditorPanel: this.slateEditorPanel,
+      }),
+    );
 
     // === TRANSFORM TAB ===
     contextToolbar.setTabContent('transform', buildTransformTab(this));
@@ -398,8 +542,10 @@ export class AppControlRegistry {
     // Description
     const desc = document.createElement('div');
     desc.dataset.testid = 'slate-description';
-    desc.style.cssText = 'font-size: 11px; color: var(--text-muted); line-height: 1.5; padding: 4px 0 8px; border-bottom: 1px solid var(--border-primary); margin-bottom: 4px;';
-    desc.textContent = 'Configure the slate frame prepended to video exports. Fill in production metadata below \u2014 a 2-second leader will be added at the start of each exported clip. Settings are not saved to the session file.';
+    desc.style.cssText =
+      'font-size: 11px; color: var(--text-muted); line-height: 1.5; padding: 4px 0 8px; border-bottom: 1px solid var(--border-primary); margin-bottom: 4px;';
+    desc.textContent =
+      'Configure the slate frame prepended to video exports. Fill in production metadata below \u2014 a 2-second leader will be added at the start of each exported clip. Settings are not saved to the session file.';
     container.appendChild(desc);
 
     const createField = (label: string, type: string, testid: string): HTMLInputElement => {
@@ -732,7 +878,7 @@ export class AppControlRegistry {
     this.conformPanel.dispose();
     this.panel.conformPanelElement.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
-    this.autoSaveManager.dispose().catch(err => {
+    this.autoSaveManager.dispose().catch((err) => {
       console.error('Error disposing auto-save manager:', err);
     });
   }

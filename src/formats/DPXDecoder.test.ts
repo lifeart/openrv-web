@@ -3,13 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  isDPXFile,
-  getDPXInfo,
-  decodeDPX,
-  unpackDPX10bit,
-  dpxLogToLinear,
-} from './DPXDecoder';
+import { isDPXFile, getDPXInfo, decodeDPX, unpackDPX10bit, dpxLogToLinear } from './DPXDecoder';
 
 const DPX_MAGIC_BE = 0x53445058; // "SDPX"
 const DPX_MAGIC_LE = 0x58504453; // "XPDS"
@@ -18,15 +12,17 @@ const DPX_MAGIC_LE = 0x58504453; // "XPDS"
  * Create a minimal valid DPX file buffer for testing.
  * Generates a DPX with the specified parameters and filled pixel data.
  */
-function createTestDPX(options: {
-  width?: number;
-  height?: number;
-  bitDepth?: number;
-  bigEndian?: boolean;
-  transfer?: number; // 0=linear, 3=log
-  channels?: number; // 3=RGB, 4=RGBA
-  dataOffset?: number;
-} = {}): ArrayBuffer {
+function createTestDPX(
+  options: {
+    width?: number;
+    height?: number;
+    bitDepth?: number;
+    bigEndian?: boolean;
+    transfer?: number; // 0=linear, 3=log
+    channels?: number; // 3=RGB, 4=RGBA
+    dataOffset?: number;
+  } = {},
+): ArrayBuffer {
   const {
     width = 2,
     height = 2,
@@ -460,9 +456,9 @@ describe('DPXDecoder', () => {
       const result = await decodeDPX(buffer);
 
       expect(result.data[0]).toBeCloseTo(128 / 255, 4); // R
-      expect(result.data[1]).toBeCloseTo(0 / 255, 4);   // G
-      expect(result.data[2]).toBeCloseTo(255 / 255, 4);  // B
-      expect(result.data[3]).toBe(1.0);                   // A
+      expect(result.data[1]).toBeCloseTo(0 / 255, 4); // G
+      expect(result.data[2]).toBeCloseTo(255 / 255, 4); // B
+      expect(result.data[3]).toBe(1.0); // A
     });
 
     it('should correctly decode 16-bit pixel values', async () => {
@@ -477,8 +473,8 @@ describe('DPXDecoder', () => {
       const result = await decodeDPX(buffer);
 
       expect(result.data[0]).toBeCloseTo(32768 / 65535, 4); // R
-      expect(result.data[1]).toBeCloseTo(0 / 65535, 4);     // G
-      expect(result.data[2]).toBeCloseTo(65535 / 65535, 4);  // B
+      expect(result.data[1]).toBeCloseTo(0 / 65535, 4); // G
+      expect(result.data[2]).toBeCloseTo(65535 / 65535, 4); // B
     });
 
     it('should correctly decode 12-bit pixel values', async () => {
@@ -487,14 +483,14 @@ describe('DPXDecoder', () => {
       const pixelView = new DataView(buffer, 2048);
       // 12-bit value 2048 stored in upper 12 bits of 16-bit: 2048 << 4 = 32768
       pixelView.setUint16(0, 2048 << 4, false); // R = 2048/4095
-      pixelView.setUint16(2, 0, false);          // G = 0/4095
-      pixelView.setUint16(4, 4095 << 4, false);  // B = 4095/4095
+      pixelView.setUint16(2, 0, false); // G = 0/4095
+      pixelView.setUint16(4, 4095 << 4, false); // B = 4095/4095
 
       const result = await decodeDPX(buffer);
 
       expect(result.data[0]).toBeCloseTo(2048 / 4095, 4); // R
-      expect(result.data[1]).toBeCloseTo(0 / 4095, 4);    // G
-      expect(result.data[2]).toBeCloseTo(4095 / 4095, 4);  // B
+      expect(result.data[1]).toBeCloseTo(0 / 4095, 4); // G
+      expect(result.data[2]).toBeCloseTo(4095 / 4095, 4); // B
     });
 
     it('should handle 1x1 pixel image', async () => {

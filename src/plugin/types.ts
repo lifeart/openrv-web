@@ -41,26 +41,13 @@ export interface PluginManifest {
   contributes: PluginContributionType[];
 }
 
-export type PluginContributionType =
-  | 'decoder'
-  | 'node'
-  | 'processor'
-  | 'tool'
-  | 'exporter'
-  | 'blendMode'
-  | 'uiPanel';
+export type PluginContributionType = 'decoder' | 'node' | 'processor' | 'tool' | 'exporter' | 'blendMode' | 'uiPanel';
 
 // ---------------------------------------------------------------------------
 // Plugin Lifecycle
 // ---------------------------------------------------------------------------
 
-export type PluginState =
-  | 'registered'
-  | 'initialized'
-  | 'active'
-  | 'inactive'
-  | 'disposed'
-  | 'error';
+export type PluginState = 'registered' | 'initialized' | 'active' | 'inactive' | 'disposed' | 'error';
 
 /**
  * Context object passed to plugin lifecycle hooks.

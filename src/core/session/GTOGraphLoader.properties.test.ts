@@ -51,7 +51,7 @@ function createMockDTO(config: {
     }),
   });
 
-  const createMockObject = (obj: typeof objects[0]) => ({
+  const createMockObject = (obj: (typeof objects)[0]) => ({
     name: obj.name,
     protocol: obj.protocol,
     component: (name: string) => createMockComponent(obj.components?.[name]),
@@ -372,10 +372,22 @@ describe('GTOGraphLoader - Property Parsing', () => {
         properties: {
           has: vi.fn((key: string) =>
             [
-              'k1', 'k2', 'k3', 'p1', 'p2', 'lensModel', 'distortionScale',
-              'centerX', 'centerY', 'pixelAspectRatio', 'fx', 'fy',
-              'cropRatioX', 'cropRatioY', 'lensWarpActive',
-            ].includes(key)
+              'k1',
+              'k2',
+              'k3',
+              'p1',
+              'p2',
+              'lensModel',
+              'distortionScale',
+              'centerX',
+              'centerY',
+              'pixelAspectRatio',
+              'fx',
+              'fy',
+              'cropRatioX',
+              'cropRatioY',
+              'lensWarpActive',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -441,9 +453,22 @@ describe('GTOGraphLoader - Property Parsing', () => {
         properties: {
           has: vi.fn((key: string) =>
             [
-              'squeeze', 'squeezeX', 'squeezeY', 'anamorphicRotation', 'lensRotation',
-              'cx02', 'cy02', 'cx22', 'cy22', 'cx04', 'cy04', 'cx24', 'cy24', 'cx44', 'cy44',
-            ].includes(key)
+              'squeeze',
+              'squeezeX',
+              'squeezeY',
+              'anamorphicRotation',
+              'lensRotation',
+              'cx02',
+              'cy02',
+              'cx22',
+              'cy22',
+              'cx04',
+              'cy04',
+              'cx24',
+              'cy24',
+              'cx44',
+              'cy44',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -476,7 +501,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
                 cx24: 0.07,
                 cy24: 0.08,
                 cx44: 0.09,
-                cy44: 0.10,
+                cy44: 0.1,
               },
             },
           },
@@ -499,7 +524,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx24', 0.07);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy24', 0.08);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx44', 0.09);
-      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy44', 0.10);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy44', 0.1);
     });
 
     it('parses color properties', () => {
@@ -551,7 +576,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'colorNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['invert', 'normalize', 'unpremult', 'hue', 'colorLut', 'colorScale', 'colorActive'].includes(key)
+            ['invert', 'normalize', 'unpremult', 'hue', 'colorLut', 'colorScale', 'colorActive'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -600,7 +625,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'colorNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['cdlActive', 'cdlColorspace', 'slope', 'cdlOffset', 'power', 'cdlSaturation', 'cdlNoClamp'].includes(key)
+            ['cdlActive', 'cdlColorspace', 'slope', 'cdlOffset', 'power', 'cdlSaturation', 'cdlNoClamp'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -649,7 +674,9 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'colorNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['luminanceLutActive', 'luminanceLut', 'luminanceLutMax', 'luminanceLutSize', 'luminanceLutName'].includes(key)
+            ['luminanceLutActive', 'luminanceLut', 'luminanceLutMax', 'luminanceLutSize', 'luminanceLutName'].includes(
+              key,
+            ),
           ),
           setValue: vi.fn(),
         },
@@ -703,12 +730,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
       vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
       vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
-      const testMatrix = [
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-      ];
+      const testMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -736,7 +758,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'retimeNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['visualScale', 'visualOffset', 'audioScale', 'audioOffset', 'retimeOutputFps'].includes(key)
+            ['visualScale', 'visualOffset', 'audioScale', 'audioOffset', 'retimeOutputFps'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -776,9 +798,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         type: 'RVRetime',
         name: 'retimeNode',
         properties: {
-          has: vi.fn((key: string) =>
-            ['warpActive', 'warpStyle', 'warpKeyFrames', 'warpKeyRates'].includes(key)
-          ),
+          has: vi.fn((key: string) => ['warpActive', 'warpStyle', 'warpKeyFrames', 'warpKeyRates'].includes(key)),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -820,7 +840,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'retimeNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['explicitActive', 'explicitFirstOutputFrame', 'explicitInputFrames'].includes(key)
+            ['explicitActive', 'explicitFirstOutputFrame', 'explicitInputFrames'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -862,10 +882,19 @@ describe('GTOGraphLoader - Property Parsing', () => {
         properties: {
           has: vi.fn((key: string) =>
             [
-              'displayColorActive', 'channelOrder', 'channelFlood', 'premult',
-              'displayGamma', 'sRGB', 'Rec709', 'displayBrightness',
-              'outOfRange', 'dither', 'ditherLast', 'overrideColorspace',
-            ].includes(key)
+              'displayColorActive',
+              'channelOrder',
+              'channelFlood',
+              'premult',
+              'displayGamma',
+              'sRGB',
+              'Rec709',
+              'displayBrightness',
+              'outOfRange',
+              'dither',
+              'ditherLast',
+              'overrideColorspace',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -925,10 +954,14 @@ describe('GTOGraphLoader - Property Parsing', () => {
         properties: {
           has: vi.fn((key: string) =>
             [
-              'chromaticitiesActive', 'adoptedNeutral', 'chromaticitiesWhite',
-              'chromaticitiesRed', 'chromaticitiesGreen', 'chromaticitiesBlue',
+              'chromaticitiesActive',
+              'adoptedNeutral',
+              'chromaticitiesWhite',
+              'chromaticitiesRed',
+              'chromaticitiesGreen',
+              'chromaticitiesBlue',
               'chromaticitiesNeutral',
-            ].includes(key)
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -977,7 +1010,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'displayStereoNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['stereoType', 'stereoSwap', 'stereoRelativeOffset', 'stereoRightOffset'].includes(key)
+            ['stereoType', 'stereoSwap', 'stereoRelativeOffset', 'stereoRightOffset'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1020,7 +1053,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'sourceStereoNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['sourceStereoSwap', 'sourceStereoRelativeOffset', 'sourceStereoRightOffset'].includes(key)
+            ['sourceStereoSwap', 'sourceStereoRelativeOffset', 'sourceStereoRightOffset'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1061,7 +1094,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'sourceStereoNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['rightEyeFlip', 'rightEyeFlop', 'rightEyeRotate', 'rightEyeTranslate'].includes(key)
+            ['rightEyeFlip', 'rightEyeFlop', 'rightEyeRotate', 'rightEyeTranslate'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1104,7 +1137,14 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'overlayNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['overlayShow', 'overlayNextRectId', 'overlayNextTextId', 'matteShow', 'matteOpacity', 'matteAspect'].includes(key)
+            [
+              'overlayShow',
+              'overlayNextRectId',
+              'overlayNextTextId',
+              'matteShow',
+              'matteOpacity',
+              'matteAspect',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1388,7 +1428,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'layoutNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['layoutMode', 'layoutSpacing', 'layoutGridRows', 'layoutGridColumns', 'layoutRetimeInputs'].includes(key)
+            ['layoutMode', 'layoutSpacing', 'layoutGridRows', 'layoutGridColumns', 'layoutRetimeInputs'].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1435,7 +1475,15 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'switchNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['switchFps', 'switchSize', 'switchInput', 'switchAutoSize', 'switchUseCutInfo', 'switchAutoEDL', 'switchAlignStartFrames'].includes(key)
+            [
+              'switchFps',
+              'switchSize',
+              'switchInput',
+              'switchAutoSize',
+              'switchUseCutInfo',
+              'switchAutoEDL',
+              'switchAlignStartFrames',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1486,7 +1534,16 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'soundTrackNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['audioVolume', 'audioBalance', 'audioOffset', 'audioInternalOffset', 'audioMute', 'audioSoftClamp', 'waveformWidth', 'waveformHeight'].includes(key)
+            [
+              'audioVolume',
+              'audioBalance',
+              'audioOffset',
+              'audioInternalOffset',
+              'audioMute',
+              'audioSoftClamp',
+              'waveformWidth',
+              'waveformHeight',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1539,9 +1596,23 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'ocioNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['ocioActive', 'ocioFunction', 'ocioInColorSpace', 'ocioLut3DSize', 'ocioOutColorSpace',
-             'ocioLook', 'ocioLookDirection', 'ocioDisplay', 'ocioView', 'ocioDither', 'ocioChannelOrder',
-             'ocioInTransformUrl', 'ocioOutTransformUrl', 'ocioConfigDescription', 'ocioWorkingDir'].includes(key)
+            [
+              'ocioActive',
+              'ocioFunction',
+              'ocioInColorSpace',
+              'ocioLut3DSize',
+              'ocioOutColorSpace',
+              'ocioLook',
+              'ocioLookDirection',
+              'ocioDisplay',
+              'ocioView',
+              'ocioDither',
+              'ocioChannelOrder',
+              'ocioInTransformUrl',
+              'ocioOutTransformUrl',
+              'ocioConfigDescription',
+              'ocioWorkingDir',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1620,8 +1691,15 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'iccNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['iccActive', 'iccSamples2D', 'iccSamples3D', 'iccInProfileUrl', 'iccInProfileDescription',
-             'iccOutProfileUrl', 'iccOutProfileDescription'].includes(key)
+            [
+              'iccActive',
+              'iccSamples2D',
+              'iccSamples3D',
+              'iccInProfileUrl',
+              'iccInProfileDescription',
+              'iccOutProfileUrl',
+              'iccOutProfileDescription',
+            ].includes(key),
           ),
           setValue: vi.fn(),
         },
@@ -1748,7 +1826,14 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'tempNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['colorTemperatureActive', 'colorInWhitePrimary', 'colorInTemperature', 'colorOutTemperature', 'colorTemperatureMethod'].includes(key)),
+            [
+              'colorTemperatureActive',
+              'colorInWhitePrimary',
+              'colorInTemperature',
+              'colorOutTemperature',
+              'colorTemperatureMethod',
+            ].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -1829,7 +1914,17 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'cdlNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['cdlActive', 'cdlFile', 'cdlColorspace', 'cdlSlope', 'cdlOffset', 'cdlPower', 'cdlSaturation', 'cdlNoClamp'].includes(key)),
+            [
+              'cdlActive',
+              'cdlFile',
+              'cdlColorspace',
+              'cdlSlope',
+              'cdlOffset',
+              'cdlPower',
+              'cdlSaturation',
+              'cdlNoClamp',
+            ].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -1951,7 +2046,8 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'unsharpNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['unsharpActive', 'unsharpAmount', 'unsharpThreshold', 'unsharpRadius'].includes(key)),
+            ['unsharpActive', 'unsharpAmount', 'unsharpThreshold', 'unsharpRadius'].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -2031,8 +2127,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         type: 'RVRotateCanvas',
         name: 'rotateNode',
         properties: {
-          has: vi.fn((key: string) =>
-            ['rotateActive', 'rotateDegrees', 'rotateFlipH', 'rotateFlipV'].includes(key)),
+          has: vi.fn((key: string) => ['rotateActive', 'rotateDegrees', 'rotateFlipH', 'rotateFlipV'].includes(key)),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -2074,7 +2169,13 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'primaryNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['primaryConvertActive', 'primaryConvertInPrimaries', 'primaryConvertOutPrimaries', 'primaryConvertAdaptationMethod'].includes(key)),
+            [
+              'primaryConvertActive',
+              'primaryConvertInPrimaries',
+              'primaryConvertOutPrimaries',
+              'primaryConvertAdaptationMethod',
+            ].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -2116,7 +2217,10 @@ describe('GTOGraphLoader - Property Parsing', () => {
         name: 'transformNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['dispTransformActive', 'dispTransformTranslate', 'dispTransformScale', 'dispTransformRotate'].includes(key)),
+            ['dispTransformActive', 'dispTransformTranslate', 'dispTransformScale', 'dispTransformRotate'].includes(
+              key,
+            ),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],

@@ -66,14 +66,13 @@ export class NoteOverlay {
 
     const notes = this.session.noteManager.getNotesForSource(currentSourceIndex);
     // Only top-level notes (no replies)
-    const topLevel = notes.filter(n => n.parentId === null);
+    const topLevel = notes.filter((n) => n.parentId === null);
     if (topLevel.length === 0) return;
 
     const savedAlpha = ctx.globalAlpha;
     const barY = trackY + trackHeight + 2; // Just below the track
 
-    const frameToX = (frame: number) =>
-      paddingLeft + ((frame - 1) / Math.max(1, totalFrames - 1)) * trackWidth;
+    const frameToX = (frame: number) => paddingLeft + ((frame - 1) / Math.max(1, totalFrames - 1)) * trackWidth;
 
     for (const note of topLevel) {
       const startX = frameToX(note.frameStart);

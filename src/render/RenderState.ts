@@ -5,8 +5,21 @@
  * making the Viewer→Renderer data contract explicit and testable.
  */
 
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  HSLQualifierState,
+  LinearizeState,
+  ChannelSwizzle,
+} from '../core/types/color';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  FalseColorState,
+  GamutMappingState,
+} from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
@@ -34,7 +47,7 @@ export interface RenderState {
   toneMappingState: ToneMappingState;
   backgroundPattern: BackgroundPatternState;
   cdl: CDLValues;
-  cdlColorspace?: number;  // 0=rec709/direct (default), 1=ACEScct
+  cdlColorspace?: number; // 0=rec709/direct (default), 1=ACEScct
   curvesLUT: CurveLUTs | null;
   colorWheels: ColorWheelsState;
   falseColor: FalseColorState;
@@ -70,13 +83,20 @@ export interface RenderState {
   hslQualifier: HSLQualifierState;
   gamutMapping?: GamutMappingState;
   deinterlace?: { enabled: boolean; method: number; fieldOrder: number };
-  filmEmulation?: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null };
+  filmEmulation?: {
+    enabled: boolean;
+    intensity: number;
+    saturation: number;
+    grainIntensity: number;
+    grainSeed: number;
+    lutData: Uint8Array | null;
+  };
   perspective?: { enabled: boolean; invH: Float32Array; quality: number };
   linearize?: LinearizeState;
-  outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
+  outOfRange?: number; // 0=off, 1=clamp-to-black, 2=highlight
   channelSwizzle?: ChannelSwizzle;
-  premultMode?: number;  // 0=off, 1=premultiply, 2=unpremultiply
-  ditherMode?: number;   // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
+  premultMode?: number; // 0=off, 1=premultiply, 2=unpremultiply
+  ditherMode?: number; // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
   quantizeBits?: number; // 0=off, 2-16 = target bit depth for quantize/posterize
   textureFilterMode?: TextureFilterMode; // 'nearest' or 'linear' (default)
   luminanceVis?: LuminanceVisRenderState;

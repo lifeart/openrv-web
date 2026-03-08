@@ -38,12 +38,12 @@ export class DisposableSubscriptionManager {
     target: EventTarget,
     event: string,
     handler: EventListenerOrEventListenerObject,
-    options?: AddEventListenerOptions
+    options?: AddEventListenerOptions,
   ): void {
     if (this.disposed) return;
     if (options?.signal) {
       throw new Error(
-        'DisposableSubscriptionManager.addDOMListener: do not pass options.signal; the manager controls the AbortController'
+        'DisposableSubscriptionManager.addDOMListener: do not pass options.signal; the manager controls the AbortController',
       );
     }
     if (!this.abortController) {

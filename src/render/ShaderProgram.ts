@@ -9,7 +9,7 @@ type UniformValue = number | number[] | Float32Array | Int32Array;
  * The COMPLETION_STATUS_KHR constant used by KHR_parallel_shader_compile.
  * Value: 0x91B1
  */
-const COMPLETION_STATUS_KHR = 0x91B1;
+const COMPLETION_STATUS_KHR = 0x91b1;
 
 /**
  * Interval in milliseconds for polling shader compilation status when using
@@ -261,7 +261,10 @@ export class ShaderProgram {
 
     if (typeof value === 'number') {
       // Check if integer or float based on name convention or value
-      if (Number.isInteger(value) && ((name.startsWith('u_') && name.includes('texture')) || name.includes('sampler'))) {
+      if (
+        Number.isInteger(value) &&
+        ((name.startsWith('u_') && name.includes('texture')) || name.includes('sampler'))
+      ) {
         gl.uniform1i(location, value);
       } else {
         gl.uniform1f(location, value);

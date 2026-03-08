@@ -78,7 +78,7 @@ describe('OCIOWasmBridge', () => {
 
     it('BRG-003: emits statusChanged on init', async () => {
       const events: Array<{ ready: boolean }> = [];
-      bridge.on('statusChanged', e => events.push(e));
+      bridge.on('statusChanged', (e) => events.push(e));
       await bridge.init();
       expect(events).toHaveLength(1);
       expect(events[0]!.ready).toBe(true);
@@ -88,7 +88,7 @@ describe('OCIOWasmBridge', () => {
       const failFactory = vi.fn(() => Promise.reject(new Error('boom')));
       const failBridge = new OCIOWasmBridge({ factory: failFactory });
       const events: Array<{ ready: boolean; error?: string }> = [];
-      failBridge.on('statusChanged', e => events.push(e));
+      failBridge.on('statusChanged', (e) => events.push(e));
 
       await expect(failBridge.init()).rejects.toThrow();
       expect(events).toHaveLength(1);
@@ -160,7 +160,7 @@ describe('OCIOWasmBridge', () => {
 
     it('BRG-PIPE-002: emits shaderReady event', () => {
       const shaders: unknown[] = [];
-      bridge.on('shaderReady', s => shaders.push(s));
+      bridge.on('shaderReady', (s) => shaders.push(s));
 
       bridge.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       expect(shaders).toHaveLength(1);
@@ -175,7 +175,7 @@ describe('OCIOWasmBridge', () => {
     it('BRG-PIPE-004: buildDisplayPipeline emits fallback when not ready', () => {
       const notReady = new OCIOWasmBridge({ factory });
       const fallbacks: Array<{ reason: string }> = [];
-      notReady.on('fallback', f => fallbacks.push(f));
+      notReady.on('fallback', (f) => fallbacks.push(f));
 
       const result = notReady.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       expect(result).toBeNull();
@@ -187,7 +187,7 @@ describe('OCIOWasmBridge', () => {
       (mockExports.ocioGetDisplayProcessor as ReturnType<typeof vi.fn>).mockReturnValue(-1);
 
       const fallbacks: Array<{ reason: string }> = [];
-      bridge.on('fallback', f => fallbacks.push(f));
+      bridge.on('fallback', (f) => fallbacks.push(f));
 
       const result = bridge.buildDisplayPipeline('bad', 'bad', 'bad');
       expect(result).toBeNull();
@@ -204,7 +204,7 @@ describe('OCIOWasmBridge', () => {
     it('BRG-CONV-002: emits fallback when WASM unavailable', () => {
       const notReady = new OCIOWasmBridge({ factory });
       const fallbacks: unknown[] = [];
-      notReady.on('fallback', f => fallbacks.push(f));
+      notReady.on('fallback', (f) => fallbacks.push(f));
 
       const result = notReady.buildConversionPipeline('ACEScg', 'sRGB');
       expect(result).toBeNull();
@@ -290,9 +290,7 @@ colorspaces:
 
     it('BRG-CFG-009: loadConfigWithFiles throws when not ready', async () => {
       const notReady = new OCIOWasmBridge({ factory });
-      await expect(
-        notReady.loadConfigWithFiles('yaml', 'test')
-      ).rejects.toThrow('not initialised');
+      await expect(notReady.loadConfigWithFiles('yaml', 'test')).rejects.toThrow('not initialised');
     });
   });
 

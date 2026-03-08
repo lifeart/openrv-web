@@ -5,13 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  isMultiViewEXR,
-  getEXRViews,
-  getEXRViewInfo,
-  decodeEXRView,
-  mapChannelsToViews,
-} from './MultiViewEXR';
+import { isMultiViewEXR, getEXRViews, getEXRViewInfo, decodeEXRView, mapChannelsToViews } from './MultiViewEXR';
 import { EXRCompression, EXRPixelType } from './EXRDecoder';
 
 // EXR magic number (little-endian)
@@ -30,7 +24,7 @@ function floatToHalf(value: number): number {
   const f = int32View[0]!;
 
   const sign = (f >> 16) & 0x8000;
-  let exponent = ((f >> 23) & 0xff) - 127 + 15;
+  const exponent = ((f >> 23) & 0xff) - 127 + 15;
   const mantissa = (f >> 13) & 0x3ff;
 
   if (exponent <= 0) {
@@ -153,7 +147,11 @@ function writeMultiViewAttribute(b: EXRBufferBuilder, views: string[]): void {
 /**
  * Write a standard channel list attribute
  */
-function writeChannelsAttribute(b: EXRBufferBuilder, channels: string[], pixelType: EXRPixelType = EXRPixelType.HALF): void {
+function writeChannelsAttribute(
+  b: EXRBufferBuilder,
+  channels: string[],
+  pixelType: EXRPixelType = EXRPixelType.HALF,
+): void {
   b.writeString('channels');
   b.writeString('chlist');
 
@@ -228,22 +226,18 @@ function writeStandardAttributes(b: EXRBufferBuilder, width: number, height: num
  * - second view: R=0.1, G=0.2, B=0.3, A=1.0
  * - third view: R=0.6, G=0.7, B=0.8, A=1.0
  */
-function createMultiViewEXR(options: {
-  views: string[];
-  width?: number;
-  height?: number;
-  /** If true, also add prefixed channels for the default view (e.g., left.R in addition to R) */
-  prefixDefaultView?: boolean;
-  /** Use only prefixed channels for all views (no unprefixed channels) */
-  allPrefixed?: boolean;
-} = { views: ['left', 'right'] }): ArrayBuffer {
-  const {
-    views,
-    width = 2,
-    height = 1,
-    prefixDefaultView = false,
-    allPrefixed = false,
-  } = options;
+function createMultiViewEXR(
+  options: {
+    views: string[];
+    width?: number;
+    height?: number;
+    /** If true, also add prefixed channels for the default view (e.g., left.R in addition to R) */
+    prefixDefaultView?: boolean;
+    /** Use only prefixed channels for all views (no unprefixed channels) */
+    allPrefixed?: boolean;
+  } = { views: ['left', 'right'] },
+): ArrayBuffer {
+  const { views, width = 2, height = 1, prefixDefaultView = false, allPrefixed = false } = options;
 
   const defaultView = views[0]!;
   const baseChannels = ['R', 'G', 'B', 'A'];
@@ -601,10 +595,10 @@ describe('MultiViewEXR', () => {
 
       // Right view pixel values: R=0.1, G=0.2, B=0.3, A=1.0
       // Check first pixel (half precision has some rounding)
-      expect(rightResult!.data[0]).toBeCloseTo(0.1, 1);  // R
-      expect(rightResult!.data[1]).toBeCloseTo(0.2, 1);  // G
-      expect(rightResult!.data[2]).toBeCloseTo(0.3, 1);  // B
-      expect(rightResult!.data[3]).toBeCloseTo(1.0, 1);  // A
+      expect(rightResult!.data[0]).toBeCloseTo(0.1, 1); // R
+      expect(rightResult!.data[1]).toBeCloseTo(0.2, 1); // G
+      expect(rightResult!.data[2]).toBeCloseTo(0.3, 1); // B
+      expect(rightResult!.data[3]).toBeCloseTo(1.0, 1); // A
     });
 
     it('EXRMV-DEC-002: decode default view works', async () => {
@@ -621,10 +615,10 @@ describe('MultiViewEXR', () => {
       expect(leftResult!.channels).toBe(4);
 
       // Default view (left) pixel values: R=0.25, G=0.5, B=0.75, A=1.0
-      expect(leftResult!.data[0]).toBeCloseTo(0.25, 1);  // R
-      expect(leftResult!.data[1]).toBeCloseTo(0.5, 1);   // G
-      expect(leftResult!.data[2]).toBeCloseTo(0.75, 1);  // B
-      expect(leftResult!.data[3]).toBeCloseTo(1.0, 1);   // A
+      expect(leftResult!.data[0]).toBeCloseTo(0.25, 1); // R
+      expect(leftResult!.data[1]).toBeCloseTo(0.5, 1); // G
+      expect(leftResult!.data[2]).toBeCloseTo(0.75, 1); // B
+      expect(leftResult!.data[3]).toBeCloseTo(1.0, 1); // A
     });
 
     it('EXRMV-DEC-003: decode non-existent view returns null', async () => {
@@ -660,11 +654,11 @@ describe('MultiViewEXR', () => {
 
       const leftResult = await decodeEXRView(exr, 'left');
       expect(leftResult).not.toBeNull();
-      expect(leftResult!.data[0]).toBeCloseTo(0.25, 1);  // R
+      expect(leftResult!.data[0]).toBeCloseTo(0.25, 1); // R
 
       const rightResult = await decodeEXRView(exr, 'right');
       expect(rightResult).not.toBeNull();
-      expect(rightResult!.data[0]).toBeCloseTo(0.1, 1);  // R
+      expect(rightResult!.data[0]).toBeCloseTo(0.1, 1); // R
     });
 
     it('should decode larger images correctly', async () => {
@@ -786,10 +780,7 @@ describe('MultiViewEXR', () => {
     it('should handle view names containing dots via startsWith matching', () => {
       // View names like "my.camera" have dots; the prefix becomes "my.camera."
       // The startsWith approach correctly matches "my.camera.R" to view "my.camera"
-      const channels = [
-        'R', 'G', 'B',
-        'my.camera.R', 'my.camera.G', 'my.camera.B',
-      ];
+      const channels = ['R', 'G', 'B', 'my.camera.R', 'my.camera.G', 'my.camera.B'];
       const views = ['main', 'my.camera'];
       const mapping = mapChannelsToViews(channels, views);
 
@@ -804,11 +795,7 @@ describe('MultiViewEXR', () => {
 
     it('should prefer longer view prefixes over shorter ones', () => {
       // "my.camera." should match before "my." when both are views
-      const channels = [
-        'R', 'G', 'B',
-        'my.R', 'my.G', 'my.B',
-        'my.camera.R', 'my.camera.G', 'my.camera.B',
-      ];
+      const channels = ['R', 'G', 'B', 'my.R', 'my.G', 'my.B', 'my.camera.R', 'my.camera.G', 'my.camera.B'];
       const views = ['default', 'my', 'my.camera'];
       const mapping = mapChannelsToViews(channels, views);
 
@@ -830,10 +817,7 @@ describe('MultiViewEXR', () => {
     it('should return null when view has only AOV channels (no R/G/B/A)', async () => {
       // Create an EXR where the "right" view has only non-standard AOV channels
       // that cannot be mapped to R/G/B/A
-      const channels = [
-        'R', 'G', 'B', 'A',
-        'right.diffuse_direct', 'right.diffuse_indirect', 'right.specular',
-      ];
+      const channels = ['R', 'G', 'B', 'A', 'right.diffuse_direct', 'right.diffuse_indirect', 'right.specular'];
       const b = new EXRBufferBuilder();
       b.writeUint32(EXR_MAGIC);
       b.writeUint32(2);

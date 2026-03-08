@@ -292,9 +292,7 @@ describe('ExportProgressDialog', () => {
 
       // 60% of 100 = 60 frames. Find the leaf div that contains 'frames' but has no child elements.
       const allDivs = parent.querySelectorAll('div');
-      const frameLabel = Array.from(allDivs).find(
-        l => l.children.length === 0 && l.textContent?.includes('frames')
-      );
+      const frameLabel = Array.from(allDivs).find((l) => l.children.length === 0 && l.textContent?.includes('frames'));
       expect(frameLabel?.textContent).toBe('60 / 100 frames');
     });
 
@@ -308,9 +306,7 @@ describe('ExportProgressDialog', () => {
 
       // Find the leaf div containing 'elapsed'
       const allDivs = parent.querySelectorAll('div');
-      const timeLabel = Array.from(allDivs).find(
-        l => l.children.length === 0 && l.textContent?.includes('elapsed')
-      );
+      const timeLabel = Array.from(allDivs).find((l) => l.children.length === 0 && l.textContent?.includes('elapsed'));
       expect(timeLabel?.textContent).toBe('5s elapsed / ~3s remaining');
     });
   });
@@ -322,7 +318,9 @@ describe('ExportProgressDialog', () => {
       activeParent = parent;
       let cancelled = false;
 
-      dialog.on('cancel', () => { cancelled = true; });
+      dialog.on('cancel', () => {
+        cancelled = true;
+      });
       dialog.show();
 
       const button = parent.querySelector('button')!;
@@ -350,7 +348,9 @@ describe('ExportProgressDialog', () => {
       activeParent = parent;
       let closed = false;
 
-      dialog.on('close', () => { closed = true; });
+      dialog.on('close', () => {
+        closed = true;
+      });
       dialog.show();
       dialog.updateProgress(makeProgress({ status: 'complete' }));
 
@@ -366,7 +366,9 @@ describe('ExportProgressDialog', () => {
       activeParent = parent;
       let cancelled = false;
 
-      dialog.on('cancel', () => { cancelled = true; });
+      dialog.on('cancel', () => {
+        cancelled = true;
+      });
       dialog.show();
       dialog.updateProgress(makeProgress({ status: 'complete' }));
 
@@ -384,7 +386,9 @@ describe('ExportProgressDialog', () => {
       activeParent = parent;
       let cancelled = false;
 
-      dialog.on('cancel', () => { cancelled = true; });
+      dialog.on('cancel', () => {
+        cancelled = true;
+      });
       dialog.show();
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -397,7 +401,9 @@ describe('ExportProgressDialog', () => {
       activeParent = parent;
       let closed = false;
 
-      dialog.on('close', () => { closed = true; });
+      dialog.on('close', () => {
+        closed = true;
+      });
       dialog.show();
       dialog.updateProgress(makeProgress({ status: 'complete' }));
 
@@ -411,7 +417,9 @@ describe('ExportProgressDialog', () => {
       activeParent = parent;
       let cancelled = false;
 
-      dialog.on('cancel', () => { cancelled = true; });
+      dialog.on('cancel', () => {
+        cancelled = true;
+      });
       // Do NOT call show() — dialog is hidden
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -429,9 +437,7 @@ describe('ExportProgressDialog', () => {
       dialog.updateProgress(makeProgress({ elapsedMs: 90000, estimatedRemainingMs: 0 }));
 
       const allDivs = parent.querySelectorAll('div');
-      const timeLabel = Array.from(allDivs).find(
-        l => l.children.length === 0 && l.textContent?.includes('elapsed')
-      );
+      const timeLabel = Array.from(allDivs).find((l) => l.children.length === 0 && l.textContent?.includes('elapsed'));
       expect(timeLabel?.textContent).toBe('1m 30s elapsed');
     });
 
@@ -444,9 +450,7 @@ describe('ExportProgressDialog', () => {
       dialog.updateProgress(makeProgress({ elapsedMs: 3661000, estimatedRemainingMs: 0 }));
 
       const allDivs = parent.querySelectorAll('div');
-      const timeLabel = Array.from(allDivs).find(
-        l => l.children.length === 0 && l.textContent?.includes('elapsed')
-      );
+      const timeLabel = Array.from(allDivs).find((l) => l.children.length === 0 && l.textContent?.includes('elapsed'));
       expect(timeLabel?.textContent).toBe('1h 1m 1s elapsed');
     });
   });

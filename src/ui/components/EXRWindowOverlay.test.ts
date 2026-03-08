@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  EXRWindowOverlay,
-  DEFAULT_EXR_WINDOW_OVERLAY_STATE,
-} from './EXRWindowOverlay';
+import { EXRWindowOverlay, DEFAULT_EXR_WINDOW_OVERLAY_STATE } from './EXRWindowOverlay';
 import type { EXRBox2i } from '../../formats/EXRDecoder';
 
 // Canvas mocks are provided by test/setup.ts
@@ -162,9 +159,7 @@ describe('EXRWindowOverlay', () => {
       overlay.on('stateChanged', handler);
       overlay.setState({ enabled: true });
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('EXR-033: stateChanged event data is a copy', () => {
@@ -208,9 +203,7 @@ describe('EXRWindowOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.enable();
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('EXR-044: disable emits stateChanged', () => {
@@ -218,9 +211,7 @@ describe('EXRWindowOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.disable();
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
   });
 
@@ -242,18 +233,14 @@ describe('EXRWindowOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setShowDataWindow(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showDataWindow: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showDataWindow: false }));
     });
 
     it('EXR-053: setShowDisplayWindow emits stateChanged', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setShowDisplayWindow(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showDisplayWindow: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showDisplayWindow: false }));
     });
   });
 
@@ -275,18 +262,14 @@ describe('EXRWindowOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setDataWindowColor('#ff0000');
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ dataWindowColor: '#ff0000' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ dataWindowColor: '#ff0000' }));
     });
 
     it('EXR-063: setDisplayWindowColor emits stateChanged', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setDisplayWindowColor('#0000ff');
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ displayWindowColor: '#0000ff' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ displayWindowColor: '#0000ff' }));
     });
   });
 
@@ -446,10 +429,7 @@ describe('Compositing: display:none for inactive overlay', () => {
 
   it('EXR-DISP-002: canvas shown when enabled with windows set', () => {
     const overlay = new EXRWindowOverlay();
-    overlay.setWindows(
-      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
-      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
-    );
+    overlay.setWindows({ xMin: 0, yMin: 0, xMax: 99, yMax: 99 }, { xMin: 0, yMin: 0, xMax: 199, yMax: 199 });
     overlay.enable();
     expect(overlay.getElement().style.display).toBe('');
     overlay.dispose();
@@ -457,10 +437,7 @@ describe('Compositing: display:none for inactive overlay', () => {
 
   it('EXR-DISP-003: canvas hidden after clearWindows()', () => {
     const overlay = new EXRWindowOverlay();
-    overlay.setWindows(
-      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
-      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
-    );
+    overlay.setWindows({ xMin: 0, yMin: 0, xMax: 99, yMax: 99 }, { xMin: 0, yMin: 0, xMax: 199, yMax: 199 });
     overlay.enable();
     overlay.clearWindows();
     expect(overlay.getElement().style.display).toBe('none');
@@ -477,10 +454,7 @@ describe('Compositing: display:none for inactive overlay', () => {
 
   it('EXR-DISP-005: canvas hidden after disable() with windows still set', () => {
     const overlay = new EXRWindowOverlay();
-    overlay.setWindows(
-      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
-      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
-    );
+    overlay.setWindows({ xMin: 0, yMin: 0, xMax: 99, yMax: 99 }, { xMin: 0, yMin: 0, xMax: 199, yMax: 199 });
     overlay.enable();
     overlay.disable();
     expect(overlay.getElement().style.display).toBe('none');

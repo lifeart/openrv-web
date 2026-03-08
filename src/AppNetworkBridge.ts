@@ -5,8 +5,7 @@
  * NetworkSyncManager/NetworkControl.
  */
 
-import type { Session } from './core/session/Session';
-import type { MediaSource } from './core/session/Session';
+import type { Session, MediaSource } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
 import type { NetworkSyncManager } from './network/NetworkSyncManager';
@@ -28,11 +27,7 @@ import {
   encodeSessionState,
   type SessionURLState,
 } from './core/session/SessionURLManager';
-import {
-  decryptSessionStateWithPin,
-  encryptSessionStateWithPin,
-  isValidPinCode,
-} from './network/PinEncryption';
+import { decryptSessionStateWithPin, encryptSessionStateWithPin, isValidPinCode } from './network/PinEncryption';
 import { createThrottle, type Throttled } from './utils/throttle';
 import { showConfirm } from './ui/components/shared/Modal';
 
@@ -107,386 +102,430 @@ export class AppNetworkBridge {
     headerBar.setNetworkControl(networkControl.render());
 
     // Wire UI events to manager
-    this.unsubscribers.push(networkControl.on('createRoom', ({ userName }) => {
-      networkSyncManager.createRoom(userName, this.getActivePinCode());
-    }));
+    this.unsubscribers.push(
+      networkControl.on('createRoom', ({ userName }) => {
+        networkSyncManager.createRoom(userName, this.getActivePinCode());
+      }),
+    );
 
-    this.unsubscribers.push(networkControl.on('joinRoom', ({ roomCode, userName }) => {
-      networkSyncManager.joinRoom(roomCode, userName, this.getActivePinCode());
-    }));
+    this.unsubscribers.push(
+      networkControl.on('joinRoom', ({ roomCode, userName }) => {
+        networkSyncManager.joinRoom(roomCode, userName, this.getActivePinCode());
+      }),
+    );
 
-    this.unsubscribers.push(networkControl.on('leaveRoom', () => {
-      networkSyncManager.leaveRoom();
-      networkControl.setConnectionState('disconnected');
-      networkControl.setIsHost(false);
-      networkControl.setShareLinkKind('generic');
-      networkControl.setResponseToken('');
-      networkControl.setRoomInfo(null);
-      networkControl.setUsers([]);
-      networkControl.hideInfo();
-      this.ctx.paintEngine?.setIdPrefix('');
-    }));
+    this.unsubscribers.push(
+      networkControl.on('leaveRoom', () => {
+        networkSyncManager.leaveRoom();
+        networkControl.setConnectionState('disconnected');
+        networkControl.setIsHost(false);
+        networkControl.setShareLinkKind('generic');
+        networkControl.setResponseToken('');
+        networkControl.setRoomInfo(null);
+        networkControl.setUsers([]);
+        networkControl.hideInfo();
+        this.ctx.paintEngine?.setIdPrefix('');
+      }),
+    );
 
-    this.unsubscribers.push(networkControl.on('syncSettingsChanged', (settings) => {
-      networkSyncManager.setSyncSettings(settings);
-    }));
+    this.unsubscribers.push(
+      networkControl.on('syncSettingsChanged', (settings) => {
+        networkSyncManager.setSyncSettings(settings);
+      }),
+    );
 
-    this.unsubscribers.push(networkControl.on('copyLink', async (baseLink) => {
-      try {
-        const pinCode = this.getActivePinCode();
-        const roomCode = networkSyncManager.roomInfo?.roomCode ?? '';
-        const fallbackBase = roomCode ? this.buildRoomLink(roomCode, pinCode) : baseLink;
-        let shareLink = baseLink.trim() || fallbackBase;
+    this.unsubscribers.push(
+      networkControl.on('copyLink', async (baseLink) => {
+        try {
+          const pinCode = this.getActivePinCode();
+          const roomCode = networkSyncManager.roomInfo?.roomCode ?? '';
+          const fallbackBase = roomCode ? this.buildRoomLink(roomCode, pinCode) : baseLink;
+          let shareLink = baseLink.trim() || fallbackBase;
 
-        const hasSessionHash = this.hasSessionShareState(shareLink);
-        if (!hasSessionHash) {
-          const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
-          shareLink = buildShareURL(shareLink, state);
-        }
+          const hasSessionHash = this.hasSessionShareState(shareLink);
+          if (!hasSessionHash) {
+            const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
+            shareLink = buildShareURL(shareLink, state);
+          }
 
-        const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
+          const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
 
-        // Update the share link immediately with session state hash,
-        // before attempting WebRTC offer generation which may be slow or fail.
-        controlWithShare.setShareLink?.(shareLink);
-
-        const managerWithServerless = networkSyncManager as unknown as {
-          buildServerlessInviteShareURL?: (url: string) => Promise<string>;
-        };
-        if (networkSyncManager.isHost && typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
-          shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
-          // Update again with the WebRTC offer token appended
+          // Update the share link immediately with session state hash,
+          // before attempting WebRTC offer generation which may be slow or fail.
           controlWithShare.setShareLink?.(shareLink);
+
+          const managerWithServerless = networkSyncManager as unknown as {
+            buildServerlessInviteShareURL?: (url: string) => Promise<string>;
+          };
+          if (networkSyncManager.isHost && typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
+            shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
+            // Update again with the WebRTC offer token appended
+            controlWithShare.setShareLink?.(shareLink);
+          }
+          await navigator.clipboard.writeText(shareLink);
+        } catch (error) {
+          if (error instanceof Error && /clipboard/i.test(error.message)) {
+            networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+            return;
+          }
+          networkControl.showError(
+            `Failed to generate share URL: ${error instanceof Error ? error.message : 'unknown error'}`,
+          );
         }
-        await navigator.clipboard.writeText(shareLink);
-      } catch (error) {
-        if (error instanceof Error && /clipboard/i.test(error.message)) {
-          networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkControl.on('applyResponseLink', async (responseLink) => {
+        const managerWithServerless = networkSyncManager as unknown as {
+          applyServerlessResponseLink?: (value: string) => Promise<boolean>;
+        };
+        if (typeof managerWithServerless.applyServerlessResponseLink !== 'function') return;
+
+        const applied = await managerWithServerless.applyServerlessResponseLink(responseLink);
+        if (!applied) {
+          networkControl.showError('Invalid WebRTC response link or no pending invite.');
           return;
         }
-        networkControl.showError(
-          `Failed to generate share URL: ${error instanceof Error ? error.message : 'unknown error'}`
-        );
-      }
-    }));
-
-    this.unsubscribers.push(networkControl.on('applyResponseLink', async (responseLink) => {
-      const managerWithServerless = networkSyncManager as unknown as {
-        applyServerlessResponseLink?: (value: string) => Promise<boolean>;
-      };
-      if (typeof managerWithServerless.applyServerlessResponseLink !== 'function') return;
-
-      const applied = await managerWithServerless.applyServerlessResponseLink(responseLink);
-      if (!applied) {
-        networkControl.showError('Invalid WebRTC response link or no pending invite.');
-        return;
-      }
-      networkControl.hideError();
-      networkControl.showInfo('Guest response applied. WebRTC peer is connecting.');
-    }));
+        networkControl.hideError();
+        networkControl.showInfo('Guest response applied. WebRTC peer is connecting.');
+      }),
+    );
 
     // One-time state sync after join/reconnect
-    this.unsubscribers.push(networkSyncManager.on('sessionStateRequested', async ({ requestId, requesterUserId }) => {
-      if (!networkSyncManager.isHost) return;
+    this.unsubscribers.push(
+      networkSyncManager.on('sessionStateRequested', async ({ requestId, requesterUserId }) => {
+        if (!networkSyncManager.isHost) return;
 
-      const encodedState = encodeSessionState(this.ctx.getSessionURLState?.() ?? this.captureSessionURLState());
-      const pinCode = this.getActivePinCode();
-
-      // Capture annotations and notes for full state transfer
-      const paintSnapshot = this.ctx.paintEngine?.toJSON();
-      const annotations = paintSnapshot
-        ? Object.values(paintSnapshot.frames).flat()
-        : undefined;
-      const notes = session.noteManager.toSerializable();
-
-      if (isValidPinCode(pinCode)) {
-        try {
-          const encrypted = await encryptSessionStateWithPin(encodedState, pinCode);
-          networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
-            encryptedSessionState: encrypted,
-            annotations,
-            notes,
-          });
-          return;
-        } catch (error) {
-          networkControl.showError(
-            `Failed to encrypt session state for transfer: ${error instanceof Error ? error.message : 'unknown error'}`
-          );
-        }
-      }
-
-      networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
-        sessionState: encodedState,
-        annotations,
-        notes,
-      });
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('sessionStateReceived', async (payload) => {
-      let encodedState = payload.sessionState;
-
-      if (!encodedState && payload.encryptedSessionState) {
+        const encodedState = encodeSessionState(this.ctx.getSessionURLState?.() ?? this.captureSessionURLState());
         const pinCode = this.getActivePinCode();
-        if (!isValidPinCode(pinCode)) {
-          networkControl.showError('A valid PIN code is required to decrypt the synced session state.');
+
+        // Capture annotations and notes for full state transfer
+        const paintSnapshot = this.ctx.paintEngine?.toJSON();
+        const annotations = paintSnapshot ? Object.values(paintSnapshot.frames).flat() : undefined;
+        const notes = session.noteManager.toSerializable();
+
+        if (isValidPinCode(pinCode)) {
+          try {
+            const encrypted = await encryptSessionStateWithPin(encodedState, pinCode);
+            networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
+              encryptedSessionState: encrypted,
+              annotations,
+              notes,
+            });
+            return;
+          } catch (error) {
+            networkControl.showError(
+              `Failed to encrypt session state for transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
+            );
+          }
+        }
+
+        networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
+          sessionState: encodedState,
+          annotations,
+          notes,
+        });
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('sessionStateReceived', async (payload) => {
+        let encodedState = payload.sessionState;
+
+        if (!encodedState && payload.encryptedSessionState) {
+          const pinCode = this.getActivePinCode();
+          if (!isValidPinCode(pinCode)) {
+            networkControl.showError('A valid PIN code is required to decrypt the synced session state.');
+            return;
+          }
+
+          try {
+            encodedState = await decryptSessionStateWithPin(payload.encryptedSessionState, pinCode);
+          } catch (error) {
+            networkControl.showError(
+              `Failed to decrypt session state: ${error instanceof Error ? error.message : 'unknown error'}`,
+            );
+            return;
+          }
+        }
+
+        if (!encodedState) return;
+        const decoded = decodeSessionState(encodedState);
+        if (!decoded) {
+          networkControl.showError('Received an invalid session state payload.');
           return;
         }
+
+        if (this.shouldRequestMediaSync(decoded)) {
+          const transferId = networkSyncManager.requestMediaSync(payload.senderUserId);
+          if (transferId) {
+            this.pendingStateByTransferId.set(transferId, decoded);
+            this.applySharedSessionState(decoded);
+            this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
+            return;
+          }
+        }
+
+        this.applySharedSessionState(decoded);
+        this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('mediaSyncRequested', async ({ transferId, requesterUserId }) => {
+        if (!networkSyncManager.isHost) return;
 
         try {
-          encodedState = await decryptSessionStateWithPin(payload.encryptedSessionState, pinCode);
+          const bundle = await this.captureLocalMediaBundle();
+          this.outgoingMediaTransfers.set(transferId, {
+            requesterUserId,
+            bundle,
+          });
+
+          networkSyncManager.sendMediaOffer(transferId, requesterUserId, {
+            totalBytes: bundle.totalBytes,
+            files: bundle.files.map(({ id, name, type, size, lastModified }) => ({
+              id,
+              name,
+              type,
+              size,
+              lastModified,
+            })),
+            sources: bundle.sources,
+          });
         } catch (error) {
           networkControl.showError(
-            `Failed to decrypt session state: ${error instanceof Error ? error.message : 'unknown error'}`
+            `Failed to prepare media transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
           );
+          networkSyncManager.sendMediaOffer(transferId, requesterUserId, {
+            totalBytes: 0,
+            files: [],
+            sources: [],
+          });
+          networkSyncManager.sendMediaComplete(transferId, requesterUserId);
+        }
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('mediaSyncOffered', async ({ transferId, senderUserId, totalBytes, files, sources }) => {
+        const accepted = await this.confirmMediaSync(totalBytes, files.length);
+        networkSyncManager.sendMediaResponse(transferId, senderUserId, accepted);
+
+        if (!accepted) {
+          const pendingState = this.pendingStateByTransferId.get(transferId);
+          if (pendingState) {
+            this.applySharedSessionState(pendingState);
+            this.pendingStateByTransferId.delete(transferId);
+          }
           return;
         }
-      }
 
-      if (!encodedState) return;
-      const decoded = decodeSessionState(encodedState);
-      if (!decoded) {
-        networkControl.showError('Received an invalid session state payload.');
-        return;
-      }
+        const incomingFiles = new Map<string, IncomingTransferFileState>();
+        files.forEach((descriptor) => {
+          incomingFiles.set(descriptor.id, {
+            descriptor,
+            chunks: new Map(),
+            totalChunks: null,
+          });
+        });
 
-      if (this.shouldRequestMediaSync(decoded)) {
-        const transferId = networkSyncManager.requestMediaSync(payload.senderUserId);
-        if (transferId) {
-          this.pendingStateByTransferId.set(transferId, decoded);
-          this.applySharedSessionState(decoded);
-          this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
+        this.incomingMediaTransfers.set(transferId, {
+          senderUserId,
+          files: incomingFiles,
+          sources,
+          totalBytes,
+        });
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('mediaSyncResponded', ({ transferId, senderUserId, accepted }) => {
+        const transfer = this.outgoingMediaTransfers.get(transferId);
+        if (!transfer) return;
+        if (transfer.requesterUserId !== senderUserId) return;
+
+        if (!accepted) {
+          this.outgoingMediaTransfers.delete(transferId);
           return;
         }
-      }
 
-      this.applySharedSessionState(decoded);
-      this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
-    }));
+        void this.streamOutgoingMediaTransfer(transferId, transfer);
+      }),
+    );
 
-    this.unsubscribers.push(networkSyncManager.on('mediaSyncRequested', async ({ transferId, requesterUserId }) => {
-      if (!networkSyncManager.isHost) return;
+    this.unsubscribers.push(
+      networkSyncManager.on('mediaSyncChunkReceived', (payload) => {
+        const transfer = this.incomingMediaTransfers.get(payload.transferId);
+        if (!transfer || transfer.senderUserId !== payload.senderUserId) return;
 
-      try {
-        const bundle = await this.captureLocalMediaBundle();
-        this.outgoingMediaTransfers.set(transferId, {
-          requesterUserId,
-          bundle,
-        });
+        const fileState = transfer.files.get(payload.fileId);
+        if (!fileState) return;
 
-        networkSyncManager.sendMediaOffer(transferId, requesterUserId, {
-          totalBytes: bundle.totalBytes,
-          files: bundle.files.map(({ id, name, type, size, lastModified }) => ({
-            id,
-            name,
-            type,
-            size,
-            lastModified,
-          })),
-          sources: bundle.sources,
-        });
-      } catch (error) {
-        networkControl.showError(
-          `Failed to prepare media transfer: ${error instanceof Error ? error.message : 'unknown error'}`
-        );
-        networkSyncManager.sendMediaOffer(transferId, requesterUserId, {
-          totalBytes: 0,
-          files: [],
-          sources: [],
-        });
-        networkSyncManager.sendMediaComplete(transferId, requesterUserId);
-      }
-    }));
+        if (fileState.totalChunks === null) {
+          fileState.totalChunks = payload.totalChunks;
+        }
+        if (payload.totalChunks !== fileState.totalChunks) return;
+        if (payload.chunkIndex < 0 || payload.chunkIndex >= payload.totalChunks) return;
 
-    this.unsubscribers.push(networkSyncManager.on('mediaSyncOffered', async ({ transferId, senderUserId, totalBytes, files, sources }) => {
-      const accepted = await this.confirmMediaSync(totalBytes, files.length);
-      networkSyncManager.sendMediaResponse(transferId, senderUserId, accepted);
+        fileState.chunks.set(payload.chunkIndex, payload.data);
+      }),
+    );
 
-      if (!accepted) {
+    this.unsubscribers.push(
+      networkSyncManager.on('mediaSyncCompleted', async ({ transferId, senderUserId }) => {
+        const transfer = this.incomingMediaTransfers.get(transferId);
         const pendingState = this.pendingStateByTransferId.get(transferId);
-        if (pendingState) {
-          this.applySharedSessionState(pendingState);
+
+        try {
+          if (transfer && transfer.senderUserId === senderUserId) {
+            await this.importIncomingMediaTransfer(transfer);
+          }
+        } catch (error) {
+          networkControl.showError(
+            `Failed to import synced media: ${error instanceof Error ? error.message : 'unknown error'}`,
+          );
+        } finally {
+          this.incomingMediaTransfers.delete(transferId);
           this.pendingStateByTransferId.delete(transferId);
         }
-        return;
-      }
 
-      const incomingFiles = new Map<string, IncomingTransferFileState>();
-      files.forEach((descriptor) => {
-        incomingFiles.set(descriptor.id, {
-          descriptor,
-          chunks: new Map(),
-          totalChunks: null,
-        });
-      });
-
-      this.incomingMediaTransfers.set(transferId, {
-        senderUserId,
-        files: incomingFiles,
-        sources,
-        totalBytes,
-      });
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('mediaSyncResponded', ({ transferId, senderUserId, accepted }) => {
-      const transfer = this.outgoingMediaTransfers.get(transferId);
-      if (!transfer) return;
-      if (transfer.requesterUserId !== senderUserId) return;
-
-      if (!accepted) {
-        this.outgoingMediaTransfers.delete(transferId);
-        return;
-      }
-
-      void this.streamOutgoingMediaTransfer(transferId, transfer);
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('mediaSyncChunkReceived', (payload) => {
-      const transfer = this.incomingMediaTransfers.get(payload.transferId);
-      if (!transfer || transfer.senderUserId !== payload.senderUserId) return;
-
-      const fileState = transfer.files.get(payload.fileId);
-      if (!fileState) return;
-
-      if (fileState.totalChunks === null) {
-        fileState.totalChunks = payload.totalChunks;
-      }
-      if (payload.totalChunks !== fileState.totalChunks) return;
-      if (payload.chunkIndex < 0 || payload.chunkIndex >= payload.totalChunks) return;
-
-      fileState.chunks.set(payload.chunkIndex, payload.data);
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('mediaSyncCompleted', async ({ transferId, senderUserId }) => {
-      const transfer = this.incomingMediaTransfers.get(transferId);
-      const pendingState = this.pendingStateByTransferId.get(transferId);
-
-      try {
-        if (transfer && transfer.senderUserId === senderUserId) {
-          await this.importIncomingMediaTransfer(transfer);
+        if (pendingState) {
+          this.applySharedSessionState(pendingState);
         }
-      } catch (error) {
-        networkControl.showError(
-          `Failed to import synced media: ${error instanceof Error ? error.message : 'unknown error'}`
-        );
-      } finally {
-        this.incomingMediaTransfers.delete(transferId);
-        this.pendingStateByTransferId.delete(transferId);
-      }
-
-      if (pendingState) {
-        this.applySharedSessionState(pendingState);
-      }
-    }));
+      }),
+    );
 
     // Wire manager events to UI
-    this.unsubscribers.push(networkSyncManager.on('connectionStateChanged', (state) => {
-      networkControl.setConnectionState(state);
-      if (state !== 'connected') {
-        networkControl.setIsHost(false);
-      } else {
+    this.unsubscribers.push(
+      networkSyncManager.on('connectionStateChanged', (state) => {
+        networkControl.setConnectionState(state);
+        if (state !== 'connected') {
+          networkControl.setIsHost(false);
+        } else {
+          networkControl.setIsHost(networkSyncManager.isHost);
+        }
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('roomCreated', (info) => {
+        networkControl.setIsHost(true);
+        networkControl.setShareLinkKind('invite');
+        networkControl.setResponseToken('');
+        networkControl.hideInfo();
+        networkControl.setRoomInfo(info);
+        networkControl.setUsers(info.users);
+        this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
+        void this.refreshShareLinkPreview();
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('roomJoined', (info) => {
         networkControl.setIsHost(networkSyncManager.isHost);
-      }
-    }));
+        networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
+        networkControl.setRoomInfo(info);
+        networkControl.setUsers(info.users);
+        this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
+        void this.refreshShareLinkPreview();
+      }),
+    );
 
-    this.unsubscribers.push(networkSyncManager.on('roomCreated', (info) => {
-      networkControl.setIsHost(true);
-      networkControl.setShareLinkKind('invite');
-      networkControl.setResponseToken('');
-      networkControl.hideInfo();
-      networkControl.setRoomInfo(info);
-      networkControl.setUsers(info.users);
-      this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
-      void this.refreshShareLinkPreview();
-    }));
+    this.unsubscribers.push(
+      networkSyncManager.on('usersChanged', (users) => {
+        networkControl.setUsers(users);
+        void this.refreshShareLinkPreview();
+      }),
+    );
 
-    this.unsubscribers.push(networkSyncManager.on('roomJoined', (info) => {
-      networkControl.setIsHost(networkSyncManager.isHost);
-      networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
-      networkControl.setRoomInfo(info);
-      networkControl.setUsers(info.users);
-      this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
-      void this.refreshShareLinkPreview();
-    }));
+    this.unsubscribers.push(
+      networkSyncManager.on('error', (err) => {
+        networkControl.showError(err.message);
+      }),
+    );
 
-    this.unsubscribers.push(networkSyncManager.on('usersChanged', (users) => {
-      networkControl.setUsers(users);
-      void this.refreshShareLinkPreview();
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('error', (err) => {
-      networkControl.showError(err.message);
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('rttUpdated', (rtt) => {
-      networkControl.setRTT(rtt);
-    }));
+    this.unsubscribers.push(
+      networkSyncManager.on('rttUpdated', (rtt) => {
+        networkControl.setRTT(rtt);
+      }),
+    );
 
     // Wire incoming sync events to Session/Viewer
-    this.unsubscribers.push(networkSyncManager.on('syncPlayback', (payload) => {
-      const sm = networkSyncManager.getSyncStateManager();
-      sm.beginApplyRemote();
-      try {
-        if (payload.isPlaying && !session.isPlaying) {
-          session.play();
-        } else if (!payload.isPlaying && session.isPlaying) {
-          session.pause();
-        }
-        if (sm.shouldApplyFrameSync(session.currentFrame, payload.currentFrame)) {
-          session.goToFrame(payload.currentFrame);
-        }
-        if (session.playbackSpeed !== payload.playbackSpeed) {
-          session.playbackSpeed = payload.playbackSpeed;
-        }
-        if (payload.playbackMode && session.playbackMode !== payload.playbackMode) {
-          session.playbackMode = payload.playbackMode;
-        }
-      } finally {
-        sm.endApplyRemote();
-      }
-    }));
-
-    this.unsubscribers.push(networkSyncManager.on('syncFrame', (payload) => {
-      const sm = networkSyncManager.getSyncStateManager();
-      if (sm.shouldApplyFrameSync(session.currentFrame, payload.currentFrame)) {
+    this.unsubscribers.push(
+      networkSyncManager.on('syncPlayback', (payload) => {
+        const sm = networkSyncManager.getSyncStateManager();
         sm.beginApplyRemote();
         try {
-          session.goToFrame(payload.currentFrame);
+          if (payload.isPlaying && !session.isPlaying) {
+            session.play();
+          } else if (!payload.isPlaying && session.isPlaying) {
+            session.pause();
+          }
+          if (sm.shouldApplyFrameSync(session.currentFrame, payload.currentFrame)) {
+            session.goToFrame(payload.currentFrame);
+          }
+          if (session.playbackSpeed !== payload.playbackSpeed) {
+            session.playbackSpeed = payload.playbackSpeed;
+          }
+          if (payload.playbackMode && session.playbackMode !== payload.playbackMode) {
+            session.playbackMode = payload.playbackMode;
+          }
         } finally {
           sm.endApplyRemote();
         }
-      }
-    }));
+      }),
+    );
 
-    this.unsubscribers.push(networkSyncManager.on('syncView', (payload) => {
-      const sm = networkSyncManager.getSyncStateManager();
-      sm.beginApplyRemote();
-      try {
-        viewer.setZoom(payload.zoom);
-      } finally {
-        sm.endApplyRemote();
-      }
-    }));
+    this.unsubscribers.push(
+      networkSyncManager.on('syncFrame', (payload) => {
+        const sm = networkSyncManager.getSyncStateManager();
+        if (sm.shouldApplyFrameSync(session.currentFrame, payload.currentFrame)) {
+          sm.beginApplyRemote();
+          try {
+            session.goToFrame(payload.currentFrame);
+          } finally {
+            sm.endApplyRemote();
+          }
+        }
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('syncView', (payload) => {
+        const sm = networkSyncManager.getSyncStateManager();
+        sm.beginApplyRemote();
+        try {
+          viewer.setZoom(payload.zoom);
+        } finally {
+          sm.endApplyRemote();
+        }
+      }),
+    );
 
     // Wire incoming color sync
-    this.unsubscribers.push(networkSyncManager.on('syncColor', (payload: ColorSyncPayload) => {
-      const sm = networkSyncManager.getSyncStateManager();
-      sm.beginApplyRemote();
-      try {
-        const current = viewer.getColorAdjustments();
-        viewer.setColorAdjustments({
-          ...current,
-          exposure: payload.exposure,
-          gamma: payload.gamma,
-          saturation: payload.saturation,
-          contrast: payload.contrast,
-          temperature: payload.temperature,
-          tint: payload.tint,
-          brightness: payload.brightness,
-        });
-      } finally {
-        sm.endApplyRemote();
-      }
-    }));
+    this.unsubscribers.push(
+      networkSyncManager.on('syncColor', (payload: ColorSyncPayload) => {
+        const sm = networkSyncManager.getSyncStateManager();
+        sm.beginApplyRemote();
+        try {
+          const current = viewer.getColorAdjustments();
+          viewer.setColorAdjustments({
+            ...current,
+            exposure: payload.exposure,
+            gamma: payload.gamma,
+            saturation: payload.saturation,
+            contrast: payload.contrast,
+            temperature: payload.temperature,
+            tint: payload.tint,
+            brightness: payload.brightness,
+          });
+        } finally {
+          sm.endApplyRemote();
+        }
+      }),
+    );
 
     // Wire outgoing color sync when local color adjustments change
     const colorControls = this.ctx.colorControls;
@@ -495,172 +534,188 @@ export class AppNetworkBridge {
         networkSyncManager.sendColorSync(payload);
       }, 100);
 
-      this.unsubscribers.push(colorControls.on('adjustmentsChanged', (adjustments) => {
-        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-          this.colorSyncThrottle!.call({
-            exposure: adjustments.exposure,
-            gamma: adjustments.gamma,
-            saturation: adjustments.saturation,
-            contrast: adjustments.contrast,
-            temperature: adjustments.temperature,
-            tint: adjustments.tint,
-            brightness: adjustments.brightness,
-          });
-        }
-      }));
+      this.unsubscribers.push(
+        colorControls.on('adjustmentsChanged', (adjustments) => {
+          if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+            this.colorSyncThrottle!.call({
+              exposure: adjustments.exposure,
+              gamma: adjustments.gamma,
+              saturation: adjustments.saturation,
+              contrast: adjustments.contrast,
+              temperature: adjustments.temperature,
+              tint: adjustments.tint,
+              brightness: adjustments.brightness,
+            });
+          }
+        }),
+      );
     }
 
     // Wire incoming annotation sync
     const paintEngine = this.ctx.paintEngine;
     if (paintEngine) {
-      this.unsubscribers.push(networkSyncManager.on('syncAnnotation', (payload: AnnotationSyncPayload) => {
+      this.unsubscribers.push(
+        networkSyncManager.on('syncAnnotation', (payload: AnnotationSyncPayload) => {
+          const sm = networkSyncManager.getSyncStateManager();
+          sm.beginApplyRemote();
+          try {
+            switch (payload.action) {
+              case 'add':
+                for (const stroke of payload.strokes) {
+                  if (isValidAnnotation(stroke)) {
+                    paintEngine.addRemoteAnnotation(stroke);
+                  }
+                }
+                break;
+              case 'remove':
+                if (payload.annotationId) {
+                  paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+                }
+                break;
+              case 'clear':
+                paintEngine.clearRemoteFrame(payload.frame);
+                break;
+              case 'update':
+                // For updates, remove then re-add
+                if (payload.annotationId) {
+                  paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+                }
+                for (const stroke of payload.strokes) {
+                  if (isValidAnnotation(stroke)) {
+                    paintEngine.addRemoteAnnotation(stroke);
+                  }
+                }
+                break;
+            }
+          } finally {
+            sm.endApplyRemote();
+          }
+        }),
+      );
+
+      // Send outgoing annotation sync when local annotations change
+      this.unsubscribers.push(
+        paintEngine.on('strokeAdded', (annotation: Annotation) => {
+          if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+            networkSyncManager.sendAnnotationSync({
+              frame: annotation.frame,
+              strokes: [annotation],
+              action: 'add',
+              annotationId: annotation.id,
+              timestamp: Date.now(),
+            });
+          }
+        }),
+      );
+
+      this.unsubscribers.push(
+        paintEngine.on('strokeRemoved', (annotation: Annotation) => {
+          if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+            networkSyncManager.sendAnnotationSync({
+              frame: annotation.frame,
+              strokes: [],
+              action: 'remove',
+              annotationId: annotation.id,
+              timestamp: Date.now(),
+            });
+          }
+        }),
+      );
+    }
+
+    // Wire incoming note sync
+    this.unsubscribers.push(
+      networkSyncManager.on('syncNote', (payload: NoteSyncPayload) => {
         const sm = networkSyncManager.getSyncStateManager();
         sm.beginApplyRemote();
         try {
+          const noteManager = session.noteManager;
           switch (payload.action) {
-            case 'add':
-              for (const stroke of payload.strokes) {
-                if (isValidAnnotation(stroke)) {
-                  paintEngine.addRemoteAnnotation(stroke);
-                }
+            case 'add': {
+              const note = payload.note as Note | undefined;
+              if (note && note.id) {
+                noteManager.importNote(note);
               }
               break;
+            }
             case 'remove':
-              if (payload.annotationId) {
-                paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+              if (payload.noteId) {
+                noteManager.removeNote(payload.noteId);
               }
               break;
+            case 'update': {
+              const note = payload.note as Partial<Note> | undefined;
+              if (payload.noteId && note) {
+                noteManager.updateNote(payload.noteId, {
+                  text: note.text,
+                  status: note.status,
+                  color: note.color,
+                });
+              }
+              break;
+            }
             case 'clear':
-              paintEngine.clearRemoteFrame(payload.frame);
+              noteManager.fromSerializable([]);
               break;
-            case 'update':
-              // For updates, remove then re-add
-              if (payload.annotationId) {
-                paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
-              }
-              for (const stroke of payload.strokes) {
-                if (isValidAnnotation(stroke)) {
-                  paintEngine.addRemoteAnnotation(stroke);
-                }
+            case 'snapshot':
+              if (Array.isArray(payload.notes)) {
+                noteManager.fromSerializable(payload.notes as Note[]);
               }
               break;
           }
         } finally {
           sm.endApplyRemote();
         }
-      }));
-
-      // Send outgoing annotation sync when local annotations change
-      this.unsubscribers.push(paintEngine.on('strokeAdded', (annotation: Annotation) => {
-        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-          networkSyncManager.sendAnnotationSync({
-            frame: annotation.frame,
-            strokes: [annotation],
-            action: 'add',
-            annotationId: annotation.id,
-            timestamp: Date.now(),
-          });
-        }
-      }));
-
-      this.unsubscribers.push(paintEngine.on('strokeRemoved', (annotation: Annotation) => {
-        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-          networkSyncManager.sendAnnotationSync({
-            frame: annotation.frame,
-            strokes: [],
-            action: 'remove',
-            annotationId: annotation.id,
-            timestamp: Date.now(),
-          });
-        }
-      }));
-    }
-
-    // Wire incoming note sync
-    this.unsubscribers.push(networkSyncManager.on('syncNote', (payload: NoteSyncPayload) => {
-      const sm = networkSyncManager.getSyncStateManager();
-      sm.beginApplyRemote();
-      try {
-        const noteManager = session.noteManager;
-        switch (payload.action) {
-          case 'add': {
-            const note = payload.note as Note | undefined;
-            if (note && note.id) {
-              noteManager.importNote(note);
-            }
-            break;
-          }
-          case 'remove':
-            if (payload.noteId) {
-              noteManager.removeNote(payload.noteId);
-            }
-            break;
-          case 'update': {
-            const note = payload.note as Partial<Note> | undefined;
-            if (payload.noteId && note) {
-              noteManager.updateNote(payload.noteId, {
-                text: note.text,
-                status: note.status,
-                color: note.color,
-              });
-            }
-            break;
-          }
-          case 'clear':
-            noteManager.fromSerializable([]);
-            break;
-          case 'snapshot':
-            if (Array.isArray(payload.notes)) {
-              noteManager.fromSerializable(payload.notes as Note[]);
-            }
-            break;
-        }
-      } finally {
-        sm.endApplyRemote();
-      }
-    }));
+      }),
+    );
 
     // Send outgoing note sync when notes change
-    this.unsubscribers.push(session.on('notesChanged', () => {
-      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-        networkSyncManager.sendNoteSync({
-          action: 'snapshot',
-          notes: session.noteManager.toSerializable(),
-          timestamp: Date.now(),
-        });
-      }
-    }));
+    this.unsubscribers.push(
+      session.on('notesChanged', () => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          networkSyncManager.sendNoteSync({
+            action: 'snapshot',
+            notes: session.noteManager.toSerializable(),
+            timestamp: Date.now(),
+          });
+        }
+      }),
+    );
 
     // Send outgoing sync when local state changes
-    this.unsubscribers.push(session.on('playbackChanged', (isPlaying) => {
-      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-        this.lastPlaybackSyncFrame = session.currentFrame;
-        this.lastPlaybackSyncTime = Date.now();
-        networkSyncManager.sendPlaybackSync({
-          isPlaying,
-          currentFrame: session.currentFrame,
-          playbackSpeed: session.playbackSpeed,
-          playDirection: session.playDirection,
-          loopMode: session.loopMode,
-          playbackMode: session.playbackMode,
-          timestamp: Date.now(),
-        });
-      }
-    }));
+    this.unsubscribers.push(
+      session.on('playbackChanged', (isPlaying) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          this.lastPlaybackSyncFrame = session.currentFrame;
+          this.lastPlaybackSyncTime = Date.now();
+          networkSyncManager.sendPlaybackSync({
+            isPlaying,
+            currentFrame: session.currentFrame,
+            playbackSpeed: session.playbackSpeed,
+            playDirection: session.playDirection,
+            loopMode: session.loopMode,
+            playbackMode: session.playbackMode,
+            timestamp: Date.now(),
+          });
+        }
+      }),
+    );
 
     this.frameSyncThrottle = createThrottle((frame: number) => {
       networkSyncManager.sendFrameSync(frame);
     }, 50);
 
-    this.unsubscribers.push(session.on('frameChanged', (frame) => {
-      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-        // Skip if this frame was just sent via playbackChanged
-        if (frame === this.lastPlaybackSyncFrame && Date.now() - this.lastPlaybackSyncTime < 50) {
-          return;
+    this.unsubscribers.push(
+      session.on('frameChanged', (frame) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          // Skip if this frame was just sent via playbackChanged
+          if (frame === this.lastPlaybackSyncFrame && Date.now() - this.lastPlaybackSyncTime < 50) {
+            return;
+          }
+          this.frameSyncThrottle!.call(frame);
         }
-        this.frameSyncThrottle!.call(frame);
-      }
-    }));
+      }),
+    );
   }
 
   private getActivePinCode(): string {
@@ -858,10 +913,7 @@ export class AppNetworkBridge {
     }
   }
 
-  private async streamOutgoingMediaTransfer(
-    transferId: string,
-    transfer: OutgoingMediaTransfer
-  ): Promise<void> {
+  private async streamOutgoingMediaTransfer(transferId: string, transfer: OutgoingMediaTransfer): Promise<void> {
     const { networkSyncManager, networkControl } = this.ctx;
 
     try {
@@ -885,7 +937,7 @@ export class AppNetworkBridge {
       networkSyncManager.sendMediaComplete(transferId, transfer.requesterUserId);
     } catch (error) {
       networkControl.showError(
-        `Failed to send media transfer: ${error instanceof Error ? error.message : 'unknown error'}`
+        `Failed to send media transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
     } finally {
       this.outgoingMediaTransfers.delete(transferId);

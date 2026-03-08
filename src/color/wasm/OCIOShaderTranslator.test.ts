@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  translateOCIOShader,
-  injectOCIOUniforms,
-  generateOCIOCallSnippet,
-} from './OCIOShaderTranslator';
+import { translateOCIOShader, injectOCIOUniforms, generateOCIOCallSnippet } from './OCIOShaderTranslator';
 import type { UniformInfo } from './OCIOShaderTranslator';
 
 // ---------------------------------------------------------------------------
@@ -76,12 +72,12 @@ describe('OCIOShaderTranslator', () => {
       const result = translateOCIOShader(SAMPLE_OCIO_GLSL);
       expect(result.uniforms).toHaveLength(2);
 
-      const sampler = result.uniforms.find(u => u.name === 'ocio_lut3d_Sampler');
+      const sampler = result.uniforms.find((u) => u.name === 'ocio_lut3d_Sampler');
       expect(sampler).toBeDefined();
       expect(sampler!.type).toBe('sampler3D');
       expect(sampler!.isSampler).toBe(true);
 
-      const size = result.uniforms.find(u => u.name === 'ocio_lut3d_Size');
+      const size = result.uniforms.find((u) => u.name === 'ocio_lut3d_Size');
       expect(size).toBeDefined();
       expect(size!.type).toBe('float');
       expect(size!.isSampler).toBe(false);
@@ -149,12 +145,12 @@ describe('OCIOShaderTranslator', () => {
 
     it('SHDR-014: extracts matrix and vector uniforms', () => {
       const result = translateOCIOShader(SAMPLE_MATRIX_GLSL);
-      const mat = result.uniforms.find(u => u.name === 'ocio_matrix_0');
+      const mat = result.uniforms.find((u) => u.name === 'ocio_matrix_0');
       expect(mat).toBeDefined();
       expect(mat!.type).toBe('mat4');
       expect(mat!.isSampler).toBe(false);
 
-      const offset = result.uniforms.find(u => u.name === 'ocio_offset_0');
+      const offset = result.uniforms.find((u) => u.name === 'ocio_offset_0');
       expect(offset).toBeDefined();
       expect(offset!.type).toBe('vec4');
     });
@@ -231,9 +227,7 @@ precision highp float;
 precision highp sampler3D;
 uniform sampler2D u_tex;
 `;
-      const uniforms: UniformInfo[] = [
-        { name: 'ocio_test', type: 'float', isSampler: false },
-      ];
+      const uniforms: UniformInfo[] = [{ name: 'ocio_test', type: 'float', isSampler: false }];
 
       const result = injectOCIOUniforms(shader, uniforms);
       // The OCIO uniforms should appear after the last precision line

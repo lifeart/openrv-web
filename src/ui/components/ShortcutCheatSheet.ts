@@ -114,7 +114,7 @@ export class ShortcutCheatSheet {
 
     // Context filtering: only show groups matching the context category
     if (this.context !== null) {
-      groups = groups.filter(g => g.category === this.context);
+      groups = groups.filter((g) => g.category === this.context);
     }
 
     // Text search filtering
@@ -123,9 +123,8 @@ export class ShortcutCheatSheet {
     for (const group of groups) {
       const filteredActions = query
         ? group.actions.filter(
-            entry =>
-              entry.description.toLowerCase().includes(query) ||
-              entry.comboLabel.toLowerCase().includes(query),
+            (entry) =>
+              entry.description.toLowerCase().includes(query) || entry.comboLabel.toLowerCase().includes(query),
           )
         : group.actions;
 

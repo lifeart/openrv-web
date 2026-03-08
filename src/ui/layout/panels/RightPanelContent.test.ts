@@ -89,7 +89,9 @@ describe('RightPanelContent', () => {
       const el = panel.getElement();
       // The filename element should have a title for tooltip
       const spans = el.querySelectorAll('span');
-      const filenameSpan = Array.from(spans).find(s => s.textContent === 'very_long_filename_that_gets_truncated.exr');
+      const filenameSpan = Array.from(spans).find(
+        (s) => s.textContent === 'very_long_filename_that_gets_truncated.exr',
+      );
       expect(filenameSpan?.title).toBe('very_long_filename_that_gets_truncated.exr');
     });
 
@@ -98,7 +100,7 @@ describe('RightPanelContent', () => {
       // Should still show something (the dash fallback)
       const el = panel.getElement();
       const spans = el.querySelectorAll('span');
-      const filenameSpan = Array.from(spans).find(s => s.textContent === '-');
+      const filenameSpan = Array.from(spans).find((s) => s.textContent === '-');
       expect(filenameSpan).not.toBeUndefined();
     });
 
@@ -133,7 +135,7 @@ describe('RightPanelContent', () => {
       panel.updateInfo({ filename: 'test.exr', fps: 0 });
       const el = panel.getElement();
       const spans = el.querySelectorAll('span');
-      const fpsSpan = Array.from(spans).find(s => s.textContent === '-');
+      const fpsSpan = Array.from(spans).find((s) => s.textContent === '-');
       expect(fpsSpan).not.toBeUndefined();
     });
 

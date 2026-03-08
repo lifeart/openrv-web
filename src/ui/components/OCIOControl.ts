@@ -11,7 +11,7 @@
  * State management is delegated to OCIOStateManager.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   type OCIOState,
   getAvailableConfigs,
@@ -20,7 +20,7 @@ import {
   getDisplays,
   getViewsForDisplay,
   getLooks,
-  OCIOProcessor,
+  type OCIOProcessor,
   WORKFLOW_PRESETS,
 } from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
@@ -190,11 +190,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     // Close panel on outside click
     this.outsideClickHandler = (e: MouseEvent) => {
-      if (
-        this.isExpanded &&
-        !this.container.contains(e.target as Node) &&
-        !this.panel.contains(e.target as Node)
-      ) {
+      if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
         this.hide();
       }
     };
@@ -437,11 +433,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   /**
    * Create a select row with label
    */
-  private createSelectRow(
-    label: string,
-    valueLabel: HTMLSpanElement,
-    testId: string
-  ): HTMLElement {
+  private createSelectRow(label: string, valueLabel: HTMLSpanElement, testId: string): HTMLElement {
     const row = document.createElement('div');
     row.setAttribute('role', 'group');
     row.style.cssText = `
@@ -761,7 +753,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getAvailableConfigs().map((c) => ({
         value: c.name,
         label: c.description,
-      }))
+      })),
     );
     this.configDropdown.setSelectedValue(this.manager.getState().configName);
 
@@ -836,7 +828,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getInputColorSpaces(state.configName).map((cs) => ({
         value: cs,
         label: cs,
-      }))
+      })),
     );
     this.inputColorSpaceDropdown.setSelectedValue(state.inputColorSpace);
   }
@@ -850,7 +842,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getWorkingColorSpaces(state.configName).map((cs) => ({
         value: cs,
         label: cs,
-      }))
+      })),
     );
     this.workingColorSpaceDropdown.setSelectedValue(state.workingColorSpace);
   }
@@ -864,7 +856,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getDisplays(state.configName).map((d) => ({
         value: d,
         label: d,
-      }))
+      })),
     );
     this.displayDropdown.setSelectedValue(state.display);
   }
@@ -878,7 +870,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getViewsForDisplay(state.configName, state.display).map((v) => ({
         value: v,
         label: v,
-      }))
+      })),
     );
     this.viewDropdown.setSelectedValue(state.view);
   }
@@ -892,7 +884,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getLooks(state.configName).map((l) => ({
         value: l,
         label: l,
-      }))
+      })),
     );
     this.lookDropdown.setSelectedValue(state.look);
   }
@@ -1006,7 +998,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       getAvailableConfigs().map((c) => ({
         value: c.name,
         label: c.description,
-      }))
+      })),
     );
   }
 

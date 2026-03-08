@@ -24,7 +24,7 @@ import { SequenceRepresentationLoader } from './SequenceRepresentationLoader';
 export function createRepresentationLoader(
   kind: RepresentationKind,
   hdrResizeTier: HDRResizeTier = 'none',
-  isSequence = false
+  isSequence = false,
 ): RepresentationLoader {
   switch (kind) {
     case 'frames':

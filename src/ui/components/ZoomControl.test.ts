@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ZoomControl, ZoomLevel } from './ZoomControl';
+import { ZoomControl, type ZoomLevel } from './ZoomControl';
 
 describe('ZoomControl', () => {
   let control: ZoomControl;

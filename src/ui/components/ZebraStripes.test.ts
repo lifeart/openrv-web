@@ -446,7 +446,7 @@ describe('ZebraStripes', () => {
         highEnabled: true,
         lowEnabled: true,
         highThreshold: 50,
-        lowThreshold: 60
+        lowThreshold: 60,
       });
 
       // Create pixel that could trigger both (55% luma)
@@ -580,12 +580,7 @@ function createImageData(width: number, height: number, color: [number, number, 
 
 function getPixel(imageData: ImageData, x: number, y: number): [number, number, number, number] {
   const i = (y * imageData.width + x) * 4;
-  return [
-    imageData.data[i]!,
-    imageData.data[i + 1]!,
-    imageData.data[i + 2]!,
-    imageData.data[i + 3]!,
-  ];
+  return [imageData.data[i]!, imageData.data[i + 1]!, imageData.data[i + 2]!, imageData.data[i + 3]!];
 }
 
 function pixelsModified(imageData: ImageData, originalColor: [number, number, number, number]): boolean {

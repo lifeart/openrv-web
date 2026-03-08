@@ -11,25 +11,21 @@
  * Only visible when stereo mode is active.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import {
-  StereoAlignMode,
-  DEFAULT_STEREO_ALIGN_MODE,
-  STEREO_ALIGN_MODES,
-} from '../../stereo/StereoEyeTransform';
+import { type StereoAlignMode, DEFAULT_STEREO_ALIGN_MODE, STEREO_ALIGN_MODES } from '../../stereo/StereoEyeTransform';
 
 export interface StereoAlignControlEvents extends EventMap {
   alignModeChanged: StereoAlignMode;
 }
 
 const ALIGN_MODE_LABELS: Record<StereoAlignMode, string> = {
-  'off': 'Off',
-  'grid': 'Grid',
-  'crosshair': 'Crosshair',
-  'difference': 'Difference',
-  'edges': 'Edge Overlay',
+  off: 'Off',
+  grid: 'Grid',
+  crosshair: 'Crosshair',
+  difference: 'Difference',
+  edges: 'Edge Overlay',
 };
 
 export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {

@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import type { FilmEmulationParams, FilmStockId } from '../../filters/FilmEmulation';
@@ -145,8 +145,12 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -161,7 +165,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     this.panel.appendChild(enabledRow.container);
 
     // Stock dropdown
-    const stockOptions: [string, string][] = FILM_STOCKS.map(s => [s.id, s.name]);
+    const stockOptions: [string, string][] = FILM_STOCKS.map((s) => [s.id, s.name]);
     const stockRow = this.createSelectRow('Film Stock', stockOptions, this.params.stock, (value) => {
       this.params.stock = value as FilmStockId;
       this.updateDescriptionText();
@@ -174,7 +178,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     const descEl = document.createElement('div');
     descEl.dataset.testid = 'film-emulation-stock-description';
     descEl.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-bottom: 12px; font-style: italic;';
-    const stock = FILM_STOCKS.find(s => s.id === this.params.stock);
+    const stock = FILM_STOCKS.find((s) => s.id === this.params.stock);
     descEl.textContent = stock?.description ?? '';
     this.panel.appendChild(descEl);
 
@@ -198,12 +202,16 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   private updateDescriptionText(): void {
     const descEl = this.panel.querySelector('[data-testid="film-emulation-stock-description"]');
     if (descEl) {
-      const stock = FILM_STOCKS.find(s => s.id === this.params.stock);
+      const stock = FILM_STOCKS.find((s) => s.id === this.params.stock);
       descEl.textContent = stock?.description ?? '';
     }
   }
 
-  private createCheckboxRow(label: string, initialValue: boolean, onChange: (checked: boolean) => void): { container: HTMLElement; checkbox: HTMLInputElement } {
+  private createCheckboxRow(
+    label: string,
+    initialValue: boolean,
+    onChange: (checked: boolean) => void,
+  ): { container: HTMLElement; checkbox: HTMLInputElement } {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
 
@@ -226,7 +234,12 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     return { container: row, checkbox };
   }
 
-  private createSelectRow(label: string, options: [string, string][], initialValue: string, onChange: (value: string) => void): { container: HTMLElement; select: HTMLSelectElement } {
+  private createSelectRow(
+    label: string,
+    options: [string, string][],
+    initialValue: string,
+    onChange: (value: string) => void,
+  ): { container: HTMLElement; select: HTMLSelectElement } {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 8px;';
 
@@ -269,7 +282,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     max: number,
     step: number,
     initialValue: number,
-    onChange: (value: number) => void
+    onChange: (value: number) => void,
   ): { slider: HTMLInputElement; valueLabel: HTMLSpanElement } {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 12px;';

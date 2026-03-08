@@ -203,10 +203,8 @@ describe('PaintToolbar', () => {
       const colorPicker = el.querySelector('input[type="color"]') as HTMLInputElement;
 
       // Find a red preset button (should be first preset)
-      const presetButtons = Array.from(el.querySelectorAll('button')).filter(
-        btn => btn.title?.startsWith('#')
-      );
-      const redPreset = presetButtons.find(btn => btn.title === '#ff4444');
+      const presetButtons = Array.from(el.querySelectorAll('button')).filter((btn) => btn.title?.startsWith('#'));
+      const redPreset = presetButtons.find((btn) => btn.title === '#ff4444');
 
       if (redPreset) {
         (redPreset as HTMLButtonElement).click();
@@ -362,14 +360,14 @@ describe('PaintToolbar', () => {
     it('PAINT-U090: has undo button', () => {
       const el = toolbar.render();
       const buttons = Array.from(el.querySelectorAll('button'));
-      const undoBtn = buttons.find(btn => btn.title?.includes('Undo'));
+      const undoBtn = buttons.find((btn) => btn.title?.includes('Undo'));
       expect(undoBtn).not.toBeUndefined();
     });
 
     it('PAINT-U091: has redo button', () => {
       const el = toolbar.render();
       const buttons = Array.from(el.querySelectorAll('button'));
-      const redoBtn = buttons.find(btn => btn.title?.includes('Redo'));
+      const redoBtn = buttons.find((btn) => btn.title?.includes('Redo'));
       expect(redoBtn).not.toBeUndefined();
     });
   });
@@ -456,9 +454,7 @@ describe('PaintToolbar', () => {
     it('PAINT-U110: toolbar has visual separators', () => {
       const el = toolbar.render();
       // Separators are divs with width: 1px
-      const dividers = Array.from(el.querySelectorAll('div')).filter(
-        div => div.style.width === '1px'
-      );
+      const dividers = Array.from(el.querySelectorAll('div')).filter((div) => div.style.width === '1px');
       expect(dividers.length).toBeGreaterThan(0);
     });
   });

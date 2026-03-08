@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LayoutStore, COLLAPSED_RAIL_SIZE, DEFAULT_PANEL_STATES } from './LayoutStore';
 import { LayoutManager } from './LayoutManager';
 
-
 describe('LayoutManager', () => {
   let store: LayoutStore;
   let manager: LayoutManager;

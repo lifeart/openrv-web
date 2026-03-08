@@ -47,7 +47,7 @@ describe('Timeline', () => {
 
   function flushRaf() {
     const cbs = rafCallbacks.splice(0);
-    cbs.forEach(cb => cb(performance.now()));
+    cbs.forEach((cb) => cb(performance.now()));
   }
 
   beforeEach(() => {
@@ -64,7 +64,11 @@ describe('Timeline', () => {
     });
 
     // Clear persisted timeline display mode so each test starts fresh
-    try { localStorage.removeItem('openrv.timeline.displayMode'); } catch { /* noop */ }
+    try {
+      localStorage.removeItem('openrv.timeline.displayMode');
+    } catch {
+      /* noop */
+    }
 
     session = new Session();
     // Use type cast since we are in test environment and want to access protected method
@@ -394,9 +398,9 @@ describe('Timeline', () => {
       const metadataY: number[] = [];
       let frameLabelY: number | null = null;
 
-      ctx.measureText.mockImplementation((): TextMetrics => (
-        { width: 100, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 3 } as TextMetrics
-      ));
+      ctx.measureText.mockImplementation(
+        (): TextMetrics => ({ width: 100, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 3 }) as TextMetrics,
+      );
       ctx.fillText.mockImplementation((text: string, _x: number, y: number): void => {
         if (text.startsWith('Frame')) {
           frameLabelY = y;
@@ -422,9 +426,10 @@ describe('Timeline', () => {
       };
       const yByCall: number[] = [];
 
-      ctx.measureText.mockImplementation((): TextMetrics => (
-        { width: 100, actualBoundingBoxAscent: Number.NaN, actualBoundingBoxDescent: Number.NaN } as TextMetrics
-      ));
+      ctx.measureText.mockImplementation(
+        (): TextMetrics =>
+          ({ width: 100, actualBoundingBoxAscent: Number.NaN, actualBoundingBoxDescent: Number.NaN }) as TextMetrics,
+      );
       ctx.fillText.mockImplementation((_text: string, _x: number, y: number): void => {
         yByCall.push(y);
       });
@@ -465,7 +470,7 @@ describe('Timeline', () => {
 
       const tl = new TestTimeline(freshSession, paintEngine);
 
-      const registeredEvents = addEventSpy.mock.calls.map(call => call[0]);
+      const registeredEvents = addEventSpy.mock.calls.map((call) => call[0]);
       expect(registeredEvents).toContain('pointerdown');
       expect(registeredEvents).not.toContain('mousedown');
 
@@ -490,7 +495,7 @@ describe('Timeline', () => {
 
       const tl = new TestTimeline(freshSession, paintEngine);
 
-      const canvasEvents = canvasAddEventSpy.mock.calls.map(call => call[0]);
+      const canvasEvents = canvasAddEventSpy.mock.calls.map((call) => call[0]);
       expect(canvasEvents).toContain('pointermove');
       expect(canvasEvents).not.toContain('mousemove');
 
@@ -515,7 +520,7 @@ describe('Timeline', () => {
 
       const tl = new TestTimeline(freshSession, paintEngine);
 
-      const canvasEvents = canvasAddEventSpy.mock.calls.map(call => call[0]);
+      const canvasEvents = canvasAddEventSpy.mock.calls.map((call) => call[0]);
       expect(canvasEvents).toContain('pointerup');
       expect(canvasEvents).not.toContain('mouseup');
 
@@ -853,8 +858,15 @@ describe('Timeline', () => {
       newTimeline.drawCount = 0;
       const container = newTimeline.render();
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-        width: 1000, height: 100, top: 0, left: 0,
-        bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       flushRaf();
       expect(newTimeline.drawCount).toBeGreaterThanOrEqual(1);
@@ -916,16 +928,19 @@ describe('Timeline', () => {
       const origSet = ctx.fillStyle;
       let lastValue: string | CanvasGradient | CanvasPattern = origSet;
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string | CanvasGradient | CanvasPattern) { lastValue = v; if (typeof v === 'string') fillStyleValues.push(v); },
-        get() { return lastValue; },
+        set(v: string | CanvasGradient | CanvasPattern) {
+          lastValue = v;
+          if (typeof v === 'string') fillStyleValues.push(v);
+        },
+        get() {
+          return lastValue;
+        },
         configurable: true,
       });
 
       (timeline as any).draw();
 
-      const transparentCalls = fillStyleValues.filter(
-        v => v === 'rgba(0, 0, 0, 0)'
-      );
+      const transparentCalls = fillStyleValues.filter((v) => v === 'rgba(0, 0, 0, 0)');
       expect(transparentCalls).toHaveLength(0);
 
       // Restore by deleting the instance property (reveals prototype)
@@ -953,8 +968,13 @@ describe('Timeline', () => {
       const fillStyleValues: string[] = [];
       let lastValue = '';
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { lastValue = v; fillStyleValues.push(v); },
-        get() { return lastValue; },
+        set(v: string) {
+          lastValue = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastValue;
+        },
         configurable: true,
       });
 
@@ -977,8 +997,13 @@ describe('Timeline', () => {
       const fillStyleValues: string[] = [];
       let lastValue = '';
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { lastValue = v; fillStyleValues.push(v); },
-        get() { return lastValue; },
+        set(v: string) {
+          lastValue = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastValue;
+        },
         configurable: true,
       });
 
@@ -1001,8 +1026,13 @@ describe('Timeline', () => {
       const fillStyleValues: string[] = [];
       let lastValue = '';
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { lastValue = v; fillStyleValues.push(v); },
-        get() { return lastValue; },
+        set(v: string) {
+          lastValue = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastValue;
+        },
         configurable: true,
       });
 
@@ -1030,13 +1060,13 @@ describe('Timeline', () => {
       (timeline as any).draw();
 
       // When paused, the FPS text should show target fps only, without actual/target format
-      const fpsText = textCalls.find(t => t.includes('fps'));
+      const fpsText = textCalls.find((t) => t.includes('fps'));
       expect(fpsText).toBeDefined();
       // Should show "Paused" status, not "Playing"
-      const statusText = textCalls.find(t => t.includes('Paused'));
+      const statusText = textCalls.find((t) => t.includes('Paused'));
       expect(statusText).toBeDefined();
       // Should NOT show the actual/target format (e.g., "24.0/24 fps")
-      const dualFpsText = textCalls.find(t => /\d+\.\d+\/\d+/.test(t));
+      const dualFpsText = textCalls.find((t) => /\d+\.\d+\/\d+/.test(t));
       expect(dualFpsText).toBeUndefined();
     });
 
@@ -1054,7 +1084,7 @@ describe('Timeline', () => {
 
       (timeline as any).draw();
 
-      const fpsText = textCalls.find(t => t.includes('skipped'));
+      const fpsText = textCalls.find((t) => t.includes('skipped'));
       expect(fpsText).toBeDefined();
       expect(fpsText).toContain('5 skipped');
     });
@@ -1074,7 +1104,7 @@ describe('Timeline', () => {
       (timeline as any).draw();
 
       // Should show effective target fps and speed multiplier
-      const fpsText = textCalls.find(t => t.includes('eff. fps') && t.includes('2x'));
+      const fpsText = textCalls.find((t) => t.includes('eff. fps') && t.includes('2x'));
       expect(fpsText).toBeDefined();
     });
 
@@ -1092,7 +1122,7 @@ describe('Timeline', () => {
 
       (timeline as any).draw();
 
-      const fpsText = textCalls.find(t => t.includes('skipped'));
+      const fpsText = textCalls.find((t) => t.includes('skipped'));
       expect(fpsText).toBeUndefined();
     });
   });
@@ -1119,7 +1149,7 @@ describe('Timeline', () => {
 
     afterEach(() => {
       // Clean up any context menus left in the DOM
-      document.querySelectorAll('.timeline-main-context-menu').forEach(el => el.remove());
+      document.querySelectorAll('.timeline-main-context-menu').forEach((el) => el.remove());
     });
 
     it('TML-CTX-001: right-click on canvas creates a context menu', () => {
@@ -1142,8 +1172,15 @@ describe('Timeline', () => {
       const tl = new TestTimeline(noSourceSession);
       const container = tl.render();
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-        width: 1000, height: 100, top: 0, left: 0,
-        bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       tl.setSize(1000, 100);
       flushRaf();
@@ -1186,15 +1223,17 @@ describe('Timeline', () => {
       mockCanvasRect(canvas);
       const goToSpy = vi.spyOn(session, 'goToFrame');
 
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const menuEl = document.querySelector('.timeline-main-context-menu')!;
-      const goToItem = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Go to')
+      const goToItem = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Go to'),
       ) as HTMLElement;
       goToItem.click();
 
@@ -1206,15 +1245,17 @@ describe('Timeline', () => {
       mockCanvasRect(canvas);
       const setInSpy = vi.spyOn(session, 'setInPoint');
 
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const menuEl = document.querySelector('.timeline-main-context-menu')!;
-      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Set In Point Here')
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Set In Point Here'),
       ) as HTMLElement;
       item.click();
 
@@ -1226,15 +1267,17 @@ describe('Timeline', () => {
       mockCanvasRect(canvas);
       const setOutSpy = vi.spyOn(session, 'setOutPoint');
 
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const menuEl = document.querySelector('.timeline-main-context-menu')!;
-      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Set Out Point Here')
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Set Out Point Here'),
       ) as HTMLElement;
       item.click();
 
@@ -1251,15 +1294,17 @@ describe('Timeline', () => {
 
       const resetSpy = vi.spyOn(session, 'resetInOutPoints');
 
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const menuEl = document.querySelector('.timeline-main-context-menu')!;
-      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Clear In/Out Range')
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Clear In/Out Range'),
       ) as HTMLElement;
       expect(item).toBeTruthy();
       item.click();
@@ -1272,15 +1317,17 @@ describe('Timeline', () => {
       mockCanvasRect(canvas);
       const toggleSpy = vi.spyOn(session, 'toggleMark');
 
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const menuEl = document.querySelector('.timeline-main-context-menu')!;
-      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Add Mark')
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Add Mark'),
       ) as HTMLElement;
       item.click();
 
@@ -1296,15 +1343,17 @@ describe('Timeline', () => {
       const removeSpy = vi.spyOn(session, 'removeMark');
 
       // Right-click at frame 51 (which falls within the 40-60 range)
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const menuEl = document.querySelector('.timeline-main-context-menu')!;
-      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Remove Mark')
+      const item = Array.from(menuEl.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Remove Mark'),
       ) as HTMLElement;
       expect(item).toBeTruthy();
       item.click();
@@ -1317,11 +1366,13 @@ describe('Timeline', () => {
       const canvas = getCanvas(timeline);
       mockCanvasRect(canvas);
 
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       expect(document.querySelector('.timeline-main-context-menu')).not.toBeNull();
       timeline.dispose();
@@ -1338,13 +1389,15 @@ describe('Timeline', () => {
       const initialFrame = session.currentFrame;
 
       // Dispatch a right-click pointerdown (button=2)
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 500,
-        clientY: 50,
-        button: 2,
-        pointerId: 1,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 500,
+          clientY: 50,
+          button: 2,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       // goToFrame should NOT have been called from pointerdown
       expect(goToSpy).not.toHaveBeenCalled();
@@ -1358,21 +1411,25 @@ describe('Timeline', () => {
       canvas.releasePointerCapture = vi.fn();
 
       // Start a left-click drag
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 300,
-        clientY: 50,
-        button: 0,
-        pointerId: 1,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 300,
+          clientY: 50,
+          button: 0,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
       expect((timeline as any).isDragging).toBe(true);
 
       // Right-click during drag shows context menu and cancels drag
-      canvas.dispatchEvent(new MouseEvent('contextmenu', {
-        clientX: 500,
-        clientY: 50,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 500,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       expect((timeline as any).isDragging).toBe(false);
       expect(document.querySelector('.timeline-main-context-menu')).not.toBeNull();
@@ -1385,13 +1442,15 @@ describe('Timeline', () => {
       canvas.releasePointerCapture = vi.fn();
 
       // Right-click (does nothing to isDragging)
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 500,
-        clientY: 50,
-        button: 2,
-        pointerId: 1,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 500,
+          clientY: 50,
+          button: 2,
+          pointerId: 1,
+          bubbles: true,
+        }),
+      );
 
       expect((timeline as any).isDragging).toBe(false);
 
@@ -1400,13 +1459,15 @@ describe('Timeline', () => {
       contextMenu.hide();
 
       // Left-click should still work
-      canvas.dispatchEvent(new PointerEvent('pointerdown', {
-        clientX: 300,
-        clientY: 50,
-        button: 0,
-        pointerId: 2,
-        bubbles: true,
-      }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          clientX: 300,
+          clientY: 50,
+          button: 0,
+          pointerId: 2,
+          bubbles: true,
+        }),
+      );
 
       expect((timeline as any).isDragging).toBe(true);
     });
@@ -1427,7 +1488,7 @@ describe('Timeline', () => {
       const addEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
       const tl = new TestTimeline(freshSession, paintEngine);
 
-      const registeredEvents = addEventSpy.mock.calls.map(call => call[0]);
+      const registeredEvents = addEventSpy.mock.calls.map((call) => call[0]);
       expect(registeredEvents).toContain('contextmenu');
 
       addEventSpy.mockRestore();

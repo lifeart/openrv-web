@@ -52,7 +52,7 @@ export type GradientDirection = 'horizontal' | 'vertical';
 export interface PatternResult {
   width: number;
   height: number;
-  data: Float32Array;  // RGBA float32, 4 channels, sRGB-encoded values
+  data: Float32Array; // RGBA float32, 4 channels, sRGB-encoded values
 }
 
 export interface MovieProcParams {
@@ -64,10 +64,10 @@ export interface MovieProcParams {
   height?: number;
   color?: [number, number, number, number];
   direction?: GradientDirection;
-  cellSize?: number;      // checkerboard cell size (clamped to >= 1)
-  colorA?: [number, number, number, number];  // checkerboard color A
-  colorB?: [number, number, number, number];  // checkerboard color B
-  steps?: number;         // grey_ramp step count (clamped to >= 2)
+  cellSize?: number; // checkerboard cell size (clamped to >= 1)
+  colorA?: [number, number, number, number]; // checkerboard color A
+  colorB?: [number, number, number, number]; // checkerboard color B
+  steps?: number; // grey_ramp step count (clamped to >= 2)
 }
 
 // ---------------------------------------------------------------------------
@@ -84,11 +84,11 @@ export const PROCEDURAL_MAX_PIXELS = 8192 * 8192;
  * Desktop OpenRV pattern name aliases for .rv session file interoperability.
  */
 export const PATTERN_ALIASES: Record<string, PatternName> = {
-  'smpte': 'smpte_bars',
-  'ebu': 'ebu_bars',
-  'checker': 'checkerboard',
-  'colorchart': 'color_chart',
-  'ramp': 'gradient',
+  smpte: 'smpte_bars',
+  ebu: 'ebu_bars',
+  checker: 'checkerboard',
+  colorchart: 'color_chart',
+  ramp: 'gradient',
 };
 
 /** All valid pattern names */
@@ -128,12 +128,12 @@ export function clampDimensions(width: number, height: number): { width: number;
 
 const SMPTE_BARS_75: readonly [number, number, number][] = [
   [0.75, 0.75, 0.75], // White
-  [0.75, 0.75, 0.0],  // Yellow
-  [0.0, 0.75, 0.75],  // Cyan
-  [0.0, 0.75, 0.0],   // Green
-  [0.75, 0.0, 0.75],  // Magenta
-  [0.75, 0.0, 0.0],   // Red
-  [0.0, 0.0, 0.75],   // Blue
+  [0.75, 0.75, 0.0], // Yellow
+  [0.0, 0.75, 0.75], // Cyan
+  [0.0, 0.75, 0.0], // Green
+  [0.75, 0.0, 0.75], // Magenta
+  [0.75, 0.0, 0.0], // Red
+  [0.0, 0.0, 0.75], // Blue
 ];
 
 // ---------------------------------------------------------------------------
@@ -142,14 +142,14 @@ const SMPTE_BARS_75: readonly [number, number, number][] = [
 // ---------------------------------------------------------------------------
 
 const EBU_BARS_100: readonly [number, number, number][] = [
-  [1.0, 1.0, 1.0],  // White
-  [1.0, 1.0, 0.0],  // Yellow
-  [0.0, 1.0, 1.0],  // Cyan
-  [0.0, 1.0, 0.0],  // Green
-  [1.0, 0.0, 1.0],  // Magenta
-  [1.0, 0.0, 0.0],  // Red
-  [0.0, 0.0, 1.0],  // Blue
-  [0.0, 0.0, 0.0],  // Black
+  [1.0, 1.0, 1.0], // White
+  [1.0, 1.0, 0.0], // Yellow
+  [0.0, 1.0, 1.0], // Cyan
+  [0.0, 1.0, 0.0], // Green
+  [1.0, 0.0, 1.0], // Magenta
+  [1.0, 0.0, 0.0], // Red
+  [0.0, 0.0, 1.0], // Blue
+  [0.0, 0.0, 0.0], // Black
 ];
 
 // ---------------------------------------------------------------------------
@@ -159,36 +159,36 @@ const EBU_BARS_100: readonly [number, number, number][] = [
 
 const COLOR_CHECKER_PATCHES: readonly [number, number, number][] = [
   // Row 1: Natural colors
-  [0.0430, 0.0323, 0.0253], // 1  Dark skin
-  [0.1470, 0.1100, 0.0805], // 2  Light skin
-  [0.0370, 0.0620, 0.1030], // 3  Blue sky
-  [0.0310, 0.0460, 0.0210], // 4  Foliage
-  [0.0640, 0.0600, 0.1350], // 5  Blue flower
-  [0.0320, 0.1490, 0.1390], // 6  Bluish green
+  [0.043, 0.0323, 0.0253], // 1  Dark skin
+  [0.147, 0.11, 0.0805], // 2  Light skin
+  [0.037, 0.062, 0.103], // 3  Blue sky
+  [0.031, 0.046, 0.021], // 4  Foliage
+  [0.064, 0.06, 0.135], // 5  Blue flower
+  [0.032, 0.149, 0.139], // 6  Bluish green
 
   // Row 2: Miscellaneous colors
-  [0.1740, 0.0760, 0.0060], // 7  Orange
-  [0.0180, 0.0360, 0.1400], // 8  Purplish blue
-  [0.1290, 0.0290, 0.0310], // 9  Moderate red
-  [0.0210, 0.0130, 0.0500], // 10 Purple
-  [0.0880, 0.1540, 0.0130], // 11 Yellow green
-  [0.2210, 0.1240, 0.0080], // 12 Orange yellow
+  [0.174, 0.076, 0.006], // 7  Orange
+  [0.018, 0.036, 0.14], // 8  Purplish blue
+  [0.129, 0.029, 0.031], // 9  Moderate red
+  [0.021, 0.013, 0.05], // 10 Purple
+  [0.088, 0.154, 0.013], // 11 Yellow green
+  [0.221, 0.124, 0.008], // 12 Orange yellow
 
   // Row 3: Primary and secondary colors
-  [0.0080, 0.0190, 0.1210], // 13 Blue
-  [0.0160, 0.0870, 0.0150], // 14 Green
-  [0.0940, 0.0130, 0.0070], // 15 Red
-  [0.2580, 0.2000, 0.0080], // 16 Yellow
-  [0.1060, 0.0260, 0.0920], // 17 Magenta
-  [0.0060, 0.0780, 0.1470], // 18 Cyan
+  [0.008, 0.019, 0.121], // 13 Blue
+  [0.016, 0.087, 0.015], // 14 Green
+  [0.094, 0.013, 0.007], // 15 Red
+  [0.258, 0.2, 0.008], // 16 Yellow
+  [0.106, 0.026, 0.092], // 17 Magenta
+  [0.006, 0.078, 0.147], // 18 Cyan
 
   // Row 4: Neutral scale (dark to light)
-  [0.0310, 0.0310, 0.0310], // 19 White 9.5
-  [0.0900, 0.0900, 0.0900], // 20 Neutral 8
-  [0.1950, 0.1950, 0.1950], // 21 Neutral 6.5
-  [0.3610, 0.3610, 0.3610], // 22 Neutral 5
-  [0.5860, 0.5860, 0.5860], // 23 Neutral 3.5
-  [0.9000, 0.9000, 0.9000], // 24 White
+  [0.031, 0.031, 0.031], // 19 White 9.5
+  [0.09, 0.09, 0.09], // 20 Neutral 8
+  [0.195, 0.195, 0.195], // 21 Neutral 6.5
+  [0.361, 0.361, 0.361], // 22 Neutral 5
+  [0.586, 0.586, 0.586], // 23 Neutral 3.5
+  [0.9, 0.9, 0.9], // 24 White
 ];
 
 // ---------------------------------------------------------------------------
@@ -292,10 +292,7 @@ export function generateGradient(
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const t =
-        direction === 'horizontal'
-          ? width > 1 ? x / (width - 1) : 0
-          : height > 1 ? y / (height - 1) : 0;
+      const t = direction === 'horizontal' ? (width > 1 ? x / (width - 1) : 0) : height > 1 ? y / (height - 1) : 0;
       const idx = (y * width + x) * 4;
       data[idx] = t;
       data[idx + 1] = t;
@@ -355,7 +352,7 @@ export function generateCheckerboard(
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const isWhite = ((Math.floor(x / cellSize) + Math.floor(y / cellSize)) % 2) === 0;
+      const isWhite = (Math.floor(x / cellSize) + Math.floor(y / cellSize)) % 2 === 0;
       const color = isWhite ? colorA : colorB;
       const idx = (y * width + x) * 4;
       data[idx] = color[0];
@@ -440,8 +437,8 @@ function drawLine(
   b: number,
 ): void {
   // Bresenham's line algorithm
-  let dx = Math.abs(x1 - x0);
-  let dy = Math.abs(y1 - y0);
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1;
   const sy = y0 < y1 ? 1 : -1;
   let err = dx - dy;
@@ -538,7 +535,7 @@ export function generateResolutionChart(width: number, height: number): PatternR
     data[i] = 1.0; // alpha = 1
   }
 
-  const w = 1.0;  // white color value
+  const w = 1.0; // white color value
 
   // Border frame (1px white outline)
   drawRect(data, width, height, 0, 0, width, height, w, w, w);
@@ -843,13 +840,7 @@ export class ProceduralSourceNode extends BaseSourceNode {
         result = generateSolid(width, height, params.color ?? [0, 0, 0, 1]);
         break;
       case 'checkerboard':
-        result = generateCheckerboard(
-          width,
-          height,
-          params.cellSize,
-          params.colorA,
-          params.colorB,
-        );
+        result = generateCheckerboard(width, height, params.cellSize, params.colorA, params.colorB);
         break;
       case 'grey_ramp':
         result = generateGreyRamp(width, height, params.steps, params.direction);

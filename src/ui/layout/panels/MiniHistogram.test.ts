@@ -26,14 +26,17 @@ function createTestHistogramData(maxValue = 1000): HistogramData {
   const luminance = new Uint32Array(256);
 
   for (let i = 0; i < 256; i++) {
-    red[i] = Math.floor(Math.sin(i / 256 * Math.PI) * maxValue);
-    green[i] = Math.floor(Math.sin((i + 85) / 256 * Math.PI) * (maxValue * 0.8));
-    blue[i] = Math.floor(Math.sin((i + 170) / 256 * Math.PI) * (maxValue * 0.6));
-    luminance[i] = Math.floor((red[i]! * 0.2126 + green[i]! * 0.7152 + blue[i]! * 0.0722));
+    red[i] = Math.floor(Math.sin((i / 256) * Math.PI) * maxValue);
+    green[i] = Math.floor(Math.sin(((i + 85) / 256) * Math.PI) * (maxValue * 0.8));
+    blue[i] = Math.floor(Math.sin(((i + 170) / 256) * Math.PI) * (maxValue * 0.6));
+    luminance[i] = Math.floor(red[i]! * 0.2126 + green[i]! * 0.7152 + blue[i]! * 0.0722);
   }
 
   return {
-    red, green, blue, luminance,
+    red,
+    green,
+    blue,
+    luminance,
     maxValue,
     pixelCount: 1920 * 1080,
     clipping: { shadows: 0, highlights: 0, shadowsPercent: 0, highlightsPercent: 0 },

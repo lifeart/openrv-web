@@ -465,21 +465,11 @@ describe('PreferencesManager export/import', () => {
     manager.importAll(JSON.stringify(payload));
 
     expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.layout)!)).toEqual(payload.layout);
-    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.layoutCustomList)!)).toEqual(
-      payload.layoutCustomList,
-    );
-    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.customKeyBindings)!)).toEqual(
-      payload.keyBindings,
-    );
-    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.ocioState)!)).toEqual(
-      payload.ocioState,
-    );
-    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.ocioPerSource)!)).toEqual(
-      payload.ocioPerSource,
-    );
-    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.autoSaveConfig)!)).toEqual(
-      payload.autoSaveConfig,
-    );
+    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.layoutCustomList)!)).toEqual(payload.layoutCustomList);
+    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.customKeyBindings)!)).toEqual(payload.keyBindings);
+    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.ocioState)!)).toEqual(payload.ocioState);
+    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.ocioPerSource)!)).toEqual(payload.ocioPerSource);
+    expect(JSON.parse(storage.getItem(PREFERENCE_STORAGE_KEYS.autoSaveConfig)!)).toEqual(payload.autoSaveConfig);
   });
 
   it('CPRF-065: importAll with null opaque key removes it', () => {
@@ -697,9 +687,9 @@ describe('FPS Indicator Preferences', () => {
     const { manager } = createManager();
     const handler = vi.fn();
     manager.on('fpsIndicatorPrefsChanged', handler);
-    manager.setFPSIndicatorPrefs({ warningThreshold: 0.90 });
+    manager.setFPSIndicatorPrefs({ warningThreshold: 0.9 });
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ warningThreshold: 0.90 }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ warningThreshold: 0.9 }));
   });
 
   it('CPRF-FPS-004: clamps backgroundOpacity to 0-1', () => {
@@ -734,10 +724,7 @@ describe('FPS Indicator Preferences', () => {
   it('CPRF-FPS-007: invalid position values are sanitized to default', () => {
     const { manager, storage } = createManager();
     // Store invalid data directly
-    storage.setItem(
-      CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator,
-      JSON.stringify({ position: 'invalid-position' })
-    );
+    storage.setItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator, JSON.stringify({ position: 'invalid-position' }));
     const prefs = manager.getFPSIndicatorPrefs();
     expect(prefs.position).toBe('top-right'); // default
   });

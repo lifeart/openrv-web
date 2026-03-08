@@ -11,9 +11,9 @@
  * - Auto-hides 2 seconds after pause
  */
 
-import { Session } from '../../core/session/Session';
+import { type Session } from '../../core/session/Session';
 import type { FPSMeasurement } from '../../core/session/PlaybackEngine';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import type { OverlayPosition } from './TimecodeOverlay';
@@ -50,11 +50,7 @@ export const DEFAULT_FPS_INDICATOR_STATE: FPSIndicatorState = {
  * Colors are resolved from CSS variables (--success, --warning, --error)
  * with hex fallbacks, following the CacheIndicator pattern.
  */
-export function getFPSColor(
-  ratio: number,
-  warningThreshold: number,
-  criticalThreshold: number,
-): string {
+export function getFPSColor(ratio: number, warningThreshold: number, criticalThreshold: number): string {
   if (ratio >= warningThreshold) {
     return getCSSColor('--success', '#4ade80'); // green
   } else if (ratio >= criticalThreshold) {
@@ -161,15 +157,9 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
     this.updateStyles();
 
     // Subscribe to session events
-    this.subs.add(
-      this.session.on('fpsUpdated', (measurement) => this.onFPSUpdated(measurement))
-    );
-    this.subs.add(
-      this.session.on('playbackChanged', (playing) => this.onPlaybackChanged(playing))
-    );
-    this.subs.add(
-      this.session.on('abSourceChanged', () => this.scheduleUpdate())
-    );
+    this.subs.add(this.session.on('fpsUpdated', (measurement) => this.onFPSUpdated(measurement)));
+    this.subs.add(this.session.on('playbackChanged', (playing) => this.onPlaybackChanged(playing)));
+    this.subs.add(this.session.on('abSourceChanged', () => this.scheduleUpdate()));
   }
 
   /**
@@ -241,11 +231,7 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
     }
 
     // Color based on RAW ratio (not EMA-smoothed)
-    const color = getFPSColor(
-      measurement.ratio,
-      this.state.warningThreshold,
-      this.state.criticalThreshold,
-    );
+    const color = getFPSColor(measurement.ratio, this.state.warningThreshold, this.state.criticalThreshold);
 
     // Display smoothed FPS value
     const displayFps = this.displayedFps.toFixed(1);

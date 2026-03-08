@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 
@@ -176,7 +176,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     max: number,
     step: number,
     initialValue: number,
-    onChange: (value: number) => void
+    onChange: (value: number) => void,
   ): HTMLInputElement {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 12px;';

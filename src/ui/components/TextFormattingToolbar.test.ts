@@ -110,7 +110,7 @@ describe('TextFormattingToolbar', () => {
 
       // Check annotation was updated
       const annotations = paintEngine.getAnnotationsForFrame(0);
-      const textAnnotation = annotations.find(a => a.id === annotation.id);
+      const textAnnotation = annotations.find((a) => a.id === annotation.id);
       expect(textAnnotation?.type).toBe('text');
       if (textAnnotation?.type === 'text') {
         expect(textAnnotation.bold).toBe(true);

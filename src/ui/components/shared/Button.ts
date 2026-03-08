@@ -29,15 +29,22 @@ interface VariantState {
   filter?: string;
 }
 
-const VARIANT_STYLES: Record<ButtonVariant, {
-  base: VariantState;
-  hover: VariantState;
-  active: VariantState;
-}> = {
+const VARIANT_STYLES: Record<
+  ButtonVariant,
+  {
+    base: VariantState;
+    hover: VariantState;
+    active: VariantState;
+  }
+> = {
   default: {
     base: { background: 'var(--bg-active)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' },
     hover: { background: 'var(--border-primary)', borderColor: 'var(--bg-active)', color: 'var(--text-primary)' },
-    active: { background: 'rgba(var(--accent-primary-rgb), 0.15)', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' },
+    active: {
+      background: 'rgba(var(--accent-primary-rgb), 0.15)',
+      borderColor: 'var(--accent-primary)',
+      color: 'var(--accent-primary)',
+    },
   },
   primary: {
     base: { background: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', color: COLORS.textBright },
@@ -46,18 +53,36 @@ const VARIANT_STYLES: Record<ButtonVariant, {
   },
   danger: {
     base: { background: 'var(--error)', border: '1px solid var(--error)', color: COLORS.textBright },
-    hover: { background: 'var(--error)', borderColor: 'var(--error)', color: COLORS.textBright, filter: 'brightness(1.1)' },
-    active: { background: 'var(--error)', borderColor: 'var(--error)', color: COLORS.textBright, filter: 'brightness(0.9)' },
+    hover: {
+      background: 'var(--error)',
+      borderColor: 'var(--error)',
+      color: COLORS.textBright,
+      filter: 'brightness(1.1)',
+    },
+    active: {
+      background: 'var(--error)',
+      borderColor: 'var(--error)',
+      color: COLORS.textBright,
+      filter: 'brightness(0.9)',
+    },
   },
   ghost: {
     base: { background: 'transparent', border: '1px solid transparent', color: 'var(--text-secondary)' },
     hover: { background: 'var(--bg-hover)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' },
-    active: { background: 'rgba(var(--accent-primary-rgb), 0.15)', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' },
+    active: {
+      background: 'rgba(var(--accent-primary-rgb), 0.15)',
+      borderColor: 'var(--accent-primary)',
+      color: 'var(--accent-primary)',
+    },
   },
   icon: {
     base: { background: 'transparent', border: '1px solid transparent', color: 'var(--text-secondary)' },
     hover: { background: 'var(--bg-hover)', borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' },
-    active: { background: 'rgba(var(--accent-primary-rgb), 0.15)', borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' },
+    active: {
+      background: 'rgba(var(--accent-primary-rgb), 0.15)',
+      borderColor: 'var(--accent-primary)',
+      color: 'var(--accent-primary)',
+    },
   },
   overlay: {
     base: { background: 'var(--overlay-border)', border: 'none', color: 'var(--text-secondary)' },
@@ -102,11 +127,7 @@ function applyVariantState(button: HTMLButtonElement, state: VariantState): void
   button.style.filter = state.filter || '';
 }
 
-export function createButton(
-  text: string,
-  onClick: () => void,
-  options: ButtonOptions = {}
-): HTMLButtonElement {
+export function createButton(text: string, onClick: () => void, options: ButtonOptions = {}): HTMLButtonElement {
   const {
     variant = 'default',
     size = 'md',
@@ -240,7 +261,7 @@ export function setButtonActive(button: HTMLButtonElement, active: boolean, vari
 export function createIconButton(
   icon: string,
   onClick: () => void,
-  options: Omit<ButtonOptions, 'icon'> = {}
+  options: Omit<ButtonOptions, 'icon'> = {},
 ): HTMLButtonElement {
   return createButton('', onClick, { ...options, icon, variant: options.variant || 'icon' });
 }
@@ -249,13 +270,13 @@ export function createIconButton(
  * Apply hover background effect to an element.
  * Sets `hoverBg` on pointerenter and `defaultBg` on pointerleave.
  */
-export function applyHoverEffect(
-  element: HTMLElement,
-  hoverBg = 'var(--bg-hover)',
-  defaultBg = 'transparent'
-): void {
-  element.addEventListener('pointerenter', () => { element.style.background = hoverBg; });
-  element.addEventListener('pointerleave', () => { element.style.background = defaultBg; });
+export function applyHoverEffect(element: HTMLElement, hoverBg = 'var(--bg-hover)', defaultBg = 'transparent'): void {
+  element.addEventListener('pointerenter', () => {
+    element.style.background = hoverBg;
+  });
+  element.addEventListener('pointerleave', () => {
+    element.style.background = defaultBg;
+  });
 }
 
 /**

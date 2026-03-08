@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  isRAWExtension,
-  isRAWFile,
-  extractRAWPreview,
-} from './RAWPreviewDecoder';
+import { isRAWExtension, isRAWFile, extractRAWPreview } from './RAWPreviewDecoder';
 
 const TIFF_LE = 0x4949; // "II"
 const TIFF_BE = 0x4d4d; // "MM"
@@ -43,7 +39,7 @@ function writeTag(
   id: number,
   type: number,
   count: number,
-  value: number
+  value: number,
 ): void {
   view.setUint16(offset, id, le);
   view.setUint16(offset + 2, type, le);
@@ -133,16 +129,18 @@ function fakeJPEGData(size: number): Uint8Array {
 /**
  * Create a test RAW buffer with a JPEG preview embedded via JPEGInterchangeFormat tags.
  */
-function createTestRAWBuffer(options: {
-  bigEndian?: boolean;
-  jpegSize?: number;
-  previewWidth?: number;
-  previewHeight?: number;
-  make?: string;
-  model?: string;
-  orientation?: number;
-  dateTime?: string;
-} = {}): ArrayBuffer {
+function createTestRAWBuffer(
+  options: {
+    bigEndian?: boolean;
+    jpegSize?: number;
+    previewWidth?: number;
+    previewHeight?: number;
+    make?: string;
+    model?: string;
+    orientation?: number;
+    dateTime?: string;
+  } = {},
+): ArrayBuffer {
   const {
     bigEndian = false,
     jpegSize = 100,
@@ -284,14 +282,16 @@ describe('RAWPreviewDecoder', () => {
       // Create a minimal TIFF with uint sample format (no float)
       const buffer = createTIFFBuffer({
         totalSize: 100,
-        ifds: [{
-          offset: 8,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 100 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 100 },
-          ],
-          nextIFD: 0,
-        }],
+        ifds: [
+          {
+            offset: 8,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 100 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 100 },
+            ],
+            nextIFD: 0,
+          },
+        ],
       });
       expect(isRAWFile(buffer)).toBe(true);
     });
@@ -300,16 +300,18 @@ describe('RAWPreviewDecoder', () => {
       // Create a TIFF with float32 sample format
       const buffer = createTIFFBuffer({
         totalSize: 200,
-        ifds: [{
-          offset: 8,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 2 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 2 },
-            { id: TAG_SAMPLE_FORMAT, type: 3, count: 1, value: 3 }, // float
-            { id: 258, type: 3, count: 1, value: 32 }, // BitsPerSample = 32
-          ],
-          nextIFD: 0,
-        }],
+        ifds: [
+          {
+            offset: 8,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 2 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 2 },
+              { id: TAG_SAMPLE_FORMAT, type: 3, count: 1, value: 3 }, // float
+              { id: 258, type: 3, count: 1, value: 32 }, // BitsPerSample = 32
+            ],
+            nextIFD: 0,
+          },
+        ],
       });
       expect(isRAWFile(buffer)).toBe(false);
     });
@@ -347,17 +349,19 @@ describe('RAWPreviewDecoder', () => {
 
       const buffer = createTIFFBuffer({
         totalSize: jpegOffset + jpegSize,
-        ifds: [{
-          offset: 8,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 800 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 600 },
-            { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
-            { id: TAG_STRIP_OFFSETS, type: 4, count: 1, value: jpegOffset },
-            { id: TAG_STRIP_BYTE_COUNTS, type: 4, count: 1, value: jpegSize },
-          ],
-          nextIFD: 0,
-        }],
+        ifds: [
+          {
+            offset: 8,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 800 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 600 },
+              { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
+              { id: TAG_STRIP_OFFSETS, type: 4, count: 1, value: jpegOffset },
+              { id: TAG_STRIP_BYTE_COUNTS, type: 4, count: 1, value: jpegSize },
+            ],
+            nextIFD: 0,
+          },
+        ],
         extraData: [{ offset: jpegOffset, data: jpegData }],
       });
 
@@ -486,15 +490,17 @@ describe('RAWPreviewDecoder', () => {
       // TIFF with no JPEG compression IFDs
       const buffer = createTIFFBuffer({
         totalSize: 100,
-        ifds: [{
-          offset: 8,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 100 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 100 },
-            { id: TAG_COMPRESSION, type: 3, count: 1, value: 1 }, // uncompressed, not JPEG
-          ],
-          nextIFD: 0,
-        }],
+        ifds: [
+          {
+            offset: 8,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 100 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 100 },
+              { id: TAG_COMPRESSION, type: 3, count: 1, value: 1 }, // uncompressed, not JPEG
+            ],
+            nextIFD: 0,
+          },
+        ],
       });
 
       const result = extractRAWPreview(buffer);
@@ -511,17 +517,19 @@ describe('RAWPreviewDecoder', () => {
 
       const buffer = createTIFFBuffer({
         totalSize: jpegOffset + jpegSize,
-        ifds: [{
-          offset: ifdOffset,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 320 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 240 },
-            { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
-            { id: TAG_JPEG_INTERCHANGE_FORMAT, type: 4, count: 1, value: jpegOffset },
-            { id: TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, type: 4, count: 1, value: jpegSize },
-          ],
-          nextIFD: ifdOffset, // cycle: points back to self
-        }],
+        ifds: [
+          {
+            offset: ifdOffset,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 320 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 240 },
+              { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
+              { id: TAG_JPEG_INTERCHANGE_FORMAT, type: 4, count: 1, value: jpegOffset },
+              { id: TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, type: 4, count: 1, value: jpegSize },
+            ],
+            nextIFD: ifdOffset, // cycle: points back to self
+          },
+        ],
         extraData: [{ offset: jpegOffset, data: jpegData }],
       });
 
@@ -541,17 +549,19 @@ describe('RAWPreviewDecoder', () => {
 
       const buffer = createTIFFBuffer({
         totalSize: badDataOffset + badDataSize,
-        ifds: [{
-          offset: 8,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 320 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 240 },
-            { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
-            { id: TAG_JPEG_INTERCHANGE_FORMAT, type: 4, count: 1, value: badDataOffset },
-            { id: TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, type: 4, count: 1, value: badDataSize },
-          ],
-          nextIFD: 0,
-        }],
+        ifds: [
+          {
+            offset: 8,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 320 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 240 },
+              { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
+              { id: TAG_JPEG_INTERCHANGE_FORMAT, type: 4, count: 1, value: badDataOffset },
+              { id: TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, type: 4, count: 1, value: badDataSize },
+            ],
+            nextIFD: 0,
+          },
+        ],
         extraData: [{ offset: badDataOffset, data: badData }],
       });
 
@@ -595,17 +605,19 @@ describe('RAWPreviewDecoder', () => {
 
       const buffer = createTIFFBuffer({
         totalSize: jpegOffset + jpegSize,
-        ifds: [{
-          offset: 8,
-          entries: [
-            { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 640 },
-            { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 480 },
-            { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
-            { id: TAG_JPEG_INTERCHANGE_FORMAT, type: 4, count: 1, value: jpegOffset },
-            { id: TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, type: 4, count: 1, value: jpegSize },
-          ],
-          nextIFD: 0,
-        }],
+        ifds: [
+          {
+            offset: 8,
+            entries: [
+              { id: TAG_IMAGE_WIDTH, type: 4, count: 1, value: 640 },
+              { id: TAG_IMAGE_LENGTH, type: 4, count: 1, value: 480 },
+              { id: TAG_COMPRESSION, type: 3, count: 1, value: 6 },
+              { id: TAG_JPEG_INTERCHANGE_FORMAT, type: 4, count: 1, value: jpegOffset },
+              { id: TAG_JPEG_INTERCHANGE_FORMAT_LENGTH, type: 4, count: 1, value: jpegSize },
+            ],
+            nextIFD: 0,
+          },
+        ],
         extraData: [{ offset: jpegOffset, data: jpegData }],
       });
 

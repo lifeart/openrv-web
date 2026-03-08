@@ -133,7 +133,7 @@ describe('downmix51ToStereo', () => {
 
   it('AM-DM51-002: center channel is mixed equally to both', () => {
     // All channels silent except center (channel 2)
-    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => ch === 2 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => (ch === 2 ? 1.0 : 0));
     const [left, right] = downmix51ToStereo(buffer);
 
     const coeff = DEFAULT_DOWNMIX_COEFFICIENTS.center;
@@ -143,7 +143,7 @@ describe('downmix51ToStereo', () => {
 
   it('AM-DM51-003: left surround goes to left only', () => {
     // Only Ls (channel 4) has signal
-    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => ch === 4 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => (ch === 4 ? 1.0 : 0));
     const [left, right] = downmix51ToStereo(buffer);
 
     const coeff = DEFAULT_DOWNMIX_COEFFICIENTS.surround;
@@ -153,7 +153,7 @@ describe('downmix51ToStereo', () => {
 
   it('AM-DM51-004: right surround goes to right only', () => {
     // Only Rs (channel 5) has signal
-    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => ch === 5 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => (ch === 5 ? 1.0 : 0));
     const [left, right] = downmix51ToStereo(buffer);
 
     expect(left[0]).toBeCloseTo(0, 5);
@@ -162,7 +162,7 @@ describe('downmix51ToStereo', () => {
 
   it('AM-DM51-005: LFE is excluded by default', () => {
     // Only LFE (channel 3) has signal
-    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => ch === 3 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => (ch === 3 ? 1.0 : 0));
     const [left, right] = downmix51ToStereo(buffer);
 
     // With default lfe=0, LFE should not be mixed in
@@ -171,7 +171,7 @@ describe('downmix51ToStereo', () => {
   });
 
   it('AM-DM51-006: custom coefficients are applied', () => {
-    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => ch === 2 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(6, 100, 44100, (ch, _i) => (ch === 2 ? 1.0 : 0));
     const [left, right] = downmix51ToStereo(buffer, { ...DEFAULT_DOWNMIX_COEFFICIENTS, center: 0.5 });
 
     expect(left[0]).toBeCloseTo(0.5, 5);
@@ -189,7 +189,7 @@ describe('downmix71ToStereo', () => {
 
   it('AM-DM71-002: back left surround goes to left', () => {
     // Only Lb (channel 6) has signal
-    const buffer = createMockAudioBuffer(8, 100, 44100, (ch, _i) => ch === 6 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(8, 100, 44100, (ch, _i) => (ch === 6 ? 1.0 : 0));
     const [left, right] = downmix71ToStereo(buffer);
 
     expect(left[0]).toBeCloseTo(DEFAULT_DOWNMIX_COEFFICIENTS.back, 5);
@@ -198,7 +198,7 @@ describe('downmix71ToStereo', () => {
 
   it('AM-DM71-003: back right surround goes to right', () => {
     // Only Rb (channel 7) has signal
-    const buffer = createMockAudioBuffer(8, 100, 44100, (ch, _i) => ch === 7 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(8, 100, 44100, (ch, _i) => (ch === 7 ? 1.0 : 0));
     const [left, right] = downmix71ToStereo(buffer);
 
     expect(left[0]).toBeCloseTo(0, 5);
@@ -216,7 +216,7 @@ describe('downmixToStereo', () => {
   });
 
   it('AM-DM-002: stereo passes through', () => {
-    const buffer = createMockAudioBuffer(2, 100, 44100, (ch) => ch === 0 ? 0.3 : 0.7);
+    const buffer = createMockAudioBuffer(2, 100, 44100, (ch) => (ch === 0 ? 0.3 : 0.7));
     const [left, right] = downmixToStereo(buffer);
 
     expect(left[0]).toBeCloseTo(0.3, 5);
@@ -224,7 +224,7 @@ describe('downmixToStereo', () => {
   });
 
   it('AM-DM-003: routes 6ch to 5.1 downmix', () => {
-    const buffer = createMockAudioBuffer(6, 100, 44100, (ch) => ch === 0 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(6, 100, 44100, (ch) => (ch === 0 ? 1.0 : 0));
     const [left, right] = downmixToStereo(buffer);
 
     expect(left[0]).toBeCloseTo(1.0, 5);
@@ -232,7 +232,7 @@ describe('downmixToStereo', () => {
   });
 
   it('AM-DM-004: routes 8ch to 7.1 downmix', () => {
-    const buffer = createMockAudioBuffer(8, 100, 44100, (ch) => ch === 1 ? 1.0 : 0);
+    const buffer = createMockAudioBuffer(8, 100, 44100, (ch) => (ch === 1 ? 1.0 : 0));
     const [left, right] = downmixToStereo(buffer);
 
     expect(left[0]).toBeCloseTo(0, 5);
@@ -305,7 +305,12 @@ describe('AudioMixer', () => {
   let mixer: AudioMixer;
 
   beforeEach(() => {
-    vi.stubGlobal('AudioContext', vi.fn(function() { return createMockAudioContext(); }));
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function () {
+        return createMockAudioContext();
+      }),
+    );
     mixer = new AudioMixer();
   });
 

@@ -29,24 +29,24 @@ function initRendererForTiled(renderer: Renderer): TiledMockGL {
   const baseGL = initRendererWithMockGL(renderer);
 
   // Add missing methods for tiled rendering
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const gl = baseGL as any;
   gl.enable = gl.enable ?? vi.fn();
   gl.disable = gl.disable ?? vi.fn();
   gl.scissor = gl.scissor ?? vi.fn();
   gl.getParameter = gl.getParameter ?? vi.fn(() => new Int32Array([0, 0, 1920, 1080]));
-  gl.SCISSOR_TEST = gl.SCISSOR_TEST ?? 0x0C11;
-  gl.VIEWPORT = gl.VIEWPORT ?? 0x0BA2;
-  gl.HALF_FLOAT = gl.HALF_FLOAT ?? 0x140B;
+  gl.SCISSOR_TEST = gl.SCISSOR_TEST ?? 0x0c11;
+  gl.VIEWPORT = gl.VIEWPORT ?? 0x0ba2;
+  gl.HALF_FLOAT = gl.HALF_FLOAT ?? 0x140b;
   gl.NEAREST = gl.NEAREST ?? 0x2600;
   gl.NO_ERROR = gl.NO_ERROR ?? 0;
-  gl.FRAMEBUFFER = gl.FRAMEBUFFER ?? 0x8D40;
-  gl.R32F = gl.R32F ?? 0x822E;
+  gl.FRAMEBUFFER = gl.FRAMEBUFFER ?? 0x8d40;
+  gl.R32F = gl.R32F ?? 0x822e;
   gl.RED = gl.RED ?? 0x1903;
-  gl.TEXTURE1 = gl.TEXTURE1 ?? 0x84C1;
-  gl.TEXTURE2 = gl.TEXTURE2 ?? 0x84C2;
-  gl.TEXTURE4 = gl.TEXTURE4 ?? 0x84C4;
-  gl.TEXTURE5 = gl.TEXTURE5 ?? 0x84C5;
+  gl.TEXTURE1 = gl.TEXTURE1 ?? 0x84c1;
+  gl.TEXTURE2 = gl.TEXTURE2 ?? 0x84c2;
+  gl.TEXTURE4 = gl.TEXTURE4 ?? 0x84c4;
+  gl.TEXTURE5 = gl.TEXTURE5 ?? 0x84c5;
 
   return gl as TiledMockGL;
 }
@@ -82,7 +82,7 @@ describe('Renderer renderTiledImages', () => {
 
     renderer.renderTiledImages([{ image, viewport }]);
 
-    expect(gl.enable).toHaveBeenCalledWith(0x0C11); // SCISSOR_TEST
+    expect(gl.enable).toHaveBeenCalledWith(0x0c11); // SCISSOR_TEST
   });
 
   it('REN-TILE-003: renderTiledImages disables scissor test after rendering', () => {
@@ -92,7 +92,7 @@ describe('Renderer renderTiledImages', () => {
 
     renderer.renderTiledImages([{ image, viewport }]);
 
-    expect(gl.disable).toHaveBeenCalledWith(0x0C11); // SCISSOR_TEST
+    expect(gl.disable).toHaveBeenCalledWith(0x0c11); // SCISSOR_TEST
   });
 
   it('REN-TILE-004: renderTiledImages sets viewport for each tile', () => {
@@ -104,7 +104,7 @@ describe('Renderer renderTiledImages', () => {
       { x: 400, y: 0, width: 400, height: 300 },
     ];
 
-    const tiles = viewports.map(vp => ({
+    const tiles = viewports.map((vp) => ({
       image: createTestImage(),
       viewport: vp,
     }));
@@ -127,7 +127,7 @@ describe('Renderer renderTiledImages', () => {
       { x: 400, y: 0, width: 400, height: 300 },
     ];
 
-    const tiles = viewports.map(vp => ({
+    const tiles = viewports.map((vp) => ({
       image: createTestImage(),
       viewport: vp,
     }));
@@ -201,9 +201,7 @@ describe('Renderer renderTiledImages', () => {
   it('REN-TILE-010: renderTiledImages does nothing when renderer not initialized', () => {
     // Don't initialize - should be a no-op
     const uninitializedRenderer = new Renderer();
-    const tiles = [
-      { image: createTestImage(), viewport: { x: 0, y: 0, width: 400, height: 300 } },
-    ];
+    const tiles = [{ image: createTestImage(), viewport: { x: 0, y: 0, width: 400, height: 300 } }];
 
     // Should not throw
     expect(() => uninitializedRenderer.renderTiledImages(tiles)).not.toThrow();
@@ -217,9 +215,7 @@ describe('Renderer renderTiledImages', () => {
       throw new Error('GPU error');
     });
 
-    const tiles = [
-      { image: createTestImage(), viewport: { x: 0, y: 0, width: 400, height: 300 } },
-    ];
+    const tiles = [{ image: createTestImage(), viewport: { x: 0, y: 0, width: 400, height: 300 } }];
 
     // renderTiledImages calls renderImage which calls updateTexture which calls texImage2D
     // The error happens inside renderImage, which is caught by the try/finally in renderTiledImages
@@ -230,6 +226,6 @@ describe('Renderer renderTiledImages', () => {
     }
 
     // Scissor should be disabled regardless of error
-    expect(gl.disable).toHaveBeenCalledWith(0x0C11);
+    expect(gl.disable).toHaveBeenCalledWith(0x0c11);
   });
 });

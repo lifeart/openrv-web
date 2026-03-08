@@ -9,10 +9,10 @@
  * A single version entry within a version group
  */
 export interface VersionEntry {
-  versionNumber: number;       // 1, 2, 3...
-  sourceIndex: number;         // Index into Session.sources[]
-  label: string;               // e.g., 'v3 - artist_name - 2026-02-15'
-  addedAt: string;             // ISO 8601
+  versionNumber: number; // 1, 2, 3...
+  sourceIndex: number; // Index into Session.sources[]
+  label: string; // e.g., 'v3 - artist_name - 2026-02-15'
+  addedAt: string; // ISO 8601
   metadata?: Record<string, string>; // Arbitrary key-value
 }
 
@@ -20,10 +20,10 @@ export interface VersionEntry {
  * A group of versions representing the same shot
  */
 export interface VersionGroup {
-  id: string;                  // crypto.randomUUID()
-  shotName: string;            // e.g., 'ABC_0010'
-  versions: VersionEntry[];    // Ordered by versionNumber ascending
-  activeVersionIndex: number;  // Currently displayed version
+  id: string; // crypto.randomUUID()
+  shotName: string; // e.g., 'ABC_0010'
+  versions: VersionEntry[]; // Ordered by versionNumber ascending
+  activeVersionIndex: number; // Currently displayed version
 }
 
 /**
@@ -88,11 +88,7 @@ export class VersionManager {
    * Versions are auto-numbered 1, 2, 3... in the order provided.
    * Returns the created group.
    */
-  createGroup(
-    shotName: string,
-    sourceIndices: number[],
-    options?: { labels?: string[] },
-  ): VersionGroup {
+  createGroup(shotName: string, sourceIndices: number[], options?: { labels?: string[] }): VersionGroup {
     const now = new Date().toISOString();
     const versions: VersionEntry[] = sourceIndices.map((sourceIndex, i) => ({
       versionNumber: i + 1,
@@ -160,7 +156,7 @@ export class VersionManager {
     const group = this._groups.get(groupId);
     if (!group) return false;
 
-    const idx = group.versions.findIndex(v => v.sourceIndex === sourceIndex);
+    const idx = group.versions.findIndex((v) => v.sourceIndex === sourceIndex);
     if (idx === -1) return false;
 
     group.versions.splice(idx, 1);
@@ -212,8 +208,7 @@ export class VersionManager {
     const group = this._groups.get(groupId);
     if (!group || group.versions.length === 0) return null;
 
-    group.activeVersionIndex =
-      (group.activeVersionIndex - 1 + group.versions.length) % group.versions.length;
+    group.activeVersionIndex = (group.activeVersionIndex - 1 + group.versions.length) % group.versions.length;
     const entry = group.versions[group.activeVersionIndex]!;
 
     this._callbacks?.onActiveVersionChanged(groupId, { ...entry });
@@ -251,7 +246,7 @@ export class VersionManager {
    * Get all version groups
    */
   getGroups(): VersionGroup[] {
-    return Array.from(this._groups.values()).map(g => this._copyGroup(g));
+    return Array.from(this._groups.values()).map((g) => this._copyGroup(g));
   }
 
   /**
@@ -259,7 +254,7 @@ export class VersionManager {
    */
   getGroupForSource(sourceIndex: number): VersionGroup | undefined {
     for (const group of this._groups.values()) {
-      if (group.versions.some(v => v.sourceIndex === sourceIndex)) {
+      if (group.versions.some((v) => v.sourceIndex === sourceIndex)) {
         return this._copyGroup(group);
       }
     }
@@ -334,7 +329,7 @@ export class VersionManager {
    * Produce a JSON-safe array of all version groups (for save/export)
    */
   toSerializable(): VersionGroup[] {
-    return Array.from(this._groups.values()).map(g => this._copyGroup(g));
+    return Array.from(this._groups.values()).map((g) => this._copyGroup(g));
   }
 
   /**
@@ -358,7 +353,7 @@ export class VersionManager {
   private _copyGroup(group: VersionGroup): VersionGroup {
     return {
       ...group,
-      versions: group.versions.map(v => ({
+      versions: group.versions.map((v) => ({
         ...v,
         metadata: v.metadata ? { ...v.metadata } : undefined,
       })),

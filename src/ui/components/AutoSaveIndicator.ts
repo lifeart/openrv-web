@@ -7,8 +7,7 @@
 
 import { getIconSvg } from './shared/Icons';
 import { Z_INDEX, SHADOWS } from './shared/theme';
-import type { AutoSaveManager } from '../../core/session/AutoSaveManager';
-import type { AutoSaveConfig } from '../../core/session/AutoSaveManager';
+import type { AutoSaveManager, AutoSaveConfig } from '../../core/session/AutoSaveManager';
 
 /** Auto-save status */
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'disabled';
@@ -413,13 +412,17 @@ export class AutoSaveIndicator {
     const toggle = this.popoverElement.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]');
     if (toggle) toggle.checked = config.enabled;
 
-    const intervalSlider = this.popoverElement.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]');
+    const intervalSlider = this.popoverElement.querySelector<HTMLInputElement>(
+      '[data-testid="autosave-interval-slider"]',
+    );
     if (intervalSlider) intervalSlider.value = String(config.interval);
 
     const intervalLabel = this.popoverElement.querySelector<HTMLElement>('[data-testid="autosave-interval-label"]');
     if (intervalLabel) intervalLabel.textContent = `Interval: ${config.interval} min`;
 
-    const versionsSlider = this.popoverElement.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]');
+    const versionsSlider = this.popoverElement.querySelector<HTMLInputElement>(
+      '[data-testid="autosave-versions-slider"]',
+    );
     if (versionsSlider) versionsSlider.value = String(config.maxVersions);
 
     const versionsLabel = this.popoverElement.querySelector<HTMLElement>('[data-testid="autosave-versions-label"]');
@@ -456,11 +459,14 @@ export class AutoSaveIndicator {
    */
   static saveConfigToStorage(config: AutoSaveConfig): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        interval: config.interval,
-        enabled: config.enabled,
-        maxVersions: config.maxVersions,
-      }));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          interval: config.interval,
+          enabled: config.enabled,
+          maxVersions: config.maxVersions,
+        }),
+      );
     } catch {
       // Ignore storage errors
     }

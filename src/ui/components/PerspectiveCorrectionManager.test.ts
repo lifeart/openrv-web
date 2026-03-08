@@ -7,10 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PerspectiveCorrectionManager } from './PerspectiveCorrectionManager';
-import {
-  DEFAULT_PERSPECTIVE_PARAMS,
-  PerspectiveCorrectionParams,
-} from '../../transform/PerspectiveCorrection';
+import { DEFAULT_PERSPECTIVE_PARAMS, type PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 
 describe('PerspectiveCorrectionManager', () => {
   let manager: PerspectiveCorrectionManager;

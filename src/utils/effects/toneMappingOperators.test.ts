@@ -42,7 +42,7 @@ describe('Reinhard Tone Mapping', () => {
 
   it('HDRTM-U003: monotonically increasing', () => {
     const values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0];
-    const outputs = values.map(v => tonemapReinhardChannel(v));
+    const outputs = values.map((v) => tonemapReinhardChannel(v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]).toBeGreaterThan(outputs[i - 1]!);
     }
@@ -52,7 +52,7 @@ describe('Reinhard Tone Mapping', () => {
     const input = 0.5;
     const wp = 4.0; // default white point
     const wp2 = wp * wp;
-    const expected = input * (1.0 + input / wp2) / (1.0 + input);
+    const expected = (input * (1.0 + input / wp2)) / (1.0 + input);
     expect(tonemapReinhardChannel(input)).toBeCloseTo(expected, 10);
   });
 
@@ -80,16 +80,16 @@ describe('Reinhard Tone Mapping', () => {
     const g = tonemapReinhardChannel(1.0);
     const b = tonemapReinhardChannel(2.0);
     // Each should match extended reinhard: L * (1 + L/wp2) / (1 + L)
-    expect(r).toBeCloseTo(0.5 * (1.0 + 0.5 / wp2) / (1.0 + 0.5), 10);
-    expect(g).toBeCloseTo(1.0 * (1.0 + 1.0 / wp2) / (1.0 + 1.0), 10);
-    expect(b).toBeCloseTo(2.0 * (1.0 + 2.0 / wp2) / (1.0 + 2.0), 10);
+    expect(r).toBeCloseTo((0.5 * (1.0 + 0.5 / wp2)) / (1.0 + 0.5), 10);
+    expect(g).toBeCloseTo((1.0 * (1.0 + 1.0 / wp2)) / (1.0 + 1.0), 10);
+    expect(b).toBeCloseTo((2.0 * (1.0 + 2.0 / wp2)) / (1.0 + 2.0), 10);
   });
 
   it('HDRTM-U009b: custom white point is respected', () => {
     const wp = 2.0;
     const wp2 = wp * wp;
     const input = 1.0;
-    const expected = input * (1.0 + input / wp2) / (1.0 + input);
+    const expected = (input * (1.0 + input / wp2)) / (1.0 + input);
     expect(tonemapReinhardChannel(input, wp)).toBeCloseTo(expected, 10);
   });
 });
@@ -114,7 +114,7 @@ describe('Filmic Tone Mapping', () => {
 
   it('HDRTM-U012: monotonically increasing for positive input', () => {
     const values = [0.01, 0.1, 0.5, 1.0, 2.0, 5.0];
-    const outputs = values.map(v => tonemapFilmicChannel(v));
+    const outputs = values.map((v) => tonemapFilmicChannel(v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]).toBeGreaterThan(outputs[i - 1]!);
     }
@@ -168,7 +168,7 @@ describe('ACES Tone Mapping', () => {
 
   it('HDRTM-U022: monotonically increasing', () => {
     const values = [0.01, 0.1, 0.5, 1.0, 2.0, 5.0];
-    const outputs = values.map(v => tonemapACESChannel(v));
+    const outputs = values.map((v) => tonemapACESChannel(v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]).toBeGreaterThan(outputs[i - 1]!);
     }
@@ -177,7 +177,7 @@ describe('ACES Tone Mapping', () => {
   it('HDRTM-U023: mid-grey (0.18) maps to reasonable display value', () => {
     const result = tonemapACESChannel(0.18);
     expect(result).toBeGreaterThan(0.05);
-    expect(result).toBeLessThan(0.30);
+    expect(result).toBeLessThan(0.3);
   });
 
   it('HDRTM-U024: handles NaN input', () => {
@@ -233,7 +233,7 @@ describe('AgX Tone Mapping', () => {
 
   it('monotonically increasing for equal-channel input', () => {
     const values = [0.01, 0.1, 0.5, 1.0, 2.0, 5.0];
-    const outputs = values.map(v => tonemapAgX(v, v, v));
+    const outputs = values.map((v) => tonemapAgX(v, v, v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]!.r).toBeGreaterThan(outputs[i - 1]!.r);
     }
@@ -313,7 +313,7 @@ describe('PBR Neutral Tone Mapping', () => {
 
   it('monotonically increasing for equal-channel input', () => {
     const values = [0.01, 0.1, 0.5, 1.0, 2.0, 5.0];
-    const outputs = values.map(v => tonemapPBRNeutral(v, v, v));
+    const outputs = values.map((v) => tonemapPBRNeutral(v, v, v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]!.r).toBeGreaterThan(outputs[i - 1]!.r);
     }
@@ -355,7 +355,7 @@ describe('GT Tone Mapping', () => {
 
   it('monotonically increasing', () => {
     const values = [0.01, 0.1, 0.22, 0.5, 1.0, 2.0, 5.0];
-    const outputs = values.map(v => tonemapGTChannel(v));
+    const outputs = values.map((v) => tonemapGTChannel(v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]).toBeGreaterThanOrEqual(outputs[i - 1]!);
     }
@@ -385,8 +385,8 @@ describe('GT Tone Mapping', () => {
   it('has smooth transition through linear section', () => {
     // The linear section starts at m=0.22
     const v1 = tonemapGTChannel(0.22);
-    const v2 = tonemapGTChannel(0.30);
-    const v3 = tonemapGTChannel(0.40);
+    const v2 = tonemapGTChannel(0.3);
+    const v3 = tonemapGTChannel(0.4);
     // All should be increasing
     expect(v2).toBeGreaterThan(v1);
     expect(v3).toBeGreaterThan(v2);
@@ -426,7 +426,7 @@ describe('ACES Hill Tone Mapping', () => {
 
   it('monotonically increasing for equal-channel input', () => {
     const values = [0.01, 0.1, 0.5, 1.0, 2.0, 5.0];
-    const outputs = values.map(v => tonemapACESHill(v, v, v));
+    const outputs = values.map((v) => tonemapACESHill(v, v, v));
     for (let i = 1; i < outputs.length; i++) {
       expect(outputs[i]!.r).toBeGreaterThan(outputs[i - 1]!.r);
     }
@@ -467,7 +467,7 @@ describe('ACES Hill Tone Mapping', () => {
   it('mid-grey (0.18) maps to reasonable display value', () => {
     const result = tonemapACESHill(0.18, 0.18, 0.18);
     expect(result.r).toBeGreaterThan(0.05);
-    expect(result.r).toBeLessThan(0.40);
+    expect(result.r).toBeLessThan(0.4);
   });
 });
 
@@ -769,11 +769,7 @@ describe('applyToneMappingToData', () => {
   });
 
   it('processes multiple pixels correctly', () => {
-    const data = new Uint8ClampedArray([
-      64, 64, 64, 255,
-      128, 128, 128, 255,
-      255, 255, 255, 255,
-    ]);
+    const data = new Uint8ClampedArray([64, 64, 64, 255, 128, 128, 128, 255, 255, 255, 255, 255]);
 
     applyToneMappingToData(data, 'reinhard');
 
@@ -830,7 +826,7 @@ describe('GPU/CPU Parity with shared functions', () => {
     const wp = 4.0;
     const wp2 = wp * wp;
     for (const x of testValues) {
-      const gpuResult = x * (1.0 + x / wp2) / (1.0 + x);
+      const gpuResult = (x * (1.0 + x / wp2)) / (1.0 + x);
       const cpuResult = tonemapReinhardChannel(x);
       expect(cpuResult).toBeCloseTo(gpuResult, 10);
     }
@@ -841,7 +837,7 @@ describe('GPU/CPU Parity with shared functions', () => {
     const wp = 2.0;
     const wp2 = wp * wp;
     for (const x of testValues) {
-      const gpuResult = x * (1.0 + x / wp2) / (1.0 + x);
+      const gpuResult = (x * (1.0 + x / wp2)) / (1.0 + x);
       const cpuResult = tonemapReinhardChannel(x, wp);
       expect(cpuResult).toBeCloseTo(gpuResult, 10);
     }
@@ -853,8 +849,13 @@ describe('GPU/CPU Parity with shared functions', () => {
     const whitePoint = 8.0;
     for (const x of testValues) {
       // GPU: filmic(exposureBias * color) / filmic(whitePoint)
-      const A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
-      const filmicFn = (v: number) => ((v * (A * v + C * B) + D * E) / (v * (A * v + B) + D * F)) - E / F;
+      const A = 0.15,
+        B = 0.5,
+        C = 0.1,
+        D = 0.2,
+        E = 0.02,
+        F = 0.3;
+      const filmicFn = (v: number) => (v * (A * v + C * B) + D * E) / (v * (A * v + B) + D * F) - E / F;
       const gpuResult = Math.max(0, filmicFn(exposureBias * x) / filmicFn(whitePoint));
       const cpuResult = tonemapFilmicChannel(x, exposureBias, whitePoint);
       expect(cpuResult).toBeCloseTo(gpuResult, 10);
@@ -864,7 +865,11 @@ describe('GPU/CPU Parity with shared functions', () => {
   it('ACES matches GPU formula', () => {
     const testValues = [0, 0.25, 0.5, 0.75, 1.0];
     for (const x of testValues) {
-      const a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+      const a = 2.51,
+        b = 0.03,
+        c = 2.43,
+        d = 0.59,
+        e = 0.14;
       const gpuResult = Math.max(0, Math.min(1, (x * (a * x + b)) / (x * (c * x + d) + e)));
       const cpuResult = tonemapACESChannel(x);
       expect(cpuResult).toBeCloseTo(gpuResult, 10);
@@ -882,23 +887,25 @@ describe('GPU/CPU Parity with shared functions', () => {
     // Verify the CPU implementation matches the ACES Hill GPU formula
     const testValues = [0.1, 0.25, 0.5, 0.75, 1.0];
     for (const v of testValues) {
-      const r = v, g = v, b = v;
+      const r = v,
+        g = v,
+        b = v;
 
       // GPU formula (row-major interpretation):
       // ACESInput: sRGB → AP1
       const ir = 0.59719 * r + 0.35458 * g + 0.04823 * b;
-      const ig = 0.07600 * r + 0.90834 * g + 0.01566 * b;
-      const ib = 0.02840 * r + 0.13383 * g + 0.83777 * b;
+      const ig = 0.076 * r + 0.90834 * g + 0.01566 * b;
+      const ib = 0.0284 * r + 0.13383 * g + 0.83777 * b;
 
       // RRT+ODT fit
-      const fitR = (ir * (ir + 0.0245786) - 0.000090537) / (ir * (0.983729 * ir + 0.4329510) + 0.238081);
-      const fitG = (ig * (ig + 0.0245786) - 0.000090537) / (ig * (0.983729 * ig + 0.4329510) + 0.238081);
-      const fitB = (ib * (ib + 0.0245786) - 0.000090537) / (ib * (0.983729 * ib + 0.4329510) + 0.238081);
+      const fitR = (ir * (ir + 0.0245786) - 0.000090537) / (ir * (0.983729 * ir + 0.432951) + 0.238081);
+      const fitG = (ig * (ig + 0.0245786) - 0.000090537) / (ig * (0.983729 * ig + 0.432951) + 0.238081);
+      const fitB = (ib * (ib + 0.0245786) - 0.000090537) / (ib * (0.983729 * ib + 0.432951) + 0.238081);
 
       // ACESOutput: AP1 → sRGB
-      const gpuR = Math.max(0, Math.min(1,  1.60475 * fitR + (-0.53108) * fitG + (-0.07367) * fitB));
-      const gpuG = Math.max(0, Math.min(1, (-0.10208) * fitR + 1.10813 * fitG + (-0.00605) * fitB));
-      const gpuB = Math.max(0, Math.min(1, (-0.00327) * fitR + (-0.07276) * fitG + 1.07602 * fitB));
+      const gpuR = Math.max(0, Math.min(1, 1.60475 * fitR + -0.53108 * fitG + -0.07367 * fitB));
+      const gpuG = Math.max(0, Math.min(1, -0.10208 * fitR + 1.10813 * fitG + -0.00605 * fitB));
+      const gpuB = Math.max(0, Math.min(1, -0.00327 * fitR + -0.07276 * fitG + 1.07602 * fitB));
 
       const cpuResult = tonemapACESHill(r, g, b);
       expect(cpuResult.r).toBeCloseTo(gpuR, 10);

@@ -2,8 +2,7 @@
  * A/B compare handlers: availability updates and source switching.
  */
 
-import type { Session } from '../core/session/Session';
-import type { SessionEvents } from '../core/session/Session';
+import type { Session, SessionEvents } from '../core/session/Session';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
 /**
@@ -12,12 +11,8 @@ import type { SessionBridgeContext } from '../AppSessionBridge';
 export function bindCompareHandlers(
   context: SessionBridgeContext,
   session: Session,
-  on: <K extends keyof SessionEvents>(
-    session: Session,
-    event: K,
-    handler: (data: SessionEvents[K]) => void
-  ) => void,
-  updateEXRLayers: () => void
+  on: <K extends keyof SessionEvents>(session: Session, event: K, handler: (data: SessionEvents[K]) => void) => void,
+  updateEXRLayers: () => void,
 ): void {
   const updateABAvailability = (): void => {
     context.getCompareControl().setABAvailable(session.abCompareAvailable);

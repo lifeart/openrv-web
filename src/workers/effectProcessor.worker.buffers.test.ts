@@ -65,10 +65,34 @@ function createDefaultWorkerEffectsState(): WorkerEffectsState {
       saturation: 1,
     },
     curvesData: {
-      master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      master: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      red: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      green: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      blue: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
     },
     filterSettings: { sharpen: 0 },
     channelMode: 'rgb',
@@ -101,7 +125,7 @@ function createDefaultWorkerEffectsState(): WorkerEffectsState {
 function createPixelData(
   width: number,
   height: number,
-  fill: { r: number; g: number; b: number; a?: number }
+  fill: { r: number; g: number; b: number; a?: number },
 ): Uint8ClampedArray {
   const data = new Uint8ClampedArray(width * height * 4);
   const { r, g, b, a = 255 } = fill;
@@ -557,12 +581,7 @@ describe('Worker Buffer Reuse (Task 05)', () => {
      * This allocates fresh buffers every time, matching the "before" behavior
      * described in the task document.
      */
-    function referenceApplyClarity(
-      data: Uint8ClampedArray,
-      width: number,
-      height: number,
-      clarity: number
-    ): void {
+    function referenceApplyClarity(data: Uint8ClampedArray, width: number, height: number, clarity: number): void {
       const CLARITY_EFFECT_SCALE = 0.7;
       const LUMA_R = 0.2126;
       const LUMA_G = 0.7152;
@@ -596,11 +615,7 @@ describe('Worker Buffer Reuse (Task 05)', () => {
       }
     }
 
-    function referenceGaussianBlur5x5(
-      data: Uint8ClampedArray,
-      width: number,
-      height: number
-    ): Uint8ClampedArray {
+    function referenceGaussianBlur5x5(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
       const result = new Uint8ClampedArray(data.length);
       const temp = new Uint8ClampedArray(data.length);
       const kernel = [1, 4, 6, 4, 1];
@@ -609,7 +624,8 @@ describe('Worker Buffer Reuse (Task 05)', () => {
         for (let x = 0; x < width; x++) {
           const idx = (y * width + x) * 4;
           for (let c = 0; c < 3; c++) {
-            let sum = 0, weightSum = 0;
+            let sum = 0,
+              weightSum = 0;
             for (let k = -2; k <= 2; k++) {
               const nx = Math.min(width - 1, Math.max(0, x + k));
               sum += data[(y * width + nx) * 4 + c]! * kernel[k + 2]!;
@@ -625,7 +641,8 @@ describe('Worker Buffer Reuse (Task 05)', () => {
         for (let x = 0; x < width; x++) {
           const idx = (y * width + x) * 4;
           for (let c = 0; c < 3; c++) {
-            let sum = 0, weightSum = 0;
+            let sum = 0,
+              weightSum = 0;
             for (let k = -2; k <= 2; k++) {
               const ny = Math.min(height - 1, Math.max(0, y + k));
               sum += temp[(ny * width + x) * 4 + c]! * kernel[k + 2]!;
@@ -711,7 +728,10 @@ describe('Worker Buffer Reuse (Task 05)', () => {
             const i = (y * w + x) * 4;
             const checker = ((x >> 3) + (y >> 3)) & 1;
             const v = checker ? 200 : 56;
-            d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+            d[i] = v;
+            d[i + 1] = v;
+            d[i + 2] = v;
+            d[i + 3] = 255;
           }
         }
         return d;
@@ -729,7 +749,8 @@ describe('Worker Buffer Reuse (Task 05)', () => {
 
       // Both should modify the data
       const original = createCheckerData(width, height);
-      let fullDiff = false, halfDiff = false;
+      let fullDiff = false,
+        halfDiff = false;
       for (let i = 0; i < data.length; i += 4) {
         if (data[i] !== original[i]) fullDiff = true;
         if (dataHalf[i] !== original[i]) halfDiff = true;

@@ -29,9 +29,7 @@ describe('globalErrorHandler', () => {
     const addSpy = vi.spyOn(window, 'addEventListener');
     installGlobalErrorHandler();
     installGlobalErrorHandler();
-    const rejectionCalls = addSpy.mock.calls.filter(
-      ([type]) => type === 'unhandledrejection',
-    );
+    const rejectionCalls = addSpy.mock.calls.filter(([type]) => type === 'unhandledrejection');
     expect(rejectionCalls).toHaveLength(1);
   });
 
@@ -43,12 +41,7 @@ describe('globalErrorHandler', () => {
     Object.defineProperty(event, 'reason', { value: reason });
     window.dispatchEvent(event);
 
-    expect(sink).toHaveBeenCalledWith(
-      LogLevel.ERROR,
-      '[GlobalErrorHandler]',
-      'Unhandled promise rejection:',
-      reason,
-    );
+    expect(sink).toHaveBeenCalledWith(LogLevel.ERROR, '[GlobalErrorHandler]', 'Unhandled promise rejection:', reason);
   });
 
   it('should be a no-op after _resetForTesting allows re-installation', () => {

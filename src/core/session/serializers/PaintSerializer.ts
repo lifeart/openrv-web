@@ -173,15 +173,14 @@ export const PaintSerializer = {
     const obj = builder.object(name, 'RVPaint', 1);
 
     // Node component (active state)
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .end();
 
     // Paint component (frame filters)
     const paintComp = obj.component('paint');
-    paintComp
-      .int('show', settings.show !== false ? 1 : 0)
-      .int('nextId', settings.nextId ?? 0);
+    paintComp.int('show', settings.show !== false ? 1 : 0).int('nextId', settings.nextId ?? 0);
 
     // Add exclude frames if provided
     if (settings.exclude && settings.exclude.length > 0) {
@@ -311,10 +310,7 @@ export const PaintSerializer = {
 
     // Format component (channel mapping)
     if (settings.channels && settings.channels.length > 0) {
-      channelMapObject
-        .component('format')
-        .string('channels', settings.channels)
-        .end();
+      channelMapObject.component('format').string('channels', settings.channels).end();
     }
 
     channelMapObject.end();
@@ -364,10 +360,7 @@ export const PaintSerializer = {
     }
 
     for (const [frame, order] of frameOrder) {
-      paintObject
-        .component(`frame:${frame}`)
-        .string('order', order)
-        .end();
+      paintObject.component(`frame:${frame}`).string('order', order).end();
     }
 
     paintObject.end();
@@ -394,16 +387,11 @@ function writePenComponent(
   paintObject: ReturnType<GTOBuilder['object']>,
   componentName: string,
   annotation: PenStroke,
-  aspectRatio: number
+  aspectRatio: number,
 ): void {
-  const points = annotation.points.map((point) => [
-    (point.x - 0.5) * aspectRatio,
-    point.y - 0.5,
-  ]);
+  const points = annotation.points.map((point) => [(point.x - 0.5) * aspectRatio, point.y - 0.5]);
 
-  const widths = Array.isArray(annotation.width)
-    ? annotation.width
-    : [annotation.width];
+  const widths = Array.isArray(annotation.width) ? annotation.width : [annotation.width];
   const normalizedWidths = widths.map((value) => value / RV_PEN_WIDTH_SCALE);
 
   paintObject
@@ -422,12 +410,9 @@ function writeTextComponent(
   paintObject: ReturnType<GTOBuilder['object']>,
   componentName: string,
   annotation: TextAnnotation,
-  aspectRatio: number
+  aspectRatio: number,
 ): void {
-  const position: [number, number] = [
-    (annotation.position.x - 0.5) * aspectRatio,
-    annotation.position.y - 0.5,
-  ];
+  const position: [number, number] = [(annotation.position.x - 0.5) * aspectRatio, annotation.position.y - 0.5];
 
   paintObject
     .component(componentName)

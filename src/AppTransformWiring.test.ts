@@ -37,7 +37,9 @@ function createMockContext() {
 
 describe('wireTransformControls', () => {
   const historyManager = getGlobalHistoryManager();
-  let recordActionSpy: MockInstance<(label: string, category: HistoryEntry['category'], redo: () => void, undo?: () => void) => HistoryEntry>;
+  let recordActionSpy: MockInstance<
+    (label: string, category: HistoryEntry['category'], redo: () => void, undo?: () => void) => HistoryEntry
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks();

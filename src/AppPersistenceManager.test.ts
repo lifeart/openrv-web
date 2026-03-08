@@ -265,16 +265,20 @@ describe('AppPersistenceManager', () => {
     it('APM-032: init() registers storageWarning listener on autoSaveManager', async () => {
       await manager.init();
 
-      expect(fullCtx._autoSaveManager.on).toHaveBeenCalledWith(
-        'storageWarning',
-        expect.any(Function)
-      );
+      expect(fullCtx._autoSaveManager.on).toHaveBeenCalledWith('storageWarning', expect.any(Function));
     });
 
     it('APM-033: init() shows recovery prompt when auto-save data exists', async () => {
       fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
       fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-1', name: 'Test Session', savedAt: new Date().toISOString(), cleanShutdown: false, version: 1, size: 1024 } as any,
+        {
+          id: 'save-1',
+          name: 'Test Session',
+          savedAt: new Date().toISOString(),
+          cleanShutdown: false,
+          version: 1,
+          size: 1024,
+        } as any,
       ]);
       vi.mocked(showConfirm).mockResolvedValue(false);
 
@@ -282,7 +286,7 @@ describe('AppPersistenceManager', () => {
 
       expect(showConfirm).toHaveBeenCalledWith(
         expect.stringContaining('Test Session'),
-        expect.objectContaining({ title: 'Recover Session' })
+        expect.objectContaining({ title: 'Recover Session' }),
       );
     });
 
@@ -310,7 +314,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledTimes(1);
       expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
         expect.stringContaining('Snapshot'),
-        expect.anything()
+        expect.anything(),
       );
     });
 
@@ -319,7 +323,7 @@ describe('AppPersistenceManager', () => {
 
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('Snapshot'),
-        expect.objectContaining({ type: 'success' })
+        expect.objectContaining({ type: 'success' }),
       );
     });
 
@@ -330,7 +334,7 @@ describe('AppPersistenceManager', () => {
 
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('Failed'),
-        expect.objectContaining({ type: 'error' })
+        expect.objectContaining({ type: 'error' }),
       );
     });
 
@@ -339,10 +343,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.createQuickSnapshot();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Untitled'
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
   });
 
@@ -354,10 +355,7 @@ describe('AppPersistenceManager', () => {
       await manager.createAutoCheckpoint('Before Restore');
 
       expect(SessionSerializer.toJSON).toHaveBeenCalledTimes(1);
-      expect(fullCtx._snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith(
-        'Before Restore',
-        expect.anything()
-      );
+      expect(fullCtx._snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith('Before Restore', expect.anything());
     });
 
     it('APM-051: createAutoCheckpoint handles errors gracefully', async () => {
@@ -366,10 +364,7 @@ describe('AppPersistenceManager', () => {
 
       await expect(manager.createAutoCheckpoint('test')).resolves.not.toThrow();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Failed to create auto-checkpoint:',
-        expect.any(Error)
-      );
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to create auto-checkpoint:', expect.any(Error));
       consoleSpy.mockRestore();
     });
   });
@@ -386,7 +381,9 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-061: retryAutoSave handles serialization errors gracefully', () => {
-      vi.mocked(SessionSerializer.toJSON).mockImplementation(() => { throw new Error('Serialize error'); });
+      vi.mocked(SessionSerializer.toJSON).mockImplementation(() => {
+        throw new Error('Serialize error');
+      });
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       expect(() => manager.retryAutoSave()).not.toThrow();
@@ -430,7 +427,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.snapshotPanel.hide).toHaveBeenCalledTimes(1);
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('My Snapshot'),
-        expect.objectContaining({ type: 'success' })
+        expect.objectContaining({ type: 'success' }),
       );
     });
 
@@ -439,10 +436,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.restoreSnapshot('missing-id');
 
-      expect(showAlert).toHaveBeenCalledWith(
-        'Snapshot not found',
-        expect.objectContaining({ type: 'error' })
-      );
+      expect(showAlert).toHaveBeenCalledWith('Snapshot not found', expect.objectContaining({ type: 'error' }));
       // Should not attempt to restore
       expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
     });
@@ -455,7 +449,7 @@ describe('AppPersistenceManager', () => {
 
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('Failed to restore snapshot'),
-        expect.objectContaining({ type: 'error' })
+        expect.objectContaining({ type: 'error' }),
       );
       consoleSpy.mockRestore();
     });
@@ -485,7 +479,7 @@ describe('AppPersistenceManager', () => {
       expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('Unable to open as project'),
-        expect.objectContaining({ type: 'warning' })
+        expect.objectContaining({ type: 'warning' }),
       );
     });
 
@@ -524,7 +518,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.session.loadEDL).toHaveBeenCalledWith('edl-text');
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('EDL loaded'),
-        expect.objectContaining({ type: 'success' })
+        expect.objectContaining({ type: 'success' }),
       );
     });
 
@@ -536,7 +530,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('.xyz'),
-        expect.objectContaining({ type: 'warning' })
+        expect.objectContaining({ type: 'warning' }),
       );
     });
   });
@@ -577,12 +571,9 @@ describe('AppPersistenceManager', () => {
 
       // SessionGTOExporter.saveToFile is mocked at module level
       const { SessionGTOExporter } = await import('./core/session/SessionGTOExporter');
-      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(
-        fullCtx.session,
-        fullCtx.paintEngine,
-        'test.exr.rv',
-        { binary: false }
-      );
+      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(fullCtx.session, fullCtx.paintEngine, 'test.exr.rv', {
+        binary: false,
+      });
     });
 
     it('APM-093: saveRvSession uses "session" as basename when no source', async () => {
@@ -591,12 +582,9 @@ describe('AppPersistenceManager', () => {
       await manager.saveRvSession('gto');
 
       const { SessionGTOExporter } = await import('./core/session/SessionGTOExporter');
-      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(
-        fullCtx.session,
-        fullCtx.paintEngine,
-        'session.gto',
-        { binary: true }
-      );
+      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(fullCtx.session, fullCtx.paintEngine, 'session.gto', {
+        binary: true,
+      });
     });
   });
 

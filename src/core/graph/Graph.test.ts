@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Graph, EvalContext } from './Graph';
+import { Graph, type EvalContext } from './Graph';
 import { IPNode } from '../../nodes/base/IPNode';
-import { IPImage } from '../image/Image';
+import { type IPImage } from '../image/Image';
 
 // Simple mock node for testing
 class MockNode extends IPNode {

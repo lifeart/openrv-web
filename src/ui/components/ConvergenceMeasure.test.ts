@@ -17,10 +17,7 @@ import {
   ConvergenceMeasure,
   DEFAULT_CONVERGENCE_STATE,
 } from './ConvergenceMeasure';
-import type {
-  DisparityResult,
-  DisparityStats,
-} from './ConvergenceMeasure';
+import type { DisparityResult, DisparityStats } from './ConvergenceMeasure';
 
 // ---------------------------------------------------------------------------
 // Helper: create ImageData with known pixel values

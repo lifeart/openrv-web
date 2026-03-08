@@ -11,7 +11,7 @@
  * Reference: OpenRV export pipeline
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,11 +19,11 @@ import { EventEmitter, EventMap } from '../utils/EventEmitter';
 
 /** Supported codec strings (WebCodecs codec registry) */
 export type VideoCodec =
-  | 'avc1.42001f'       // H.264 Baseline
-  | 'avc1.4d0028'       // H.264 Main
-  | 'avc1.640028'       // H.264 High
-  | 'vp09.00.10.08'     // VP9
-  | 'av01.0.04M.08';    // AV1
+  | 'avc1.42001f' // H.264 Baseline
+  | 'avc1.4d0028' // H.264 Main
+  | 'avc1.640028' // H.264 High
+  | 'vp09.00.10.08' // VP9
+  | 'av01.0.04M.08'; // AV1
 
 /** Configuration for a video export job */
 export interface VideoExportConfig {
@@ -179,10 +179,7 @@ export class VideoExporter extends EventEmitter<VideoExporterEvents> {
    * @returns Encoded chunks ready for muxing into a container format
    * @throws If WebCodecs is not available, codec is unsupported, or encoding fails
    */
-  async encode(
-    config: VideoExportConfig,
-    frameProvider: FrameProvider,
-  ): Promise<ExportResult> {
+  async encode(config: VideoExportConfig, frameProvider: FrameProvider): Promise<ExportResult> {
     if (this.encoding) {
       throw new Error('VideoExporter: already encoding');
     }
@@ -414,5 +411,5 @@ export class ExportCancelledError extends Error {
 // ---------------------------------------------------------------------------
 
 function yieldToMainThread(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

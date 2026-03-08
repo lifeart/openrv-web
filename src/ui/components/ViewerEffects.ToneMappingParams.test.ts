@@ -39,7 +39,10 @@ describe('applyToneMappingWithParams', () => {
     // Different white points should produce different results
     let hasDiff = false;
     for (let i = 0; i < img1.data.length; i += 4) {
-      if (img1.data[i] !== img2.data[i]) { hasDiff = true; break; }
+      if (img1.data[i] !== img2.data[i]) {
+        hasDiff = true;
+        break;
+      }
     }
     expect(hasDiff).toBe(true);
   });
@@ -66,7 +69,10 @@ describe('applyToneMappingWithParams', () => {
 
     let hasDiff = false;
     for (let i = 0; i < img1.data.length; i += 4) {
-      if (img1.data[i] !== img2.data[i]) { hasDiff = true; break; }
+      if (img1.data[i] !== img2.data[i]) {
+        hasDiff = true;
+        break;
+      }
     }
     expect(hasDiff).toBe(true);
   });
@@ -97,7 +103,10 @@ describe('applyToneMappingWithParams', () => {
 
     let hasDiff = false;
     for (let i = 0; i < img1.data.length; i += 4) {
-      if (img1.data[i] !== img2.data[i]) { hasDiff = true; break; }
+      if (img1.data[i] !== img2.data[i]) {
+        hasDiff = true;
+        break;
+      }
     }
     expect(hasDiff).toBe(true);
   });

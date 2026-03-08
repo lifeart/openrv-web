@@ -239,12 +239,7 @@ export class MultiSourceLayoutManager extends EventEmitter<MultiSourceLayoutMana
     // Test tiles in reverse order (last tile = top of z-order in manual mode)
     for (let i = Math.min(viewports.length, tiles.length) - 1; i >= 0; i--) {
       const vp = viewports[i]!;
-      if (
-        canvasX >= vp.x &&
-        canvasX <= vp.x + vp.width &&
-        glY >= vp.y &&
-        glY <= vp.y + vp.height
-      ) {
+      if (canvasX >= vp.x && canvasX <= vp.x + vp.width && glY >= vp.y && glY <= vp.y + vp.height) {
         return tiles[i]!.id;
       }
     }
@@ -298,12 +293,8 @@ export function packedGrid(n: number, forcedColumns = 0): { columns: number; row
  * @param canvasH - Canvas height in pixels
  * @returns Array of TileViewport regions
  */
-export function manualViewports(
-  tiles: TileState[],
-  canvasW: number,
-  canvasH: number,
-): TileViewport[] {
-  return tiles.map(tile => ({
+export function manualViewports(tiles: TileState[], canvasW: number, canvasH: number): TileViewport[] {
+  return tiles.map((tile) => ({
     x: Math.round(tile.manualX * canvasW),
     y: Math.round((1 - tile.manualY - tile.manualHeight) * canvasH), // WebGL Y-flip
     width: Math.round(tile.manualWidth * canvasW),

@@ -5,8 +5,8 @@
  * Height: 36px
  */
 
-import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
-import { getIconSvg, IconName } from '../shared/Icons';
+import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
+import { getIconSvg, type IconName } from '../shared/Icons';
 
 export type TabId = 'view' | 'color' | 'effects' | 'transform' | 'annotate' | 'qc';
 
@@ -151,7 +151,9 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     // Track whether the click was initiated by a pointer (mouse/touch)
     // so we can blur only for pointer clicks, preserving keyboard focus.
     let pointerTriggered = false;
-    button.addEventListener('pointerdown', () => { pointerTriggered = true; });
+    button.addEventListener('pointerdown', () => {
+      pointerTriggered = true;
+    });
 
     button.addEventListener('click', () => {
       this.setActiveTab(tab.id);
@@ -210,7 +212,7 @@ export class TabBar extends EventEmitter<TabBarEvents> {
    * Handle keyboard shortcuts (1-5 for tabs)
    */
   handleKeyboard(key: string): boolean {
-    const tab = TABS.find(t => t.shortcut === key);
+    const tab = TABS.find((t) => t.shortcut === key);
     if (tab) {
       this.setActiveTab(tab.id);
       return true;

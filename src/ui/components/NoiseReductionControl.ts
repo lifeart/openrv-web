@@ -4,11 +4,8 @@
  * Provides controls for strength, luminance/chroma separation, and radius.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import {
-  NoiseReductionParams,
-  DEFAULT_NOISE_REDUCTION_PARAMS,
-} from '../../filters/NoiseReduction';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type NoiseReductionParams, DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
 import { getIconSvg } from './shared/Icons';
 
 export interface NoiseReductionControlEvents extends EventMap {
@@ -107,7 +104,7 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
         }
         this.emitChange();
       },
-      '%'
+      '%',
     );
     this.strengthSlider = strengthRow.slider;
     this.strengthValue = strengthRow.value;
@@ -126,7 +123,7 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
         this.emitChange();
       },
       '',
-      1
+      1,
     );
     this.radiusSlider = radiusRow.slider;
     this.radiusValue = radiusRow.value;
@@ -176,7 +173,7 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
         this.lumaValue.textContent = `${value}%`;
         this.emitChange();
       },
-      '%'
+      '%',
     );
     this.lumaSlider = lumaRow.slider;
     this.lumaValue = lumaRow.value;
@@ -194,7 +191,7 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
         this.chromaValue.textContent = `${value}%`;
         this.emitChange();
       },
-      '%'
+      '%',
     );
     this.chromaSlider = chromaRow.slider;
     this.chromaValue = chromaRow.value;
@@ -211,7 +208,7 @@ export class NoiseReductionControl extends EventEmitter<NoiseReductionControlEve
     initial: number,
     onChange: (value: number) => void,
     suffix = '',
-    step = 1
+    step = 1,
   ): { row: HTMLElement; slider: HTMLInputElement; value: HTMLSpanElement } {
     const row = document.createElement('div');
     row.style.cssText = `

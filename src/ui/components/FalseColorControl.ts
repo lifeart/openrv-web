@@ -7,7 +7,7 @@
  * - Color legend display
  */
 
-import { FalseColor, FalseColorPreset } from './FalseColor';
+import { type FalseColor, type FalseColorPreset } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
@@ -105,16 +105,20 @@ export class FalseColorControl {
     this.createDropdownContent();
 
     // Listen for state changes
-    this.subs.add(this.falseColor.on('stateChanged', () => {
-      this.updateButtonState();
-      this.updatePresetButtons();
-      this.updateLegend();
-    }));
+    this.subs.add(
+      this.falseColor.on('stateChanged', () => {
+        this.updateButtonState();
+        this.updatePresetButtons();
+        this.updateLegend();
+      }),
+    );
 
     // Listen for theme changes
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      this.updateLegend();
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        this.updateLegend();
+      }),
+    );
   }
 
   private createDropdownContent(): void {
@@ -143,9 +147,11 @@ export class FalseColorControl {
     });
 
     // Update checkbox when state changes
-    this.subs.add(this.falseColor.on('stateChanged', (state) => {
-      enableCheckbox.checked = state.enabled;
-    }));
+    this.subs.add(
+      this.falseColor.on('stateChanged', (state) => {
+        enableCheckbox.checked = state.enabled;
+      }),
+    );
 
     enableRow.appendChild(enableLabel);
     enableRow.appendChild(enableCheckbox);

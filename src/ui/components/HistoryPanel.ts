@@ -8,8 +8,8 @@
  * - Clear history option
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { HistoryManager, HistoryEntry } from '../../utils/HistoryManager';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { HistoryManager, type HistoryEntry } from '../../utils/HistoryManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getIconSvg } from './shared/Icons';
@@ -350,7 +350,8 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     // Category icon (SVG)
     const icon = document.createElement('span');
     icon.innerHTML = HistoryManager.getCategoryIcon(entry.category);
-    icon.style.cssText = 'width: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);';
+    icon.style.cssText =
+      'width: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);';
 
     // Description
     const desc = document.createElement('span');

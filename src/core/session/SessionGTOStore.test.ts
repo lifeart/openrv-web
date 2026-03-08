@@ -46,7 +46,9 @@ const BASE_GTO: GTOData = {
 };
 
 /** Helper: build a GTO with pre-existing RVColor data (simulating a loaded .rv file) */
-function gtoWithColor(overrides: Record<string, { type: string; size: number; width: number; data: unknown[] }>): GTOData {
+function gtoWithColor(
+  overrides: Record<string, { type: string; size: number; width: number; data: unknown[] }>,
+): GTOData {
   return {
     version: 4,
     objects: [
@@ -78,7 +80,9 @@ function gtoWithColor(overrides: Record<string, { type: string; size: number; wi
 }
 
 /** Helper: build a GTO with pre-existing RVLinearize data */
-function gtoWithLinearize(colorProps: Record<string, { type: string; size: number; width: number; data: unknown[] }> = {}): GTOData {
+function gtoWithLinearize(
+  colorProps: Record<string, { type: string; size: number; width: number; data: unknown[] }> = {},
+): GTOData {
   return {
     version: 4,
     objects: [
@@ -113,7 +117,12 @@ function gtoWithLinearize(colorProps: Record<string, { type: string; size: numbe
 }
 
 /** Helper: build a GTO with pre-existing RVColor + CDL data (simulating a loaded .rv file with CDL noClamp) */
-function gtoWithCDL(cdlOverrides: Record<string, { type: string; size: number; width: number; interpretation: string; data: unknown[] }> = {}): GTOData {
+function gtoWithCDL(
+  cdlOverrides: Record<
+    string,
+    { type: string; size: number; width: number; interpretation: string; data: unknown[] }
+  > = {},
+): GTOData {
   return {
     version: 4,
     objects: [

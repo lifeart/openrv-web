@@ -1,5 +1,13 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { type CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML, parseCC, parseCCC } from '../../color/ColorProcessingFacade';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import {
+  type CDLValues,
+  DEFAULT_CDL,
+  isDefaultCDL,
+  parseCDLXML,
+  exportCDLXML,
+  parseCC,
+  parseCCC,
+} from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 
@@ -168,8 +176,12 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       e.stopPropagation();
       onClick();
     });
-    btn.addEventListener('pointerenter', () => { btn.style.background = 'var(--text-muted)'; });
-    btn.addEventListener('pointerleave', () => { btn.style.background = 'var(--border-secondary)'; });
+    btn.addEventListener('pointerenter', () => {
+      btn.style.background = 'var(--text-muted)';
+    });
+    btn.addEventListener('pointerleave', () => {
+      btn.style.background = 'var(--border-secondary)';
+    });
     return btn;
   }
 
@@ -179,7 +191,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     min: number,
     max: number,
     step: number,
-    defaultValue: number
+    defaultValue: number,
   ): void {
     const section = document.createElement('div');
     section.style.cssText = 'margin-bottom: 12px;';
@@ -217,7 +229,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     min: number,
     max: number,
     step: number,
-    defaultValue: number
+    defaultValue: number,
   ): HTMLElement {
     const row = document.createElement('div');
     row.style.cssText = `

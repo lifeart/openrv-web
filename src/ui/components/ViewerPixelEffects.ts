@@ -154,15 +154,20 @@ export function detectActivePixelEffects(ctx: PixelEffectsContext): DetectedPixe
   const hasSharpen = filterSettings.sharpen > 0;
   const hasNoiseReduction = isNoiseReductionActive(noiseReductionParams);
   const hasChannel = channelMode !== 'rgb';
-  const hasHighlightsShadows = colorPipeline.colorAdjustments.highlights !== 0 || colorPipeline.colorAdjustments.shadows !== 0 ||
-                               colorPipeline.colorAdjustments.whites !== 0 || colorPipeline.colorAdjustments.blacks !== 0;
+  const hasHighlightsShadows =
+    colorPipeline.colorAdjustments.highlights !== 0 ||
+    colorPipeline.colorAdjustments.shadows !== 0 ||
+    colorPipeline.colorAdjustments.whites !== 0 ||
+    colorPipeline.colorAdjustments.blacks !== 0;
   const hasVibrance = colorPipeline.colorAdjustments.vibrance !== 0;
   const hasClarity = colorPipeline.colorAdjustments.clarity !== 0;
   const hasHueRotation = !isIdentityHueRotation(colorPipeline.colorAdjustments.hueRotation);
   const hasColorWheels = colorWheels.hasAdjustments();
   const hasHSLQualifier = hslQualifier.isEnabled();
   const hasFalseColor = overlayManager.getFalseColor().isEnabled();
-  const hasLuminanceVis = overlayManager.getLuminanceVisualization().getMode() !== 'off' && overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
+  const hasLuminanceVis =
+    overlayManager.getLuminanceVisualization().getMode() !== 'off' &&
+    overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
   const hasZebras = overlayManager.getZebraStripes().isEnabled();
   const hasClippingOverlay = overlayManager.getClippingOverlay().isEnabled();
   const hasToneMapping = isToneMappingEnabled(ctx);
@@ -172,14 +177,51 @@ export function detectActivePixelEffects(ctx: PixelEffectsContext): DetectedPixe
   const hasFilmEmulation = isFilmEmulationActive(filmEmulationParams);
   const hasStabilization = isStabilizationActive(stabilizationParams) && stabilizationParams.cropAmount > 0;
 
-  const anyActive = hasCDL || hasCurves || hasSharpen || hasNoiseReduction || hasChannel || hasHighlightsShadows || hasVibrance || hasClarity || hasHueRotation || hasColorWheels || hasHSLQualifier || hasFalseColor || hasLuminanceVis || hasZebras || hasClippingOverlay || hasToneMapping || hasInversion || hasDisplayColorMgmt || hasDeinterlace || hasFilmEmulation || hasStabilization;
+  const anyActive =
+    hasCDL ||
+    hasCurves ||
+    hasSharpen ||
+    hasNoiseReduction ||
+    hasChannel ||
+    hasHighlightsShadows ||
+    hasVibrance ||
+    hasClarity ||
+    hasHueRotation ||
+    hasColorWheels ||
+    hasHSLQualifier ||
+    hasFalseColor ||
+    hasLuminanceVis ||
+    hasZebras ||
+    hasClippingOverlay ||
+    hasToneMapping ||
+    hasInversion ||
+    hasDisplayColorMgmt ||
+    hasDeinterlace ||
+    hasFilmEmulation ||
+    hasStabilization;
 
   return {
-    hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
-    hasHighlightsShadows, hasVibrance, hasClarity, hasHueRotation,
-    hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
-    hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
-    hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
+    hasCDL,
+    hasCurves,
+    hasSharpen,
+    hasNoiseReduction,
+    hasChannel,
+    hasHighlightsShadows,
+    hasVibrance,
+    hasClarity,
+    hasHueRotation,
+    hasColorWheels,
+    hasHSLQualifier,
+    hasFalseColor,
+    hasLuminanceVis,
+    hasZebras,
+    hasClippingOverlay,
+    hasToneMapping,
+    hasInversion,
+    hasDisplayColorMgmt,
+    hasDeinterlace,
+    hasFilmEmulation,
+    hasStabilization,
     anyActive,
     colorPipeline,
     filterSettings,
@@ -205,7 +247,7 @@ export function compositeImageDataOverBackground(
   ctx: PixelEffectsContext,
   imageData: ImageData,
   width: number,
-  height: number
+  height: number,
 ): void {
   const imageCtx = ctx.getImageCtx();
 
@@ -252,20 +294,44 @@ export function applyBatchedPixelEffects(
   ctx: PixelEffectsContext,
   canvasCtx: CanvasRenderingContext2D,
   width: number,
-  height: number
+  height: number,
 ): void {
   const detected = detectActivePixelEffects(ctx);
   if (!detected.anyActive) return;
 
   const {
-    hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
-    hasHighlightsShadows, hasVibrance, hasClarity, hasHueRotation,
-    hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
-    hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
-    hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
-    colorPipeline, filterSettings, colorWheels, hslQualifier, overlayManager,
-    deinterlaceParams, filmEmulationParams, stabilizationParams,
-    noiseReductionParams, interactionQuality, channelMode,
+    hasCDL,
+    hasCurves,
+    hasSharpen,
+    hasNoiseReduction,
+    hasChannel,
+    hasHighlightsShadows,
+    hasVibrance,
+    hasClarity,
+    hasHueRotation,
+    hasColorWheels,
+    hasHSLQualifier,
+    hasFalseColor,
+    hasLuminanceVis,
+    hasZebras,
+    hasClippingOverlay,
+    hasToneMapping,
+    hasInversion,
+    hasDisplayColorMgmt,
+    hasDeinterlace,
+    hasFilmEmulation,
+    hasStabilization,
+    colorPipeline,
+    filterSettings,
+    colorWheels,
+    hslQualifier,
+    overlayManager,
+    deinterlaceParams,
+    filmEmulationParams,
+    stabilizationParams,
+    noiseReductionParams,
+    interactionQuality,
+    channelMode,
   } = detected;
   const effectProcessor = ctx.getEffectProcessor();
   const sharpenProcessor = ctx.getSharpenProcessor();
@@ -419,21 +485,45 @@ export async function applyBatchedPixelEffectsAsync(
   width: number,
   height: number,
   generation: number,
-  cropClipActive: boolean
+  cropClipActive: boolean,
 ): Promise<void> {
   try {
     const detected = detectActivePixelEffects(ctx);
     if (!detected.anyActive) return;
 
     const {
-      hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
-      hasHighlightsShadows, hasVibrance, hasClarity, hasHueRotation,
-      hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
-      hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
-      hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
-      colorPipeline, filterSettings, colorWheels, hslQualifier, overlayManager,
-      deinterlaceParams, filmEmulationParams, stabilizationParams,
-      noiseReductionParams, interactionQuality, channelMode,
+      hasCDL,
+      hasCurves,
+      hasSharpen,
+      hasNoiseReduction,
+      hasChannel,
+      hasHighlightsShadows,
+      hasVibrance,
+      hasClarity,
+      hasHueRotation,
+      hasColorWheels,
+      hasHSLQualifier,
+      hasFalseColor,
+      hasLuminanceVis,
+      hasZebras,
+      hasClippingOverlay,
+      hasToneMapping,
+      hasInversion,
+      hasDisplayColorMgmt,
+      hasDeinterlace,
+      hasFilmEmulation,
+      hasStabilization,
+      colorPipeline,
+      filterSettings,
+      colorWheels,
+      hslQualifier,
+      overlayManager,
+      deinterlaceParams,
+      filmEmulationParams,
+      stabilizationParams,
+      noiseReductionParams,
+      interactionQuality,
+      channelMode,
     } = detected;
     const effectProcessor = ctx.getEffectProcessor();
     const sharpenProcessor = ctx.getSharpenProcessor();
@@ -465,8 +555,17 @@ export async function applyBatchedPixelEffectsAsync(
     }
 
     // --- Pass 3: Per-pixel color effects ---
-    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion || hasFilmEmulation;
+    const hasPerPixelEffects =
+      hasHighlightsShadows ||
+      hasVibrance ||
+      hasHueRotation ||
+      hasColorWheels ||
+      hasCDL ||
+      hasCurves ||
+      hasHSLQualifier ||
+      hasToneMapping ||
+      hasInversion ||
+      hasFilmEmulation;
 
     if (hasPerPixelEffects) {
       if (hasHighlightsShadows) {
@@ -603,7 +702,7 @@ export function applyLightweightEffects(
   ctx: PixelEffectsContext,
   canvasCtx: CanvasRenderingContext2D,
   width: number,
-  height: number
+  height: number,
 ): void {
   const channelMode = ctx.getChannelMode();
   const overlayManager = ctx.getOverlayManager();
@@ -611,7 +710,9 @@ export function applyLightweightEffects(
 
   const hasChannel = channelMode !== 'rgb';
   const hasFalseColor = overlayManager.getFalseColor().isEnabled();
-  const hasLuminanceVis = overlayManager.getLuminanceVisualization().getMode() !== 'off' && overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
+  const hasLuminanceVis =
+    overlayManager.getLuminanceVisualization().getMode() !== 'off' &&
+    overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
   const hasZebras = overlayManager.getZebraStripes().isEnabled();
   const hasClippingOverlay = overlayManager.getClippingOverlay().isEnabled();
   const hasDisplayColorMgmt = isDisplayStateActive(colorPipeline.displayColorState);

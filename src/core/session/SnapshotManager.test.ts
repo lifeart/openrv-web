@@ -93,24 +93,30 @@ describe('SnapshotManager', () => {
     it('should reject invalid metadata fields', () => {
       const validateFn = (manager as any).validateSnapshotData.bind(manager);
 
-      expect(validateFn({
-        metadata: { name: 123, version: 1 }, // name should be string
-        state: { version: 1 }
-      })).toBe(false);
+      expect(
+        validateFn({
+          metadata: { name: 123, version: 1 }, // name should be string
+          state: { version: 1 },
+        }),
+      ).toBe(false);
 
-      expect(validateFn({
-        metadata: { name: 'test', version: 'not a number' }, // version should be number
-        state: { version: 1 }
-      })).toBe(false);
+      expect(
+        validateFn({
+          metadata: { name: 'test', version: 'not a number' }, // version should be number
+          state: { version: 1 },
+        }),
+      ).toBe(false);
     });
 
     it('should accept valid data', () => {
       const validateFn = (manager as any).validateSnapshotData.bind(manager);
 
-      expect(validateFn({
-        metadata: { name: 'Test Snapshot', version: 1 },
-        state: { version: 1 }
-      })).toBe(true);
+      expect(
+        validateFn({
+          metadata: { name: 'Test Snapshot', version: 1 },
+          state: { version: 1 },
+        }),
+      ).toBe(true);
     });
   });
 
@@ -241,7 +247,7 @@ describe('SnapshotManager', () => {
 
       const futureSnapshot = JSON.stringify({
         metadata: { name: 'Future', version: SESSION_STATE_VERSION + 100 },
-        state: { version: SESSION_STATE_VERSION + 100 }
+        state: { version: SESSION_STATE_VERSION + 100 },
       });
 
       await expect(manager.importSnapshot(futureSnapshot)).rejects.toThrow(/newer than supported/);
@@ -308,9 +314,7 @@ describe('SnapshotManager', () => {
 
       // createSnapshot should throw because isInitialized is false
       const mockState = { version: SESSION_STATE_VERSION, name: 'Test' } as any;
-      expect(
-        manager.createSnapshot('Test', mockState)
-      ).rejects.toThrow('SnapshotManager not initialized');
+      expect(manager.createSnapshot('Test', mockState)).rejects.toThrow('SnapshotManager not initialized');
     });
 
     it('SNAP-D002: double dispose does not throw', () => {
@@ -382,9 +386,7 @@ describe('SnapshotManager', () => {
         name: 'Test',
       } as any;
 
-      await expect(
-        manager.createSnapshot('Test', mockState)
-      ).rejects.toThrow('SnapshotManager not initialized');
+      await expect(manager.createSnapshot('Test', mockState)).rejects.toThrow('SnapshotManager not initialized');
     });
 
     it('SNAP-D009: createAutoCheckpoint throws after dispose (not initialized)', async () => {
@@ -398,9 +400,9 @@ describe('SnapshotManager', () => {
         name: 'Test',
       } as any;
 
-      await expect(
-        manager.createAutoCheckpoint('source-change', mockState)
-      ).rejects.toThrow('SnapshotManager not initialized');
+      await expect(manager.createAutoCheckpoint('source-change', mockState)).rejects.toThrow(
+        'SnapshotManager not initialized',
+      );
     });
 
     it('SNAP-D010: exportSnapshot returns null after dispose (db is null)', async () => {
@@ -417,9 +419,7 @@ describe('SnapshotManager', () => {
       manager.dispose();
 
       // renameSnapshot early-returns when db is null (first line: if (!this.db) return)
-      await expect(
-        manager.renameSnapshot('snapshot-123', 'New Name')
-      ).resolves.toBeUndefined();
+      await expect(manager.renameSnapshot('snapshot-123', 'New Name')).resolves.toBeUndefined();
     });
   });
 });

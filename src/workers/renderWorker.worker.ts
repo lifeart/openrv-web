@@ -14,11 +14,7 @@
 
 import { Renderer } from '../render/Renderer';
 import { IPImage } from '../core/image/Image';
-import type {
-  RenderWorkerMessage,
-  RenderWorkerResult,
-  RenderHDRMessage,
-} from '../render/renderWorker.messages';
+import type { RenderWorkerMessage, RenderWorkerResult, RenderHDRMessage } from '../render/renderWorker.messages';
 import {
   DATA_TYPE_FROM_CODE,
   TRANSFER_FUNCTION_FROM_CODE,
@@ -57,12 +53,9 @@ function post(msg: RenderWorkerResult, transfer?: Transferable[]): void {
  */
 function reconstructIPImage(msg: RenderHDRMessage): IPImage {
   const dataType = DATA_TYPE_FROM_CODE[msg.dataType] ?? 'float32';
-  const transferFunction = msg.transferFunction !== undefined
-    ? TRANSFER_FUNCTION_FROM_CODE[msg.transferFunction]
-    : undefined;
-  const colorPrimaries = msg.colorPrimaries !== undefined
-    ? COLOR_PRIMARIES_FROM_CODE[msg.colorPrimaries]
-    : undefined;
+  const transferFunction =
+    msg.transferFunction !== undefined ? TRANSFER_FUNCTION_FROM_CODE[msg.transferFunction] : undefined;
+  const colorPrimaries = msg.colorPrimaries !== undefined ? COLOR_PRIMARIES_FROM_CODE[msg.colorPrimaries] : undefined;
 
   return new IPImage({
     width: msg.width,
@@ -120,10 +113,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
   // Protocol version check: warn on mismatch but continue processing
   // for backward compatibility. Missing version (undefined) is acceptable
   // from older senders that predate versioning.
-  if (
-    msg.protocolVersion !== undefined &&
-    msg.protocolVersion !== RENDER_WORKER_PROTOCOL_VERSION
-  ) {
+  if (msg.protocolVersion !== undefined && msg.protocolVersion !== RENDER_WORKER_PROTOCOL_VERSION) {
     log.warn(
       `Protocol version mismatch: received v${msg.protocolVersion}, expected v${RENDER_WORKER_PROTOCOL_VERSION}. Message type: ${msg.type}`,
     );
@@ -135,10 +125,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
         canvas = msg.canvas;
         renderer = new Renderer();
         // Renderer.initialize accepts HTMLCanvasElement | OffscreenCanvas
-        renderer.initialize(
-          canvas as unknown as HTMLCanvasElement,
-          msg.capabilities,
-        );
+        renderer.initialize(canvas as unknown as HTMLCanvasElement, msg.capabilities);
 
         // Listen for context loss/restore on the OffscreenCanvas
         canvas.addEventListener('webglcontextlost', (e) => {
@@ -198,7 +185,11 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
         // Attempt to close bitmap even on error
-        try { msg.bitmap.close(); } catch (e) { log.warn('Failed to close bitmap after render error:', e); }
+        try {
+          msg.bitmap.close();
+        } catch (e) {
+          log.warn('Failed to close bitmap after render error:', e);
+        }
         post({
           type: 'renderError',
           id: msg.id,

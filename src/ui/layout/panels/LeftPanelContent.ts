@@ -23,13 +23,41 @@ interface SliderConfig {
 }
 
 const PANEL_SLIDERS: SliderConfig[] = [
-  { key: 'exposure', label: 'Exposure', min: -5, max: 5, step: 0.1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}` },
+  {
+    key: 'exposure',
+    label: 'Exposure',
+    min: -5,
+    max: 5,
+    step: 0.1,
+    format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
+  },
   { key: 'contrast', label: 'Contrast', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
   { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
-  { key: 'temperature', label: 'Temp', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+  {
+    key: 'temperature',
+    label: 'Temp',
+    min: -100,
+    max: 100,
+    step: 1,
+    format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+  },
   { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-  { key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-  { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+  {
+    key: 'highlights',
+    label: 'Highlights',
+    min: -100,
+    max: 100,
+    step: 1,
+    format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+  },
+  {
+    key: 'shadows',
+    label: 'Shadows',
+    min: -100,
+    max: 100,
+    step: 1,
+    format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+  },
 ];
 
 export class LeftPanelContent {
@@ -168,16 +196,12 @@ export class LeftPanelContent {
       colorControls.on('adjustmentsChanged', (adj) => {
         if (this._updating) return;
         this.syncSlidersFromAdjustments(adj);
-      })
+      }),
     );
 
     // History updates
-    this.unsubscribers.push(
-      historyManager.on('historyChanged', (entries) => this.renderHistory(entries))
-    );
-    this.unsubscribers.push(
-      historyManager.on('currentIndexChanged', () => this.updateHistoryHighlight())
-    );
+    this.unsubscribers.push(historyManager.on('historyChanged', (entries) => this.renderHistory(entries)));
+    this.unsubscribers.push(historyManager.on('currentIndexChanged', () => this.updateHistoryHighlight()));
 
     // Initial render
     const state = historyManager.getState();

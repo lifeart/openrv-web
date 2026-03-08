@@ -156,9 +156,9 @@ describe('StabilizeMotion', () => {
       expect(result.width).toBe(2);
       expect(result.height).toBe(2);
       expect(result.data.length).toBe(4);
-      expect(result.data[0]).toBe(1);  // (0,0)
-      expect(result.data[1]).toBe(3);  // (2,0)
-      expect(result.data[2]).toBe(9);  // (0,2)
+      expect(result.data[0]).toBe(1); // (0,0)
+      expect(result.data[1]).toBe(3); // (2,0)
+      expect(result.data[2]).toBe(9); // (0,2)
       expect(result.data[3]).toBe(11); // (2,2)
     });
 
@@ -313,11 +313,7 @@ describe('StabilizeMotion', () => {
 
       // Apply compensating shift: srcX = x + dx, so dx=+5 pulls from x+5 in the shifted
       // frame, recovering the original content (shifted[x+5] = reference[x+5-5] = reference[x])
-      const stabilized = new ImageData(
-        new Uint8ClampedArray(shifted.data),
-        shifted.width,
-        shifted.height,
-      );
+      const stabilized = new ImageData(new Uint8ClampedArray(shifted.data), shifted.width, shifted.height);
       applyStabilization(stabilized, { dx: 5, dy: 0, cropAmount: 0 });
 
       // Compare MSE over the valid interior region (excluding border artifacts)
@@ -384,11 +380,7 @@ describe('StabilizeMotion', () => {
 
       // Apply compensating shift: dx=+shiftX recovers reference content
       // shifted[x+shiftX] = reference[x+shiftX - shiftX] = reference[x]
-      const stabilized = new ImageData(
-        new Uint8ClampedArray(shifted.data),
-        shifted.width,
-        shifted.height,
-      );
+      const stabilized = new ImageData(new Uint8ClampedArray(shifted.data), shifted.width, shifted.height);
       applyStabilization(stabilized, { dx: shiftX, dy: shiftY, cropAmount: 0 });
 
       // Interior pixels (away from border) should closely match reference

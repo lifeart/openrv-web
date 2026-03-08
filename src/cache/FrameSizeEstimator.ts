@@ -36,10 +36,7 @@ export function estimateFrameBytes(
  * @param bytesPerFrame  - Estimated bytes per frame (from estimateFrameBytes)
  * @returns Maximum number of frames that fit within the budget
  */
-export function maxFramesInBudget(
-  budgetBytes: number,
-  bytesPerFrame: number,
-): number {
+export function maxFramesInBudget(budgetBytes: number, bytesPerFrame: number): number {
   if (bytesPerFrame <= 0) return 0;
   return Math.floor(budgetBytes / bytesPerFrame);
 }
@@ -53,10 +50,7 @@ export function maxFramesInBudget(
  * @param bytesPerFrame  - Estimated bytes per frame
  * @returns Region capacity in number of frames
  */
-export function regionCapacity(
-  budgetBytes: number,
-  bytesPerFrame: number,
-): number {
+export function regionCapacity(budgetBytes: number, bytesPerFrame: number): number {
   const maxFrames = maxFramesInBudget(budgetBytes, bytesPerFrame);
   return Math.floor(maxFrames * 0.8);
 }
@@ -117,9 +111,6 @@ export function calculateWindowSplit(
  * @param minGuard        - Minimum guard radius (default: 2)
  * @returns Guard radius in frames
  */
-export function evictionGuardRadius(
-  playbackSpeed: number,
-  minGuard: number = 2,
-): number {
+export function evictionGuardRadius(playbackSpeed: number, minGuard: number = 2): number {
   return Math.max(minGuard, Math.ceil(playbackSpeed * 2));
 }

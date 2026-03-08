@@ -1,18 +1,13 @@
-import { GTODTO } from 'gto-js';
-import type { GTOData } from 'gto-js';
+import { type GTODTO, type GTOData } from 'gto-js';
 import { EventEmitter } from '../../utils/EventEmitter';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
-import type {
-  PenStroke,
-  TextAnnotation,
-  PaintEffects,
-} from '../../paint/types';
+import type { PenStroke, TextAnnotation, PaintEffects } from '../../paint/types';
 import type { UncropState } from '../../core/types/transform';
 import type { MediaRepresentation } from '../types/representation';
 import {
-  AnnotationStore,
+  type AnnotationStore,
   getNumberValue as _getNumberValue,
   getBooleanValue as _getBooleanValue,
   getNumberArray as _getNumberArray,
@@ -20,12 +15,7 @@ import {
 } from './AnnotationStore';
 import type { LoopMode, PlaybackMode } from '../types/session';
 import type { Graph } from '../graph/Graph';
-import type {
-  HashResolveResult,
-  AtResolveResult,
-  GTOHashResolveResult,
-  GTOAtResolveResult,
-} from './PropertyResolver';
+import type { HashResolveResult, AtResolveResult, GTOHashResolveResult, GTOAtResolveResult } from './PropertyResolver';
 import {
   parseInitialSettings as _parseInitialSettings,
   parseColorAdjustments as _parseColorAdjustments,
@@ -88,7 +78,6 @@ export type { RVEDLEntry } from '../../formats/RVEDLParser';
 export { PLAYBACK_SPEED_PRESETS } from '../../config/PlaybackConfig';
 export type { PlaybackSpeedPreset } from '../../config/PlaybackConfig';
 
-
 export class Session extends EventEmitter<SessionEvents> {
   // Playback service - owns PlaybackEngine, VolumeManager, ABCompareManager, AudioCoordinator
   private _playback = new SessionPlayback();
@@ -109,85 +98,176 @@ export class Session extends EventEmitter<SessionEvents> {
   // Tests access these via (session as any)._currentFrame etc.
   // Now route through _playback._playbackEngine.
 
-  protected get _playbackEngine() { return this._playback._playbackEngine; }
+  protected get _playbackEngine() {
+    return this._playback._playbackEngine;
+  }
 
-  protected get _currentFrame(): number { return this._playback._playbackEngine.currentFrame; }
-  protected set _currentFrame(v: number) { this._playback._playbackEngine.setCurrentFrameInternal(v); }
+  protected get _currentFrame(): number {
+    return this._playback._playbackEngine.currentFrame;
+  }
+  protected set _currentFrame(v: number) {
+    this._playback._playbackEngine.setCurrentFrameInternal(v);
+  }
 
-  protected get _inPoint(): number { return this._playback._playbackEngine.inPoint; }
-  protected set _inPoint(v: number) { this._playback._playbackEngine.setInPointInternal(v); }
+  protected get _inPoint(): number {
+    return this._playback._playbackEngine.inPoint;
+  }
+  protected set _inPoint(v: number) {
+    this._playback._playbackEngine.setInPointInternal(v);
+  }
 
-  protected get _outPoint(): number { return this._playback._playbackEngine.outPoint; }
-  protected set _outPoint(v: number) { this._playback._playbackEngine.setOutPointInternal(v); }
+  protected get _outPoint(): number {
+    return this._playback._playbackEngine.outPoint;
+  }
+  protected set _outPoint(v: number) {
+    this._playback._playbackEngine.setOutPointInternal(v);
+  }
 
-  protected get _fps(): number { return this._playback._playbackEngine.fps; }
-  protected set _fps(v: number) { this._playback._playbackEngine.setFpsInternal(v); }
+  protected get _fps(): number {
+    return this._playback._playbackEngine.fps;
+  }
+  protected set _fps(v: number) {
+    this._playback._playbackEngine.setFpsInternal(v);
+  }
 
-  protected get _isPlaying(): boolean { return this._playback._playbackEngine.isPlaying; }
-  protected set _isPlaying(v: boolean) { this._playback._playbackEngine.setIsPlayingInternal(v); }
+  protected get _isPlaying(): boolean {
+    return this._playback._playbackEngine.isPlaying;
+  }
+  protected set _isPlaying(v: boolean) {
+    this._playback._playbackEngine.setIsPlayingInternal(v);
+  }
 
-  protected get _playDirection(): number { return this._playback._playbackEngine.playDirection; }
+  protected get _playDirection(): number {
+    return this._playback._playbackEngine.playDirection;
+  }
   protected set _playDirection(v: number) {
     this._playback._playbackEngine.setPlayDirectionInternal(v);
   }
 
-  protected get _playbackSpeed(): number { return this._playback._playbackEngine.playbackSpeed; }
+  protected get _playbackSpeed(): number {
+    return this._playback._playbackEngine.playbackSpeed;
+  }
 
-  protected get _loopMode(): LoopMode { return this._playback._playbackEngine.loopMode; }
-  protected set _loopMode(v: LoopMode) { this._playback._playbackEngine.loopMode = v; }
+  protected get _loopMode(): LoopMode {
+    return this._playback._playbackEngine.loopMode;
+  }
+  protected set _loopMode(v: LoopMode) {
+    this._playback._playbackEngine.loopMode = v;
+  }
 
-  protected get _interpolationEnabled(): boolean { return this._playback._playbackEngine.interpolationEnabled; }
+  protected get _interpolationEnabled(): boolean {
+    return this._playback._playbackEngine.interpolationEnabled;
+  }
 
-  protected get _pendingPlayPromise(): Promise<void> | null { return this._playback._playbackEngine.pendingPlayPromise; }
-  protected set _pendingPlayPromise(v: Promise<void> | null) { this._playback._playbackEngine.setPendingPlayPromise(v); }
+  protected get _pendingPlayPromise(): Promise<void> | null {
+    return this._playback._playbackEngine.pendingPlayPromise;
+  }
+  protected set _pendingPlayPromise(v: Promise<void> | null) {
+    this._playback._playbackEngine.setPendingPlayPromise(v);
+  }
 
-  protected get _pendingFetchFrame(): number | null { return this._playback._playbackEngine.pendingFetchFrame; }
+  protected get _pendingFetchFrame(): number | null {
+    return this._playback._playbackEngine.pendingFetchFrame;
+  }
 
-  protected get _frameIncrement(): number { return this._playback._playbackEngine.frameIncrement; }
-  protected set _frameIncrement(v: number) { this._playback._playbackEngine.setFrameIncrementInternal(v); }
+  protected get _frameIncrement(): number {
+    return this._playback._playbackEngine.frameIncrement;
+  }
+  protected set _frameIncrement(v: number) {
+    this._playback._playbackEngine.setFrameIncrementInternal(v);
+  }
 
   // --- Backward-compatible accessors for timing state ---
   // Tests access these via (session as any).lastFrameTime etc.
 
-  get lastFrameTime(): number { return this._playback._playbackEngine.lastFrameTime; }
-  set lastFrameTime(v: number) { this._playback._playbackEngine.lastFrameTime = v; }
+  get lastFrameTime(): number {
+    return this._playback._playbackEngine.lastFrameTime;
+  }
+  set lastFrameTime(v: number) {
+    this._playback._playbackEngine.lastFrameTime = v;
+  }
 
-  get frameAccumulator(): number { return this._playback._playbackEngine.frameAccumulator; }
-  set frameAccumulator(v: number) { this._playback._playbackEngine.frameAccumulator = v; }
+  get frameAccumulator(): number {
+    return this._playback._playbackEngine.frameAccumulator;
+  }
+  set frameAccumulator(v: number) {
+    this._playback._playbackEngine.frameAccumulator = v;
+  }
 
-  get _bufferingCount(): number { return this._playback._playbackEngine._bufferingCount; }
-  set _bufferingCount(v: number) { this._playback._playbackEngine._bufferingCount = v; }
+  get _bufferingCount(): number {
+    return this._playback._playbackEngine._bufferingCount;
+  }
+  set _bufferingCount(v: number) {
+    this._playback._playbackEngine._bufferingCount = v;
+  }
 
-  get _isBuffering(): boolean { return this._playback._playbackEngine._isBuffering; }
-  set _isBuffering(v: boolean) { this._playback._playbackEngine._isBuffering = v; }
+  get _isBuffering(): boolean {
+    return this._playback._playbackEngine._isBuffering;
+  }
+  set _isBuffering(v: boolean) {
+    this._playback._playbackEngine._isBuffering = v;
+  }
 
-  get _starvationStartTime(): number { return this._playback._playbackEngine._starvationStartTime; }
-  set _starvationStartTime(v: number) { this._playback._playbackEngine._starvationStartTime = v; }
+  get _starvationStartTime(): number {
+    return this._playback._playbackEngine._starvationStartTime;
+  }
+  set _starvationStartTime(v: number) {
+    this._playback._playbackEngine._starvationStartTime = v;
+  }
 
-  get _consecutiveStarvationSkips(): number { return this._playback._playbackEngine._consecutiveStarvationSkips; }
-  set _consecutiveStarvationSkips(v: number) { this._playback._playbackEngine._consecutiveStarvationSkips = v; }
+  get _consecutiveStarvationSkips(): number {
+    return this._playback._playbackEngine._consecutiveStarvationSkips;
+  }
+  set _consecutiveStarvationSkips(v: number) {
+    this._playback._playbackEngine._consecutiveStarvationSkips = v;
+  }
 
-  get fpsFrameCount(): number { return this._playback._playbackEngine.fpsFrameCount; }
-  set fpsFrameCount(v: number) { this._playback._playbackEngine.fpsFrameCount = v; }
+  get fpsFrameCount(): number {
+    return this._playback._playbackEngine.fpsFrameCount;
+  }
+  set fpsFrameCount(v: number) {
+    this._playback._playbackEngine.fpsFrameCount = v;
+  }
 
-  get fpsLastTime(): number { return this._playback._playbackEngine.fpsLastTime; }
-  set fpsLastTime(v: number) { this._playback._playbackEngine.fpsLastTime = v; }
+  get fpsLastTime(): number {
+    return this._playback._playbackEngine.fpsLastTime;
+  }
+  set fpsLastTime(v: number) {
+    this._playback._playbackEngine.fpsLastTime = v;
+  }
 
-  get _effectiveFps(): number { return this._playback._playbackEngine._effectiveFps; }
-  set _effectiveFps(v: number) { this._playback._playbackEngine._effectiveFps = v; }
+  get _effectiveFps(): number {
+    return this._playback._playbackEngine._effectiveFps;
+  }
+  set _effectiveFps(v: number) {
+    this._playback._playbackEngine._effectiveFps = v;
+  }
 
-  get _subFramePosition(): SubFramePosition | null { return this._playback._playbackEngine._subFramePosition; }
-  set _subFramePosition(v: SubFramePosition | null) { this._playback._playbackEngine._subFramePosition = v; }
+  get _subFramePosition(): SubFramePosition | null {
+    return this._playback._playbackEngine._subFramePosition;
+  }
+  set _subFramePosition(v: SubFramePosition | null) {
+    this._playback._playbackEngine._subFramePosition = v;
+  }
 
   // Backward-compatible proxy to media sources
-  protected get sources(): MediaSource[] { return this._media.allSources; }
-  protected set sources(_v: MediaSource[]) { /* no-op, only used by dispose to clear */ }
+  protected get sources(): MediaSource[] {
+    return this._media.allSources;
+  }
+  protected set sources(_v: MediaSource[]) {
+    /* no-op, only used by dispose to clear */
+  }
 
-  protected get _currentSourceIndex(): number { return this._media.currentSourceIndex; }
-  protected set _currentSourceIndex(v: number) { this._media.setCurrentSourceIndexInternal(v); }
+  protected get _currentSourceIndex(): number {
+    return this._media.currentSourceIndex;
+  }
+  protected set _currentSourceIndex(v: number) {
+    this._media.setCurrentSourceIndexInternal(v);
+  }
 
-  protected get _hdrResizeTier(): HDRResizeTier { return this._media.hdrResizeTier; }
-
+  protected get _hdrResizeTier(): HDRResizeTier {
+    return this._media.hdrResizeTier;
+  }
 
   constructor() {
     super();
@@ -199,18 +279,35 @@ export class Session extends EventEmitter<SessionEvents> {
       getSourceCount: () => this._media.sourceCount,
       getSources: () => this._media.allSources,
       getMediaCurrentSourceIndex: () => this._media.currentSourceIndex,
-      setMediaCurrentSourceIndex: (index) => { this._media.setCurrentSourceIndexInternal(index); },
+      setMediaCurrentSourceIndex: (index) => {
+        this._media.setCurrentSourceIndexInternal(index);
+      },
       emitDurationChanged: (duration) => this.emit('durationChanged', duration),
     });
 
     // Forward SessionPlayback events to Session events
     const playbackEvents = [
-      'frameChanged', 'playbackChanged', 'playDirectionChanged', 'playbackSpeedChanged',
-      'loopModeChanged', 'playbackModeChanged', 'fpsChanged', 'frameIncrementChanged', 'inOutChanged',
-      'interpolationEnabledChanged', 'subFramePositionChanged', 'buffering',
-      'volumeChanged', 'mutedChanged', 'preservesPitchChanged', 'audioScrubEnabledChanged',
+      'frameChanged',
+      'playbackChanged',
+      'playDirectionChanged',
+      'playbackSpeedChanged',
+      'loopModeChanged',
+      'playbackModeChanged',
+      'fpsChanged',
+      'frameIncrementChanged',
+      'inOutChanged',
+      'interpolationEnabledChanged',
+      'subFramePositionChanged',
+      'buffering',
+      'volumeChanged',
+      'mutedChanged',
+      'preservesPitchChanged',
+      'audioScrubEnabledChanged',
       'audioScrubAvailabilityChanged',
-      'audioError', 'abSourceChanged', 'fpsUpdated', 'frameDecodeTimeout',
+      'audioError',
+      'abSourceChanged',
+      'fpsUpdated',
+      'frameDecodeTimeout',
     ] as const;
     for (const event of playbackEvents) {
       this._playback.on(event as any, (data: any) => this.emit(event as any, data));
@@ -218,9 +315,14 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Forward SessionAnnotation events to Session events
     const annotationEvents = [
-      'marksChanged', 'annotationsLoaded', 'paintEffectsLoaded',
-      'matteChanged', 'notesChanged', 'versionsChanged',
-      'statusChanged', 'statusesChanged',
+      'marksChanged',
+      'annotationsLoaded',
+      'paintEffectsLoaded',
+      'matteChanged',
+      'notesChanged',
+      'versionsChanged',
+      'statusChanged',
+      'statusesChanged',
     ] as const;
     for (const event of annotationEvents) {
       this._annotations.on(event as any, (data: any) => this.emit(event as any, data));
@@ -228,12 +330,24 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Wire SessionGraph host
     this._sessionGraph.setHost({
-      setFps: (fps) => { this.fps = fps; },
-      setCurrentFrame: (frame) => { this._currentFrame = frame; },
-      setInPoint: (v) => { this._inPoint = v; },
-      setOutPoint: (v) => { this._outPoint = v; },
-      setFrameIncrement: (v) => { this._frameIncrement = v; },
-      setPlaybackMode: (mode) => { this.playbackMode = mode; },
+      setFps: (fps) => {
+        this.fps = fps;
+      },
+      setCurrentFrame: (frame) => {
+        this._currentFrame = frame;
+      },
+      setInPoint: (v) => {
+        this._inPoint = v;
+      },
+      setOutPoint: (v) => {
+        this._outPoint = v;
+      },
+      setFrameIncrement: (v) => {
+        this._frameIncrement = v;
+      },
+      setPlaybackMode: (mode) => {
+        this.playbackMode = mode;
+      },
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
       emitFrameIncrementChanged: (inc) => this.emit('frameIncrementChanged', inc),
       getAnnotations: () => this._annotations,
@@ -250,10 +364,18 @@ export class Session extends EventEmitter<SessionEvents> {
     this._media.setHost({
       getFps: () => this._fps,
       getCurrentFrame: () => this._currentFrame,
-      setFps: (fps) => { this._fps = fps; },
-      setInPoint: (v) => { this._inPoint = v; },
-      setOutPoint: (v) => { this._outPoint = v; },
-      setCurrentFrame: (v) => { this._currentFrame = v; },
+      setFps: (fps) => {
+        this._fps = fps;
+      },
+      setInPoint: (v) => {
+        this._inPoint = v;
+      },
+      setOutPoint: (v) => {
+        this._outPoint = v;
+      },
+      setCurrentFrame: (v) => {
+        this._currentFrame = v;
+      },
       pause: () => this.pause(),
       getIsPlaying: () => this._isPlaying,
       getMuted: () => this._playback._volumeManager.muted,
@@ -261,8 +383,7 @@ export class Session extends EventEmitter<SessionEvents> {
       initVideoPreservesPitch: (v) => this._playback._volumeManager.initVideoPreservesPitch(v),
       onSourceAdded: (c) => this._playback._abCompareManager.onSourceAdded(c),
       emitABChanged: (i) => this._playback._abCompareManager.emitChanged(i),
-      loadAudioFromVideo: (video, vol, muted) =>
-        this._playback._audioCoordinator.loadFromVideo(video, vol, muted),
+      loadAudioFromVideo: (video, vol, muted) => this._playback._audioCoordinator.loadFromVideo(video, vol, muted),
       clearGraphData: () => this._sessionGraph.clearData(),
       emitFpsChanged: (fps) => this.emit('fpsChanged', fps),
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
@@ -270,8 +391,12 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Forward SessionMedia events
     const mediaEvents = [
-      'sourceLoaded', 'durationChanged', 'unsupportedCodec',
-      'representationChanged', 'representationError', 'fallbackActivated',
+      'sourceLoaded',
+      'durationChanged',
+      'unsupportedCodec',
+      'representationChanged',
+      'representationError',
+      'fallbackActivated',
     ] as const;
     for (const event of mediaEvents) {
       this._media.on(event as any, (data: any) => this.emit(event as any, data));
@@ -634,12 +759,10 @@ export class Session extends EventEmitter<SessionEvents> {
     this._playback.play();
   }
 
-
-
   protected triggerStarvationRecoveryPreload(
     _videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
     _fromFrame: number,
-    _direction: number
+    _direction: number,
   ): void {
     // Handled by PlaybackEngine internally
   }
@@ -647,8 +770,6 @@ export class Session extends EventEmitter<SessionEvents> {
   pause(): void {
     this._playback.pause();
   }
-
-
 
   togglePlayback(): void {
     this._playback.togglePlayback();
@@ -780,13 +901,9 @@ export class Session extends EventEmitter<SessionEvents> {
     this._playback.update();
   }
 
-
-
   protected advanceFrame(direction: number): void {
     this._playback.advanceFrame(direction);
   }
-
-
 
   // Session loading — delegated to SessionGraph
   async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
@@ -811,16 +928,24 @@ export class Session extends EventEmitter<SessionEvents> {
   // GTO value extraction helpers - delegate to standalone functions from AnnotationStore.
   // Kept as private methods for backward compatibility (tests access via `(session as any)`).
   // @ts-ignore TS6133 - accessed by tests via (session as any).getNumberValue()
-  private getNumberValue(value: unknown): number | undefined { return _getNumberValue(value); }
+  private getNumberValue(value: unknown): number | undefined {
+    return _getNumberValue(value);
+  }
 
   // @ts-ignore TS6133 - accessed by tests via (session as any).getBooleanValue()
-  private getBooleanValue(value: unknown): boolean | undefined { return _getBooleanValue(value); }
+  private getBooleanValue(value: unknown): boolean | undefined {
+    return _getBooleanValue(value);
+  }
 
   // @ts-ignore TS6133 - accessed by tests via (session as any).getNumberArray()
-  private getNumberArray(value: unknown): number[] | undefined { return _getNumberArray(value); }
+  private getNumberArray(value: unknown): number[] | undefined {
+    return _getNumberArray(value);
+  }
 
   // @ts-ignore TS6133 - accessed by tests via (session as any).getStringValue()
-  private getStringValue(value: unknown): string | undefined { return _getStringValue(value); }
+  private getStringValue(value: unknown): string | undefined {
+    return _getStringValue(value);
+  }
 
   // GTO settings parsing - delegates to pure functions in GTOSettingsParser.ts.
   // Kept as private methods for backward compatibility (tests access via `(session as any)`).
@@ -894,11 +1019,21 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Protected so that subclasses (e.g., CoordinateParsing.test.ts TestSession) can access them.
-  protected parsePenStroke(strokeId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): PenStroke | null {
+  protected parsePenStroke(
+    strokeId: string,
+    frame: number,
+    comp: GTOComponentDTO,
+    aspectRatio: number,
+  ): PenStroke | null {
     return this._annotations.annotationStore.parsePenStroke(strokeId, frame, comp, aspectRatio);
   }
 
-  protected parseTextAnnotation(textId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): TextAnnotation | null {
+  protected parseTextAnnotation(
+    textId: string,
+    frame: number,
+    comp: GTOComponentDTO,
+    aspectRatio: number,
+  ): TextAnnotation | null {
     return this._annotations.annotationStore.parseTextAnnotation(textId, frame, comp, aspectRatio);
   }
 
@@ -1042,7 +1177,7 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   addRepresentationToSource(
     sourceIndex: number,
-    config: import('../types/representation').AddRepresentationConfig
+    config: import('../types/representation').AddRepresentationConfig,
   ): MediaRepresentation | null {
     return this._media.addRepresentationToSource(sourceIndex, config);
   }
@@ -1060,7 +1195,7 @@ export class Session extends EventEmitter<SessionEvents> {
   async switchRepresentation(
     sourceIndex: number,
     repId: string,
-    options?: import('../types/representation').SwitchRepresentationOptions
+    options?: import('../types/representation').SwitchRepresentationOptions,
   ): Promise<boolean> {
     return this._media.switchRepresentation(sourceIndex, repId, options);
   }
@@ -1165,20 +1300,22 @@ export class Session extends EventEmitter<SessionEvents> {
   /**
    * Restore playback state from serialization
    */
-  setPlaybackState(state: Partial<{
-    currentFrame: number;
-    inPoint: number;
-    outPoint: number;
-    fps: number;
-    loopMode: LoopMode;
-    playbackMode: PlaybackMode;
-    volume: number;
-    muted: boolean;
-    preservesPitch: boolean;
-    audioScrubEnabled: boolean;
-    marks: Marker[] | number[]; // Support both old and new format
-    currentSourceIndex: number;
-  }>): void {
+  setPlaybackState(
+    state: Partial<{
+      currentFrame: number;
+      inPoint: number;
+      outPoint: number;
+      fps: number;
+      loopMode: LoopMode;
+      playbackMode: PlaybackMode;
+      volume: number;
+      muted: boolean;
+      preservesPitch: boolean;
+      audioScrubEnabled: boolean;
+      marks: Marker[] | number[]; // Support both old and new format
+      currentSourceIndex: number;
+    }>,
+  ): void {
     if (state.fps !== undefined) this.fps = state.fps;
     if (state.loopMode !== undefined) {
       this._loopMode = state.loopMode;

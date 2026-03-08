@@ -30,11 +30,7 @@ export interface OCIOWasmExports {
   /** Get look names (JSON array string) */
   ocioGetLooks(configHandle: number): string;
   /** Build a GPU processor and return GLSL shader code */
-  ocioGetProcessor(
-    configHandle: number,
-    srcColorSpace: string,
-    dstColorSpace: string,
-  ): number; // processor handle
+  ocioGetProcessor(configHandle: number, srcColorSpace: string, dstColorSpace: string): number; // processor handle
   /** Build a display processor: src → display + view, optional look */
   ocioGetDisplayProcessor(
     configHandle: number,
@@ -151,13 +147,21 @@ export class OCIOWasmModule {
 
     // Destroy all processors first
     for (const ph of this.processors) {
-      try { this.wasm?.ocioDestroyProcessor(ph); } catch { /* best effort */ }
+      try {
+        this.wasm?.ocioDestroyProcessor(ph);
+      } catch {
+        /* best effort */
+      }
     }
     this.processors.clear();
 
     // Destroy all configs
     for (const [id] of this.configs) {
-      try { this.wasm?.ocioDestroyConfig(id); } catch { /* best effort */ }
+      try {
+        this.wasm?.ocioDestroyConfig(id);
+      } catch {
+        /* best effort */
+      }
     }
     this.configs.clear();
 
@@ -269,13 +273,11 @@ export class OCIOWasmModule {
     look: string = '',
   ): number {
     this.ensureReady();
-    const ph = this.wasm!.ocioGetDisplayProcessor(
-      config.id, srcColorSpace, display, view, look,
-    );
+    const ph = this.wasm!.ocioGetDisplayProcessor(config.id, srcColorSpace, display, view, look);
     if (ph < 0) {
       throw new Error(
         `OCIOWasmModule: failed to create processor ` +
-        `(${srcColorSpace} → ${display}/${view}, look=${look || 'none'})`
+          `(${srcColorSpace} → ${display}/${view}, look=${look || 'none'})`,
       );
     }
     this.processors.add(ph);
@@ -285,17 +287,11 @@ export class OCIOWasmModule {
   /**
    * Build a color space conversion processor: src → dst.
    */
-  createProcessor(
-    config: ConfigHandle,
-    srcColorSpace: string,
-    dstColorSpace: string,
-  ): number {
+  createProcessor(config: ConfigHandle, srcColorSpace: string, dstColorSpace: string): number {
     this.ensureReady();
     const ph = this.wasm!.ocioGetProcessor(config.id, srcColorSpace, dstColorSpace);
     if (ph < 0) {
-      throw new Error(
-        `OCIOWasmModule: failed to create processor (${srcColorSpace} → ${dstColorSpace})`
-      );
+      throw new Error(`OCIOWasmModule: failed to create processor (${srcColorSpace} → ${dstColorSpace})`);
     }
     this.processors.add(ph);
     return ph;

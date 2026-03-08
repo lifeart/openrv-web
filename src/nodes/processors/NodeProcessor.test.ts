@@ -228,12 +228,18 @@ describe('SwitchProcessor', () => {
 
   it('selects the input at the provided index', () => {
     const imageA = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
       metadata: { sourcePath: 'A' },
     });
     const imageB = new IPImage({
-      width: 200, height: 200, channels: 4, dataType: 'uint8',
+      width: 200,
+      height: 200,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(200 * 200 * 4),
       metadata: { sourcePath: 'B' },
     });
@@ -245,7 +251,10 @@ describe('SwitchProcessor', () => {
 
   it('clamps index to valid range (high)', () => {
     const imageA = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
     });
 
@@ -256,7 +265,10 @@ describe('SwitchProcessor', () => {
 
   it('clamps index to valid range (low)', () => {
     const imageA = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
     });
 
@@ -266,11 +278,17 @@ describe('SwitchProcessor', () => {
   });
 
   it('uses context to determine active index', () => {
-    const images = [0, 1, 2].map(i => new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
-      data: new ArrayBuffer(100 * 100 * 4),
-      metadata: { sourcePath: `img${i}` },
-    }));
+    const images = [0, 1, 2].map(
+      (i) =>
+        new IPImage({
+          width: 100,
+          height: 100,
+          channels: 4,
+          dataType: 'uint8',
+          data: new ArrayBuffer(100 * 100 * 4),
+          metadata: { sourcePath: `img${i}` },
+        }),
+    );
 
     // Select based on frame number
     const processor = new SwitchProcessor((ctx) => ctx.frame % 3);
@@ -314,11 +332,17 @@ describe('LayoutProcessor', () => {
 
   it('returns first input (pass-through)', () => {
     const imageA = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
     });
     const imageB = new IPImage({
-      width: 200, height: 200, channels: 4, dataType: 'uint8',
+      width: 200,
+      height: 200,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(200 * 200 * 4),
     });
 
@@ -426,12 +450,18 @@ describe('StackProcessor', () => {
 
   it('selects input based on provider callback', () => {
     const imageA = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
       metadata: { sourcePath: 'A' },
     });
     const imageB = new IPImage({
-      width: 200, height: 200, channels: 4, dataType: 'uint8',
+      width: 200,
+      height: 200,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(200 * 200 * 4),
       metadata: { sourcePath: 'B' },
     });
@@ -442,10 +472,16 @@ describe('StackProcessor', () => {
   });
 
   it('receives input count in callback', () => {
-    const images = [0, 1, 2].map(() => new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
-      data: new ArrayBuffer(100 * 100 * 4),
-    }));
+    const images = [0, 1, 2].map(
+      () =>
+        new IPImage({
+          width: 100,
+          height: 100,
+          channels: 4,
+          dataType: 'uint8',
+          data: new ArrayBuffer(100 * 100 * 4),
+        }),
+    );
 
     const callback = vi.fn().mockReturnValue(0);
     const processor = new StackProcessor(callback);
@@ -456,7 +492,10 @@ describe('StackProcessor', () => {
 
   it('clamps index to valid range', () => {
     const image = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
     });
 
@@ -469,12 +508,18 @@ describe('StackProcessor', () => {
 
   it('simulates wipe mode (selects based on threshold)', () => {
     const imageA = new IPImage({
-      width: 100, height: 100, channels: 4, dataType: 'uint8',
+      width: 100,
+      height: 100,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(100 * 100 * 4),
       metadata: { sourcePath: 'A' },
     });
     const imageB = new IPImage({
-      width: 200, height: 200, channels: 4, dataType: 'uint8',
+      width: 200,
+      height: 200,
+      channels: 4,
+      dataType: 'uint8',
       data: new ArrayBuffer(200 * 200 * 4),
       metadata: { sourcePath: 'B' },
     });

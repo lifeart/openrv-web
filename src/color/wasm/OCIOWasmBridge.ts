@@ -10,10 +10,10 @@
  *   OCIOProcessor  ←→  OCIOWasmModule  →  OCIOShaderTranslator  →  Renderer
  */
 
-import { OCIOWasmModule, ConfigHandle, OCIOWasmFactory } from './OCIOWasmModule';
-import { OCIOVirtualFS, VFSLoadOptions } from './OCIOVirtualFS';
-import { translateOCIOShader, TranslatedShader, ShaderTranslateOptions } from './OCIOShaderTranslator';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { OCIOWasmModule, type ConfigHandle, type OCIOWasmFactory } from './OCIOWasmModule';
+import { OCIOVirtualFS, type VFSLoadOptions } from './OCIOVirtualFS';
+import { translateOCIOShader, type TranslatedShader, type ShaderTranslateOptions } from './OCIOShaderTranslator';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { Logger } from '../../utils/Logger';
 import type { LUT3D } from '../LUTLoader';
 
@@ -72,7 +72,9 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
 
     if (config.autoInit && config.factory) {
       // Fire-and-forget init (errors emitted via event)
-      this.init().catch((err) => { log.warn('OCIO auto-init failed:', err); });
+      this.init().catch((err) => {
+        log.warn('OCIO auto-init failed:', err);
+      });
     }
   }
 
@@ -152,11 +154,7 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
    * @param name - Config name
    * @param options - URL loading options (baseUrl for LUT file resolution)
    */
-  async loadConfigWithFiles(
-    configYaml: string,
-    name: string,
-    options: VFSLoadOptions = {},
-  ): Promise<void> {
+  async loadConfigWithFiles(configYaml: string, name: string, options: VFSLoadOptions = {}): Promise<void> {
     this.ensureReady();
 
     // Extract file references and search paths
@@ -241,9 +239,7 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     this.releaseProcessor();
 
     try {
-      this.processorHandle = this.module.createDisplayProcessor(
-        this.configHandle, srcColorSpace, display, view, look,
-      );
+      this.processorHandle = this.module.createDisplayProcessor(this.configHandle, srcColorSpace, display, view, look);
 
       const rawGLSL = this.module.generateShaderCode(this.processorHandle);
       this.currentShader = translateOCIOShader(rawGLSL, shaderOptions);
@@ -274,9 +270,7 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     this.releaseProcessor();
 
     try {
-      this.processorHandle = this.module.createProcessor(
-        this.configHandle, srcColorSpace, dstColorSpace,
-      );
+      this.processorHandle = this.module.createProcessor(this.configHandle, srcColorSpace, dstColorSpace);
 
       const rawGLSL = this.module.generateShaderCode(this.processorHandle);
       this.currentShader = translateOCIOShader(rawGLSL, shaderOptions);
@@ -357,7 +351,9 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     if (this.processorHandle !== null && this.module.isReady()) {
       try {
         this.module.destroyProcessor(this.processorHandle);
-      } catch { /* best effort */ }
+      } catch {
+        /* best effort */
+      }
     }
     this.processorHandle = null;
     this.currentShader = null;
@@ -367,7 +363,9 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     if (this.configHandle !== null && this.module.isReady()) {
       try {
         this.module.destroyConfig(this.configHandle);
-      } catch { /* best effort */ }
+      } catch {
+        /* best effort */
+      }
     }
     this.configHandle = null;
   }

@@ -104,21 +104,30 @@ export class AudioOrchestrator {
         .then((arrayBuffer) => {
           if (!arrayBuffer) return;
           const audioCtx = new AudioContext();
-          return audioCtx.decodeAudioData(arrayBuffer).then((audioBuffer) => {
-            audioCtx.close().catch((err) => { log.debug('AudioContext close after decode:', err); });
-            return audioBuffer;
-          }).catch((err) => {
-            log.debug('Audio decode failed (video may not contain audio):', err);
-            audioCtx.close().catch((closeErr) => { log.debug('AudioContext close after failed decode:', closeErr); });
-            return undefined;
-          });
+          return audioCtx
+            .decodeAudioData(arrayBuffer)
+            .then((audioBuffer) => {
+              audioCtx.close().catch((err) => {
+                log.debug('AudioContext close after decode:', err);
+              });
+              return audioBuffer;
+            })
+            .catch((err) => {
+              log.debug('Audio decode failed (video may not contain audio):', err);
+              audioCtx.close().catch((closeErr) => {
+                log.debug('AudioContext close after failed decode:', closeErr);
+              });
+              return undefined;
+            });
         })
         .then((audioBuffer) => {
           if (!audioBuffer) return;
           this.audioMixer.addTrack({ id: trackId, label: source.name });
           this.audioMixer.loadTrackBuffer(trackId, audioBuffer);
         })
-        .catch((err) => { log.debug('Audio extraction skipped (video may lack audio track):', err); });
+        .catch((err) => {
+          log.debug('Audio extraction skipped (video may lack audio track):', err);
+        });
     };
 
     const playbackHandler = onPlaybackChanged as (data: unknown) => void;
@@ -143,7 +152,9 @@ export class AudioOrchestrator {
     const initAudio = (): void => {
       if (this.audioInitialized) return;
       this.audioInitialized = true;
-      this.audioMixer.initialize().catch((err) => { log.warn('AudioMixer initialization failed:', err); });
+      this.audioMixer.initialize().catch((err) => {
+        log.warn('AudioMixer initialization failed:', err);
+      });
       document.removeEventListener('click', initAudio);
       document.removeEventListener('keydown', initAudio);
     };

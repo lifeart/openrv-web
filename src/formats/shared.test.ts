@@ -3,7 +3,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { validateImageDimensions, toRGBA, applyLogToLinearRGBA, drawImageWithOrientation, applyOrientationRGBA } from './shared';
+import {
+  validateImageDimensions,
+  toRGBA,
+  applyLogToLinearRGBA,
+  drawImageWithOrientation,
+  applyOrientationRGBA,
+} from './shared';
 import { IMAGE_LIMITS } from '../config/ImageLimits';
 
 describe('shared decoder utilities', () => {
@@ -22,45 +28,37 @@ describe('shared decoder utilities', () => {
     });
 
     it('SH-U004: should reject zero width', () => {
-      expect(() => validateImageDimensions(0, 100, 'Test')).toThrow(
-        'Invalid Test dimensions: 0x100'
-      );
+      expect(() => validateImageDimensions(0, 100, 'Test')).toThrow('Invalid Test dimensions: 0x100');
     });
 
     it('SH-U005: should reject zero height', () => {
-      expect(() => validateImageDimensions(100, 0, 'Test')).toThrow(
-        'Invalid Test dimensions: 100x0'
-      );
+      expect(() => validateImageDimensions(100, 0, 'Test')).toThrow('Invalid Test dimensions: 100x0');
     });
 
     it('SH-U006: should reject negative width', () => {
-      expect(() => validateImageDimensions(-1, 100, 'Test')).toThrow(
-        'Invalid Test dimensions: -1x100'
-      );
+      expect(() => validateImageDimensions(-1, 100, 'Test')).toThrow('Invalid Test dimensions: -1x100');
     });
 
     it('SH-U007: should reject negative height', () => {
-      expect(() => validateImageDimensions(100, -5, 'Test')).toThrow(
-        'Invalid Test dimensions: 100x-5'
-      );
+      expect(() => validateImageDimensions(100, -5, 'Test')).toThrow('Invalid Test dimensions: 100x-5');
     });
 
     it('SH-U008: should reject width exceeding max dimension', () => {
       expect(() => validateImageDimensions(65537, 100, 'Test')).toThrow(
-        'Test dimensions 65537x100 exceed maximum of 65536x65536'
+        'Test dimensions 65537x100 exceed maximum of 65536x65536',
       );
     });
 
     it('SH-U009: should reject height exceeding max dimension', () => {
       expect(() => validateImageDimensions(100, 65537, 'Test')).toThrow(
-        'Test dimensions 100x65537 exceed maximum of 65536x65536'
+        'Test dimensions 100x65537 exceed maximum of 65536x65536',
       );
     });
 
     it('SH-U010: should reject total pixels exceeding max', () => {
       // 20000 * 20000 = 400M > 268M limit
       expect(() => validateImageDimensions(20000, 20000, 'Test')).toThrow(
-        'Test image has 400000000 pixels, exceeding maximum of 268435456'
+        'Test image has 400000000 pixels, exceeding maximum of 268435456',
       );
     });
 
@@ -72,14 +70,14 @@ describe('shared decoder utilities', () => {
 
     it('SH-U012: should use custom maxDimension when provided', () => {
       expect(() => validateImageDimensions(200, 200, 'Test', 100)).toThrow(
-        'Test dimensions 200x200 exceed maximum of 100x100'
+        'Test dimensions 200x200 exceed maximum of 100x100',
       );
       expect(() => validateImageDimensions(100, 100, 'Test', 100)).not.toThrow();
     });
 
     it('SH-U013: should use custom maxPixels when provided', () => {
       expect(() => validateImageDimensions(100, 100, 'Test', 65536, 5000)).toThrow(
-        'Test image has 10000 pixels, exceeding maximum of 5000'
+        'Test image has 10000 pixels, exceeding maximum of 5000',
       );
     });
 
@@ -142,10 +140,18 @@ describe('shared decoder utilities', () => {
     it('SH-U024: should handle multi-row images', () => {
       // 2x2 image with 3 channels
       const input = new Float32Array([
-        0.1, 0.2, 0.3,  // row 0, col 0
-        0.4, 0.5, 0.6,  // row 0, col 1
-        0.7, 0.8, 0.9,  // row 1, col 0
-        1.0, 0.0, 0.5,  // row 1, col 1
+        0.1,
+        0.2,
+        0.3, // row 0, col 0
+        0.4,
+        0.5,
+        0.6, // row 0, col 1
+        0.7,
+        0.8,
+        0.9, // row 1, col 0
+        1.0,
+        0.0,
+        0.5, // row 1, col 1
       ]);
       const result = toRGBA(input, 2, 2, 3);
       expect(result.length).toBe(16); // 4 pixels * 4 channels
@@ -198,16 +204,22 @@ describe('shared decoder utilities', () => {
         calls.push(cv);
         return cv;
       });
-      expect(calls[0]).toBeCloseTo(1023);    // 1.0 * 1023
-      expect(calls[1]).toBeCloseTo(511.5);   // 0.5 * 1023
-      expect(calls[2]).toBeCloseTo(0);       // 0.0 * 1023
+      expect(calls[0]).toBeCloseTo(1023); // 1.0 * 1023
+      expect(calls[1]).toBeCloseTo(511.5); // 0.5 * 1023
+      expect(calls[2]).toBeCloseTo(0); // 0.0 * 1023
     });
 
     it('SH-U033: should handle multi-pixel images', () => {
       // 2x1 image
       const data = new Float32Array([
-        0.5, 0.5, 0.5, 1.0,  // pixel 0
-        1.0, 1.0, 1.0, 0.5,  // pixel 1
+        0.5,
+        0.5,
+        0.5,
+        1.0, // pixel 0
+        1.0,
+        1.0,
+        1.0,
+        0.5, // pixel 1
       ]);
       applyLogToLinearRGBA(data, 2, 1, 8, (cv) => cv / 255);
       // pixel 0: 0.5 * 255 = 127.5, then / 255 = 0.5
@@ -416,10 +428,14 @@ describe('shared decoder utilities', () => {
 
       // Define the expected pixel mapping for each orientation
       // Maps (x, y) -> (dx, dy) and expected output dimensions
-      const orientationMappings: Record<number, {
-        outW: number; outH: number;
-        map: (x: number, y: number) => [number, number];
-      }> = {
+      const orientationMappings: Record<
+        number,
+        {
+          outW: number;
+          outH: number;
+          map: (x: number, y: number) => [number, number];
+        }
+      > = {
         1: { outW: W, outH: H, map: (x, y) => [x, y] },
         2: { outW: W, outH: H, map: (x, y) => [W - 1 - x, y] },
         3: { outW: W, outH: H, map: (x, y) => [W - 1 - x, H - 1 - y] },

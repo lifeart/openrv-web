@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { MarkerManager, MARKER_COLORS, type Marker } from './MarkerManager';
 import { NoteManager } from './NoteManager';
 import { VersionManager } from './VersionManager';
@@ -41,8 +41,7 @@ export class SessionAnnotations extends EventEmitter<SessionAnnotationEvents> {
       },
     });
     this._statusManager.setCallbacks({
-      onStatusChanged: (sourceIndex, status, previous) =>
-        this.emit('statusChanged', { sourceIndex, status, previous }),
+      onStatusChanged: (sourceIndex, status, previous) => this.emit('statusChanged', { sourceIndex, status, previous }),
       onStatusesChanged: () => this.emit('statusesChanged', undefined),
     });
     this._annotationStore.setCallbacks({
@@ -53,18 +52,38 @@ export class SessionAnnotations extends EventEmitter<SessionAnnotationEvents> {
   }
 
   // --- Sub-manager access ---
-  get markerManager(): MarkerManager { return this._markerManager; }
-  get noteManager(): NoteManager { return this._noteManager; }
-  get versionManager(): VersionManager { return this._versionManager; }
-  get statusManager(): StatusManager { return this._statusManager; }
-  get annotationStore(): AnnotationStore { return this._annotationStore; }
+  get markerManager(): MarkerManager {
+    return this._markerManager;
+  }
+  get noteManager(): NoteManager {
+    return this._noteManager;
+  }
+  get versionManager(): VersionManager {
+    return this._versionManager;
+  }
+  get statusManager(): StatusManager {
+    return this._statusManager;
+  }
+  get annotationStore(): AnnotationStore {
+    return this._annotationStore;
+  }
 
   // --- Convenience delegations for markers ---
-  get marks(): ReadonlyMap<number, Marker> { return this._markerManager.marks; }
-  get markedFrames(): number[] { return this._markerManager.markedFrames; }
-  getMarker(frame: number): Marker | undefined { return this._markerManager.getMarker(frame); }
-  hasMarker(frame: number): boolean { return this._markerManager.hasMarker(frame); }
-  toggleMark(frame: number): void { this._markerManager.toggleMark(frame); }
+  get marks(): ReadonlyMap<number, Marker> {
+    return this._markerManager.marks;
+  }
+  get markedFrames(): number[] {
+    return this._markerManager.markedFrames;
+  }
+  getMarker(frame: number): Marker | undefined {
+    return this._markerManager.getMarker(frame);
+  }
+  hasMarker(frame: number): boolean {
+    return this._markerManager.hasMarker(frame);
+  }
+  toggleMark(frame: number): void {
+    this._markerManager.toggleMark(frame);
+  }
   setMarker(frame: number, note?: string, color?: string, endFrame?: number): void {
     this._markerManager.setMarker(frame, note ?? '', color ?? MARKER_COLORS[0], endFrame);
   }
@@ -80,12 +99,20 @@ export class SessionAnnotations extends EventEmitter<SessionAnnotationEvents> {
   setMarkerColor(frame: number, color: string): void {
     this._markerManager.setMarkerColor(frame, color);
   }
-  removeMark(frame: number): void { this._markerManager.removeMark(frame); }
-  clearMarks(): void { this._markerManager.clearMarks(); }
+  removeMark(frame: number): void {
+    this._markerManager.removeMark(frame);
+  }
+  clearMarks(): void {
+    this._markerManager.clearMarks();
+  }
 
   // --- Matte/paint accessors ---
-  get matteSettings(): MatteSettings | null { return this._annotationStore.matteSettings; }
-  get sessionPaintEffects(): Partial<PaintEffects> | null { return this._annotationStore.sessionPaintEffects; }
+  get matteSettings(): MatteSettings | null {
+    return this._annotationStore.matteSettings;
+  }
+  get sessionPaintEffects(): Partial<PaintEffects> | null {
+    return this._annotationStore.sessionPaintEffects;
+  }
 
   dispose(): void {
     this._markerManager.dispose();

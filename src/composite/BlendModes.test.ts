@@ -8,7 +8,7 @@ import {
   BLEND_MODE_LABELS,
   compositeImageData,
   compositeMultipleLayers,
-  CompositeLayer,
+  type CompositeLayer,
   stackCompositeToBlendMode,
   COMPOSITE_MODES,
   COMPOSITE_MODE_CODES,
@@ -47,7 +47,7 @@ describe('BlendModes', () => {
 
         expect(result.data[0]).toBe(200); // R
         expect(result.data[1]).toBe(150); // G
-        expect(result.data[2]).toBe(50);  // B
+        expect(result.data[2]).toBe(50); // B
         expect(result.data[3]).toBe(255); // A
       });
 
@@ -242,7 +242,7 @@ describe('BlendModes', () => {
         const result = compositeImageData(base, top, 'normal', 1);
 
         expect(result.data[0]).toBe(255); // Red unchanged
-        expect(result.data[1]).toBe(0);   // No green
+        expect(result.data[1]).toBe(0); // No green
       });
 
       it('fully transparent base shows top', () => {
@@ -251,7 +251,7 @@ describe('BlendModes', () => {
 
         const result = compositeImageData(base, top, 'normal', 1);
 
-        expect(result.data[0]).toBe(0);   // No red
+        expect(result.data[0]).toBe(0); // No red
         expect(result.data[1]).toBe(255); // Green
       });
     });
@@ -286,7 +286,7 @@ describe('BlendModes', () => {
       const result = compositeMultipleLayers(layers, 10, 10);
 
       // Top layer (green) should be visible
-      expect(result.data[0]).toBe(0);   // No red
+      expect(result.data[0]).toBe(0); // No red
       expect(result.data[1]).toBe(255); // Green
     });
 
@@ -310,7 +310,7 @@ describe('BlendModes', () => {
 
       // Only red layer should be visible
       expect(result.data[0]).toBe(255); // Red
-      expect(result.data[1]).toBe(0);   // No green
+      expect(result.data[1]).toBe(0); // No green
     });
 
     it('skips layers with opacity 0', () => {
@@ -367,12 +367,16 @@ describe('BlendModes', () => {
     it('BLD-015: bilinear resize produces interpolated values at edges', () => {
       // Create a 2x1 source: left pixel black, right pixel white
       const source = new ImageData(2, 1);
-      source.data[0] = 0;   source.data[1] = 0;   source.data[2] = 0;   source.data[3] = 255; // black
-      source.data[4] = 255; source.data[5] = 255; source.data[6] = 255; source.data[7] = 255; // white
+      source.data[0] = 0;
+      source.data[1] = 0;
+      source.data[2] = 0;
+      source.data[3] = 255; // black
+      source.data[4] = 255;
+      source.data[5] = 255;
+      source.data[6] = 255;
+      source.data[7] = 255; // white
 
-      const layers: CompositeLayer[] = [
-        { imageData: source, blendMode: 'normal', opacity: 1, visible: true },
-      ];
+      const layers: CompositeLayer[] = [{ imageData: source, blendMode: 'normal', opacity: 1, visible: true }];
 
       // Resize to 4x1: bilinear interpolation should produce smooth gradient
       const result = compositeMultipleLayers(layers, 4, 1);
@@ -390,7 +394,7 @@ describe('BlendModes', () => {
       expect(r2).toBeLessThanOrEqual(r3);
 
       // At least one interior pixel should have an interpolated (non-extreme) value
-      const hasInterpolated = [r0, r1, r2, r3].some(v => v > 0 && v < 255);
+      const hasInterpolated = [r0, r1, r2, r3].some((v) => v > 0 && v < 255);
       expect(hasInterpolated).toBe(true);
     });
 
@@ -398,9 +402,7 @@ describe('BlendModes', () => {
       // A uniform-color image should stay uniform after resize
       const source = createTestImageData(3, 3, { r: 42, g: 137, b: 200, a: 180 });
 
-      const layers: CompositeLayer[] = [
-        { imageData: source, blendMode: 'normal', opacity: 1, visible: true },
-      ];
+      const layers: CompositeLayer[] = [{ imageData: source, blendMode: 'normal', opacity: 1, visible: true }];
 
       const result = compositeMultipleLayers(layers, 6, 6);
 
@@ -416,14 +418,24 @@ describe('BlendModes', () => {
     it('BLD-017: bilinear resize downscales with interpolation', () => {
       // Create a 4x1 source with a gradient: 0, 85, 170, 255
       const source = new ImageData(4, 1);
-      source.data[0]  = 0;   source.data[1]  = 0;   source.data[2]  = 0;   source.data[3]  = 255;
-      source.data[4]  = 85;  source.data[5]  = 85;  source.data[6]  = 85;  source.data[7]  = 255;
-      source.data[8]  = 170; source.data[9]  = 170; source.data[10] = 170; source.data[11] = 255;
-      source.data[12] = 255; source.data[13] = 255; source.data[14] = 255; source.data[15] = 255;
+      source.data[0] = 0;
+      source.data[1] = 0;
+      source.data[2] = 0;
+      source.data[3] = 255;
+      source.data[4] = 85;
+      source.data[5] = 85;
+      source.data[6] = 85;
+      source.data[7] = 255;
+      source.data[8] = 170;
+      source.data[9] = 170;
+      source.data[10] = 170;
+      source.data[11] = 255;
+      source.data[12] = 255;
+      source.data[13] = 255;
+      source.data[14] = 255;
+      source.data[15] = 255;
 
-      const layers: CompositeLayer[] = [
-        { imageData: source, blendMode: 'normal', opacity: 1, visible: true },
-      ];
+      const layers: CompositeLayer[] = [{ imageData: source, blendMode: 'normal', opacity: 1, visible: true }];
 
       // Downscale from 4x1 to 2x1
       const result = compositeMultipleLayers(layers, 2, 1);
@@ -495,8 +507,8 @@ describe('BlendModes', () => {
       // outA = 0.502 + 1.0 * (1 - 0.502) ≈ 1.0 -> 255
       expect(result.data[0]).toBeCloseTo(127, -1); // R: base showing through
       expect(result.data[1]).toBeCloseTo(128, -1); // G: top premultiplied value
-      expect(result.data[2]).toBe(0);               // B: zero in both
-      expect(result.data[3]).toBe(255);             // A: fully opaque composite
+      expect(result.data[2]).toBe(0); // B: zero in both
+      expect(result.data[3]).toBe(255); // A: fully opaque composite
     });
 
     it('BLD-022: premultiplied over with transparent base uses top', () => {
@@ -643,8 +655,8 @@ describe('BlendModes', () => {
       // outG = (0 * 0.6 + 0 * 1.0 * 0.4) / 1.0 = 0
       // outB = (0 * 0.6 + 200 * 1.0 * 0.4) / 1.0 = 80
       expect(result.data[0]).toBe(108); // R
-      expect(result.data[1]).toBe(0);   // G
-      expect(result.data[2]).toBe(80);  // B
+      expect(result.data[1]).toBe(0); // G
+      expect(result.data[2]).toBe(80); // B
       expect(result.data[3]).toBe(255); // A = outA * 255
     });
 
@@ -689,8 +701,8 @@ describe('BlendModes', () => {
       // outB = 0 + 200 * (1 - 0.6) = 0 + 80 = 80
       // outA = topA + baseA * (1 - topA) = 0.6 + 1.0 * 0.4 = 1.0
       expect(result.data[0]).toBe(153); // R
-      expect(result.data[1]).toBe(0);   // G
-      expect(result.data[2]).toBe(80);  // B
+      expect(result.data[1]).toBe(0); // G
+      expect(result.data[2]).toBe(80); // B
       expect(result.data[3]).toBe(255); // A
     });
 

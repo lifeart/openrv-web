@@ -32,9 +32,9 @@ function createColorTestImage(width: number, height: number): ImageData {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
-      data[i] = Math.round((x / (width - 1)) * 255);     // R gradient left-right
+      data[i] = Math.round((x / (width - 1)) * 255); // R gradient left-right
       data[i + 1] = Math.round((y / (height - 1)) * 255); // G gradient top-bottom
-      data[i + 2] = 128;                                   // B constant
+      data[i + 2] = 128; // B constant
       data[i + 3] = 255;
     }
   }
@@ -54,26 +54,32 @@ describe('FilmEmulation', () => {
 
   describe('isFilmEmulationActive', () => {
     it('should return false when disabled', () => {
-      expect(isFilmEmulationActive({
-        ...DEFAULT_FILM_EMULATION_PARAMS,
-        enabled: false,
-      })).toBe(false);
+      expect(
+        isFilmEmulationActive({
+          ...DEFAULT_FILM_EMULATION_PARAMS,
+          enabled: false,
+        }),
+      ).toBe(false);
     });
 
     it('should return false when intensity is 0', () => {
-      expect(isFilmEmulationActive({
-        ...DEFAULT_FILM_EMULATION_PARAMS,
-        enabled: true,
-        intensity: 0,
-      })).toBe(false);
+      expect(
+        isFilmEmulationActive({
+          ...DEFAULT_FILM_EMULATION_PARAMS,
+          enabled: true,
+          intensity: 0,
+        }),
+      ).toBe(false);
     });
 
     it('should return true when enabled with intensity > 0', () => {
-      expect(isFilmEmulationActive({
-        ...DEFAULT_FILM_EMULATION_PARAMS,
-        enabled: true,
-        intensity: 50,
-      })).toBe(true);
+      expect(
+        isFilmEmulationActive({
+          ...DEFAULT_FILM_EMULATION_PARAMS,
+          enabled: true,
+          intensity: 50,
+        }),
+      ).toBe(true);
     });
   });
 
@@ -136,9 +142,11 @@ describe('FilmEmulation', () => {
         // Should be different from original for a colorful image
         let isDifferent = false;
         for (let i = 0; i < imageData.data.length; i += 4) {
-          if (imageData.data[i] !== originalData[i] ||
-              imageData.data[i + 1] !== originalData[i + 1] ||
-              imageData.data[i + 2] !== originalData[i + 2]) {
+          if (
+            imageData.data[i] !== originalData[i] ||
+            imageData.data[i + 1] !== originalData[i + 1] ||
+            imageData.data[i + 2] !== originalData[i + 2]
+          ) {
             isDifferent = true;
             break;
           }
@@ -335,7 +343,9 @@ describe('FilmEmulation', () => {
       applyFilmEmulation(whiteImg, grainParams);
       applyFilmEmulation(midImg, grainParams);
 
-      let blackDiff = 0, whiteDiff = 0, midDiff = 0;
+      let blackDiff = 0,
+        whiteDiff = 0,
+        midDiff = 0;
       const pixelCount = 20 * 20;
 
       for (let i = 0; i < blackImg.data.length; i += 4) {

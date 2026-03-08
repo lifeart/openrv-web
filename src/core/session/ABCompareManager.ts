@@ -188,9 +188,12 @@ export class ABCompareManager {
    */
   isQuadAvailable(sourceCount: number): boolean {
     return (
-      this._sourceBIndex >= 0 && this._sourceBIndex < sourceCount &&
-      this._sourceCIndex >= 0 && this._sourceCIndex < sourceCount &&
-      this._sourceDIndex >= 0 && this._sourceDIndex < sourceCount
+      this._sourceBIndex >= 0 &&
+      this._sourceBIndex < sourceCount &&
+      this._sourceCIndex >= 0 &&
+      this._sourceCIndex < sourceCount &&
+      this._sourceDIndex >= 0 &&
+      this._sourceDIndex < sourceCount
     );
   }
 
@@ -200,10 +203,14 @@ export class ABCompareManager {
    */
   getSourceIndex(label: 'A' | 'B' | 'C' | 'D'): number {
     switch (label) {
-      case 'A': return this._sourceAIndex;
-      case 'B': return this._sourceBIndex;
-      case 'C': return this._sourceCIndex;
-      case 'D': return this._sourceDIndex;
+      case 'A':
+        return this._sourceAIndex;
+      case 'B':
+        return this._sourceBIndex;
+      case 'C':
+        return this._sourceCIndex;
+      case 'D':
+        return this._sourceDIndex;
     }
   }
 

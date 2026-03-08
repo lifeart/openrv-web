@@ -5,7 +5,7 @@
  * to prevent data loss. Includes recovery detection on startup.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 import { Logger } from '../../utils/Logger';
@@ -622,7 +622,7 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
     // Wait briefly for any in-progress save to complete
     if (this.isSaving) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     // Mark clean shutdown (only if db is still valid)

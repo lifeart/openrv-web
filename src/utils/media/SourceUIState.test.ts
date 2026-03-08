@@ -5,10 +5,7 @@ describe('SourceUIState', () => {
   it('prefers the active representation start frame over sequence metadata', () => {
     const source = {
       sequenceInfo: { startFrame: 1001 },
-      representations: [
-        { startFrame: 0 },
-        { startFrame: 86400 },
-      ],
+      representations: [{ startFrame: 0 }, { startFrame: 86400 }],
       activeRepresentationIndex: 1,
     } as any;
 
@@ -18,9 +15,7 @@ describe('SourceUIState', () => {
   it('falls back to sequence start frame when no active representation is selected', () => {
     const source = {
       sequenceInfo: { startFrame: 1001 },
-      representations: [
-        { startFrame: 86400 },
-      ],
+      representations: [{ startFrame: 86400 }],
       activeRepresentationIndex: -1,
     } as any;
 

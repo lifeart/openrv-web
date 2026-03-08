@@ -4,19 +4,14 @@
  */
 
 /** Identity 4x4 matrix in row-major flat layout */
-export const IDENTITY_MATRIX_4X4 = new Float32Array([
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1,
-]);
+export const IDENTITY_MATRIX_4X4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 /**
  * Check if a 4x4 matrix (flat[16]) is the identity matrix.
  */
 export function isIdentityMatrix(m: Float32Array): boolean {
   for (let i = 0; i < 16; i++) {
-    const expected = (i % 5 === 0) ? 1 : 0;
+    const expected = i % 5 === 0 ? 1 : 0;
     if (m[i] !== expected) return false;
   }
   return true;
@@ -77,14 +72,11 @@ export function sanitizeLUTMatrix(
  *
  * GTO convention: row vector * matrix (post-multiply), row-major storage.
  */
-export function applyColorMatrix(
-  r: number, g: number, b: number,
-  m: Float32Array,
-): [number, number, number] {
+export function applyColorMatrix(r: number, g: number, b: number, m: Float32Array): [number, number, number] {
   // Row vector [r, g, b, 1] * row-major M
   // result[j] = r*M[0*4+j] + g*M[1*4+j] + b*M[2*4+j] + 1*M[3*4+j]
-  const outR = r * m[0]! + g * m[4]! + b * m[8]!  + m[12]!;
-  const outG = r * m[1]! + g * m[5]! + b * m[9]!  + m[13]!;
+  const outR = r * m[0]! + g * m[4]! + b * m[8]! + m[12]!;
+  const outG = r * m[1]! + g * m[5]! + b * m[9]! + m[13]!;
   const outB = r * m[2]! + g * m[6]! + b * m[10]! + m[14]!;
   return [outR, outG, outB];
 }
@@ -134,12 +126,7 @@ export function normalizeIntegers(data: Float32Array, maxValue: number): Float32
  * @param t - normalized input in [0, 1]
  * @param lutSize - number of entries in the 1D LUT
  */
-function sampleLUT1DChannel(
-  channelData: Float32Array,
-  channelOffset: number,
-  t: number,
-  lutSize: number,
-): number {
+function sampleLUT1DChannel(channelData: Float32Array, channelOffset: number, t: number, lutSize: number): number {
   const clamped = Math.max(0, Math.min(1, t));
   const maxIdx = lutSize - 1;
   const idx = clamped * maxIdx;
@@ -187,9 +174,9 @@ export function bake1DTo3D(
         const gInput = domainMin[1] + gNorm * (domainMax[1] - domainMin[1]);
         const bInput = domainMin[2] + bNorm * (domainMax[2] - domainMin[2]);
         // Normalize to [0,1] for LUT sampling
-        const rT = (domainMax[0] - domainMin[0]) !== 0 ? (rInput - domainMin[0]) / (domainMax[0] - domainMin[0]) : 0;
-        const gT = (domainMax[1] - domainMin[1]) !== 0 ? (gInput - domainMin[1]) / (domainMax[1] - domainMin[1]) : 0;
-        const bT = (domainMax[2] - domainMin[2]) !== 0 ? (bInput - domainMin[2]) / (domainMax[2] - domainMin[2]) : 0;
+        const rT = domainMax[0] - domainMin[0] !== 0 ? (rInput - domainMin[0]) / (domainMax[0] - domainMin[0]) : 0;
+        const gT = domainMax[1] - domainMin[1] !== 0 ? (gInput - domainMin[1]) / (domainMax[1] - domainMin[1]) : 0;
+        const bT = domainMax[2] - domainMin[2] !== 0 ? (bInput - domainMin[2]) / (domainMax[2] - domainMin[2]) : 0;
         data[idx + 0] = sampleLUT1DChannel(lut1DData, 0, rT, lut1DSize);
         data[idx + 1] = sampleLUT1DChannel(lut1DData, 1, gT, lut1DSize);
         data[idx + 2] = sampleLUT1DChannel(lut1DData, 2, bT, lut1DSize);

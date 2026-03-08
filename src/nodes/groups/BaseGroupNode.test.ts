@@ -21,7 +21,7 @@ describe('BaseGroupNode', () => {
     frame: 1,
     width: 1920,
     height: 1080,
-    quality: 'full'
+    quality: 'full',
   };
 
   it('BGN-001: returns null when inputs are empty', () => {
@@ -33,7 +33,7 @@ describe('BaseGroupNode', () => {
     const node = new TestGroupNode('test');
     const img1 = IPImage.createEmpty(100, 100);
     const img2 = IPImage.createEmpty(200, 200);
-    
+
     node.activeIndex = 1;
     expect(node.testProcess(context, [img1, img2])).toBe(img2);
   });
@@ -41,10 +41,10 @@ describe('BaseGroupNode', () => {
   it('BGN-003: clamps the active index to bounds', () => {
     const node = new TestGroupNode('test');
     const img1 = IPImage.createEmpty(100, 100);
-    
+
     node.activeIndex = 5; // Out of bounds high
     expect(node.testProcess(context, [img1])).toBe(img1);
-    
+
     node.activeIndex = -1; // Out of bounds low
     expect(node.testProcess(context, [img1])).toBe(img1);
   });
@@ -58,7 +58,7 @@ describe('BaseGroupNode', () => {
   it('BGN-004: serializes correctly to JSON', () => {
     const node = new TestGroupNode('test', 'MyGroup');
     const json = node.toJSON() as any;
-    
+
     expect(json.type).toBe('test');
     expect(json.name).toBe('MyGroup');
     expect(json.inputs).toEqual([]);

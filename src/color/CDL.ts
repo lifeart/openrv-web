@@ -38,9 +38,15 @@ export const DEFAULT_CDL: CDLValues = {
  */
 export function isDefaultCDL(cdl: CDLValues): boolean {
   return (
-    cdl.slope.r === 1.0 && cdl.slope.g === 1.0 && cdl.slope.b === 1.0 &&
-    cdl.offset.r === 0.0 && cdl.offset.g === 0.0 && cdl.offset.b === 0.0 &&
-    cdl.power.r === 1.0 && cdl.power.g === 1.0 && cdl.power.b === 1.0 &&
+    cdl.slope.r === 1.0 &&
+    cdl.slope.g === 1.0 &&
+    cdl.slope.b === 1.0 &&
+    cdl.offset.r === 0.0 &&
+    cdl.offset.g === 0.0 &&
+    cdl.offset.b === 0.0 &&
+    cdl.power.r === 1.0 &&
+    cdl.power.g === 1.0 &&
+    cdl.power.b === 1.0 &&
     cdl.saturation === 1.0
   );
 }
@@ -48,12 +54,7 @@ export function isDefaultCDL(cdl: CDLValues): boolean {
 /**
  * Apply CDL to a single color value (0-255 range)
  */
-export function applyCDLToValue(
-  value: number,
-  slope: number,
-  offset: number,
-  power: number
-): number {
+export function applyCDLToValue(value: number, slope: number, offset: number, power: number): number {
   // Normalize to 0-1
   let v = value / 255;
 
@@ -83,7 +84,7 @@ export function applySaturation(
   r: number,
   g: number,
   b: number,
-  saturation: number
+  saturation: number,
 ): { r: number; g: number; b: number } {
   if (saturation === 1.0) {
     return { r, g, b };
@@ -103,12 +104,7 @@ export function applySaturation(
 /**
  * Apply full CDL transform to RGB values (0-255 range)
  */
-export function applyCDL(
-  r: number,
-  g: number,
-  b: number,
-  cdl: CDLValues
-): { r: number; g: number; b: number } {
+export function applyCDL(r: number, g: number, b: number, cdl: CDLValues): { r: number; g: number; b: number } {
   // Apply SOP (Slope, Offset, Power) per channel
   let outR = applyCDLToValue(r, cdl.slope.r, cdl.offset.r, cdl.power.r);
   let outG = applyCDLToValue(g, cdl.slope.g, cdl.offset.g, cdl.power.g);
@@ -279,9 +275,7 @@ export function parseCC(xml: string): CDLEntry {
   // Strip namespace prefix for comparison (e.g., "cdl:ColorCorrection" -> "ColorCorrection")
   const localName = root.localName || root.nodeName.split(':').pop()!;
   if (localName !== 'ColorCorrection') {
-    throw new Error(
-      `Expected <ColorCorrection> root element, got <${root.nodeName}>`
-    );
+    throw new Error(`Expected <ColorCorrection> root element, got <${root.nodeName}>`);
   }
 
   return parseColorCorrectionElement(root);
@@ -305,9 +299,7 @@ export function parseCCC(xml: string): CDLEntry[] {
   const root = doc.documentElement;
   const localName = root.localName || root.nodeName.split(':').pop()!;
   if (localName !== 'ColorCorrectionCollection') {
-    throw new Error(
-      `Expected <ColorCorrectionCollection> root element, got <${root.nodeName}>`
-    );
+    throw new Error(`Expected <ColorCorrectionCollection> root element, got <${root.nodeName}>`);
   }
 
   const corrections = root.querySelectorAll('ColorCorrection');

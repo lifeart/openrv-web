@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  applyDeinterlace,
-  isDeinterlaceActive,
-  detectInterlacing,
-  DEFAULT_DEINTERLACE_PARAMS,
-} from './Deinterlace';
+import { applyDeinterlace, isDeinterlaceActive, detectInterlacing, DEFAULT_DEINTERLACE_PARAMS } from './Deinterlace';
 
 // Helper to create test ImageData
 function createTestImageData(width: number, height: number, fill?: number[]): ImageData {
@@ -161,7 +156,7 @@ describe('Deinterlace', () => {
       const { data, width } = imageData;
       // TFF: even lines (kept field) should be white (255)
       for (let y = 0; y < 10; y += 2) {
-        const idx = (y * width) * 4;
+        const idx = y * width * 4;
         expect(data[idx]).toBe(255);
         expect(data[idx + 1]).toBe(255);
         expect(data[idx + 2]).toBe(255);
@@ -180,7 +175,7 @@ describe('Deinterlace', () => {
       const { data, width } = imageData;
       // BFF: odd lines (kept field) should be black (0)
       for (let y = 1; y < 10; y += 2) {
-        const idx = (y * width) * 4;
+        const idx = y * width * 4;
         expect(data[idx]).toBe(0);
         expect(data[idx + 1]).toBe(0);
         expect(data[idx + 2]).toBe(0);
@@ -253,9 +248,9 @@ describe('Deinterlace', () => {
       const { data } = imageData;
 
       // TFF keeps even rows (0, 2, 4) unchanged
-      expect(data[0 * width * 4]).toBe(0);      // row 0 → R=0
-      expect(data[2 * width * 4]).toBe(50);      // row 2 → R=50
-      expect(data[4 * width * 4]).toBe(100);     // row 4 → R=100
+      expect(data[0 * width * 4]).toBe(0); // row 0 → R=0
+      expect(data[2 * width * 4]).toBe(50); // row 2 → R=50
+      expect(data[4 * width * 4]).toBe(100); // row 4 → R=100
 
       // Odd rows interpolated: avg of row above (y-1) and below (y+1)
       // row 1 = avg(original_row0=0, original_row2=50) = 25
@@ -286,9 +281,9 @@ describe('Deinterlace', () => {
       const { data } = imageData;
 
       // BFF keeps odd rows (1, 3, 5) unchanged
-      expect(data[1 * width * 4]).toBe(25);      // row 1 → R=25
-      expect(data[3 * width * 4]).toBe(75);       // row 3 → R=75
-      expect(data[5 * width * 4]).toBe(125);      // row 5 → R=125
+      expect(data[1 * width * 4]).toBe(25); // row 1 → R=25
+      expect(data[3 * width * 4]).toBe(75); // row 3 → R=75
+      expect(data[5 * width * 4]).toBe(125); // row 5 → R=125
 
       // Even rows interpolated: avg of (y-1) and (y+1)
       // row 0 (first) = copy of row below (y+1) = original_row1 = 25

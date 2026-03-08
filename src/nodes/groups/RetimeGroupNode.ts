@@ -136,7 +136,7 @@ export class RetimeGroupNode extends BaseGroupNode {
       const rateAtEnd = rateStart + (rateEnd - rateStart) * t;
 
       // Trapezoidal rule for this portion of the segment
-      integral += (rateStart + rateAtEnd) / 2 * (effectiveEnd - segStart);
+      integral += ((rateStart + rateAtEnd) / 2) * (effectiveEnd - segStart);
 
       if (outputFrame <= segEnd) {
         break;

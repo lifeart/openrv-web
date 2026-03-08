@@ -8,7 +8,7 @@ import {
   isPARActive,
   PAR_PRESETS,
   DEFAULT_PAR_STATE,
-  PARState,
+  type PARState,
 } from './PixelAspectRatio';
 
 describe('PixelAspectRatio', () => {

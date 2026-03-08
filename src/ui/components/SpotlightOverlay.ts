@@ -128,14 +128,14 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
 
   private getResizeCursor(handle: string): string {
     const cursorMap: Record<string, string> = {
-      'n': 'ns-resize',
-      's': 'ns-resize',
-      'e': 'ew-resize',
-      'w': 'ew-resize',
-      'ne': 'nesw-resize',
-      'sw': 'nesw-resize',
-      'nw': 'nwse-resize',
-      'se': 'nwse-resize',
+      n: 'ns-resize',
+      s: 'ns-resize',
+      e: 'ew-resize',
+      w: 'ew-resize',
+      ne: 'nesw-resize',
+      sw: 'nesw-resize',
+      nw: 'nwse-resize',
+      se: 'nwse-resize',
     };
     return cursorMap[handle] || 'move';
   }
@@ -232,19 +232,11 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
       const dy = (y - cy) / height;
       return dx * dx + dy * dy <= 1;
     } else {
-      return (
-        x >= cx - width &&
-        x <= cx + width &&
-        y >= cy - height &&
-        y <= cy + height
-      );
+      return x >= cx - width && x <= cx + width && y >= cy - height && y <= cy + height;
     }
   }
 
-  private getResizeHandle(
-    x: number,
-    y: number
-  ): 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null {
+  private getResizeHandle(x: number, y: number): 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null {
     const { x: cx, y: cy, width, height, shape } = this.state;
     // Hit area size for handles (4% of display for easier clicking)
     const handleSize = 0.04;
@@ -390,10 +382,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
       ctx.save();
 
       // Create radial gradient for feathered edge
-      const gradient = ctx.createRadialGradient(
-        centerX, centerY, innerRadius,
-        centerX, centerY, radius + pixelFeather
-      );
+      const gradient = ctx.createRadialGradient(centerX, centerY, innerRadius, centerX, centerY, radius + pixelFeather);
       gradient.addColorStop(0, `rgba(0, 0, 0, 0)`);
       gradient.addColorStop(1, `rgba(0, 0, 0, ${dimAmount})`);
 
@@ -427,7 +416,6 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
 
       // Draw resize handles
       this.drawResizeHandles(centerX, centerY, radius, radius);
-
     } else {
       // Rectangle spotlight
       const left = centerX - pixelWidth;
@@ -451,12 +439,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
           const alpha = i / steps;
           const expand = (1 - alpha) * pixelFeather;
           ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-          ctx.fillRect(
-            left - expand,
-            top - expand,
-            (right - left) + expand * 2,
-            (bottom - top) + expand * 2
-          );
+          ctx.fillRect(left - expand, top - expand, right - left + expand * 2, bottom - top + expand * 2);
         }
       } else {
         ctx.fillStyle = 'rgba(0, 0, 0, 1)';
@@ -487,10 +470,10 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
 
     // Draw 4 handles at cardinal points
     const handles = [
-      { x: cx, y: cy - ry },       // N
-      { x: cx, y: cy + ry },       // S
-      { x: cx + rx, y: cy },       // E
-      { x: cx - rx, y: cy },       // W
+      { x: cx, y: cy - ry }, // N
+      { x: cx, y: cy + ry }, // S
+      { x: cx + rx, y: cy }, // E
+      { x: cx - rx, y: cy }, // W
     ];
 
     for (const h of handles) {
@@ -513,14 +496,14 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
 
     // 8 handles for rectangle
     const handles = [
-      { x: left, y: top },         // NW
-      { x: right, y: top },        // NE
-      { x: left, y: bottom },      // SW
-      { x: right, y: bottom },     // SE
-      { x: cx, y: top },           // N
-      { x: cx, y: bottom },        // S
-      { x: right, y: cy },         // E
-      { x: left, y: cy },          // W
+      { x: left, y: top }, // NW
+      { x: right, y: top }, // NE
+      { x: left, y: bottom }, // SW
+      { x: right, y: bottom }, // SE
+      { x: cx, y: top }, // N
+      { x: cx, y: bottom }, // S
+      { x: right, y: cy }, // E
+      { x: left, y: cy }, // W
     ];
 
     for (const h of handles) {

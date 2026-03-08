@@ -116,12 +116,7 @@ interface WGPUCommandBuffer {}
 interface WGPUSampler {}
 
 interface WGPUCanvasContext {
-  configure(config: {
-    device: WGPUDevice;
-    format: string;
-    toneMapping?: { mode: string };
-    alphaMode?: string;
-  }): void;
+  configure(config: { device: WGPUDevice; format: string; toneMapping?: { mode: string }; alphaMode?: string }): void;
   getCurrentTexture(): WGPUTexture;
   unconfigure(): void;
 }
@@ -327,11 +322,13 @@ export class WebGPUHDRBlit {
     const canvasTexture = this.gpuContext.getCurrentTexture();
     const encoder = this.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: canvasTexture.createView(),
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
+      colorAttachments: [
+        {
+          view: canvasTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
     });
 
     pass.setPipeline(this.pipeline);
@@ -355,7 +352,11 @@ export class WebGPUHDRBlit {
       this.srcTexture = null;
     }
     if (this.gpuContext) {
-      try { this.gpuContext.unconfigure(); } catch { /* context may be lost */ }
+      try {
+        this.gpuContext.unconfigure();
+      } catch {
+        /* context may be lost */
+      }
       this.gpuContext = null;
     }
     if (this.device) {

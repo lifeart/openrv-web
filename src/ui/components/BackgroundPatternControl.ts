@@ -6,7 +6,7 @@
  * behind images to reveal transparency/alpha regions.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
@@ -256,9 +256,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val)) {
         this.state.customColor = val;
         this.state.pattern = 'custom';
-        colorInput.value = val.length === 4
-          ? `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}`
-          : val;
+        colorInput.value = val.length === 4 ? `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}` : val;
         this.updateButtonLabel();
         this.updateButtonStyle();
         this.emit('stateChanged', { ...this.state });
@@ -587,7 +585,7 @@ export function drawBackgroundPattern(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  state: BackgroundPatternState
+  state: BackgroundPatternState,
 ): void {
   if (state.pattern === 'black') {
     // Black is the default canvas background - no drawing needed
@@ -634,7 +632,7 @@ export function clearPatternCache(): void {
 
 function getOrCreateCheckerPattern(
   ctx: CanvasRenderingContext2D,
-  checkerSize: 'small' | 'medium' | 'large'
+  checkerSize: 'small' | 'medium' | 'large',
 ): CanvasPattern | null {
   const cacheKey = `checker-${checkerSize}`;
   const cached = patternCache.get(cacheKey);
@@ -667,9 +665,7 @@ function getOrCreateCheckerPattern(
   return pattern;
 }
 
-function getOrCreateCrosshatchPattern(
-  ctx: CanvasRenderingContext2D
-): CanvasPattern | null {
+function getOrCreateCrosshatchPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
   const cacheKey = 'crosshatch';
   const cached = patternCache.get(cacheKey);
   if (cached) return cached;
@@ -720,7 +716,7 @@ function drawCheckerboard(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  checkerSize: 'small' | 'medium' | 'large'
+  checkerSize: 'small' | 'medium' | 'large',
 ): void {
   const pattern = getOrCreateCheckerPattern(ctx, checkerSize);
   if (pattern) {
@@ -735,18 +731,14 @@ function drawCheckerboard(
 
   for (let y = 0; y < height; y += size) {
     for (let x = 0; x < width; x += size) {
-      const isLight = ((Math.floor(x / size)) + (Math.floor(y / size))) % 2 === 0;
+      const isLight = (Math.floor(x / size) + Math.floor(y / size)) % 2 === 0;
       ctx.fillStyle = isLight ? PATTERN_COLORS.checkerLight! : PATTERN_COLORS.checkerDark!;
       ctx.fillRect(x, y, size, size);
     }
   }
 }
 
-function drawCrosshatch(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number
-): void {
+function drawCrosshatch(ctx: CanvasRenderingContext2D, width: number, height: number): void {
   const pattern = getOrCreateCrosshatchPattern(ctx);
   if (pattern) {
     ctx.fillStyle = pattern;

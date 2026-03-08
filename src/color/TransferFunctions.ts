@@ -26,7 +26,7 @@ const PQ_C3 = 18.6875; // = 2392 / 4096 * 32
  */
 export function pqEncode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear < 0) return 0;
   const Ym1 = Math.pow(linear, PQ_M1);
@@ -38,7 +38,7 @@ export function pqEncode(linear: number): number {
  */
 export function pqDecode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) return 0;
   const Np = Math.pow(encoded, 1 / PQ_M2);
@@ -62,7 +62,7 @@ const HLG_C = 0.55991073; // = 0.5 - HLG_A * Math.log(4 * HLG_A)
  */
 export function hlgEncode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear < 0) return 0;
   if (linear <= 1 / 12) {
@@ -76,7 +76,7 @@ export function hlgEncode(linear: number): number {
  */
 export function hlgDecode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) return 0;
   if (encoded <= 0.5) {
@@ -92,7 +92,7 @@ export function hlgDecode(encoded: number): number {
 const LOGC3_CUT = 0.010591;
 const LOGC3_A = 5.555556;
 const LOGC3_B = 0.052272;
-const LOGC3_C = 0.247190;
+const LOGC3_C = 0.24719;
 const LOGC3_D = 0.385537;
 const LOGC3_E = 5.367655;
 const LOGC3_F = 0.092809;
@@ -104,7 +104,7 @@ const LOGC3_ENCODED_CUT = LOGC3_E * LOGC3_CUT + LOGC3_F;
  */
 export function logC3Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear > LOGC3_CUT) {
     return LOGC3_C * Math.log10(LOGC3_A * linear + LOGC3_B) + LOGC3_D;
@@ -117,7 +117,7 @@ export function logC3Encode(linear: number): number {
  */
 export function logC3Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded > LOGC3_ENCODED_CUT) {
     return (Math.pow(10, (encoded - LOGC3_D) / LOGC3_C) - LOGC3_B) / LOGC3_A;
@@ -143,7 +143,7 @@ const LOGC4_ENCODED_CUT = (LOGC4_CUT * LOGC4_S + LOGC4_T) / 14.0;
  */
 export function logC4Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear >= LOGC4_CUT) {
     return (Math.log2(linear * LOGC4_A + LOGC4_B) + LOGC4_C) / 14.0;
@@ -156,7 +156,7 @@ export function logC4Encode(linear: number): number {
  */
 export function logC4Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   const x = encoded * 14.0;
   if (encoded >= LOGC4_ENCODED_CUT) {
@@ -179,7 +179,7 @@ const LOG3G10_G = 15.1927;
  */
 export function log3G10Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   const x = linear + LOG3G10_C;
   if (x < 0) {
@@ -193,7 +193,7 @@ export function log3G10Encode(linear: number): number {
  */
 export function log3G10Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) {
     return encoded / LOG3G10_G - LOG3G10_C;
@@ -210,12 +210,12 @@ export function log3G10Decode(encoded: number): number {
  */
 export function slog3Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
-  if (linear >= 0.01125000) {
+  if (linear >= 0.01125) {
     return (420.0 + Math.log10((linear + 0.01) / (0.18 + 0.01)) * 261.5) / 1023.0;
   }
-  return (linear * (171.2102946929 - 95.0) / 0.01125000 + 95.0) / 1023.0;
+  return ((linear * (171.2102946929 - 95.0)) / 0.01125 + 95.0) / 1023.0;
 }
 
 /**
@@ -223,13 +223,13 @@ export function slog3Encode(linear: number): number {
  */
 export function slog3Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   const x = encoded * 1023.0;
   if (x >= 171.2102946929) {
     return Math.pow(10, (x - 420.0) / 261.5) * (0.18 + 0.01) - 0.01;
   }
-  return (x - 95.0) * 0.01125000 / (171.2102946929 - 95.0);
+  return ((x - 95.0) * 0.01125) / (171.2102946929 - 95.0);
 }
 
 // =============================================================================
@@ -241,7 +241,7 @@ export function slog3Decode(encoded: number): number {
  */
 export function gamma22Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear < 0) return -Math.pow(-linear, 1 / 2.2);
   return Math.pow(linear, 1 / 2.2);
@@ -252,7 +252,7 @@ export function gamma22Encode(linear: number): number {
  */
 export function gamma22Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) return -Math.pow(-encoded, 2.2);
   return Math.pow(encoded, 2.2);
@@ -263,7 +263,7 @@ export function gamma22Decode(encoded: number): number {
  */
 export function gamma24Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear < 0) return -Math.pow(-linear, 1 / 2.4);
   return Math.pow(linear, 1 / 2.4);
@@ -274,7 +274,7 @@ export function gamma24Encode(linear: number): number {
  */
 export function gamma24Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) return -Math.pow(-encoded, 2.4);
   return Math.pow(encoded, 2.4);
@@ -285,7 +285,7 @@ export function gamma24Decode(encoded: number): number {
  */
 export function gamma26Encode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear < 0) return -Math.pow(-linear, 1 / 2.6);
   return Math.pow(linear, 1 / 2.6);
@@ -296,7 +296,7 @@ export function gamma26Encode(linear: number): number {
  */
 export function gamma26Decode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) return -Math.pow(-encoded, 2.6);
   return Math.pow(encoded, 2.6);
@@ -320,7 +320,7 @@ const SMPTE240M_INV_GAMMA = 1 / 0.45; // decoding exponent
  */
 export function smpte240mEncode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear < 0) return 0;
   if (linear < 0.0228) {
@@ -336,7 +336,7 @@ export function smpte240mEncode(linear: number): number {
  */
 export function smpte240mDecode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded < 0) return 0;
   if (encoded < SMPTE240M_THRESHOLD) {
@@ -363,7 +363,7 @@ const ACESCCT_OFFSET = 0.0729055341958355;
  */
 export function acescctEncode(linear: number): number {
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   if (linear <= ACESCCT_CUT_LINEAR) {
     return ACESCCT_SLOPE * Math.max(0, linear) + ACESCCT_OFFSET;
@@ -379,7 +379,7 @@ export function acescctEncode(linear: number): number {
  */
 export function acescctDecode(encoded: number): number {
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   if (encoded > ACESCCT_CUT_ENCODED) {
     return Math.pow(2, encoded * 17.52 - 9.72);

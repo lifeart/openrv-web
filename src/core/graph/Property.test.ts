@@ -391,10 +391,7 @@ describe('PropertyContainer', () => {
 
       container.setValue('test', 50);
 
-      expect(listener).toHaveBeenCalledWith(
-        { name: 'test', value: 50 },
-        { name: 'test', value: 0 }
-      );
+      expect(listener).toHaveBeenCalledWith({ name: 'test', value: 50 }, { name: 'test', value: 0 });
     });
   });
 
@@ -472,10 +469,7 @@ describe('PropertyContainer', () => {
 
       // Changing the new property should fire propertyChanged
       prop2.value = 20;
-      expect(listener).toHaveBeenCalledWith(
-        { name: 'dup', value: 20 },
-        { name: 'dup', value: 10 }
-      );
+      expect(listener).toHaveBeenCalledWith({ name: 'dup', value: 20 }, { name: 'dup', value: 10 });
     });
   });
 });

@@ -259,11 +259,7 @@ describe('Canvas2DHDRBlit', () => {
       const { blit, mockCtx } = createInitializedBlit();
 
       // 3x1 image: single row should be identical after flip
-      const pixels = new Float32Array([
-        0.1, 0.2, 0.3, 1.0,
-        0.4, 0.5, 0.6, 1.0,
-        0.7, 0.8, 0.9, 1.0,
-      ]);
+      const pixels = new Float32Array([0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0, 0.7, 0.8, 0.9, 1.0]);
       blit.uploadAndDisplay(pixels, 3, 1);
 
       const imageData = mockCtx.putImageData.mock.calls[0]![0];
@@ -348,8 +344,7 @@ describe('Canvas2DHDRBlit', () => {
 
       // Second upload: 2x2 (triggers resize)
       const pixels2 = new Float32Array([
-        0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0,
-        0.7, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0,
+        0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0, 0.7, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0,
       ]);
       blit.uploadAndDisplay(pixels2, 2, 2);
 

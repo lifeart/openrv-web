@@ -16,19 +16,19 @@ export type ShotStatus = 'pending' | 'approved' | 'needs-work' | 'cbb' | 'omit';
 export interface StatusEntry {
   sourceIndex: number;
   status: ShotStatus;
-  setBy: string;       // Author who set the status
-  setAt: string;       // ISO 8601 timestamp
+  setBy: string; // Author who set the status
+  setAt: string; // ISO 8601 timestamp
 }
 
 /**
  * Color mapping for each status (for UI badges and GTO export)
  */
 export const STATUS_COLORS: Record<ShotStatus, string> = {
-  pending: '#94a3b8',     // slate-400
-  approved: '#22c55e',    // green-500
+  pending: '#94a3b8', // slate-400
+  approved: '#22c55e', // green-500
   'needs-work': '#f97316', // orange-500
-  cbb: '#eab308',         // yellow-500
-  omit: '#ef4444',        // red-500
+  cbb: '#eab308', // yellow-500
+  omit: '#ef4444', // red-500
 };
 
 /**
@@ -153,7 +153,7 @@ export class StatusManager {
    * Get all explicitly set status entries
    */
   getAllStatuses(): StatusEntry[] {
-    return Array.from(this._statuses.values()).map(e => ({ ...e }));
+    return Array.from(this._statuses.values()).map((e) => ({ ...e }));
   }
 
   /**
@@ -169,7 +169,7 @@ export class StatusManager {
    * Produce a JSON-safe array of all status entries (for save/export)
    */
   toSerializable(): StatusEntry[] {
-    return Array.from(this._statuses.values()).map(e => ({ ...e }));
+    return Array.from(this._statuses.values()).map((e) => ({ ...e }));
   }
 
   /**

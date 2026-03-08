@@ -27,8 +27,12 @@ function createMockSession() {
   session.currentSource = { name: 'test.mp4', duration: 100, fps: 24 };
   session.loopMode = 'once';
 
-  session.play = vi.fn(() => { session._isPlaying = true; });
-  session.pause = vi.fn(() => { session._isPlaying = false; });
+  session.play = vi.fn(() => {
+    session._isPlaying = true;
+  });
+  session.pause = vi.fn(() => {
+    session._isPlaying = false;
+  });
   session.togglePlayback = vi.fn();
   session.goToFrame = vi.fn((frame: number) => {
     session.currentFrame = frame;
@@ -44,7 +48,9 @@ function createMockSession() {
   session._playbackMode = 'realtime';
   Object.defineProperty(session, 'playbackMode', {
     get: () => session._playbackMode,
-    set: (v: string) => { session._playbackMode = v; },
+    set: (v: string) => {
+      session._playbackMode = v;
+    },
   });
 
   return session;

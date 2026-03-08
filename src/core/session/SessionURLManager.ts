@@ -100,23 +100,23 @@ export function buildShareURL(baseUrl: string, state: SessionURLState): string {
 // ---------------------------------------------------------------------------
 
 interface CompactState {
-  f: number;   // frame
+  f: number; // frame
   fps: number;
-  si: number;  // sourceIndex
+  si: number; // sourceIndex
   su?: string; // sourceUrl
   ip?: number; // inPoint
   op?: number; // outPoint
   sai?: number; // sourceAIndex
   sbi?: number; // sourceBIndex
-  ab?: string;  // currentAB
+  ab?: string; // currentAB
   t?: CompactTransform;
-  w?: string;  // wipeMode
+  w?: string; // wipeMode
   wp?: number; // wipePosition
   o?: OCIOURLState;
 }
 
 interface CompactTransform {
-  r?: number;  // rotation
+  r?: number; // rotation
   fh?: boolean; // flipH
   fv?: boolean; // flipV
   sx?: number; // scale.x
@@ -221,9 +221,7 @@ function parseState(obj: unknown): SessionURLState | null {
 }
 
 function parseTransform(t: Record<string, unknown>): Transform2D {
-  const rotation = typeof t.r === 'number' && Number.isFinite(t.r)
-    ? ((t.r % 360) + 360) % 360
-    : 0;
+  const rotation = typeof t.r === 'number' && Number.isFinite(t.r) ? ((t.r % 360) + 360) % 360 : 0;
 
   return {
     rotation,
@@ -261,10 +259,7 @@ function base64UrlEncode(str: string): string {
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]!);
   }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64UrlDecode(str: string): string {

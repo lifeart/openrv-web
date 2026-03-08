@@ -7,15 +7,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  downsample2x,
-  upsample2x,
-  HALF_RES_MIN_DIMENSION,
-} from './effectProcessing.shared';
-import {
-  EffectProcessor,
-  createDefaultEffectsState,
-} from './EffectProcessor';
+import { downsample2x, upsample2x, HALF_RES_MIN_DIMENSION } from './effectProcessing.shared';
+import { EffectProcessor, createDefaultEffectsState } from './EffectProcessor';
 import { createGradientImageData } from '../../../test/utils';
 
 describe('Half-Resolution Processing', () => {
@@ -36,13 +29,25 @@ describe('Half-Resolution Processing', () => {
 
       // Fill first 2x2 block (top-left) with distinct values
       // Pixel (0,0): R=100, G=200, B=50, A=255
-      data[0] = 100; data[1] = 200; data[2] = 50; data[3] = 255;
+      data[0] = 100;
+      data[1] = 200;
+      data[2] = 50;
+      data[3] = 255;
       // Pixel (1,0): R=200, G=100, B=150, A=255
-      data[4] = 200; data[5] = 100; data[6] = 150; data[7] = 255;
+      data[4] = 200;
+      data[5] = 100;
+      data[6] = 150;
+      data[7] = 255;
       // Pixel (0,1): R=50, G=150, B=200, A=255
-      data[16] = 50; data[17] = 150; data[18] = 200; data[19] = 255;
+      data[16] = 50;
+      data[17] = 150;
+      data[18] = 200;
+      data[19] = 255;
       // Pixel (1,1): R=150, G=50, B=100, A=255
-      data[20] = 150; data[21] = 50; data[22] = 100; data[23] = 255;
+      data[20] = 150;
+      data[21] = 50;
+      data[22] = 100;
+      data[23] = 255;
 
       const result = downsample2x(data, width, height);
       expect(result.width).toBe(2);
@@ -112,10 +117,10 @@ describe('Half-Resolution Processing', () => {
       const data = new Uint8ClampedArray(width * height * 4);
 
       // Fill with varying alpha: top-left block has alphas 100,200,150,50
-      data[3] = 100;   // (0,0)
-      data[7] = 200;   // (1,0)
-      data[19] = 150;  // (0,1)
-      data[23] = 50;   // (1,1)
+      data[3] = 100; // (0,0)
+      data[7] = 200; // (1,0)
+      data[19] = 150; // (0,1)
+      data[23] = 50; // (1,1)
 
       const result = downsample2x(data, width, height);
 
@@ -163,8 +168,14 @@ describe('Half-Resolution Processing', () => {
       const halfW = 2;
       const halfH = 1;
       const halfData = new Uint8ClampedArray(halfW * halfH * 4);
-      halfData[0] = 0; halfData[1] = 0; halfData[2] = 0; halfData[3] = 255;
-      halfData[4] = 255; halfData[5] = 255; halfData[6] = 255; halfData[7] = 255;
+      halfData[0] = 0;
+      halfData[1] = 0;
+      halfData[2] = 0;
+      halfData[3] = 255;
+      halfData[4] = 255;
+      halfData[5] = 255;
+      halfData[6] = 255;
+      halfData[7] = 255;
 
       const targetW = 4;
       const targetH = 1;
@@ -333,7 +344,7 @@ describe('Half-Resolution Processing', () => {
       const rmsError = Math.sqrt(sumSqErr / (pixelCount * 3));
 
       // Sharpen is more sensitive but should still be under 10% for interactive preview
-      expect(rmsError).toBeLessThan(0.10);
+      expect(rmsError).toBeLessThan(0.1);
     });
 
     it('EP-HALF-005b: small images skip half-res sharpen', () => {
@@ -391,7 +402,7 @@ describe('Half-Resolution Processing', () => {
       const rmsError = Math.sqrt(sumSqErr / (pixelCount * 3));
 
       // Delta-blend approach should keep RMS error under 10% for interactive preview
-      expect(rmsError).toBeLessThan(0.10);
+      expect(rmsError).toBeLessThan(0.1);
     });
 
     it('EP-HALF-DELTA-002: delta-blend preserves original data better than naive replacement', () => {

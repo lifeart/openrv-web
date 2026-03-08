@@ -63,9 +63,15 @@ function createMockShaderAndTexCb() {
   const intCalls: Record<string, unknown> = {};
   const matCalls: Record<string, unknown> = {};
   const mockShader = {
-    setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
-    setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
-    setUniformMatrix3: (name: string, value: unknown) => { matCalls[name] = value; },
+    setUniform: (name: string, value: unknown) => {
+      uniformCalls[name] = value;
+    },
+    setUniformInt: (name: string, value: number) => {
+      intCalls[name] = value;
+    },
+    setUniformMatrix3: (name: string, value: unknown) => {
+      matCalls[name] = value;
+    },
   } as any;
 
   let lut3DBound = false;
@@ -74,16 +80,26 @@ function createMockShaderAndTexCb() {
   const mockTexCb: TextureCallbacks = {
     bindCurvesLUTTexture: () => {},
     bindFalseColorLUTTexture: () => {},
-    bindLUT3DTexture: () => { lut3DBound = true; },
-    bindFileLUT3DTexture: () => { fileLUTBound = true; },
-    bindDisplayLUT3DTexture: () => { displayLUTBound = true; },
+    bindLUT3DTexture: () => {
+      lut3DBound = true;
+    },
+    bindFileLUT3DTexture: () => {
+      fileLUTBound = true;
+    },
+    bindDisplayLUT3DTexture: () => {
+      displayLUTBound = true;
+    },
     bindFilmLUTTexture: () => {},
     bindInlineLUTTexture: () => {},
     getCanvasSize: () => ({ width: 100, height: 100 }),
   };
 
   return {
-    uniformCalls, intCalls, matCalls, mockShader, mockTexCb,
+    uniformCalls,
+    intCalls,
+    matCalls,
+    mockShader,
+    mockTexCb,
     getBound: () => ({ lut3DBound, fileLUTBound, displayLUTBound }),
   };
 }
@@ -889,17 +905,17 @@ describe('Multi-Point LUT Pipeline', () => {
       const lut1D = new Float32Array(size1D * 3);
       for (let i = 0; i < size1D; i++) {
         const t = i / (size1D - 1);
-        lut1D[i * 3 + 0] = t;         // R = identity
-        lut1D[i * 3 + 1] = 1 - t;     // G = inverted
-        lut1D[i * 3 + 2] = 0.5;       // B = constant
+        lut1D[i * 3 + 0] = t; // R = identity
+        lut1D[i * 3 + 1] = 1 - t; // G = inverted
+        lut1D[i * 3 + 2] = 0.5; // B = constant
       }
       const result = bake1DTo3D(lut1D, size1D, [0, 0, 0], [1, 1, 1], 5);
       // Check (r=4, g=0, b=2) -> normalized r=1, g=0, b=0.5
       // Expected: R=1 (identity), G=1(inverted 0), B=0.5(constant)
       const idx = (4 * 25 + 0 * 5 + 2) * 3;
-      expect(result.data[idx + 0]).toBeCloseTo(1, 2);    // R channel
-      expect(result.data[idx + 1]).toBeCloseTo(1, 2);    // G channel (1-0 = 1)
-      expect(result.data[idx + 2]).toBeCloseTo(0.5, 2);  // B channel (constant)
+      expect(result.data[idx + 0]).toBeCloseTo(1, 2); // R channel
+      expect(result.data[idx + 1]).toBeCloseTo(1, 2); // G channel (1-0 = 1)
+      expect(result.data[idx + 2]).toBeCloseTo(0.5, 2); // B channel (constant)
     });
   });
 

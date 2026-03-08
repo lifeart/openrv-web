@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  KB, MB, GB,
+  KB,
+  MB,
+  GB,
   CACHE_MODE_LABELS,
   CACHE_MODE_TOOLTIPS,
   DEFAULT_CACHE_CONFIG,

@@ -14,10 +14,10 @@ import type { DisplayCapabilities } from './DisplayCapabilities';
  * Browser color space detection result
  */
 export interface BrowserColorSpaceInfo {
-  colorSpace: string;       // 'srgb' | 'display-p3' | 'unknown'
+  colorSpace: string; // 'srgb' | 'display-p3' | 'unknown'
   gamut: 'srgb' | 'p3' | 'rec2020' | 'unknown';
   hdr: boolean;
-  bitDepth: number;         // estimated: 8, 10, 12
+  bitDepth: number; // estimated: 8, 10, 12
 }
 
 /**
@@ -100,10 +100,14 @@ export function canvasSupportsDisplayP3(): boolean {
  */
 export function gamutLabel(gamut: BrowserColorSpaceInfo['gamut']): string {
   switch (gamut) {
-    case 'srgb': return 'sRGB gamut';
-    case 'p3': return 'P3 gamut';
-    case 'rec2020': return 'Rec.2020 gamut';
-    default: return 'Unknown gamut';
+    case 'srgb':
+      return 'sRGB gamut';
+    case 'p3':
+      return 'P3 gamut';
+    case 'rec2020':
+      return 'Rec.2020 gamut';
+    default:
+      return 'Unknown gamut';
   }
 }
 
@@ -112,9 +116,12 @@ export function gamutLabel(gamut: BrowserColorSpaceInfo['gamut']): string {
  */
 export function colorSpaceLabel(colorSpace: string): string {
   switch (colorSpace) {
-    case 'srgb': return 'sRGB';
-    case 'display-p3': return 'Display P3';
-    default: return colorSpace || 'Unknown';
+    case 'srgb':
+      return 'sRGB';
+    case 'display-p3':
+      return 'Display P3';
+    default:
+      return colorSpace || 'Unknown';
   }
 }
 

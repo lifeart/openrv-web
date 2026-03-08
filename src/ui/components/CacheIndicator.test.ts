@@ -12,16 +12,18 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 vi.useFakeTimers();
 
 // Mock Session class
-const createMockSession = (options: {
-  cachedFrames?: Set<number>;
-  pendingFrames?: Set<number>;
-  duration?: number;
-  width?: number;
-  height?: number;
-  inPoint?: number;
-  outPoint?: number;
-  isMediabunny?: boolean;
-} = {}) => {
+const createMockSession = (
+  options: {
+    cachedFrames?: Set<number>;
+    pendingFrames?: Set<number>;
+    duration?: number;
+    width?: number;
+    height?: number;
+    inPoint?: number;
+    outPoint?: number;
+    isMediabunny?: boolean;
+  } = {},
+) => {
   const cachedFrames = options.cachedFrames ?? new Set<number>();
   const pendingFrames = options.pendingFrames ?? new Set<number>();
 
@@ -329,27 +331,33 @@ describe('CacheIndicator', () => {
 
   describe('prerender stats', () => {
     // Mock Viewer for prerender stats
-    const createMockViewer = (stats: {
-      cacheSize?: number;
-      totalFrames?: number;
-      pendingRequests?: number;
-      activeRequests?: number;
-      memorySizeMB?: number;
-      cacheHits?: number;
-      cacheMisses?: number;
-      hitRate?: number;
-    } | null = null) => {
+    const createMockViewer = (
+      stats: {
+        cacheSize?: number;
+        totalFrames?: number;
+        pendingRequests?: number;
+        activeRequests?: number;
+        memorySizeMB?: number;
+        cacheHits?: number;
+        cacheMisses?: number;
+        hitRate?: number;
+      } | null = null,
+    ) => {
       return {
-        getPrerenderStats: vi.fn(() => stats ? {
-          cacheSize: stats.cacheSize ?? 0,
-          totalFrames: stats.totalFrames ?? 100,
-          pendingRequests: stats.pendingRequests ?? 0,
-          activeRequests: stats.activeRequests ?? 0,
-          memorySizeMB: stats.memorySizeMB ?? 0,
-          cacheHits: stats.cacheHits ?? 0,
-          cacheMisses: stats.cacheMisses ?? 0,
-          hitRate: stats.hitRate ?? 0,
-        } : null),
+        getPrerenderStats: vi.fn(() =>
+          stats
+            ? {
+                cacheSize: stats.cacheSize ?? 0,
+                totalFrames: stats.totalFrames ?? 100,
+                pendingRequests: stats.pendingRequests ?? 0,
+                activeRequests: stats.activeRequests ?? 0,
+                memorySizeMB: stats.memorySizeMB ?? 0,
+                cacheHits: stats.cacheHits ?? 0,
+                cacheMisses: stats.cacheMisses ?? 0,
+                hitRate: stats.hitRate ?? 0,
+              }
+            : null,
+        ),
         setOnPrerenderCacheUpdate: vi.fn(),
       };
     };

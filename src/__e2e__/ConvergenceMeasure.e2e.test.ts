@@ -41,10 +41,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // UI component (state manager with events)
-import {
-  ConvergenceMeasure,
-  measureDisparity,
-} from '../ui/components/ConvergenceMeasure';
+import { ConvergenceMeasure, measureDisparity } from '../ui/components/ConvergenceMeasure';
 import type {
   DisparityResult,
   DisparityStats as UIDisparityStats,
@@ -60,9 +57,7 @@ import {
   DEFAULT_MEASURE_PARAMS,
   DEFAULT_CONVERGENCE_GUIDE_OPTIONS,
 } from '../stereo/ConvergenceMeasure';
-import type {
-  DisparityMeasureParams,
-} from '../stereo/ConvergenceMeasure';
+import type { DisparityMeasureParams } from '../stereo/ConvergenceMeasure';
 
 // Floating window detector
 import {
@@ -70,10 +65,7 @@ import {
   renderViolationOverlay,
   DEFAULT_FLOATING_WINDOW_OPTIONS,
 } from '../stereo/FloatingWindowDetector';
-import type {
-  FloatingWindowViolationResult,
-  FloatingWindowDetectorOptions,
-} from '../stereo/FloatingWindowDetector';
+import type { FloatingWindowViolationResult, FloatingWindowDetectorOptions } from '../stereo/FloatingWindowDetector';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,12 +85,7 @@ function createImageData(width: number, height: number, fill?: number): ImageDat
 }
 
 /** Create a vertical stripe image for disparity tests */
-function createStripeImage(
-  width: number,
-  height: number,
-  stripeX: number,
-  stripeWidth: number = 3,
-): ImageData {
+function createStripeImage(width: number, height: number, stripeX: number, stripeWidth: number = 3): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -559,7 +546,7 @@ describe('FloatingWindowDetector E2E', () => {
       const left = createStripeImage(128, 64, 5, 5);
       const right = createStripeImage(128, 64, 10, 5); // positive disparity
       const result = detectFloatingWindowViolations(left, right, fastFWDOptions);
-      const leftViolation = result.violations.find(v => v.edge === 'left');
+      const leftViolation = result.violations.find((v) => v.edge === 'left');
       expect(leftViolation).toBeUndefined();
     });
 
@@ -758,7 +745,6 @@ describe('ConvergenceMeasure E2E - AppControlRegistry Wiring', () => {
 
     expect(buttonActiveStates).toEqual([true, false, true]);
   });
-
 });
 
 // =============================================================================
@@ -852,12 +838,13 @@ describe('ConvergenceMeasure E2E - Cross-Module Consistency', () => {
     // This means confidence values from the two modules are NOT comparable.
 
     // Create a test image that would show different luminance for Rec.601 vs Rec.709
-    const width = 32, height = 32;
+    const width = 32,
+      height = 32;
     const data = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < width * height; i++) {
-      data[i * 4] = 200;     // R
-      data[i * 4 + 1] = 50;  // G
-      data[i * 4 + 2] = 50;  // B
+      data[i * 4] = 200; // R
+      data[i * 4 + 1] = 50; // G
+      data[i * 4 + 2] = 50; // B
       data[i * 4 + 3] = 255;
     }
     const img = new ImageData(data, width, height);

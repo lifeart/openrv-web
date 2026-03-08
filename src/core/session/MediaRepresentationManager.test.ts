@@ -23,9 +23,7 @@ function createMockSourceNode(name = 'MockNode'): BaseSourceNode {
   } as unknown as BaseSourceNode;
 }
 
-function createMockRepresentation(
-  overrides: Partial<MediaRepresentation> = {}
-): MediaRepresentation {
+function createMockRepresentation(overrides: Partial<MediaRepresentation> = {}): MediaRepresentation {
   return {
     id: overrides.id ?? 'rep-1',
     label: overrides.label ?? 'Test Rep',
@@ -231,8 +229,18 @@ describe('MediaRepresentationManager', () => {
     });
 
     it('should fall back when removing the active representation', () => {
-      const rep1 = createMockRepresentation({ id: 'rep-1', priority: 0, status: 'ready', sourceNode: createMockSourceNode() });
-      const rep2 = createMockRepresentation({ id: 'rep-2', priority: 1, status: 'ready', sourceNode: createMockSourceNode() });
+      const rep1 = createMockRepresentation({
+        id: 'rep-1',
+        priority: 0,
+        status: 'ready',
+        sourceNode: createMockSourceNode(),
+      });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        priority: 1,
+        status: 'ready',
+        sourceNode: createMockSourceNode(),
+      });
       const { accessor } = createMockAccessor([rep1, rep2], 0);
       manager.setAccessor(accessor);
 
@@ -255,8 +263,18 @@ describe('MediaRepresentationManager', () => {
 
   describe('switchRepresentation', () => {
     it('should switch to a ready representation', async () => {
-      const rep1 = createMockRepresentation({ id: 'rep-1', priority: 0, status: 'ready', sourceNode: createMockSourceNode() });
-      const rep2 = createMockRepresentation({ id: 'rep-2', priority: 1, status: 'ready', sourceNode: createMockSourceNode() });
+      const rep1 = createMockRepresentation({
+        id: 'rep-1',
+        priority: 0,
+        status: 'ready',
+        sourceNode: createMockSourceNode(),
+      });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        priority: 1,
+        status: 'ready',
+        sourceNode: createMockSourceNode(),
+      });
       const { accessor } = createMockAccessor([rep1, rep2], 0);
       manager.setAccessor(accessor);
 
@@ -309,7 +327,13 @@ describe('MediaRepresentationManager', () => {
       });
 
       const rep1 = createMockRepresentation({ id: 'rep-1', status: 'idle', kind: 'movie', priority: 0 });
-      const rep2 = createMockRepresentation({ id: 'rep-2', status: 'ready', kind: 'proxy', priority: 1, sourceNode: createMockSourceNode() });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        status: 'ready',
+        kind: 'proxy',
+        priority: 1,
+        sourceNode: createMockSourceNode(),
+      });
       const { accessor } = createMockAccessor([rep1, rep2]);
       manager.setAccessor(accessor);
 
@@ -332,7 +356,13 @@ describe('MediaRepresentationManager', () => {
       });
 
       const rep1 = createMockRepresentation({ id: 'rep-1', status: 'idle', kind: 'movie', priority: 0 });
-      const rep2 = createMockRepresentation({ id: 'rep-2', status: 'ready', kind: 'proxy', priority: 1, sourceNode: createMockSourceNode() });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        status: 'ready',
+        kind: 'proxy',
+        priority: 1,
+        sourceNode: createMockSourceNode(),
+      });
       const { accessor } = createMockAccessor([rep1, rep2]);
       manager.setAccessor(accessor);
 
@@ -364,7 +394,12 @@ describe('MediaRepresentationManager', () => {
   describe('handleRepresentationError', () => {
     it('should fall back to a ready representation', () => {
       const rep1 = createMockRepresentation({ id: 'rep-1', status: 'error', priority: 0 });
-      const rep2 = createMockRepresentation({ id: 'rep-2', status: 'ready', priority: 1, sourceNode: createMockSourceNode() });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        status: 'ready',
+        priority: 1,
+        sourceNode: createMockSourceNode(),
+      });
       const { accessor } = createMockAccessor([rep1, rep2]);
       manager.setAccessor(accessor);
 
@@ -521,7 +556,13 @@ describe('MediaRepresentationManager', () => {
       });
 
       const rep1 = createMockRepresentation({ id: 'rep-1', status: 'idle', kind: 'movie', priority: 0 });
-      const rep2 = createMockRepresentation({ id: 'rep-2', status: 'ready', kind: 'proxy', priority: 1, sourceNode: createMockSourceNode() });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        status: 'ready',
+        kind: 'proxy',
+        priority: 1,
+        sourceNode: createMockSourceNode(),
+      });
       const { accessor } = createMockAccessor([rep1, rep2]);
       manager.setAccessor(accessor);
 

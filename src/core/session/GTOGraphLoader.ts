@@ -444,8 +444,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
               author: typeof author === 'string' ? author : '',
               createdAt: typeof createdAt === 'string' ? createdAt : '',
               modifiedAt: typeof modifiedAt === 'string' ? modifiedAt : '',
-              status: (status === 'open' || status === 'resolved' || status === 'wontfix') ? status : 'open',
-              parentId: (typeof parentId === 'string' && parentId.length > 0) ? parentId : null,
+              status: status === 'open' || status === 'resolved' || status === 'wontfix' ? status : 'open',
+              parentId: typeof parentId === 'string' && parentId.length > 0 ? parentId : null,
               color: typeof color === 'string' ? color : '#fbbf24',
             });
           }
@@ -492,7 +492,12 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
                 id,
                 shotName: typeof shotName === 'string' ? shotName : '',
                 versions,
-                activeVersionIndex: (typeof activeVersionIndex === 'number' && activeVersionIndex >= 0 && activeVersionIndex < versions.length) ? activeVersionIndex : versions.length - 1,
+                activeVersionIndex:
+                  typeof activeVersionIndex === 'number' &&
+                  activeVersionIndex >= 0 &&
+                  activeVersionIndex < versions.length
+                    ? activeVersionIndex
+                    : versions.length - 1,
               });
             }
           }
@@ -525,7 +530,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (Array.isArray(lhs) && Array.isArray(rhs)) {
           if (lhs.length !== rhs.length) {
             console.warn(
-              `connections object has mismatched lhs/rhs lengths: ${lhs.length} vs ${rhs.length}, using minimum`
+              `connections object has mismatched lhs/rhs lengths: ${lhs.length} vs ${rhs.length}, using minimum`,
             );
           }
           const len = Math.min(lhs.length, rhs.length);
@@ -563,8 +568,13 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const groupName = obj.name;
       const children: string[] = [];
       for (const child of allObjects) {
-        if (child.name.startsWith(groupName + '_') &&
-            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource' || child.protocol === 'RVMovieProc')) {
+        if (
+          child.name.startsWith(groupName + '_') &&
+          (child.protocol === 'RVFileSource' ||
+            child.protocol === 'RVImageSource' ||
+            child.protocol === 'RVMovieSource' ||
+            child.protocol === 'RVMovieProc')
+        ) {
           children.push(child.name);
         }
       }
@@ -660,7 +670,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           if (availableFiles && availableFiles.size > 0) {
             // Extract basename from movie path (e.g., /path/to/video.mp4 -> video.mp4)
             const basename = movie.split(/[/\\]/).pop();
-            
+
             if (basename && availableFiles.has(basename)) {
               // Found a match! Use the blob URL for loading
               const file = availableFiles.get(basename)!;
@@ -679,9 +689,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const proxyComp = obj.component('proxy');
       if (proxyComp?.exists()) {
         const sizeValue = proxyComp.property('size').value();
-        const size = Array.isArray(sizeValue)
-          ? (Array.isArray(sizeValue[0]) ? sizeValue[0] : sizeValue)
-          : null;
+        const size = Array.isArray(sizeValue) ? (Array.isArray(sizeValue[0]) ? sizeValue[0] : sizeValue) : null;
         if (Array.isArray(size) && size.length >= 2) {
           nodeInfo.properties.width = size[0];
           nodeInfo.properties.height = size[1];
@@ -1073,7 +1081,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof sRGB2linear === 'number') nodeInfo.properties.sRGB2linear = sRGB2linear !== 0;
         if (typeof rec709ToLinear === 'number') nodeInfo.properties.rec709ToLinear = rec709ToLinear !== 0;
         if (typeof fileGamma === 'number') nodeInfo.properties.fileGamma = fileGamma;
-        if (typeof ignoreChromaticities === 'number') nodeInfo.properties.ignoreChromaticities = ignoreChromaticities !== 0;
+        if (typeof ignoreChromaticities === 'number') {
+          nodeInfo.properties.ignoreChromaticities = ignoreChromaticities !== 0;
+        }
       }
 
       // Parse cineon component
@@ -1780,7 +1790,11 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     }
 
     // Parse RVICCTransform properties
-    if (protocol === 'RVICCTransform' || protocol === 'RVICCLinearizeTransform' || protocol === 'RVICCDisplayTransform') {
+    if (
+      protocol === 'RVICCTransform' ||
+      protocol === 'RVICCLinearizeTransform' ||
+      protocol === 'RVICCDisplayTransform'
+    ) {
       const nodeComp = obj.component('node');
       if (nodeComp?.exists()) {
         const active = nodeComp.property('active').value() as number;

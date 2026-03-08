@@ -35,9 +35,7 @@ export class FileRepresentationLoader implements RepresentationLoader {
       },
       par: representation.par ?? 1.0,
       startFrame: representation.startFrame ?? 0,
-      colorSpace: fileSourceNode.isHDR()
-        ? { transferFunction: 'linear', colorPrimaries: 'bt709' }
-        : undefined,
+      colorSpace: fileSourceNode.isHDR() ? { transferFunction: 'linear', colorPrimaries: 'bt709' } : undefined,
     };
   }
 

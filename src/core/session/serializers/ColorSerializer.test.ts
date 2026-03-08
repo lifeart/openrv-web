@@ -7,18 +7,14 @@ import { ObjectDTO } from 'gto-js';
 // ===========================================================================
 describe('ColorSerializer.buildColorExposureObject', () => {
   it('CS-001: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('exp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorExposureObject('exp'));
     expect(dto.name).toBe('exp');
     expect(dto.protocol).toBe('RVColorExposure');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-002: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('exp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorExposureObject('exp'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -26,23 +22,17 @@ describe('ColorSerializer.buildColorExposureObject', () => {
   });
 
   it('CS-003: applies custom exposure value', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('exp', { exposure: 2.5 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorExposureObject('exp', { exposure: 2.5 }));
     expect(dto.prop('color', 'exposure')).toBe(2.5);
   });
 
   it('CS-004: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('exp', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorExposureObject('exp', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 
   it('CS-005: active=true sets active to 1', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('exp', { active: true }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorExposureObject('exp', { active: true }));
     expect(dto.prop('color', 'active')).toBe(1);
   });
 });
@@ -52,18 +42,14 @@ describe('ColorSerializer.buildColorExposureObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorCurveObject', () => {
   it('CS-006: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCurveObject('curve'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCurveObject('curve'));
     expect(dto.name).toBe('curve');
     expect(dto.protocol).toBe('RVColorCurve');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-007: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCurveObject('curve'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCurveObject('curve'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -71,16 +57,12 @@ describe('ColorSerializer.buildColorCurveObject', () => {
   });
 
   it('CS-008: applies custom contrast value', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCurveObject('curve', { contrast: 0.75 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCurveObject('curve', { contrast: 0.75 }));
     expect(dto.prop('color', 'contrast')).toBe(0.75);
   });
 
   it('CS-009: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCurveObject('curve', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCurveObject('curve', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -90,18 +72,14 @@ describe('ColorSerializer.buildColorCurveObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorTemperatureObject', () => {
   it('CS-010: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorTemperatureObject('temp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorTemperatureObject('temp'));
     expect(dto.name).toBe('temp');
     expect(dto.protocol).toBe('RVColorTemperature');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-011: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorTemperatureObject('temp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorTemperatureObject('temp'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -128,9 +106,7 @@ describe('ColorSerializer.buildColorTemperatureObject', () => {
   });
 
   it('CS-013: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorTemperatureObject('temp', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorTemperatureObject('temp', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -140,18 +116,14 @@ describe('ColorSerializer.buildColorTemperatureObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorSaturationObject', () => {
   it('CS-014: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSaturationObject('sat'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSaturationObject('sat'));
     expect(dto.name).toBe('sat');
     expect(dto.protocol).toBe('RVColorSaturation');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-015: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSaturationObject('sat'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSaturationObject('sat'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -159,16 +131,12 @@ describe('ColorSerializer.buildColorSaturationObject', () => {
   });
 
   it('CS-016: applies custom saturation value', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSaturationObject('sat', { saturation: 1.5 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSaturationObject('sat', { saturation: 1.5 }));
     expect(dto.prop('color', 'saturation')).toBe(1.5);
   });
 
   it('CS-017: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSaturationObject('sat', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSaturationObject('sat', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -178,18 +146,14 @@ describe('ColorSerializer.buildColorSaturationObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorVibranceObject', () => {
   it('CS-018: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorVibranceObject('vib'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorVibranceObject('vib'));
     expect(dto.name).toBe('vib');
     expect(dto.protocol).toBe('RVColorVibrance');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-019: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorVibranceObject('vib'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorVibranceObject('vib'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -197,16 +161,12 @@ describe('ColorSerializer.buildColorVibranceObject', () => {
   });
 
   it('CS-020: applies custom vibrance value', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorVibranceObject('vib', { vibrance: 0.8 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorVibranceObject('vib', { vibrance: 0.8 }));
     expect(dto.prop('color', 'vibrance')).toBe(0.8);
   });
 
   it('CS-021: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorVibranceObject('vib', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorVibranceObject('vib', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -216,18 +176,14 @@ describe('ColorSerializer.buildColorVibranceObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorShadowObject', () => {
   it('CS-022: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorShadowObject('shd'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorShadowObject('shd'));
     expect(dto.name).toBe('shd');
     expect(dto.protocol).toBe('RVColorShadow');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-023: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorShadowObject('shd'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorShadowObject('shd'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -235,16 +191,12 @@ describe('ColorSerializer.buildColorShadowObject', () => {
   });
 
   it('CS-024: applies custom shadow value', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorShadowObject('shd', { shadow: -0.3 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorShadowObject('shd', { shadow: -0.3 }));
     expect(dto.prop('color', 'shadow')).toBe(-0.3);
   });
 
   it('CS-025: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorShadowObject('shd', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorShadowObject('shd', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -254,18 +206,14 @@ describe('ColorSerializer.buildColorShadowObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorHighlightObject', () => {
   it('CS-026: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorHighlightObject('hlt'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorHighlightObject('hlt'));
     expect(dto.name).toBe('hlt');
     expect(dto.protocol).toBe('RVColorHighlight');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-027: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorHighlightObject('hlt'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorHighlightObject('hlt'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -273,16 +221,12 @@ describe('ColorSerializer.buildColorHighlightObject', () => {
   });
 
   it('CS-028: applies custom highlight value', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorHighlightObject('hlt', { highlight: 0.6 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorHighlightObject('hlt', { highlight: 0.6 }));
     expect(dto.prop('color', 'highlight')).toBe(0.6);
   });
 
   it('CS-029: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorHighlightObject('hlt', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorHighlightObject('hlt', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -292,18 +236,14 @@ describe('ColorSerializer.buildColorHighlightObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorGrayScaleObject', () => {
   it('CS-030: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorGrayScaleObject('gray'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorGrayScaleObject('gray'));
     expect(dto.name).toBe('gray');
     expect(dto.protocol).toBe('RVColorGrayScale');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-031: has node component with active=0 by default (uses active ? 1 : 0)', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorGrayScaleObject('gray'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorGrayScaleObject('gray'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     // GrayScale uses `active ? 1 : 0`, so undefined -> 0
@@ -311,16 +251,12 @@ describe('ColorSerializer.buildColorGrayScaleObject', () => {
   });
 
   it('CS-032: active=true sets active to 1', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorGrayScaleObject('gray', { active: true }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorGrayScaleObject('gray', { active: true }));
     expect(dto.prop('node', 'active')).toBe(1);
   });
 
   it('CS-033: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorGrayScaleObject('gray', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorGrayScaleObject('gray', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 });
@@ -330,18 +266,14 @@ describe('ColorSerializer.buildColorGrayScaleObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorCDLObject', () => {
   it('CS-034: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCDLObject('cdl'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCDLObject('cdl'));
     expect(dto.name).toBe('cdl');
     expect(dto.protocol).toBe('RVColorCDL');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-035: has node component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCDLObject('cdl'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCDLObject('cdl'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     expect(n.prop('active')).toBe(1);
@@ -376,16 +308,12 @@ describe('ColorSerializer.buildColorCDLObject', () => {
   });
 
   it('CS-037: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCDLObject('cdl', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCDLObject('cdl', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 
   it('CS-038: file is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorCDLObject('cdl'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorCDLObject('cdl'));
     const n = dto.component('node');
     expect(n.hasProperty('file')).toBe(false);
   });
@@ -396,27 +324,21 @@ describe('ColorSerializer.buildColorCDLObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorLinearToSRGBObject', () => {
   it('CS-039: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorLinearToSRGBObject('lin2srgb'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorLinearToSRGBObject('lin2srgb'));
     expect(dto.name).toBe('lin2srgb');
     expect(dto.protocol).toBe('RVColorLinearToSRGB');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-040: has node component with active=1 by default', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorLinearToSRGBObject('lin2srgb'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorLinearToSRGBObject('lin2srgb'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     expect(n.prop('active')).toBe(1);
   });
 
   it('CS-041: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorLinearToSRGBObject('lin2srgb', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorLinearToSRGBObject('lin2srgb', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 });
@@ -426,27 +348,21 @@ describe('ColorSerializer.buildColorLinearToSRGBObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorSRGBToLinearObject', () => {
   it('CS-042: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSRGBToLinearObject('srgb2lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSRGBToLinearObject('srgb2lin'));
     expect(dto.name).toBe('srgb2lin');
     expect(dto.protocol).toBe('RVColorSRGBToLinear');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-043: has node component with active=1 by default', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSRGBToLinearObject('srgb2lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSRGBToLinearObject('srgb2lin'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     expect(n.prop('active')).toBe(1);
   });
 
   it('CS-044: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorSRGBToLinearObject('srgb2lin', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorSRGBToLinearObject('srgb2lin', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 });
@@ -456,18 +372,14 @@ describe('ColorSerializer.buildColorSRGBToLinearObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildPrimaryConvertObject', () => {
   it('CS-045: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildPrimaryConvertObject('prim'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildPrimaryConvertObject('prim'));
     expect(dto.name).toBe('prim');
     expect(dto.protocol).toBe('RVPrimaryConvert');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-046: has node component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildPrimaryConvertObject('prim'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildPrimaryConvertObject('prim'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     expect(n.prop('active')).toBe(1);
@@ -491,9 +403,7 @@ describe('ColorSerializer.buildPrimaryConvertObject', () => {
   });
 
   it('CS-048: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildPrimaryConvertObject('prim', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildPrimaryConvertObject('prim', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 });
@@ -503,27 +413,21 @@ describe('ColorSerializer.buildPrimaryConvertObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildOCIOObject', () => {
   it('CS-049: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.name).toBe('ocio');
     expect(dto.protocol).toBe('RVOCIO');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-050: has ocio component with active=1 by default', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     const o = dto.component('ocio');
     expect(o.exists()).toBe(true);
     expect(o.prop('active')).toBe(1);
   });
 
   it('CS-051: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('dither')).toBe(0);
@@ -531,25 +435,19 @@ describe('ColorSerializer.buildOCIOObject', () => {
   });
 
   it('CS-052: ocio_color component is omitted when outColorSpace not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.hasComponent('ocio_color')).toBe(false);
   });
 
   it('CS-053: ocio_color component is included when outColorSpace provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { outColorSpace: 'scene_linear' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { outColorSpace: 'scene_linear' }));
     const oc = dto.component('ocio_color');
     expect(oc.exists()).toBe(true);
     expect(oc.prop('outColorSpace')).toBe('scene_linear');
   });
 
   it('CS-054: ocio_look component is omitted when look not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.hasComponent('ocio_look')).toBe(false);
   });
 
@@ -569,25 +467,19 @@ describe('ColorSerializer.buildOCIOObject', () => {
   });
 
   it('CS-056: ocio_look component is included when lookDirection provided without look', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { lookDirection: 0 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { lookDirection: 0 }));
     const lk = dto.component('ocio_look');
     expect(lk.exists()).toBe(true);
     expect(lk.prop('direction')).toBe(0);
   });
 
   it('CS-057: ocio_display component is omitted when display/view not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.hasComponent('ocio_display')).toBe(false);
   });
 
   it('CS-058: ocio_display component is included when display provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { display: 'sRGB', view: 'Film' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { display: 'sRGB', view: 'Film' }));
     const d = dto.component('ocio_display');
     expect(d.exists()).toBe(true);
     expect(d.prop('display')).toBe('sRGB');
@@ -595,41 +487,31 @@ describe('ColorSerializer.buildOCIOObject', () => {
   });
 
   it('CS-059: inTransform component is omitted when url not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.hasComponent('inTransform')).toBe(false);
   });
 
   it('CS-060: inTransform component is included when url provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { inTransformUrl: '/path/to/lut.cube' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { inTransformUrl: '/path/to/lut.cube' }));
     const it_ = dto.component('inTransform');
     expect(it_.exists()).toBe(true);
     expect(it_.prop('url')).toBe('/path/to/lut.cube');
   });
 
   it('CS-061: outTransform component is omitted when url not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.hasComponent('outTransform')).toBe(false);
   });
 
   it('CS-062: outTransform component is included when url provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { outTransformUrl: '/path/to/out.cube' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { outTransformUrl: '/path/to/out.cube' }));
     const ot = dto.component('outTransform');
     expect(ot.exists()).toBe(true);
     expect(ot.prop('url')).toBe('/path/to/out.cube');
   });
 
   it('CS-063: config component is omitted when no config settings provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     expect(dto.hasComponent('config')).toBe(false);
   });
 
@@ -647,52 +529,38 @@ describe('ColorSerializer.buildOCIOObject', () => {
   });
 
   it('CS-065: active=false sets ocio active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { active: false }));
     expect(dto.prop('ocio', 'active')).toBe(0);
   });
 
   it('CS-066: function property is included when provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { function: 'color' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { function: 'color' }));
     expect(dto.prop('ocio', 'function')).toBe('color');
   });
 
   it('CS-067: function property is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio'));
     const o = dto.component('ocio');
     expect(o.hasProperty('function')).toBe(false);
   });
 
   it('CS-068: inColorSpace is included when provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { inColorSpace: 'ACEScg' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { inColorSpace: 'ACEScg' }));
     expect(dto.prop('ocio', 'inColorSpace')).toBe('ACEScg');
   });
 
   it('CS-069: lut3DSize is included when provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { lut3DSize: 64 }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { lut3DSize: 64 }));
     expect(dto.prop('ocio', 'lut3DSize')).toBe(64);
   });
 
   it('CS-070: dither=true sets dither to 1', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { dither: true }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { dither: true }));
     expect(dto.prop('color', 'dither')).toBe(1);
   });
 
   it('CS-071: custom channelOrder is applied', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildOCIOObject('ocio', { channelOrder: 'BGRA' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildOCIOObject('ocio', { channelOrder: 'BGRA' }));
     expect(dto.prop('color', 'channelOrder')).toBe('BGRA');
   });
 
@@ -732,18 +600,14 @@ describe('ColorSerializer.buildOCIOObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildICCObject', () => {
   it('CS-073: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildICCObject('icc'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildICCObject('icc'));
     expect(dto.name).toBe('icc');
     expect(dto.protocol).toBe('RVICCTransform');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-074: has node component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildICCObject('icc'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildICCObject('icc'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     expect(n.prop('active')).toBe(1);
@@ -764,9 +628,7 @@ describe('ColorSerializer.buildICCObject', () => {
   });
 
   it('CS-076: inProfile component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildICCObject('icc'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildICCObject('icc'));
     expect(dto.hasComponent('inProfile')).toBe(false);
   });
 
@@ -784,9 +646,7 @@ describe('ColorSerializer.buildICCObject', () => {
   });
 
   it('CS-078: outProfile component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildICCObject('icc'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildICCObject('icc'));
     expect(dto.hasComponent('outProfile')).toBe(false);
   });
 
@@ -804,9 +664,7 @@ describe('ColorSerializer.buildICCObject', () => {
   });
 
   it('CS-080: active=false sets active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildICCObject('icc', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildICCObject('icc', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 
@@ -828,25 +686,19 @@ describe('ColorSerializer.buildICCObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildLinearizeObject', () => {
   it('CS-082: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin'));
     expect(dto.name).toBe('lin');
     expect(dto.protocol).toBe('RVLinearize');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-083: has node component with active=1 by default', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin'));
     expect(dto.prop('node', 'active')).toBe(1);
   });
 
   it('CS-084: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -862,9 +714,7 @@ describe('ColorSerializer.buildLinearizeObject', () => {
   });
 
   it('CS-085: has cineon component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin'));
     const cin = dto.component('cineon');
     expect(cin.exists()).toBe(true);
     expect(cin.prop('whiteCodeValue')).toBe(685);
@@ -873,9 +723,7 @@ describe('ColorSerializer.buildLinearizeObject', () => {
   });
 
   it('CS-086: has lut component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin'));
     const l = dto.component('lut');
     expect(l.exists()).toBe(true);
     expect(l.prop('active')).toBe(0);
@@ -956,9 +804,7 @@ describe('ColorSerializer.buildLinearizeObject', () => {
   });
 
   it('CS-090: CDL component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin'));
     expect(dto.hasComponent('CDL')).toBe(false);
   });
 
@@ -996,9 +842,7 @@ describe('ColorSerializer.buildLinearizeObject', () => {
   });
 
   it('CS-093: active=false sets node active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLinearizeObject('lin', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLinearizeObject('lin', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 });
@@ -1008,25 +852,19 @@ describe('ColorSerializer.buildLinearizeObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildLookLUTObject', () => {
   it('CS-094: returns correct name and protocol with defaults (RVLookLUT)', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('llut'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('llut'));
     expect(dto.name).toBe('llut');
     expect(dto.protocol).toBe('RVLookLUT');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-095: uses RVCacheLUT protocol when specified', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('clut', {}, 'RVCacheLUT'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('clut', {}, 'RVCacheLUT'));
     expect(dto.protocol).toBe('RVCacheLUT');
   });
 
   it('CS-096: has node and lut components with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('llut'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('llut'));
     const n = dto.component('node');
     expect(n.exists()).toBe(true);
     expect(n.prop('active')).toBe(1);
@@ -1071,16 +909,12 @@ describe('ColorSerializer.buildLookLUTObject', () => {
   });
 
   it('CS-098: active=false sets node active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('llut', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('llut', { active: false }));
     expect(dto.prop('node', 'active')).toBe(0);
   });
 
   it('CS-099: inMatrix and outMatrix are omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('llut'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('llut'));
     const l = dto.component('lut');
     expect(l.hasProperty('inMatrix')).toBe(false);
     expect(l.hasProperty('outMatrix')).toBe(false);
@@ -1093,9 +927,7 @@ describe('ColorSerializer.buildLookLUTObject', () => {
       [0, 0, 1, 0],
       [0, 0, 0, 1],
     ];
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('llut', { inMatrix: matrix }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('llut', { inMatrix: matrix }));
     const l = dto.component('lut');
     expect(l.hasProperty('inMatrix')).toBe(true);
     expect(l.property('inMatrix').data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -1103,10 +935,14 @@ describe('ColorSerializer.buildLookLUTObject', () => {
 
   it('CS-101: lut:output component is included for RVCacheLUT with data', () => {
     const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('clut', {
-        lutData: [0.1, 0.2, 0.3],
-        prelutData: [0.5, 0.6],
-      }, 'RVCacheLUT'),
+      ColorSerializer.buildLookLUTObject(
+        'clut',
+        {
+          lutData: [0.1, 0.2, 0.3],
+          prelutData: [0.5, 0.6],
+        },
+        'RVCacheLUT',
+      ),
     );
     const output = dto.component('lut:output');
     expect(output.exists()).toBe(true);
@@ -1116,17 +952,19 @@ describe('ColorSerializer.buildLookLUTObject', () => {
 
   it('CS-102: lut:output component is omitted for RVLookLUT even with data', () => {
     const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('llut', {
-        lutData: [0.1, 0.2, 0.3],
-      }, 'RVLookLUT'),
+      ColorSerializer.buildLookLUTObject(
+        'llut',
+        {
+          lutData: [0.1, 0.2, 0.3],
+        },
+        'RVLookLUT',
+      ),
     );
     expect(dto.hasComponent('lut:output')).toBe(false);
   });
 
   it('CS-103: lut:output component is omitted for RVCacheLUT without data', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildLookLUTObject('clut', {}, 'RVCacheLUT'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildLookLUTObject('clut', {}, 'RVCacheLUT'));
     expect(dto.hasComponent('lut:output')).toBe(false);
   });
 });
@@ -1136,18 +974,14 @@ describe('ColorSerializer.buildLookLUTObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildColorObject', () => {
   it('CS-104: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color'));
     expect(dto.name).toBe('color');
     expect(dto.protocol).toBe('RVColor');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-105: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -1227,9 +1061,7 @@ describe('ColorSerializer.buildColorObject', () => {
   });
 
   it('CS-110: CDL component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color'));
     expect(dto.hasComponent('CDL')).toBe(false);
   });
 
@@ -1275,9 +1107,7 @@ describe('ColorSerializer.buildColorObject', () => {
   });
 
   it('CS-113: luminanceLUT component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color'));
     expect(dto.hasComponent('luminanceLUT')).toBe(false);
   });
 
@@ -1317,9 +1147,7 @@ describe('ColorSerializer.buildColorObject', () => {
   });
 
   it('CS-116: outputMatrix component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color'));
     expect(dto.hasComponent('matrix:output')).toBe(false);
   });
 
@@ -1330,9 +1158,7 @@ describe('ColorSerializer.buildColorObject', () => {
       [0, 0, 1, 0],
       [0, 0, 0, 1],
     ];
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color', { outputMatrix: matrix }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color', { outputMatrix: matrix }));
     const m = dto.component('matrix:output');
     expect(m.exists()).toBe(true);
     expect(m.property('RGBA').data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -1340,18 +1166,14 @@ describe('ColorSerializer.buildColorObject', () => {
 
   it('CS-118: outputMatrix component is included with flat array', () => {
     const flat = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color', { outputMatrix: flat }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color', { outputMatrix: flat }));
     const m = dto.component('matrix:output');
     expect(m.exists()).toBe(true);
     expect(m.property('RGBA').data).toEqual(flat);
   });
 
   it('CS-119: active=false sets color active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorObject('color', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorObject('color', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -1361,18 +1183,14 @@ describe('ColorSerializer.buildColorObject', () => {
 // ===========================================================================
 describe('ColorSerializer.buildDisplayColorObject', () => {
   it('CS-120: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp'));
     expect(dto.name).toBe('disp');
     expect(dto.protocol).toBe('RVDisplayColor');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('CS-121: has color component with default values', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp'));
     const c = dto.component('color');
     expect(c.exists()).toBe(true);
     expect(c.prop('active')).toBe(1);
@@ -1417,9 +1235,7 @@ describe('ColorSerializer.buildDisplayColorObject', () => {
   });
 
   it('CS-123: matrix is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp'));
     const c = dto.component('color');
     expect(c.hasProperty('matrix')).toBe(false);
   });
@@ -1431,33 +1247,25 @@ describe('ColorSerializer.buildDisplayColorObject', () => {
       [0, 0, 1, 0],
       [0, 0, 0, 1],
     ];
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp', { matrix }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp', { matrix }));
     const c = dto.component('color');
     expect(c.property('matrix').data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   });
 
   it('CS-125: overrideColorspace is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp'));
     const c = dto.component('color');
     expect(c.hasProperty('overrideColorspace')).toBe(false);
   });
 
   it('CS-126: overrideColorspace is included when provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp', { overrideColorspace: 'linear' }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp', { overrideColorspace: 'linear' }));
     const c = dto.component('color');
     expect(c.prop('overrideColorspace')).toBe('linear');
   });
 
   it('CS-127: chromaticities component is omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp'));
     expect(dto.hasComponent('chromaticities')).toBe(false);
   });
 
@@ -1512,9 +1320,7 @@ describe('ColorSerializer.buildDisplayColorObject', () => {
   });
 
   it('CS-131: active=false sets color active to 0', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildDisplayColorObject('disp', { active: false }),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildDisplayColorObject('disp', { active: false }));
     expect(dto.prop('color', 'active')).toBe(0);
   });
 });
@@ -1524,12 +1330,8 @@ describe('ColorSerializer.buildDisplayColorObject', () => {
 // ===========================================================================
 describe('ColorSerializer cross-cutting tests', () => {
   it('CS-132: each method returns a standalone ObjectData (not shared state)', () => {
-    const a = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('a', { exposure: 1.0 }),
-    );
-    const b = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('b', { exposure: 2.0 }),
-    );
+    const a = new ObjectDTO(ColorSerializer.buildColorExposureObject('a', { exposure: 1.0 }));
+    const b = new ObjectDTO(ColorSerializer.buildColorExposureObject('b', { exposure: 2.0 }));
     expect(a.name).toBe('a');
     expect(b.name).toBe('b');
     expect(a.prop('color', 'exposure')).toBe(1.0);
@@ -1537,9 +1339,7 @@ describe('ColorSerializer cross-cutting tests', () => {
   });
 
   it('CS-133: object names with special characters are preserved', () => {
-    const dto = new ObjectDTO(
-      ColorSerializer.buildColorExposureObject('source_group000000_exposure'),
-    );
+    const dto = new ObjectDTO(ColorSerializer.buildColorExposureObject('source_group000000_exposure'));
     expect(dto.name).toBe('source_group000000_exposure');
   });
 

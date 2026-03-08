@@ -6,7 +6,7 @@
  */
 
 import {
-  PerspectiveCorrectionParams,
+  type PerspectiveCorrectionParams,
   DEFAULT_PERSPECTIVE_PARAMS,
   isPerspectiveActive,
   applyPerspectiveCorrection,

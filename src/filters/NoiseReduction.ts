@@ -9,10 +9,10 @@ import { clamp } from '../utils/math';
 import { luminanceRec709 } from '../color/PixelMath';
 
 export interface NoiseReductionParams {
-  strength: number;           // 0-100 (overall strength)
-  luminanceStrength: number;  // 0-100 (defaults to strength)
-  chromaStrength: number;     // 0-100 (defaults to strength * 1.5) - controls color noise reduction independently from luma
-  radius: number;             // 1-5 (kernel size = radius * 2 + 1)
+  strength: number; // 0-100 (overall strength)
+  luminanceStrength: number; // 0-100 (defaults to strength)
+  chromaStrength: number; // 0-100 (defaults to strength * 1.5) - controls color noise reduction independently from luma
+  radius: number; // 1-5 (kernel size = radius * 2 + 1)
 }
 
 export const DEFAULT_NOISE_REDUCTION_PARAMS: NoiseReductionParams = {
@@ -40,10 +40,7 @@ function luminance(r: number, g: number, b: number): number {
  *   are blended back, allowing stronger color noise reduction while
  *   preserving luminance detail.
  */
-export function applyNoiseReduction(
-  imageData: ImageData,
-  params: NoiseReductionParams
-): void {
+export function applyNoiseReduction(imageData: ImageData, params: NoiseReductionParams): void {
   const { data, width, height } = imageData;
   const { strength, luminanceStrength, chromaStrength, radius } = params;
 

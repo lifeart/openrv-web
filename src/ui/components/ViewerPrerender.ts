@@ -3,16 +3,16 @@
  * Contains helper functions for prerender buffer management.
  */
 
-import { Session } from '../../core/session/Session';
-import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
-import { AllEffectsState } from '../../utils/effects/EffectProcessor';
-import { ColorAdjustments } from './ColorControls';
-import { FilterSettings } from './FilterControl';
+import { type Session } from '../../core/session/Session';
+import { type PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
+import { type AllEffectsState } from '../../utils/effects/EffectProcessor';
+import { type ColorAdjustments } from './ColorControls';
+import { type FilterSettings } from './FilterControl';
 import { type CDLValues, type ColorCurvesData } from '../../color/ColorProcessingFacade';
-import { ChannelMode } from './ChannelSelect';
-import { ColorWheels } from './ColorWheels';
-import { HSLQualifier } from './HSLQualifier';
-import { ToneMappingState } from './ToneMappingControl';
+import { type ChannelMode } from './ChannelSelect';
+import { type ColorWheels } from './ColorWheels';
+import { type HSLQualifier } from './HSLQualifier';
+import { type ToneMappingState } from './ToneMappingControl';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
@@ -23,7 +23,7 @@ import { DEFAULT_FILM_EMULATION_PARAMS } from '../../filters/FilmEmulation';
  * This returns raw frames from the session for subsequent effect processing.
  */
 export function createFrameLoader(
-  session: Session
+  session: Session,
 ): (frame: number) => HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap | null {
   return (frame: number) => {
     try {
@@ -40,9 +40,11 @@ export function createFrameLoader(
         return session.getSequenceFrameSync(frame) || null;
       } else if (source.type === 'video') {
         // For videos with mediabunny, get cached frame canvas
-        if (typeof session.isUsingMediabunny === 'function' &&
-            session.isUsingMediabunny() &&
-            typeof session.getVideoFrameCanvas === 'function') {
+        if (
+          typeof session.isUsingMediabunny === 'function' &&
+          session.isUsingMediabunny() &&
+          typeof session.getVideoFrameCanvas === 'function'
+        ) {
           return session.getVideoFrameCanvas(frame) || null;
         }
       }
@@ -112,7 +114,7 @@ export function getPrerenderStats(
   prerenderBuffer: PrerenderBufferManager | null,
   totalFrames: number,
   sourceWidth: number,
-  sourceHeight: number
+  sourceHeight: number,
 ): PrerenderStats | null {
   if (!prerenderBuffer) {
     return null;

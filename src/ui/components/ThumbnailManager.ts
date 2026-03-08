@@ -8,7 +8,7 @@
  * - AbortController support for cancellation on source change
  */
 
-import { Session } from '../../core/session/Session';
+import { type Session } from '../../core/session/Session';
 import { LRUCache } from '../../utils/LRUCache';
 
 export interface ThumbnailSlot {
@@ -126,7 +126,7 @@ export class ThumbnailManager {
     trackHeight: number,
     duration: number,
     sourceWidth: number,
-    sourceHeight: number
+    sourceHeight: number,
   ): ThumbnailSlot[] {
     if (duration <= 1 || sourceWidth <= 0 || sourceHeight <= 0 || trackWidth <= 0) {
       this.slots = [];
@@ -244,7 +244,7 @@ export class ThumbnailManager {
       if (!source) return;
 
       // Find the slot for this frame to get correct dimensions
-      const slot = this.slots.find(s => s.frame === frame);
+      const slot = this.slots.find((s) => s.frame === frame);
       const thumbWidth = slot?.width ?? 48;
       const thumbHeight = slot?.height ?? 27;
 
@@ -275,7 +275,11 @@ export class ThumbnailManager {
       if (!sourceElement || signal.aborted) return;
 
       // Guard against detached ImageBitmaps (closed before thumbnail generation)
-      if (typeof ImageBitmap !== 'undefined' && sourceElement instanceof ImageBitmap && (sourceElement.width === 0 || sourceElement.height === 0)) {
+      if (
+        typeof ImageBitmap !== 'undefined' &&
+        sourceElement instanceof ImageBitmap &&
+        (sourceElement.width === 0 || sourceElement.height === 0)
+      ) {
         this.queueRetry(frame);
         return;
       }
@@ -368,7 +372,7 @@ export class ThumbnailManager {
    */
   private queueRetry(frame: number): void {
     // Check if already queued
-    const existing = this.pendingRetries.find(p => p.frame === frame);
+    const existing = this.pendingRetries.find((p) => p.frame === frame);
     if (existing) {
       return;
     }
@@ -431,7 +435,10 @@ export class ThumbnailManager {
     }
   }
 
-  private acquireCanvas(width: number, height: number): {
+  private acquireCanvas(
+    width: number,
+    height: number,
+  ): {
     canvas: HTMLCanvasElement | OffscreenCanvas;
     ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   } | null {

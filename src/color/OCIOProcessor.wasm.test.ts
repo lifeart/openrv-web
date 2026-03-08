@@ -37,7 +37,7 @@ function createMockExports(): OCIOWasmExports {
     ocioGenerateShaderCode: vi.fn(() => SAMPLE_GLSL),
     ocioGetProcessorLUT3D: vi.fn((_, size: number) => new Float32Array(size * size * size * 3)),
     ocioDestroyProcessor: vi.fn(),
-    ocioApplyRGB: vi.fn(() => new Float32Array([0.25, 0.50, 0.75])),
+    ocioApplyRGB: vi.fn(() => new Float32Array([0.25, 0.5, 0.75])),
     ocioGetVersion: vi.fn(() => '2.3.1'),
   };
 }
@@ -82,7 +82,7 @@ describe('OCIOProcessor WASM Integration', () => {
 
     it('PROC-WASM-002: setWasmPipeline switches to WASM mode', () => {
       const modes: Array<{ mode: OCIOProcessingMode; reason: string }> = [];
-      processor.on('processingModeChanged', e => modes.push(e));
+      processor.on('processingModeChanged', (e) => modes.push(e));
 
       processor.setWasmPipeline(pipeline);
 

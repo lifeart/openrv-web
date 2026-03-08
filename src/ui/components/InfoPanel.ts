@@ -9,7 +9,7 @@
  * - Configurable fields
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
@@ -365,7 +365,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
    * Convert RGB to hex color
    */
   private rgbToHex(r: number, g: number, b: number): string {
-    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
   }
 
   /**

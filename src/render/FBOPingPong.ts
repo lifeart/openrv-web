@@ -45,17 +45,8 @@ export class FBOPingPong {
    * Ensure FBOs exist and match dimensions/format.
    * Returns false if allocation failed (e.g., no EXT_color_buffer_float).
    */
-  ensure(
-    gl: WebGL2RenderingContext,
-    width: number,
-    height: number,
-    format: 'rgba16f' | 'rgba8' = 'rgba8',
-  ): boolean {
-    if (
-      this.fbos[0] && this.fbos[1] &&
-      this._width === width && this._height === height &&
-      this._format === format
-    ) {
+  ensure(gl: WebGL2RenderingContext, width: number, height: number, format: 'rgba16f' | 'rgba8' = 'rgba8'): boolean {
+    if (this.fbos[0] && this.fbos[1] && this._width === width && this._height === height && this._format === format) {
       return true;
     }
 
@@ -63,7 +54,10 @@ export class FBOPingPong {
 
     for (let i = 0; i < 2; i++) {
       const texture = gl.createTexture();
-      if (!texture) { this.dispose(gl); return false; }
+      if (!texture) {
+        this.dispose(gl);
+        return false;
+      }
 
       gl.bindTexture(gl.TEXTURE_2D, texture);
       const internalFormat = format === 'rgba16f' ? gl.RGBA16F : gl.RGBA8;
@@ -76,7 +70,11 @@ export class FBOPingPong {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
       const fbo = gl.createFramebuffer();
-      if (!fbo) { gl.deleteTexture(texture); this.dispose(gl); return false; }
+      if (!fbo) {
+        gl.deleteTexture(texture);
+        this.dispose(gl);
+        return false;
+      }
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
@@ -155,15 +153,27 @@ export class FBOPingPong {
     for (let i = 0; i < 2; i++) {
       const tex = this.textures[i];
       const fbo = this.fbos[i];
-      if (tex) { gl.deleteTexture(tex); this.textures[i] = null; }
-      if (fbo) { gl.deleteFramebuffer(fbo); this.fbos[i] = null; }
+      if (tex) {
+        gl.deleteTexture(tex);
+        this.textures[i] = null;
+      }
+      if (fbo) {
+        gl.deleteFramebuffer(fbo);
+        this.fbos[i] = null;
+      }
     }
     this._width = 0;
     this._height = 0;
     this._format = 'rgba8';
   }
 
-  getWidth(): number { return this._width; }
-  getHeight(): number { return this._height; }
-  getFormat(): 'rgba16f' | 'rgba8' { return this._format; }
+  getWidth(): number {
+    return this._width;
+  }
+  getHeight(): number {
+    return this._height;
+  }
+  getFormat(): 'rgba16f' | 'rgba8' {
+    return this._format;
+  }
 }

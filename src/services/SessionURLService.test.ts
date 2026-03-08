@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  SessionURLService,
-  type SessionURLDeps,
-} from './SessionURLService';
+import { SessionURLService, type SessionURLDeps } from './SessionURLService';
 import type { SessionURLState } from '../core/session/SessionURLManager';
 import { encodeSessionState } from '../core/session/SessionURLManager';
 import { createMockSession, createMockViewer } from '../../test/mocks';
@@ -311,7 +308,9 @@ describe('SessionURLService', () => {
     });
 
     it('SU-013: always calls endApplyRemote even if an error occurs', () => {
-      deps.session.setCurrentSource = vi.fn().mockImplementation(() => { throw new Error('boom'); });
+      deps.session.setCurrentSource = vi.fn().mockImplementation(() => {
+        throw new Error('boom');
+      });
 
       expect(() => {
         service.applySessionURLState({

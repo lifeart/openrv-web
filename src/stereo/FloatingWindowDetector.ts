@@ -14,11 +14,7 @@
  */
 
 import { clamp } from '../utils/math';
-import {
-  measureDisparityAtPoint,
-  type DisparityMeasureParams,
-  DEFAULT_MEASURE_PARAMS,
-} from './ConvergenceMeasure';
+import { measureDisparityAtPoint, type DisparityMeasureParams, DEFAULT_MEASURE_PARAMS } from './ConvergenceMeasure';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -157,11 +153,7 @@ function sampleEdgeDisparity(
 /**
  * Analyze disparity samples for a single edge and produce violation info.
  */
-function analyzeEdge(
-  edge: ViolationEdge,
-  disparities: number[],
-  threshold: number,
-): EdgeViolation | null {
+function analyzeEdge(edge: ViolationEdge, disparities: number[], threshold: number): EdgeViolation | null {
   if (disparities.length === 0) return null;
 
   let violatingCount = 0;
@@ -226,7 +218,7 @@ export function detectFloatingWindowViolations(
     hasViolation: violations.length > 0,
     violations,
     worstDisparity,
-    affectedEdges: violations.map(v => v.edge),
+    affectedEdges: violations.map((v) => v.edge),
   };
 }
 
@@ -262,9 +254,7 @@ export function renderViolationOverlay(
   for (const v of result.violations) {
     // Severity: 0 to 1, based on how negative the disparity is (more negative = more severe)
     // Normalize using worst disparity as reference
-    const severity = result.worstDisparity !== 0
-      ? clamp(v.maxViolationDisparity / result.worstDisparity, 0, 1)
-      : 1;
+    const severity = result.worstDisparity !== 0 ? clamp(v.maxViolationDisparity / result.worstDisparity, 0, 1) : 1;
     edgeSeverity.set(v.edge, severity);
   }
 

@@ -34,7 +34,13 @@ import {
   parseTmapBox,
 } from './AVIFGainmapDecoder';
 import { drawImageWithOrientation } from './shared';
-import { type GainMapMetadata, parseGainMapMetadataFromXMP, tmapToGainMapMetadata, reconstructHDR, defaultGainMapMetadata } from './GainMapMetadata';
+import {
+  type GainMapMetadata,
+  parseGainMapMetadataFromXMP,
+  tmapToGainMapMetadata,
+  reconstructHDR,
+  defaultGainMapMetadata,
+} from './GainMapMetadata';
 
 // =============================================================================
 // Types
@@ -280,8 +286,8 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
 
   // 5. Parse iloc → get byte ranges for primary and gainmap items
   const locations = parseIloc(view, meta.dataStart, meta.dataEnd);
-  const primaryLoc = locations.find(l => l.itemId === primaryItemId);
-  const gainmapLoc = locations.find(l => l.itemId === gainmapItemId);
+  const primaryLoc = locations.find((l) => l.itemId === primaryItemId);
+  const gainmapLoc = locations.find((l) => l.itemId === gainmapItemId);
 
   if (!primaryLoc || !gainmapLoc) return null;
   if (primaryLoc.extents.length === 0 || gainmapLoc.extents.length === 0) return null;
@@ -308,7 +314,7 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
     const properties = enumerateIpcoProperties(view, ipco.dataStart, ipco.dataEnd);
     const gainmapPropIndices = getItemPropertyIndices(view, ipma, gainmapItemId);
     for (const propIdx of gainmapPropIndices) {
-      const prop = properties.find(p => p.index === propIdx);
+      const prop = properties.find((p) => p.index === propIdx);
       if (prop && prop.type === 'hvcC') {
         // Copy the entire hvcC box (including header) for embedding in standalone wrapper
         gainmapHvcC = new Uint8Array(buffer.slice(prop.boxStart, prop.boxEnd));
@@ -325,7 +331,7 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
     if (!gainmapHvcC) {
       const primaryPropIndices = getItemPropertyIndices(view, ipma, primaryItemId);
       for (const propIdx of primaryPropIndices) {
-        const prop = properties.find(p => p.index === propIdx);
+        const prop = properties.find((p) => p.index === propIdx);
         if (prop && prop.type === 'hvcC') {
           gainmapHvcC = new Uint8Array(buffer.slice(prop.boxStart, prop.boxEnd));
           break;
@@ -358,12 +364,12 @@ function extractHEICGainMapMetadata(
   items: import('./AVIFGainmapDecoder').ItemEntry[],
   locations: import('./AVIFGainmapDecoder').ItemLocation[],
   ipcoStart: number,
-  ipcoEnd: number
+  ipcoEnd: number,
 ): { headroom: number; metadata: GainMapMetadata } | null {
   // Try XMP from mime-type items
   for (const item of items) {
     if (item.type === 'mime') {
-      const loc = locations.find(l => l.itemId === item.id);
+      const loc = locations.find((l) => l.itemId === item.id);
       if (!loc || loc.extents.length === 0) continue;
 
       const offset = loc.baseOffset + loc.extents[0]!.offset;
@@ -486,8 +492,12 @@ export function parseHEICColorInfo(buffer: ArrayBuffer): HEICColorInfo | null {
  * @param imirAxis - Optional imir mirror axis (0 or 1) to embed
  */
 export function buildStandaloneHEIC(
-  codedData: Uint8Array, hvcC: Uint8Array, width: number, height: number,
-  irotAngle?: number, imirAxis?: number,
+  codedData: Uint8Array,
+  hvcC: Uint8Array,
+  width: number,
+  height: number,
+  irotAngle?: number,
+  imirAxis?: number,
 ): ArrayBuffer {
   const parts: Uint8Array[] = [];
 
@@ -682,7 +692,7 @@ function scaleImageData(
   srcWidth: number,
   srcHeight: number,
   dstWidth: number,
-  dstHeight: number
+  dstHeight: number,
 ): Uint8ClampedArray {
   if (srcWidth === dstWidth && srcHeight === dstHeight) {
     return data;
@@ -707,7 +717,7 @@ function scaleImageData(
  */
 export async function decodeHEICGainmapToFloat32(
   buffer: ArrayBuffer,
-  info: HEICGainmapInfo
+  info: HEICGainmapInfo,
 ): Promise<{
   width: number;
   height: number;
@@ -734,7 +744,12 @@ export async function decodeHEICGainmapToFloat32(
 
     let gainmapBlob: Blob;
     if (info.gainmapHvcC) {
-      const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC, info.gainmapWidth, info.gainmapHeight);
+      const gainmapHEIC = buildStandaloneHEIC(
+        gainmapCodedData,
+        info.gainmapHvcC,
+        info.gainmapWidth,
+        info.gainmapHeight,
+      );
       gainmapBlob = new Blob([gainmapHEIC], { type: 'image/heic' });
     } else {
       gainmapBlob = new Blob([gainmapCodedData], { type: 'image/heic' });
@@ -778,19 +793,17 @@ export async function decodeHEICGainmapToFloat32(
       throw new Error('Cannot decode HEIC gainmap: no hvcC decoder configuration found');
     }
     const gainmapHEIC = buildStandaloneHEIC(
-      gainmapCodedData, info.gainmapHvcC, info.gainmapWidth, info.gainmapHeight,
-      transforms.irotAngle, transforms.imirAxis
+      gainmapCodedData,
+      info.gainmapHvcC,
+      info.gainmapWidth,
+      info.gainmapHeight,
+      transforms.irotAngle,
+      transforms.imirAxis,
     );
     const gainResult = await decodeHEICToImageData(gainmapHEIC);
 
     // Scale gainmap to base dimensions if they differ
-    gainData = scaleImageData(
-      gainResult.data,
-      gainResult.width,
-      gainResult.height,
-      width,
-      height
-    );
+    gainData = scaleImageData(gainResult.data, gainResult.width, gainResult.height, width, height);
   }
 
   // Apply HDR reconstruction per-pixel using shared module

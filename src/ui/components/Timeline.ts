@@ -1,9 +1,15 @@
-import { Session } from '../../core/session/Session';
-import { PaintEngine } from '../../paint/PaintEngine';
+import { type Session } from '../../core/session/Session';
+import { type PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
 import { TimelineContextMenu } from './TimelineContextMenu';
-import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
+import {
+  formatTimecode,
+  formatFrameDisplay,
+  type TimecodeDisplayMode,
+  getNextDisplayMode,
+  getDisplayModeLabel,
+} from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -35,7 +41,12 @@ export class Timeline {
   private thumbnailManager: ThumbnailManager;
   private thumbnailsEnabled = true;
   private static readonly DISPLAY_MODE_STORAGE_KEY = 'openrv.timeline.displayMode';
-  private static readonly VALID_DISPLAY_MODES: readonly TimecodeDisplayMode[] = ['frames', 'timecode', 'seconds', 'footage'];
+  private static readonly VALID_DISPLAY_MODES: readonly TimecodeDisplayMode[] = [
+    'frames',
+    'timecode',
+    'seconds',
+    'footage',
+  ];
 
   private _timecodeDisplayMode: TimecodeDisplayMode = 'frames';
 
@@ -217,33 +228,41 @@ export class Timeline {
 
     // Listen to session changes
     this.subs.add(this.session.on('frameChanged', () => this.scheduleDraw()));
-    this.subs.add(this.session.on('playbackChanged', (isPlaying) => {
-      if (isPlaying) {
-        this.thumbnailManager.pauseLoading();
-      } else {
-        this.thumbnailManager.resumeLoading();
-      }
-      this.scheduleDraw();
-    }));
-    this.subs.add(this.session.on('durationChanged', () => {
-      this.recalculateThumbnails();
-      this.scheduleDraw();
-    }));
-    this.subs.add(this.session.on('sourceLoaded', () => {
-      this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
-      this.loadThumbnails();
-      this.scheduleDraw();
-    }));
+    this.subs.add(
+      this.session.on('playbackChanged', (isPlaying) => {
+        if (isPlaying) {
+          this.thumbnailManager.pauseLoading();
+        } else {
+          this.thumbnailManager.resumeLoading();
+        }
+        this.scheduleDraw();
+      }),
+    );
+    this.subs.add(
+      this.session.on('durationChanged', () => {
+        this.recalculateThumbnails();
+        this.scheduleDraw();
+      }),
+    );
+    this.subs.add(
+      this.session.on('sourceLoaded', () => {
+        this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
+        this.loadThumbnails();
+        this.scheduleDraw();
+      }),
+    );
     this.subs.add(this.session.on('inOutChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('loopModeChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('marksChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('rangeShifted', () => this.flashRangeShift()));
 
     // Listen to theme changes so canvas redraws with new colors
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      this.cachedColors = null;
-      this.scheduleDraw();
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        this.cachedColors = null;
+        this.scheduleDraw();
+      }),
+    );
 
     // Listen to paint engine changes (only once)
     this.subscribeToPaintEngine();
@@ -384,7 +403,7 @@ export class Timeline {
       trackHeight,
       duration,
       source.width,
-      source.height
+      source.height,
     );
 
     // Start loading thumbnails asynchronously
@@ -460,7 +479,7 @@ export class Timeline {
     }
 
     this.session.goToFrame(nearestFrame);
-  }
+  };
 
   private onPointerDown = (e: PointerEvent): void => {
     // Only left-clicks trigger seeking; right-clicks are handled by contextmenu
@@ -653,13 +672,13 @@ export class Timeline {
         const audioDuration = waveformData.duration;
         this.waveformRenderer.render(
           ctx,
-          padding + 2,           // x: slight inset
-          trackY + 2,            // y: slight inset
-          trackWidth - 4,        // width: with margin
-          trackHeight - 4,       // height: with margin
-          0,                     // startTime
-          audioDuration,         // endTime
-          colors.waveform
+          padding + 2, // x: slight inset
+          trackY + 2, // y: slight inset
+          trackWidth - 4, // width: with margin
+          trackHeight - 4, // height: with margin
+          0, // startTime
+          audioDuration, // endTime
+          colors.waveform,
         );
       }
     }
@@ -725,10 +744,7 @@ export class Timeline {
 
     // Draw note overlay bars (between marks and playhead)
     if (this.noteOverlay) {
-      this.noteOverlay.update(
-        ctx, trackWidth, duration, padding,
-        this.session.currentSourceIndex, trackY, trackHeight,
-      );
+      this.noteOverlay.update(ctx, trackWidth, duration, padding, this.session.currentSourceIndex, trackY, trackHeight);
     }
 
     // Draw transition overlays (if playlist mode is active)
@@ -739,8 +755,7 @@ export class Timeline {
       const totalDuration = this.playlistManager.getTotalDuration();
 
       if (totalDuration > 1) {
-        const transFrameToX = (frame: number) =>
-          padding + ((frame - 1) / Math.max(1, totalDuration - 1)) * trackWidth;
+        const transFrameToX = (frame: number) => padding + ((frame - 1) / Math.max(1, totalDuration - 1)) * trackWidth;
 
         for (let i = 0; i < transitions.length; i++) {
           const transition = transitions[i];
@@ -761,21 +776,23 @@ export class Timeline {
           // Small label
           const labelWidth = x2 - x1;
           if (labelWidth > 30) {
-            const abbrev = transition.type === 'crossfade' ? 'CF' :
-              transition.type === 'dissolve' ? 'DS' :
-              transition.type === 'wipe-left' ? 'WL' :
-              transition.type === 'wipe-right' ? 'WR' :
-              transition.type === 'wipe-up' ? 'WU' :
-              'WD';
+            const abbrev =
+              transition.type === 'crossfade'
+                ? 'CF'
+                : transition.type === 'dissolve'
+                  ? 'DS'
+                  : transition.type === 'wipe-left'
+                    ? 'WL'
+                    : transition.type === 'wipe-right'
+                      ? 'WR'
+                      : transition.type === 'wipe-up'
+                        ? 'WU'
+                        : 'WD';
             ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
             ctx.fillStyle = 'rgba(255, 165, 0, 0.9)';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(
-              `${abbrev} ${transition.durationFrames}f`,
-              (x1 + x2) / 2,
-              trackY + trackHeight / 2,
-            );
+            ctx.fillText(`${abbrev} ${transition.durationFrames}f`, (x1 + x2) / 2, trackY + trackHeight / 2);
           }
         }
       }
@@ -783,7 +800,15 @@ export class Timeline {
 
     // Draw playhead
     const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
-    drawPlayhead(ctx, playheadX, trackY, trackHeight, colors.playhead, colors.playheadShadow, Timeline.PLAYHEAD_CIRCLE_RADIUS);
+    drawPlayhead(
+      ctx,
+      playheadX,
+      trackY,
+      trackHeight,
+      colors.playhead,
+      colors.playheadShadow,
+      Timeline.PLAYHEAD_CIRCLE_RADIUS,
+    );
 
     // Frame numbers / timecode
     const fps = this.session.fps;
@@ -791,9 +816,8 @@ export class Timeline {
     const isTimecode = currentMode === 'timecode';
     const trackCenterY = trackY + trackHeight / 2;
     const bottomInfoY = height - 20;
-    const safeMetric = (value: number | undefined, fallback: number): number => (
-      typeof value === 'number' && Number.isFinite(value) ? value : fallback
-    );
+    const safeMetric = (value: number | undefined, fallback: number): number =>
+      typeof value === 'number' && Number.isFinite(value) ? value : fallback;
     const drawMiddleAlignedText = (text: string, x: number, yCenter: number): TextMetrics => {
       const metrics = ctx.measureText(text);
       const ascent = safeMetric(metrics.actualBoundingBoxAscent, 8);
@@ -826,11 +850,12 @@ export class Timeline {
     ctx.textAlign = 'center';
     ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, monospace';
     const frameLabel = formatFrameDisplay(currentFrame, fps, this._timecodeDisplayMode);
-    const inOutInfo = inPoint !== 1 || outPoint !== duration
-      ? isTimecode
-        ? ` [${formatTimecode(inPoint, fps)}-${formatTimecode(outPoint, fps)}]`
-        : ` [${inPoint}-${outPoint}]`
-      : '';
+    const inOutInfo =
+      inPoint !== 1 || outPoint !== duration
+        ? isTimecode
+          ? ` [${formatTimecode(inPoint, fps)}-${formatTimecode(outPoint, fps)}]`
+          : ` [${inPoint}-${outPoint}]`
+        : '';
     const frameAndRangeLabel = `${frameLabel}${inOutInfo}`;
     const frameLabelMetrics = drawMiddleAlignedText(frameAndRangeLabel, width / 2, bottomInfoY);
     const frameLabelWidth = frameLabelMetrics.width;
@@ -873,9 +898,7 @@ export class Timeline {
       }
 
       // Color-code actual FPS portion based on ratio (CSS variables with hex fallbacks)
-      const ratio = effectiveTargetFps > 0
-        ? Math.min(1, effectiveFps / effectiveTargetFps)
-        : 0;
+      const ratio = effectiveTargetFps > 0 ? Math.min(1, effectiveFps / effectiveTargetFps) : 0;
       const WARNING_THRESHOLD = 0.97;
       const CRITICAL_THRESHOLD = 0.85;
       if (ratio >= WARNING_THRESHOLD) {
@@ -898,9 +921,10 @@ export class Timeline {
     const playbackMode = this.session.playbackMode;
     const playbackModeLabel = playbackMode === 'playAllFrames' ? 'ALL' : 'RT';
     // Check if native video path is active (play-all-frames not fully effective)
-    const isNativeVideo = this.session.currentSource?.type === 'video'
-      && !this.session.isUsingMediabunny()
-      && this.session.currentSource?.videoSourceNode === undefined;
+    const isNativeVideo =
+      this.session.currentSource?.type === 'video' &&
+      !this.session.isUsingMediabunny() &&
+      this.session.currentSource?.videoSourceNode === undefined;
     const isDimmed = playbackMode === 'playAllFrames' && isNativeVideo;
 
     // Draw status line with split coloring: only FPS portion gets the color

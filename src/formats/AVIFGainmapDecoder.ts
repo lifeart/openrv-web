@@ -14,7 +14,13 @@
  */
 
 import { drawImageWithOrientation } from './shared';
-import { type GainMapMetadata, parseGainMapMetadataFromXMP, tmapToGainMapMetadata, reconstructHDR, defaultGainMapMetadata } from './GainMapMetadata';
+import {
+  type GainMapMetadata,
+  parseGainMapMetadataFromXMP,
+  tmapToGainMapMetadata,
+  reconstructHDR,
+  defaultGainMapMetadata,
+} from './GainMapMetadata';
 
 export interface AVIFGainmapInfo {
   primaryItemId: number;
@@ -38,7 +44,7 @@ export function readBoxType(view: DataView, offset: number): string {
     view.getUint8(offset),
     view.getUint8(offset + 1),
     view.getUint8(offset + 2),
-    view.getUint8(offset + 3)
+    view.getUint8(offset + 3),
   );
 }
 
@@ -245,8 +251,8 @@ export function parseGainmapAVIF(buffer: ArrayBuffer): AVIFGainmapInfo | null {
 
   // 5. Parse iloc → get byte ranges for primary and gainmap items
   const locations = parseIloc(view, meta.dataStart, meta.dataEnd);
-  const primaryLoc = locations.find(l => l.itemId === primaryItemId);
-  const gainmapLoc = locations.find(l => l.itemId === gainmapItemId);
+  const primaryLoc = locations.find((l) => l.itemId === primaryItemId);
+  const gainmapLoc = locations.find((l) => l.itemId === gainmapItemId);
 
   if (!primaryLoc || !gainmapLoc) return null;
   if (primaryLoc.extents.length === 0 || gainmapLoc.extents.length === 0) return null;
@@ -341,18 +347,27 @@ export function parseIinf(view: DataView, metaStart: number, metaEnd: number): I
       let pos = infe.dataStart;
       let itemId: number;
       if (infeVersion === 2) {
-        if (pos + 2 > infe.dataEnd) { offset = infe.boxEnd; continue; }
+        if (pos + 2 > infe.dataEnd) {
+          offset = infe.boxEnd;
+          continue;
+        }
         itemId = view.getUint16(pos);
         pos += 2;
       } else {
         // version 3: uint32
-        if (pos + 4 > infe.dataEnd) { offset = infe.boxEnd; continue; }
+        if (pos + 4 > infe.dataEnd) {
+          offset = infe.boxEnd;
+          continue;
+        }
         itemId = view.getUint32(pos);
         pos += 4;
       }
       pos += 2; // skip item_protection_index
 
-      if (pos + 4 > infe.dataEnd) { offset = infe.boxEnd; continue; }
+      if (pos + 4 > infe.dataEnd) {
+        offset = infe.boxEnd;
+        continue;
+      }
       const itemType = readBoxType(view, pos);
       items.push({ id: itemId, type: itemType });
     }
@@ -426,13 +441,13 @@ export function findItemWithProperty(view: DataView, ipma: BoxInfo, propertyInde
         // 16-bit entries: 1 bit essential + 15 bits property index
         if (pos + 2 > ipma.dataEnd) return -1;
         const val = view.getUint16(pos);
-        propIdx = val & 0x7FFF;
+        propIdx = val & 0x7fff;
         pos += 2;
       } else {
         // 8-bit entries: 1 bit essential + 7 bits property index
         if (pos + 1 > ipma.dataEnd) return -1;
         const val = view.getUint8(pos);
-        propIdx = val & 0x7F;
+        propIdx = val & 0x7f;
         pos += 1;
       }
 
@@ -462,13 +477,23 @@ export function findAuxlItem(view: DataView, iref: BoxInfo, primaryItemId: numbe
       let refCount: number;
 
       if (version === 0) {
-        if (pos + 4 > box.dataEnd) { offset = box.boxEnd; continue; }
-        fromItemId = view.getUint16(pos); pos += 2;
-        refCount = view.getUint16(pos); pos += 2;
+        if (pos + 4 > box.dataEnd) {
+          offset = box.boxEnd;
+          continue;
+        }
+        fromItemId = view.getUint16(pos);
+        pos += 2;
+        refCount = view.getUint16(pos);
+        pos += 2;
       } else {
-        if (pos + 6 > box.dataEnd) { offset = box.boxEnd; continue; }
-        fromItemId = view.getUint32(pos); pos += 4;
-        refCount = view.getUint16(pos); pos += 2;
+        if (pos + 6 > box.dataEnd) {
+          offset = box.boxEnd;
+          continue;
+        }
+        fromItemId = view.getUint32(pos);
+        pos += 4;
+        refCount = view.getUint16(pos);
+        pos += 2;
       }
 
       // auxl: from=gainmap_item, to=primary_item
@@ -476,10 +501,12 @@ export function findAuxlItem(view: DataView, iref: BoxInfo, primaryItemId: numbe
         let toItemId: number;
         if (version === 0) {
           if (pos + 2 > box.dataEnd) break;
-          toItemId = view.getUint16(pos); pos += 2;
+          toItemId = view.getUint16(pos);
+          pos += 2;
         } else {
           if (pos + 4 > box.dataEnd) break;
-          toItemId = view.getUint32(pos); pos += 4;
+          toItemId = view.getUint32(pos);
+          pos += 4;
         }
         if (toItemId === primaryItemId) return fromItemId;
       }
@@ -508,10 +535,10 @@ export function parseIloc(view: DataView, metaStart: number, metaEnd: number): I
   const sizeByte2 = view.getUint8(pos + 1);
   pos += 2;
 
-  const offsetSize = (sizeByte1 >> 4) & 0xF;
-  const lengthSize = sizeByte1 & 0xF;
-  const baseOffsetSize = (sizeByte2 >> 4) & 0xF;
-  const indexSize = version >= 1 ? (sizeByte2 & 0xF) : 0;
+  const offsetSize = (sizeByte1 >> 4) & 0xf;
+  const lengthSize = sizeByte1 & 0xf;
+  const baseOffsetSize = (sizeByte2 >> 4) & 0xf;
+  const indexSize = version >= 1 ? sizeByte2 & 0xf : 0;
 
   let itemCount: number;
   if (version < 2) {
@@ -541,7 +568,7 @@ export function parseIloc(view: DataView, metaStart: number, metaEnd: number): I
     let constructionMethod = 0;
     if (version >= 1) {
       if (pos + 2 > iloc.dataEnd) break;
-      constructionMethod = view.getUint16(pos) & 0xF;
+      constructionMethod = view.getUint16(pos) & 0xf;
       pos += 2;
     }
 
@@ -582,15 +609,19 @@ export function parseIloc(view: DataView, metaStart: number, metaEnd: number): I
  */
 function readSizedUint(view: DataView, offset: number, size: number): number {
   switch (size) {
-    case 0: return 0;
-    case 2: return view.getUint16(offset);
-    case 4: return view.getUint32(offset);
+    case 0:
+      return 0;
+    case 2:
+      return view.getUint16(offset);
+    case 4:
+      return view.getUint32(offset);
     case 8: {
       const high = view.getUint32(offset);
       const low = view.getUint32(offset + 4);
       return high * 0x100000000 + low;
     }
-    default: return 0;
+    default:
+      return 0;
   }
 }
 
@@ -607,12 +638,12 @@ export function extractHeadroom(
   items: ItemEntry[],
   locations: ItemLocation[],
   ipcoStart: number,
-  ipcoEnd: number
+  ipcoEnd: number,
 ): number | null {
   // Try XMP from mime-type items
   for (const item of items) {
     if (item.type === 'mime') {
-      const loc = locations.find(l => l.itemId === item.id);
+      const loc = locations.find((l) => l.itemId === item.id);
       if (!loc || loc.extents.length === 0) continue;
 
       const offset = loc.baseOffset + loc.extents[0]!.offset;
@@ -713,7 +744,7 @@ export function parseTmapBox(view: DataView, start: number, end: number): TmapMe
 
   // flags: 3 bytes at start+1..start+3; channel_count flag is bit 0 of the flags field
   const flagsByte = view.getUint8(start + 3);
-  const channelCount = (flagsByte & 1) ? 3 : 1;
+  const channelCount = flagsByte & 1 ? 3 : 1;
 
   let pos = start + 4;
 
@@ -796,12 +827,12 @@ function extractGainMapMetadata(
   items: ItemEntry[],
   locations: ItemLocation[],
   ipcoStart: number,
-  ipcoEnd: number
+  ipcoEnd: number,
 ): { headroom: number; metadata: GainMapMetadata } | null {
   // Try XMP from mime-type items
   for (const item of items) {
     if (item.type === 'mime') {
-      const loc = locations.find(l => l.itemId === item.id);
+      const loc = locations.find((l) => l.itemId === item.id);
       if (!loc || loc.extents.length === 0) continue;
 
       const offset = loc.baseOffset + loc.extents[0]!.offset;
@@ -895,11 +926,11 @@ export function getItemPropertyIndices(view: DataView, ipma: BoxInfo, itemId: nu
       let propIdx: number;
       if (flags & 1) {
         if (pos + 2 > ipma.dataEnd) return [];
-        propIdx = view.getUint16(pos) & 0x7FFF;
+        propIdx = view.getUint16(pos) & 0x7fff;
         pos += 2;
       } else {
         if (pos + 1 > ipma.dataEnd) return [];
-        propIdx = view.getUint8(pos) & 0x7F;
+        propIdx = view.getUint8(pos) & 0x7f;
         pos += 1;
       }
       indices.push(propIdx);
@@ -926,11 +957,7 @@ export interface ISOBMFFTransformInfo {
  *
  * Finds transforms associated with the primary item via ipma.
  */
-export function parseISOBMFFTransforms(
-  view: DataView,
-  metaStart: number,
-  metaEnd: number,
-): ISOBMFFTransformInfo {
+export function parseISOBMFFTransforms(view: DataView, metaStart: number, metaEnd: number): ISOBMFFTransformInfo {
   const result: ISOBMFFTransformInfo = {};
 
   // Find primary item ID
@@ -964,7 +991,7 @@ export function parseISOBMFFTransforms(
 
   // Find irot and imir among primary item's properties
   for (const propIdx of propIndices) {
-    const prop = properties.find(p => p.index === propIdx);
+    const prop = properties.find((p) => p.index === propIdx);
     if (!prop) continue;
 
     if (prop.type === 'irot') {
@@ -1007,11 +1034,7 @@ export function parseISOBMFFTransforms(
  *   imir 1 (flip V) + irot 2 → EXIF 2
  *   imir 1 (flip V) + irot 3 → EXIF 5
  */
-export function parseISOBMFFOrientation(
-  view: DataView,
-  metaStart: number,
-  metaEnd: number,
-): number {
+export function parseISOBMFFOrientation(view: DataView, metaStart: number, metaEnd: number): number {
   const transforms = parseISOBMFFTransforms(view, metaStart, metaEnd);
 
   const angle = transforms.irotAngle ?? 0;
@@ -1021,11 +1044,16 @@ export function parseISOBMFFOrientation(
   if (!hasImir) {
     // Rotation only
     switch (angle) {
-      case 0: return 1;
-      case 1: return 8;
-      case 2: return 3;
-      case 3: return 6;
-      default: return 1;
+      case 0:
+        return 1;
+      case 1:
+        return 8;
+      case 2:
+        return 3;
+      case 3:
+        return 6;
+      default:
+        return 1;
     }
   }
 
@@ -1033,20 +1061,30 @@ export function parseISOBMFFOrientation(
   if (axis === 0) {
     // Flip horizontal
     switch (angle) {
-      case 0: return 2;
-      case 1: return 5;
-      case 2: return 4;
-      case 3: return 7;
-      default: return 2;
+      case 0:
+        return 2;
+      case 1:
+        return 5;
+      case 2:
+        return 4;
+      case 3:
+        return 7;
+      default:
+        return 2;
     }
   } else {
     // Flip vertical
     switch (angle) {
-      case 0: return 4;
-      case 1: return 7;
-      case 2: return 2;
-      case 3: return 5;
-      default: return 4;
+      case 0:
+        return 4;
+      case 1:
+        return 7;
+      case 2:
+        return 2;
+      case 3:
+        return 5;
+      default:
+        return 4;
     }
   }
 }
@@ -1171,7 +1209,7 @@ export function buildStandaloneAVIF(codedData: Uint8Array): ArrayBuffer {
  */
 export async function decodeAVIFGainmapToFloat32(
   buffer: ArrayBuffer,
-  info: AVIFGainmapInfo
+  info: AVIFGainmapInfo,
 ): Promise<{
   width: number;
   height: number;
@@ -1192,10 +1230,7 @@ export async function decodeAVIFGainmapToFloat32(
   const gainmapAVIF = buildStandaloneAVIF(gainmapCodedData);
   const gainmapBlob = new Blob([gainmapAVIF], { type: 'image/avif' });
 
-  const [baseBitmap, gainmapBitmap] = await Promise.all([
-    createImageBitmap(baseBlob),
-    createImageBitmap(gainmapBlob),
-  ]);
+  const [baseBitmap, gainmapBitmap] = await Promise.all([createImageBitmap(baseBlob), createImageBitmap(gainmapBlob)]);
 
   const width = baseBitmap.width;
   const height = baseBitmap.height;

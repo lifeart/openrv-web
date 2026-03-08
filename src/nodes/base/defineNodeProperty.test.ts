@@ -94,10 +94,7 @@ describe('defineNodeProperty', () => {
     node.testProp = 77;
 
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(
-      { name: 'testProp', value: 77 },
-      { name: 'testProp', value: 0 },
-    );
+    expect(callback).toHaveBeenCalledWith({ name: 'testProp', value: 77 }, { name: 'testProp', value: 0 });
   });
 
   it('does not fire propertyChanged when value is unchanged', () => {

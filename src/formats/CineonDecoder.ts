@@ -13,7 +13,11 @@
 
 import { cineonLogToLinear as _cineonLogToLinear, type LogLinearOptions } from './LogLinear';
 import { unpackDPX10bit } from './DPXDecoder';
-import { validateImageDimensions, toRGBA as sharedToRGBA, applyLogToLinearRGBA as sharedApplyLogToLinearRGBA } from './shared';
+import {
+  validateImageDimensions,
+  toRGBA as sharedToRGBA,
+  applyLogToLinearRGBA as sharedApplyLogToLinearRGBA,
+} from './shared';
 import { DecoderError } from '../core/errors';
 
 // Re-export for backwards compatibility
@@ -112,7 +116,7 @@ function applyLogToLinearRGBA(
   width: number,
   height: number,
   bitDepth: number,
-  options?: LogLinearOptions
+  options?: LogLinearOptions,
 ): void {
   sharedApplyLogToLinearRGBA(data, width, height, bitDepth, (codeValue) => _cineonLogToLinear(codeValue, options));
 }
@@ -124,10 +128,7 @@ function applyLogToLinearRGBA(
  * @param options - Decode options
  * @param options.applyLogToLinear - Whether to convert log data to linear (default: true for Cineon)
  */
-export async function decodeCineon(
-  buffer: ArrayBuffer,
-  options?: CineonDecodeOptions
-): Promise<CineonDecodeResult> {
+export async function decodeCineon(buffer: ArrayBuffer, options?: CineonDecodeOptions): Promise<CineonDecodeResult> {
   const info = getCineonInfo(buffer);
   if (!info) {
     throw new DecoderError('Cineon', 'Invalid Cineon file');
@@ -145,7 +146,10 @@ export async function decodeCineon(
 
   // Validate data offset
   if (dataOffset >= buffer.byteLength) {
-    throw new DecoderError('Cineon', `Invalid Cineon file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
+    throw new DecoderError(
+      'Cineon',
+      `Invalid Cineon file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`,
+    );
   }
 
   // Create DataView for pixel data

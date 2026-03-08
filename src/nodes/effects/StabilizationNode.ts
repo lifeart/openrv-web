@@ -1,7 +1,7 @@
 import { RegisterNode } from '../base/NodeFactory';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import {
   computeMotionVector,
@@ -82,17 +82,11 @@ export class StabilizationNode extends EffectNode {
     const imageData = clone.toImageData();
 
     // Only compute motion if we have a consecutive previous frame
-    if (
-      this.previousFrame !== null &&
-      this.previousFrameNumber === context.frame - 1
-    ) {
+    if (this.previousFrame !== null && this.previousFrameNumber === context.frame - 1) {
       const motion = computeMotionVector(imageData, this.previousFrame);
       this.motionHistory.push(motion);
 
-      const smoothed = smoothMotionPath(
-        this.motionHistory,
-        this.smoothingStrength,
-      );
+      const smoothed = smoothMotionPath(this.motionHistory, this.smoothingStrength);
       const lastSmoothed = smoothed[smoothed.length - 1]!;
 
       const stabilizationParams: ApplyStabilizationParams = {

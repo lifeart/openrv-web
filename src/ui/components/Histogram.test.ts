@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  Histogram,
-  calculateHistogram,
-} from './Histogram';
+import { Histogram, calculateHistogram } from './Histogram';
 import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
 
 // Mock WebGLScopes module - WebGL2 is not available in jsdom,
@@ -187,7 +184,11 @@ describe('Histogram', () => {
 });
 
 describe('Histogram calculation', () => {
-  function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+  function createTestImageData(
+    width: number,
+    height: number,
+    fill?: { r: number; g: number; b: number; a: number },
+  ): ImageData {
     const data = new Uint8ClampedArray(width * height * 4);
     if (fill) {
       for (let i = 0; i < data.length; i += 4) {
@@ -293,11 +294,20 @@ describe('Histogram calculation', () => {
       const pixels = imageData.data;
 
       // Pixel 0: R=0
-      pixels[0] = 0; pixels[1] = 0; pixels[2] = 0; pixels[3] = 255;
+      pixels[0] = 0;
+      pixels[1] = 0;
+      pixels[2] = 0;
+      pixels[3] = 255;
       // Pixel 1: R=128
-      pixels[4] = 128; pixels[5] = 0; pixels[6] = 0; pixels[7] = 255;
+      pixels[4] = 128;
+      pixels[5] = 0;
+      pixels[6] = 0;
+      pixels[7] = 255;
       // Pixel 2: R=255
-      pixels[8] = 255; pixels[9] = 0; pixels[10] = 0; pixels[11] = 255;
+      pixels[8] = 255;
+      pixels[9] = 0;
+      pixels[10] = 0;
+      pixels[11] = 255;
 
       const data = calculateHistogram(imageData);
 
@@ -312,7 +322,11 @@ describe('Histogram calculation', () => {
 describe('Histogram stats', () => {
   let histogram: Histogram;
 
-  function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+  function createTestImageData(
+    width: number,
+    height: number,
+    fill?: { r: number; g: number; b: number; a: number },
+  ): ImageData {
     const data = new Uint8ClampedArray(width * height * 4);
     if (fill) {
       for (let i = 0; i < data.length; i += 4) {
@@ -368,11 +382,20 @@ describe('Histogram stats', () => {
     const pixels = imageData.data;
 
     // Pixel 0: Gray 50
-    pixels[0] = 50; pixels[1] = 50; pixels[2] = 50; pixels[3] = 255;
+    pixels[0] = 50;
+    pixels[1] = 50;
+    pixels[2] = 50;
+    pixels[3] = 255;
     // Pixel 1: Gray 100
-    pixels[4] = 100; pixels[5] = 100; pixels[6] = 100; pixels[7] = 255;
+    pixels[4] = 100;
+    pixels[5] = 100;
+    pixels[6] = 100;
+    pixels[7] = 255;
     // Pixel 2: Gray 200
-    pixels[8] = 200; pixels[9] = 200; pixels[10] = 200; pixels[11] = 255;
+    pixels[8] = 200;
+    pixels[9] = 200;
+    pixels[10] = 200;
+    pixels[11] = 255;
 
     histogram.calculate(imageData);
 
@@ -481,7 +504,11 @@ describe('Histogram hi-DPI support', () => {
 describe('Histogram GPU rendering', () => {
   let histogram: Histogram;
 
-  function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+  function createTestImageData(
+    width: number,
+    height: number,
+    fill?: { r: number; g: number; b: number; a: number },
+  ): ImageData {
     const data = new Uint8ClampedArray(width * height * 4);
     if (fill) {
       for (let i = 0; i < data.length; i += 4) {

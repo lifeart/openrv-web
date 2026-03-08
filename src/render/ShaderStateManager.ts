@@ -15,9 +15,26 @@
 import type { ManagerBase } from '../core/ManagerBase';
 import type { ShaderProgram } from './ShaderProgram';
 import type { ColorPrimaries } from '../core/image/Image';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  HSLQualifierState,
+  LinearizeState,
+  ChannelSwizzle,
+} from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
+  GamutMappingState,
+  GamutIdentifier,
+} from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import { PATTERN_COLORS } from '../core/types/background';
@@ -29,41 +46,108 @@ import type { StateAccessor, CurvesLUTSnapshot, FalseColorLUTSnapshot, LUT3DSnap
 
 // Re-export from extracted modules for backward compatibility
 export {
-  DIRTY_COLOR, DIRTY_TONE_MAPPING, DIRTY_CDL, DIRTY_COLOR_WHEELS,
-  DIRTY_HSL, DIRTY_ZEBRA, DIRTY_CHANNELS, DIRTY_BACKGROUND,
-  DIRTY_DISPLAY, DIRTY_CLARITY, DIRTY_SHARPEN, DIRTY_FALSE_COLOR,
-  DIRTY_CURVES, DIRTY_VIBRANCE, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_INVERSION,
-  DIRTY_LUT3D, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE, DIRTY_FILM_EMULATION,
-  DIRTY_PERSPECTIVE, DIRTY_LINEARIZE, DIRTY_INLINE_LUT, DIRTY_OUT_OF_RANGE,
-  DIRTY_CHANNEL_SWIZZLE, DIRTY_PREMULT, DIRTY_DITHER, DIRTY_SPHERICAL,
-  DIRTY_COLOR_PRIMARIES, DIRTY_CONTOUR, DIRTY_FILE_LUT3D, DIRTY_DISPLAY_LUT3D,
+  DIRTY_COLOR,
+  DIRTY_TONE_MAPPING,
+  DIRTY_CDL,
+  DIRTY_COLOR_WHEELS,
+  DIRTY_HSL,
+  DIRTY_ZEBRA,
+  DIRTY_CHANNELS,
+  DIRTY_BACKGROUND,
+  DIRTY_DISPLAY,
+  DIRTY_CLARITY,
+  DIRTY_SHARPEN,
+  DIRTY_FALSE_COLOR,
+  DIRTY_CURVES,
+  DIRTY_VIBRANCE,
+  DIRTY_HIGHLIGHTS_SHADOWS,
+  DIRTY_INVERSION,
+  DIRTY_LUT3D,
+  DIRTY_GAMUT_MAPPING,
+  DIRTY_DEINTERLACE,
+  DIRTY_FILM_EMULATION,
+  DIRTY_PERSPECTIVE,
+  DIRTY_LINEARIZE,
+  DIRTY_INLINE_LUT,
+  DIRTY_OUT_OF_RANGE,
+  DIRTY_CHANNEL_SWIZZLE,
+  DIRTY_PREMULT,
+  DIRTY_DITHER,
+  DIRTY_SPHERICAL,
+  DIRTY_COLOR_PRIMARIES,
+  DIRTY_CONTOUR,
+  DIRTY_FILE_LUT3D,
+  DIRTY_DISPLAY_LUT3D,
   ALL_DIRTY_FLAGS,
   TONE_MAPPING_OPERATOR_CODES,
-  BG_PATTERN_NONE, BG_PATTERN_SOLID, BG_PATTERN_CHECKER, BG_PATTERN_CROSSHATCH,
-  CHANNEL_MODE_CODES, GAMUT_CODES, GAMUT_MODE_CODES,
+  BG_PATTERN_NONE,
+  BG_PATTERN_SOLID,
+  BG_PATTERN_CHECKER,
+  BG_PATTERN_CROSSHATCH,
+  CHANNEL_MODE_CODES,
+  GAMUT_CODES,
+  GAMUT_MODE_CODES,
   COLOR_PRIMARIES_MATRICES,
-  DEFAULT_ZEBRA_HIGH_THRESHOLD, DEFAULT_ZEBRA_LOW_THRESHOLD, DEFAULT_CHECKER_SIZE,
+  DEFAULT_ZEBRA_HIGH_THRESHOLD,
+  DEFAULT_ZEBRA_LOW_THRESHOLD,
+  DEFAULT_CHECKER_SIZE,
 } from './ShaderConstants';
 
 export type { InternalShaderState, TextureCallbacks } from './ShaderStateTypes';
 export { createDefaultInternalState } from './ShaderStateTypes';
 
-import { ALL_DIRTY_FLAGS, DIRTY_COLOR, DIRTY_TONE_MAPPING, DIRTY_CDL,
-  DIRTY_COLOR_WHEELS, DIRTY_CURVES, DIRTY_FALSE_COLOR, DIRTY_ZEBRA,
-  DIRTY_CHANNELS, DIRTY_LUT3D, DIRTY_FILE_LUT3D, DIRTY_DISPLAY_LUT3D,
-  DIRTY_DISPLAY, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_VIBRANCE, DIRTY_CLARITY,
-  DIRTY_SHARPEN, DIRTY_HSL, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE,
-  DIRTY_FILM_EMULATION, DIRTY_PERSPECTIVE, DIRTY_LINEARIZE, DIRTY_INLINE_LUT,
-  DIRTY_OUT_OF_RANGE, DIRTY_CHANNEL_SWIZZLE, DIRTY_PREMULT, DIRTY_DITHER,
-  DIRTY_SPHERICAL, DIRTY_COLOR_PRIMARIES, DIRTY_CONTOUR, DIRTY_INVERSION, DIRTY_BACKGROUND,
-  BG_PATTERN_NONE, BG_PATTERN_SOLID, BG_PATTERN_CHECKER, BG_PATTERN_CROSSHATCH,
-  CHANNEL_MODE_CODES, GAMUT_CODES, GAMUT_MODE_CODES,
+import {
+  ALL_DIRTY_FLAGS,
+  DIRTY_COLOR,
+  DIRTY_TONE_MAPPING,
+  DIRTY_CDL,
+  DIRTY_COLOR_WHEELS,
+  DIRTY_CURVES,
+  DIRTY_FALSE_COLOR,
+  DIRTY_ZEBRA,
+  DIRTY_CHANNELS,
+  DIRTY_LUT3D,
+  DIRTY_FILE_LUT3D,
+  DIRTY_DISPLAY_LUT3D,
+  DIRTY_DISPLAY,
+  DIRTY_HIGHLIGHTS_SHADOWS,
+  DIRTY_VIBRANCE,
+  DIRTY_CLARITY,
+  DIRTY_SHARPEN,
+  DIRTY_HSL,
+  DIRTY_GAMUT_MAPPING,
+  DIRTY_DEINTERLACE,
+  DIRTY_FILM_EMULATION,
+  DIRTY_PERSPECTIVE,
+  DIRTY_LINEARIZE,
+  DIRTY_INLINE_LUT,
+  DIRTY_OUT_OF_RANGE,
+  DIRTY_CHANNEL_SWIZZLE,
+  DIRTY_PREMULT,
+  DIRTY_DITHER,
+  DIRTY_SPHERICAL,
+  DIRTY_COLOR_PRIMARIES,
+  DIRTY_CONTOUR,
+  DIRTY_INVERSION,
+  DIRTY_BACKGROUND,
+  BG_PATTERN_NONE,
+  BG_PATTERN_SOLID,
+  BG_PATTERN_CHECKER,
+  BG_PATTERN_CROSSHATCH,
+  CHANNEL_MODE_CODES,
+  GAMUT_CODES,
+  GAMUT_MODE_CODES,
   COLOR_PRIMARIES_MATRICES,
   DEFAULT_CHECKER_SIZE,
 } from './ShaderConstants';
 
 import type { InternalShaderState, TextureCallbacks } from './ShaderStateTypes';
-import { createDefaultInternalState, hexToRgbInto, assignColorAdjustments, assignToneMappingState } from './ShaderStateTypes';
+import {
+  createDefaultInternalState,
+  hexToRgbInto,
+  assignColorAdjustments,
+  assignToneMappingState,
+} from './ShaderStateTypes';
 
 import { applyUniforms as applyUniformsFn } from './ShaderUniformUploader';
 import type { UniformBuffers } from './ShaderUniformUploader';
@@ -172,7 +256,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty' | 'fileLUT3DDirty' | 'displayLUT3DDirty'): void {
+  clearTextureDirtyFlag(
+    flag:
+      | 'curvesLUTDirty'
+      | 'falseColorLUTDirty'
+      | 'lut3DDirty'
+      | 'filmLUTDirty'
+      | 'inlineLUTDirty'
+      | 'fileLUT3DDirty'
+      | 'displayLUT3DDirty',
+  ): void {
     this.state[flag] = false;
     if (flag === 'curvesLUTDirty') {
       this.cachedCurvesSnapshot = null;
@@ -314,17 +407,29 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
 
   setCDL(cdl: CDLValues): void {
     const isDefault =
-      cdl.slope.r === 1 && cdl.slope.g === 1 && cdl.slope.b === 1 &&
-      cdl.offset.r === 0 && cdl.offset.g === 0 && cdl.offset.b === 0 &&
-      cdl.power.r === 1 && cdl.power.g === 1 && cdl.power.b === 1 &&
+      cdl.slope.r === 1 &&
+      cdl.slope.g === 1 &&
+      cdl.slope.b === 1 &&
+      cdl.offset.r === 0 &&
+      cdl.offset.g === 0 &&
+      cdl.offset.b === 0 &&
+      cdl.power.r === 1 &&
+      cdl.power.g === 1 &&
+      cdl.power.b === 1 &&
       cdl.saturation === 1;
     this.state.cdlEnabled = !isDefault;
     const slope = this.state.cdlSlope;
-    slope[0] = cdl.slope.r; slope[1] = cdl.slope.g; slope[2] = cdl.slope.b;
+    slope[0] = cdl.slope.r;
+    slope[1] = cdl.slope.g;
+    slope[2] = cdl.slope.b;
     const offset = this.state.cdlOffset;
-    offset[0] = cdl.offset.r; offset[1] = cdl.offset.g; offset[2] = cdl.offset.b;
+    offset[0] = cdl.offset.r;
+    offset[1] = cdl.offset.g;
+    offset[2] = cdl.offset.b;
     const power = this.state.cdlPower;
-    power[0] = cdl.power.r; power[1] = cdl.power.g; power[2] = cdl.power.b;
+    power[0] = cdl.power.r;
+    power[1] = cdl.power.g;
+    power[2] = cdl.power.b;
     this.state.cdlSaturation = cdl.saturation;
     this.dirtyFlags.add(DIRTY_CDL);
   }
@@ -334,7 +439,12 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.dirtyFlags.add(DIRTY_CDL);
   }
 
-  setContour(state: { enabled: boolean; levels: number; desaturate: boolean; lineColor: [number, number, number] }): void {
+  setContour(state: {
+    enabled: boolean;
+    levels: number;
+    desaturate: boolean;
+    lineColor: [number, number, number];
+  }): void {
     this.state.contourEnabled = state.enabled;
     this.state.contourLevels = state.levels;
     this.state.contourDesaturate = state.desaturate;
@@ -366,7 +476,12 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     }
     let isIdentity = true;
     for (let i = 0; i < LUT_1D_SIZE; i++) {
-      if (data[i * RGBA_CHANNELS] !== i || data[i * RGBA_CHANNELS + 1] !== i || data[i * RGBA_CHANNELS + 2] !== i || data[i * RGBA_CHANNELS + 3] !== i) {
+      if (
+        data[i * RGBA_CHANNELS] !== i ||
+        data[i * RGBA_CHANNELS + 1] !== i ||
+        data[i * RGBA_CHANNELS + 2] !== i ||
+        data[i * RGBA_CHANNELS + 3] !== i
+      ) {
         isIdentity = false;
         break;
       }
@@ -379,16 +494,34 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   setColorWheels(cwState: ColorWheelsState): void {
     const { lift, gamma, gain } = cwState;
     const hasAdjustments =
-      lift.r !== 0 || lift.g !== 0 || lift.b !== 0 || lift.y !== 0 ||
-      gamma.r !== 0 || gamma.g !== 0 || gamma.b !== 0 || gamma.y !== 0 ||
-      gain.r !== 0 || gain.g !== 0 || gain.b !== 0 || gain.y !== 0;
+      lift.r !== 0 ||
+      lift.g !== 0 ||
+      lift.b !== 0 ||
+      lift.y !== 0 ||
+      gamma.r !== 0 ||
+      gamma.g !== 0 ||
+      gamma.b !== 0 ||
+      gamma.y !== 0 ||
+      gain.r !== 0 ||
+      gain.g !== 0 ||
+      gain.b !== 0 ||
+      gain.y !== 0;
     this.state.colorWheelsEnabled = hasAdjustments;
     const wl = this.state.wheelLift;
-    wl[0] = lift.r; wl[1] = lift.g; wl[2] = lift.b; wl[3] = lift.y;
+    wl[0] = lift.r;
+    wl[1] = lift.g;
+    wl[2] = lift.b;
+    wl[3] = lift.y;
     const wg = this.state.wheelGamma;
-    wg[0] = gamma.r; wg[1] = gamma.g; wg[2] = gamma.b; wg[3] = gamma.y;
+    wg[0] = gamma.r;
+    wg[1] = gamma.g;
+    wg[2] = gamma.b;
+    wg[3] = gamma.y;
     const wn = this.state.wheelGain;
-    wn[0] = gain.r; wn[1] = gain.g; wn[2] = gain.b; wn[3] = gain.y;
+    wn[0] = gain.r;
+    wn[1] = gain.g;
+    wn[2] = gain.b;
+    wn[3] = gain.y;
     this.dirtyFlags.add(DIRTY_COLOR_WHEELS);
   }
 
@@ -619,7 +752,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.gamutMappingModeCode = enabled ? (GAMUT_MODE_CODES[gmState.mode] ?? 0) : 0;
     this.state.gamutSourceCode = GAMUT_CODES[gmState.sourceGamut] ?? 0;
     this.state.gamutTargetCode = GAMUT_CODES[gmState.targetGamut] ?? 0;
-    this.state.gamutHighlightEnabled = enabled && (gmState.highlightOutOfGamut === true);
+    this.state.gamutHighlightEnabled = enabled && gmState.highlightOutOfGamut === true;
     this.dirtyFlags.add(DIRTY_GAMUT_MAPPING);
   }
 
@@ -670,7 +803,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.dirtyFlags.add(DIRTY_DEINTERLACE);
   }
 
-  setFilmEmulation(feState: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null }): void {
+  setFilmEmulation(feState: {
+    enabled: boolean;
+    intensity: number;
+    saturation: number;
+    grainIntensity: number;
+    grainSeed: number;
+    lutData: Uint8Array | null;
+  }): void {
     this.state.filmEnabled = feState.enabled && feState.intensity > 0;
     this.state.filmIntensity = feState.intensity;
     this.state.filmSaturation = feState.saturation;
@@ -748,7 +888,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   }
 
   setPremultMode(mode: number): void {
-    const clamped = (mode === 1 || mode === 2) ? mode : 0;
+    const clamped = mode === 1 || mode === 2 ? mode : 0;
     if (clamped === this.state.premultMode) return;
     this.state.premultMode = clamped;
     this.dirtyFlags.add(DIRTY_PREMULT);
@@ -791,7 +931,10 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
 
   setChannelSwizzle(swizzle: ChannelSwizzle): void {
     const s = this.state.channelSwizzle;
-    s[0] = swizzle[0]; s[1] = swizzle[1]; s[2] = swizzle[2]; s[3] = swizzle[3];
+    s[0] = swizzle[0];
+    s[1] = swizzle[1];
+    s[2] = swizzle[2];
+    s[3] = swizzle[3];
     this.dirtyFlags.add(DIRTY_CHANNEL_SWIZZLE);
   }
 
@@ -823,10 +966,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    * Callers must set u_inputTransfer and u_outputMode BEFORE calling this,
    * since those differ between the two render paths (renderImage vs renderSDRFrame).
    */
-  applyUniforms(
-    shader: ShaderProgram,
-    texCb: TextureCallbacks,
-  ): void {
+  applyUniforms(shader: ShaderProgram, texCb: TextureCallbacks): void {
     this._textureUnitsInitialized = applyUniformsFn(
       this.state,
       this.dirtyFlags,

@@ -5,7 +5,7 @@
  * and estimated remaining time. Includes a cancel button.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { ExportProgress as ProgressData } from '../../export/VideoExporter';
 
 // ---------------------------------------------------------------------------
@@ -262,9 +262,8 @@ export class ExportProgressDialog extends EventEmitter<ExportProgressEvents> {
 
     if (progress.elapsedMs > 0) {
       const elapsed = formatDuration(progress.elapsedMs);
-      const remaining = progress.estimatedRemainingMs > 0
-        ? ` / ~${formatDuration(progress.estimatedRemainingMs)} remaining`
-        : '';
+      const remaining =
+        progress.estimatedRemainingMs > 0 ? ` / ~${formatDuration(progress.estimatedRemainingMs)} remaining` : '';
       this.timeLabel.textContent = `${elapsed} elapsed${remaining}`;
     }
   }

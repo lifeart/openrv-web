@@ -126,7 +126,7 @@ export class ViewHistory {
    */
   removeNodeEntries(nodeId: string): void {
     const currentEntry = this.current();
-    this.entries = this.entries.filter(e => e.nodeId !== nodeId);
+    this.entries = this.entries.filter((e) => e.nodeId !== nodeId);
     if (this.entries.length === 0) {
       this.index = -1;
     } else if (currentEntry && currentEntry.nodeId === nodeId) {
@@ -134,8 +134,8 @@ export class ViewHistory {
       this.index = Math.min(this.index, this.entries.length - 1);
     } else if (currentEntry) {
       // Recalculate index based on the current entry's position
-      const newIndex = this.entries.findIndex(e =>
-        e.nodeId === currentEntry.nodeId && e.timestamp === currentEntry.timestamp
+      const newIndex = this.entries.findIndex(
+        (e) => e.nodeId === currentEntry.nodeId && e.timestamp === currentEntry.timestamp,
       );
       this.index = newIndex >= 0 ? newIndex : Math.min(this.index, this.entries.length - 1);
     }

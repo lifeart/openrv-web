@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  DisplayCapabilities,
+  type DisplayCapabilities,
   DEFAULT_CAPABILITIES,
   detectDisplayCapabilities,
   detectWebGPUHDR,
@@ -57,11 +57,20 @@ describe('DisplayCapabilities', () => {
 
     it('DC-005: is a complete DisplayCapabilities object', () => {
       const requiredKeys: Array<keyof DisplayCapabilities> = [
-        'canvasP3', 'webglP3', 'displayGamut',
-        'displayHDR', 'webglHLG', 'webglPQ', 'canvasHLG', 'canvasFloat16',
-        'webgpuAvailable', 'webgpuHDR',
-        'webglDrawingBufferStorage', 'canvasExtendedHDR',
-        'activeColorSpace', 'activeHDRMode',
+        'canvasP3',
+        'webglP3',
+        'displayGamut',
+        'displayHDR',
+        'webglHLG',
+        'webglPQ',
+        'canvasHLG',
+        'canvasFloat16',
+        'webgpuAvailable',
+        'webgpuHDR',
+        'webglDrawingBufferStorage',
+        'canvasExtendedHDR',
+        'activeColorSpace',
+        'activeHDRMode',
       ];
       for (const key of requiredKeys) {
         expect(DEFAULT_CAPABILITIES).toHaveProperty(key);
@@ -176,13 +185,21 @@ describe('DisplayCapabilities', () => {
       const mockGetExtension = vi.fn().mockReturnValue({ loseContext: mockLoseContext });
       const mockGl = {
         getExtension: mockGetExtension,
-        get drawingBufferColorSpace() { return 'srgb'; },
-        set drawingBufferColorSpace(_v: string) { throw new Error('not supported'); },
+        get drawingBufferColorSpace() {
+          return 'srgb';
+        },
+        set drawingBufferColorSpace(_v: string) {
+          throw new Error('not supported');
+        },
       };
       // Ensure 'drawingBufferColorSpace' in mockGl is true
       Object.defineProperty(mockGl, 'drawingBufferColorSpace', {
-        get() { return 'srgb'; },
-        set(_v: string) { throw new Error('not supported'); },
+        get() {
+          return 'srgb';
+        },
+        set(_v: string) {
+          throw new Error('not supported');
+        },
         enumerable: true,
         configurable: true,
       });
@@ -214,8 +231,12 @@ describe('DisplayCapabilities', () => {
         getExtension: mockGetExtension,
       };
       Object.defineProperty(mockGl, 'drawingBufferColorSpace', {
-        get() { return currentColorSpace; },
-        set(v: string) { currentColorSpace = v; },
+        get() {
+          return currentColorSpace;
+        },
+        set(v: string) {
+          currentColorSpace = v;
+        },
         enumerable: true,
         configurable: true,
       });
@@ -524,10 +545,13 @@ describe('DisplayCapabilities', () => {
 
     it('DC-HDR-021: logs diagnostic info', () => {
       isHDROutputAvailableWithLog(DEFAULT_CAPABILITIES);
-      expect(console.log).toHaveBeenCalledWith('[HDR Display]', expect.objectContaining({
-        dynamicRange: 'standard',
-        activeHDRMode: 'sdr',
-      }));
+      expect(console.log).toHaveBeenCalledWith(
+        '[HDR Display]',
+        expect.objectContaining({
+          dynamicRange: 'standard',
+          activeHDRMode: 'sdr',
+        }),
+      );
     });
 
     it('DC-HDR-022: logs "Not capable" for SDR defaults', () => {

@@ -87,11 +87,13 @@ describe('formatDuration', () => {
 });
 
 describe('updateInfoPanel', () => {
-  function createMockContext(overrides: {
-    currentFrame?: number;
-    fps?: number;
-    currentSource?: { name?: string; width?: number; height?: number; duration?: number } | null;
-  } = {}): SessionBridgeContext {
+  function createMockContext(
+    overrides: {
+      currentFrame?: number;
+      fps?: number;
+      currentSource?: { name?: string; width?: number; height?: number; duration?: number } | null;
+    } = {},
+  ): SessionBridgeContext {
     const infoPanel = { update: vi.fn() };
     const session = {
       currentFrame: overrides.currentFrame ?? 0,
@@ -137,7 +139,7 @@ describe('updateInfoPanel', () => {
         width: undefined,
         height: undefined,
         totalFrames: 0,
-      })
+      }),
     );
   });
 

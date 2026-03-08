@@ -34,7 +34,9 @@ function makeHost(sources: MediaSource[] = []): {
     getSourceCount: () => sources.length,
     getSources: () => sources,
     getMediaCurrentSourceIndex: () => currentIndex,
-    setMediaCurrentSourceIndex: (i: number) => { currentIndex = i; },
+    setMediaCurrentSourceIndex: (i: number) => {
+      currentIndex = i;
+    },
     emitDurationChanged,
   };
   return { host, currentIndex, emitDurationChanged };

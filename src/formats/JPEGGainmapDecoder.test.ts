@@ -3,19 +3,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  isGainmapJPEG,
-  parseGainmapJPEG,
-  extractJPEGOrientation,
-} from './JPEGGainmapDecoder';
+import { isGainmapJPEG, parseGainmapJPEG, extractJPEGOrientation } from './JPEGGainmapDecoder';
 
 // Helper to create a minimal JPEG buffer with SOI marker
 function createJPEGBuffer(): ArrayBuffer {
   // SOI (0xFFD8) + EOI (0xFFD9)
   const buf = new ArrayBuffer(4);
   const view = new DataView(buf);
-  view.setUint16(0, 0xFFD8);
-  view.setUint16(2, 0xFFD9);
+  view.setUint16(0, 0xffd8);
+  view.setUint16(2, 0xffd9);
   return buf;
 }
 
@@ -26,25 +22,25 @@ function createMPFJPEGBuffer(): ArrayBuffer {
   const parts: number[] = [];
 
   // SOI
-  parts.push(0xFF, 0xD8);
+  parts.push(0xff, 0xd8);
 
   // APP2 marker: 0xFFE2
-  parts.push(0xFF, 0xE2);
+  parts.push(0xff, 0xe2);
 
   // Length of APP2 segment (including length field itself)
   // 'MPF\0' (4) + Endian(2) + Magic(2) + IFDOffset(4) + IFD entry count(2) + 2 IFD entries(24) + MP entries(32)
   const segmentDataLen = 4 + 2 + 2 + 4 + 2 + 24 + 32;
   const segmentLen = segmentDataLen + 2; // +2 for length field
-  parts.push((segmentLen >> 8) & 0xFF, segmentLen & 0xFF);
+  parts.push((segmentLen >> 8) & 0xff, segmentLen & 0xff);
 
   // 'MPF\0' identifier
-  parts.push(0x4D, 0x50, 0x46, 0x00);
+  parts.push(0x4d, 0x50, 0x46, 0x00);
 
   // Little-endian byte order ('II')
   parts.push(0x49, 0x49);
 
   // TIFF magic 0x002A (LE)
-  parts.push(0x2A, 0x00);
+  parts.push(0x2a, 0x00);
 
   // Offset to first IFD (relative to mpfDataOffset) = 8 (right after this field)
   parts.push(0x08, 0x00, 0x00, 0x00);
@@ -54,7 +50,7 @@ function createMPFJPEGBuffer(): ArrayBuffer {
 
   // IFD Entry 1: MP Entry Number (tag 0xB001)
   // Tag: 0xB001, Type: LONG(4), Count: 2, Value: 2
-  parts.push(0x01, 0xB0); // tag LE
+  parts.push(0x01, 0xb0); // tag LE
   parts.push(0x04, 0x00); // type LONG
   parts.push(0x02, 0x00, 0x00, 0x00); // count
   parts.push(0x02, 0x00, 0x00, 0x00); // value
@@ -62,16 +58,16 @@ function createMPFJPEGBuffer(): ArrayBuffer {
   // IFD Entry 2: MPEntry (tag 0xB002)
   // Tag: 0xB002, Type: UNDEFINED(7), Count: 2, Value/Offset: relative offset to MP entries
   const mpEntryRelativeOffset = 8 + 2 + 24; // after IFD header + 2 entries
-  parts.push(0x02, 0xB0); // tag LE
+  parts.push(0x02, 0xb0); // tag LE
   parts.push(0x07, 0x00); // type UNDEFINED
   parts.push(0x02, 0x00, 0x00, 0x00); // count = 2 entries
-  parts.push(mpEntryRelativeOffset & 0xFF, (mpEntryRelativeOffset >> 8) & 0xFF, 0x00, 0x00); // offset LE
+  parts.push(mpEntryRelativeOffset & 0xff, (mpEntryRelativeOffset >> 8) & 0xff, 0x00, 0x00); // offset LE
 
   // MP Entry 1: Base image (16 bytes)
   // Attributes(4) + Size(4) + Offset(4) + Dep1(2) + Dep2(2)
   const baseSize = 1000; // dummy
   parts.push(0x00, 0x00, 0x00, 0x00); // attributes
-  parts.push(baseSize & 0xFF, (baseSize >> 8) & 0xFF, 0x00, 0x00); // size LE
+  parts.push(baseSize & 0xff, (baseSize >> 8) & 0xff, 0x00, 0x00); // size LE
   parts.push(0x00, 0x00, 0x00, 0x00); // offset (0 for first image)
   parts.push(0x00, 0x00); // dep1
   parts.push(0x00, 0x00); // dep2
@@ -80,13 +76,13 @@ function createMPFJPEGBuffer(): ArrayBuffer {
   const gainmapSize = 500; // dummy
   const gainmapOffset = baseSize; // right after base
   parts.push(0x00, 0x00, 0x00, 0x00); // attributes
-  parts.push(gainmapSize & 0xFF, (gainmapSize >> 8) & 0xFF, 0x00, 0x00); // size LE
-  parts.push(gainmapOffset & 0xFF, (gainmapOffset >> 8) & 0xFF, 0x00, 0x00); // offset LE
+  parts.push(gainmapSize & 0xff, (gainmapSize >> 8) & 0xff, 0x00, 0x00); // size LE
+  parts.push(gainmapOffset & 0xff, (gainmapOffset >> 8) & 0xff, 0x00, 0x00); // offset LE
   parts.push(0x00, 0x00); // dep1
   parts.push(0x00, 0x00); // dep2
 
   // EOI
-  parts.push(0xFF, 0xD9);
+  parts.push(0xff, 0xd9);
 
   const buf = new ArrayBuffer(parts.length);
   const uint8 = new Uint8Array(buf);
@@ -119,7 +115,7 @@ describe('JPEGGainmapDecoder', () => {
     it('returns false for buffer too small', () => {
       const buf = new ArrayBuffer(2);
       const view = new DataView(buf);
-      view.setUint16(0, 0xFFD8);
+      view.setUint16(0, 0xffd8);
       expect(isGainmapJPEG(buf)).toBe(false);
     });
   });
@@ -155,7 +151,6 @@ describe('JPEGGainmapDecoder', () => {
       expect(info!.headroom).toBe(2.0);
     });
   });
-
 });
 
 // ---------------------------------------------------------------------------
@@ -165,16 +160,16 @@ function buildJPEGWithOrientation(orientation: number, bigEndian = false): Array
   const parts: number[] = [];
 
   // SOI
-  parts.push(0xFF, 0xD8);
+  parts.push(0xff, 0xd8);
 
   // APP1 marker (0xFFE1)
-  parts.push(0xFF, 0xE1);
+  parts.push(0xff, 0xe1);
 
   // We will compute the segment length after building content
   // Segment data: 'Exif\0\0' (6) + TIFF header (8) + IFD0 (2 + 12 = 14) = 28
   // Segment length field includes itself (2 bytes) => 28 + 2 = 30
   const segmentLength = 30;
-  parts.push((segmentLength >> 8) & 0xFF, segmentLength & 0xFF);
+  parts.push((segmentLength >> 8) & 0xff, segmentLength & 0xff);
 
   // 'Exif\0\0'
   parts.push(0x45, 0x78, 0x69, 0x66, 0x00, 0x00);
@@ -182,7 +177,7 @@ function buildJPEGWithOrientation(orientation: number, bigEndian = false): Array
   // TIFF header starts here (tiffStart)
   if (bigEndian) {
     // 'MM' big-endian
-    parts.push(0x4D, 0x4D);
+    parts.push(0x4d, 0x4d);
   } else {
     // 'II' little-endian
     parts.push(0x49, 0x49);
@@ -190,9 +185,9 @@ function buildJPEGWithOrientation(orientation: number, bigEndian = false): Array
 
   // TIFF magic 0x002A
   if (bigEndian) {
-    parts.push(0x00, 0x2A);
+    parts.push(0x00, 0x2a);
   } else {
-    parts.push(0x2A, 0x00);
+    parts.push(0x2a, 0x00);
   }
 
   // IFD0 offset (relative to tiffStart) = 8 (immediately after TIFF header)
@@ -218,7 +213,7 @@ function buildJPEGWithOrientation(orientation: number, bigEndian = false): Array
     // count
     parts.push(0x00, 0x00, 0x00, 0x01);
     // value: orientation as uint16 BE + 2 pad bytes
-    parts.push((orientation >> 8) & 0xFF, orientation & 0xFF, 0x00, 0x00);
+    parts.push((orientation >> 8) & 0xff, orientation & 0xff, 0x00, 0x00);
   } else {
     // tag
     parts.push(0x12, 0x01);
@@ -227,11 +222,11 @@ function buildJPEGWithOrientation(orientation: number, bigEndian = false): Array
     // count
     parts.push(0x01, 0x00, 0x00, 0x00);
     // value: orientation as uint16 LE + 2 pad bytes
-    parts.push(orientation & 0xFF, (orientation >> 8) & 0xFF, 0x00, 0x00);
+    parts.push(orientation & 0xff, (orientation >> 8) & 0xff, 0x00, 0x00);
   }
 
   // EOI
-  parts.push(0xFF, 0xD9);
+  parts.push(0xff, 0xd9);
 
   const buf = new ArrayBuffer(parts.length);
   const uint8 = new Uint8Array(buf);
@@ -246,14 +241,14 @@ describe('extractJPEGOrientation', () => {
     const buf = new ArrayBuffer(16);
     const uint8 = new Uint8Array(buf);
     for (let i = 0; i < uint8.length; i++) {
-      uint8[i] = (i * 37 + 13) & 0xFF; // arbitrary non-JPEG bytes
+      uint8[i] = (i * 37 + 13) & 0xff; // arbitrary non-JPEG bytes
     }
     expect(extractJPEGOrientation(buf)).toBe(1);
   });
 
   it('JPEG-ORI-002: returns 1 for JPEG without EXIF APP1', () => {
     // SOI (0xFFD8) + SOS marker (0xFFDA) + some bytes
-    const parts: number[] = [0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x04, 0x00, 0x00];
+    const parts: number[] = [0xff, 0xd8, 0xff, 0xda, 0x00, 0x04, 0x00, 0x00];
     const buf = new ArrayBuffer(parts.length);
     const uint8 = new Uint8Array(buf);
     for (let i = 0; i < parts.length; i++) {
@@ -284,14 +279,14 @@ describe('extractJPEGOrientation', () => {
     const parts: number[] = [];
 
     // SOI
-    parts.push(0xFF, 0xD8);
+    parts.push(0xff, 0xd8);
 
     // APP1 marker
-    parts.push(0xFF, 0xE1);
+    parts.push(0xff, 0xe1);
 
     // Segment length = 30 (same structure, just different tag)
     const segmentLength = 30;
-    parts.push((segmentLength >> 8) & 0xFF, segmentLength & 0xFF);
+    parts.push((segmentLength >> 8) & 0xff, segmentLength & 0xff);
 
     // 'Exif\0\0'
     parts.push(0x45, 0x78, 0x69, 0x66, 0x00, 0x00);
@@ -300,7 +295,7 @@ describe('extractJPEGOrientation', () => {
     parts.push(0x49, 0x49);
 
     // TIFF magic 0x002A (LE)
-    parts.push(0x2A, 0x00);
+    parts.push(0x2a, 0x00);
 
     // IFD0 offset = 8
     parts.push(0x08, 0x00, 0x00, 0x00);
@@ -309,13 +304,13 @@ describe('extractJPEGOrientation', () => {
     parts.push(0x01, 0x00);
 
     // IFD Entry: tag=0x010F (Make), type=2 (ASCII), count=1, value=0
-    parts.push(0x0F, 0x01); // tag LE
+    parts.push(0x0f, 0x01); // tag LE
     parts.push(0x02, 0x00); // type ASCII
     parts.push(0x01, 0x00, 0x00, 0x00); // count
     parts.push(0x00, 0x00, 0x00, 0x00); // value
 
     // EOI
-    parts.push(0xFF, 0xD9);
+    parts.push(0xff, 0xd9);
 
     const buf = new ArrayBuffer(parts.length);
     const uint8 = new Uint8Array(buf);
@@ -330,15 +325,15 @@ describe('extractJPEGOrientation', () => {
     const parts: number[] = [];
 
     // SOI
-    parts.push(0xFF, 0xD8);
+    parts.push(0xff, 0xd8);
 
     // APP1 marker
-    parts.push(0xFF, 0xE1);
+    parts.push(0xff, 0xe1);
 
     // Segment length: only enough for 'Exif\0\0' + 2 bytes (truncated TIFF header)
     // length field = 2 (self) + 6 (Exif\0\0) + 2 (partial) = 10
     const segmentLength = 10;
-    parts.push((segmentLength >> 8) & 0xFF, segmentLength & 0xFF);
+    parts.push((segmentLength >> 8) & 0xff, segmentLength & 0xff);
 
     // 'Exif\0\0'
     parts.push(0x45, 0x78, 0x69, 0x66, 0x00, 0x00);
@@ -347,7 +342,7 @@ describe('extractJPEGOrientation', () => {
     parts.push(0x49, 0x49);
 
     // EOI
-    parts.push(0xFF, 0xD9);
+    parts.push(0xff, 0xd9);
 
     const buf = new ArrayBuffer(parts.length);
     const uint8 = new Uint8Array(buf);

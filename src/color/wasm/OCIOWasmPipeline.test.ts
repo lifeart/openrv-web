@@ -82,7 +82,7 @@ describe('OCIOWasmPipeline', () => {
 
     it('PIPE-002: init transitions to wasm mode when WASM succeeds', async () => {
       const modes: OCIOPipelineMode[] = [];
-      pipeline.on('modeChanged', e => modes.push(e.mode));
+      pipeline.on('modeChanged', (e) => modes.push(e.mode));
 
       await pipeline.init();
 
@@ -95,7 +95,7 @@ describe('OCIOWasmPipeline', () => {
       const failFactory = vi.fn(() => Promise.reject(new Error('WASM load failed')));
       const failPipeline = new OCIOWasmPipeline({ factory: failFactory });
       const errors: Array<{ message: string; phase: string }> = [];
-      failPipeline.on('error', e => errors.push(e));
+      failPipeline.on('error', (e) => errors.push(e));
 
       await failPipeline.init();
 
@@ -111,8 +111,7 @@ describe('OCIOWasmPipeline', () => {
       await pipeline.init();
       pipeline.dispose();
 
-      expect(() => pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video'))
-        .toThrow('disposed');
+      expect(() => pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video')).toThrow('disposed');
     });
 
     it('PIPE-005: double dispose is safe', async () => {
@@ -143,7 +142,7 @@ describe('OCIOWasmPipeline', () => {
     it('PIPE-CFG-006: loadConfig emits error when WASM not ready', () => {
       const notReadyPipeline = new OCIOWasmPipeline({ factory });
       const errors: Array<{ message: string; phase: string }> = [];
-      notReadyPipeline.on('error', e => errors.push(e));
+      notReadyPipeline.on('error', (e) => errors.push(e));
 
       notReadyPipeline.loadConfig('yaml', 'test');
       expect(errors).toHaveLength(1);
@@ -165,7 +164,7 @@ describe('OCIOWasmPipeline', () => {
 
     it('PIPE-BUILD-002: emits pipelineReady event', () => {
       const results: OCIOPipelineResult[] = [];
-      pipeline.on('pipelineReady', r => results.push(r));
+      pipeline.on('pipelineReady', (r) => results.push(r));
 
       pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
@@ -229,9 +228,7 @@ describe('OCIOWasmPipeline', () => {
 
       const result = pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       expect(result!.lut3D.size).toBe(33);
-      expect(mockExports.ocioGetProcessorLUT3D).toHaveBeenCalledWith(
-        expect.any(Number), 33,
-      );
+      expect(mockExports.ocioGetProcessorLUT3D).toHaveBeenCalledWith(expect.any(Number), 33);
     });
 
     it('PIPE-LUT-003: setLutSize ignores invalid values', () => {
@@ -280,7 +277,7 @@ describe('OCIOWasmPipeline', () => {
     it('PIPE-SHADER-002: uniforms are extracted', () => {
       const result = pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
-      const samplerUniforms = result!.uniforms.filter(u => u.isSampler);
+      const samplerUniforms = result!.uniforms.filter((u) => u.isSampler);
       expect(samplerUniforms.length).toBeGreaterThan(0);
       expect(samplerUniforms[0]!.type).toBe('sampler3D');
     });
@@ -311,7 +308,7 @@ describe('OCIOWasmPipeline', () => {
       failPipeline.loadConfig('yaml', 'test');
 
       const modes: OCIOPipelineMode[] = [];
-      failPipeline.on('modeChanged', e => modes.push(e.mode));
+      failPipeline.on('modeChanged', (e) => modes.push(e.mode));
 
       const result = failPipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
@@ -326,7 +323,9 @@ describe('OCIOWasmPipeline', () => {
 
     it('PIPE-FALL-002: degrades mode when shader generation fails', async () => {
       const failExports = createMockExports();
-      failExports.ocioGenerateShaderCode = vi.fn(() => { throw new Error('shader gen failed'); });
+      failExports.ocioGenerateShaderCode = vi.fn(() => {
+        throw new Error('shader gen failed');
+      });
       const failFactory = createMockFactory(failExports);
       const failPipeline = new OCIOWasmPipeline({ factory: failFactory });
 
@@ -334,7 +333,7 @@ describe('OCIOWasmPipeline', () => {
       failPipeline.loadConfig('yaml', 'test');
 
       const modes: OCIOPipelineMode[] = [];
-      failPipeline.on('modeChanged', e => modes.push(e.mode));
+      failPipeline.on('modeChanged', (e) => modes.push(e.mode));
 
       failPipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
@@ -354,7 +353,7 @@ describe('OCIOWasmPipeline', () => {
   describe('events', () => {
     it('PIPE-EVT-001: emits modeChanged on init', async () => {
       const events: Array<{ mode: OCIOPipelineMode; reason: string }> = [];
-      pipeline.on('modeChanged', e => events.push(e));
+      pipeline.on('modeChanged', (e) => events.push(e));
 
       await pipeline.init();
 
@@ -367,7 +366,7 @@ describe('OCIOWasmPipeline', () => {
       pipeline.loadConfig('yaml', 'test');
 
       const results: OCIOPipelineResult[] = [];
-      pipeline.on('pipelineReady', r => results.push(r));
+      pipeline.on('pipelineReady', (r) => results.push(r));
 
       pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       expect(results).toHaveLength(1);
@@ -380,7 +379,7 @@ describe('OCIOWasmPipeline', () => {
       pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
       const results: OCIOPipelineResult[] = [];
-      pipeline.on('pipelineReady', r => results.push(r));
+      pipeline.on('pipelineReady', (r) => results.push(r));
 
       pipeline.buildDisplayPipeline('ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       expect(results).toHaveLength(0);

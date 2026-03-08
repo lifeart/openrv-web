@@ -32,12 +32,7 @@ function createGradientImage(width: number, height: number): ImageData {
  * Create an image with a bright vertical stripe at a given x position.
  * Background is black, stripe is white.
  */
-function createStripeImage(
-  width: number,
-  height: number,
-  stripeX: number,
-  stripeWidth: number = 5,
-): ImageData {
+function createStripeImage(width: number, height: number, stripeX: number, stripeWidth: number = 5): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -212,12 +207,14 @@ describe('FloatingWindowControl', () => {
     it('FWC-U031: formats violation result with affected edges', () => {
       const result: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'left',
-          maxViolationDisparity: -5,
-          violatingPoints: 3,
-          totalPoints: 10,
-        }],
+        violations: [
+          {
+            edge: 'left',
+            maxViolationDisparity: -5,
+            violatingPoints: 3,
+            totalPoints: 10,
+          },
+        ],
         worstDisparity: -5,
         affectedEdges: ['left'],
       };
@@ -317,11 +314,9 @@ describe('FloatingWindowControl', () => {
 
     it('FWC-U061: detect with 2x2 image returns valid result', () => {
       const small = new ImageData(
-        new Uint8ClampedArray([
-          255, 0, 0, 255,   0, 255, 0, 255,
-          0, 0, 255, 255,   255, 255, 0, 255,
-        ]),
-        2, 2,
+        new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]),
+        2,
+        2,
       );
       const result = control.detect(small, small);
 

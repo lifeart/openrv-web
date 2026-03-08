@@ -1,4 +1,3 @@
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HSLQualifierControl } from './HSLQualifierControl';
 import { HSLQualifier } from './HSLQualifier';
@@ -64,9 +63,7 @@ describe('HSLQualifierControl', () => {
       hslQualifier = new HSLQualifier();
       control = new HSLQualifierControl(hslQualifier);
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(0);
       addSpy.mockRestore();
     });
@@ -79,9 +76,7 @@ describe('HSLQualifierControl', () => {
       addSpy.mockClear();
       button.click(); // open
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       addSpy.mockRestore();
     });
@@ -95,9 +90,7 @@ describe('HSLQualifierControl', () => {
       removeSpy.mockClear();
       button.click(); // close
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });
@@ -111,9 +104,7 @@ describe('HSLQualifierControl', () => {
       removeSpy.mockClear();
       control.dispose();
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });

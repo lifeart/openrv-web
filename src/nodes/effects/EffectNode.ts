@@ -1,6 +1,6 @@
 import { IPNode } from '../base/IPNode';
 import { defineNodeProperty } from '../base/defineNodeProperty';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 
 /**
@@ -61,15 +61,9 @@ export abstract class EffectNode extends IPNode {
    * Implementations should NOT modify the input image in-place if caching
    * is desired upstream; instead, clone and modify.
    */
-  protected abstract applyEffect(
-    context: EvalContext,
-    input: IPImage
-  ): IPImage;
+  protected abstract applyEffect(context: EvalContext, input: IPImage): IPImage;
 
-  protected process(
-    context: EvalContext,
-    inputs: (IPImage | null)[]
-  ): IPImage | null {
+  protected process(context: EvalContext, inputs: (IPImage | null)[]): IPImage | null {
     const input = inputs[0];
     if (!input) return null;
 

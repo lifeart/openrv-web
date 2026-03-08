@@ -33,39 +33,47 @@ describe('StabilizationEffect', () => {
     });
 
     it('returns false when enabled but no motion and no crop', () => {
-      expect(stabilizationEffect.isActive({
-        stabilizationEnabled: true,
-        stabilizationDx: 0,
-        stabilizationDy: 0,
-        stabilizationCropAmount: 0,
-      })).toBe(false);
+      expect(
+        stabilizationEffect.isActive({
+          stabilizationEnabled: true,
+          stabilizationDx: 0,
+          stabilizationDy: 0,
+          stabilizationCropAmount: 0,
+        }),
+      ).toBe(false);
     });
 
     it('returns true when enabled with non-zero dx', () => {
-      expect(stabilizationEffect.isActive({
-        stabilizationEnabled: true,
-        stabilizationDx: 5,
-        stabilizationDy: 0,
-        stabilizationCropAmount: 0,
-      })).toBe(true);
+      expect(
+        stabilizationEffect.isActive({
+          stabilizationEnabled: true,
+          stabilizationDx: 5,
+          stabilizationDy: 0,
+          stabilizationCropAmount: 0,
+        }),
+      ).toBe(true);
     });
 
     it('returns true when enabled with non-zero dy', () => {
-      expect(stabilizationEffect.isActive({
-        stabilizationEnabled: true,
-        stabilizationDx: 0,
-        stabilizationDy: -3,
-        stabilizationCropAmount: 0,
-      })).toBe(true);
+      expect(
+        stabilizationEffect.isActive({
+          stabilizationEnabled: true,
+          stabilizationDx: 0,
+          stabilizationDy: -3,
+          stabilizationCropAmount: 0,
+        }),
+      ).toBe(true);
     });
 
     it('returns true when enabled with cropAmount only', () => {
-      expect(stabilizationEffect.isActive({
-        stabilizationEnabled: true,
-        stabilizationDx: 0,
-        stabilizationDy: 0,
-        stabilizationCropAmount: 4,
-      })).toBe(true);
+      expect(
+        stabilizationEffect.isActive({
+          stabilizationEnabled: true,
+          stabilizationDx: 0,
+          stabilizationDy: 0,
+          stabilizationCropAmount: 4,
+        }),
+      ).toBe(true);
     });
   });
 
@@ -205,27 +213,33 @@ describe('StabilizationAdapter', () => {
     });
 
     it('returns true when enabled with autoMotion', () => {
-      expect(adapter.isActive({
-        stabilizationEnabled: true,
-        stabilizationAutoMotion: true,
-      })).toBe(true);
+      expect(
+        adapter.isActive({
+          stabilizationEnabled: true,
+          stabilizationAutoMotion: true,
+        }),
+      ).toBe(true);
     });
 
     it('returns true when enabled with manual dx/dy', () => {
-      expect(adapter.isActive({
-        stabilizationEnabled: true,
-        stabilizationDx: 5,
-      })).toBe(true);
+      expect(
+        adapter.isActive({
+          stabilizationEnabled: true,
+          stabilizationDx: 5,
+        }),
+      ).toBe(true);
     });
 
     it('returns false when enabled without autoMotion and zero manual params', () => {
-      expect(adapter.isActive({
-        stabilizationEnabled: true,
-        stabilizationAutoMotion: false,
-        stabilizationDx: 0,
-        stabilizationDy: 0,
-        stabilizationCropAmount: 0,
-      })).toBe(false);
+      expect(
+        adapter.isActive({
+          stabilizationEnabled: true,
+          stabilizationAutoMotion: false,
+          stabilizationDx: 0,
+          stabilizationDy: 0,
+          stabilizationCropAmount: 0,
+        }),
+      ).toBe(false);
     });
   });
 
@@ -243,7 +257,10 @@ describe('StabilizationAdapter', () => {
 
       let changed = false;
       for (let i = 0; i < originalData.length; i++) {
-        if (img.data[i] !== originalData[i]) { changed = true; break; }
+        if (img.data[i] !== originalData[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });

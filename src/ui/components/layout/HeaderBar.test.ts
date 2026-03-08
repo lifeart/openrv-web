@@ -106,9 +106,7 @@ describe('HeaderBar', () => {
       const scrollContainer = headerBar.getContainer();
       // Dividers are 1px-wide elements with border-primary background
       const children = Array.from(scrollContainer.children) as HTMLElement[];
-      const dividers = children.filter(
-        (c) => c.style.width === '1px' && c.style.height === '24px'
-      );
+      const dividers = children.filter((c) => c.style.width === '1px' && c.style.height === '24px');
       expect(dividers.length).toBeGreaterThan(0);
       for (const d of dividers) {
         expect(d.style.flexShrink).toBe('0');
@@ -151,7 +149,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject'
+        (input) => (input as HTMLInputElement).accept === '.orvproject',
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
       expect(projectInput.accept).toBe('.orvproject');
@@ -162,54 +160,42 @@ describe('HeaderBar', () => {
     it('HDR-U030: has play button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const playBtn = Array.from(buttons).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
-      );
+      const playBtn = Array.from(buttons).find((btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'));
       expect(playBtn).not.toBeUndefined();
     });
 
     it('HDR-U031: has skip-back button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const skipBackBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Go to start')
-      );
+      const skipBackBtn = Array.from(buttons).find((btn) => btn.title?.includes('Go to start'));
       expect(skipBackBtn).not.toBeUndefined();
     });
 
     it('HDR-U032: has skip-forward button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const skipFwdBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Go to end')
-      );
+      const skipFwdBtn = Array.from(buttons).find((btn) => btn.title?.includes('Go to end'));
       expect(skipFwdBtn).not.toBeUndefined();
     });
 
     it('HDR-U033: has step-back button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const stepBackBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Step back')
-      );
+      const stepBackBtn = Array.from(buttons).find((btn) => btn.title?.includes('Step back'));
       expect(stepBackBtn).not.toBeUndefined();
     });
 
     it('HDR-U034: has step-forward button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const stepFwdBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Step forward')
-      );
+      const stepFwdBtn = Array.from(buttons).find((btn) => btn.title?.includes('Step forward'));
       expect(stepFwdBtn).not.toBeUndefined();
     });
 
     it('HDR-U035: has loop mode button', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode')
-      );
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode'));
       expect(loopBtn).not.toBeUndefined();
     });
 
@@ -217,9 +203,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       // After render, the title is "Playing forward (Up to reverse)" or "Playing backward..."
-      const dirBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Playing')
-      );
+      const dirBtn = Array.from(buttons).find((btn) => btn.title?.includes('Playing'));
       expect(dirBtn).not.toBeUndefined();
     });
 
@@ -236,7 +220,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const playBtn = Array.from(buttons).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
       playBtn.click();
@@ -248,7 +232,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const playBtn = Array.from(buttons).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
       // Play icon uses polygon shape
@@ -259,7 +243,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const playBtn = Array.from(buttons).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
       // Simulate playback started
@@ -274,7 +258,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const playBtn = Array.from(buttons).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
       // Simulate playback started
@@ -288,7 +272,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const playBtn = Array.from(buttons).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
       // Initial state is paused
@@ -309,9 +293,7 @@ describe('HeaderBar', () => {
     it('HDR-U050: clicking loop button cycles loop mode', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode')
-      ) as HTMLButtonElement;
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
 
       expect(session.loopMode).toBe('loop'); // Default
 
@@ -328,8 +310,8 @@ describe('HeaderBar', () => {
     it('HDR-U051: loop button shows current mode via aria-label', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode')
+      const loopBtn = Array.from(buttons).find(
+        (btn) => btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode'),
       ) as HTMLButtonElement;
 
       expect(loopBtn.getAttribute('aria-label')).toContain('Loop');
@@ -341,9 +323,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       // After render, the title is "Playing forward (Up to reverse)" or "Playing backward..."
-      const dirBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Playing')
-      ) as HTMLButtonElement;
+      const dirBtn = Array.from(buttons).find((btn) => btn.title?.includes('Playing')) as HTMLButtonElement;
 
       expect(session.playDirection).toBe(1); // Forward
 
@@ -357,9 +337,7 @@ describe('HeaderBar', () => {
     it('HDR-U061: direction button title reflects current direction', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const dirBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Playing')
-      ) as HTMLButtonElement;
+      const dirBtn = Array.from(buttons).find((btn) => btn.title?.includes('Playing')) as HTMLButtonElement;
 
       expect(dirBtn.title).toContain('forward');
     });
@@ -368,18 +346,14 @@ describe('HeaderBar', () => {
   describe('speed button', () => {
     it('HDR-U070: speed button shows current speed', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       expect(speedBtn.textContent).toBe('1x');
     });
 
     it('HDR-U071: clicking speed button cycles through presets', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       expect(session.playbackSpeed).toBe(1);
 
@@ -392,9 +366,7 @@ describe('HeaderBar', () => {
 
     it('HDR-U072: speed button has blue styling when not at 1x', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       // At 1x, should be transparent
       expect(speedBtn.style.background).toBe('transparent');
@@ -412,9 +384,7 @@ describe('HeaderBar', () => {
       session.currentFrame = 50;
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const skipBackBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Go to start')
-      ) as HTMLButtonElement;
+      const skipBackBtn = Array.from(buttons).find((btn) => btn.title?.includes('Go to start')) as HTMLButtonElement;
 
       skipBackBtn.click();
 
@@ -424,9 +394,7 @@ describe('HeaderBar', () => {
     it('HDR-U081: skip-forward button goes to end', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const skipFwdBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Go to end')
-      ) as HTMLButtonElement;
+      const skipFwdBtn = Array.from(buttons).find((btn) => btn.title?.includes('Go to end')) as HTMLButtonElement;
 
       skipFwdBtn.click();
 
@@ -437,9 +405,7 @@ describe('HeaderBar', () => {
       session.currentFrame = 50;
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const stepBackBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Step back')
-      ) as HTMLButtonElement;
+      const stepBackBtn = Array.from(buttons).find((btn) => btn.title?.includes('Step back')) as HTMLButtonElement;
 
       stepBackBtn.click();
 
@@ -450,9 +416,7 @@ describe('HeaderBar', () => {
       session.currentFrame = 50;
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const stepFwdBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Step forward')
-      ) as HTMLButtonElement;
+      const stepFwdBtn = Array.from(buttons).find((btn) => btn.title?.includes('Step forward')) as HTMLButtonElement;
 
       stepFwdBtn.click();
 
@@ -615,9 +579,7 @@ describe('HeaderBar', () => {
       const goToStartSpy = vi.spyOn(session, 'goToStart');
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const skipBackBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Go to start')
-      ) as HTMLButtonElement;
+      const skipBackBtn = Array.from(buttons).find((btn) => btn.title?.includes('Go to start')) as HTMLButtonElement;
 
       skipBackBtn.click();
 
@@ -628,9 +590,7 @@ describe('HeaderBar', () => {
       const goToEndSpy = vi.spyOn(session, 'goToEnd');
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const skipFwdBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Go to end')
-      ) as HTMLButtonElement;
+      const skipFwdBtn = Array.from(buttons).find((btn) => btn.title?.includes('Go to end')) as HTMLButtonElement;
 
       skipFwdBtn.click();
 
@@ -641,9 +601,7 @@ describe('HeaderBar', () => {
       const stepBackSpy = vi.spyOn(session, 'stepBackward');
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const stepBackBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Step back')
-      ) as HTMLButtonElement;
+      const stepBackBtn = Array.from(buttons).find((btn) => btn.title?.includes('Step back')) as HTMLButtonElement;
 
       stepBackBtn.click();
 
@@ -654,9 +612,7 @@ describe('HeaderBar', () => {
       const stepFwdSpy = vi.spyOn(session, 'stepForward');
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const stepFwdBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Step forward')
-      ) as HTMLButtonElement;
+      const stepFwdBtn = Array.from(buttons).find((btn) => btn.title?.includes('Step forward')) as HTMLButtonElement;
 
       stepFwdBtn.click();
 
@@ -668,8 +624,8 @@ describe('HeaderBar', () => {
     it('HDR-U120: updates loop button when loop mode changes', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode')
+      const loopBtn = Array.from(buttons).find(
+        (btn) => btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode'),
       ) as HTMLButtonElement;
 
       session.loopMode = 'pingpong';
@@ -681,9 +637,7 @@ describe('HeaderBar', () => {
     it('HDR-U121: updates direction button when direction changes', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const dirBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Playing')
-      ) as HTMLButtonElement;
+      const dirBtn = Array.from(buttons).find((btn) => btn.title?.includes('Playing')) as HTMLButtonElement;
 
       (session as any)._playDirection = -1;
       session.emit('playDirectionChanged', -1);
@@ -693,9 +647,7 @@ describe('HeaderBar', () => {
 
     it('HDR-U122: updates speed button when speed changes', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       session.playbackSpeed = 4;
       session.emit('playbackSpeedChanged', 4);
@@ -711,9 +663,7 @@ describe('HeaderBar', () => {
 
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
-      const saveBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Save project')
-      ) as HTMLButtonElement;
+      const saveBtn = Array.from(buttons).find((btn) => btn.title?.includes('Save project')) as HTMLButtonElement;
 
       saveBtn.click();
 
@@ -727,7 +677,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject'
+        (input) => (input as HTMLInputElement).accept === '.orvproject',
       ) as HTMLInputElement;
 
       // Create a mock file and dispatch change event
@@ -802,9 +752,7 @@ describe('HeaderBar', () => {
   describe('speed button edge cases', () => {
     it('HDR-U150: speed wraps to minimum preset after reaching max preset', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       // Click through to max speed (1 -> 2 -> 4 -> 8), then wrap to min.
       speedBtn.click(); // 2
@@ -818,9 +766,7 @@ describe('HeaderBar', () => {
 
     it('HDR-U150b: speed returns to 1x after a full forward cycle', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       for (let i = 0; i < PLAYBACK_SPEED_PRESETS.length; i++) {
         speedBtn.click();
@@ -832,9 +778,7 @@ describe('HeaderBar', () => {
 
     it('HDR-U151: PLAYBACK_SPEED_PRESETS are ordered ascending', () => {
       for (let i = 1; i < PLAYBACK_SPEED_PRESETS.length; i++) {
-        expect(PLAYBACK_SPEED_PRESETS[i]).toBeGreaterThan(
-          PLAYBACK_SPEED_PRESETS[i - 1]!
-        );
+        expect(PLAYBACK_SPEED_PRESETS[i]).toBeGreaterThan(PLAYBACK_SPEED_PRESETS[i - 1]!);
       }
     });
   });
@@ -844,9 +788,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       document.body.appendChild(el);
 
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       // Right-click to open context menu
       speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
@@ -867,9 +809,7 @@ describe('HeaderBar', () => {
       // Default is preservesPitch = true
       expect(session.preservesPitch).toBe(true);
 
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
@@ -887,9 +827,7 @@ describe('HeaderBar', () => {
 
       expect(session.preservesPitch).toBe(true);
 
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
@@ -909,9 +847,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       document.body.appendChild(el);
 
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
 
@@ -1046,11 +982,14 @@ describe('HeaderBar', () => {
       sessionNameDisplay.click();
 
       await vi.waitFor(() => {
-        expect(promptSpy).toHaveBeenCalledWith('Enter session name', expect.objectContaining({
-          title: 'Rename Session',
-          confirmText: 'Rename',
-          defaultValue: '',
-        }));
+        expect(promptSpy).toHaveBeenCalledWith(
+          'Enter session name',
+          expect.objectContaining({
+            title: 'Rename Session',
+            confirmText: 'Rename',
+            defaultValue: '',
+          }),
+        );
       });
       await vi.waitFor(() => {
         expect(setDisplayNameSpy).toHaveBeenCalledWith('Renamed Session');
@@ -1090,7 +1029,7 @@ describe('HeaderBar', () => {
   describe('image mode', () => {
     const findPlayButton = (el: HTMLElement) =>
       Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
     beforeEach(() => {
@@ -1194,9 +1133,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       headerBar.setImageMode(true);
       vi.advanceTimersByTime(350);
-      const saveBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Save project')
-      );
+      const saveBtn = Array.from(el.querySelectorAll('button')).find((btn) => btn.title?.includes('Save project'));
       expect(saveBtn).toBeDefined();
       expect((saveBtn as HTMLElement).style.display).not.toBe('none');
       expect((saveBtn as HTMLElement).closest('[style*="display: none"]')).toBeNull();
@@ -1334,7 +1271,7 @@ describe('HeaderBar', () => {
       const scrollContainer = headerBar.getContainer();
       // Count all 1px-wide dividers in the header scroll container
       const allDividers = Array.from(scrollContainer.children).filter(
-        (child) => (child as HTMLElement).style.width === '1px'
+        (child) => (child as HTMLElement).style.width === '1px',
       ) as HTMLElement[];
       // There should be at least the two playback dividers
       expect(allDividers.length).toBeGreaterThanOrEqual(2);
@@ -1343,16 +1280,12 @@ describe('HeaderBar', () => {
       vi.advanceTimersByTime(350);
 
       // The dividers flanking the playback group should be hidden
-      const hiddenDividers = allDividers.filter(
-        (d) => d.style.display === 'none'
-      );
+      const hiddenDividers = allDividers.filter((d) => d.style.display === 'none');
       expect(hiddenDividers.length).toBeGreaterThanOrEqual(2);
 
       // Restore
       headerBar.setImageMode(false);
-      const stillHidden = allDividers.filter(
-        (d) => d.style.display === 'none'
-      );
+      const stillHidden = allDividers.filter((d) => d.style.display === 'none');
       expect(stillHidden.length).toBe(0);
     });
   });
@@ -1373,8 +1306,8 @@ describe('HeaderBar', () => {
     it('HB-H11b: createCompactButton() should call applyA11yFocus on the created button', () => {
       const el = headerBar.render();
       // The loop button is created via createCompactButton
-      const loopBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('loop mode')
+      const loopBtn = Array.from(el.querySelectorAll('button')).find((btn) =>
+        btn.title?.includes('loop mode'),
       ) as HTMLButtonElement;
 
       // Simulate keyboard focus (no preceding mousedown).
@@ -1420,7 +1353,7 @@ describe('HeaderBar', () => {
     it('ICN-H12c-play: play button icon SVG has aria-hidden="true"', () => {
       const el = headerBar.render();
       const playBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
       const svg = playBtn.querySelector('svg');
       expect(svg).not.toBeNull();
@@ -1430,7 +1363,7 @@ describe('HeaderBar', () => {
     it('ICN-H12c-update: play button icon SVG retains aria-hidden after playback state change', () => {
       const el = headerBar.render();
       const playBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause'),
       ) as HTMLButtonElement;
 
       // Simulate playback started (switches to pause icon)
@@ -1559,8 +1492,8 @@ describe('HeaderBar', () => {
     it('HB-L60b: compact buttons should respond to pointerenter/pointerleave (touch support)', () => {
       const el = headerBar.render();
       // The loop button is created via createCompactButton
-      const loopBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('loop mode')
+      const loopBtn = Array.from(el.querySelectorAll('button')).find((btn) =>
+        btn.title?.includes('loop mode'),
       ) as HTMLButtonElement;
 
       // Initial state: transparent background
@@ -1579,9 +1512,7 @@ describe('HeaderBar', () => {
 
     it('HB-L60c: speed button should respond to pointerenter/pointerleave (touch support)', () => {
       const el = headerBar.render();
-      const speedBtn = el.querySelector(
-        '[data-testid="playback-speed-button"]'
-      ) as HTMLButtonElement;
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
 
       // Simulate pointerenter
       speedBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
@@ -1622,7 +1553,10 @@ describe('HeaderBar', () => {
 
   describe('speed menu keyboard accessibility (M-22)', () => {
     /** Helper: opens the speed menu and returns the menu element */
-    function openSpeedMenu(el: HTMLElement, method: 'contextmenu' | 'shift-enter' | 'shift-space' = 'contextmenu'): HTMLElement {
+    function openSpeedMenu(
+      el: HTMLElement,
+      method: 'contextmenu' | 'shift-enter' | 'shift-space' = 'contextmenu',
+    ): HTMLElement {
       const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
       if (method === 'contextmenu') {
         speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));

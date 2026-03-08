@@ -1,9 +1,5 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import {
-  FramePreloadManager,
-  PreloadConfig,
-  DEFAULT_PRELOAD_CONFIG,
-} from './FramePreloadManager';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { FramePreloadManager, type PreloadConfig, DEFAULT_PRELOAD_CONFIG } from './FramePreloadManager';
 
 interface TestFrame {
   frame: number;
@@ -145,7 +141,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait for preloads to complete
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should have preloaded 3 frames in each direction
       expect(manager.hasFrame(49)).toBe(true);
@@ -163,7 +159,7 @@ describe('FramePreloadManager', () => {
       manager.setPlaybackState(true, 1);
       manager.preloadAround(50);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should have more frames ahead
       expect(manager.hasFrame(51)).toBe(true);
@@ -179,7 +175,7 @@ describe('FramePreloadManager', () => {
 
       manager.preloadAround(1);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should not try to load frame 0 or negative
       expect(loader).not.toHaveBeenCalledWith(0);
@@ -198,7 +194,7 @@ describe('FramePreloadManager', () => {
       loader.mockClear();
 
       manager.preloadAround(50);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should not reload frame 51
       expect(loader).not.toHaveBeenCalledWith(51);
@@ -343,7 +339,7 @@ describe('FramePreloadManager', () => {
       const slowLoader = vi.fn(async (frame: number) => {
         activeCount++;
         maxActive = Math.max(maxActive, activeCount);
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 20));
         activeCount--;
         return { frame, data: `frame-${frame}` };
       });
@@ -356,7 +352,7 @@ describe('FramePreloadManager', () => {
 
       manager.preloadAround(50);
 
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       expect(maxActive).toBeLessThanOrEqual(3);
     });
@@ -365,7 +361,7 @@ describe('FramePreloadManager', () => {
       let loadCount = 0;
       const slowLoader = vi.fn(async (frame: number) => {
         loadCount++;
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         return { frame, data: `frame-${frame}` };
       });
 
@@ -414,7 +410,7 @@ describe('FramePreloadManager', () => {
         preloadAhead: 30,
         preloadBehind: 5,
         scrubWindow: 10,
-        maxConcurrent: 3,  // Kept low: MediabunnyFrameExtractor serializes decoding
+        maxConcurrent: 3, // Kept low: MediabunnyFrameExtractor serializes decoding
         priorityDecayRate: 1.0,
       });
     });
@@ -483,19 +479,14 @@ describe('FramePreloadManager', () => {
       let loadCount = 0;
       const slowLoader = vi.fn(async (frame: number) => {
         loadCount++;
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
         return { frame, data: `frame-${frame}` };
       });
 
       const manager = new FramePreloadManager<TestFrame>(100, slowLoader);
 
       // Request different frames concurrently
-      const promises = [
-        manager.getFrame(1),
-        manager.getFrame(2),
-        manager.getFrame(3),
-        manager.getFrame(4),
-      ];
+      const promises = [manager.getFrame(1), manager.getFrame(2), manager.getFrame(3), manager.getFrame(4)];
 
       await Promise.all(promises);
 
@@ -505,7 +496,7 @@ describe('FramePreloadManager', () => {
 
     it('FPM-031: request during pending load returns same promise result', async () => {
       const slowLoader = vi.fn(async (frame: number) => {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         return { frame, data: `frame-${frame}` };
       });
 
@@ -515,7 +506,7 @@ describe('FramePreloadManager', () => {
       const promise1 = manager.getFrame(5);
 
       // Wait a bit, then request same frame while still loading
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       const promise2 = manager.getFrame(5);
 
       const [result1, result2] = await Promise.all([promise1, promise2]);
@@ -528,7 +519,7 @@ describe('FramePreloadManager', () => {
 
     it('FPM-032: cancelled requests do not add to cache when not yet started', async () => {
       const slowLoader = vi.fn(async (frame: number) => {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
         return { frame, data: `frame-${frame}` };
       });
 
@@ -546,7 +537,7 @@ describe('FramePreloadManager', () => {
       // Frames far from position 1 should be cancelled
       manager.preloadAround(1);
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Frames very far from position 1 should not be cached
       // (they were cancelled before starting due to low concurrency)
@@ -566,7 +557,7 @@ describe('FramePreloadManager', () => {
       manager.setPlaybackState(true, -1); // Reverse playback
       manager.preloadAround(50);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // In reverse, "ahead" means lower frame numbers
       expect(manager.hasFrame(49)).toBe(true); // Ahead in reverse
@@ -585,7 +576,7 @@ describe('FramePreloadManager', () => {
       // Start in playback mode
       manager.setPlaybackState(true, 1);
       manager.preloadAround(50);
-      await new Promise(resolve => setTimeout(resolve, 30));
+      await new Promise((resolve) => setTimeout(resolve, 30));
 
       // Switch to scrub mode
       manager.setPlaybackState(false);
@@ -594,7 +585,7 @@ describe('FramePreloadManager', () => {
 
       // Preload in scrub mode
       manager.preloadAround(50);
-      await new Promise(resolve => setTimeout(resolve, 30));
+      await new Promise((resolve) => setTimeout(resolve, 30));
 
       // Scrub mode should have symmetric preloading
       expect(manager.hasFrame(49)).toBe(true);
@@ -832,7 +823,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(35);
       manager.preloadAround(70);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const stats = manager.getStats();
       expect(stats.cacheSize).toBe(70);
@@ -937,7 +928,7 @@ describe('FramePreloadManager', () => {
       // Preload around frame 65 (near the end)
       manager.preloadAround(65);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should NOT try to load frames beyond 70
       expect(loader).not.toHaveBeenCalledWith(71, expect.any(AbortSignal));
@@ -1047,7 +1038,7 @@ describe('FramePreloadManager', () => {
 
       // Wait for active requests to complete via .finally() handlers
       // Active requests will resolve quickly due to abort signal
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const stats = manager.getStats();
       // All pending requests should be cleared immediately
@@ -1079,13 +1070,13 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait a bit for requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Stop playback - should abort pending operations
       manager.setPlaybackState(false);
 
       // Wait for cleanup
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const stats = manager.getStats();
       // Pending requests should be cleared when stopping playback
@@ -1114,7 +1105,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait for requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Get signal before direction change
       const signalBefore = manager.getAbortSignal();
@@ -1126,7 +1117,7 @@ describe('FramePreloadManager', () => {
       expect(signalBefore.aborted).toBe(true);
 
       // Wait for cleanup
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const stats = manager.getStats();
       expect(stats.pendingRequests).toBe(0);
@@ -1184,7 +1175,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait for requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Clear should abort everything
       manager.clear();
@@ -1267,7 +1258,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait for requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const signalBefore = manager.getAbortSignal();
 
@@ -1304,7 +1295,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait for requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const signalBefore = manager.getAbortSignal();
 
@@ -1315,7 +1306,7 @@ describe('FramePreloadManager', () => {
       expect(signalBefore.aborted).toBe(true);
 
       // Wait for cleanup
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const stats = manager.getStats();
       expect(stats.pendingRequests).toBe(0);
@@ -1343,7 +1334,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(50);
 
       // Wait for requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const signalBefore = manager.getAbortSignal();
 
@@ -1354,7 +1345,7 @@ describe('FramePreloadManager', () => {
       expect(signalBefore.aborted).toBe(true);
 
       // Wait for cleanup
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const stats = manager.getStats();
       expect(stats.pendingRequests).toBe(0);
@@ -1390,7 +1381,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(10);
 
       // Wait for preload requests to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       // Now request a frame that's not cached and not in-flight
       // This should abort the in-flight preloads
@@ -1410,7 +1401,7 @@ describe('FramePreloadManager', () => {
 
       // Queue some preloads
       manager.preloadAround(5);
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const signalBefore = manager.getAbortSignal();
 
@@ -1441,7 +1432,7 @@ describe('FramePreloadManager', () => {
       manager.setPlaybackState(false);
       manager.preloadAround(10);
 
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const signalBefore = manager.getAbortSignal();
 
@@ -1513,7 +1504,7 @@ describe('FramePreloadManager', () => {
       manager.preloadAround(10);
 
       // Wait for all to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Max concurrent loads should not exceed 3 (the default)
       expect(maxActiveLoads).toBeLessThanOrEqual(3);

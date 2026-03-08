@@ -19,7 +19,7 @@ import type { ShotStatus } from '../core/session/StatusManager';
 // ---------------------------------------------------------------------------
 
 function createMockSession(
-  sources: { name: string; duration: number; fps: number; startFrame?: number }[]
+  sources: { name: string; duration: number; fps: number; startFrame?: number }[],
 ): ReportSession {
   return {
     sourceCount: sources.length,
@@ -35,7 +35,7 @@ function createMockNoteManager(notes: Record<number, { text: string }[]>): Repor
 }
 
 function createMockStatusManager(
-  statuses: Record<number, { status: ShotStatus; setBy: string; setAt?: string }>
+  statuses: Record<number, { status: ShotStatus; setBy: string; setAt?: string }>,
 ): ReportStatusManager {
   return {
     getStatus: (i: number) => statuses[i]?.status ?? 'pending',
@@ -44,9 +44,7 @@ function createMockStatusManager(
   };
 }
 
-function createMockVersionManager(
-  groups: Record<number, { shotName: string; label: string }>
-): ReportVersionManager {
+function createMockVersionManager(groups: Record<number, { shotName: string; label: string }>): ReportVersionManager {
   return {
     getGroupForSource: (i: number) => {
       const g = groups[i];
@@ -191,9 +189,7 @@ describe('ReportExporter', () => {
     });
 
     it('uses editorial startFrame for frame range', () => {
-      const session = createMockSession([
-        { name: 'shot.exr', duration: 48, fps: 24, startFrame: 1001 },
-      ]);
+      const session = createMockSession([{ name: 'shot.exr', duration: 48, fps: 24, startFrame: 1001 }]);
       const rows = buildReportRows(
         session,
         createMockNoteManager({}),
@@ -230,18 +226,20 @@ describe('ReportExporter', () => {
     });
 
     it('REPORT-002: escapes commas and quotes in notes', () => {
-      const rows: ReportRow[] = [{
-        shotName: 'shot',
-        versionLabel: 'v1',
-        status: 'approved',
-        notes: ['Fix "edge" blending, and roto'],
-        frameRange: '1-48',
-        timecodeIn: '00:00:00:00',
-        timecodeOut: '00:00:02:00',
-        duration: '48 frames',
-        setBy: 'user',
-        setAt: '',
-      }];
+      const rows: ReportRow[] = [
+        {
+          shotName: 'shot',
+          versionLabel: 'v1',
+          status: 'approved',
+          notes: ['Fix "edge" blending, and roto'],
+          frameRange: '1-48',
+          timecodeIn: '00:00:00:00',
+          timecodeOut: '00:00:02:00',
+          duration: '48 frames',
+          setBy: 'user',
+          setAt: '',
+        },
+      ];
       const csv = generateCSV(rows, defaultOptions);
       const dataLine = csv.split('\r\n')[1]!;
       // The notes field should be double-quoted and inner quotes doubled
@@ -251,7 +249,7 @@ describe('ReportExporter', () => {
     it('REPORT-003: includes all fields per row', () => {
       const rows = createSampleRows();
       const csv = generateCSV(rows, defaultOptions);
-      const lines = csv.split('\r\n').filter(l => l.length > 0);
+      const lines = csv.split('\r\n').filter((l) => l.length > 0);
       expect(lines).toHaveLength(3); // header + 2 data rows
 
       const fields = lines[1]!.split(',');
@@ -285,7 +283,7 @@ describe('ReportExporter', () => {
 
     it('REPORT-008: handles empty playlist (header only)', () => {
       const csv = generateCSV([], defaultOptions);
-      const lines = csv.split('\r\n').filter(l => l.length > 0);
+      const lines = csv.split('\r\n').filter((l) => l.length > 0);
       expect(lines).toHaveLength(1);
       expect(lines[0]).toContain('Shot');
     });
@@ -354,18 +352,20 @@ describe('ReportExporter', () => {
     });
 
     it('escapes HTML special characters in shot names', () => {
-      const rows: ReportRow[] = [{
-        shotName: '<script>alert("xss")</script>',
-        versionLabel: '',
-        status: 'pending',
-        notes: [],
-        frameRange: '1-24',
-        timecodeIn: '00:00:00:00',
-        timecodeOut: '00:00:01:00',
-        duration: '24 frames',
-        setBy: '',
-        setAt: '',
-      }];
+      const rows: ReportRow[] = [
+        {
+          shotName: '<script>alert("xss")</script>',
+          versionLabel: '',
+          status: 'pending',
+          notes: [],
+          frameRange: '1-24',
+          timecodeIn: '00:00:00:00',
+          timecodeOut: '00:00:01:00',
+          duration: '24 frames',
+          setBy: '',
+          setAt: '',
+        },
+      ];
       const html = generateHTML(rows, defaultOptions);
       expect(html).not.toContain('<script>');
       expect(html).toContain('&lt;script&gt;');
@@ -378,18 +378,20 @@ describe('ReportExporter', () => {
     });
 
     it('escapes HTML in notes', () => {
-      const rows: ReportRow[] = [{
-        shotName: 'shot',
-        versionLabel: '',
-        status: 'pending',
-        notes: ['<b>bold</b>'],
-        frameRange: '1-24',
-        timecodeIn: '00:00:00:00',
-        timecodeOut: '00:00:01:00',
-        duration: '24 frames',
-        setBy: '',
-        setAt: '',
-      }];
+      const rows: ReportRow[] = [
+        {
+          shotName: 'shot',
+          versionLabel: '',
+          status: 'pending',
+          notes: ['<b>bold</b>'],
+          frameRange: '1-24',
+          timecodeIn: '00:00:00:00',
+          timecodeOut: '00:00:01:00',
+          duration: '24 frames',
+          setBy: '',
+          setAt: '',
+        },
+      ];
       const html = generateHTML(rows, defaultOptions);
       expect(html).toContain('&lt;b&gt;bold&lt;/b&gt;');
     });
@@ -451,9 +453,7 @@ describe('ReportExporter', () => {
       URL.createObjectURL = vi.fn(() => mockUrl);
       URL.revokeObjectURL = vi.fn();
 
-      const session = createMockSession([
-        { name: 'shot.exr', duration: 48, fps: 24 },
-      ]);
+      const session = createMockSession([{ name: 'shot.exr', duration: 48, fps: 24 }]);
 
       generateReport(
         session,
@@ -490,13 +490,10 @@ describe('ReportExporter', () => {
 
       const session = createMockSession([{ name: 'shot.exr', duration: 48, fps: 24 }]);
 
-      generateReport(
-        session,
-        createMockNoteManager({}),
-        createMockStatusManager({}),
-        createMockVersionManager({}),
-        { ...defaultOptions, format: 'html' },
-      );
+      generateReport(session, createMockNoteManager({}), createMockStatusManager({}), createMockVersionManager({}), {
+        ...defaultOptions,
+        format: 'html',
+      });
 
       expect(mockAnchor.download).toContain('.html');
 

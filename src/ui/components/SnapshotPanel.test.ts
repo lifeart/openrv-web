@@ -10,9 +10,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SnapshotPanel } from './SnapshotPanel';
 import type { ExclusivePanel } from './SnapshotPanel';
-import type { Snapshot } from '../../core/session/SnapshotManager';
+import type { Snapshot, SnapshotManagerEvents } from '../../core/session/SnapshotManager';
 import { EventEmitter } from '../../utils/EventEmitter';
-import type { SnapshotManagerEvents } from '../../core/session/SnapshotManager';
 
 vi.mock('./shared/Modal', () => ({
   showPrompt: vi.fn(),
@@ -91,10 +90,7 @@ describe('SnapshotPanel', () => {
       const onSpy = vi.spyOn(spyManager, 'on');
       const spyPanel = new SnapshotPanel(spyManager as never);
 
-      expect(onSpy).toHaveBeenCalledWith(
-        'snapshotsChanged',
-        expect.any(Function)
-      );
+      expect(onSpy).toHaveBeenCalledWith('snapshotsChanged', expect.any(Function));
 
       spyPanel.dispose();
     });
@@ -246,9 +242,7 @@ describe('SnapshotPanel', () => {
         createMockSnapshot({ id: 'snap-1', name: 'Snapshot A' }),
         createMockSnapshot({ id: 'snap-2', name: 'Snapshot B' }),
       ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -261,12 +255,8 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-032: shows MANUAL badge for manual snapshots', async () => {
-      const snapshots = [
-        createMockSnapshot({ isAutoCheckpoint: false }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ isAutoCheckpoint: false })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -278,12 +268,8 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-033: shows AUTO badge for auto-checkpoints', async () => {
-      const snapshots = [
-        createMockSnapshot({ isAutoCheckpoint: true, name: 'Auto: source loaded' }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ isAutoCheckpoint: true, name: 'Auto: source loaded' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -298,9 +284,7 @@ describe('SnapshotPanel', () => {
       document.body.appendChild(panel.render());
       panel.show();
 
-      const newSnapshots = [
-        createMockSnapshot({ id: 'snap-new', name: 'New Snapshot' }),
-      ];
+      const newSnapshots = [createMockSnapshot({ id: 'snap-new', name: 'New Snapshot' })];
 
       // Simulate snapshotsChanged event from manager using the real EventEmitter
       manager.emit('snapshotsChanged', { snapshots: newSnapshots });
@@ -316,12 +300,8 @@ describe('SnapshotPanel', () => {
   // ---------------------------------------------------------------------------
   describe('snapshot actions', () => {
     it('SNAP-040: restore button emits restoreRequested event', async () => {
-      const snapshots = [
-        createMockSnapshot({ id: 'snap-restore', name: 'Restore Me' }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ id: 'snap-restore', name: 'Restore Me' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -340,12 +320,8 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-041: rename button calls showPrompt and manager.renameSnapshot', async () => {
-      const snapshots = [
-        createMockSnapshot({ id: 'snap-rename', name: 'Old Name' }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ id: 'snap-rename', name: 'Old Name' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       vi.mocked(showPrompt).mockResolvedValue('New Name');
 
       document.body.appendChild(panel.render());
@@ -359,22 +335,15 @@ describe('SnapshotPanel', () => {
 
       await vi.waitFor(() => {
         expect(showPrompt).toHaveBeenCalled();
-        expect(manager.renameSnapshot).toHaveBeenCalledWith(
-          'snap-rename',
-          'New Name'
-        );
+        expect(manager.renameSnapshot).toHaveBeenCalledWith('snap-rename', 'New Name');
       });
 
       document.body.removeChild(panel.render());
     });
 
     it('SNAP-042: delete button calls showConfirm and manager.deleteSnapshot', async () => {
-      const snapshots = [
-        createMockSnapshot({ id: 'snap-delete', name: 'Delete Me' }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ id: 'snap-delete', name: 'Delete Me' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       vi.mocked(showConfirm).mockResolvedValue(true);
 
       document.body.appendChild(panel.render());
@@ -395,12 +364,8 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-043: delete does not proceed when user cancels confirmation', async () => {
-      const snapshots = [
-        createMockSnapshot({ id: 'snap-cancel', name: 'Keep Me' }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ id: 'snap-cancel', name: 'Keep Me' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       vi.mocked(showConfirm).mockResolvedValue(false);
 
       document.body.appendChild(panel.render());
@@ -439,9 +404,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -473,9 +436,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -521,9 +482,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -553,9 +512,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -575,12 +532,8 @@ describe('SnapshotPanel', () => {
   // ---------------------------------------------------------------------------
   describe('size formatting', () => {
     it('SNAP-060: formats bytes correctly', async () => {
-      const snapshots = [
-        createMockSnapshot({ size: 512 }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ size: 512 })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -592,12 +545,8 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-061: formats kilobytes correctly', async () => {
-      const snapshots = [
-        createMockSnapshot({ size: 2048 }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ size: 2048 })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -609,12 +558,8 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-062: formats megabytes correctly', async () => {
-      const snapshots = [
-        createMockSnapshot({ size: 2 * 1024 * 1024 }),
-      ];
-      manager.listSnapshots.mockResolvedValue(
-        snapshots
-      );
+      const snapshots = [createMockSnapshot({ size: 2 * 1024 * 1024 })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
       panel.show();
 

@@ -140,11 +140,7 @@ export function forEachBrushPixel(
  * Read RGBA values from a pixel buffer at the given coordinates.
  * Returns [0, 0, 0, 0] for out-of-bounds coordinates.
  */
-export function samplePixel(
-  buffer: PixelBuffer,
-  x: number,
-  y: number,
-): [number, number, number, number] {
+export function samplePixel(buffer: PixelBuffer, x: number, y: number): [number, number, number, number] {
   const px = Math.round(x);
   const py = Math.round(y);
 
@@ -153,12 +149,7 @@ export function samplePixel(
   }
 
   const idx = (py * buffer.width + px) * 4;
-  return [
-    buffer.data[idx]!,
-    buffer.data[idx + 1]!,
-    buffer.data[idx + 2]!,
-    buffer.data[idx + 3]!,
-  ];
+  return [buffer.data[idx]!, buffer.data[idx + 1]!, buffer.data[idx + 2]!, buffer.data[idx + 3]!];
 }
 
 // ---------------------------------------------------------------------------
@@ -422,10 +413,15 @@ export type AdvancedToolName = 'dodge' | 'burn' | 'clone' | 'smudge';
  */
 export function createAdvancedTool(name: AdvancedToolName): PaintToolInterface {
   switch (name) {
-    case 'dodge': return new DodgeTool();
-    case 'burn': return new BurnTool();
-    case 'clone': return new CloneTool();
-    case 'smudge': return new SmudgeTool();
-    default: throw new Error(`Unknown advanced paint tool: ${name}`);
+    case 'dodge':
+      return new DodgeTool();
+    case 'burn':
+      return new BurnTool();
+    case 'clone':
+      return new CloneTool();
+    case 'smudge':
+      return new SmudgeTool();
+    default:
+      throw new Error(`Unknown advanced paint tool: ${name}`);
   }
 }

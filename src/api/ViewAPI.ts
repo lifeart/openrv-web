@@ -8,24 +8,22 @@ import type { ViewerProvider } from './types';
 import type { ChannelMode } from '../core/types/color';
 import { ValidationError } from '../core/errors';
 
-const VALID_CHANNELS: ReadonlySet<string> = new Set([
-  'rgb', 'red', 'green', 'blue', 'alpha', 'luminance',
-]);
+const VALID_CHANNELS: ReadonlySet<string> = new Set(['rgb', 'red', 'green', 'blue', 'alpha', 'luminance']);
 
 // Alias map for user-friendly channel names
 const CHANNEL_ALIASES: Record<string, ChannelMode> = {
-  'rgb': 'rgb',
-  'red': 'red',
-  'r': 'red',
-  'green': 'green',
-  'g': 'green',
-  'blue': 'blue',
-  'b': 'blue',
-  'alpha': 'alpha',
-  'a': 'alpha',
-  'luminance': 'luminance',
-  'luma': 'luminance',
-  'l': 'luminance',
+  rgb: 'rgb',
+  red: 'red',
+  r: 'red',
+  green: 'green',
+  g: 'green',
+  blue: 'blue',
+  b: 'blue',
+  alpha: 'alpha',
+  a: 'alpha',
+  luminance: 'luminance',
+  luma: 'luminance',
+  l: 'luminance',
 };
 
 export class ViewAPI {
@@ -172,7 +170,7 @@ export class ViewAPI {
     const resolved = CHANNEL_ALIASES[mode.toLowerCase()];
     if (!resolved) {
       throw new ValidationError(
-        `Invalid channel mode: "${mode}". Valid modes: ${Array.from(VALID_CHANNELS).join(', ')}`
+        `Invalid channel mode: "${mode}". Valid modes: ${Array.from(VALID_CHANNELS).join(', ')}`,
       );
     }
     this.viewer.setChannelMode(resolved);

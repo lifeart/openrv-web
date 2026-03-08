@@ -17,65 +17,65 @@ function createMockGL(): WebGL2RenderingContext {
   let bufferId = 1;
 
   return {
-    TEXTURE_2D: 0x0DE1,
-    TEXTURE0: 0x84C0,
+    TEXTURE_2D: 0x0de1,
+    TEXTURE0: 0x84c0,
     RGBA: 0x1908,
     RGBA8: 0x8058,
-    RGBA16F: 0x881A,
+    RGBA16F: 0x881a,
     UNSIGNED_BYTE: 0x1401,
-    HALF_FLOAT: 0x140B,
+    HALF_FLOAT: 0x140b,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
     LINEAR: 0x2601,
     NEAREST: 0x2600,
-    CLAMP_TO_EDGE: 0x812F,
-    FRAMEBUFFER: 0x8D40,
-    COLOR_ATTACHMENT0: 0x8CE0,
+    CLAMP_TO_EDGE: 0x812f,
+    FRAMEBUFFER: 0x8d40,
+    COLOR_ATTACHMENT0: 0x8ce0,
     COLOR_BUFFER_BIT: 0x00004000,
-    FRAMEBUFFER_COMPLETE: 0x8CD5,
-    COMPILE_STATUS: 0x8B81,
-    LINK_STATUS: 0x8B82,
-    VERTEX_SHADER: 0x8B31,
-    FRAGMENT_SHADER: 0x8B30,
-    INVALID_INDEX: 0xFFFFFFFF,
+    FRAMEBUFFER_COMPLETE: 0x8cd5,
+    COMPILE_STATUS: 0x8b81,
+    LINK_STATUS: 0x8b82,
+    VERTEX_SHADER: 0x8b31,
+    FRAGMENT_SHADER: 0x8b30,
+    INVALID_INDEX: 0xffffffff,
     FLOAT: 0x1406,
     ARRAY_BUFFER: 0x8892,
-    STATIC_DRAW: 0x88E4,
-    UNIFORM_BUFFER: 0x8A11,
-    DYNAMIC_DRAW: 0x88E8,
+    STATIC_DRAW: 0x88e4,
+    UNIFORM_BUFFER: 0x8a11,
+    DYNAMIC_DRAW: 0x88e8,
     TRIANGLE_STRIP: 0x0005,
 
-    createTexture: vi.fn(() => (textureId++) as unknown as WebGLTexture),
+    createTexture: vi.fn(() => textureId++ as unknown as WebGLTexture),
     bindTexture: vi.fn(),
     texImage2D: vi.fn(),
     texParameteri: vi.fn(),
     deleteTexture: vi.fn(),
     activeTexture: vi.fn(),
 
-    createFramebuffer: vi.fn(() => (fboId++) as unknown as WebGLFramebuffer),
+    createFramebuffer: vi.fn(() => fboId++ as unknown as WebGLFramebuffer),
     bindFramebuffer: vi.fn(),
     framebufferTexture2D: vi.fn(),
-    checkFramebufferStatus: vi.fn(() => 0x8CD5),
+    checkFramebufferStatus: vi.fn(() => 0x8cd5),
     deleteFramebuffer: vi.fn(),
     invalidateFramebuffer: vi.fn(),
 
-    createBuffer: vi.fn(() => (bufferId++) as unknown as WebGLBuffer),
+    createBuffer: vi.fn(() => bufferId++ as unknown as WebGLBuffer),
     bindBuffer: vi.fn(),
     bufferData: vi.fn(),
     bufferSubData: vi.fn(),
     bindBufferBase: vi.fn(),
     deleteBuffer: vi.fn(),
 
-    createShader: vi.fn(() => (shaderId++) as unknown as WebGLShader),
+    createShader: vi.fn(() => shaderId++ as unknown as WebGLShader),
     shaderSource: vi.fn(),
     compileShader: vi.fn(),
     getShaderParameter: vi.fn(() => true),
     getShaderInfoLog: vi.fn(() => ''),
     deleteShader: vi.fn(),
 
-    createProgram: vi.fn(() => (programId++) as unknown as WebGLProgram),
+    createProgram: vi.fn(() => programId++ as unknown as WebGLProgram),
     attachShader: vi.fn(),
     linkProgram: vi.fn(),
     getProgramParameter: vi.fn(() => true),
@@ -83,7 +83,7 @@ function createMockGL(): WebGL2RenderingContext {
     useProgram: vi.fn(),
     deleteProgram: vi.fn(),
     getUniformLocation: vi.fn(() => ({ _loc: true })),
-    getUniformBlockIndex: vi.fn(() => 0xFFFFFFFF),
+    getUniformBlockIndex: vi.fn(() => 0xffffffff),
     uniformBlockBinding: vi.fn(),
     uniform1f: vi.fn(),
     uniform1i: vi.fn(),
@@ -137,9 +137,18 @@ function createMockState(): InternalShaderState {
     cdlColorspace: 0,
     curvesEnabled: false,
     colorWheelsEnabled: false,
-    liftR: 0, liftG: 0, liftB: 0, liftMaster: 0,
-    gammaR: 1, gammaG: 1, gammaB: 1, gammaMaster: 1,
-    gainR: 1, gainG: 1, gainB: 1, gainMaster: 1,
+    liftR: 0,
+    liftG: 0,
+    liftB: 0,
+    liftMaster: 0,
+    gammaR: 1,
+    gammaG: 1,
+    gammaB: 1,
+    gammaMaster: 1,
+    gainR: 1,
+    gainG: 1,
+    gainB: 1,
+    gainMaster: 1,
     falseColorEnabled: false,
     falseColorMode: 0,
     zebraEnabled: false,
@@ -288,9 +297,7 @@ describe('ShaderPipeline', () => {
       const sourceTexture = gl.createTexture()!;
       const targetFBO = gl.createFramebuffer()!;
 
-      const result = pipeline.executeToLinearFBO(
-        gl, sourceTexture, 800, 600, state, texCb, targetFBO,
-      );
+      const result = pipeline.executeToLinearFBO(gl, sourceTexture, 800, 600, state, texCb, targetFBO);
 
       expect(result).toBe(true);
       expect(gl.drawArrays).toHaveBeenCalled();
@@ -303,9 +310,7 @@ describe('ShaderPipeline', () => {
       const sourceTexture = gl.createTexture()!;
       const targetFBO = gl.createFramebuffer()!;
 
-      const result = pipeline.executeToLinearFBO(
-        gl, sourceTexture, 800, 600, state, texCb, targetFBO,
-      );
+      const result = pipeline.executeToLinearFBO(gl, sourceTexture, 800, 600, state, texCb, targetFBO);
 
       expect(result).toBe(true);
       expect(stage.applyUniforms).toHaveBeenCalled();
@@ -318,9 +323,7 @@ describe('ShaderPipeline', () => {
       const sourceTexture = gl.createTexture()!;
       const targetFBO = gl.createFramebuffer()!;
 
-      const result = pipeline.executeToLinearFBO(
-        gl, sourceTexture, 800, 600, state, texCb, targetFBO,
-      );
+      const result = pipeline.executeToLinearFBO(gl, sourceTexture, 800, 600, state, texCb, targetFBO);
 
       expect(result).toBe(true);
       // Should have drawn at least 2 quads (one per active stage)
@@ -336,9 +339,7 @@ describe('ShaderPipeline', () => {
       const sourceTexture = gl.createTexture()!;
       const targetFBO = gl.createFramebuffer()!;
 
-      pipeline.executeToLinearFBO(
-        gl, sourceTexture, 800, 600, state, texCb, targetFBO,
-      );
+      pipeline.executeToLinearFBO(gl, sourceTexture, 800, 600, state, texCb, targetFBO);
 
       // Only per-layer stage should have its uniforms applied
       expect(perLayerStage.applyUniforms).toHaveBeenCalled();
@@ -354,9 +355,7 @@ describe('ShaderPipeline', () => {
       const sourceTexture = gl.createTexture()!;
       const targetFBO = gl.createFramebuffer()!;
 
-      pipeline.executeToLinearFBO(
-        gl, sourceTexture, 800, 600, state, texCb, targetFBO,
-      );
+      pipeline.executeToLinearFBO(gl, sourceTexture, 800, 600, state, texCb, targetFBO);
 
       expect(activeStage.applyUniforms).toHaveBeenCalled();
       expect(identityStage.applyUniforms).not.toHaveBeenCalled();
@@ -367,9 +366,7 @@ describe('ShaderPipeline', () => {
     it('renders passthrough when no display stages are active', () => {
       const inputTexture = gl.createTexture()!;
 
-      pipeline.executeDisplayOutput(
-        gl, inputTexture, 800, 600, state, texCb,
-      );
+      pipeline.executeDisplayOutput(gl, inputTexture, 800, 600, state, texCb);
 
       expect(gl.drawArrays).toHaveBeenCalled();
     });
@@ -380,9 +377,7 @@ describe('ShaderPipeline', () => {
 
       const inputTexture = gl.createTexture()!;
 
-      pipeline.executeDisplayOutput(
-        gl, inputTexture, 800, 600, state, texCb,
-      );
+      pipeline.executeDisplayOutput(gl, inputTexture, 800, 600, state, texCb);
 
       expect(stage.applyUniforms).toHaveBeenCalled();
     });
@@ -393,9 +388,7 @@ describe('ShaderPipeline', () => {
 
       const inputTexture = gl.createTexture()!;
 
-      pipeline.executeDisplayOutput(
-        gl, inputTexture, 800, 600, state, texCb,
-      );
+      pipeline.executeDisplayOutput(gl, inputTexture, 800, 600, state, texCb);
 
       expect((gl.drawArrays as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
@@ -408,9 +401,7 @@ describe('ShaderPipeline', () => {
 
       const inputTexture = gl.createTexture()!;
 
-      pipeline.executeDisplayOutput(
-        gl, inputTexture, 800, 600, state, texCb,
-      );
+      pipeline.executeDisplayOutput(gl, inputTexture, 800, 600, state, texCb);
 
       // Only display stage should have its uniforms applied
       expect(displayStage.applyUniforms).toHaveBeenCalled();
@@ -424,9 +415,7 @@ describe('ShaderPipeline', () => {
       const inputTexture = gl.createTexture()!;
       const targetFBO = gl.createFramebuffer()!;
 
-      pipeline.executeDisplayOutput(
-        gl, inputTexture, 800, 600, state, texCb, targetFBO,
-      );
+      pipeline.executeDisplayOutput(gl, inputTexture, 800, 600, state, texCb, targetFBO);
 
       // Should bind the target FBO
       expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, targetFBO);
@@ -438,9 +427,7 @@ describe('ShaderPipeline', () => {
 
       const inputTexture = gl.createTexture()!;
 
-      pipeline.executeDisplayOutput(
-        gl, inputTexture, 800, 600, state, texCb,
-      );
+      pipeline.executeDisplayOutput(gl, inputTexture, 800, 600, state, texCb);
 
       // Should bind null (screen)
       expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, null);

@@ -72,7 +72,9 @@ describe('PerspectiveGridOverlay', () => {
   describe('events', () => {
     it('PG-004: emits cornersChanged event', () => {
       let emitted = false;
-      overlay.on('cornersChanged', () => { emitted = true; });
+      overlay.on('cornersChanged', () => {
+        emitted = true;
+      });
 
       // Simulate a corner change by calling emit directly (drag testing is complex in unit tests)
       overlay.emit('cornersChanged', overlay.getParams());
@@ -105,9 +107,7 @@ describe('PerspectiveGridOverlay', () => {
         quality: 'bilinear',
       });
 
-      const handle = overlay.getElement().querySelector(
-        '[data-testid="perspective-handle-topLeft"]',
-      ) as HTMLElement;
+      const handle = overlay.getElement().querySelector('[data-testid="perspective-handle-topLeft"]') as HTMLElement;
 
       const setCaptureSpy = vi.fn();
       handle.setPointerCapture = setCaptureSpy;
@@ -135,9 +135,7 @@ describe('PerspectiveGridOverlay', () => {
         quality: 'bilinear',
       });
 
-      const handle = overlay.getElement().querySelector(
-        '[data-testid="perspective-handle-topLeft"]',
-      ) as HTMLElement;
+      const handle = overlay.getElement().querySelector('[data-testid="perspective-handle-topLeft"]') as HTMLElement;
 
       const setCaptureSpy = vi.fn();
       const releaseCaptureSpy = vi.fn();

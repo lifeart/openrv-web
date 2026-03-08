@@ -66,11 +66,7 @@ function createTestImage(): IPImage {
 /**
  * Wire up source -> effect in a graph and evaluate.
  */
-function evaluateEffect(
-  source: TestSourceNode,
-  effect: TestEffectNode,
-  context: EvalContext
-): IPImage | null {
+function evaluateEffect(source: TestSourceNode, effect: TestEffectNode, context: EvalContext): IPImage | null {
   const graph = new Graph();
   graph.addNode(source);
   graph.addNode(effect);

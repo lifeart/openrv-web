@@ -16,7 +16,7 @@ if (typeof globalThis.PointerEvent === 'undefined') {
 }
 
 import { ContextToolbar } from './ContextToolbar';
-import { TabId } from './TabBar';
+import { type TabId } from './TabBar';
 
 describe('ContextToolbar', () => {
   let toolbar: ContextToolbar;
@@ -436,7 +436,7 @@ describe('ContextToolbar', () => {
   describe('all tabs', () => {
     const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
 
-    tabs.forEach(tab => {
+    tabs.forEach((tab) => {
       it(`CTX-U090-${tab}: ${tab} tab has container`, () => {
         const container = toolbar.getTabContainer(tab);
         expect(container).toBeInstanceOf(HTMLElement);

@@ -21,38 +21,40 @@ import {
  * Build a minimal valid ISOBMFF AVIF buffer with gainmap aux image for testing.
  * Structure: ftyp + meta(pitm, iinf, iprp/ipco/auxC, ipma, iloc, [iref]) + mdat
  */
-function createTestAVIFGainmapBuffer(options: {
-  brand?: string;
-  includeGainmapAuxC?: boolean;
-  includeXMP?: boolean;
-  xmpHeadroom?: number;
-  primaryDataSize?: number;
-  gainmapDataSize?: number;
-  /** If true, also include a colr(nclx) box with PQ transfer */
-  includeNclxHDR?: boolean;
-  /** If provided, include a spec-compliant ISO 21496-1 tmap box in ipco */
-  tmapData?: {
-    channelCount?: number;
-    gainMapMinN?: number[];
-    gainMapMinD?: number[];
-    gainMapMaxN?: number[];
-    gainMapMaxD?: number[];
-    gainMapGammaN?: number[];
-    gainMapGammaD?: number[];
-    baseOffsetN?: number[];
-    baseOffsetD?: number[];
-    alternateOffsetN?: number[];
-    alternateOffsetD?: number[];
-    baseHdrHeadroomN?: number;
-    baseHdrHeadroomD?: number;
-    alternateHdrHeadroomN?: number;
-    alternateHdrHeadroomD?: number;
-  };
-  /** If true, skip pitm box */
-  skipPitm?: boolean;
-  /** If true, skip meta box entirely (only ftyp + mdat) */
-  skipMeta?: boolean;
-} = {}): ArrayBuffer {
+function createTestAVIFGainmapBuffer(
+  options: {
+    brand?: string;
+    includeGainmapAuxC?: boolean;
+    includeXMP?: boolean;
+    xmpHeadroom?: number;
+    primaryDataSize?: number;
+    gainmapDataSize?: number;
+    /** If true, also include a colr(nclx) box with PQ transfer */
+    includeNclxHDR?: boolean;
+    /** If provided, include a spec-compliant ISO 21496-1 tmap box in ipco */
+    tmapData?: {
+      channelCount?: number;
+      gainMapMinN?: number[];
+      gainMapMinD?: number[];
+      gainMapMaxN?: number[];
+      gainMapMaxD?: number[];
+      gainMapGammaN?: number[];
+      gainMapGammaD?: number[];
+      baseOffsetN?: number[];
+      baseOffsetD?: number[];
+      alternateOffsetN?: number[];
+      alternateOffsetD?: number[];
+      baseHdrHeadroomN?: number;
+      baseHdrHeadroomD?: number;
+      alternateHdrHeadroomN?: number;
+      alternateHdrHeadroomD?: number;
+    };
+    /** If true, skip pitm box */
+    skipPitm?: boolean;
+    /** If true, skip meta box entirely (only ftyp + mdat) */
+    skipMeta?: boolean;
+  } = {},
+): ArrayBuffer {
   const {
     brand = 'avif',
     includeGainmapAuxC = true,
@@ -69,7 +71,7 @@ function createTestAVIFGainmapBuffer(options: {
   const parts: number[] = [];
 
   function pushUint32BE(value: number): void {
-    parts.push((value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+    parts.push((value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
   }
 
   function pushString(str: string): void {
@@ -91,8 +93,8 @@ function createTestAVIFGainmapBuffer(options: {
     const mdatTotalSize = 8 + primaryDataSize + gainmapDataSize;
     pushUint32BE(mdatTotalSize);
     pushString('mdat');
-    for (let i = 0; i < primaryDataSize; i++) parts.push(0xAA);
-    for (let i = 0; i < gainmapDataSize; i++) parts.push(0xBB);
+    for (let i = 0; i < primaryDataSize; i++) parts.push(0xaa);
+    for (let i = 0; i < gainmapDataSize; i++) parts.push(0xbb);
 
     const buf = new ArrayBuffer(parts.length);
     const uint8 = new Uint8Array(buf);
@@ -195,7 +197,7 @@ function createTestAVIFGainmapBuffer(options: {
     const alternateHdrHeadroomD = tmapData.alternateHdrHeadroomD ?? 1;
 
     // Compute data size: version(1) + flags(3) + per-channel arrays(5 pairs * cc * 2 * 4) + scalars(4 * 4)
-    const tmapPayloadSize = 4 + (cc * 2 * 4 * 5) + (4 * 4);
+    const tmapPayloadSize = 4 + cc * 2 * 4 * 5 + 4 * 4;
     const tmapSize = 8 + tmapPayloadSize; // box header + payload
     ipcoContent.push(...uint32BE(tmapSize));
     ipcoContent.push(...strBytes('tmap'));
@@ -258,7 +260,7 @@ function createTestAVIFGainmapBuffer(options: {
   const ilocSize = 4 + 4 + 4 + 2 + 2 + ilocItemCount * ilocPerItem;
 
   // Build XMP data if needed
-  let xmpData: number[] = [];
+  const xmpData: number[] = [];
   if (includeXMP) {
     const xmpStr = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" xmlns:apple="http://ns.apple.com/"><rdf:Description apple:hdrgainmapheadroom="${xmpHeadroom}"/></x:xmpmeta><?xpacket end="w"?>`;
     for (let i = 0; i < xmpStr.length; i++) xmpData.push(xmpStr.charCodeAt(i));
@@ -326,9 +328,9 @@ function createTestAVIFGainmapBuffer(options: {
   pushString('mdat');
 
   // Primary data (dummy bytes)
-  for (let i = 0; i < primaryDataSize; i++) parts.push(0xAA);
+  for (let i = 0; i < primaryDataSize; i++) parts.push(0xaa);
   // Gainmap data (dummy bytes)
-  for (let i = 0; i < gainmapDataSize; i++) parts.push(0xBB);
+  for (let i = 0; i < gainmapDataSize; i++) parts.push(0xbb);
   // XMP data
   parts.push(...xmpData);
 
@@ -343,11 +345,11 @@ function createTestAVIFGainmapBuffer(options: {
 
 // Utility helpers for the test buffer builder
 function uint32BE(value: number): number[] {
-  return [(value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF];
+  return [(value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
 function uint16BE(value: number): number[] {
-  return [(value >> 8) & 0xFF, value & 0xFF];
+  return [(value >> 8) & 0xff, value & 0xff];
 }
 
 function strBytes(str: string): number[] {
@@ -362,7 +364,10 @@ function buildInfe(itemId: number, itemType: string): number[] {
   return [
     ...uint32BE(size),
     ...strBytes('infe'),
-    0x02, 0x00, 0x00, 0x00, // version=2, flags=0
+    0x02,
+    0x00,
+    0x00,
+    0x00, // version=2, flags=0
     ...uint16BE(itemId),
     ...uint16BE(0), // protection index
     ...strBytes(itemType),
@@ -606,24 +611,26 @@ describe('AVIFGainmapDecoder', () => {
     /**
      * Build a raw tmap box payload (without box header) for direct parseTmapBox testing.
      */
-    function buildTmapPayload(opts: {
-      version?: number;
-      channelCount?: number;
-      gainMapMinN?: number[];
-      gainMapMinD?: number[];
-      gainMapMaxN?: number[];
-      gainMapMaxD?: number[];
-      gainMapGammaN?: number[];
-      gainMapGammaD?: number[];
-      baseOffsetN?: number[];
-      baseOffsetD?: number[];
-      alternateOffsetN?: number[];
-      alternateOffsetD?: number[];
-      baseHdrHeadroomN?: number;
-      baseHdrHeadroomD?: number;
-      alternateHdrHeadroomN?: number;
-      alternateHdrHeadroomD?: number;
-    } = {}): ArrayBuffer {
+    function buildTmapPayload(
+      opts: {
+        version?: number;
+        channelCount?: number;
+        gainMapMinN?: number[];
+        gainMapMinD?: number[];
+        gainMapMaxN?: number[];
+        gainMapMaxD?: number[];
+        gainMapGammaN?: number[];
+        gainMapGammaD?: number[];
+        baseOffsetN?: number[];
+        baseOffsetD?: number[];
+        alternateOffsetN?: number[];
+        alternateOffsetD?: number[];
+        baseHdrHeadroomN?: number;
+        baseHdrHeadroomD?: number;
+        alternateHdrHeadroomN?: number;
+        alternateHdrHeadroomD?: number;
+      } = {},
+    ): ArrayBuffer {
       const cc = opts.channelCount ?? 1;
       const version = opts.version ?? 0;
       const flagsByte = cc === 3 ? 1 : 0;
@@ -644,18 +651,25 @@ describe('AVIFGainmapDecoder', () => {
       const alternateHdrHeadroomN = opts.alternateHdrHeadroomN ?? 0;
       const alternateHdrHeadroomD = opts.alternateHdrHeadroomD ?? 1;
 
-      const size = 4 + (cc * 2 * 4 * 5) + (4 * 4);
+      const size = 4 + cc * 2 * 4 * 5 + 4 * 4;
       const buf = new ArrayBuffer(size);
       const view = new DataView(buf);
       let pos = 0;
 
-      view.setUint8(pos, version); pos += 1;
-      view.setUint8(pos, 0); pos += 1;
-      view.setUint8(pos, 0); pos += 1;
-      view.setUint8(pos, flagsByte); pos += 1;
+      view.setUint8(pos, version);
+      pos += 1;
+      view.setUint8(pos, 0);
+      pos += 1;
+      view.setUint8(pos, 0);
+      pos += 1;
+      view.setUint8(pos, flagsByte);
+      pos += 1;
 
       const writeArray = (arr: number[]) => {
-        for (const v of arr) { view.setUint32(pos, v); pos += 4; }
+        for (const v of arr) {
+          view.setUint32(pos, v);
+          pos += 4;
+        }
       };
 
       writeArray(gainMapMinN);
@@ -669,10 +683,14 @@ describe('AVIFGainmapDecoder', () => {
       writeArray(alternateOffsetN);
       writeArray(alternateOffsetD);
 
-      view.setUint32(pos, baseHdrHeadroomN); pos += 4;
-      view.setUint32(pos, baseHdrHeadroomD); pos += 4;
-      view.setUint32(pos, alternateHdrHeadroomN); pos += 4;
-      view.setUint32(pos, alternateHdrHeadroomD); pos += 4;
+      view.setUint32(pos, baseHdrHeadroomN);
+      pos += 4;
+      view.setUint32(pos, baseHdrHeadroomD);
+      pos += 4;
+      view.setUint32(pos, alternateHdrHeadroomN);
+      pos += 4;
+      view.setUint32(pos, alternateHdrHeadroomD);
+      pos += 4;
 
       return buf;
     }
@@ -886,21 +904,15 @@ describe('AVIFGainmapDecoder', () => {
 
       const view = new DataView(result);
       // Check ftyp box
-      const ftypType = String.fromCharCode(
-        view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-      );
+      const ftypType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
       expect(ftypType).toBe('ftyp');
 
       // Check brand
-      const brand = String.fromCharCode(
-        view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)
-      );
+      const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
       expect(brand).toBe('mif1');
 
       // Find meta box at offset 16
-      const metaType = String.fromCharCode(
-        view.getUint8(20), view.getUint8(21), view.getUint8(22), view.getUint8(23)
-      );
+      const metaType = String.fromCharCode(view.getUint8(20), view.getUint8(21), view.getUint8(22), view.getUint8(23));
       expect(metaType).toBe('meta');
 
       // Verify mdat contains our data
@@ -908,8 +920,8 @@ describe('AVIFGainmapDecoder', () => {
       // Find mdat marker
       let mdatPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x6D && bytes[i + 5] === 0x64 &&
-            bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) { // 'mdat'
+        if (bytes[i + 4] === 0x6d && bytes[i + 5] === 0x64 && bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
+          // 'mdat'
           mdatPos = i;
           break;
         }
@@ -934,8 +946,7 @@ describe('AVIFGainmapDecoder', () => {
       const bytes = new Uint8Array(result);
       let mdatPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x6D && bytes[i + 5] === 0x64 &&
-            bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
+        if (bytes[i + 4] === 0x6d && bytes[i + 5] === 0x64 && bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
           mdatPos = i;
           break;
         }
@@ -947,7 +958,7 @@ describe('AVIFGainmapDecoder', () => {
     });
 
     it('AGM-023c: iloc extent offset and length are consistent with mdat', () => {
-      const testData = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF]);
+      const testData = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
       const result = buildStandaloneAVIF(testData);
       const view = new DataView(result);
       const bytes = new Uint8Array(result);
@@ -955,8 +966,7 @@ describe('AVIFGainmapDecoder', () => {
       // Find mdat box
       let mdatPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x6D && bytes[i + 5] === 0x64 &&
-            bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
+        if (bytes[i + 4] === 0x6d && bytes[i + 5] === 0x64 && bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
           mdatPos = i;
           break;
         }
@@ -966,8 +976,8 @@ describe('AVIFGainmapDecoder', () => {
       // Find iloc box to read the extent offset
       let ilocPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x69 && bytes[i + 5] === 0x6C &&
-            bytes[i + 6] === 0x6F && bytes[i + 7] === 0x63) { // 'iloc'
+        if (bytes[i + 4] === 0x69 && bytes[i + 5] === 0x6c && bytes[i + 6] === 0x6f && bytes[i + 7] === 0x63) {
+          // 'iloc'
           ilocPos = i;
           break;
         }
@@ -1006,9 +1016,7 @@ describe('AVIFGainmapDecoder', () => {
       // Should still produce valid ftyp + meta + mdat
       expect(result.byteLength).toBeGreaterThan(0);
 
-      const ftypType = String.fromCharCode(
-        view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-      );
+      const ftypType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
       expect(ftypType).toBe('ftyp');
     });
   });
@@ -1041,7 +1049,10 @@ describe('AVIFGainmapDecoder', () => {
       // irot: plain box, 9 bytes: size(4) + "irot"(4) + angle(1)
       ipcoProperties.push([
         ...uint32BE(9),
-        0x69, 0x72, 0x6F, 0x74, // "irot"
+        0x69,
+        0x72,
+        0x6f,
+        0x74, // "irot"
         options.irotAngle & 0x03,
       ]);
     }
@@ -1049,7 +1060,10 @@ describe('AVIFGainmapDecoder', () => {
       // imir: plain box, 9 bytes: size(4) + "imir"(4) + axis(1)
       ipcoProperties.push([
         ...uint32BE(9),
-        0x69, 0x6D, 0x69, 0x72, // "imir"
+        0x69,
+        0x6d,
+        0x69,
+        0x72, // "imir"
         options.imirAxis & 0x01,
       ]);
     }

@@ -7,18 +7,14 @@ import { ObjectDTO } from 'gto-js';
 // ===========================================================================
 describe('TransformSerializer.buildDispTransform2DObject', () => {
   it('TS-001: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildDispTransform2DObject('disp_xform'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildDispTransform2DObject('disp_xform'));
     expect(dto.name).toBe('disp_xform');
     expect(dto.protocol).toBe('RVDispTransform2D');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('TS-002: has a transform component with default values', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildDispTransform2DObject('dt'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildDispTransform2DObject('dt'));
     const t = dto.component('transform');
     expect(t.exists()).toBe(true);
 
@@ -67,9 +63,7 @@ describe('TransformSerializer.buildDispTransform2DObject', () => {
   });
 
   it('TS-006: property types are correct', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildDispTransform2DObject('dt'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildDispTransform2DObject('dt'));
     const t = dto.component('transform');
     expect(t.property('active').type).toBe('int');
     expect(t.property('translate').type).toBe('float');
@@ -83,18 +77,14 @@ describe('TransformSerializer.buildDispTransform2DObject', () => {
 // ===========================================================================
 describe('TransformSerializer.buildTransform2DObject', () => {
   it('TS-007: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildTransform2DObject('src_xform'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildTransform2DObject('src_xform'));
     expect(dto.name).toBe('src_xform');
     expect(dto.protocol).toBe('RVTransform2D');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('TS-008: has transform component with default values', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildTransform2DObject('t2d'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildTransform2DObject('t2d'));
     const t = dto.component('transform');
     expect(t.exists()).toBe(true);
 
@@ -125,16 +115,12 @@ describe('TransformSerializer.buildTransform2DObject', () => {
   });
 
   it('TS-010: does not include visibleBox component when not provided', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildTransform2DObject('t2d'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildTransform2DObject('t2d'));
     expect(dto.hasComponent('visibleBox')).toBe(false);
   });
 
   it('TS-011: does not include stencil component when not provided', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildTransform2DObject('t2d'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildTransform2DObject('t2d'));
     expect(dto.hasComponent('stencil')).toBe(false);
   });
 
@@ -248,27 +234,21 @@ describe('TransformSerializer.buildTransform2DObject', () => {
 // ===========================================================================
 describe('TransformSerializer.buildLensWarpObject', () => {
   it('TS-019: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildLensWarpObject('lens'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildLensWarpObject('lens'));
     expect(dto.name).toBe('lens');
     expect(dto.protocol).toBe('RVLensWarp');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('TS-020: has node component with active=1 by default', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildLensWarpObject('lens'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildLensWarpObject('lens'));
     const node = dto.component('node');
     expect(node.exists()).toBe(true);
     expect(node.prop('active')).toBe(1);
   });
 
   it('TS-021: has warp component with default values', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildLensWarpObject('lens'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildLensWarpObject('lens'));
     const w = dto.component('warp');
     expect(w.exists()).toBe(true);
 
@@ -334,9 +314,7 @@ describe('TransformSerializer.buildLensWarpObject', () => {
   });
 
   it('TS-024: anamorphic properties are omitted when not provided', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildLensWarpObject('lens'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildLensWarpObject('lens'));
     const w = dto.component('warp');
     expect(w.hasProperty('squeeze')).toBe(false);
     expect(w.hasProperty('squeezeX')).toBe(false);
@@ -374,7 +352,7 @@ describe('TransformSerializer.buildLensWarpObject', () => {
           cx24: 0.07,
           cy24: 0.08,
           cx44: 0.09,
-          cy44: 0.10,
+          cy44: 0.1,
         },
       }),
     );
@@ -393,7 +371,7 @@ describe('TransformSerializer.buildLensWarpObject', () => {
     expect(w.prop('cx24')).toBe(0.07);
     expect(w.prop('cy24')).toBe(0.08);
     expect(w.prop('cx44')).toBe(0.09);
-    expect(w.prop('cy44')).toBe(0.10);
+    expect(w.prop('cy44')).toBe(0.1);
   });
 
   it('TS-026: partial anamorphic only includes provided fields', () => {
@@ -433,18 +411,14 @@ describe('TransformSerializer.buildLensWarpObject', () => {
 // ===========================================================================
 describe('TransformSerializer.buildRotateCanvasObject', () => {
   it('TS-028: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildRotateCanvasObject('rot'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildRotateCanvasObject('rot'));
     expect(dto.name).toBe('rot');
     expect(dto.protocol).toBe('RVRotateCanvas');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('TS-029: has node component with default values', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildRotateCanvasObject('rot'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildRotateCanvasObject('rot'));
     const node = dto.component('node');
     expect(node.exists()).toBe(true);
 
@@ -480,9 +454,7 @@ describe('TransformSerializer.buildRotateCanvasObject', () => {
   });
 
   it('TS-032: property types are correct', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildRotateCanvasObject('rot'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildRotateCanvasObject('rot'));
     const node = dto.component('node');
     expect(node.property('active').type).toBe('int');
     expect(node.property('degrees').type).toBe('float');
@@ -507,18 +479,14 @@ describe('TransformSerializer.buildRotateCanvasObject', () => {
 // ===========================================================================
 describe('TransformSerializer.buildResizeObject', () => {
   it('TS-034: returns correct name and protocol with defaults', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildResizeObject('resize'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildResizeObject('resize'));
     expect(dto.name).toBe('resize');
     expect(dto.protocol).toBe('RVResize');
     expect(dto.protocolVersion).toBe(1);
   });
 
   it('TS-035: has node component with default values', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildResizeObject('resize'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildResizeObject('resize'));
     const node = dto.component('node');
     expect(node.exists()).toBe(true);
 
@@ -557,9 +525,7 @@ describe('TransformSerializer.buildResizeObject', () => {
   });
 
   it('TS-038: all properties are int type', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildResizeObject('resize'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildResizeObject('resize'));
     const node = dto.component('node');
     expect(node.property('active').type).toBe('int');
     expect(node.property('width').type).toBe('int');
@@ -772,12 +738,8 @@ describe('TransformSerializer.buildFormatObject', () => {
 // ===========================================================================
 describe('TransformSerializer cross-cutting tests', () => {
   it('TS-056: each method returns a standalone ObjectData (not shared state)', () => {
-    const a = new ObjectDTO(
-      TransformSerializer.buildDispTransform2DObject('a'),
-    );
-    const b = new ObjectDTO(
-      TransformSerializer.buildDispTransform2DObject('b', { rotate: 45 }),
-    );
+    const a = new ObjectDTO(TransformSerializer.buildDispTransform2DObject('a'));
+    const b = new ObjectDTO(TransformSerializer.buildDispTransform2DObject('b', { rotate: 45 }));
     expect(a.name).toBe('a');
     expect(b.name).toBe('b');
     // They should not share the same component references
@@ -788,67 +750,39 @@ describe('TransformSerializer cross-cutting tests', () => {
   });
 
   it('TS-057: object names with special characters are preserved', () => {
-    const dto = new ObjectDTO(
-      TransformSerializer.buildResizeObject('source_group000000_resize'),
-    );
+    const dto = new ObjectDTO(TransformSerializer.buildResizeObject('source_group000000_resize'));
     expect(dto.name).toBe('source_group000000_resize');
   });
 
   it('TS-058: active=undefined defaults to active=1 (active !== false)', () => {
     // Tests all methods that use the "active !== false" pattern
-    const disp = new ObjectDTO(
-      TransformSerializer.buildDispTransform2DObject('d', {}),
-    );
+    const disp = new ObjectDTO(TransformSerializer.buildDispTransform2DObject('d', {}));
     expect(disp.prop('transform', 'active')).toBe(1);
 
-    const lens = new ObjectDTO(
-      TransformSerializer.buildLensWarpObject('l', {}),
-    );
+    const lens = new ObjectDTO(TransformSerializer.buildLensWarpObject('l', {}));
     expect(lens.prop('node', 'active')).toBe(1);
 
-    const rot = new ObjectDTO(
-      TransformSerializer.buildRotateCanvasObject('r', {}),
-    );
+    const rot = new ObjectDTO(TransformSerializer.buildRotateCanvasObject('r', {}));
     expect(rot.prop('node', 'active')).toBe(1);
 
-    const resize = new ObjectDTO(
-      TransformSerializer.buildResizeObject('s', {}),
-    );
+    const resize = new ObjectDTO(TransformSerializer.buildResizeObject('s', {}));
     expect(resize.prop('node', 'active')).toBe(1);
   });
 
   it('TS-059: all methods accept empty settings object', () => {
-    expect(() =>
-      TransformSerializer.buildDispTransform2DObject('a', {}),
-    ).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildTransform2DObject('a', {}),
-    ).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildLensWarpObject('a', {}),
-    ).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildRotateCanvasObject('a', {}),
-    ).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildResizeObject('a', {}),
-    ).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildFormatObject('a', {}),
-    ).not.toThrow();
+    expect(() => TransformSerializer.buildDispTransform2DObject('a', {})).not.toThrow();
+    expect(() => TransformSerializer.buildTransform2DObject('a', {})).not.toThrow();
+    expect(() => TransformSerializer.buildLensWarpObject('a', {})).not.toThrow();
+    expect(() => TransformSerializer.buildRotateCanvasObject('a', {})).not.toThrow();
+    expect(() => TransformSerializer.buildResizeObject('a', {})).not.toThrow();
+    expect(() => TransformSerializer.buildFormatObject('a', {})).not.toThrow();
   });
 
   it('TS-060: all methods work with no settings argument', () => {
-    expect(() =>
-      TransformSerializer.buildDispTransform2DObject('a'),
-    ).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildTransform2DObject('a'),
-    ).not.toThrow();
+    expect(() => TransformSerializer.buildDispTransform2DObject('a')).not.toThrow();
+    expect(() => TransformSerializer.buildTransform2DObject('a')).not.toThrow();
     expect(() => TransformSerializer.buildLensWarpObject('a')).not.toThrow();
-    expect(() =>
-      TransformSerializer.buildRotateCanvasObject('a'),
-    ).not.toThrow();
+    expect(() => TransformSerializer.buildRotateCanvasObject('a')).not.toThrow();
     expect(() => TransformSerializer.buildResizeObject('a')).not.toThrow();
     expect(() => TransformSerializer.buildFormatObject('a')).not.toThrow();
   });

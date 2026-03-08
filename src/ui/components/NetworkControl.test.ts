@@ -18,7 +18,7 @@ describe('NetworkControl', () => {
   afterEach(() => {
     control.dispose();
     // Clean up any body-level panels
-    document.querySelectorAll('[data-testid="network-panel"]').forEach(el => el.remove());
+    document.querySelectorAll('[data-testid="network-panel"]').forEach((el) => el.remove());
   });
 
   describe('render', () => {
@@ -206,9 +206,7 @@ describe('NetworkControl', () => {
         maxUsers: 10,
       });
 
-      control.setUsers([
-        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
-      ]);
+      control.setUsers([{ id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() }]);
       control.openPanel();
 
       let userList = document.querySelector('[data-testid="network-user-list"]');
@@ -237,9 +235,7 @@ describe('NetworkControl', () => {
     });
 
     it('NCC-022b: hides badge when only one user', () => {
-      control.setUsers([
-        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
-      ]);
+      control.setUsers([{ id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() }]);
 
       const badge = control.render().querySelector('[data-testid="network-user-badge"]') as HTMLElement;
       expect(badge.style.display).toBe('none');
@@ -426,7 +422,8 @@ describe('NetworkControl', () => {
 
       const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
       expect(applyBtn).toBeTruthy();
-      const tokenSection = document.querySelector('[data-testid="network-response-token-input"]')?.parentElement?.parentElement as HTMLElement;
+      const tokenSection = document.querySelector('[data-testid="network-response-token-input"]')?.parentElement
+        ?.parentElement as HTMLElement;
       expect(tokenSection.style.display).toBe('none');
     });
   });

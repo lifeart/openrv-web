@@ -11,7 +11,9 @@ import { createMockSession } from '../../test/mocks';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeClip(overrides: Partial<NavPlaylistClip> & { id: string; globalStartFrame: number; duration: number }): NavPlaylistClip {
+function makeClip(
+  overrides: Partial<NavPlaylistClip> & { id: string; globalStartFrame: number; duration: number },
+): NavPlaylistClip {
   return {
     inPoint: 1,
     outPoint: overrides.duration,
@@ -19,7 +21,12 @@ function makeClip(overrides: Partial<NavPlaylistClip> & { id: string; globalStar
   };
 }
 
-function makeMapping(clip: NavPlaylistClip, clipIndex: number, sourceIndex: number, localFrame: number): NavFrameMapping {
+function makeMapping(
+  clip: NavPlaylistClip,
+  clipIndex: number,
+  sourceIndex: number,
+  localFrame: number,
+): NavFrameMapping {
   return { clip, clipIndex, sourceIndex, localFrame };
 }
 
@@ -78,9 +85,7 @@ describe('FrameNavigationService', () => {
     it('FN-001: navigates to globalStartFrame of the first clip', () => {
       const clip = makeClip({ id: 'c1', globalStartFrame: 1, duration: 30 });
       deps.playlistManager.getClipByIndex.mockReturnValue(clip);
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(clip, 0, 0, 1)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(clip, 0, 0, 1));
 
       service.goToPlaylistStart();
 
@@ -108,9 +113,7 @@ describe('FrameNavigationService', () => {
       deps.playlistManager.getClipCount.mockReturnValue(3);
       deps.playlistManager.getClipByIndex.mockReturnValue(clip);
       // globalStartFrame + duration - 1 = 61 + 30 - 1 = 90
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(clip, 2, 2, 30)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(clip, 2, 2, 30));
 
       service.goToPlaylistEnd();
 
@@ -174,9 +177,7 @@ describe('FrameNavigationService', () => {
     it('FN-008: does nothing when at last clip boundary and no marker', () => {
       const clip = makeClip({ id: 'c1', globalStartFrame: 1, duration: 30 });
       deps.playlistManager.getCurrentFrame.mockReturnValue(15);
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(clip, 0, 0, 15)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(clip, 0, 0, 15));
       deps.playlistManager.getClipByIndex.mockReturnValue(null); // no next clip
 
       service.goToNextMarkOrBoundary();
@@ -238,9 +239,7 @@ describe('FrameNavigationService', () => {
     it('FN-012: does nothing at first clip start and no marker', () => {
       const clip = makeClip({ id: 'c1', globalStartFrame: 1, duration: 30 });
       deps.playlistManager.getCurrentFrame.mockReturnValue(1);
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(clip, 0, 0, 1)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(clip, 0, 0, 1));
       // globalFrame (1) === currentClipStart (1) → targetIndex = 0 - 1 = -1 < 0 → bail
 
       service.goToPreviousMarkOrBoundary();
@@ -258,9 +257,7 @@ describe('FrameNavigationService', () => {
       const nextClip = makeClip({ id: 'c2', globalStartFrame: 31, duration: 20 });
       deps.playlistManager.getCurrentFrame.mockReturnValue(15);
       deps.playlistManager.goToNextClip.mockReturnValue({ frame: 31, clip: nextClip });
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(nextClip, 1, 1, 1)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(nextClip, 1, 1, 1));
 
       service.goToNextShot();
 
@@ -295,9 +292,7 @@ describe('FrameNavigationService', () => {
       const prevClip = makeClip({ id: 'c1', globalStartFrame: 1, duration: 30 });
       deps.playlistManager.getCurrentFrame.mockReturnValue(35);
       deps.playlistManager.goToPreviousClip.mockReturnValue({ frame: 1, clip: prevClip });
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(prevClip, 0, 0, 1)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(prevClip, 0, 0, 1));
 
       service.goToPreviousShot();
 
@@ -412,9 +407,7 @@ describe('FrameNavigationService', () => {
   describe('jumpToPlaylistGlobalFrame', () => {
     it('FN-027: maps global frame to correct source/local frame and updates state', () => {
       const clip = makeClip({ id: 'c2', globalStartFrame: 31, duration: 30, inPoint: 1, outPoint: 30 });
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(clip, 1, 2, 10)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(clip, 1, 2, 10));
       deps.session.currentSourceIndex = 0; // different from mapping.sourceIndex=2
 
       service.jumpToPlaylistGlobalFrame(40);
@@ -429,9 +422,7 @@ describe('FrameNavigationService', () => {
 
     it('FN-028: does not switch source when already on the correct source', () => {
       const clip = makeClip({ id: 'c1', globalStartFrame: 1, duration: 30, inPoint: 1, outPoint: 30 });
-      deps.playlistManager.getClipAtFrame.mockReturnValue(
-        makeMapping(clip, 0, 0, 5)
-      );
+      deps.playlistManager.getClipAtFrame.mockReturnValue(makeMapping(clip, 0, 0, 5));
       deps.session.currentSourceIndex = 0; // same as mapping.sourceIndex
 
       service.jumpToPlaylistGlobalFrame(5);

@@ -1,9 +1,9 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 
 export interface VolumeState {
-  volume: number;  // 0-1
+  volume: number; // 0-1
   muted: boolean;
 }
 

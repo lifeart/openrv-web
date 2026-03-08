@@ -9,7 +9,7 @@ function createNoisyImageData(size = 4): ImageData {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
-      const noise = ((x + y) % 2 === 0) ? 30 : -30;
+      const noise = (x + y) % 2 === 0 ? 30 : -30;
       data[i] = 128 + noise;
       data[i + 1] = 128 + noise;
       data[i + 2] = 128 + noise;
@@ -25,9 +25,9 @@ function createColorNoisyImageData(size = 6): ImageData {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
-      data[i] = 128 + ((x * 37 + y * 13) % 60) - 30;     // R
-      data[i + 1] = 128 + ((x * 17 + y * 41) % 60) - 30;  // G
-      data[i + 2] = 128 + ((x * 29 + y * 7) % 60) - 30;   // B
+      data[i] = 128 + ((x * 37 + y * 13) % 60) - 30; // R
+      data[i + 1] = 128 + ((x * 17 + y * 41) % 60) - 30; // G
+      data[i + 2] = 128 + ((x * 29 + y * 7) % 60) - 30; // B
       data[i + 3] = 200;
     }
   }
@@ -217,7 +217,10 @@ describe('noiseReductionEffect adapter', () => {
 
       let changed = false;
       for (let i = 0; i < img.data.length; i += 4) {
-        if (img.data[i] !== original[i]) { changed = true; break; }
+        if (img.data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });
@@ -230,7 +233,10 @@ describe('noiseReductionEffect adapter', () => {
 
       let changed = false;
       for (let i = 0; i < img.data.length; i += 4) {
-        if (img.data[i] !== original[i]) { changed = true; break; }
+        if (img.data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });
@@ -312,7 +318,7 @@ describe('noiseReductionEffect adapter', () => {
     it('registers as spatial category', () => {
       registry.register(noiseReductionEffect);
       const spatial = registry.getByCategory('spatial');
-      expect(spatial.map(e => e.name)).toContain('noiseReduction');
+      expect(spatial.map((e) => e.name)).toContain('noiseReduction');
     });
 
     it('applyAll skips when strength is 0', () => {
@@ -334,7 +340,10 @@ describe('noiseReductionEffect adapter', () => {
 
       let changed = false;
       for (let i = 0; i < img.data.length; i += 4) {
-        if (img.data[i] !== original[i]) { changed = true; break; }
+        if (img.data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });
@@ -348,7 +357,10 @@ describe('noiseReductionEffect adapter', () => {
 
       let changed = false;
       for (let i = 0; i < img.data.length; i += 4) {
-        if (img.data[i] !== original[i]) { changed = true; break; }
+        if (img.data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });
@@ -378,7 +390,10 @@ describe('noiseReductionEffect adapter', () => {
 
       let changed = false;
       for (let i = 0; i < img.data.length; i += 4) {
-        if (img.data[i] !== original[i]) { changed = true; break; }
+        if (img.data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });

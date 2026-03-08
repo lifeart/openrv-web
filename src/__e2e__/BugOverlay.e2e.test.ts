@@ -220,9 +220,7 @@ describe('BugOverlay E2E Integration', () => {
       expect(bugOverlay.hasImage()).toBe(true);
       expect(bugOverlay.isVisible()).toBe(true);
       expect(imageHandler).toHaveBeenCalledWith({ width: 200, height: 100 });
-      expect(stateHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(stateHandler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('BUG-E2E-021: removeImage disables overlay', () => {

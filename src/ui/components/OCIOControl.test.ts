@@ -66,9 +66,7 @@ describe('OCIOControl', () => {
       control.setState({ enabled: true });
 
       expect(localStorageMock.setItem).toHaveBeenCalled();
-      const savedValue = localStorageMock.setItem.mock.calls.find(
-        (call) => call[0] === 'openrv-ocio-state'
-      );
+      const savedValue = localStorageMock.setItem.mock.calls.find((call) => call[0] === 'openrv-ocio-state');
       expect(savedValue).toBeDefined();
       const savedState = JSON.parse(savedValue![1]);
       expect(savedState.enabled).toBe(true);
@@ -126,9 +124,7 @@ describe('OCIOControl', () => {
       control.setState({ enabled: true });
 
       // Check localStorage was updated
-      const calls = localStorageMock.setItem.mock.calls.filter(
-        (call) => call[0] === 'openrv-ocio-state'
-      );
+      const calls = localStorageMock.setItem.mock.calls.filter((call) => call[0] === 'openrv-ocio-state');
       expect(calls.length).toBeGreaterThan(0);
 
       const lastCall = calls[calls.length - 1];
@@ -142,9 +138,7 @@ describe('OCIOControl', () => {
 
       control.setState({ display: 'Rec.709', view: 'Raw' });
 
-      const calls = localStorageMock.setItem.mock.calls.filter(
-        (call) => call[0] === 'openrv-ocio-state'
-      );
+      const calls = localStorageMock.setItem.mock.calls.filter((call) => call[0] === 'openrv-ocio-state');
       const lastCall = calls[calls.length - 1];
       expect(lastCall).toBeDefined();
       const savedState = JSON.parse(lastCall![1]);

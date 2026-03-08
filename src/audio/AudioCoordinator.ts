@@ -83,18 +83,21 @@ export class AudioCoordinator implements ManagerBase {
    * HTMLVideoElement audio path remains available.
    */
   loadFromVideo(video: HTMLVideoElement, volume: number, muted: boolean): void {
-    this._manager.loadFromVideo(video).then(() => {
-      this._manager.setVolume(volume);
-      this._manager.setMuted(muted);
-      this._callbacks?.onAudioScrubAvailabilityChanged?.(this._manager.isUsingWebAudio);
-      // If playback started while audio was still loading, activate now
-      if (this._isPlaying) {
-        this.activateAppropriateAudioPath();
-      }
-    }).catch(err => {
-      log.warn('Audio extraction failed, using video element audio:', err);
-      this._callbacks?.onAudioScrubAvailabilityChanged?.(false);
-    });
+    this._manager
+      .loadFromVideo(video)
+      .then(() => {
+        this._manager.setVolume(volume);
+        this._manager.setMuted(muted);
+        this._callbacks?.onAudioScrubAvailabilityChanged?.(this._manager.isUsingWebAudio);
+        // If playback started while audio was still loading, activate now
+        if (this._isPlaying) {
+          this.activateAppropriateAudioPath();
+        }
+      })
+      .catch((err) => {
+        log.warn('Audio extraction failed, using video element audio:', err);
+        this._callbacks?.onAudioScrubAvailabilityChanged?.(false);
+      });
   }
 
   // ---- Playback lifecycle (called by Session in response to PlaybackEngine events) ----
@@ -132,7 +135,7 @@ export class AudioCoordinator implements ManagerBase {
       this._manager.syncToTime(time);
     } else {
       // AudioBufferSourceNode ended (e.g. loop wrap) -- restart
-      this._manager.play(time).catch(err => {
+      this._manager.play(time).catch((err) => {
         log.warn('Failed to restart audio after loop wrap:', err);
       });
       this._callbacks?.onAudioPathChanged();
@@ -203,12 +206,7 @@ export class AudioCoordinator implements ManagerBase {
    * Apply volume to a video element, accounting for the active audio path.
    * When Web Audio is handling audio the video is force-muted.
    */
-  applyToVideoElement(
-    video: HTMLVideoElement,
-    effectiveVolume: number,
-    muted: boolean,
-    direction: number,
-  ): void {
+  applyToVideoElement(video: HTMLVideoElement, effectiveVolume: number, muted: boolean, direction: number): void {
     if (this.isWebAudioActive) {
       video.volume = 0;
       video.muted = true;
@@ -247,7 +245,7 @@ export class AudioCoordinator implements ManagerBase {
         const time = ((frame ?? 1) - 1) / this._fps;
         this._manager.setPlaybackRate(this._speed);
         this._manager.setReversePlayback(this._direction < 0);
-        this._manager.play(time).catch(err => {
+        this._manager.play(time).catch((err) => {
           log.warn('Failed to activate Web Audio path:', err);
         });
       }

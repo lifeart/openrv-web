@@ -44,10 +44,13 @@ describe('SafeCanvasContext', () => {
     safeCanvasContext2D(canvas, { alpha: false }, 'display-p3');
 
     // Should have tried with colorSpace first
-    expect(spy).toHaveBeenCalledWith('2d', expect.objectContaining({
-      alpha: false,
-      colorSpace: 'display-p3',
-    }));
+    expect(spy).toHaveBeenCalledWith(
+      '2d',
+      expect.objectContaining({
+        alpha: false,
+        colorSpace: 'display-p3',
+      }),
+    );
   });
 
   it('SCC-004: falls back to standard context when colorSpace getContext returns null', () => {
@@ -104,10 +107,7 @@ describe('SafeCanvasContext', () => {
     const canvas = document.createElement('canvas');
     const mockCtx = { canvas, fillRect: vi.fn(), isP3: true } as unknown as CanvasRenderingContext2D;
 
-    HTMLCanvasElement.prototype.getContext = vi.fn(function (
-      this: HTMLCanvasElement,
-      contextId: string,
-    ) {
+    HTMLCanvasElement.prototype.getContext = vi.fn(function (this: HTMLCanvasElement, contextId: string) {
       if (contextId === '2d') {
         return mockCtx;
       }
@@ -124,9 +124,12 @@ describe('SafeCanvasContext', () => {
 
     safeCanvasContext2D(canvas, {}, 'rec2100-hlg');
 
-    expect(spy).toHaveBeenCalledWith('2d', expect.objectContaining({
-      colorSpace: 'rec2100-hlg',
-    }));
+    expect(spy).toHaveBeenCalledWith(
+      '2d',
+      expect.objectContaining({
+        colorSpace: 'rec2100-hlg',
+      }),
+    );
   });
 
   it('SCC-009: throws when fallback context creation returns null', () => {
@@ -136,20 +139,14 @@ describe('SafeCanvasContext', () => {
       return null;
     }) as typeof HTMLCanvasElement.prototype.getContext;
 
-    expect(() => safeCanvasContext2D(canvas, { alpha: false })).toThrow(
-      'Failed to create 2D canvas context',
-    );
+    expect(() => safeCanvasContext2D(canvas, { alpha: false })).toThrow('Failed to create 2D canvas context');
   });
 
   it('SCC-008: merges colorSpace with existing baseOptions', () => {
     const canvas = document.createElement('canvas');
     const spy = vi.spyOn(canvas, 'getContext');
 
-    safeCanvasContext2D(
-      canvas,
-      { alpha: false, willReadFrequently: true },
-      'display-p3',
-    );
+    safeCanvasContext2D(canvas, { alpha: false, willReadFrequently: true }, 'display-p3');
 
     expect(spy).toHaveBeenCalledWith('2d', {
       alpha: false,

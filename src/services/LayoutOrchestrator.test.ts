@@ -196,10 +196,7 @@ function createMockClientMode() {
   return {
     ...et,
     isEnabled: vi.fn().mockReturnValue(false),
-    getRestrictedElements: vi.fn().mockReturnValue([
-      '[data-panel="color"]',
-      '[data-panel="effects"]',
-    ]),
+    getRestrictedElements: vi.fn().mockReturnValue(['[data-panel="color"]', '[data-panel="effects"]']),
   };
 }
 
@@ -594,7 +591,8 @@ describe('LayoutOrchestrator', () => {
   // -------------------------------------------------------------------------
   it('LO-025: sets elements to hide in presentation mode', () => {
     orchestrator.createLayout();
-    const setFn = (d.mocks.controls.presentationMode as unknown as Record<string, ReturnType<typeof vi.fn>>).setElementsToHide!;
+    const setFn = (d.mocks.controls.presentationMode as unknown as Record<string, ReturnType<typeof vi.fn>>)
+      .setElementsToHide!;
     expect(setFn).toHaveBeenCalledTimes(1);
     const args = (setFn as ReturnType<typeof vi.fn>).mock.calls[0]![0] as HTMLElement[];
     expect(args.length).toBe(5);

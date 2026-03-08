@@ -6,10 +6,10 @@ function createMockGL() {
   const program = {};
   const shader = {};
   const gl = {
-    VERTEX_SHADER: 0x8B31,
-    FRAGMENT_SHADER: 0x8B30,
-    COMPILE_STATUS: 0x8B81,
-    LINK_STATUS: 0x8B82,
+    VERTEX_SHADER: 0x8b31,
+    FRAGMENT_SHADER: 0x8b30,
+    COMPILE_STATUS: 0x8b81,
+    LINK_STATUS: 0x8b82,
     createShader: vi.fn(() => shader),
     shaderSource: vi.fn(),
     compileShader: vi.fn(),
@@ -249,13 +249,13 @@ describe('ShaderProgram', () => {
 
       // Now simulate compilation complete but link failure
       vi.mocked(failGL.getShaderParameter).mockImplementation((_shader, pname) => {
-        if (pname === 0x91B1) return true;   // COMPLETION_STATUS_KHR
-        if (pname === 0x8B81) return true;    // COMPILE_STATUS → pass
+        if (pname === 0x91b1) return true; // COMPLETION_STATUS_KHR
+        if (pname === 0x8b81) return true; // COMPILE_STATUS → pass
         return true;
       });
       vi.mocked(failGL.getProgramParameter).mockImplementation((_prog, pname) => {
-        if (pname === 0x91B1) return true;  // COMPLETION_STATUS_KHR
-        if (pname === 0x8B82) return false;  // LINK_STATUS → fail
+        if (pname === 0x91b1) return true; // COMPLETION_STATUS_KHR
+        if (pname === 0x8b82) return false; // LINK_STATUS → fail
         return true;
       });
       vi.mocked(failGL.getProgramInfoLog).mockReturnValue('link error');
@@ -276,12 +276,12 @@ describe('ShaderProgram', () => {
 
       // Now simulate compilation complete but vertex shader compile failure
       vi.mocked(failGL.getShaderParameter).mockImplementation((_shader, pname) => {
-        if (pname === 0x91B1) return true;   // COMPLETION_STATUS_KHR
-        if (pname === 0x8B81) return false;   // COMPILE_STATUS → fail
+        if (pname === 0x91b1) return true; // COMPLETION_STATUS_KHR
+        if (pname === 0x8b81) return false; // COMPILE_STATUS → fail
         return true;
       });
       vi.mocked(failGL.getProgramParameter).mockImplementation((_prog, pname) => {
-        if (pname === 0x91B1) return true;  // COMPLETION_STATUS_KHR
+        if (pname === 0x91b1) return true; // COMPLETION_STATUS_KHR
         return true;
       });
       vi.mocked(failGL.getShaderInfoLog).mockReturnValue('compile error');
@@ -303,13 +303,13 @@ describe('ShaderProgram', () => {
 
       // Simulate completion with link failure
       vi.mocked(failGL.getShaderParameter).mockImplementation((_shader, pname) => {
-        if (pname === 0x91B1) return true;   // COMPLETION_STATUS_KHR
-        if (pname === 0x8B81) return true;    // COMPILE_STATUS → pass
+        if (pname === 0x91b1) return true; // COMPLETION_STATUS_KHR
+        if (pname === 0x8b81) return true; // COMPILE_STATUS → pass
         return true;
       });
       vi.mocked(failGL.getProgramParameter).mockImplementation((_prog, pname) => {
-        if (pname === 0x91B1) return true;
-        if (pname === 0x8B82) return false;
+        if (pname === 0x91b1) return true;
+        if (pname === 0x8b82) return false;
         return true;
       });
 

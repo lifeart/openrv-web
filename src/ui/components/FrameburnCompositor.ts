@@ -10,8 +10,12 @@ export interface FrameburnTimecodeOptions extends TimecodeOverlayState {
 
 /** Extended field-based frameburn config */
 export type FrameburnPosition =
-  | 'top-left' | 'top-center' | 'top-right'
-  | 'bottom-left' | 'bottom-center' | 'bottom-right';
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right';
 
 export interface FrameburnField {
   type: 'timecode' | 'frame' | 'shotName' | 'date' | 'custom' | 'resolution' | 'fps' | 'colorspace' | 'codec';
@@ -55,7 +59,7 @@ function getAnchorPosition(
   canvasWidth: number,
   canvasHeight: number,
   boxWidth: number,
-  boxHeight: number
+  boxHeight: number,
 ): { x: number; y: number } {
   const margin = 16;
   switch (position) {
@@ -81,7 +85,7 @@ function drawRoundedRect(
   y: number,
   width: number,
   height: number,
-  radius: number
+  radius: number,
 ): void {
   if (typeof ctx.roundRect === 'function') {
     ctx.beginPath();
@@ -113,15 +117,11 @@ export function compositeTimecodeFrameburn(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
   canvasHeight: number,
-  options?: FrameburnTimecodeOptions | null
+  options?: FrameburnTimecodeOptions | null,
 ): void {
   if (!options?.enabled) return;
 
-  const timecode = formatTimecode(frameToTimecode(
-    options.frame,
-    options.fps,
-    options.startFrame ?? 0
-  ));
+  const timecode = formatTimecode(frameToTimecode(options.frame, options.fps, options.startFrame ?? 0));
   const frameCounter = `Frame ${options.frame} / ${options.totalFrames}`;
 
   const fontSize = FONT_SIZES[options.fontSize];
@@ -144,9 +144,7 @@ export function compositeTimecodeFrameburn(
 
   const boxWidth = Math.ceil(maxTextWidth + horizontalPadding * 2);
   const boxHeight = Math.ceil(
-    verticalPadding * 2 +
-      fontSize +
-      (options.showFrameCounter ? lineGap + counterFontSize : 0)
+    verticalPadding * 2 + fontSize + (options.showFrameCounter ? lineGap + counterFontSize : 0),
   );
 
   const { x, y } = getAnchorPosition(options.position, canvasWidth, canvasHeight, boxWidth, boxHeight);
@@ -222,7 +220,7 @@ export function compositeFrameburn(
   canvasWidth: number,
   canvasHeight: number,
   config: FrameburnConfig,
-  context: FrameburnContext
+  context: FrameburnContext,
 ): void {
   if (!config.enabled || config.fields.length === 0) return;
 
@@ -266,4 +264,3 @@ export function compositeFrameburn(
 
   ctx.restore();
 }
-

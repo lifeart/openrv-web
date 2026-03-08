@@ -9,15 +9,9 @@
  * - stateChanged: fired whenever any state property changes
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import {
-  detectFloatingWindowViolations,
-  DEFAULT_FLOATING_WINDOW_OPTIONS,
-} from '../../stereo/FloatingWindowDetector';
-import type {
-  FloatingWindowViolationResult,
-  FloatingWindowDetectorOptions,
-} from '../../stereo/FloatingWindowDetector';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { detectFloatingWindowViolations, DEFAULT_FLOATING_WINDOW_OPTIONS } from '../../stereo/FloatingWindowDetector';
+import type { FloatingWindowViolationResult, FloatingWindowDetectorOptions } from '../../stereo/FloatingWindowDetector';
 
 // ---------------------------------------------------------------------------
 // Types

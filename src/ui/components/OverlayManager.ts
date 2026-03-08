@@ -68,11 +68,7 @@ export class OverlayManager {
   private lastWidth = 0;
   private lastHeight = 0;
 
-  constructor(
-    canvasContainer: HTMLElement,
-    session: Session,
-    callbacks: OverlayManagerCallbacks,
-  ) {
+  constructor(canvasContainer: HTMLElement, session: Session, callbacks: OverlayManagerCallbacks) {
     this.canvasContainer = canvasContainer;
     this.session = session;
 
@@ -125,7 +121,9 @@ export class OverlayManager {
   // Lazy overlay creation helpers
   // ---------------------------------------------------------------------------
 
-  private applyStoredDimensions(overlay: { setViewerDimensions: (w: number, h: number, ox: number, oy: number, dw: number, dh: number) => void }): void {
+  private applyStoredDimensions(overlay: {
+    setViewerDimensions: (w: number, h: number, ox: number, oy: number, dw: number, dh: number) => void;
+  }): void {
     if (this.lastWidth > 0 || this.lastHeight > 0) {
       overlay.setViewerDimensions(this.lastWidth, this.lastHeight, 0, 0, this.lastWidth, this.lastHeight);
     }

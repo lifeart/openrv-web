@@ -155,11 +155,7 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Load HTMLVideoElement (always needed for playback)
    */
-  private async loadHtmlVideo(
-    url: string,
-    name?: string,
-    fps: number = 24
-  ): Promise<void> {
+  private async loadHtmlVideo(url: string, name?: string, fps: number = 24): Promise<void> {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
@@ -205,7 +201,11 @@ export class VideoSourceNode extends BaseSourceNode {
    * Returns VideoLoadResult with codec information
    * @param hdrResizeTier - Pre-detected HDR canvas resize tier from DisplayCapabilities
    */
-  private async tryInitMediabunny(file: File | Blob, fps: number, hdrResizeTier: HDRResizeTier = 'none'): Promise<VideoLoadResult> {
+  private async tryInitMediabunny(
+    file: File | Blob,
+    fps: number,
+    hdrResizeTier: HDRResizeTier = 'none',
+  ): Promise<VideoLoadResult> {
     // Check if WebCodecs is supported
     if (!MediabunnyFrameExtractor.isSupported()) {
       this.useMediabunny = false;
@@ -254,7 +254,7 @@ export class VideoSourceNode extends BaseSourceNode {
       if (error instanceof UnsupportedCodecException) {
         console.warn(
           `Unsupported professional codec detected: ${error.codecError.codecInfo.displayName}`,
-          error.codecError.message
+          error.codecError.message,
         );
         this.lastUnsupportedCodecError = error.codecError;
         this.frameExtractor?.dispose();
@@ -273,10 +273,7 @@ export class VideoSourceNode extends BaseSourceNode {
       }
 
       // Generic error - try fallback
-      console.warn(
-        'Mediabunny initialization failed, using HTML video fallback:',
-        error
-      );
+      console.warn('Mediabunny initialization failed, using HTML video fallback:', error);
       this.frameExtractor?.dispose();
       this.frameExtractor = null;
       this.preloadManager?.dispose();
@@ -315,10 +312,13 @@ export class VideoSourceNode extends BaseSourceNode {
     const h = this.hdrTargetSize?.h ?? this.metadata.height;
     const bytesPerFrame = w * h * 8; // RGBA16F = 8 bytes/pixel
     if (bytesPerFrame <= 0) return;
-    const maxFrames = Math.max(VideoSourceNode.HDR_MIN_CACHE_FRAMES, Math.min(
-      this.metadata.duration, // never more than total frames
-      Math.floor(VideoSourceNode.HDR_MEMORY_BUDGET_BYTES / bytesPerFrame)
-    ));
+    const maxFrames = Math.max(
+      VideoSourceNode.HDR_MIN_CACHE_FRAMES,
+      Math.min(
+        this.metadata.duration, // never more than total frames
+        Math.floor(VideoSourceNode.HDR_MEMORY_BUDGET_BYTES / bytesPerFrame),
+      ),
+    );
     this.hdrFrameCache.setCapacity(maxFrames);
   }
 
@@ -368,7 +368,7 @@ export class VideoSourceNode extends BaseSourceNode {
       totalFrames,
       loader,
       disposer,
-      config // FramePreloadManager applies DEFAULT_PRELOAD_CONFIG internally
+      config, // FramePreloadManager applies DEFAULT_PRELOAD_CONFIG internally
     );
   }
 
@@ -822,12 +822,7 @@ export class VideoSourceNode extends BaseSourceNode {
 
     // Draw current video frame to canvas
     this.ctx.drawImage(this.video, 0, 0);
-    const imageData = this.ctx.getImageData(
-      0,
-      0,
-      this.canvas.width,
-      this.canvas.height
-    );
+    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
     const ipImage = new IPImage({
       width: imageData.width,
@@ -883,12 +878,14 @@ export class VideoSourceNode extends BaseSourceNode {
     let videoFrame = sample.toVideoFrame();
 
     try {
-      const frameColorSpace = videoFrame.colorSpace ? {
-        transfer: videoFrame.colorSpace.transfer ?? undefined,
-        primaries: videoFrame.colorSpace.primaries ?? undefined,
-        matrix: videoFrame.colorSpace.matrix ?? undefined,
-        fullRange: videoFrame.colorSpace.fullRange ?? undefined,
-      } : null;
+      const frameColorSpace = videoFrame.colorSpace
+        ? {
+            transfer: videoFrame.colorSpace.transfer ?? undefined,
+            primaries: videoFrame.colorSpace.primaries ?? undefined,
+            matrix: videoFrame.colorSpace.matrix ?? undefined,
+            fullRange: videoFrame.colorSpace.fullRange ?? undefined,
+          }
+        : null;
 
       let effectiveColorSpace = this.videoColorSpace;
       const hasTrackColorInfo = !!(effectiveColorSpace?.transfer || effectiveColorSpace?.primaries);
@@ -911,11 +908,7 @@ export class VideoSourceNode extends BaseSourceNode {
 
       // Resize via HDR OffscreenCanvas if target is smaller than source
       if (targetSize && this.hdrResizer) {
-        const result = this.hdrResizer.resize(
-          videoFrame,
-          targetSize,
-          effectiveColorSpace ?? undefined,
-        );
+        const result = this.hdrResizer.resize(videoFrame, targetSize, effectiveColorSpace ?? undefined);
         videoFrame = result.videoFrame;
         if (result.resized) {
           width = result.width;
@@ -954,7 +947,11 @@ export class VideoSourceNode extends BaseSourceNode {
       return ipImage;
     } catch (e) {
       // Clean up VideoFrame on any error to prevent VRAM leak
-      try { videoFrame.close(); } catch { /* already closed */ }
+      try {
+        videoFrame.close();
+      } catch {
+        /* already closed */
+      }
       throw e;
     }
   }
@@ -1081,7 +1078,11 @@ export class VideoSourceNode extends BaseSourceNode {
         return this.hdrFrameCache.get(frame)!;
       } catch (e) {
         ipImage?.close();
-        try { sample?.close(); } catch { /* */ }
+        try {
+          sample?.close();
+        } catch {
+          /* */
+        }
         log.debug('HDR frame decode/resize failed:', e);
         return null;
       }
@@ -1100,11 +1101,7 @@ export class VideoSourceNode extends BaseSourceNode {
    * Extracts and caches nearby frames sequentially (decoder is serialized).
    * Skips frames already in the LRU cache.
    */
-  async preloadHDRFrames(
-    centerFrame: number,
-    ahead: number = 8,
-    behind: number = 2,
-  ): Promise<void> {
+  async preloadHDRFrames(centerFrame: number, ahead: number = 8, behind: number = 2): Promise<void> {
     if (!this.isHDRVideo || !this.useMediabunny || !this.frameExtractor) return;
 
     // Clamp preload window to cache capacity to prevent evicting the current frame
@@ -1166,7 +1163,7 @@ export class VideoSourceNode extends BaseSourceNode {
    */
   async *generateThumbnails(
     count: number = 10,
-    maxSize: number = 128
+    maxSize: number = 128,
   ): AsyncGenerator<HTMLCanvasElement, void, unknown> {
     if (this.frameExtractor && this.useMediabunny) {
       yield* this.frameExtractor.generateThumbnails(count, maxSize);

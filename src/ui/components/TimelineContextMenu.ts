@@ -81,18 +81,14 @@ export class TimelineContextMenu {
     `;
 
     // Build info header: frame + timecode
-    const infoRow1 = this.createInfoRow(
-      `${options.frameLabel}  |  ${options.timecode}`
-    );
+    const infoRow1 = this.createInfoRow(`${options.frameLabel}  |  ${options.timecode}`);
     menu.appendChild(infoRow1);
 
     // Build info header: source info
     if (options.sourceName) {
       const typeLabel = options.sourceType === 'video' ? '[VID]' : '[IMG]';
       const resInfo = options.sourceResolution ? `  (${options.sourceResolution})` : '';
-      const infoRow2 = this.createInfoRow(
-        `${typeLabel} ${options.sourceName}${resInfo}`
-      );
+      const infoRow2 = this.createInfoRow(`${typeLabel} ${options.sourceName}${resInfo}`);
       menu.appendChild(infoRow2);
     }
 
@@ -100,65 +96,45 @@ export class TimelineContextMenu {
     menu.appendChild(this.createSeparator());
 
     // Copy Timecode
-    const copyItem = this.createMenuItem(
-      'Copy Timecode',
-      'Ctrl+C',
-      () => {
-        options.onCopyTimecode(options.timecode);
-        this.hide();
-      }
-    );
+    const copyItem = this.createMenuItem('Copy Timecode', 'Ctrl+C', () => {
+      options.onCopyTimecode(options.timecode);
+      this.hide();
+    });
     menu.appendChild(copyItem);
 
     // Separator
     menu.appendChild(this.createSeparator());
 
     // Go to Frame
-    const goToItem = this.createMenuItem(
-      `Go to ${options.frameLabel}`,
-      null,
-      () => {
-        options.onGoToFrame(options.frame);
-        this.hide();
-      }
-    );
+    const goToItem = this.createMenuItem(`Go to ${options.frameLabel}`, null, () => {
+      options.onGoToFrame(options.frame);
+      this.hide();
+    });
     menu.appendChild(goToItem);
 
     // Separator
     menu.appendChild(this.createSeparator());
 
     // Set In Point Here
-    const setInItem = this.createMenuItem(
-      'Set In Point Here',
-      'I',
-      () => {
-        options.onSetInPoint(options.frame);
-        this.hide();
-      }
-    );
+    const setInItem = this.createMenuItem('Set In Point Here', 'I', () => {
+      options.onSetInPoint(options.frame);
+      this.hide();
+    });
     menu.appendChild(setInItem);
 
     // Set Out Point Here
-    const setOutItem = this.createMenuItem(
-      'Set Out Point Here',
-      'O',
-      () => {
-        options.onSetOutPoint(options.frame);
-        this.hide();
-      }
-    );
+    const setOutItem = this.createMenuItem('Set Out Point Here', 'O', () => {
+      options.onSetOutPoint(options.frame);
+      this.hide();
+    });
     menu.appendChild(setOutItem);
 
     // Clear In/Out Range (conditional)
     if (options.hasCustomInOut) {
-      const clearItem = this.createMenuItem(
-        'Clear In/Out Range',
-        'R',
-        () => {
-          options.onResetInOutPoints();
-          this.hide();
-        }
-      );
+      const clearItem = this.createMenuItem('Clear In/Out Range', 'R', () => {
+        options.onResetInOutPoints();
+        this.hide();
+      });
       menu.appendChild(clearItem);
     }
 
@@ -168,24 +144,16 @@ export class TimelineContextMenu {
     // Add/Remove Mark
     if (options.markerAtFrame) {
       const markerStartFrame = options.markerAtFrame.frame;
-      const removeItem = this.createMenuItem(
-        `Remove Mark at Frame ${markerStartFrame}`,
-        'M',
-        () => {
-          options.onRemoveMark(markerStartFrame);
-          this.hide();
-        }
-      );
+      const removeItem = this.createMenuItem(`Remove Mark at Frame ${markerStartFrame}`, 'M', () => {
+        options.onRemoveMark(markerStartFrame);
+        this.hide();
+      });
       menu.appendChild(removeItem);
     } else {
-      const addItem = this.createMenuItem(
-        `Add Mark at ${options.frameLabel}`,
-        'M',
-        () => {
-          options.onToggleMark(options.frame);
-          this.hide();
-        }
-      );
+      const addItem = this.createMenuItem(`Add Mark at ${options.frameLabel}`, 'M', () => {
+        options.onToggleMark(options.frame);
+        this.hide();
+      });
       menu.appendChild(addItem);
     }
 
@@ -277,11 +245,7 @@ export class TimelineContextMenu {
     return row;
   }
 
-  private createMenuItem(
-    label: string,
-    shortcut: string | null,
-    onClick: () => void
-  ): HTMLDivElement {
+  private createMenuItem(label: string, shortcut: string | null, onClick: () => void): HTMLDivElement {
     const item = document.createElement('div');
     item.setAttribute('role', 'menuitem');
     item.tabIndex = -1;
@@ -341,9 +305,7 @@ export class TimelineContextMenu {
 
   private setupKeyboardNavigation(menu: HTMLDivElement): void {
     menu.addEventListener('keydown', (e: KeyboardEvent) => {
-      const items = Array.from(
-        menu.querySelectorAll<HTMLElement>('[role="menuitem"]')
-      );
+      const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
       const currentIndex = items.indexOf(document.activeElement as HTMLElement);
 
       switch (e.key) {

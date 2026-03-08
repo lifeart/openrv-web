@@ -58,19 +58,11 @@ export const PAR_PRESETS: PARPreset[] = [
  * @param displayAspectRatio - Optional known display aspect ratio (e.g., 16/9)
  * @returns Detected pixel aspect ratio
  */
-export function detectPAR(
-  width: number,
-  height: number,
-  displayAspectRatio?: number,
-): number {
+export function detectPAR(width: number, height: number, displayAspectRatio?: number): number {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1.0;
 
   // If a display aspect ratio is provided, compute PAR from it
-  if (
-    displayAspectRatio !== undefined &&
-    Number.isFinite(displayAspectRatio) &&
-    displayAspectRatio > 0
-  ) {
+  if (displayAspectRatio !== undefined && Number.isFinite(displayAspectRatio) && displayAspectRatio > 0) {
     const storageAspect = width / height;
     return displayAspectRatio / storageAspect;
   }
@@ -95,10 +87,7 @@ export function detectPAR(
  * @param par - Pixel aspect ratio
  * @returns Corrected display width
  */
-export function calculatePARCorrectedWidth(
-  sourceWidth: number,
-  par: number,
-): number {
+export function calculatePARCorrectedWidth(sourceWidth: number, par: number): number {
   if (!Number.isFinite(par) || par <= 0) return sourceWidth;
   if (!Number.isFinite(sourceWidth) || sourceWidth <= 0) return sourceWidth;
   return Math.round(sourceWidth * par);
@@ -112,11 +101,7 @@ export function calculatePARCorrectedWidth(
  * @param par - Pixel aspect ratio
  * @returns Display aspect ratio
  */
-export function calculateDisplayAspectRatio(
-  width: number,
-  height: number,
-  par: number,
-): number {
+export function calculateDisplayAspectRatio(width: number, height: number, par: number): number {
   if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(par)) return 1.0;
   if (height <= 0 || par <= 0 || width <= 0) return 1.0;
   return (width * par) / height;

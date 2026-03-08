@@ -134,11 +134,7 @@ export class WorkerPool<TResult = unknown> {
   /**
    * Submit a task to the pool
    */
-  submit(
-    data: WorkerTaskData,
-    transferables?: Transferable[],
-    priority: number = 0
-  ): Promise<TResult> {
+  submit(data: WorkerTaskData, transferables?: Transferable[], priority: number = 0): Promise<TResult> {
     if (this.disposed) {
       return Promise.reject(new Error('WorkerPool has been disposed'));
     }
@@ -196,7 +192,7 @@ export class WorkerPool<TResult = unknown> {
     if (this.disposed) return;
 
     // Find available workers
-    const availableWorkers = this.workers.filter(w => w.ready && !w.busy);
+    const availableWorkers = this.workers.filter((w) => w.ready && !w.busy);
 
     while (availableWorkers.length > 0 && this.taskQueue.length > 0) {
       const worker = availableWorkers.shift()!;
@@ -431,7 +427,7 @@ export class WorkerPool<TResult = unknown> {
   } {
     return {
       totalWorkers: this.workers.length,
-      busyWorkers: this.workers.filter(w => w.busy).length,
+      busyWorkers: this.workers.filter((w) => w.busy).length,
       queuedTasks: this.taskQueue.length,
       pendingTasks: this.pendingTasks.size,
     };

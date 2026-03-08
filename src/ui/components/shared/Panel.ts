@@ -184,8 +184,12 @@ export function createPanelHeader(title: string, onClose?: () => void): HTMLElem
       display: inline-flex;
       align-items: center;
     `;
-    closeBtn.addEventListener('pointerenter', () => { closeBtn.style.color = 'var(--text-primary)'; });
-    closeBtn.addEventListener('pointerleave', () => { closeBtn.style.color = 'var(--text-muted)'; });
+    closeBtn.addEventListener('pointerenter', () => {
+      closeBtn.style.color = 'var(--text-primary)';
+    });
+    closeBtn.addEventListener('pointerleave', () => {
+      closeBtn.style.color = 'var(--text-muted)';
+    });
     closeBtn.addEventListener('click', onClose);
     header.appendChild(closeBtn);
   }
@@ -206,7 +210,7 @@ export function createSliderRow(
     unit?: string;
     onChange?: (value: number) => void;
     onReset?: () => void;
-  } = {}
+  } = {},
 ): { container: HTMLElement; slider: HTMLInputElement; valueLabel: HTMLSpanElement } {
   const { min = 0, max = 100, step = 1, value = 50, unit = '', onChange, onReset } = options;
 

@@ -55,7 +55,7 @@ function logToLinear(codeValue: number, options?: LogLinearOptions): number {
   // relativeLogExposure = density / filmGamma - refWhiteOffset
   // where refWhiteOffset = refWhite * densityPerCodeValue / filmGamma
   const density = codeValue * DENSITY_PER_CODE_VALUE;
-  const refWhiteOffset = refWhite * DENSITY_PER_CODE_VALUE / filmGamma;
+  const refWhiteOffset = (refWhite * DENSITY_PER_CODE_VALUE) / filmGamma;
   const relativeLogExposure = density / filmGamma - refWhiteOffset;
   const linear = Math.pow(10, relativeLogExposure);
 

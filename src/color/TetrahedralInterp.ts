@@ -21,12 +21,7 @@ import { applyLUT3D } from './LUTLoader';
  * The input point is then interpolated from the 4 vertices of the
  * tetrahedron it falls within.
  */
-export function applyLUT3DTetrahedral(
-  lut: LUT3D,
-  r: number,
-  g: number,
-  b: number
-): [number, number, number] {
+export function applyLUT3DTetrahedral(lut: LUT3D, r: number, g: number, b: number): [number, number, number] {
   const { size, domainMin, domainMax, data } = lut;
 
   // Normalize input to 0-1 range based on domain
@@ -158,7 +153,7 @@ export function applyLUT3DToBuffer(
   _width: number,
   _height: number,
   lut: LUT3D,
-  method: InterpolationMethod = 'tetrahedral'
+  method: InterpolationMethod = 'tetrahedral',
 ): Float32Array {
   const output = new Float32Array(data.length);
 
@@ -189,7 +184,7 @@ export function compareInterpolationMethods(
   lut: LUT3D,
   r: number,
   g: number,
-  b: number
+  b: number,
 ): {
   trilinear: [number, number, number];
   tetrahedral: [number, number, number];

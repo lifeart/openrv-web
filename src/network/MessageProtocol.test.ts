@@ -242,7 +242,10 @@ describe('MessageProtocol', () => {
 
     it('MPR-003/004: round-trips a view sync message', () => {
       const original = createViewSyncMessage('room-1', 'user-1', {
-        panX: 5, panY: -10, zoom: 3, channelMode: 'red',
+        panX: 5,
+        panY: -10,
+        zoom: 3,
+        channelMode: 'red',
       });
       const serialized = serializeMessage(original);
       const deserialized = deserializeMessage(serialized);
@@ -269,52 +272,62 @@ describe('MessageProtocol', () => {
       expect(validateMessage(null)).toBe(false);
       expect(validateMessage(undefined)).toBe(false);
       expect(validateMessage({})).toBe(false);
-      expect(validateMessage({ id: '', type: 'sync.playback', roomId: '', userId: '', timestamp: 1, payload: {} })).toBe(false); // empty id
+      expect(
+        validateMessage({ id: '', type: 'sync.playback', roomId: '', userId: '', timestamp: 1, payload: {} }),
+      ).toBe(false); // empty id
     });
 
     it('MPR-007: rejects unknown message type', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'unknown.type',
-        roomId: '',
-        userId: '',
-        timestamp: 1,
-        payload: {},
-      })).toBe(false);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'unknown.type',
+          roomId: '',
+          userId: '',
+          timestamp: 1,
+          payload: {},
+        }),
+      ).toBe(false);
     });
 
     it('MPR-009: rejects non-finite timestamp', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'ping',
-        roomId: '',
-        userId: '',
-        timestamp: NaN,
-        payload: {},
-      })).toBe(false);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'ping',
+          roomId: '',
+          userId: '',
+          timestamp: NaN,
+          payload: {},
+        }),
+      ).toBe(false);
     });
 
     it('MPR-010: rejects missing payload', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'ping',
-        roomId: '',
-        userId: '',
-        timestamp: 1,
-      })).toBe(false);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'ping',
+          roomId: '',
+          userId: '',
+          timestamp: 1,
+        }),
+      ).toBe(false);
     });
   });
 
   describe('validatePlaybackPayload', () => {
     it('MPR-021: accepts valid playback payload', () => {
-      expect(validatePlaybackPayload({
-        isPlaying: true,
-        currentFrame: 0,
-        playbackSpeed: 1,
-        playDirection: 1,
-        loopMode: 'loop',
-        timestamp: Date.now(),
-      })).toBe(true);
+      expect(
+        validatePlaybackPayload({
+          isPlaying: true,
+          currentFrame: 0,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        }),
+      ).toBe(true);
     });
 
     it('MPR-022: rejects invalid playback payload', () => {
@@ -348,10 +361,17 @@ describe('MessageProtocol', () => {
 
   describe('validateColorPayload', () => {
     it('MPR-027: accepts valid color payload', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(true);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(true);
     });
 
     it('MPR-028: rejects invalid color payload', () => {
@@ -362,158 +382,302 @@ describe('MessageProtocol', () => {
     it('MPR-028b: rejects payload with only 3 of 7 required fields', () => {
       // This payload has exposure, gamma, saturation but is missing
       // contrast, temperature, tint, and brightness
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028c: rejects payload missing contrast', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028d: rejects payload missing temperature', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028e: rejects payload missing tint', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028f: rejects payload missing brightness', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028g: rejects payload missing exposure', () => {
-      expect(validateColorPayload({
-        gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028h: rejects payload missing gamma', () => {
-      expect(validateColorPayload({
-        exposure: 0, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028i: rejects payload missing saturation', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028j: accepts payload with extra unknown fields alongside 7 required fields', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-        unknownField: 'hello',
-        anotherExtra: 42,
-      })).toBe(true);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+          unknownField: 'hello',
+          anotherExtra: 42,
+        }),
+      ).toBe(true);
     });
 
     it('MPR-028k: rejects payload with NaN exposure', () => {
-      expect(validateColorPayload({
-        exposure: NaN, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: NaN,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028l: rejects payload with NaN gamma', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: NaN, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: NaN,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028m: rejects payload with Infinity contrast', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: Infinity, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: Infinity,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028n: rejects payload with -Infinity temperature', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: -Infinity, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: -Infinity,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028o: rejects payload with NaN tint', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: NaN, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: NaN,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028p: rejects payload with NaN brightness', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: NaN,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: NaN,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028q: rejects payload with NaN saturation', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: NaN,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: NaN,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028r: rejects payload with string value for exposure', () => {
-      expect(validateColorPayload({
-        exposure: '0', gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: '0',
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028s: rejects payload with string value for gamma', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: '1', saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: '1',
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028t: rejects payload with boolean value for contrast', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: true, temperature: 0, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: true,
+          temperature: 0,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028u: rejects payload with null value for temperature', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: null, tint: 0, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: null,
+          tint: 0,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028v: rejects payload with undefined value for tint', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: undefined, brightness: 0,
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: undefined,
+          brightness: 0,
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028w: rejects payload with array value for brightness', () => {
-      expect(validateColorPayload({
-        exposure: 0, gamma: 1, saturation: 1,
-        contrast: 1, temperature: 0, tint: 0, brightness: [0],
-      })).toBe(false);
+      expect(
+        validateColorPayload({
+          exposure: 0,
+          gamma: 1,
+          saturation: 1,
+          contrast: 1,
+          temperature: 0,
+          tint: 0,
+          brightness: [0],
+        }),
+      ).toBe(false);
     });
 
     it('MPR-028x: rejects empty object', () => {
@@ -521,11 +685,17 @@ describe('MessageProtocol', () => {
     });
 
     it('MPR-028y: accepts payload with extreme but finite numeric values', () => {
-      expect(validateColorPayload({
-        exposure: -1e10, gamma: 1e10, saturation: -1e10,
-        contrast: Number.MAX_SAFE_INTEGER, temperature: Number.MIN_SAFE_INTEGER,
-        tint: -0, brightness: 0,
-      })).toBe(true);
+      expect(
+        validateColorPayload({
+          exposure: -1e10,
+          gamma: 1e10,
+          saturation: -1e10,
+          contrast: Number.MAX_SAFE_INTEGER,
+          temperature: Number.MIN_SAFE_INTEGER,
+          tint: -0,
+          brightness: 0,
+        }),
+      ).toBe(true);
     });
   });
 
@@ -542,34 +712,42 @@ describe('MessageProtocol', () => {
     });
 
     it('MPR-048: validateWebRTCOfferPayload checks required fields', () => {
-      expect(validateWebRTCOfferPayload({
-        requestId: 'req-1',
-        targetUserId: 'user-2',
-        sdp: 'offer',
-      })).toBe(true);
+      expect(
+        validateWebRTCOfferPayload({
+          requestId: 'req-1',
+          targetUserId: 'user-2',
+          sdp: 'offer',
+        }),
+      ).toBe(true);
       expect(validateWebRTCOfferPayload({ requestId: 'req-1' })).toBe(false);
     });
 
     it('MPR-049: validateWebRTCAnswerPayload checks required fields', () => {
-      expect(validateWebRTCAnswerPayload({
-        requestId: 'req-1',
-        targetUserId: 'user-1',
-        sdp: 'answer',
-      })).toBe(true);
+      expect(
+        validateWebRTCAnswerPayload({
+          requestId: 'req-1',
+          targetUserId: 'user-1',
+          sdp: 'answer',
+        }),
+      ).toBe(true);
       expect(validateWebRTCAnswerPayload({ requestId: 'req-1' })).toBe(false);
     });
 
     it('MPR-050: validateWebRTCIcePayload checks required fields', () => {
-      expect(validateWebRTCIcePayload({
-        requestId: 'req-1',
-        targetUserId: 'user-2',
-        candidate: { candidate: 'x' },
-      })).toBe(true);
-      expect(validateWebRTCIcePayload({
-        requestId: 'req-1',
-        targetUserId: 'user-2',
-        candidate: null,
-      })).toBe(false);
+      expect(
+        validateWebRTCIcePayload({
+          requestId: 'req-1',
+          targetUserId: 'user-2',
+          candidate: { candidate: 'x' },
+        }),
+      ).toBe(true);
+      expect(
+        validateWebRTCIcePayload({
+          requestId: 'req-1',
+          targetUserId: 'user-2',
+          candidate: null,
+        }),
+      ).toBe(false);
     });
   });
 
@@ -587,12 +765,8 @@ describe('MessageProtocol', () => {
         transferId: 'transfer-1',
         targetUserId: 'user-2',
         totalBytes: 1024,
-        files: [
-          { id: 'f1', name: 'shot.exr', type: 'image/x-exr', size: 1024, lastModified: 1 },
-        ],
-        sources: [
-          { kind: 'image', fileIds: ['f1'], fps: 24 },
-        ],
+        files: [{ id: 'f1', name: 'shot.exr', type: 'image/x-exr', size: 1024, lastModified: 1 }],
+        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
       });
       expect(msg.type).toBe('sync.media-offer');
     });
@@ -627,103 +801,127 @@ describe('MessageProtocol', () => {
       expect(validateMediaRequestPayload({ transferId: 't1' })).toBe(true);
       expect(validateMediaRequestPayload({ transferId: '' })).toBe(false);
 
-      expect(validateMediaOfferPayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-        totalBytes: 1,
-        files: [],
-        sources: [],
-      })).toBe(true);
-      expect(validateMediaOfferPayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-        totalBytes: -1,
-        files: [],
-        sources: [],
-      })).toBe(false);
+      expect(
+        validateMediaOfferPayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+          totalBytes: 1,
+          files: [],
+          sources: [],
+        }),
+      ).toBe(true);
+      expect(
+        validateMediaOfferPayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+          totalBytes: -1,
+          files: [],
+          sources: [],
+        }),
+      ).toBe(false);
 
-      expect(validateMediaResponsePayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-        accepted: true,
-      })).toBe(true);
-      expect(validateMediaResponsePayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-        accepted: 'yes',
-      })).toBe(false);
+      expect(
+        validateMediaResponsePayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+          accepted: true,
+        }),
+      ).toBe(true);
+      expect(
+        validateMediaResponsePayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+          accepted: 'yes',
+        }),
+      ).toBe(false);
 
-      expect(validateMediaChunkPayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-        fileId: 'f1',
-        chunkIndex: 0,
-        totalChunks: 1,
-        data: 'AA==',
-      })).toBe(true);
-      expect(validateMediaChunkPayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-        fileId: 'f1',
-        chunkIndex: -1,
-        totalChunks: 1,
-        data: 'AA==',
-      })).toBe(false);
+      expect(
+        validateMediaChunkPayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+          fileId: 'f1',
+          chunkIndex: 0,
+          totalChunks: 1,
+          data: 'AA==',
+        }),
+      ).toBe(true);
+      expect(
+        validateMediaChunkPayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+          fileId: 'f1',
+          chunkIndex: -1,
+          totalChunks: 1,
+          data: 'AA==',
+        }),
+      ).toBe(false);
 
-      expect(validateMediaCompletePayload({
-        transferId: 't1',
-        targetUserId: 'u2',
-      })).toBe(true);
-      expect(validateMediaCompletePayload({
-        transferId: '',
-        targetUserId: 'u2',
-      })).toBe(false);
+      expect(
+        validateMediaCompletePayload({
+          transferId: 't1',
+          targetUserId: 'u2',
+        }),
+      ).toBe(true);
+      expect(
+        validateMediaCompletePayload({
+          transferId: '',
+          targetUserId: 'u2',
+        }),
+      ).toBe(false);
     });
   });
 
   describe('edge cases', () => {
     it('MPR-030: validates message with null payload', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'ping',
-        roomId: '',
-        userId: '',
-        timestamp: 1,
-        payload: null,
-      })).toBe(true);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'ping',
+          roomId: '',
+          userId: '',
+          timestamp: 1,
+          payload: null,
+        }),
+      ).toBe(true);
     });
 
     it('MPR-031: validates message with array payload', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'ping',
-        roomId: '',
-        userId: '',
-        timestamp: 1,
-        payload: [1, 2, 3],
-      })).toBe(true);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'ping',
+          roomId: '',
+          userId: '',
+          timestamp: 1,
+          payload: [1, 2, 3],
+        }),
+      ).toBe(true);
     });
 
     it('MPR-032: rejects Infinity timestamp', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'ping',
-        roomId: '',
-        userId: '',
-        timestamp: Infinity,
-        payload: {},
-      })).toBe(false);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'ping',
+          roomId: '',
+          userId: '',
+          timestamp: Infinity,
+          payload: {},
+        }),
+      ).toBe(false);
     });
 
     it('MPR-033: rejects negative Infinity timestamp', () => {
-      expect(validateMessage({
-        id: 'test',
-        type: 'ping',
-        roomId: '',
-        userId: '',
-        timestamp: -Infinity,
-        payload: {},
-      })).toBe(false);
+      expect(
+        validateMessage({
+          id: 'test',
+          type: 'ping',
+          roomId: '',
+          userId: '',
+          timestamp: -Infinity,
+          payload: {},
+        }),
+      ).toBe(false);
     });
 
     it('MPR-034: deserializeMessage handles deeply nested JSON', () => {
@@ -757,8 +955,12 @@ describe('MessageProtocol', () => {
       const msg = createStateResponseMessage('room-1', 'user-1', {
         requestId: 'req-1',
         playback: {
-          isPlaying: false, currentFrame: 0, playbackSpeed: 1,
-          playDirection: 1, loopMode: 'loop', timestamp: 0,
+          isPlaying: false,
+          currentFrame: 0,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: 0,
         },
         view: { panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' },
       });
@@ -782,14 +984,16 @@ describe('MessageProtocol', () => {
     });
 
     it('MPR-040: validatePlaybackPayload rejects extra wrong types', () => {
-      expect(validatePlaybackPayload({
-        isPlaying: true,
-        currentFrame: 'ten',
-        playbackSpeed: 1,
-        playDirection: 1,
-        loopMode: 'loop',
-        timestamp: Date.now(),
-      })).toBe(false);
+      expect(
+        validatePlaybackPayload({
+          isPlaying: true,
+          currentFrame: 'ten',
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        }),
+      ).toBe(false);
     });
 
     it('MPR-041: validateFramePayload rejects missing timestamp', () => {

@@ -4,11 +4,11 @@
  */
 
 import { Logger } from '../../utils/Logger';
-import { Session } from '../../core/session/Session';
-import { PaintEngine } from '../../paint/PaintEngine';
-import { PaintRenderer } from '../../paint/PaintRenderer';
-import { Transform2D } from './TransformControl';
-import { CropRegion } from './CropControl';
+import { type Session } from '../../core/session/Session';
+import { type PaintEngine } from '../../paint/PaintEngine';
+import { type PaintRenderer } from '../../paint/PaintRenderer';
+import { type Transform2D } from './TransformControl';
+import { type CropRegion } from './CropControl';
 import {
   drawWithTransform,
   drawWithTransformFill,
@@ -43,7 +43,7 @@ function drawElementWithTransformAndCrop(
   outputHeight: number,
   transform: Transform2D | undefined,
   crop: { x: number; y: number } | null,
-  filterString?: string
+  filterString?: string,
 ): void {
   // Enable high-quality image smoothing for best picture quality
   ctx.imageSmoothingEnabled = true;
@@ -121,7 +121,7 @@ function computeExportParams(
   sourceWidth: number,
   sourceHeight: number,
   transform: Transform2D | undefined,
-  cropRegion: CropRegion | undefined
+  cropRegion: CropRegion | undefined,
 ): ExportParams {
   // Normalize rotation to [0, 360)
   const rawRotation = transform?.rotation ?? 0;
@@ -130,23 +130,21 @@ function computeExportParams(
   const { width: effectiveWidth, height: effectiveHeight } = getEffectiveDimensions(
     sourceWidth,
     sourceHeight,
-    rotation
+    rotation,
   );
 
   const hasCrop = !!(cropRegion && !isFullCropRegion(cropRegion));
   const crop = hasCrop ? cropRegion : null;
 
-  const outputWidth = crop
-    ? Math.round(crop.width * effectiveWidth)
-    : effectiveWidth;
-  const outputHeight = crop
-    ? Math.round(crop.height * effectiveHeight)
-    : effectiveHeight;
+  const outputWidth = crop ? Math.round(crop.width * effectiveWidth) : effectiveWidth;
+  const outputHeight = crop ? Math.round(crop.height * effectiveHeight) : effectiveHeight;
 
-  const cropOffset = crop ? {
-    x: Math.round(crop.x * effectiveWidth),
-    y: Math.round(crop.y * effectiveHeight),
-  } : null;
+  const cropOffset = crop
+    ? {
+        x: Math.round(crop.x * effectiveWidth),
+        y: Math.round(crop.y * effectiveHeight),
+      }
+    : null;
 
   return { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop: cropOffset };
 }
@@ -167,7 +165,7 @@ export function createExportCanvas(
   colorSpace?: 'srgb' | 'display-p3',
   frameburnOptions?: FrameburnTimecodeOptions | null,
   frameburnConfig?: FrameburnConfig | null,
-  frameburnContext?: FrameburnContext | null
+  frameburnContext?: FrameburnContext | null,
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
   if (!source) return null;
@@ -175,8 +173,12 @@ export function createExportCanvas(
   const element = getSourceElementForFrame(session);
   if (!element) return null;
 
-  const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } =
-    computeExportParams(source.width, source.height, transform, cropRegion);
+  const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } = computeExportParams(
+    source.width,
+    source.height,
+    transform,
+    cropRegion,
+  );
 
   // Create canvas at output resolution (cropped or full)
   // When colorSpace is 'display-p3', the exported PNG will be tagged with a P3 ICC profile.
@@ -190,11 +192,17 @@ export function createExportCanvas(
 
   // Draw image with optional transforms and crop
   drawElementWithTransformAndCrop(
-    ctx, element,
-    source.width, source.height,
-    effectiveWidth, effectiveHeight,
-    outputWidth, outputHeight,
-    transform, crop, filterString
+    ctx,
+    element,
+    source.width,
+    source.height,
+    effectiveWidth,
+    effectiveHeight,
+    outputWidth,
+    outputHeight,
+    transform,
+    crop,
+    filterString,
   );
 
   // Reset filter for annotations
@@ -210,11 +218,16 @@ export function createExportCanvas(
       });
 
       drawElementWithTransformAndCrop(
-        ctx, paintRenderer.getCanvas(),
-        source.width, source.height,
-        effectiveWidth, effectiveHeight,
-        outputWidth, outputHeight,
-        transform, crop
+        ctx,
+        paintRenderer.getCanvas(),
+        source.width,
+        source.height,
+        effectiveWidth,
+        effectiveHeight,
+        outputWidth,
+        outputHeight,
+        transform,
+        crop,
       );
     }
   }
@@ -235,7 +248,7 @@ export function createExportCanvas(
  */
 export function createSourceExportCanvas(
   session: Session,
-  colorSpace?: 'srgb' | 'display-p3'
+  colorSpace?: 'srgb' | 'display-p3',
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
   if (!source) return null;
@@ -272,7 +285,7 @@ export async function renderFrameToCanvas(
   colorSpace?: 'srgb' | 'display-p3',
   frameburnOptions?: FrameburnTimecodeOptions | null,
   frameburnConfig?: FrameburnConfig | null,
-  frameburnContext?: FrameburnContext | null
+  frameburnContext?: FrameburnContext | null,
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -324,8 +337,12 @@ export async function renderFrameToCanvas(
       return null;
     }
 
-    const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } =
-      computeExportParams(source.width, source.height, transform, cropRegion);
+    const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } = computeExportParams(
+      source.width,
+      source.height,
+      transform,
+      cropRegion,
+    );
 
     // Create canvas at output resolution (cropped or full)
     // When colorSpace is 'display-p3', the exported PNG will be tagged with a P3 ICC profile.
@@ -339,11 +356,17 @@ export async function renderFrameToCanvas(
 
     // Draw image with transforms and optional crop
     drawElementWithTransformAndCrop(
-      ctx, element,
-      source.width, source.height,
-      effectiveWidth, effectiveHeight,
-      outputWidth, outputHeight,
-      transform, crop, filterString
+      ctx,
+      element,
+      source.width,
+      source.height,
+      effectiveWidth,
+      effectiveHeight,
+      outputWidth,
+      outputHeight,
+      transform,
+      crop,
+      filterString,
     );
 
     // Reset filter for annotations
@@ -359,11 +382,16 @@ export async function renderFrameToCanvas(
         });
 
         drawElementWithTransformAndCrop(
-          ctx, paintRenderer.getCanvas(),
-          source.width, source.height,
-          effectiveWidth, effectiveHeight,
-          outputWidth, outputHeight,
-          transform, crop
+          ctx,
+          paintRenderer.getCanvas(),
+          source.width,
+          source.height,
+          effectiveWidth,
+          effectiveHeight,
+          outputWidth,
+          outputHeight,
+          transform,
+          crop,
         );
       }
     }

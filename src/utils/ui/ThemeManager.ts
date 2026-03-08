@@ -9,7 +9,7 @@
  * - Smooth CSS transitions
  */
 
-import { EventEmitter, EventMap } from '../EventEmitter';
+import { EventEmitter, type EventMap } from '../EventEmitter';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
 export type ThemeMode = 'dark' | 'light' | 'auto';

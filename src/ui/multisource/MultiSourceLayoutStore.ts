@@ -38,7 +38,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
   getState(): MultiSourceLayoutState {
     return {
       ...this.state,
-      tiles: this.state.tiles.map(t => ({ ...t })),
+      tiles: this.state.tiles.map((t) => ({ ...t })),
     };
   }
 
@@ -54,18 +54,18 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
 
   /** Get the current tile list (shallow copy). */
   getTiles(): TileState[] {
-    return this.state.tiles.map(t => ({ ...t }));
+    return this.state.tiles.map((t) => ({ ...t }));
   }
 
   /** Get a tile by ID. */
   getTile(tileId: string): TileState | undefined {
-    const tile = this.state.tiles.find(t => t.id === tileId);
+    const tile = this.state.tiles.find((t) => t.id === tileId);
     return tile ? { ...tile } : undefined;
   }
 
   /** Get the active tile, or undefined if none. */
   getActiveTile(): TileState | undefined {
-    const tile = this.state.tiles.find(t => t.active);
+    const tile = this.state.tiles.find((t) => t.active);
     return tile ? { ...tile } : undefined;
   }
 
@@ -170,7 +170,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
    * Remove a tile by ID. Returns true if removed.
    */
   removeTile(tileId: string): boolean {
-    const index = this.state.tiles.findIndex(t => t.id === tileId);
+    const index = this.state.tiles.findIndex((t) => t.id === tileId);
     if (index === -1) return false;
 
     const wasActive = this.state.tiles[index]!.active;
@@ -192,7 +192,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
   /** Remove all tiles. */
   clearTiles(): void {
     if (this.state.tiles.length === 0) return;
-    const ids = this.state.tiles.map(t => t.id);
+    const ids = this.state.tiles.map((t) => t.id);
     this.state.tiles = [];
     for (const id of ids) {
       this.emit('tileRemoved', id);
@@ -203,7 +203,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
 
   /** Set the active tile by ID. */
   setActiveTile(tileId: string | null): void {
-    const currentActive = this.state.tiles.find(t => t.active);
+    const currentActive = this.state.tiles.find((t) => t.active);
     if (currentActive?.id === tileId) return;
 
     for (const tile of this.state.tiles) {
@@ -218,7 +218,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
   cycleActiveTile(reverse = false): string | null {
     if (this.state.tiles.length === 0) return null;
 
-    const currentIndex = this.state.tiles.findIndex(t => t.active);
+    const currentIndex = this.state.tiles.findIndex((t) => t.active);
     let nextIndex: number;
 
     if (currentIndex === -1) {
@@ -242,7 +242,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
 
   /** Update a tile's pan/zoom state. */
   updateTileTransform(tileId: string, update: Partial<Pick<TileState, 'panX' | 'panY' | 'zoom'>>): void {
-    const tile = this.state.tiles.find(t => t.id === tileId);
+    const tile = this.state.tiles.find((t) => t.id === tileId);
     if (!tile) return;
 
     let changed = false;
@@ -269,7 +269,7 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
     tileId: string,
     update: Partial<Pick<TileState, 'manualX' | 'manualY' | 'manualWidth' | 'manualHeight'>>,
   ): void {
-    const tile = this.state.tiles.find(t => t.id === tileId);
+    const tile = this.state.tiles.find((t) => t.id === tileId);
     if (!tile) return;
 
     let changed = false;

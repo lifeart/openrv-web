@@ -13,11 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  exportOTIO,
-  buildExportClips,
-  type OTIOExportClip,
-} from '../utils/media/OTIOWriter';
+import { exportOTIO, buildExportClips, type OTIOExportClip } from '../utils/media/OTIOWriter';
 import { parseOTIO } from '../utils/media/OTIOParser';
 import { PlaylistManager } from '../core/session/PlaylistManager';
 
@@ -29,10 +25,7 @@ import { PlaylistManager } from '../core/session/PlaylistManager';
  * Simulate what PlaylistPanel.exportOTIO does:
  * map PlaylistClip -> OTIOExportClip with empty sourceUrl.
  */
-function playlistClipsToOTIOClips(
-  manager: PlaylistManager,
-  fps = 24,
-): OTIOExportClip[] {
+function playlistClipsToOTIOClips(manager: PlaylistManager, fps = 24): OTIOExportClip[] {
   return manager.getClips().map((clip) => ({
     sourceName: clip.sourceName,
     sourceUrl: '',
@@ -80,9 +73,9 @@ describe('OTIOWriter E2E', () => {
     });
 
     it('E2E-OTIO-002: multiple clips have contiguous globalStartFrame', () => {
-      manager.addClip(0, 'A', 1, 48);   // duration=48
-      manager.addClip(1, 'B', 10, 33);  // duration=24
-      manager.addClip(2, 'C', 1, 100);  // duration=100
+      manager.addClip(0, 'A', 1, 48); // duration=48
+      manager.addClip(1, 'B', 10, 33); // duration=24
+      manager.addClip(2, 'C', 1, 100); // duration=100
 
       const otioClips = playlistClipsToOTIOClips(manager, 24);
       expect(otioClips).toHaveLength(3);
@@ -336,10 +329,18 @@ describe('OTIOWriter E2E', () => {
       vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
       vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
       vi.spyOn(document, 'createElement').mockReturnValue({
-        set href(v: string) { capturedHref = v; },
-        get href() { return capturedHref; },
-        set download(v: string) { capturedDownload = v; },
-        get download() { return capturedDownload; },
+        set href(v: string) {
+          capturedHref = v;
+        },
+        get href() {
+          return capturedHref;
+        },
+        set download(v: string) {
+          capturedDownload = v;
+        },
+        get download() {
+          return capturedDownload;
+        },
         click: mockClick,
       } as unknown as HTMLAnchorElement);
       vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -481,11 +482,7 @@ describe('OTIOWriter E2E', () => {
       manager.addClip(99, 'unknown', 1, 24);
 
       const playlistClips = manager.getClips();
-      const result = buildExportClips(
-        playlistClips,
-        () => null,
-        24,
-      );
+      const result = buildExportClips(playlistClips, () => null, 24);
 
       expect(result[0]!.sourceUrl).toBe('');
       expect(result[0]!.fps).toBe(24);

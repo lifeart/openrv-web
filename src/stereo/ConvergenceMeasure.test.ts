@@ -14,24 +14,14 @@ import {
   DEFAULT_CONVERGENCE_GUIDE_OPTIONS,
   DEFAULT_MEASURE_PARAMS,
 } from './ConvergenceMeasure';
-import type {
-  DisparityAtPoint,
-  DisparityStats,
-  DisparityMeasureParams,
-} from './ConvergenceMeasure';
+import type { DisparityAtPoint, DisparityStats, DisparityMeasureParams } from './ConvergenceMeasure';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /** Create a solid-color ImageData */
-function createSolidImage(
-  width: number,
-  height: number,
-  r: number,
-  g: number,
-  b: number,
-): ImageData {
+function createSolidImage(width: number, height: number, r: number, g: number, b: number): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < width * height; i++) {
     data[i * 4] = r;
@@ -46,12 +36,7 @@ function createSolidImage(
  * Create an image with a bright vertical stripe at a given x position.
  * Background is black, stripe is white.
  */
-function createStripeImage(
-  width: number,
-  height: number,
-  stripeX: number,
-  stripeWidth: number = 3,
-): ImageData {
+function createStripeImage(width: number, height: number, stripeX: number, stripeWidth: number = 3): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

@@ -12,23 +12,14 @@ import {
   renderViolationOverlay,
   DEFAULT_FLOATING_WINDOW_OPTIONS,
 } from './FloatingWindowDetector';
-import type {
-  FloatingWindowViolationResult,
-  FloatingWindowDetectorOptions,
-} from './FloatingWindowDetector';
+import type { FloatingWindowViolationResult, FloatingWindowDetectorOptions } from './FloatingWindowDetector';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /** Create a solid-color ImageData */
-function createSolidImage(
-  width: number,
-  height: number,
-  r: number,
-  g: number,
-  b: number,
-): ImageData {
+function createSolidImage(width: number, height: number, r: number, g: number, b: number): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < width * height; i++) {
     data[i * 4] = r;
@@ -43,12 +34,7 @@ function createSolidImage(
  * Create an image with a bright vertical stripe at a given x position.
  * Background is black, stripe is white.
  */
-function createStripeImage(
-  width: number,
-  height: number,
-  stripeX: number,
-  stripeWidth: number = 5,
-): ImageData {
+function createStripeImage(width: number, height: number, stripeX: number, stripeWidth: number = 5): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -140,7 +126,7 @@ describe('FloatingWindowDetector', () => {
       const result = detectFloatingWindowViolations(left, right, testOptions);
 
       // Left edge should not be violated (positive disparity)
-      const leftViolation = result.violations.find(v => v.edge === 'left');
+      const leftViolation = result.violations.find((v) => v.edge === 'left');
       expect(leftViolation).toBeUndefined();
     });
 
@@ -245,12 +231,14 @@ describe('FloatingWindowDetector', () => {
 
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'left',
-          maxViolationDisparity: -5,
-          violatingPoints: 3,
-          totalPoints: 5,
-        }],
+        violations: [
+          {
+            edge: 'left',
+            maxViolationDisparity: -5,
+            violatingPoints: 3,
+            totalPoints: 5,
+          },
+        ],
         worstDisparity: -5,
         affectedEdges: ['left'],
       };
@@ -263,12 +251,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(64, 64, 0, 0, 0);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'left',
-          maxViolationDisparity: -5,
-          violatingPoints: 3,
-          totalPoints: 5,
-        }],
+        violations: [
+          {
+            edge: 'left',
+            maxViolationDisparity: -5,
+            violatingPoints: 3,
+            totalPoints: 5,
+          },
+        ],
         worstDisparity: -5,
         affectedEdges: ['left'],
       };
@@ -292,12 +282,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(64, 64, 0, 0, 0);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'right',
-          maxViolationDisparity: -8,
-          violatingPoints: 4,
-          totalPoints: 6,
-        }],
+        violations: [
+          {
+            edge: 'right',
+            maxViolationDisparity: -8,
+            violatingPoints: 4,
+            totalPoints: 6,
+          },
+        ],
         worstDisparity: -8,
         affectedEdges: ['right'],
       };
@@ -317,12 +309,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(64, 64, 0, 0, 0);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'top',
-          maxViolationDisparity: -3,
-          violatingPoints: 2,
-          totalPoints: 4,
-        }],
+        violations: [
+          {
+            edge: 'top',
+            maxViolationDisparity: -3,
+            violatingPoints: 2,
+            totalPoints: 4,
+          },
+        ],
         worstDisparity: -3,
         affectedEdges: ['top'],
       };
@@ -342,12 +336,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(64, 64, 0, 0, 0);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'bottom',
-          maxViolationDisparity: -6,
-          violatingPoints: 5,
-          totalPoints: 8,
-        }],
+        violations: [
+          {
+            edge: 'bottom',
+            maxViolationDisparity: -6,
+            violatingPoints: 5,
+            totalPoints: 8,
+          },
+        ],
         worstDisparity: -6,
         affectedEdges: ['bottom'],
       };
@@ -393,12 +389,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(64, 64, 100, 100, 100);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'left',
-          maxViolationDisparity: -5,
-          violatingPoints: 3,
-          totalPoints: 5,
-        }],
+        violations: [
+          {
+            edge: 'left',
+            maxViolationDisparity: -5,
+            violatingPoints: 3,
+            totalPoints: 5,
+          },
+        ],
         worstDisparity: -5,
         affectedEdges: ['left'],
       };
@@ -424,12 +422,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(64, 64, 0, 0, 0);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'left',
-          maxViolationDisparity: -5,
-          violatingPoints: 3,
-          totalPoints: 5,
-        }],
+        violations: [
+          {
+            edge: 'left',
+            maxViolationDisparity: -5,
+            violatingPoints: 3,
+            totalPoints: 5,
+          },
+        ],
         worstDisparity: -5,
         affectedEdges: ['left'],
       };
@@ -449,12 +449,14 @@ describe('FloatingWindowDetector', () => {
       const img = createSolidImage(80, 60, 50, 50, 50);
       const violationResult: FloatingWindowViolationResult = {
         hasViolation: true,
-        violations: [{
-          edge: 'left',
-          maxViolationDisparity: -3,
-          violatingPoints: 2,
-          totalPoints: 4,
-        }],
+        violations: [
+          {
+            edge: 'left',
+            maxViolationDisparity: -3,
+            violatingPoints: 2,
+            totalPoints: 4,
+          },
+        ],
         worstDisparity: -3,
         affectedEdges: ['left'],
       };

@@ -567,8 +567,14 @@ describe('reconstructHDR', () => {
   });
 
   it('should produce alpha = 1.0 for all pixels', () => {
-    const base = makePixels([[128, 128, 128], [200, 200, 200]]);
-    const gain = makePixels([[64, 64, 64], [192, 192, 192]]);
+    const base = makePixels([
+      [128, 128, 128],
+      [200, 200, 200],
+    ]);
+    const gain = makePixels([
+      [64, 64, 64],
+      [192, 192, 192],
+    ]);
     const meta = defaultGainMapMetadata(3.0);
 
     const result = reconstructHDR(base, gain, 2, meta);
@@ -577,8 +583,14 @@ describe('reconstructHDR', () => {
   });
 
   it('should handle multiple pixels correctly', () => {
-    const base = makePixels([[0, 0, 0], [255, 255, 255]]);
-    const gain = makePixels([[0, 0, 0], [255, 255, 255]]);
+    const base = makePixels([
+      [0, 0, 0],
+      [255, 255, 255],
+    ]);
+    const gain = makePixels([
+      [0, 0, 0],
+      [255, 255, 255],
+    ]);
     const meta = defaultGainMapMetadata(3.0);
 
     const result = reconstructHDR(base, gain, 2, meta);

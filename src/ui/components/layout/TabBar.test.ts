@@ -297,7 +297,7 @@ describe('TabBar', () => {
     });
 
     it('TAB-U102: tab shortcuts are 1 through 6', () => {
-      const shortcuts = TABS.map(t => t.shortcut);
+      const shortcuts = TABS.map((t) => t.shortcut);
       expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6']);
     });
   });

@@ -14,7 +14,7 @@ export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
 export const DEFAULT_PLAYBACK_MODE: PlaybackMode = 'realtime';
 
 /** Derived type for any value in the presets array */
-export type PlaybackSpeedPreset = typeof PLAYBACK_SPEED_PRESETS[number];
+export type PlaybackSpeedPreset = (typeof PLAYBACK_SPEED_PRESETS)[number];
 
 /**
  * Maximum consecutive starvation skips before forcing a pause.

@@ -5,7 +5,7 @@
  * and configuring sync settings. Appears in the header bar.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import type { ConnectionState, SyncUser, SyncSettings, RoomInfo } from '../../network/types';
@@ -465,7 +465,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       margin-bottom: 12px;
       position: relative;
     `;
-    divider.innerHTML = '<span style="background: var(--bg-secondary); padding: 0 8px; position: relative; z-index: 1;">or join a room</span>';
+    divider.innerHTML =
+      '<span style="background: var(--bg-secondary); padding: 0 8px; position: relative; z-index: 1;">or join a room</span>';
     divider.style.background = `linear-gradient(var(--border-secondary), var(--border-secondary)) no-repeat center / calc(100% - 16px) 1px`;
     panel.appendChild(divider);
 
@@ -584,7 +585,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
 
     this.shareLinkLabel = document.createElement('div');
-    this.shareLinkLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    this.shareLinkLabel.style.cssText =
+      'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
     this.shareLinkLabel.textContent = 'Share URL';
     shareSection.appendChild(this.shareLinkLabel);
 
@@ -620,7 +622,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
 
     const responseLabel = document.createElement('div');
-    responseLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    responseLabel.style.cssText =
+      'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
     responseLabel.textContent = 'Guest Response (Host)';
     this.applyResponseSection.appendChild(responseLabel);
 
@@ -682,7 +685,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
 
     const tokenLabel = document.createElement('div');
-    tokenLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    tokenLabel.style.cssText =
+      'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
     tokenLabel.textContent = 'Response Token (Send To Host)';
     this.responseTokenSection.appendChild(tokenLabel);
 
@@ -754,7 +758,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
 
     const usersLabel = document.createElement('div');
-    usersLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    usersLabel.style.cssText =
+      'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
     usersLabel.textContent = 'Connected Users';
     usersSection.appendChild(usersLabel);
 
@@ -773,7 +778,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
 
     const settingsLabel = document.createElement('div');
-    settingsLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    settingsLabel.style.cssText =
+      'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
     settingsLabel.textContent = 'Sync Settings';
     settingsSection.appendChild(settingsLabel);
 
@@ -1147,8 +1153,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private updatePanelVisibility(): void {
     const { connectionState } = this.state;
 
-    this.disconnectedPanel.style.display = connectionState === 'disconnected' || connectionState === 'error' ? 'block' : 'none';
-    this.connectingPanel.style.display = connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
+    this.disconnectedPanel.style.display =
+      connectionState === 'disconnected' || connectionState === 'error' ? 'block' : 'none';
+    this.connectingPanel.style.display =
+      connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
     this.connectedPanel.style.display = connectionState === 'connected' ? 'flex' : 'none';
   }
 
@@ -1215,7 +1223,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   private normalizeRoomCode(roomCode: string | null): string | null {
     if (!roomCode) return null;
-    const raw = roomCode.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 8);
+    const raw = roomCode
+      .replace(/[^A-Z0-9]/gi, '')
+      .toUpperCase()
+      .slice(0, 8);
     if (raw.length !== 8) return null;
     return `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
   }
@@ -1235,7 +1246,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     label.textContent = 'Room:';
 
     const code = document.createElement('span');
-    code.style.cssText = 'color: var(--text-primary); font-family: var(--font-mono); font-weight: 600; letter-spacing: 1px;';
+    code.style.cssText =
+      'color: var(--text-primary); font-family: var(--font-mono); font-weight: 600; letter-spacing: 1px;';
     code.textContent = info.roomCode;
 
     const participants = document.createElement('span');

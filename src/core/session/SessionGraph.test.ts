@@ -72,9 +72,7 @@ describe('SessionGraph', () => {
       graph.updateMetadata({ displayName: 'My Session' });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ displayName: 'My Session' }),
-      );
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({ displayName: 'My Session' }));
     });
 
     it('SG-021: does NOT emit metadataChanged when nothing changes', () => {
@@ -103,9 +101,7 @@ describe('SessionGraph', () => {
 
       graph.updateMetadata({ displayName: '  My Session  ' });
 
-      expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ displayName: 'My Session' }),
-      );
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({ displayName: 'My Session' }));
     });
 
     it('SG-023: emits metadataChanged when comment changes', () => {
@@ -183,10 +179,7 @@ describe('SessionGraph', () => {
       const listener = vi.fn();
       graph.on('edlLoaded', listener);
 
-      const edlText = [
-        '# RVEDL Test',
-        '/path/to/clip.mov 1 100',
-      ].join('\n');
+      const edlText = ['# RVEDL Test', '/path/to/clip.mov 1 100'].join('\n');
 
       const entries = graph.loadEDL(edlText);
 

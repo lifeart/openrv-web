@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type LUT3D, isLUT3D, parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
@@ -134,7 +134,6 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     }
   }
 
-
   private createSliders(): void {
     const sliderConfigs: Array<{
       key: NumericAdjustmentKey;
@@ -144,20 +143,83 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       step: number;
       format: (v: number) => string;
     }> = [
-      { key: 'exposure', label: 'Exposure', min: -5, max: 5, step: 0.1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}` },
-      { key: 'brightness', label: 'Brightness', min: -1, max: 1, step: 0.01, format: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%` },
+      {
+        key: 'exposure',
+        label: 'Exposure',
+        min: -5,
+        max: 5,
+        step: 0.1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
+      },
+      {
+        key: 'brightness',
+        label: 'Brightness',
+        min: -1,
+        max: 1,
+        step: 0.01,
+        format: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%`,
+      },
       { key: 'contrast', label: 'Contrast', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
-      { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      {
+        key: 'clarity',
+        label: 'Clarity',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
       { key: 'hueRotation', label: 'Hue Rotation', min: 0, max: 360, step: 1, format: (v) => `${v.toFixed(0)}\u00B0` },
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, format: (v) => v.toFixed(2) },
       { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
-      { key: 'vibrance', label: 'Vibrance', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-      { key: 'temperature', label: 'Temperature', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      {
+        key: 'vibrance',
+        label: 'Vibrance',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
+      {
+        key: 'temperature',
+        label: 'Temperature',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
       { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-      { key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-      { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-      { key: 'whites', label: 'Whites', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
-      { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      {
+        key: 'highlights',
+        label: 'Highlights',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
+      {
+        key: 'shadows',
+        label: 'Shadows',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
+      {
+        key: 'whites',
+        label: 'Whites',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
+      {
+        key: 'blacks',
+        label: 'Blacks',
+        min: -100,
+        max: 100,
+        step: 1,
+        format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      },
     ];
 
     // Header with reset button
@@ -188,8 +250,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       font-size: 11px;
     `;
     resetButton.addEventListener('click', () => this.reset());
-    resetButton.addEventListener('pointerenter', () => { resetButton.style.background = 'var(--text-muted)'; });
-    resetButton.addEventListener('pointerleave', () => { resetButton.style.background = 'var(--border-secondary)'; });
+    resetButton.addEventListener('pointerenter', () => {
+      resetButton.style.background = 'var(--text-muted)';
+    });
+    resetButton.addEventListener('pointerleave', () => {
+      resetButton.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetButton);
@@ -257,8 +323,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     fileInput.addEventListener('change', (e) => this.handleLUTFile(e));
 
     lutLoadBtn.addEventListener('click', () => fileInput.click());
-    lutLoadBtn.addEventListener('pointerenter', () => { lutLoadBtn.style.background = 'var(--text-muted)'; });
-    lutLoadBtn.addEventListener('pointerleave', () => { lutLoadBtn.style.background = 'var(--border-secondary)'; });
+    lutLoadBtn.addEventListener('pointerenter', () => {
+      lutLoadBtn.style.background = 'var(--text-muted)';
+    });
+    lutLoadBtn.addEventListener('pointerleave', () => {
+      lutLoadBtn.style.background = 'var(--border-secondary)';
+    });
 
     lutHeader.appendChild(lutTitle);
     lutHeader.appendChild(lutLoadBtn);
@@ -385,7 +455,10 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       this.setLUT(lut);
     } catch (err) {
       console.error('Failed to load LUT:', err);
-      showAlert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`, { type: 'error', title: 'LUT Error' });
+      showAlert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`, {
+        type: 'error',
+        title: 'LUT Error',
+      });
     }
 
     // Reset input

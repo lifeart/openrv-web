@@ -1,8 +1,17 @@
-import { IPImage, DataType, type ColorPrimaries } from '../core/image/Image';
+import { type IPImage, type DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { getRotationMatrix2x2, normalizeAngle } from '../utils/rotation';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
+  GamutMappingState,
+} from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { TextureFilterMode } from '../core/types/filter';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
@@ -37,7 +46,10 @@ const log = new Logger('Renderer');
 
 /** Neutral display color config for scope rendering — no display OETF, gamma, or brightness. */
 const SCOPE_DISPLAY_CONFIG: DisplayColorConfig = {
-  transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2,
+  transferFunction: 0,
+  displayGamma: 1,
+  displayBrightness: 1,
+  customGamma: 2.2,
 };
 
 /** Determine if an image requires RGBA16F scope FBO (HDR) or can use RGBA8 (SDR). */
@@ -53,7 +65,14 @@ export function isHDRContent(image: IPImage): boolean {
 export { TONE_MAPPING_OPERATOR_CODES } from './ShaderStateManager';
 
 // Re-export the interface and types so existing consumers can import from here
-export type { RendererBackend, RendererLifecycle, RendererColorPipeline, RendererEffects, RendererHDR, TextureHandle } from './RendererBackend';
+export type {
+  RendererBackend,
+  RendererLifecycle,
+  RendererColorPipeline,
+  RendererEffects,
+  RendererHDR,
+  TextureHandle,
+} from './RendererBackend';
 
 /**
  * WebGL2-based renderer backend.
@@ -150,8 +169,8 @@ export class Renderer implements RendererBackend {
   private hdrPBOFences: [WebGLSync | null, WebGLSync | null] = [null, null];
   private hdrPBOWidth = 0;
   private hdrPBOHeight = 0;
-  private hdrPBOCachedPixels: Float32Array | null = null;  // data from previous frame
-  private hdrPBOReady = false;       // true after first frame has been captured
+  private hdrPBOCachedPixels: Float32Array | null = null; // data from previous frame
+  private hdrPBOReady = false; // true after first frame has been captured
 
   // --- Dedicated FBO/PBO for scope readback (separate from display blit path) ---
   // Scope analysis renders at reduced resolution (320×180 / 640×360), so using
@@ -243,7 +262,11 @@ export class Renderer implements RendererBackend {
           if (gl2.drawingBufferColorSpace === 'rec2100-pq') {
             this.hdrOutputMode = 'pq';
             log.info('HDR output: rec2100-pq');
-          } else if (capabilities?.displayHDR && capabilities?.webglDrawingBufferStorage && capabilities?.canvasExtendedHDR) {
+          } else if (
+            capabilities?.displayHDR &&
+            capabilities?.webglDrawingBufferStorage &&
+            capabilities?.canvasExtendedHDR
+          ) {
             // Extended HDR: use display-p3 (or srgb) + half-float backbuffer + extended mode
             gl2.drawingBufferColorSpace = capabilities?.webglP3 ? 'display-p3' : 'srgb';
             this.hdrOutputMode = 'extended';
@@ -256,7 +279,7 @@ export class Renderer implements RendererBackend {
             log.info(`HDR color spaces not accepted, drawingBufferColorSpace='${gl2.drawingBufferColorSpace}'`);
           }
         }
-      } catch (e) {
+      } catch (_e) {
         // rec2100-hlg/pq not in PredefinedColorSpace enum — expected on most browsers.
         // Try extended HDR mode, then fall back to P3.
         if (capabilities?.displayHDR && capabilities?.webglDrawingBufferStorage && capabilities?.canvasExtendedHDR) {
@@ -315,7 +338,11 @@ export class Renderer implements RendererBackend {
     // and generateMipmap must be available on the context
     const floatLinear = (gl as WebGL2RenderingContext).getExtension('OES_texture_float_linear');
     const colorBufferFloat = (gl as WebGL2RenderingContext).getExtension('EXT_color_buffer_float');
-    this._mipmapSupported = !!(floatLinear && colorBufferFloat && typeof (gl as WebGL2RenderingContext).generateMipmap === 'function');
+    this._mipmapSupported = !!(
+      floatLinear &&
+      colorBufferFloat &&
+      typeof (gl as WebGL2RenderingContext).generateMipmap === 'function'
+    );
 
     // Probe for KHR_parallel_shader_compile before shader init.
     // When available, shader compilation will be non-blocking.
@@ -377,10 +404,7 @@ export class Renderer implements RendererBackend {
     // Create VBO with quad vertices and texcoords
     const vertices = new Float32Array([
       // Position    TexCoord
-      -1, -1, 0, 1,
-      1, -1, 1, 1,
-      -1, 1, 0, 0,
-      1, 1, 1, 0,
+      -1, -1, 0, 1, 1, -1, 1, 1, -1, 1, 0, 0, 1, 1, 1, 0,
     ]);
 
     this.quadVBO = gl.createBuffer();
@@ -446,13 +470,7 @@ export class Renderer implements RendererBackend {
     return image.texture ?? null;
   }
 
-  renderImage(
-    image: IPImage,
-    offsetX = 0,
-    offsetY = 0,
-    scaleX = 1,
-    scaleY = 1
-  ): void {
+  renderImage(image: IPImage, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1): void {
     if (!this.gl || !this.displayShader) return;
 
     // Skip rendering if the shader is still compiling (parallel compile path).
@@ -470,9 +488,11 @@ export class Renderer implements RendererBackend {
 
     // Use display shader
     this.displayShader.use();
-    this.offsetBuffer[0] = offsetX; this.offsetBuffer[1] = offsetY;
+    this.offsetBuffer[0] = offsetX;
+    this.offsetBuffer[1] = offsetY;
     this.displayShader.setUniform('u_offset', this.offsetBuffer);
-    this.scaleBuffer[0] = scaleX; this.scaleBuffer[1] = scaleY;
+    this.scaleBuffer[0] = scaleX;
+    this.scaleBuffer[1] = scaleY;
     this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
     // Set HDR output mode uniform
@@ -499,9 +519,9 @@ export class Renderer implements RendererBackend {
       const dc = this.stateManager.getDisplayColorState();
       log.info(
         `renderImage: outputMode=${this.hdrOutputMode}` +
-        ` inputTransfer=${inputTransferCode} (metadata.tf=${image.metadata.transferFunction ?? 'unset'})` +
-        ` displayTransfer=${dc.transferFunction} displayGamma=${dc.displayGamma} displayBrightness=${dc.displayBrightness}` +
-        ` size=${image.width}x${image.height} dtype=${image.dataType} channels=${image.channels}`
+          ` inputTransfer=${inputTransferCode} (metadata.tf=${image.metadata.transferFunction ?? 'unset'})` +
+          ` displayTransfer=${dc.transferFunction} displayGamma=${dc.displayGamma} displayBrightness=${dc.displayBrightness}` +
+          ` size=${image.width}x${image.height} dtype=${image.dataType} channels=${image.channels}`,
       );
     }
 
@@ -781,8 +801,8 @@ export class Renderer implements RendererBackend {
         const dst = this.inlineLUTDeinterleavedBuffer;
         const src = s.inlineLUTData;
         for (let i = 0; i < lutSize; i++) {
-          dst[i] = src[i * 3]!;                 // R row
-          dst[lutSize + i] = src[i * 3 + 1]!;   // G row
+          dst[i] = src[i * 3]!; // R row
+          dst[lutSize + i] = src[i * 3 + 1]!; // G row
           dst[lutSize * 2 + i] = src[i * 3 + 2]!; // B row
         }
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, lutSize, 3, 0, gl.RED, gl.FLOAT, dst);
@@ -838,10 +858,10 @@ export class Renderer implements RendererBackend {
         gl.texImage2D(
           gl.TEXTURE_2D,
           0,
-          gl.RGBA16F,    // 16-bit float internal format for HDR
+          gl.RGBA16F, // 16-bit float internal format for HDR
           gl.RGBA,
           gl.HALF_FLOAT,
-          image.videoFrame // VideoFrame is a valid TexImageSource
+          image.videoFrame, // VideoFrame is a valid TexImageSource
         );
         PerfTrace.end('texImage2D(VideoFrame)');
 
@@ -899,14 +919,7 @@ export class Renderer implements RendererBackend {
         }
 
         PerfTrace.begin('texImage2D(ImageBitmap)');
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          0,
-          gl.RGBA8,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          image.imageBitmap
-        );
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, image.imageBitmap);
         PerfTrace.end('texImage2D(ImageBitmap)');
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -944,17 +957,7 @@ export class Renderer implements RendererBackend {
       uploadData = rgba;
     }
 
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      internalFormat,
-      image.width,
-      image.height,
-      0,
-      format,
-      type,
-      uploadData
-    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, image.width, image.height, 0, format, type, uploadData);
 
     // Generate mipmaps for RGBA float textures (including padded 3-channel HDR).
     // Skip for VideoFrame sources (cost blows 16ms frame budget on mobile).
@@ -970,7 +973,10 @@ export class Renderer implements RendererBackend {
     image.textureNeedsUpdate = false;
   }
 
-  private getTextureFormat(dataType: DataType, channels: number): {
+  private getTextureFormat(
+    dataType: DataType,
+    channels: number,
+  ): {
     internalFormat: number;
     format: number;
     type: number;
@@ -1085,8 +1091,7 @@ export class Renderer implements RendererBackend {
     } else {
       // In bilinear mode, restore mipmap sampling for textures that have mipmaps.
       const hasMipmaps = this._mipmappedTextures.has(texture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER,
-        hasMipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, hasMipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
     }
   }
 
@@ -1188,7 +1193,9 @@ export class Renderer implements RendererBackend {
 
       // Verify the assignment stuck (browser silently ignores unsupported values)
       if ((mode === 'hlg' || mode === 'pq') && this.gl.drawingBufferColorSpace !== targetColorSpace) {
-        log.warn(`drawingBufferColorSpace='${targetColorSpace}' not supported (got '${this.gl.drawingBufferColorSpace}')`);
+        log.warn(
+          `drawingBufferColorSpace='${targetColorSpace}' not supported (got '${this.gl.drawingBufferColorSpace}')`,
+        );
         this.hdrOutputMode = previousMode;
         return false;
       }
@@ -1234,7 +1241,11 @@ export class Renderer implements RendererBackend {
       log.warn('Failed to set HDR output mode:', e);
       this.hdrOutputMode = previousMode;
       this.usingHalfFloatBackbuffer = previousHalfFloat;
-      try { this.gl.drawingBufferColorSpace = previousColorSpace; } catch { /* best effort */ }
+      try {
+        this.gl.drawingBufferColorSpace = previousColorSpace;
+      } catch {
+        /* best effort */
+      }
       return false;
     }
   }
@@ -1325,7 +1336,11 @@ export class Renderer implements RendererBackend {
    * Identical logic to renderImageToFloatAsync but uses scope-specific resources
    * to avoid contention with the display blit path.
    */
-  private renderImageToFloatAsyncForScopes(image: IPImage, width: number, height: number): Float32Array | Uint8Array | null {
+  private renderImageToFloatAsyncForScopes(
+    image: IPImage,
+    width: number,
+    height: number,
+  ): Float32Array | Uint8Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
 
@@ -1439,7 +1454,12 @@ export class Renderer implements RendererBackend {
   /**
    * Synchronous float readback using a specific FBO (fallback when PBOs fail).
    */
-  private renderImageToFloatSync(image: IPImage, width: number, height: number, fbo: WebGLFramebuffer): Float32Array | Uint8Array | null {
+  private renderImageToFloatSync(
+    image: IPImage,
+    width: number,
+    height: number,
+    fbo: WebGLFramebuffer,
+  ): Float32Array | Uint8Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
 
@@ -1488,12 +1508,23 @@ export class Renderer implements RendererBackend {
     const gl = this.gl;
     if (!gl) return;
 
-    if (this.scopeFBO && this.scopeFBOWidth === width && this.scopeFBOHeight === height && this.scopeFBOFormat === format) {
+    if (
+      this.scopeFBO &&
+      this.scopeFBOWidth === width &&
+      this.scopeFBOHeight === height &&
+      this.scopeFBOFormat === format
+    ) {
       return;
     }
 
-    if (this.scopeFBOTexture) { gl.deleteTexture(this.scopeFBOTexture); this.scopeFBOTexture = null; }
-    if (this.scopeFBO) { gl.deleteFramebuffer(this.scopeFBO); this.scopeFBO = null; }
+    if (this.scopeFBOTexture) {
+      gl.deleteTexture(this.scopeFBOTexture);
+      this.scopeFBOTexture = null;
+    }
+    if (this.scopeFBO) {
+      gl.deleteFramebuffer(this.scopeFBO);
+      this.scopeFBO = null;
+    }
 
     const texture = gl.createTexture();
     if (!texture) return;
@@ -1509,7 +1540,10 @@ export class Renderer implements RendererBackend {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     const fbo = gl.createFramebuffer();
-    if (!fbo) { gl.deleteTexture(texture); return; }
+    if (!fbo) {
+      gl.deleteTexture(texture);
+      return;
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
 
@@ -1536,8 +1570,15 @@ export class Renderer implements RendererBackend {
   private ensureScopePBOs(width: number, height: number, format: 'rgba16f' | 'rgba8' = 'rgba16f'): void {
     const gl = this.gl;
     if (!gl) return;
-    if (this.scopePBOs[0] && this.scopePBOs[1] && this.scopePBOFormat === format
-        && this.scopePBOWidth === width && this.scopePBOHeight === height) return;
+    if (
+      this.scopePBOs[0] &&
+      this.scopePBOs[1] &&
+      this.scopePBOFormat === format &&
+      this.scopePBOWidth === width &&
+      this.scopePBOHeight === height
+    ) {
+      return;
+    }
 
     // If PBOs exist but format changed, dispose them first
     if (this.scopePBOs[0] || this.scopePBOs[1]) {
@@ -1574,10 +1615,22 @@ export class Renderer implements RendererBackend {
   private disposeScopePBOs(): void {
     const gl = this.gl;
     if (gl) {
-      if (this.scopePBOs[0]) { gl.deleteBuffer(this.scopePBOs[0]); this.scopePBOs[0] = null; }
-      if (this.scopePBOs[1]) { gl.deleteBuffer(this.scopePBOs[1]); this.scopePBOs[1] = null; }
-      if (this.scopePBOFences[0]) { gl.deleteSync(this.scopePBOFences[0]); this.scopePBOFences[0] = null; }
-      if (this.scopePBOFences[1]) { gl.deleteSync(this.scopePBOFences[1]); this.scopePBOFences[1] = null; }
+      if (this.scopePBOs[0]) {
+        gl.deleteBuffer(this.scopePBOs[0]);
+        this.scopePBOs[0] = null;
+      }
+      if (this.scopePBOs[1]) {
+        gl.deleteBuffer(this.scopePBOs[1]);
+        this.scopePBOs[1] = null;
+      }
+      if (this.scopePBOFences[0]) {
+        gl.deleteSync(this.scopePBOFences[0]);
+        this.scopePBOFences[0] = null;
+      }
+      if (this.scopePBOFences[1]) {
+        gl.deleteSync(this.scopePBOFences[1]);
+        this.scopePBOFences[1] = null;
+      }
     }
     this.scopePBOWidth = 0;
     this.scopePBOHeight = 0;
@@ -1843,10 +1896,22 @@ export class Renderer implements RendererBackend {
   private disposeHDRPBOs(): void {
     const gl = this.gl;
     if (gl) {
-      if (this.hdrPBOs[0]) { gl.deleteBuffer(this.hdrPBOs[0]); this.hdrPBOs[0] = null; }
-      if (this.hdrPBOs[1]) { gl.deleteBuffer(this.hdrPBOs[1]); this.hdrPBOs[1] = null; }
-      if (this.hdrPBOFences[0]) { gl.deleteSync(this.hdrPBOFences[0]); this.hdrPBOFences[0] = null; }
-      if (this.hdrPBOFences[1]) { gl.deleteSync(this.hdrPBOFences[1]); this.hdrPBOFences[1] = null; }
+      if (this.hdrPBOs[0]) {
+        gl.deleteBuffer(this.hdrPBOs[0]);
+        this.hdrPBOs[0] = null;
+      }
+      if (this.hdrPBOs[1]) {
+        gl.deleteBuffer(this.hdrPBOs[1]);
+        this.hdrPBOs[1] = null;
+      }
+      if (this.hdrPBOFences[0]) {
+        gl.deleteSync(this.hdrPBOFences[0]);
+        this.hdrPBOFences[0] = null;
+      }
+      if (this.hdrPBOFences[1]) {
+        gl.deleteSync(this.hdrPBOFences[1]);
+        this.hdrPBOFences[1] = null;
+      }
     }
     this.hdrPBOWidth = 0;
     this.hdrPBOHeight = 0;
@@ -1942,15 +2007,33 @@ export class Renderer implements RendererBackend {
     this.stateManager.setLUT(lutData, lutSize, intensity);
   }
 
-  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+  setFileLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
     this.stateManager.setFileLUT(data, size, intensity, domainMin, domainMax);
   }
 
-  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+  setLookLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
     this.stateManager.setLookLUT(data, size, intensity, domainMin, domainMax);
   }
 
-  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void {
+  setDisplayLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
     this.stateManager.setDisplayLUT(data, size, intensity, domainMin, domainMax);
   }
 
@@ -1991,9 +2074,9 @@ export class Renderer implements RendererBackend {
 
     log.info(
       `OCIO WASM shader set: function=${result.functionName}` +
-      ` uniforms=${result.uniforms.length}` +
-      ` lut3dSize=${lut.size}` +
-      ` fromWasm=${result.fromWasm}`,
+        ` uniforms=${result.uniforms.length}` +
+        ` lut3dSize=${lut.size}` +
+        ` fromWasm=${result.fromWasm}`,
     );
   }
 
@@ -2203,7 +2286,10 @@ export class Renderer implements RendererBackend {
     this.stateManager.setGamutMapping(state);
   }
 
-  setColorPrimaries(inputPrimaries: ColorPrimaries | undefined, outputColorSpace: 'srgb' | 'display-p3' | 'rec2020'): void {
+  setColorPrimaries(
+    inputPrimaries: ColorPrimaries | undefined,
+    outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+  ): void {
     this.stateManager.setColorPrimaries(inputPrimaries, outputColorSpace);
   }
 
@@ -2262,7 +2348,11 @@ export class Renderer implements RendererBackend {
     if (!this.displayShader.isReady()) return null;
 
     // Guard against detached ImageBitmaps (closed before render)
-    if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap && (source.width === 0 || source.height === 0)) {
+    if (
+      typeof ImageBitmap !== 'undefined' &&
+      source instanceof ImageBitmap &&
+      (source.width === 0 || source.height === 0)
+    ) {
       return null;
     }
 
@@ -2295,14 +2385,7 @@ export class Renderer implements RendererBackend {
     }
 
     try {
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA8,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        source as TexImageSource,
-      );
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source as TexImageSource);
     } catch (e) {
       // texImage2D can throw for tainted or invalid sources
       log.warn('texImage2D failed for SDR frame (tainted or invalid source):', e);
@@ -2326,9 +2409,11 @@ export class Renderer implements RendererBackend {
 
     // Use display shader
     this.displayShader.use();
-    this.offsetBuffer[0] = 0; this.offsetBuffer[1] = 0;
+    this.offsetBuffer[0] = 0;
+    this.offsetBuffer[1] = 0;
     this.displayShader.setUniform('u_offset', this.offsetBuffer);
-    this.scaleBuffer[0] = 1; this.scaleBuffer[1] = 1;
+    this.scaleBuffer[0] = 1;
+    this.scaleBuffer[1] = 1;
     this.displayShader.setUniform('u_scale', this.scaleBuffer);
 
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
@@ -2344,8 +2429,14 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniform('u_hdrHeadroom', 1.0);
 
     // Set texel size for clarity/sharpen (based on source dimensions)
-    const srcWidth = ('videoWidth' in source ? (source as HTMLVideoElement).videoWidth : (source as HTMLCanvasElement | HTMLImageElement).width) || this.canvas.width;
-    const srcHeight = ('videoHeight' in source ? (source as HTMLVideoElement).videoHeight : (source as HTMLCanvasElement | HTMLImageElement).height) || this.canvas.height;
+    const srcWidth =
+      ('videoWidth' in source
+        ? (source as HTMLVideoElement).videoWidth
+        : (source as HTMLCanvasElement | HTMLImageElement).width) || this.canvas.width;
+    const srcHeight =
+      ('videoHeight' in source
+        ? (source as HTMLVideoElement).videoHeight
+        : (source as HTMLCanvasElement | HTMLImageElement).height) || this.canvas.height;
     if (srcWidth > 0 && srcHeight > 0) {
       this.stateManager.setTexelSize(1.0 / srcWidth, 1.0 / srcHeight);
     }

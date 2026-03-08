@@ -8,7 +8,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Histogram } from './Histogram';
 
-function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+function createTestImageData(
+  width: number,
+  height: number,
+  fill?: { r: number; g: number; b: number; a: number },
+): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   if (fill) {
     for (let i = 0; i < data.length; i += 4) {
@@ -28,7 +32,7 @@ function createTestImageData(width: number, height: number, fill?: { r: number; 
 function createHDRImageData(
   width: number,
   height: number,
-  pixels: Array<{ r: number; g: number; b: number; a: number }>
+  pixels: Array<{ r: number; g: number; b: number; a: number }>,
 ): ImageData {
   const floatData = new Float32Array(width * height * 4);
   for (let i = 0; i < pixels.length; i++) {
@@ -153,9 +157,7 @@ describe('Histogram HDR Mode', () => {
       // Create HDR pixels with values beyond 1.0
       // With maxValue=4.0, binScale = 255/4.0 = 63.75
       // A value of 2.0 maps to bin round(2.0 * 63.75) = round(127.5) = 128
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 2.0, g: 0.0, b: 0.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 2.0, g: 0.0, b: 0.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       const expectedBin = Math.round(2.0 * (255 / 4.0)); // 128
@@ -165,9 +167,7 @@ describe('Histogram HDR Mode', () => {
     it('P3-021: HDR bins map value 0.0 to bin 0', () => {
       histogram.setHDRMode(true, 4.0);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 0.0, g: 0.0, b: 0.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.red[0]).toBe(1);
@@ -178,9 +178,7 @@ describe('Histogram HDR Mode', () => {
     it('P3-022: HDR bins map maxValue to bin 255', () => {
       histogram.setHDRMode(true, 4.0);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 4.0, g: 4.0, b: 4.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 4.0, g: 4.0, b: 4.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.red[255]).toBe(1);
@@ -191,9 +189,7 @@ describe('Histogram HDR Mode', () => {
     it('P3-023: HDR bins clamp values beyond maxValue to bin 255', () => {
       histogram.setHDRMode(true, 4.0);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 10.0, g: 8.0, b: 5.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 10.0, g: 8.0, b: 5.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.red[255]).toBe(1);
@@ -216,7 +212,7 @@ describe('Histogram HDR Mode', () => {
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.red[0]).toBe(1);
-      expect(data.red[128]).toBe(1);   // 1.0 * 127.5 = 127.5 -> round to 128
+      expect(data.red[128]).toBe(1); // 1.0 * 127.5 = 127.5 -> round to 128
       expect(data.red[255]).toBe(1);
       expect(data.pixelCount).toBe(3);
     });
@@ -228,9 +224,7 @@ describe('Histogram HDR Mode', () => {
       // Luma = 0.7152 * 2.0 = 1.4304
       // binScale = 255/4.0 = 63.75
       // lumaBin = round(1.4304 * 63.75) = round(91.19) = 91
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 0.0, g: 2.0, b: 0.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 0.0, g: 2.0, b: 0.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       const expectedBin = Math.round(0.7152 * 2.0 * (255 / 4.0));
@@ -240,9 +234,7 @@ describe('Histogram HDR Mode', () => {
     it('P3-026: custom headroom changes bin mapping', () => {
       // With headroom 2.0, a value of 1.0 maps to mid-range
       histogram.setHDRMode(true, 2.0);
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 1.0, g: 0.0, b: 0.0, a: 1.0 }]);
       const data = histogram.calculateHDR(hdrImage);
       const expectedBin = Math.round(1.0 * (255 / 2.0)); // 128
       expect(data.red[expectedBin]).toBe(1);
@@ -251,9 +243,7 @@ describe('Histogram HDR Mode', () => {
     it('P3-027: negative values clamp to bin 0', () => {
       histogram.setHDRMode(true, 4.0);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: -0.5, g: -1.0, b: -2.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: -0.5, g: -1.0, b: -2.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.red[0]).toBe(1);
@@ -265,9 +255,7 @@ describe('Histogram HDR Mode', () => {
       histogram.setHDRMode(true, 4.0);
       histogram.setHDRAutoFit(true);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 1.0, g: 0.5, b: 0.25, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 1.0, g: 0.5, b: 0.25, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       // Auto-fit should use effective max=1.0, so value 1.0 maps to the right edge.
@@ -278,9 +266,7 @@ describe('Histogram HDR Mode', () => {
       histogram.setHDRMode(true, 4.0);
       histogram.setHDRAutoFit(true);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 6.0, g: 0.0, b: 0.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 6.0, g: 0.0, b: 0.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.red[255]).toBe(1);
@@ -292,7 +278,7 @@ describe('Histogram HDR Mode', () => {
       const el = histogram.render();
       const spans = el.querySelectorAll('div > span');
       const labels: string[] = [];
-      spans.forEach(span => labels.push(span.textContent ?? ''));
+      spans.forEach((span) => labels.push(span.textContent ?? ''));
 
       // Default SDR labels should include 0, 128, 255
       expect(labels).toContain('0');
@@ -305,7 +291,7 @@ describe('Histogram HDR Mode', () => {
       const el = histogram.render();
       const allSpans = el.querySelectorAll('div > span');
       const labels: string[] = [];
-      allSpans.forEach(span => labels.push(span.textContent ?? ''));
+      allSpans.forEach((span) => labels.push(span.textContent ?? ''));
 
       // HDR labels should include 0, 2.0 (midpoint), 4.0 (max)
       expect(labels).toContain('0');
@@ -320,7 +306,7 @@ describe('Histogram HDR Mode', () => {
       const el = histogram.render();
       const spans = el.querySelectorAll('div > span');
       const labels: string[] = [];
-      spans.forEach(span => labels.push(span.textContent ?? ''));
+      spans.forEach((span) => labels.push(span.textContent ?? ''));
 
       expect(labels).toContain('0');
       expect(labels).toContain('128');
@@ -406,9 +392,7 @@ describe('Histogram HDR Mode', () => {
     it('P3-061: HDR mid-range values do not count as clipping', () => {
       histogram.setHDRMode(true, 4.0);
 
-      const hdrImage = createHDRImageData(1, 1, [
-        { r: 2.0, g: 2.0, b: 2.0, a: 1.0 },
-      ]);
+      const hdrImage = createHDRImageData(1, 1, [{ r: 2.0, g: 2.0, b: 2.0, a: 1.0 }]);
 
       const data = histogram.calculateHDR(hdrImage);
       expect(data.clipping.shadows).toBe(0);
@@ -419,10 +403,7 @@ describe('Histogram HDR Mode', () => {
   describe('updateHDR method', () => {
     it('P3-070: updateHDR does not throw with valid float data', () => {
       histogram.setHDRMode(true, 4.0);
-      const floatData = new Float32Array([
-        0.5, 0.3, 0.1, 1.0,
-        2.0, 1.5, 0.8, 1.0,
-      ]);
+      const floatData = new Float32Array([0.5, 0.3, 0.1, 1.0, 2.0, 1.5, 0.8, 1.0]);
       expect(() => histogram.updateHDR(floatData, 2, 1)).not.toThrow();
     });
 
@@ -459,8 +440,14 @@ describe('Histogram HDR Mode', () => {
     it('P3-074: updateHDR updates clipping display', () => {
       histogram.setHDRMode(true, 4.0);
       const floatData = new Float32Array([
-        0.0, 0.0, 0.0, 1.0, // shadow pixel
-        4.0, 4.0, 4.0, 1.0, // highlight at max
+        0.0,
+        0.0,
+        0.0,
+        1.0, // shadow pixel
+        4.0,
+        4.0,
+        4.0,
+        1.0, // highlight at max
       ]);
 
       histogram.updateHDR(floatData, 2, 1);

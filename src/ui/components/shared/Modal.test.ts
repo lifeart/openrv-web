@@ -39,7 +39,7 @@ describe('Modal showAlert', () => {
 
     const container = document.getElementById('modal-container');
     const buttons = container?.querySelectorAll('button');
-    const buttonTexts = Array.from(buttons || []).map(b => b.textContent);
+    const buttonTexts = Array.from(buttons || []).map((b) => b.textContent);
     expect(buttonTexts).toContain('OK');
   });
 
@@ -92,8 +92,7 @@ describe('Modal showAlert', () => {
     const promise = showAlert('Message');
 
     const container = document.getElementById('modal-container');
-    const okButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'OK');
+    const okButton = Array.from(container?.querySelectorAll('button') || []).find((btn) => btn.textContent === 'OK');
     okButton?.click();
 
     await expect(promise).resolves.toBeUndefined();
@@ -124,7 +123,7 @@ describe('Modal showConfirm', () => {
 
     const container = document.getElementById('modal-container');
     const buttons = container?.querySelectorAll('button');
-    const buttonTexts = Array.from(buttons || []).map(b => b.textContent);
+    const buttonTexts = Array.from(buttons || []).map((b) => b.textContent);
 
     expect(buttonTexts).toContain('Cancel');
     expect(buttonTexts).toContain('OK');
@@ -134,8 +133,7 @@ describe('Modal showConfirm', () => {
     const promise = showConfirm('Confirm?');
 
     const container = document.getElementById('modal-container');
-    const okButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'OK');
+    const okButton = Array.from(container?.querySelectorAll('button') || []).find((btn) => btn.textContent === 'OK');
     okButton?.click();
 
     await expect(promise).resolves.toBe(true);
@@ -145,8 +143,9 @@ describe('Modal showConfirm', () => {
     const promise = showConfirm('Confirm?');
 
     const container = document.getElementById('modal-container');
-    const cancelButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'Cancel');
+    const cancelButton = Array.from(container?.querySelectorAll('button') || []).find(
+      (btn) => btn.textContent === 'Cancel',
+    );
     cancelButton?.click();
 
     await expect(promise).resolves.toBe(false);
@@ -160,7 +159,7 @@ describe('Modal showConfirm', () => {
 
     const container = document.getElementById('modal-container');
     const buttons = container?.querySelectorAll('button');
-    const buttonTexts = Array.from(buttons || []).map(b => b.textContent);
+    const buttonTexts = Array.from(buttons || []).map((b) => b.textContent);
 
     expect(buttonTexts).toContain('Delete');
     expect(buttonTexts).toContain('Keep');
@@ -210,8 +209,7 @@ describe('Modal showPrompt', () => {
     const input = container?.querySelector('input') as HTMLInputElement;
     input.value = 'test input';
 
-    const okButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'OK');
+    const okButton = Array.from(container?.querySelectorAll('button') || []).find((btn) => btn.textContent === 'OK');
     okButton?.click();
 
     await expect(promise).resolves.toBe('test input');
@@ -221,8 +219,9 @@ describe('Modal showPrompt', () => {
     const promise = showPrompt('Enter value:');
 
     const container = document.getElementById('modal-container');
-    const cancelButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'Cancel');
+    const cancelButton = Array.from(container?.querySelectorAll('button') || []).find(
+      (btn) => btn.textContent === 'Cancel',
+    );
     cancelButton?.click();
 
     await expect(promise).resolves.toBeNull();
@@ -386,8 +385,7 @@ describe('Modal event listener cleanup', () => {
     expect(keydownAdds).toHaveLength(1);
 
     const container = document.getElementById('modal-container');
-    const okButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'OK');
+    const okButton = Array.from(container?.querySelectorAll('button') || []).find((btn) => btn.textContent === 'OK');
     okButton?.click();
 
     await promise;
@@ -407,8 +405,9 @@ describe('Modal event listener cleanup', () => {
     expect(keydownAdds).toHaveLength(1);
 
     const container = document.getElementById('modal-container');
-    const cancelButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'Cancel');
+    const cancelButton = Array.from(container?.querySelectorAll('button') || []).find(
+      (btn) => btn.textContent === 'Cancel',
+    );
     cancelButton?.click();
 
     await promise;
@@ -428,8 +427,7 @@ describe('Modal event listener cleanup', () => {
     expect(keydownAdds).toHaveLength(1);
 
     const container = document.getElementById('modal-container');
-    const okButton = Array.from(container?.querySelectorAll('button') || [])
-      .find(btn => btn.textContent === 'OK');
+    const okButton = Array.from(container?.querySelectorAll('button') || []).find((btn) => btn.textContent === 'OK');
     okButton?.click();
 
     await promise;

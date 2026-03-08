@@ -14,7 +14,11 @@ describe('PresentationMode', () => {
     // Dispose first while timer APIs are still available (fake or real)
     mode.dispose();
     // Then restore real timers
-    try { vi.useRealTimers(); } catch { /* already real */ }
+    try {
+      vi.useRealTimers();
+    } catch {
+      /* already real */
+    }
     document.body.style.cursor = '';
   });
 
@@ -139,9 +143,7 @@ describe('PresentationMode', () => {
 
       mode.setState({ enabled: true });
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('PM-U015: should emit stateChanged on toggle', () => {
@@ -150,9 +152,7 @@ describe('PresentationMode', () => {
 
       mode.toggle();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
   });
 
@@ -185,10 +185,7 @@ describe('PresentationMode', () => {
       mode.setState({ enabled: true });
       mode.dispose();
 
-      expect(removeEventListenerSpy).toHaveBeenCalledWith(
-        'mousemove',
-        expect.any(Function)
-      );
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
       vi.useRealTimers();
     });
   });
@@ -254,15 +251,11 @@ describe('PresentationMode', () => {
 
       // Enable once
       mode.setState({ enabled: true });
-      const callCount = addListenerSpy.mock.calls.filter(
-        ([event]) => event === 'mousemove'
-      ).length;
+      const callCount = addListenerSpy.mock.calls.filter(([event]) => event === 'mousemove').length;
 
       // Set enabled: true again - should not re-enter
       mode.setState({ enabled: true });
-      const newCallCount = addListenerSpy.mock.calls.filter(
-        ([event]) => event === 'mousemove'
-      ).length;
+      const newCallCount = addListenerSpy.mock.calls.filter(([event]) => event === 'mousemove').length;
 
       expect(newCallCount).toBe(callCount);
 

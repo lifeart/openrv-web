@@ -40,7 +40,15 @@ interface TestableViewer {
     updateCropCursor(handle: CropDragHandle): void;
     handleCropPointerMove(e: PointerEvent): void;
     constrainToAspectRatio(region: CropRegion, handle: CropDragHandle): CropRegion;
-    drawUncropBackground(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
+    drawUncropBackground(
+      imageCtx: CanvasRenderingContext2D,
+      displayWidth: number,
+      displayHeight: number,
+      uncropOffsetX: number,
+      uncropOffsetY: number,
+      imageDisplayW: number,
+      imageDisplayH: number,
+    ): void;
     clearOutsideCropRegion(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number): void;
   };
 
@@ -64,7 +72,9 @@ interface TestableViewer {
   };
   pixelSamplingManager: {
     lastMouseMoveUpdate: number;
-    cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null;
+    cursorColorCallback:
+      | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+      | null;
     getImageData(): ImageData | null;
     getSourceImageData(): ImageData | null;
   };
@@ -1056,7 +1066,7 @@ describe('Viewer', () => {
     /** Set up a playing session with a mock prerenderBuffer (cache miss or hit). */
     function setupPlaybackSession(
       tv: TestableViewer,
-      cachedFrame: { canvas: HTMLCanvasElement; effectsHash: string; width: number; height: number } | null
+      cachedFrame: { canvas: HTMLCanvasElement; effectsHash: string; width: number; height: number } | null,
     ): void {
       tv.prerenderBuffer = {
         getFrame: vi.fn().mockReturnValue(cachedFrame),
@@ -1272,7 +1282,7 @@ describe('Viewer', () => {
 
       // Step 3: Let the rAF callback fire
       // In jsdom, requestAnimationFrame is faked; flush it
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
 
       // render() should NOT have been called again — the rAF callback
       // checks pendingRender and bails out since renderDirect() cleared it
@@ -1355,5 +1365,4 @@ describe('Viewer', () => {
       expect(tv.pendingRender).toBe(true);
     });
   });
-
 });

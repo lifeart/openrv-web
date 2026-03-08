@@ -12,7 +12,7 @@ export const MARKER_COLORS = [
   '#8844ff', // Purple
 ] as const;
 
-export type MarkerColor = typeof MARKER_COLORS[number];
+export type MarkerColor = (typeof MARKER_COLORS)[number];
 
 /**
  * Marker data structure with optional note and color
@@ -283,7 +283,7 @@ export class MarkerManager {
    * Get all markers as an array (for serialization).
    */
   toArray(): Marker[] {
-    return Array.from(this._marks.values()).map(m => ({ ...m }));
+    return Array.from(this._marks.values()).map((m) => ({ ...m }));
   }
 
   /**

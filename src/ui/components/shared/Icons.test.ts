@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createIcon, getIconSvg, ICONS, IconName, IconSize } from './Icons';
+import { createIcon, getIconSvg, ICONS, type IconName, type IconSize } from './Icons';
 
 describe('createIcon', () => {
   describe('basic creation', () => {

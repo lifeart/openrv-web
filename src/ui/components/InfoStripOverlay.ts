@@ -9,8 +9,8 @@
  * - Non-intrusive: pointer-events pass through to the viewer canvas
  */
 
-import { Session } from '../../core/session/Session';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { type Session } from '../../core/session/Session';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 
 export interface InfoStripOverlayState {
   enabled: boolean;
@@ -149,9 +149,7 @@ export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
     this.container.appendChild(this.toggleButton);
 
     // Bind session events
-    this.unsubscribers.push(
-      this.session.on('sourceLoaded', () => this.update()),
-    );
+    this.unsubscribers.push(this.session.on('sourceLoaded', () => this.update()));
 
     // Initial update
     this.update();

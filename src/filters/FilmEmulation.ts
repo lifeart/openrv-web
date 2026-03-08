@@ -23,9 +23,9 @@ export type FilmStockId =
 export interface FilmEmulationParams {
   enabled: boolean;
   stock: FilmStockId;
-  intensity: number;       // 0-100 — blend between original and full effect
-  grainIntensity: number;  // 0-100 — grain overlay strength
-  grainSeed: number;       // Changes per frame for animated grain
+  intensity: number; // 0-100 — blend between original and full effect
+  grainIntensity: number; // 0-100 — grain overlay strength
+  grainSeed: number; // Changes per frame for animated grain
 }
 
 export interface FilmStockProfile {
@@ -71,7 +71,7 @@ export const FILM_STOCKS: FilmStockProfile[] = [
     toneCurve(r, g, b) {
       // Lifted blacks, warm shift, gentle S-curve
       const cr = liftGamma(r * 1.03 + 0.01, 0.03, 0.95);
-      const cg = liftGamma(g * 1.00, 0.02, 0.97);
+      const cg = liftGamma(g * 1.0, 0.02, 0.97);
       const cb = liftGamma(b * 0.95, 0.01, 1.02);
       return [softSCurve(cr), softSCurve(cg), softSCurve(cb)];
     },
@@ -154,7 +154,7 @@ export const FILM_STOCKS: FilmStockProfile[] = [
  * Get a film stock profile by ID.
  */
 export function getFilmStock(id: FilmStockId): FilmStockProfile | undefined {
-  return FILM_STOCKS.find(s => s.id === id);
+  return FILM_STOCKS.find((s) => s.id === id);
 }
 
 /**
@@ -174,10 +174,7 @@ export function isFilmEmulationActive(params: FilmEmulationParams): boolean {
 /**
  * Apply film emulation to ImageData in-place.
  */
-export function applyFilmEmulation(
-  imageData: ImageData,
-  params: FilmEmulationParams
-): void {
+export function applyFilmEmulation(imageData: ImageData, params: FilmEmulationParams): void {
   if (!params.enabled || params.intensity <= 0) return;
 
   const stock = getFilmStock(params.stock);
@@ -188,13 +185,13 @@ export function applyFilmEmulation(
   const grainStrength = (clamp(params.grainIntensity, 0, 100) / 100) * stock.grainAmount;
 
   // Simple deterministic PRNG for grain (xorshift32)
-  let rngState = (params.grainSeed | 0) || 1;
+  let rngState = params.grainSeed | 0 || 1;
   function nextRng(): number {
     rngState ^= rngState << 13;
     rngState ^= rngState >> 17;
     rngState ^= rngState << 5;
     // Return value in -1..1 range
-    return ((rngState & 0xffff) / 0x8000) - 1;
+    return (rngState & 0xffff) / 0x8000 - 1;
   }
 
   const totalPixels = width * height;
@@ -233,9 +230,9 @@ export function applyFilmEmulation(
     }
 
     // Blend with original based on intensity
-    r = origR / 255 * (1 - intensity) + clamp(r, 0, 1) * intensity;
-    g = origG / 255 * (1 - intensity) + clamp(g, 0, 1) * intensity;
-    b = origB / 255 * (1 - intensity) + clamp(b, 0, 1) * intensity;
+    r = (origR / 255) * (1 - intensity) + clamp(r, 0, 1) * intensity;
+    g = (origG / 255) * (1 - intensity) + clamp(g, 0, 1) * intensity;
+    b = (origB / 255) * (1 - intensity) + clamp(b, 0, 1) * intensity;
 
     data[i] = Math.round(clamp(r, 0, 1) * 255);
     data[i + 1] = Math.round(clamp(g, 0, 1) * 255);

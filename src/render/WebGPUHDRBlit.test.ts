@@ -187,10 +187,12 @@ describe('WebGPUHDRBlit', () => {
 
       await blit.initialize();
 
-      expect(adapter.requestDevice).toHaveBeenCalledWith(expect.objectContaining({
-        requiredFeatures: ['float32-filterable'],
-        requiredLimits: expect.objectContaining({ maxBufferSize: expect.any(Number) }),
-      }));
+      expect(adapter.requestDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requiredFeatures: ['float32-filterable'],
+          requiredLimits: expect.objectContaining({ maxBufferSize: expect.any(Number) }),
+        }),
+      );
     });
 
     it('WGPU-BLIT-008: requests device without features when float32-filterable unavailable', async () => {
@@ -211,9 +213,11 @@ describe('WebGPUHDRBlit', () => {
       await blit.initialize();
 
       // Should have requiredLimits but NOT requiredFeatures
-      expect(adapter.requestDevice).toHaveBeenCalledWith(expect.objectContaining({
-        requiredLimits: expect.objectContaining({ maxBufferSize: expect.any(Number) }),
-      }));
+      expect(adapter.requestDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requiredLimits: expect.objectContaining({ maxBufferSize: expect.any(Number) }),
+        }),
+      );
       const callArg = adapter.requestDevice.mock.calls[0]![0];
       expect(callArg).not.toHaveProperty('requiredFeatures');
     });
@@ -281,11 +285,13 @@ describe('WebGPUHDRBlit', () => {
 
       await blit.initialize();
 
-      expect(gpuCtx.configure).toHaveBeenCalledWith(expect.objectContaining({
-        format: 'rgba16float',
-        toneMapping: { mode: 'extended' },
-        alphaMode: 'opaque',
-      }));
+      expect(gpuCtx.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          format: 'rgba16float',
+          toneMapping: { mode: 'extended' },
+          alphaMode: 'opaque',
+        }),
+      );
     });
 
     it('WGPU-BLIT-012: sets initialized to true on success', async () => {
@@ -347,13 +353,15 @@ describe('WebGPUHDRBlit', () => {
 
       await blit.initialize();
 
-      expect(device.createRenderPipeline).toHaveBeenCalledWith(expect.objectContaining({
-        layout: 'auto',
-        fragment: expect.objectContaining({
-          targets: [{ format: 'rgba16float' }],
+      expect(device.createRenderPipeline).toHaveBeenCalledWith(
+        expect.objectContaining({
+          layout: 'auto',
+          fragment: expect.objectContaining({
+            targets: [{ format: 'rgba16float' }],
+          }),
+          primitive: { topology: 'triangle-list' },
         }),
-        primitive: { topology: 'triangle-list' },
-      }));
+      );
     });
   });
 
@@ -407,10 +415,12 @@ describe('WebGPUHDRBlit', () => {
       const pixels = new Float32Array(16 * 16 * 4);
       blit.uploadAndDisplay(pixels, 16, 16);
 
-      expect(device.createTexture).toHaveBeenCalledWith(expect.objectContaining({
-        size: { width: 16, height: 16 },
-        format: 'rgba32float',
-      }));
+      expect(device.createTexture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          size: { width: 16, height: 16 },
+          format: 'rgba32float',
+        }),
+      );
     });
 
     it('WGPU-BLIT-023: calls writeTexture with correct bytesPerRow', async () => {
@@ -423,7 +433,7 @@ describe('WebGPUHDRBlit', () => {
 
       expect(device.queue.writeTexture).toHaveBeenCalledWith(
         expect.anything(), // dest
-        pixels,            // data
+        pixels, // data
         { bytesPerRow: width * 4 * 4, rowsPerImage: height }, // 4 channels * 4 bytes/float
         { width, height },
       );
@@ -490,12 +500,14 @@ describe('WebGPUHDRBlit', () => {
       const pixels = new Float32Array(4 * 4 * 4);
       blit.uploadAndDisplay(pixels, 4, 4);
 
-      expect(device.createBindGroup).toHaveBeenCalledWith(expect.objectContaining({
-        entries: expect.arrayContaining([
-          expect.objectContaining({ binding: 0 }), // sampler
-          expect.objectContaining({ binding: 1 }), // texture view
-        ]),
-      }));
+      expect(device.createBindGroup).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entries: expect.arrayContaining([
+            expect.objectContaining({ binding: 0 }), // sampler
+            expect.objectContaining({ binding: 1 }), // texture view
+          ]),
+        }),
+      );
     });
 
     it('WGPU-BLIT-029: draws 3 vertices (fullscreen triangle)', async () => {

@@ -39,7 +39,14 @@ describe('CurvesControl', () => {
 
     it('CURVES-U004: should accept initial curves', () => {
       const customCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.7 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -92,7 +99,14 @@ describe('CurvesControl', () => {
 
     it('CURVES-U021: setCurves updates curves', () => {
       const newCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.6 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -104,7 +118,14 @@ describe('CurvesControl', () => {
 
     it('CURVES-U022: setCurves marks as non-default', () => {
       const newCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.6 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -177,7 +198,14 @@ describe('CurvesControl', () => {
 
     it('CURVES-U041: isDefault returns false after modification', () => {
       const newCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.3, y: 0.5 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.3, y: 0.5 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),
@@ -213,7 +241,14 @@ describe('CurvesControl', () => {
   describe('curvesChanged event', () => {
     it('CURVES-U070: setCurves does not throw', () => {
       const newCurves: ColorCurvesData = {
-        master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.7 },
+            { x: 1, y: 1 },
+          ],
+        },
         red: createDefaultCurve(),
         green: createDefaultCurve(),
         blue: createDefaultCurve(),

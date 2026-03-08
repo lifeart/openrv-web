@@ -3,9 +3,9 @@
  * Contains rendering helper functions for transforms, crop overlay, and filter strings.
  */
 
-import { ColorAdjustments } from './ColorControls';
-import { Transform2D } from './TransformControl';
-import { CropState, CropRegion } from './CropControl';
+import { type ColorAdjustments } from './ColorControls';
+import { type Transform2D } from './TransformControl';
+import { type CropState, type CropRegion } from './CropControl';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { VIEWER_PLACEHOLDER_SUPPORT_LINES } from '../../utils/media/SupportedMediaFormats';
 import { MAX_CANVAS_DIMENSION } from './ScalePresets';
@@ -27,11 +27,7 @@ function getTextWidth(ctx: CanvasRenderingContext2D, text: string): number {
   return text.length * fontSize * 0.56;
 }
 
-function wrapTextToWidth(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number
-): string[] {
+function wrapTextToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const trimmed = text.trim();
   if (!trimmed) return [];
 
@@ -66,7 +62,7 @@ export function drawWithTransform(
   displayWidth: number,
   displayHeight: number,
   transform: Transform2D,
-  smoothingEnabled = true
+  smoothingEnabled = true,
 ): void {
   const { rotation, flipH, flipV } = transform;
 
@@ -99,8 +95,10 @@ export function drawWithTransform(
 
   // Compute draw dimensions using AABB: scale the source so the rotated
   // bounding box fits within the display area.
-  const sourceW = (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || displayWidth;
-  const sourceH = (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || displayHeight;
+  const sourceW =
+    (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || displayWidth;
+  const sourceH =
+    (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || displayHeight;
   const { width: bbW, height: bbH } = getEffectiveDimensions(sourceW, sourceH, rotation);
   const fitScaleX = displayWidth / bbW;
   const fitScaleY = displayHeight / bbH;
@@ -129,8 +127,7 @@ function buildColorFilterArray(adjustments: ColorAdjustments): string[] {
   const filters: string[] = [];
 
   // Helper: only use a value if it is a finite number, otherwise fall back to default
-  const safe = (value: number, fallback: number): number =>
-    Number.isFinite(value) ? value : fallback;
+  const safe = (value: number, fallback: number): number => (Number.isFinite(value) ? value : fallback);
 
   const brightness = 1 + safe(adjustments.brightness, 0);
   if (brightness !== 1) {
@@ -189,10 +186,7 @@ function buildColorFilterArray(adjustments: ColorAdjustments): string[] {
  * Build CSS filter string from color adjustments.
  * Uses cache to avoid rebuilding if adjustments haven't changed.
  */
-export function getCanvasFilterString(
-  adjustments: ColorAdjustments,
-  cache: FilterStringCache
-): string {
+export function getCanvasFilterString(adjustments: ColorAdjustments, cache: FilterStringCache): string {
   // Check if cached filter is still valid
   if (cache.filterString !== null && cache.cachedAdjustments !== null) {
     const cached = cache.cachedAdjustments;
@@ -221,10 +215,7 @@ export function getCanvasFilterString(
 /**
  * Build CSS filter string for the canvas container (includes blur).
  */
-export function buildContainerFilterString(
-  adjustments: ColorAdjustments,
-  blurAmount: number
-): string {
+export function buildContainerFilterString(adjustments: ColorAdjustments, blurAmount: number): string {
   const filters = buildColorFilterArray(adjustments);
 
   // Blur filter effect
@@ -246,7 +237,7 @@ export function renderCropOverlay(
   cropState: CropState,
   displayWidth: number,
   displayHeight: number,
-  isEditing: boolean = true
+  isEditing: boolean = true,
 ): void {
   const w = displayWidth;
   const h = displayHeight;
@@ -331,7 +322,7 @@ export function drawPlaceholder(
   ctx: CanvasRenderingContext2D,
   logicalWidth: number,
   logicalHeight: number,
-  zoom: number
+  zoom: number,
 ): void {
   const w = logicalWidth;
   const h = logicalHeight;
@@ -346,7 +337,7 @@ export function drawPlaceholder(
   const darkColor = getCSSColor('--bg-secondary', '#222');
   for (let y = 0; y < h; y += size) {
     for (let x = 0; x < w; x += size) {
-      const isLight = ((x / size) + (y / size)) % 2 === 0;
+      const isLight = (x / size + y / size) % 2 === 0;
       ctx.fillStyle = isLight ? lightColor : darkColor;
       ctx.fillRect(x, y, size, size);
     }
@@ -363,11 +354,7 @@ export function drawPlaceholder(
   ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const titleLines = wrapTextToWidth(
-    ctx,
-    'Drop media or session files here',
-    textMaxWidth,
-  );
+  const titleLines = wrapTextToWidth(ctx, 'Drop media or session files here', textMaxWidth);
 
   const smallFontSize = Math.max(8, Math.floor(13 * zoom));
   const smallLineHeight = Math.max(10, Math.floor(smallFontSize * 1.4));
@@ -375,9 +362,7 @@ export function drawPlaceholder(
   const sectionGap = Math.max(6, Math.floor(smallFontSize * 0.7));
 
   ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  const supportLines = VIEWER_PLACEHOLDER_SUPPORT_LINES.flatMap((line) =>
-    wrapTextToWidth(ctx, line, textMaxWidth)
-  );
+  const supportLines = VIEWER_PLACEHOLDER_SUPPORT_LINES.flatMap((line) => wrapTextToWidth(ctx, line, textMaxWidth));
 
   const showTip = h >= 240;
   const tipLines = showTip
@@ -431,7 +416,7 @@ export function calculateDisplayDimensions(
   containerWidth: number,
   containerHeight: number,
   zoom: number,
-  fitMode: 'all' | 'width' | 'height' = 'all'
+  fitMode: 'all' | 'width' | 'height' = 'all',
 ): { width: number; height: number } {
   // Guard against zero/negative dimensions
   if (sourceWidth <= 0 || sourceHeight <= 0 || containerWidth <= 0 || containerHeight <= 0) {
@@ -451,11 +436,7 @@ export function calculateDisplayDimensions(
     default:
       // Scale down to fit the container while preserving aspect ratio.
       // Only scale down images larger than the viewport; smaller images stay at native size.
-      fitScale = Math.min(
-        containerWidth / sourceWidth,
-        containerHeight / sourceHeight,
-        1
-      );
+      fitScale = Math.min(containerWidth / sourceWidth, containerHeight / sourceHeight, 1);
       break;
   }
 
@@ -482,8 +463,12 @@ export function calculateDisplayDimensions(
  */
 export function isFullCropRegion(region: CropRegion): boolean {
   const EPS = 1e-6;
-  return Math.abs(region.x) < EPS && Math.abs(region.y) < EPS
-    && Math.abs(region.width - 1) < EPS && Math.abs(region.height - 1) < EPS;
+  return (
+    Math.abs(region.x) < EPS &&
+    Math.abs(region.y) < EPS &&
+    Math.abs(region.width - 1) < EPS &&
+    Math.abs(region.height - 1) < EPS
+  );
 }
 
 /**
@@ -499,7 +484,7 @@ export function drawWithTransformFill(
   canvasWidth: number,
   canvasHeight: number,
   transform: Transform2D,
-  smoothingEnabled = true
+  smoothingEnabled = true,
 ): void {
   const { rotation, flipH, flipV } = transform;
 
@@ -533,7 +518,8 @@ export function drawWithTransformFill(
   // Compute draw dimensions from AABB: the canvas is sized to the bounding box,
   // so we need to figure out the source dimensions to draw at.
   const sourceW = (element as HTMLImageElement).naturalWidth || (element as HTMLVideoElement).videoWidth || canvasWidth;
-  const sourceH = (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || canvasHeight;
+  const sourceH =
+    (element as HTMLImageElement).naturalHeight || (element as HTMLVideoElement).videoHeight || canvasHeight;
   const { width: bbW, height: bbH } = getEffectiveDimensions(sourceW, sourceH, rotation);
   const fitScaleX = canvasWidth / bbW;
   const fitScaleY = canvasHeight / bbH;
@@ -556,7 +542,7 @@ export function drawWithTransformFill(
 export function getEffectiveDimensions(
   width: number,
   height: number,
-  rotation: number
+  rotation: number,
 ): { width: number; height: number } {
   const rad = (rotation * Math.PI) / 180;
   let absCos = Math.abs(Math.cos(rad));

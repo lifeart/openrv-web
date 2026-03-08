@@ -8,7 +8,7 @@
  * - Standard IRE-based color mapping (broadcast standard)
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export interface FalseColorEvents extends EventMap {
@@ -62,10 +62,10 @@ export type FalseColorPreset = 'standard' | 'arri' | 'red' | 'custom';
 
 // IRE values are mapped to 0-255 range (0 IRE = 0, 100 IRE = 255)
 interface ColorRange {
-  min: number;     // Min luminance (0-255)
-  max: number;     // Max luminance (0-255)
+  min: number; // Min luminance (0-255)
+  max: number; // Max luminance (0-255)
   color: [number, number, number]; // RGB color
-  label: string;   // Description
+  label: string; // Description
 }
 
 /**
@@ -86,18 +86,18 @@ interface ColorRange {
  *   90-100 IRE (231-255): Pink - clipped/overexposed
  */
 const STANDARD_PALETTE: ColorRange[] = [
-  { min: 0, max: 5, color: [128, 0, 128], label: 'Black crush' },      // Purple - crushed blacks
-  { min: 6, max: 25, color: [0, 0, 128], label: 'Very dark' },         // Navy - very underexposed
-  { min: 26, max: 51, color: [0, 0, 255], label: 'Underexposed' },     // Blue - underexposed
-  { min: 52, max: 76, color: [0, 128, 128], label: 'Dark' },           // Teal - dark
-  { min: 77, max: 102, color: [0, 128, 0], label: 'Low-mid' },         // Green - lower midtones
+  { min: 0, max: 5, color: [128, 0, 128], label: 'Black crush' }, // Purple - crushed blacks
+  { min: 6, max: 25, color: [0, 0, 128], label: 'Very dark' }, // Navy - very underexposed
+  { min: 26, max: 51, color: [0, 0, 255], label: 'Underexposed' }, // Blue - underexposed
+  { min: 52, max: 76, color: [0, 128, 128], label: 'Dark' }, // Teal - dark
+  { min: 77, max: 102, color: [0, 128, 0], label: 'Low-mid' }, // Green - lower midtones
   { min: 103, max: 115, color: [170, 255, 0], label: 'Skin tone low' }, // Yellow-green - lower skin
-  { min: 116, max: 128, color: [128, 128, 128], label: 'Mid grey' },   // Grey - middle grey (18%)
-  { min: 129, max: 140, color: [255, 192, 128], label: 'Skin tone' },  // Peach - skin tones
-  { min: 141, max: 166, color: [255, 255, 0], label: 'Bright' },       // Yellow - bright
-  { min: 167, max: 191, color: [255, 165, 0], label: 'Very bright' },  // Orange - very bright
-  { min: 192, max: 230, color: [255, 0, 0], label: 'Highlight' },      // Red - approaching clipping
-  { min: 231, max: 255, color: [255, 128, 255], label: 'Clipped' },    // Pink - clipped/overexposed
+  { min: 116, max: 128, color: [128, 128, 128], label: 'Mid grey' }, // Grey - middle grey (18%)
+  { min: 129, max: 140, color: [255, 192, 128], label: 'Skin tone' }, // Peach - skin tones
+  { min: 141, max: 166, color: [255, 255, 0], label: 'Bright' }, // Yellow - bright
+  { min: 167, max: 191, color: [255, 165, 0], label: 'Very bright' }, // Orange - very bright
+  { min: 192, max: 230, color: [255, 0, 0], label: 'Highlight' }, // Red - approaching clipping
+  { min: 231, max: 255, color: [255, 128, 255], label: 'Clipped' }, // Pink - clipped/overexposed
 ];
 
 // ARRI-style false color palette
@@ -279,7 +279,7 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
    */
   getLegend(): Array<{ color: string; label: string }> {
     const palette = PALETTES[this.state.preset];
-    return palette.map(range => ({
+    return palette.map((range) => ({
       color: `rgb(${range.color[0]}, ${range.color[1]}, ${range.color[2]})`,
       label: range.label,
     }));

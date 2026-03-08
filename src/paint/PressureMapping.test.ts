@@ -13,10 +13,10 @@ import {
   StrokeMode,
   LineCap,
   LineJoin,
-  PenStroke,
-  StrokePoint,
+  type PenStroke,
+  type StrokePoint,
 } from './types';
-import { PaintRenderer, RenderOptions } from './PaintRenderer';
+import { PaintRenderer, type RenderOptions } from './PaintRenderer';
 
 // ---------------------------------------------------------------------------
 // adjustSaturation tests
@@ -85,10 +85,7 @@ describe('DEFAULT_PRESSURE_MAPPING', () => {
 // PaintRenderer pressure mapping integration
 // ---------------------------------------------------------------------------
 
-function makeGaussianStroke(
-  points: StrokePoint[],
-  overrides: Partial<PenStroke> = {},
-): PenStroke {
+function makeGaussianStroke(points: StrokePoint[], overrides: Partial<PenStroke> = {}): PenStroke {
   return {
     type: 'pen',
     id: 'test-stroke',
@@ -193,9 +190,7 @@ describe('PaintRenderer pressure mapping', () => {
   it('PRESS-012: all mappings disabled skips modulation', () => {
     renderer.pressureMapping = { width: false, opacity: false, saturation: false };
 
-    const stroke = makeGaussianStroke([
-      { x: 0.5, y: 0.5, pressure: 0.1 },
-    ]);
+    const stroke = makeGaussianStroke([{ x: 0.5, y: 0.5, pressure: 0.1 }]);
 
     // Should render without pressure affecting anything
     expect(() => renderer.renderStroke(stroke, renderOptions)).not.toThrow();

@@ -395,7 +395,9 @@ describe('ShaderStateManager', () => {
     it('SSM-080: per-channel exposureRGB [0.5, 1.0, 1.5] produces correct vec3 uniform', () => {
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
         setUniformInt: (_name: string, _value: number) => {},
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
@@ -425,7 +427,9 @@ describe('ShaderStateManager', () => {
     it('SSM-081: scalar exposure 2.0 produces uniform vec3(2.0, 2.0, 2.0)', () => {
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
         setUniformInt: (_name: string, _value: number) => {},
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
@@ -455,7 +459,9 @@ describe('ShaderStateManager', () => {
     it('SSM-082: gammaRGB = [0, 0, 0] does not produce NaN (clamped to epsilon)', () => {
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
         setUniformInt: (_name: string, _value: number) => {},
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
@@ -491,7 +497,9 @@ describe('ShaderStateManager', () => {
     it('SSM-083: exposureRGB = [Infinity, -Infinity, NaN] is sanitized to [0, 0, 0]', () => {
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
         setUniformInt: (_name: string, _value: number) => {},
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
@@ -524,7 +532,9 @@ describe('ShaderStateManager', () => {
     it('SSM-084: per-channel contrastRGB is sent as vec3', () => {
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
         setUniformInt: (_name: string, _value: number) => {},
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
@@ -554,7 +564,9 @@ describe('ShaderStateManager', () => {
     it('SSM-085: scalar gamma broadcasts to vec3', () => {
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
         setUniformInt: (_name: string, _value: number) => {},
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
@@ -702,8 +714,12 @@ describe('ShaderStateManager', () => {
       const uniformCalls: Record<string, unknown> = {};
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -738,7 +754,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: () => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: () => {},
       } as any;
 
@@ -952,8 +970,12 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const uniformCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -965,7 +987,9 @@ describe('ShaderStateManager', () => {
         bindFileLUT3DTexture: () => {},
         bindDisplayLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
-        bindInlineLUTTexture: () => { inlineLUTBound = true; },
+        bindInlineLUTTexture: () => {
+          inlineLUTBound = true;
+        },
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -982,7 +1006,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -994,7 +1020,9 @@ describe('ShaderStateManager', () => {
         bindFileLUT3DTexture: () => {},
         bindDisplayLUT3DTexture: () => {},
         bindFilmLUTTexture: () => {},
-        bindInlineLUTTexture: () => { inlineLUTBound = true; },
+        bindInlineLUTTexture: () => {
+          inlineLUTBound = true;
+        },
         getCanvasSize: () => ({ width: 100, height: 100 }),
       };
 
@@ -1088,7 +1116,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1120,7 +1150,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1168,8 +1200,12 @@ describe('ShaderStateManager', () => {
       const uniformCalls: Record<string, unknown> = {};
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1324,7 +1360,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1349,7 +1387,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1519,7 +1559,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1544,7 +1586,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1569,7 +1613,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1688,7 +1734,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1732,7 +1780,9 @@ describe('ShaderStateManager', () => {
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
         setUniform: (_name: string, _value: unknown) => {},
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -1882,11 +1932,26 @@ describe('ShaderStateManager', () => {
       // Access state indirectly via applyUniforms
       const uploaded: Record<string, unknown> = {};
       const shader = {
-        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniform: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformInt: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformMatrix3: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
       expect(uploaded['u_outputPrimariesEnabled']).toBe(0);
     });
@@ -1896,11 +1961,26 @@ describe('ShaderStateManager', () => {
       mgr.setColorPrimaries('bt2020', 'srgb');
       const uploaded: Record<string, unknown> = {};
       const shader = {
-        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniform: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformInt: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformMatrix3: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
       expect(mat).toBeInstanceOf(Float32Array);
@@ -1914,11 +1994,26 @@ describe('ShaderStateManager', () => {
       mgr.setColorPrimaries(undefined, 'display-p3');
       const uploaded: Record<string, unknown> = {};
       const shader = {
-        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniform: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformInt: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformMatrix3: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(0);
       expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
@@ -1930,11 +2025,26 @@ describe('ShaderStateManager', () => {
       mgr.setColorPrimaries(undefined, 'rec2020');
       const uploaded: Record<string, unknown> = {};
       const shader = {
-        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniform: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformInt: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformMatrix3: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
       expect(uploaded['u_outputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_outputPrimariesMatrix'] as Float32Array;
       expect(mat[0]).toBeCloseTo(0.6274, 3);
@@ -1949,11 +2059,26 @@ describe('ShaderStateManager', () => {
       mgr.setColorPrimaries('p3', 'srgb');
       const uploaded: Record<string, unknown> = {};
       const shader = {
-        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniform: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformInt: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformMatrix3: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const mat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
       expect(mat).toBeInstanceOf(Float32Array);
@@ -1969,11 +2094,26 @@ describe('ShaderStateManager', () => {
       mgr.setColorPrimaries('bt2020', 'display-p3');
       const uploaded: Record<string, unknown> = {};
       const shader = {
-        setUniform: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformInt: (name: string, val: unknown) => { uploaded[name] = val; },
-        setUniformMatrix3: (name: string, val: unknown) => { uploaded[name] = val; },
+        setUniform: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformInt: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
+        setUniformMatrix3: (name: string, val: unknown) => {
+          uploaded[name] = val;
+        },
       };
-      mgr.applyUniforms(shader as never, { bindCurvesLUTTexture: () => {}, bindFalseColorLUTTexture: () => {}, bindLUT3DTexture: () => {}, bindFileLUT3DTexture: () => {}, bindDisplayLUT3DTexture: () => {}, bindFilmLUTTexture: () => {}, bindInlineLUTTexture: () => {}, getCanvasSize: () => ({ width: 100, height: 100 }) });
+      mgr.applyUniforms(shader as never, {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFileLUT3DTexture: () => {},
+        bindDisplayLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      });
       // Input: bt2020 → sRGB (REC2020_TO_SRGB)
       expect(uploaded['u_inputPrimariesEnabled']).toBe(1);
       const inMat = uploaded['u_inputPrimariesMatrix'] as Float32Array;
@@ -1994,8 +2134,12 @@ describe('ShaderStateManager', () => {
       const uniformCalls: Record<string, unknown> = {};
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 
@@ -2249,13 +2393,23 @@ describe('ShaderStateManager', () => {
 
     it('SSM-CONT-007: same contour state does not mark dirty', () => {
       const rs1 = createDefaultRenderState();
-      rs1.luminanceVis = { mode: 'contour', contourLevels: 15, contourDesaturate: false, contourLineColor: [0.5, 0.5, 0.5] };
+      rs1.luminanceVis = {
+        mode: 'contour',
+        contourLevels: 15,
+        contourDesaturate: false,
+        contourLineColor: [0.5, 0.5, 0.5],
+      };
       mgr.applyRenderState(rs1);
       const flags = mgr.getDirtyFlags() as Set<string>;
       flags.clear();
 
       const rs2 = createDefaultRenderState();
-      rs2.luminanceVis = { mode: 'contour', contourLevels: 15, contourDesaturate: false, contourLineColor: [0.5, 0.5, 0.5] };
+      rs2.luminanceVis = {
+        mode: 'contour',
+        contourLevels: 15,
+        contourDesaturate: false,
+        contourLineColor: [0.5, 0.5, 0.5],
+      };
       mgr.applyRenderState(rs2);
       expect(flags.has(DIRTY_CONTOUR)).toBe(false);
     });
@@ -2305,8 +2459,12 @@ describe('ShaderStateManager', () => {
       const uniformCalls: Record<string, unknown> = {};
       const intCalls: Record<string, unknown> = {};
       const mockShader = {
-        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
-        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniform: (name: string, value: unknown) => {
+          uniformCalls[name] = value;
+        },
+        setUniformInt: (name: string, value: number) => {
+          intCalls[name] = value;
+        },
         setUniformMatrix3: (_name: string, _value: unknown) => {},
       } as any;
 

@@ -9,9 +9,9 @@
  * - EDL import/export
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { PlaylistManager, PlaylistClip } from '../../core/session/PlaylistManager';
-import { TransitionManager } from '../../core/session/TransitionManager';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type PlaylistManager, type PlaylistClip } from '../../core/session/PlaylistManager';
+import { type TransitionManager } from '../../core/session/TransitionManager';
 import { isTransitionType, DEFAULT_TRANSITION_DURATION, type TransitionType } from '../../core/types/transition';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
@@ -38,9 +38,9 @@ export interface ExclusivePanel {
 
 /** Human-readable labels for transition types */
 const TRANSITION_TYPE_LABELS: Record<TransitionType, string> = {
-  'cut': 'Cut',
-  'crossfade': 'Crossfade',
-  'dissolve': 'Dissolve',
+  cut: 'Cut',
+  crossfade: 'Crossfade',
+  dissolve: 'Dissolve',
   'wipe-left': 'Wipe Left',
   'wipe-right': 'Wipe Right',
   'wipe-up': 'Wipe Up',
@@ -727,7 +727,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
         durationInput.style.display = 'none';
         durationLabel.style.display = 'none';
       } else {
-        const frames = Math.max(1, Math.min(120, Number.parseInt(durationInput.value, 10) || DEFAULT_TRANSITION_DURATION));
+        const frames = Math.max(
+          1,
+          Math.min(120, Number.parseInt(durationInput.value, 10) || DEFAULT_TRANSITION_DURATION),
+        );
         const validated = tm.validateTransition(gapIndex, { type: selectedType, durationFrames: frames }, clips);
         if (validated) {
           tm.setTransition(gapIndex, validated);
@@ -766,9 +769,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private exportEDL(): void {
     const clips = this.playlistManager.getClips();
     // When transitions exist, use overlap-adjusted frames for accurate record timecodes
-    const adjustedClips = this.transitionManager
-      ? this.transitionManager.calculateOverlapAdjustedFrames(clips)
-      : clips;
+    const adjustedClips = this.transitionManager ? this.transitionManager.calculateOverlapAdjustedFrames(clips) : clips;
     const edlClips: EDLClip[] = adjustedClips.map((clip, index) => {
       const edlClip: EDLClip = {
         sourceName: clip.sourceName,

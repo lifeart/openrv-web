@@ -267,10 +267,12 @@ describe('VolumeControl', () => {
       document.body.appendChild(externalButton);
 
       // Dispatch focusout with relatedTarget outside the control
-      element.dispatchEvent(new FocusEvent('focusout', {
-        bubbles: true,
-        relatedTarget: externalButton,
-      }));
+      element.dispatchEvent(
+        new FocusEvent('focusout', {
+          bubbles: true,
+          relatedTarget: externalButton,
+        }),
+      );
 
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });
@@ -287,10 +289,12 @@ describe('VolumeControl', () => {
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // Dispatch focusout with relatedTarget inside the control (e.g., moving from button to slider)
-      element.dispatchEvent(new FocusEvent('focusout', {
-        bubbles: true,
-        relatedTarget: slider,
-      }));
+      element.dispatchEvent(
+        new FocusEvent('focusout', {
+          bubbles: true,
+          relatedTarget: slider,
+        }),
+      );
 
       // Should still be expanded
       expect(volumeControl.isSliderExpanded()).toBe(true);

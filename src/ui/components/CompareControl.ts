@@ -8,10 +8,10 @@
  * This class is responsible only for DOM rendering and user interaction.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { DifferenceMatteState } from './DifferenceMatteControl';
+import { type DifferenceMatteState } from './DifferenceMatteControl';
 import {
   ComparisonManager,
   type WipeMode,
@@ -204,7 +204,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const wipeHeader = document.createElement('div');
     wipeHeader.textContent = 'Wipe Mode';
-    wipeHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    wipeHeader.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     wipeSection.appendChild(wipeHeader);
 
     for (const { mode, label, icon } of WIPE_MODES) {
@@ -252,7 +253,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const abHeader = document.createElement('div');
     abHeader.textContent = 'A/B Compare';
-    abHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    abHeader.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     abSection.appendChild(abHeader);
 
     // A/B button row
@@ -342,7 +344,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const diffHeader = document.createElement('div');
     diffHeader.textContent = 'Difference Matte';
-    diffHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    diffHeader.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     diffSection.appendChild(diffHeader);
 
     // Enable toggle
@@ -453,7 +456,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const blendHeader = document.createElement('div');
     blendHeader.textContent = 'Blend Modes';
-    blendHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    blendHeader.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     blendSection.appendChild(blendHeader);
 
     // Onion Skin button
@@ -484,7 +488,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const onionOpacityValue = document.createElement('span');
     onionOpacityValue.className = 'onion-opacity-value';
     onionOpacityValue.textContent = `${Math.round(managerState.blendMode.onionOpacity * 100)}%`;
-    onionOpacityValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
+    onionOpacityValue.style.cssText =
+      'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
 
     onionOpacityRow.appendChild(onionOpacityLabel);
     onionOpacityRow.appendChild(onionOpacitySlider);
@@ -519,7 +524,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const flickerRateValue = document.createElement('span');
     flickerRateValue.className = 'flicker-rate-value';
     flickerRateValue.textContent = `${managerState.blendMode.flickerRate} Hz`;
-    flickerRateValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 40px; text-align: right;';
+    flickerRateValue.style.cssText =
+      'font-size: 11px; color: var(--text-secondary); min-width: 40px; text-align: right;';
 
     flickerRateRow.appendChild(flickerRateLabel);
     flickerRateRow.appendChild(flickerRateSlider);
@@ -554,7 +560,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const blendRatioValue = document.createElement('span');
     blendRatioValue.className = 'blend-ratio-value';
     blendRatioValue.textContent = `${Math.round(managerState.blendMode.blendRatio * 100)}%`;
-    blendRatioValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
+    blendRatioValue.style.cssText =
+      'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
 
     blendRatioRow.appendChild(blendRatioLabel);
     blendRatioRow.appendChild(blendRatioSlider);
@@ -575,7 +582,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const quadHeader = document.createElement('div');
     quadHeader.textContent = 'Quad View';
-    quadHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    quadHeader.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     quadSection.appendChild(quadHeader);
 
     // Quad view toggle button
@@ -715,10 +723,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       parts.push(blendLabels[state.blendMode.mode]);
     } else if (state.wipeMode !== 'off') {
       const wipeLabels: Record<WipeMode, string> = {
-        'off': '',
-        'horizontal': 'H-Wipe',
-        'vertical': 'V-Wipe',
-        'quad': 'Quad',
+        off: '',
+        horizontal: 'H-Wipe',
+        vertical: 'V-Wipe',
+        quad: 'Quad',
         'splitscreen-h': 'Split-H',
         'splitscreen-v': 'Split-V',
       };
@@ -808,7 +816,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         // Disable if A/B not available
         diffToggle.disabled = !state.abAvailable;
         diffToggle.style.opacity = state.abAvailable ? '1' : '0.5';
-        diffToggle.title = state.abAvailable ? 'Toggle difference matte' : 'Load a second source to enable difference matte';
+        diffToggle.title = state.abAvailable
+          ? 'Toggle difference matte'
+          : 'Load a second source to enable difference matte';
       }
 
       if (heatmapToggle) {
@@ -928,11 +938,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isOpen &&
-      !this.button.contains(e.target as Node) &&
-      !this.dropdown.contains(e.target as Node)
-    ) {
+    if (this.isOpen && !this.button.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       this.closeDropdown();
     }
   }

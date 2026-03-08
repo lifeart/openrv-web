@@ -504,7 +504,7 @@ describe('LUTPipeline', () => {
         expect.objectContaining({
           sourceId: 'source-1',
           stage: 'file',
-        })
+        }),
       );
     });
 
@@ -520,7 +520,7 @@ describe('LUTPipeline', () => {
         expect.objectContaining({
           sourceId: 'source-1',
           stage: 'file',
-        })
+        }),
       );
     });
 
@@ -533,7 +533,7 @@ describe('LUTPipeline', () => {
       expect(callback).toHaveBeenCalledWith(
         expect.objectContaining({
           stage: 'display',
-        })
+        }),
       );
     });
 
@@ -549,7 +549,7 @@ describe('LUTPipeline', () => {
         expect.objectContaining({
           previousSourceId: null,
           newSourceId: 'source-2',
-        })
+        }),
       );
     });
   });

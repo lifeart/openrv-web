@@ -20,7 +20,12 @@
  */
 
 import { drawImageWithOrientation } from './shared';
-import { type GainMapMetadata, parseGainMapMetadataFromXMP, reconstructHDR, defaultGainMapMetadata } from './GainMapMetadata';
+import {
+  type GainMapMetadata,
+  parseGainMapMetadataFromXMP,
+  reconstructHDR,
+  defaultGainMapMetadata,
+} from './GainMapMetadata';
 
 export interface GainmapInfo {
   baseImageOffset: number;
@@ -41,7 +46,7 @@ export function isGainmapJPEG(buffer: ArrayBuffer): boolean {
 
   // Check JPEG SOI marker
   if (buffer.byteLength < 4) return false;
-  if (view.getUint16(0) !== 0xFFD8) return false;
+  if (view.getUint16(0) !== 0xffd8) return false;
 
   // Scan for MPF APP2 marker (0xFFE2 with 'MPF\0' identifier)
   return findMPFMarkerOffset(view) !== -1;
@@ -55,7 +60,7 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   const view = new DataView(buffer);
 
   // Verify JPEG
-  if (view.getUint16(0) !== 0xFFD8) return null;
+  if (view.getUint16(0) !== 0xffd8) return null;
 
   // Find MPF marker
   const mpfOffset = findMPFMarkerOffset(view);
@@ -118,7 +123,7 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
  */
 export async function decodeGainmapToFloat32(
   buffer: ArrayBuffer,
-  info: GainmapInfo
+  info: GainmapInfo,
 ): Promise<{
   width: number;
   height: number;
@@ -129,26 +134,20 @@ export async function decodeGainmapToFloat32(
   // For the first image (offset 0), use gainmap offset as the end boundary.
   // MPF size fields can underreport the first image's actual size (missing EOI marker),
   // and JPEG decoders ignore trailing bytes after EOI, so this is safe.
-  const baseEnd = info.baseImageOffset === 0 && info.gainmapOffset > info.baseImageLength
-    ? info.gainmapOffset
-    : info.baseImageOffset + info.baseImageLength;
-  const baseBlob = new Blob(
-    [buffer.slice(info.baseImageOffset, baseEnd)],
-    { type: 'image/jpeg' }
-  );
-  const gainmapBlob = new Blob(
-    [buffer.slice(info.gainmapOffset, info.gainmapOffset + info.gainmapLength)],
-    { type: 'image/jpeg' }
-  );
+  const baseEnd =
+    info.baseImageOffset === 0 && info.gainmapOffset > info.baseImageLength
+      ? info.gainmapOffset
+      : info.baseImageOffset + info.baseImageLength;
+  const baseBlob = new Blob([buffer.slice(info.baseImageOffset, baseEnd)], { type: 'image/jpeg' });
+  const gainmapBlob = new Blob([buffer.slice(info.gainmapOffset, info.gainmapOffset + info.gainmapLength)], {
+    type: 'image/jpeg',
+  });
 
   // Parse EXIF orientation from the original JPEG (applied by browser to base but not to gainmap)
   const orientation = extractJPEGOrientation(buffer);
 
   // Decode both using browser's JPEG decoder
-  const [baseBitmap, gainmapBitmap] = await Promise.all([
-    createImageBitmap(baseBlob),
-    createImageBitmap(gainmapBlob),
-  ]);
+  const [baseBitmap, gainmapBitmap] = await Promise.all([createImageBitmap(baseBlob), createImageBitmap(gainmapBlob)]);
 
   const width = baseBitmap.width;
   const height = baseBitmap.height;
@@ -196,13 +195,13 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
   const view = new DataView(buffer);
 
   // Verify JPEG SOI
-  if (view.getUint16(0) !== 0xFFD8) return 1;
+  if (view.getUint16(0) !== 0xffd8) return 1;
 
   let offset = 2;
   const length = buffer.byteLength;
 
   while (offset < length - 4) {
-    if (view.getUint8(offset) !== 0xFF) {
+    if (view.getUint8(offset) !== 0xff) {
       offset++;
       continue;
     }
@@ -210,13 +209,16 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
     const marker = view.getUint8(offset + 1);
 
     // SOS or EOI — stop scanning
-    if (marker === 0xDA || marker === 0xD9) break;
+    if (marker === 0xda || marker === 0xd9) break;
 
     // Skip padding bytes
-    if (marker === 0xFF) { offset++; continue; }
+    if (marker === 0xff) {
+      offset++;
+      continue;
+    }
 
     // Skip standalone markers
-    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0xd8 || marker === 0x01) {
       offset += 2;
       continue;
     }
@@ -225,7 +227,7 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
     const segmentLength = view.getUint16(offset + 2);
 
     // APP1 marker (0xFFE1) — may contain EXIF
-    if (marker === 0xE1) {
+    if (marker === 0xe1) {
       // Check for 'Exif\0\0' identifier (6 bytes at offset+4)
       if (
         offset + 13 < length &&
@@ -244,10 +246,10 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
         // Read byte order
         const byteOrder = view.getUint16(tiffStart);
         const isLE = byteOrder === 0x4949; // 'II' = little-endian
-        if (byteOrder !== 0x4949 && byteOrder !== 0x4D4D) break;
+        if (byteOrder !== 0x4949 && byteOrder !== 0x4d4d) break;
 
         // Verify TIFF magic 0x002A
-        if (view.getUint16(tiffStart + 2, isLE) !== 0x002A) break;
+        if (view.getUint16(tiffStart + 2, isLE) !== 0x002a) break;
 
         // Read IFD0 offset (relative to tiffStart)
         const ifdOffset = view.getUint32(tiffStart + 4, isLE);
@@ -262,7 +264,8 @@ export function extractJPEGOrientation(buffer: ArrayBuffer): number {
           if (entryStart + 12 > Math.min(segEnd, length)) break;
 
           const tag = view.getUint16(entryStart, isLE);
-          if (tag === 0x0112) { // Orientation tag (274)
+          if (tag === 0x0112) {
+            // Orientation tag (274)
             const type = view.getUint16(entryStart + 2, isLE);
             // type 3 = SHORT (uint16), value in first 2 bytes of value field
             if (type === 3) {
@@ -302,7 +305,7 @@ function findMPFMarkerOffset(view: DataView): number {
 
   while (offset < length - 4) {
     // Look for marker prefix
-    if (view.getUint8(offset) !== 0xFF) {
+    if (view.getUint8(offset) !== 0xff) {
       offset++;
       continue;
     }
@@ -310,19 +313,19 @@ function findMPFMarkerOffset(view: DataView): number {
     const marker = view.getUint8(offset + 1);
 
     // SOS (Start of Scan) - stop scanning markers
-    if (marker === 0xDA) break;
+    if (marker === 0xda) break;
 
     // EOI (End of Image) - stop scanning
-    if (marker === 0xD9) break;
+    if (marker === 0xd9) break;
 
     // Skip padding bytes (0xFF 0xFF)
-    if (marker === 0xFF) {
+    if (marker === 0xff) {
       offset++;
       continue;
     }
 
     // Skip standalone markers (RST, SOI, etc.)
-    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0xd8 || marker === 0x01) {
       offset += 2;
       continue;
     }
@@ -332,14 +335,14 @@ function findMPFMarkerOffset(view: DataView): number {
     const segmentLength = view.getUint16(offset + 2);
 
     // APP2 marker (0xFFE2) - check for MPF identifier
-    if (marker === 0xE2) {
+    if (marker === 0xe2) {
       // Check for 'MPF\0' identifier
       if (
         offset + 7 < length &&
-        view.getUint8(offset + 4) === 0x4D && // 'M'
+        view.getUint8(offset + 4) === 0x4d && // 'M'
         view.getUint8(offset + 5) === 0x50 && // 'P'
         view.getUint8(offset + 6) === 0x46 && // 'F'
-        view.getUint8(offset + 7) === 0x00    // '\0'
+        view.getUint8(offset + 7) === 0x00 // '\0'
       ) {
         return offset;
       }
@@ -367,11 +370,11 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
   // Read byte order (II = little-endian, MM = big-endian)
   const byteOrder = view.getUint16(mpfDataStart);
   const isLittleEndian = byteOrder === 0x4949; // 'II'
-  if (byteOrder !== 0x4949 && byteOrder !== 0x4D4D) return null;
+  if (byteOrder !== 0x4949 && byteOrder !== 0x4d4d) return null;
 
   // Verify TIFF magic (0x002A)
   const magic = view.getUint16(mpfDataStart + 2, isLittleEndian);
-  if (magic !== 0x002A) return null;
+  if (magic !== 0x002a) return null;
 
   // Read offset to first IFD (relative to mpfDataStart)
   const ifdOffset = view.getUint32(mpfDataStart + 4, isLittleEndian);
@@ -394,13 +397,13 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
     const count = view.getUint32(entryStart + 4, isLittleEndian);
     const valueOffset = view.getUint32(entryStart + 8, isLittleEndian);
 
-    if (tag === 0xB001) {
+    if (tag === 0xb001) {
       // NumberOfImages tag: type=LONG, count=1
       // The value field contains the actual number of images
       mpEntryCount = valueOffset;
     }
 
-    if (tag === 0xB002) {
+    if (tag === 0xb002) {
       // MPEntry tag: type=UNDEFINED, count=total bytes
       // Each entry is 16 bytes; count is byte length, not entry count
       if (mpEntryCount === 0) {
@@ -450,19 +453,23 @@ function parseMPFEntries(view: DataView, mpfMarkerOffset: number): MPFImageEntry
  * @param endOffset - Byte offset to stop scanning (undefined = startOffset + 65536)
  * @returns headroom value or null if not found
  */
-function extractHeadroomFromXMP(buffer: ArrayBuffer, startOffset: number, endOffset: number | undefined): number | null {
+function extractHeadroomFromXMP(
+  buffer: ArrayBuffer,
+  startOffset: number,
+  endOffset: number | undefined,
+): number | null {
   const view = new DataView(buffer);
 
   // Skip SOI marker if we're at one
   let offset = startOffset;
-  if (offset + 1 < view.byteLength && view.getUint8(offset) === 0xFF && view.getUint8(offset + 1) === 0xD8) {
+  if (offset + 1 < view.byteLength && view.getUint8(offset) === 0xff && view.getUint8(offset + 1) === 0xd8) {
     offset += 2;
   }
 
-  const scanEnd = Math.min(endOffset ?? (startOffset + 65536), view.byteLength);
+  const scanEnd = Math.min(endOffset ?? startOffset + 65536, view.byteLength);
 
   while (offset < scanEnd - 4) {
-    if (view.getUint8(offset) !== 0xFF) {
+    if (view.getUint8(offset) !== 0xff) {
       offset++;
       continue;
     }
@@ -470,11 +477,14 @@ function extractHeadroomFromXMP(buffer: ArrayBuffer, startOffset: number, endOff
     const marker = view.getUint8(offset + 1);
 
     // SOS - stop scanning
-    if (marker === 0xDA) break;
+    if (marker === 0xda) break;
 
     // Skip padding / standalone markers
-    if (marker === 0xFF) { offset++; continue; }
-    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+    if (marker === 0xff) {
+      offset++;
+      continue;
+    }
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0xd8 || marker === 0x01) {
       offset += 2;
       continue;
     }
@@ -483,7 +493,7 @@ function extractHeadroomFromXMP(buffer: ArrayBuffer, startOffset: number, endOff
     const segmentLength = view.getUint16(offset + 2);
 
     // APP1 marker (0xFFE1) - may contain XMP
-    if (marker === 0xE1) {
+    if (marker === 0xe1) {
       const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
       if (dataLen > 0) {
         const segmentData = new Uint8Array(buffer, offset + 4, dataLen);
@@ -511,23 +521,26 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
   const view = new DataView(buffer);
 
   let offset = startOffset;
-  if (offset + 1 < view.byteLength && view.getUint8(offset) === 0xFF && view.getUint8(offset + 1) === 0xD8) {
+  if (offset + 1 < view.byteLength && view.getUint8(offset) === 0xff && view.getUint8(offset + 1) === 0xd8) {
     offset += 2;
   }
 
-  const scanEnd = Math.min(endOffset ?? (startOffset + 65536), view.byteLength);
+  const scanEnd = Math.min(endOffset ?? startOffset + 65536, view.byteLength);
 
   while (offset < scanEnd - 4) {
-    if (view.getUint8(offset) !== 0xFF) {
+    if (view.getUint8(offset) !== 0xff) {
       offset++;
       continue;
     }
 
     const marker = view.getUint8(offset + 1);
 
-    if (marker === 0xDA) break;
-    if (marker === 0xFF) { offset++; continue; }
-    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+    if (marker === 0xda) break;
+    if (marker === 0xff) {
+      offset++;
+      continue;
+    }
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0xd8 || marker === 0x01) {
       offset += 2;
       continue;
     }
@@ -535,7 +548,7 @@ function extractXMPFromJPEG(buffer: ArrayBuffer, startOffset: number, endOffset:
     if (offset + 3 >= scanEnd) break;
     const segmentLength = view.getUint16(offset + 2);
 
-    if (marker === 0xE1) {
+    if (marker === 0xe1) {
       const dataLen = Math.min(segmentLength - 2, buffer.byteLength - offset - 4);
       if (dataLen > 0) {
         const segmentData = new Uint8Array(buffer, offset + 4, dataLen);

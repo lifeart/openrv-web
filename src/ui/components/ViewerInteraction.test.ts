@@ -14,7 +14,7 @@ import {
   getPixelColor,
   easeOutCubic,
   interpolateZoom,
-  PointerState,
+  type PointerState,
 } from './ViewerInteraction';
 
 describe('ViewerInteraction', () => {
@@ -149,12 +149,16 @@ describe('ViewerInteraction', () => {
   describe('calculateZoomPan', () => {
     it('keeps mouse position stationary during zoom', () => {
       const result = calculateZoomPan(
-        100, 100,  // mouse position
-        400, 300,  // container size
-        200, 150,  // source size
-        0, 0,      // current pan
-        1.0,       // old zoom
-        2.0        // new zoom
+        100,
+        100, // mouse position
+        400,
+        300, // container size
+        200,
+        150, // source size
+        0,
+        0, // current pan
+        1.0, // old zoom
+        2.0, // new zoom
       );
 
       expect(result.panX).toBeDefined();
@@ -163,12 +167,16 @@ describe('ViewerInteraction', () => {
 
     it('returns current pan for zero source dimensions', () => {
       const result = calculateZoomPan(
-        100, 100,
-        400, 300,
-        0, 150,   // zero width
-        10, 20,
+        100,
+        100,
+        400,
+        300,
+        0,
+        150, // zero width
+        10,
+        20,
         1.0,
-        2.0
+        2.0,
       );
 
       expect(result.panX).toBe(10);
@@ -177,12 +185,16 @@ describe('ViewerInteraction', () => {
 
     it('returns current pan for zero height', () => {
       const result = calculateZoomPan(
-        100, 100,
-        400, 300,
-        200, 0,   // zero height
-        10, 20,
+        100,
+        100,
+        400,
+        300,
+        200,
+        0, // zero height
+        10,
+        20,
         1.0,
-        2.0
+        2.0,
       );
 
       expect(result.panX).toBe(10);
@@ -193,12 +205,16 @@ describe('ViewerInteraction', () => {
       // Container 400x300, source 200x150 (fits exactly at scale 1)
       // Mouse at center (200, 150)
       const result = calculateZoomPan(
-        200, 150,  // mouse at center
-        400, 300,
-        200, 150,
-        0, 0,
+        200,
+        150, // mouse at center
+        400,
+        300,
+        200,
+        150,
+        0,
+        0,
         1.0,
-        2.0
+        2.0,
       );
 
       // At center, pan should remain 0 for centered zoom
@@ -209,12 +225,8 @@ describe('ViewerInteraction', () => {
     // --- Fit Mode Tests ---
 
     it('uses fit-all formula by default (backward compatible)', () => {
-      const result1 = calculateZoomPan(
-        100, 100, 400, 300, 200, 150, 0, 0, 1.0, 2.0
-      );
-      const result2 = calculateZoomPan(
-        100, 100, 400, 300, 200, 150, 0, 0, 1.0, 2.0, 'all'
-      );
+      const result1 = calculateZoomPan(100, 100, 400, 300, 200, 150, 0, 0, 1.0, 2.0);
+      const result2 = calculateZoomPan(100, 100, 400, 300, 200, 150, 0, 0, 1.0, 2.0, 'all');
       expect(result1).toEqual(result2);
     });
 
@@ -224,9 +236,7 @@ describe('ViewerInteraction', () => {
       // Verify that the function accepts the fitMode parameter and produces
       // valid pan values. The key benefit is that when used with
       // calculateDisplayDimensions, the display dimensions change correctly.
-      const result = calculateZoomPan(
-        200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5, 'width'
-      );
+      const result = calculateZoomPan(200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5, 'width');
       expect(result.panX).toBeDefined();
       expect(result.panY).toBeDefined();
       expect(typeof result.panX).toBe('number');
@@ -236,9 +246,7 @@ describe('ViewerInteraction', () => {
     });
 
     it('uses fit-height formula when fitMode is "height"', () => {
-      const result = calculateZoomPan(
-        200, 100, 800, 600, 1920, 600, 50, 30, 1.0, 1.5, 'height'
-      );
+      const result = calculateZoomPan(200, 100, 800, 600, 1920, 600, 50, 30, 1.0, 1.5, 'height');
       expect(result.panX).toBeDefined();
       expect(result.panY).toBeDefined();
       expect(typeof result.panX).toBe('number');
@@ -248,12 +256,8 @@ describe('ViewerInteraction', () => {
     });
 
     it('default fitMode matches explicit "all"', () => {
-      const resultDefault = calculateZoomPan(
-        200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5
-      );
-      const resultAll = calculateZoomPan(
-        200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5, 'all'
-      );
+      const resultDefault = calculateZoomPan(200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5);
+      const resultAll = calculateZoomPan(200, 100, 800, 600, 600, 1200, 50, 30, 1.0, 1.5, 'all');
       expect(resultDefault.panX).toBe(resultAll.panX);
       expect(resultDefault.panY).toBe(resultAll.panY);
     });
@@ -342,9 +346,9 @@ describe('ViewerInteraction', () => {
       const imageCanvas = document.createElement('canvas');
       const paintCanvas = document.createElement('canvas');
 
-      expect(isViewerContentElement(
-        container, container, canvasContainer, imageCanvas, paintCanvas, null, null
-      )).toBe(true);
+      expect(isViewerContentElement(container, container, canvasContainer, imageCanvas, paintCanvas, null, null)).toBe(
+        true,
+      );
     });
 
     it('returns true for image canvas', () => {
@@ -353,9 +357,9 @@ describe('ViewerInteraction', () => {
       const imageCanvas = document.createElement('canvas');
       const paintCanvas = document.createElement('canvas');
 
-      expect(isViewerContentElement(
-        imageCanvas, container, canvasContainer, imageCanvas, paintCanvas, null, null
-      )).toBe(true);
+      expect(
+        isViewerContentElement(imageCanvas, container, canvasContainer, imageCanvas, paintCanvas, null, null),
+      ).toBe(true);
     });
 
     it('returns true for paint canvas', () => {
@@ -364,9 +368,9 @@ describe('ViewerInteraction', () => {
       const imageCanvas = document.createElement('canvas');
       const paintCanvas = document.createElement('canvas');
 
-      expect(isViewerContentElement(
-        paintCanvas, container, canvasContainer, imageCanvas, paintCanvas, null, null
-      )).toBe(true);
+      expect(
+        isViewerContentElement(paintCanvas, container, canvasContainer, imageCanvas, paintCanvas, null, null),
+      ).toBe(true);
     });
 
     it('returns true for crop overlay when provided', () => {
@@ -376,9 +380,9 @@ describe('ViewerInteraction', () => {
       const paintCanvas = document.createElement('canvas');
       const cropOverlay = document.createElement('canvas');
 
-      expect(isViewerContentElement(
-        cropOverlay, container, canvasContainer, imageCanvas, paintCanvas, cropOverlay, null
-      )).toBe(true);
+      expect(
+        isViewerContentElement(cropOverlay, container, canvasContainer, imageCanvas, paintCanvas, cropOverlay, null),
+      ).toBe(true);
     });
 
     it('returns true for wipe line when provided', () => {
@@ -388,9 +392,9 @@ describe('ViewerInteraction', () => {
       const paintCanvas = document.createElement('canvas');
       const wipeLine = document.createElement('div');
 
-      expect(isViewerContentElement(
-        wipeLine, container, canvasContainer, imageCanvas, paintCanvas, null, wipeLine
-      )).toBe(true);
+      expect(
+        isViewerContentElement(wipeLine, container, canvasContainer, imageCanvas, paintCanvas, null, wipeLine),
+      ).toBe(true);
     });
 
     it('returns true for child of canvas container', () => {
@@ -401,9 +405,9 @@ describe('ViewerInteraction', () => {
       const child = document.createElement('div');
       canvasContainer.appendChild(child);
 
-      expect(isViewerContentElement(
-        child, container, canvasContainer, imageCanvas, paintCanvas, null, null
-      )).toBe(true);
+      expect(isViewerContentElement(child, container, canvasContainer, imageCanvas, paintCanvas, null, null)).toBe(
+        true,
+      );
     });
 
     it('returns false for unrelated element', () => {
@@ -413,9 +417,9 @@ describe('ViewerInteraction', () => {
       const paintCanvas = document.createElement('canvas');
       const unrelated = document.createElement('div');
 
-      expect(isViewerContentElement(
-        unrelated, container, canvasContainer, imageCanvas, paintCanvas, null, null
-      )).toBe(false);
+      expect(isViewerContentElement(unrelated, container, canvasContainer, imageCanvas, paintCanvas, null, null)).toBe(
+        false,
+      );
     });
   });
 
@@ -500,9 +504,9 @@ describe('ViewerInteraction', () => {
       const imageData = new ImageData(10, 10);
       // Set pixel at (5, 5) to red
       const index = (5 * 10 + 5) * 4;
-      imageData.data[index] = 255;     // R
+      imageData.data[index] = 255; // R
       imageData.data[index + 1] = 128; // G
-      imageData.data[index + 2] = 64;  // B
+      imageData.data[index + 2] = 64; // B
       imageData.data[index + 3] = 255; // A
 
       const color = getPixelColor(imageData, 5, 5);

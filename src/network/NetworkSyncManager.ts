@@ -626,14 +626,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     if (this._pendingStateRequest.retryCount < 2) {
       this._pendingStateRequest.retryCount++;
-      this.sendStateRequest(
-        this._pendingStateRequest.requestId,
-        this._pendingStateRequest.targetUserId,
-      );
-      this._pendingStateRequest.timer = setTimeout(
-        () => this.handleStateRequestTimeout(),
-        3000,
-      );
+      this.sendStateRequest(this._pendingStateRequest.requestId, this._pendingStateRequest.targetUserId);
+      this._pendingStateRequest.timer = setTimeout(() => this.handleStateRequestTimeout(), 3000);
     } else {
       this.emit('toastMessage', {
         message: 'Failed to receive session state from host after multiple attempts.',
@@ -656,7 +650,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   sendSessionStateResponse(
     requestId: string,
     requesterUserId: string,
-    payload: Omit<StateResponsePayload, 'requestId' | 'targetUserId'>
+    payload: Omit<StateResponsePayload, 'requestId' | 'targetUserId'>,
   ): void {
     if (!this.isConnected || !this._roomInfo) return;
 
@@ -701,7 +695,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   sendMediaOffer(
     transferId: string,
     requesterUserId: string,
-    payload: Omit<MediaOfferPayload, 'transferId' | 'targetUserId'>
+    payload: Omit<MediaOfferPayload, 'transferId' | 'targetUserId'>,
   ): void {
     if (!this.isConnected || !this._roomInfo) return;
     const message = createMediaOfferMessage(this._roomInfo.roomId, this._userId, {
@@ -731,7 +725,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   sendMediaChunk(
     transferId: string,
     targetUserId: string,
-    payload: Omit<MediaChunkPayload, 'transferId' | 'targetUserId'>
+    payload: Omit<MediaChunkPayload, 'transferId' | 'targetUserId'>,
   ): void {
     if (!this.isConnected || !this._roomInfo) return;
     const message = createMediaChunkMessage(this._roomInfo.roomId, this._userId, {
@@ -947,7 +941,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this._roomInfo = {
       roomId: payload.roomId,
       roomCode: payload.roomCode,
-      hostId: payload.users.find(u => u.isHost)?.id ?? '',
+      hostId: payload.users.find((u) => u.isHost)?.id ?? '',
       users: payload.users,
       createdAt: Date.now(),
       maxUsers: 10,
@@ -976,9 +970,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private handleRoomLeft(payload: RoomLeftPayload): void {
     if (!this._roomInfo) return;
 
-    const leavingUser = this._roomInfo.users.find(u => u.id === payload.userId);
+    const leavingUser = this._roomInfo.users.find((u) => u.id === payload.userId);
     if (leavingUser) {
-      this._roomInfo.users = this._roomInfo.users.filter(u => u.id !== payload.userId);
+      this._roomInfo.users = this._roomInfo.users.filter((u) => u.id !== payload.userId);
       this._permissions.delete(payload.userId);
       this._remoteCursors.delete(payload.userId);
       this.emit('usersChanged', [...this._roomInfo.users]);
@@ -994,7 +988,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this._roomInfo) return;
 
     // Prune permissions and cursors for users no longer in the room
-    const currentIds = new Set(payload.users.map(u => u.id));
+    const currentIds = new Set(payload.users.map((u) => u.id));
     for (const key of this._permissions.keys()) {
       if (!currentIds.has(key)) this._permissions.delete(key);
     }
@@ -1066,7 +1060,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       sanitized.strokes = sanitized.strokes.map((stroke: unknown) =>
         typeof stroke === 'object' && stroke !== null
           ? { ...(stroke as Record<string, unknown>), user: senderUserId }
-          : stroke
+          : stroke,
       );
     }
 
@@ -1088,9 +1082,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     }
     if (Array.isArray(sanitized.notes)) {
       sanitized.notes = sanitized.notes.map((note: unknown) =>
-        note && typeof note === 'object'
-          ? { ...(note as Record<string, unknown>), author: senderUserId }
-          : note
+        note && typeof note === 'object' ? { ...(note as Record<string, unknown>), author: senderUserId } : note,
       );
     }
 
@@ -1142,8 +1134,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (responsePayload.targetUserId && responsePayload.targetUserId !== this._userId) return;
 
     const hasState =
-      typeof responsePayload.sessionState === 'string' ||
-      responsePayload.encryptedSessionState !== undefined;
+      typeof responsePayload.sessionState === 'string' || responsePayload.encryptedSessionState !== undefined;
     if (!hasState) return;
 
     this.clearPendingStateRequest();
@@ -1249,11 +1240,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   private shouldUseServerlessUrlSignaling(): boolean {
     return (
-      this.isConnected &&
-      this.isHost &&
-      !this.wsClient.isConnected &&
-      this.canUseWebRTC() &&
-      this._roomInfo !== null
+      this.isConnected && this.isHost && !this.wsClient.isConnected && this.canUseWebRTC() && this._roomInfo !== null
     );
   }
 
@@ -1913,9 +1900,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   simulateUserLeft(userId: string): void {
     if (!this._roomInfo) return;
 
-    const user = this._roomInfo.users.find(u => u.id === userId);
+    const user = this._roomInfo.users.find((u) => u.id === userId);
     if (user) {
-      this._roomInfo.users = this._roomInfo.users.filter(u => u.id !== userId);
+      this._roomInfo.users = this._roomInfo.users.filter((u) => u.id !== userId);
       this._permissions.delete(userId);
       this._remoteCursors.delete(userId);
       this.emit('usersChanged', [...this._roomInfo.users]);
@@ -1935,7 +1922,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.clearCreateRoomFallbackTimer();
 
     // Unsubscribe all listeners
-    this._unsubscribers.forEach(unsub => unsub());
+    this._unsubscribers.forEach((unsub) => unsub());
     this._unsubscribers = [];
 
     // Leave room if connected

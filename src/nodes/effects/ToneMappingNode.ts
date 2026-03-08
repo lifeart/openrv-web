@@ -1,7 +1,7 @@
 import { RegisterNode } from '../base/NodeFactory';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyToneMappingWithParams } from '../../ui/components/ViewerEffects';
 import type { ToneMappingOperator, ToneMappingState } from '../../core/types/effects';

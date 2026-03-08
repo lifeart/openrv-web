@@ -6,12 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  SafeAreasOverlay,
-  AspectRatioGuide,
-  ASPECT_RATIOS,
-  DEFAULT_SAFE_AREAS_STATE,
-} from './SafeAreasOverlay';
+import { SafeAreasOverlay, type AspectRatioGuide, ASPECT_RATIOS, DEFAULT_SAFE_AREAS_STATE } from './SafeAreasOverlay';
 
 // Canvas mocks are provided by test/setup.ts
 
@@ -149,9 +144,7 @@ describe('SafeAreasOverlay', () => {
       safeAreas.enable();
 
       expect(safeAreas.isVisible()).toBe(true);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('SAFE-011: disable hides overlay', () => {
@@ -162,9 +155,7 @@ describe('SafeAreasOverlay', () => {
       safeAreas.disable();
 
       expect(safeAreas.isVisible()).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('SAFE-004: toggle enables/disables (FEATURES.md SAFE-004)', () => {
@@ -201,9 +192,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.toggleTitleSafe();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ titleSafe: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ titleSafe: false }));
     });
   });
 
@@ -230,9 +219,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.toggleActionSafe();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ actionSafe: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ actionSafe: false }));
     });
   });
 
@@ -266,9 +253,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.setAspectRatio('2.39:1');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ aspectRatio: '2.39:1' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ aspectRatio: '2.39:1' }));
     });
 
     it('SAFE-043: custom aspect ratio can be set', () => {
@@ -314,9 +299,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.toggleCenterCrosshair();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ centerCrosshair: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ centerCrosshair: true }));
     });
   });
 
@@ -339,9 +322,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.toggleRuleOfThirds();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ ruleOfThirds: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ ruleOfThirds: true }));
     });
   });
 
@@ -357,9 +338,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.setGuideColor('#00ff00');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ guideColor: '#00ff00' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ guideColor: '#00ff00' }));
     });
 
     it('SAFE-071: setGuideOpacity changes opacity', () => {
@@ -381,9 +360,7 @@ describe('SafeAreasOverlay', () => {
 
       safeAreas.setGuideOpacity(0.7);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ guideOpacity: 0.7 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ guideOpacity: 0.7 }));
     });
   });
 

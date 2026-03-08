@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StackControl } from './StackControl';
-import { BlendMode, BLEND_MODES } from '../../composite/BlendModes';
+import { type BlendMode, BLEND_MODES } from '../../composite/BlendModes';
 
 describe('StackControl', () => {
   let control: StackControl;
@@ -610,7 +610,9 @@ describe('StackControl layer button hover states', () => {
     addTwoLayersAndShowPanel();
 
     const layers = control.getLayers();
-    const visBtn = document.querySelector(`[data-testid="stack-layer-visibility-${layers[0]!.id}"]`) as HTMLButtonElement;
+    const visBtn = document.querySelector(
+      `[data-testid="stack-layer-visibility-${layers[0]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(visBtn).toBeTruthy();
 
     const originalColor = visBtn.style.color;
@@ -626,7 +628,9 @@ describe('StackControl layer button hover states', () => {
 
     const layers = control.getLayers();
     // Layer at index 0 (bottom) has move-up enabled
-    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[0]!.id}"]`) as HTMLButtonElement;
+    const moveUpBtn = document.querySelector(
+      `[data-testid="stack-layer-move-up-${layers[0]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveUpBtn).toBeTruthy();
     expect(moveUpBtn.disabled).toBe(false);
 
@@ -645,7 +649,9 @@ describe('StackControl layer button hover states', () => {
 
     const layers = control.getLayers();
     // Layer at index 1 (top) has move-down enabled
-    const moveDownBtn = document.querySelector(`[data-testid="stack-layer-move-down-${layers[1]!.id}"]`) as HTMLButtonElement;
+    const moveDownBtn = document.querySelector(
+      `[data-testid="stack-layer-move-down-${layers[1]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveDownBtn).toBeTruthy();
     expect(moveDownBtn.disabled).toBe(false);
 
@@ -663,7 +669,9 @@ describe('StackControl layer button hover states', () => {
     addTwoLayersAndShowPanel();
 
     const layers = control.getLayers();
-    const deleteBtn = document.querySelector(`[data-testid="stack-layer-delete-${layers[0]!.id}"]`) as HTMLButtonElement;
+    const deleteBtn = document.querySelector(
+      `[data-testid="stack-layer-delete-${layers[0]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(deleteBtn).toBeTruthy();
 
     deleteBtn.dispatchEvent(new MouseEvent('pointerenter'));
@@ -680,7 +688,9 @@ describe('StackControl layer button hover states', () => {
 
     const layers = control.getLayers();
     // Layer at index 1 (top, last in array) has move-up disabled
-    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[1]!.id}"]`) as HTMLButtonElement;
+    const moveUpBtn = document.querySelector(
+      `[data-testid="stack-layer-move-up-${layers[1]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveUpBtn).toBeTruthy();
     expect(moveUpBtn.disabled).toBe(true);
 
@@ -700,13 +710,17 @@ describe('StackControl layer button hover states', () => {
 
     const layers = control.getLayers();
     // Layer at index 1 (top, last in array) has move-up disabled
-    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[1]!.id}"]`) as HTMLButtonElement;
+    const moveUpBtn = document.querySelector(
+      `[data-testid="stack-layer-move-up-${layers[1]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveUpBtn).toBeTruthy();
     expect(moveUpBtn.disabled).toBe(true);
     expect(moveUpBtn.style.cursor).toBe('not-allowed');
 
     // Layer at index 0 (bottom, first in array) has move-down disabled
-    const moveDownBtn = document.querySelector(`[data-testid="stack-layer-move-down-${layers[0]!.id}"]`) as HTMLButtonElement;
+    const moveDownBtn = document.querySelector(
+      `[data-testid="stack-layer-move-down-${layers[0]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveDownBtn).toBeTruthy();
     expect(moveDownBtn.disabled).toBe(true);
     expect(moveDownBtn.style.cursor).toBe('not-allowed');
@@ -717,13 +731,17 @@ describe('StackControl layer button hover states', () => {
 
     const layers = control.getLayers();
     // Layer at index 0 (bottom) has move-up enabled
-    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[0]!.id}"]`) as HTMLButtonElement;
+    const moveUpBtn = document.querySelector(
+      `[data-testid="stack-layer-move-up-${layers[0]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveUpBtn).toBeTruthy();
     expect(moveUpBtn.disabled).toBe(false);
     expect(moveUpBtn.style.cursor).toBe('pointer');
 
     // Layer at index 1 (top) has move-down enabled
-    const moveDownBtn = document.querySelector(`[data-testid="stack-layer-move-down-${layers[1]!.id}"]`) as HTMLButtonElement;
+    const moveDownBtn = document.querySelector(
+      `[data-testid="stack-layer-move-down-${layers[1]!.id}"]`,
+    ) as HTMLButtonElement;
     expect(moveDownBtn).toBeTruthy();
     expect(moveDownBtn.disabled).toBe(false);
     expect(moveDownBtn.style.cursor).toBe('pointer');
@@ -874,7 +892,7 @@ describe('StackControl source validation', () => {
 
     // Source 0 exists in available sources
     const availableSources = control.getAvailableSources();
-    const isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    const isValid = availableSources.some((s) => s.index === layer.sourceIndex);
     expect(isValid).toBe(true);
   });
 
@@ -895,7 +913,7 @@ describe('StackControl source validation', () => {
 
     // Source 5 does not exist in available sources
     const availableSources = control.getAvailableSources();
-    const isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    const isValid = availableSources.some((s) => s.index === layer.sourceIndex);
     expect(isValid).toBe(false);
   });
 
@@ -922,7 +940,7 @@ describe('StackControl source validation', () => {
 
     // Now source is valid
     const availableSources = control.getAvailableSources();
-    const isValid = availableSources.some(s => s.index === layers[0]?.sourceIndex);
+    const isValid = availableSources.some((s) => s.index === layers[0]?.sourceIndex);
     expect(isValid).toBe(true);
   });
 
@@ -944,7 +962,7 @@ describe('StackControl source validation', () => {
 
     // Source 2 is valid
     let availableSources = control.getAvailableSources();
-    let isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    let isValid = availableSources.some((s) => s.index === layer.sourceIndex);
     expect(isValid).toBe(true);
 
     // Remove source 2 (simulate source being closed)
@@ -955,7 +973,7 @@ describe('StackControl source validation', () => {
 
     // Source 2 is now invalid
     availableSources = control.getAvailableSources();
-    isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    isValid = availableSources.some((s) => s.index === layer.sourceIndex);
     expect(isValid).toBe(false);
   });
 });
@@ -1051,7 +1069,7 @@ describe('StackControl drag-and-drop reordering', () => {
   it('SC-M29d: drop should reorder the layer and emit the change event', () => {
     addThreeLayers();
     const layers = control.getLayers();
-    expect(layers.map(l => l.name)).toEqual(['Bottom', 'Middle', 'Top']);
+    expect(layers.map((l) => l.name)).toEqual(['Bottom', 'Middle', 'Top']);
 
     const callback = vi.fn();
     control.on('layerReordered', callback);
@@ -1069,7 +1087,7 @@ describe('StackControl drag-and-drop reordering', () => {
 
     // After move: "Bottom" should have moved to index 2
     const reorderedLayers = control.getLayers();
-    expect(reorderedLayers.map(l => l.name)).toEqual(['Middle', 'Top', 'Bottom']);
+    expect(reorderedLayers.map((l) => l.name)).toEqual(['Middle', 'Top', 'Bottom']);
 
     // layerReordered should have been emitted
     expect(callback).toHaveBeenCalledWith({

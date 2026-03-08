@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  WatermarkOverlay,
-  WatermarkPosition,
-  DEFAULT_WATERMARK_STATE,
-} from './WatermarkOverlay';
+import { WatermarkOverlay, type WatermarkPosition, DEFAULT_WATERMARK_STATE } from './WatermarkOverlay';
 
 describe('WatermarkOverlay', () => {
   let overlay: WatermarkOverlay;
@@ -61,9 +57,7 @@ describe('WatermarkOverlay', () => {
       overlay.on('stateChanged', callback);
 
       overlay.setPosition('center');
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ position: 'center' })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ position: 'center' }));
     });
 
     it('WM-U013: setPosition does not emit if unchanged', () => {
@@ -156,9 +150,7 @@ describe('WatermarkOverlay', () => {
       overlay.on('stateChanged', callback);
 
       overlay.setScale(1.2);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ scale: 1.2 })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ scale: 1.2 }));
     });
   });
 
@@ -193,9 +185,7 @@ describe('WatermarkOverlay', () => {
       overlay.on('stateChanged', callback);
 
       overlay.setOpacity(0.3);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ opacity: 0.3 })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ opacity: 0.3 }));
     });
   });
 
@@ -222,9 +212,7 @@ describe('WatermarkOverlay', () => {
       overlay.on('stateChanged', callback);
 
       overlay.setMargin(30);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ margin: 30 })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ margin: 30 }));
     });
   });
 
@@ -242,9 +230,7 @@ describe('WatermarkOverlay', () => {
       overlay.on('stateChanged', callback);
 
       overlay.setEnabled(true);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('WM-U062: setEnabled does not emit if unchanged', () => {

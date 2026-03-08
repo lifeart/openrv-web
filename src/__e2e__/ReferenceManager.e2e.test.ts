@@ -22,7 +22,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ReferenceManager, type ReferenceState, type ReferenceViewMode, type ReferenceImage } from '../ui/components/ReferenceManager';
+import {
+  ReferenceManager,
+  type ReferenceState,
+  type ReferenceViewMode,
+  type ReferenceImage,
+} from '../ui/components/ReferenceManager';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -221,7 +226,7 @@ describe('ReferenceManager E2E Integration', () => {
       const mockImageData = new ImageData(2, 2);
       mockImageData.data[0] = 200; // R of first pixel
       mockImageData.data[1] = 100; // G
-      mockImageData.data[2] = 50;  // B
+      mockImageData.data[2] = 50; // B
       mockImageData.data[3] = 255; // A
 
       // This is the actual wiring from AppControlRegistry line 408-416

@@ -390,7 +390,7 @@ describe('LUTStageControl', () => {
       await vi.waitFor(() => {
         expect(showAlert).toHaveBeenCalledWith(
           'GPU LUT stages only support 3D LUTs. Please load a 3D LUT file.',
-          expect.objectContaining({ type: 'error', title: 'Unsupported LUT Type' })
+          expect.objectContaining({ type: 'error', title: 'Unsupported LUT Type' }),
         );
       });
       expect(callbacks.onLUTLoaded).not.toHaveBeenCalled();
@@ -401,10 +401,7 @@ describe('LUTStageControl', () => {
       vi.mocked(parseLUT).mockReturnValue(lut1D);
 
       const precacheCallbacks = createDefaultCallbacks();
-      const precacheControl = new LUTStageControl(
-        createDefaultConfig({ stageId: 'precache' }),
-        precacheCallbacks
-      );
+      const precacheControl = new LUTStageControl(createDefaultConfig({ stageId: 'precache' }), precacheCallbacks);
       const el = precacheControl.render();
       const fileInput = el.querySelector('[data-testid="lut-precache-file-input"]') as HTMLInputElement;
 
@@ -433,7 +430,7 @@ describe('LUTStageControl', () => {
       await vi.waitFor(() => {
         expect(showAlert).toHaveBeenCalledWith(
           'Failed to load LUT: Parse failed',
-          expect.objectContaining({ type: 'error', title: 'LUT Error' })
+          expect.objectContaining({ type: 'error', title: 'LUT Error' }),
         );
       });
     });
@@ -465,20 +462,14 @@ describe('LUTStageControl', () => {
 
   describe('source selector', () => {
     it('LSC-046: source selector renders when showSourceSelector is true', () => {
-      const c = new LUTStageControl(
-        createDefaultConfig({ showSourceSelector: true }),
-        callbacks
-      );
+      const c = new LUTStageControl(createDefaultConfig({ showSourceSelector: true }), callbacks);
       const el = c.render();
       const select = el.querySelector('[data-testid="lut-file-source-select"]');
       expect(select).toBeTruthy();
     });
 
     it('LSC-047: source selector is not rendered when showSourceSelector is false', () => {
-      const c = new LUTStageControl(
-        createDefaultConfig({ showSourceSelector: false }),
-        callbacks
-      );
+      const c = new LUTStageControl(createDefaultConfig({ showSourceSelector: false }), callbacks);
       const el = c.render();
       const select = el.querySelector('[data-testid="lut-file-source-select"]');
       expect(select).toBeNull();
@@ -491,10 +482,7 @@ describe('LUTStageControl', () => {
     });
 
     it('LSC-049: source selector has Manual and OCIO options', () => {
-      const c = new LUTStageControl(
-        createDefaultConfig({ showSourceSelector: true }),
-        callbacks
-      );
+      const c = new LUTStageControl(createDefaultConfig({ showSourceSelector: true }), callbacks);
       const el = c.render();
       const select = el.querySelector('[data-testid="lut-file-source-select"]') as HTMLSelectElement;
       const options = Array.from(select.options);
@@ -509,7 +497,7 @@ describe('LUTStageControl', () => {
       const onSourceChanged = vi.fn();
       const c = new LUTStageControl(
         createDefaultConfig({ showSourceSelector: true }),
-        createDefaultCallbacks({ onSourceChanged })
+        createDefaultCallbacks({ onSourceChanged }),
       );
       const el = c.render();
       const select = el.querySelector('[data-testid="lut-file-source-select"]') as HTMLSelectElement;
@@ -519,10 +507,7 @@ describe('LUTStageControl', () => {
     });
 
     it('LSC-051: setSource updates the selector value', () => {
-      const c = new LUTStageControl(
-        createDefaultConfig({ showSourceSelector: true }),
-        callbacks
-      );
+      const c = new LUTStageControl(createDefaultConfig({ showSourceSelector: true }), callbacks);
       const el = c.render();
       c.setSource('ocio');
       const select = el.querySelector('[data-testid="lut-file-source-select"]') as HTMLSelectElement;
@@ -537,10 +522,7 @@ describe('LUTStageControl', () => {
 
   describe('session-wide label', () => {
     it('LSC-053: session-wide label is shown when sessionWide is true', () => {
-      const c = new LUTStageControl(
-        createDefaultConfig({ sessionWide: true }),
-        callbacks
-      );
+      const c = new LUTStageControl(createDefaultConfig({ sessionWide: true }), callbacks);
       const el = c.render();
       expect(el.textContent).toContain('Session-wide');
     });
@@ -585,10 +567,7 @@ describe('LUTStageControl', () => {
       vi.mocked(parseLUT).mockReturnValue(lut1D);
 
       const lookCallbacks = createDefaultCallbacks();
-      const lookControl = new LUTStageControl(
-        createDefaultConfig({ stageId: 'look' }),
-        lookCallbacks
-      );
+      const lookControl = new LUTStageControl(createDefaultConfig({ stageId: 'look' }), lookCallbacks);
       const el = lookControl.render();
       const fileInput = el.querySelector('[data-testid="lut-look-file-input"]') as HTMLInputElement;
 
@@ -607,10 +586,7 @@ describe('LUTStageControl', () => {
       vi.mocked(parseLUT).mockReturnValue(lut1D);
 
       const displayCallbacks = createDefaultCallbacks();
-      const displayControl = new LUTStageControl(
-        createDefaultConfig({ stageId: 'display' }),
-        displayCallbacks
-      );
+      const displayControl = new LUTStageControl(createDefaultConfig({ stageId: 'display' }), displayCallbacks);
       const el = displayControl.render();
       const fileInput = el.querySelector('[data-testid="lut-display-file-input"]') as HTMLInputElement;
 

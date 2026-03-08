@@ -255,7 +255,9 @@ describe('VolumeManager', () => {
         onPreservesPitchChanged: vi.fn(),
       };
       manager.setCallbacks(plainCallbacks);
-      expect(() => { manager.audioScrubEnabled = false; }).not.toThrow();
+      expect(() => {
+        manager.audioScrubEnabled = false;
+      }).not.toThrow();
       expect(manager.audioScrubEnabled).toBe(false);
     });
 

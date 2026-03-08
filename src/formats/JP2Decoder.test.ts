@@ -76,10 +76,16 @@ function makeJP2Buffer(opts: {
   tileHeight?: number;
 }): ArrayBuffer {
   const {
-    width, height, numComponents, bitsPerComponent,
+    width,
+    height,
+    numComponents,
+    bitsPerComponent,
     isSigned = false,
-    includeCodestream = true, htj2k = false,
-    includeColrBox = false, colrMeth = 1, colrEnumCS = 16,
+    includeCodestream = true,
+    htj2k = false,
+    includeColrBox = false,
+    colrMeth = 1,
+    colrEnumCS = 16,
     profile = 0,
     tileWidth,
     tileHeight,
@@ -138,8 +144,8 @@ function makeJP2Buffer(opts: {
       colrView.setUint32(0, 15, false);
       const colrStr = 'colr';
       for (let i = 0; i < 4; i++) colrView.setUint8(4 + i, colrStr.charCodeAt(i));
-      colrView.setUint8(8, 1);  // METH = 1 (enumerated)
-      colrView.setUint8(9, 0);  // PREC
+      colrView.setUint8(8, 1); // METH = 1 (enumerated)
+      colrView.setUint8(9, 0); // PREC
       colrView.setUint8(10, 0); // APPROX
       colrView.setUint32(11, colrEnumCS, false);
     } else if (colrMeth === 2) {
@@ -149,8 +155,8 @@ function makeJP2Buffer(opts: {
       colrView.setUint32(0, 15, false);
       const colrStr = 'colr';
       for (let i = 0; i < 4; i++) colrView.setUint8(4 + i, colrStr.charCodeAt(i));
-      colrView.setUint8(8, 2);  // METH = 2 (ICC)
-      colrView.setUint8(9, 0);  // PREC
+      colrView.setUint8(8, 2); // METH = 2 (ICC)
+      colrView.setUint8(9, 0); // PREC
       colrView.setUint8(10, 0); // APPROX
       colrView.setUint32(11, 0, false); // Dummy ICC data
     }
@@ -219,8 +225,12 @@ function makeJ2KCodestream(opts: {
   tileHeight?: number;
 }): ArrayBuffer {
   const {
-    width, height, numComponents, bitsPerComponent,
-    isSigned = false, htj2k = false,
+    width,
+    height,
+    numComponents,
+    bitsPerComponent,
+    isSigned = false,
+    htj2k = false,
     profile = 0,
     tileWidth = width,
     tileHeight = height,
@@ -458,8 +468,12 @@ describe('JP2Decoder', () => {
 
     it('JP2-HDR-009: should parse tile dimensions from SIZ marker', () => {
       const buf = makeJ2KCodestream({
-        width: 4096, height: 2160, numComponents: 3, bitsPerComponent: 12,
-        tileWidth: 1024, tileHeight: 1024,
+        width: 4096,
+        height: 2160,
+        numComponents: 3,
+        bitsPerComponent: 12,
+        tileWidth: 1024,
+        tileHeight: 1024,
       });
       const info = parseJP2Header(buf);
       expect(info.tileWidth).toBe(1024);
@@ -475,14 +489,22 @@ describe('JP2Decoder', () => {
 
     it('JP2-HDR-011: should parse isSigned from SIZ Ssiz byte in J2K codestream', () => {
       const signedBuf = makeJ2KCodestream({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 16, isSigned: true,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 16,
+        isSigned: true,
       });
       const signedInfo = parseJP2Header(signedBuf);
       expect(signedInfo.isSigned).toBe(true);
       expect(signedInfo.bitsPerComponent).toBe(16);
 
       const unsignedBuf = makeJ2KCodestream({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 16, isSigned: false,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 16,
+        isSigned: false,
       });
       const unsignedInfo = parseJP2Header(unsignedBuf);
       expect(unsignedInfo.isSigned).toBe(false);
@@ -490,7 +512,11 @@ describe('JP2Decoder', () => {
 
     it('JP2-HDR-012: should parse isSigned from ihdr bpc byte in JP2 container', () => {
       const signedBuf = makeJP2Buffer({
-        width: 256, height: 256, numComponents: 3, bitsPerComponent: 12, isSigned: true,
+        width: 256,
+        height: 256,
+        numComponents: 3,
+        bitsPerComponent: 12,
+        isSigned: true,
       });
       const signedInfo = parseJP2Header(signedBuf);
       expect(signedInfo.isSigned).toBe(true);
@@ -504,8 +530,13 @@ describe('JP2Decoder', () => {
   describe('parseColrBox -- colour specification box', () => {
     it('JP2-COLR-001: should parse sRGB from colr box (EnumCS=16)', () => {
       const buf = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 8,
-        includeColrBox: true, colrMeth: 1, colrEnumCS: 16,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 8,
+        includeColrBox: true,
+        colrMeth: 1,
+        colrEnumCS: 16,
       });
       const info = parseJP2Header(buf);
       expect(info.colorSpace).toBe('sRGB');
@@ -513,8 +544,13 @@ describe('JP2Decoder', () => {
 
     it('JP2-COLR-002: should parse greyscale from colr box (EnumCS=17)', () => {
       const buf = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 1, bitsPerComponent: 8,
-        includeColrBox: true, colrMeth: 1, colrEnumCS: 17,
+        width: 64,
+        height: 64,
+        numComponents: 1,
+        bitsPerComponent: 8,
+        includeColrBox: true,
+        colrMeth: 1,
+        colrEnumCS: 17,
       });
       const info = parseJP2Header(buf);
       expect(info.colorSpace).toBe('greyscale');
@@ -522,8 +558,13 @@ describe('JP2Decoder', () => {
 
     it('JP2-COLR-003: should parse sYCC from colr box (EnumCS=18)', () => {
       const buf = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 8,
-        includeColrBox: true, colrMeth: 1, colrEnumCS: 18,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 8,
+        includeColrBox: true,
+        colrMeth: 1,
+        colrEnumCS: 18,
       });
       const info = parseJP2Header(buf);
       expect(info.colorSpace).toBe('sYCC');
@@ -531,8 +572,12 @@ describe('JP2Decoder', () => {
 
     it('JP2-COLR-004: should detect ICC profile (METH=2)', () => {
       const buf = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 8,
-        includeColrBox: true, colrMeth: 2,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 8,
+        includeColrBox: true,
+        colrMeth: 2,
       });
       const info = parseJP2Header(buf);
       expect(info.colorSpace).toBe('icc-embedded');
@@ -540,13 +585,19 @@ describe('JP2Decoder', () => {
 
     it('JP2-COLR-005: should fall back to component count heuristic when no colr box', () => {
       const buf3 = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 8,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 8,
         includeColrBox: false,
       });
       expect(parseJP2Header(buf3).colorSpace).toBe('sRGB');
 
       const buf1 = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 1, bitsPerComponent: 8,
+        width: 64,
+        height: 64,
+        numComponents: 1,
+        bitsPerComponent: 8,
         includeColrBox: false,
       });
       expect(parseJP2Header(buf1).colorSpace).toBe('grayscale');
@@ -554,7 +605,10 @@ describe('JP2Decoder', () => {
 
     it('JP2-COLR-006: parseColrBox should return null for buffer without colr box', () => {
       const buf = makeJP2Buffer({
-        width: 64, height: 64, numComponents: 3, bitsPerComponent: 8,
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 8,
         includeColrBox: false,
       });
       expect(parseColrBox(buf)).toBeNull();
@@ -588,9 +642,10 @@ describe('JP2Decoder', () => {
     it('JP2-WASM-003: should decode and return result when ready', async () => {
       const expectedData = new Float32Array([1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1]);
       const mockModule = {
-        decode: (): JP2DecodeResult => makeMockResult({
-          data: expectedData,
-        }),
+        decode: (): JP2DecodeResult =>
+          makeMockResult({
+            data: expectedData,
+          }),
       };
       decoder.setMockModule(mockModule);
       await decoder.init();
@@ -690,7 +745,9 @@ describe('JP2Decoder', () => {
       let destroyCalled = false;
       const mockModule = {
         decode: (): JP2DecodeResult => makeMockResult({ width: 1, height: 1, data: new Float32Array(4) }),
-        destroy: () => { destroyCalled = true; },
+        destroy: () => {
+          destroyCalled = true;
+        },
       };
       decoder.setMockModule(mockModule);
       await decoder.init();
@@ -808,7 +865,8 @@ describe('JP2Decoder', () => {
         decode: (_buf: ArrayBuffer, opts?: JP2DecodeOptions): JP2DecodeResult => {
           receivedOptions = opts;
           return makeMockResult({
-            width: 64, height: 64,
+            width: 64,
+            height: 64,
             data: new Float32Array(64 * 64 * 4),
           });
         },
@@ -881,7 +939,7 @@ describe('JP2Decoder', () => {
       const view = new DataView(buffer);
       view.setUint16(0, 0xff4f, false); // SOC
       view.setUint16(2, 0xff51, false); // SIZ
-      view.setUint16(4, 41, false);     // Lsiz (correct minimum)
+      view.setUint16(4, 41, false); // Lsiz (correct minimum)
       // But buffer is too short to contain all SIZ fields
 
       expect(() => parseJP2Header(buffer)).toThrow('Failed to parse J2K SIZ marker');
@@ -916,7 +974,8 @@ describe('JP2Decoder', () => {
     it('decodeJP2 should use module-level decoder when no explicit decoder provided', async () => {
       const decoder = new TestableJP2WasmDecoder();
       decoder.setMockModule({
-        decode: (): JP2DecodeResult => makeMockResult({ width: 128, height: 128, data: new Float32Array(128 * 128 * 4) }),
+        decode: (): JP2DecodeResult =>
+          makeMockResult({ width: 128, height: 128, data: new Float32Array(128 * 128 * 4) }),
       });
       await decoder.init();
       setJP2WasmDecoder(decoder);
@@ -953,13 +1012,15 @@ describe('JP2Decoder', () => {
     it('should successfully decode a valid JP2 file with WASM decoder', async () => {
       const decoder = new TestableJP2WasmDecoder();
       decoder.setMockModule({
-        decode: (): JP2DecodeResult => makeMockResult({
-          width: 256, height: 256,
-          data: new Float32Array(256 * 256 * 3),
-          channels: 3,
-          bitsPerComponent: 10,
-          colorSpace: 'sRGB',
-        }),
+        decode: (): JP2DecodeResult =>
+          makeMockResult({
+            width: 256,
+            height: 256,
+            data: new Float32Array(256 * 256 * 3),
+            channels: 3,
+            bitsPerComponent: 10,
+            colorSpace: 'sRGB',
+          }),
       });
       await decoder.init();
 
@@ -977,14 +1038,16 @@ describe('JP2Decoder', () => {
       const rawData = new Float32Array([0, 128, 255, 0, 64, 192]);
       const decoder = new TestableJP2WasmDecoder();
       decoder.setMockModule({
-        decode: (): JP2DecodeResult => makeMockResult({
-          width: 2, height: 1,
-          data: rawData,
-          channels: 3,
-          bitsPerComponent: 8,
-          colorSpace: 'sRGB',
-          isSigned: false,
-        }),
+        decode: (): JP2DecodeResult =>
+          makeMockResult({
+            width: 2,
+            height: 1,
+            data: rawData,
+            channels: 3,
+            bitsPerComponent: 8,
+            colorSpace: 'sRGB',
+            isSigned: false,
+          }),
       });
       await decoder.init();
 
@@ -1005,14 +1068,16 @@ describe('JP2Decoder', () => {
       const rawData = new Float32Array([-2048, 0, 2047]);
       const decoder = new TestableJP2WasmDecoder();
       decoder.setMockModule({
-        decode: (): JP2DecodeResult => makeMockResult({
-          width: 1, height: 1,
-          data: rawData,
-          channels: 3,
-          bitsPerComponent: 12,
-          colorSpace: 'sRGB',
-          isSigned: true,
-        }),
+        decode: (): JP2DecodeResult =>
+          makeMockResult({
+            width: 1,
+            height: 1,
+            data: rawData,
+            channels: 3,
+            bitsPerComponent: 12,
+            colorSpace: 'sRGB',
+            isSigned: true,
+          }),
       });
       await decoder.init();
 
@@ -1029,7 +1094,10 @@ describe('JP2Decoder', () => {
       // Create a J2K codestream with dimensions that exceed limits
       // validateImageDimensions will reject > 65536 in either dimension
       const buffer = makeJ2KCodestream({
-        width: 70000, height: 100, numComponents: 3, bitsPerComponent: 8,
+        width: 70000,
+        height: 100,
+        numComponents: 3,
+        bitsPerComponent: 8,
       });
 
       const decoder = new TestableJP2WasmDecoder();

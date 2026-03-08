@@ -1,5 +1,5 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams } from '../../transform/LensDistortion';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams } from '../../transform/LensDistortion';
 import { getIconSvg } from './shared/Icons';
 
 export interface LensControlEvents extends EventMap {
@@ -136,8 +136,12 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -240,8 +244,12 @@ export class LensControl extends EventEmitter<LensControlEvents> {
         this.updateSliderValue('k2', preset.k2);
         this.emitChange();
       });
-      btn.addEventListener('pointerenter', () => { btn.style.background = 'var(--border-secondary)'; });
-      btn.addEventListener('pointerleave', () => { btn.style.background = 'var(--border-primary)'; });
+      btn.addEventListener('pointerenter', () => {
+        btn.style.background = 'var(--border-secondary)';
+      });
+      btn.addEventListener('pointerleave', () => {
+        btn.style.background = 'var(--border-primary)';
+      });
       presetsRow.appendChild(btn);
     }
 
@@ -255,7 +263,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     max: number,
     step: number,
     defaultValue: number,
-    onChange: (value: number) => void
+    onChange: (value: number) => void,
   ): void {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 10px;';

@@ -7,8 +7,7 @@
  * `implements` clause is needed.
  */
 
-import type { ColorAdjustments } from '../core/types/color';
-import type { ChannelMode } from '../core/types/color';
+import type { ColorAdjustments, ChannelMode } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
 import type { ColorCurvesData } from '../color/ColorCurves';
 

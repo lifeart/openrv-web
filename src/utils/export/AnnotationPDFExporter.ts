@@ -223,7 +223,7 @@ function buildPDFContent(
   paintEngine: PaintEngine,
   session: Session,
   frameThumbnails: Map<number, string>,
-  options: PDFExportOptions
+  options: PDFExportOptions,
 ): string {
   const snapshot = paintEngine.toJSON() as PaintSnapshot;
   const fps = session.fps;
@@ -374,14 +374,18 @@ function buildSummarySection(snapshot: PaintSnapshot, fps: number): string {
           </tr>
         </thead>
         <tbody>
-          ${allAnnotations.map(({ frame, annotation }) => `
+          ${allAnnotations
+            .map(
+              ({ frame, annotation }) => `
             <tr>
               <td>${frame}</td>
               <td><code>${frameToTimecode(frame, fps)}</code></td>
               <td>${getAnnotationTypeName(annotation.type)}</td>
               <td>${getAnnotationSummary(annotation)}</td>
             </tr>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </tbody>
       </table>
     </div>
@@ -417,7 +421,7 @@ export async function exportAnnotationsPDF(
   paintEngine: PaintEngine,
   session: Session,
   renderFrame: (frame: number) => Promise<HTMLCanvasElement>,
-  options?: Partial<PDFExportOptions>
+  options?: Partial<PDFExportOptions>,
 ): Promise<void> {
   const opts: PDFExportOptions = { ...DEFAULT_PDF_OPTIONS, ...options };
   const snapshot = paintEngine.toJSON() as PaintSnapshot;
@@ -481,7 +485,7 @@ export async function exportAnnotationsPDF(
 export function previewAnnotationsPDF(
   paintEngine: PaintEngine,
   session: Session,
-  options?: Partial<PDFExportOptions>
+  options?: Partial<PDFExportOptions>,
 ): string {
   const opts: PDFExportOptions = { ...DEFAULT_PDF_OPTIONS, ...options };
   return buildPDFContent(paintEngine, session, new Map(), opts);

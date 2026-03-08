@@ -7,17 +7,17 @@ export type NoteStatus = 'open' | 'resolved' | 'wontfix';
  * A note/comment attached to a frame range on a specific media source
  */
 export interface Note {
-  id: string;              // crypto.randomUUID()
-  sourceIndex: number;     // Which media source
-  frameStart: number;      // Start frame (inclusive)
-  frameEnd: number;        // End frame (inclusive)
+  id: string; // crypto.randomUUID()
+  sourceIndex: number; // Which media source
+  frameStart: number; // Start frame (inclusive)
+  frameEnd: number; // End frame (inclusive)
   text: string;
   author: string;
-  createdAt: string;       // ISO 8601
-  modifiedAt: string;      // ISO 8601
+  createdAt: string; // ISO 8601
+  modifiedAt: string; // ISO 8601
   status: NoteStatus;
   parentId: string | null; // null = top-level, string = reply
-  color: string;           // Hex color (default '#fbbf24')
+  color: string; // Hex color (default '#fbbf24')
 }
 
 /**
@@ -150,7 +150,7 @@ export class NoteManager {
    * Get all notes as an array
    */
   getNotes(): Note[] {
-    return Array.from(this._notes.values()).map(n => ({ ...n }));
+    return Array.from(this._notes.values()).map((n) => ({ ...n }));
   }
 
   /**
@@ -238,7 +238,7 @@ export class NoteManager {
    * Produce a JSON-safe array of all notes (for save/export)
    */
   toSerializable(): Note[] {
-    return Array.from(this._notes.values()).map(n => ({ ...n }));
+    return Array.from(this._notes.values()).map((n) => ({ ...n }));
   }
 
   /**

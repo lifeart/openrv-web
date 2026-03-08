@@ -6,15 +6,11 @@
  * can react accordingly.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
-import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
+import { type DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 import type { WipeMode, StencilBox } from '../../core/types/wipe';
-import {
-  DEFAULT_STENCIL_BOX,
-  computeHorizontalWipeBoxes,
-  computeVerticalWipeBoxes,
-} from '../../core/types/wipe';
+import { DEFAULT_STENCIL_BOX, computeHorizontalWipeBoxes, computeVerticalWipeBoxes } from '../../core/types/wipe';
 
 export type { WipeMode };
 export type ABSource = 'A' | 'B' | 'C' | 'D';
@@ -33,9 +29,9 @@ export const DEFAULT_QUAD_VIEW_STATE: QuadViewState = {
 
 export interface BlendModeState {
   mode: ComparisonBlendMode;
-  onionOpacity: number;    // 0-1 for onion skin mode
-  flickerRate: number;     // Hz for flicker mode (1-30)
-  blendRatio: number;      // 0-1 for blend mode (0.5 = 50/50)
+  onionOpacity: number; // 0-1 for onion skin mode
+  flickerRate: number; // Hz for flicker mode (1-30)
+  blendRatio: number; // 0-1 for blend mode (0.5 = 50/50)
 }
 
 export const DEFAULT_BLEND_MODE_STATE: BlendModeState = {
@@ -488,11 +484,13 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
    * Check if any comparison feature is active.
    */
   isActive(): boolean {
-    return this.state.wipeMode !== 'off' ||
-           (this.state.currentAB === 'B' && this.state.abAvailable) ||
-           this.state.differenceMatte.enabled ||
-           this.state.blendMode.mode !== 'off' ||
-           this.state.quadView.enabled;
+    return (
+      this.state.wipeMode !== 'off' ||
+      (this.state.currentAB === 'B' && this.state.abAvailable) ||
+      this.state.differenceMatte.enabled ||
+      this.state.blendMode.mode !== 'off' ||
+      this.state.quadView.enabled
+    );
   }
 
   /**

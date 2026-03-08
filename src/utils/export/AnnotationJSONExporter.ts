@@ -70,10 +70,7 @@ const DEFAULT_EXPORT_OPTIONS: AnnotationExportOptions = {
  * @param options - Export options
  * @returns JSON string of exported annotations
  */
-export function exportAnnotationsJSON(
-  paintEngine: PaintEngine,
-  options?: Partial<AnnotationExportOptions>
-): string {
+export function exportAnnotationsJSON(paintEngine: PaintEngine, options?: Partial<AnnotationExportOptions>): string {
   const opts: AnnotationExportOptions = { ...DEFAULT_EXPORT_OPTIONS, ...options };
   const snapshot = paintEngine.toJSON() as PaintSnapshot;
 
@@ -110,7 +107,9 @@ export function exportAnnotationsJSON(
   }
 
   // Determine frame range
-  const includedFrameNumbers = Object.keys(frames).map(Number).sort((a, b) => a - b);
+  const includedFrameNumbers = Object.keys(frames)
+    .map(Number)
+    .sort((a, b) => a - b);
   const startFrame = includedFrameNumbers[0] ?? 0;
   const endFrame = includedFrameNumbers[includedFrameNumbers.length - 1] ?? 0;
 
@@ -156,7 +155,7 @@ export function exportAnnotationsJSON(
 export function downloadAnnotationsJSON(
   paintEngine: PaintEngine,
   filename: string,
-  options?: Partial<AnnotationExportOptions>
+  options?: Partial<AnnotationExportOptions>,
 ): void {
   const json = exportAnnotationsJSON(paintEngine, options);
   const blob = new Blob([json], { type: 'application/json' });
@@ -219,7 +218,7 @@ const DEFAULT_APPLY_OPTIONS: AnnotationApplyOptions = {
 export function applyAnnotationsJSON(
   paintEngine: PaintEngine,
   data: AnnotationExportData,
-  options?: Partial<AnnotationApplyOptions>
+  options?: Partial<AnnotationApplyOptions>,
 ): number {
   const opts: AnnotationApplyOptions = { ...DEFAULT_APPLY_OPTIONS, ...options };
   const frameOffset = opts.frameOffset ?? 0;

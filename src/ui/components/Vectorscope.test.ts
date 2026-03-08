@@ -203,7 +203,7 @@ describe('Vectorscope', () => {
       const imageData = new ImageData(100, 100);
       // Fill with some data
       for (let i = 0; i < imageData.data.length; i += 4) {
-        imageData.data[i] = 128;     // R
+        imageData.data[i] = 128; // R
         imageData.data[i + 1] = 128; // G
         imageData.data[i + 2] = 128; // B
         imageData.data[i + 3] = 255; // A
@@ -255,8 +255,8 @@ describe('Vectorscope', () => {
       // Create simple image data for testing
       imageData = new ImageData(10, 10);
       for (let i = 0; i < imageData.data.length; i += 4) {
-        imageData.data[i] = 128;     // R
-        imageData.data[i + 1] = 64;  // G
+        imageData.data[i] = 128; // R
+        imageData.data[i + 1] = 64; // G
         imageData.data[i + 2] = 192; // B
         imageData.data[i + 3] = 255; // A
       }

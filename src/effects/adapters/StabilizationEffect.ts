@@ -84,8 +84,7 @@ export class StabilizationAdapter implements ImageEffect {
 
   apply(imageData: ImageData, params: Record<string, unknown>): void {
     const autoMotion = (params['stabilizationAutoMotion'] as boolean) ?? false;
-    const smoothingStrength =
-      (params['stabilizationSmoothingStrength'] as number) ?? 50;
+    const smoothingStrength = (params['stabilizationSmoothingStrength'] as number) ?? 50;
     const cropAmount = (params['stabilizationCropAmount'] as number) ?? 0;
 
     if (autoMotion) {
@@ -99,11 +98,7 @@ export class StabilizationAdapter implements ImageEffect {
       this.rawVectors.push(rawVector);
 
       // Store a copy of the current frame as the next reference
-      this.referenceFrame = new ImageData(
-        new Uint8ClampedArray(imageData.data),
-        imageData.width,
-        imageData.height,
-      );
+      this.referenceFrame = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
 
       // Smooth the full accumulated path and take the correction for the
       // current frame.

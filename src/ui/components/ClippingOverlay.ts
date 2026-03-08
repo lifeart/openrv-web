@@ -8,7 +8,7 @@
  * - Real-time updates during grading
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export interface ClippingOverlayState {
@@ -24,8 +24,8 @@ export const DEFAULT_CLIPPING_OVERLAY_STATE: ClippingOverlayState = {
   enabled: false,
   showHighlights: true,
   showShadows: true,
-  highlightColor: { r: 255, g: 0, b: 0 },    // Red for highlights
-  shadowColor: { r: 0, g: 100, b: 255 },     // Blue for shadows
+  highlightColor: { r: 255, g: 0, b: 0 }, // Red for highlights
+  shadowColor: { r: 0, g: 100, b: 255 }, // Blue for shadows
   opacity: 0.7,
 };
 
@@ -69,7 +69,7 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
       const isHighlightClipped = showHighlights && (r >= 254 || g >= 254 || b >= 254 || luma >= 254);
 
       // Check for shadow clipping (all channels at min)
-      const isShadowClipped = showShadows && (r <= 1 && g <= 1 && b <= 1);
+      const isShadowClipped = showShadows && r <= 1 && g <= 1 && b <= 1;
 
       if (isHighlightClipped) {
         // Blend with highlight color (red)

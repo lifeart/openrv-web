@@ -390,7 +390,9 @@ export class MediaManager implements ManagerBase {
       const fileSourceNode = new FileSourceNode(file.name);
       await fileSourceNode.loadFile(file);
 
-      log.info(`Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`);
+      log.info(
+        `Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`,
+      );
 
       const source: MediaSource = {
         type: 'image',
@@ -573,7 +575,7 @@ export class MediaManager implements ManagerBase {
 
     // Pre-fetch initial frames for immediate display
     if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1).catch(err => {
+      videoSourceNode.preloadFrames(1).catch((err) => {
         log.warn('Initial frame preload error:', err);
       });
     }
@@ -585,7 +587,7 @@ export class MediaManager implements ManagerBase {
 
     // Pre-load initial frames for immediate playback
     if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1).catch(err => {
+      videoSourceNode.preloadFrames(1).catch((err) => {
         log.warn('Initial frame preload error:', err);
       });
 
@@ -654,7 +656,7 @@ export class MediaManager implements ManagerBase {
 
           // Pre-fetch initial frames for immediate display
           if (node.isUsingMediabunny()) {
-            node.preloadFrames(1).catch(err => {
+            node.preloadFrames(1).catch((err) => {
               log.warn('Initial frame preload error:', err);
             });
           }
@@ -905,7 +907,7 @@ export class MediaManager implements ManagerBase {
    */
   getFrameCanvasForSource(
     source: MediaSource | null,
-    frameIndex?: number
+    frameIndex?: number,
   ): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
       return null;
@@ -938,7 +940,7 @@ export class MediaManager implements ManagerBase {
 
     const currentFrame = this._host?.getCurrentFrame() ?? 1;
     const frame = centerFrame ?? currentFrame;
-    source.videoSourceNode.preloadFrames(frame).catch(err => {
+    source.videoSourceNode.preloadFrames(frame).catch((err) => {
       log.warn('Video frame preload error:', err);
     });
   }

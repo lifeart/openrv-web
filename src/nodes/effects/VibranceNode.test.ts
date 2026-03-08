@@ -16,12 +16,7 @@ class TestSourceNode extends IPNode {
   }
 }
 
-function createTestImage(
-  width = 4,
-  height = 4,
-  channels = 4,
-  dataType: 'uint8' | 'float32' = 'uint8',
-): IPImage {
+function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {
   const image = IPImage.createEmpty(width, height, channels, dataType);
   const data = image.getTypedArray();
   for (let i = 0; i < data.length; i++) {
@@ -99,7 +94,7 @@ describe('VibranceNode', () => {
       const h = halfData[i]!;
       const lo = Math.min(s, f);
       const hi = Math.max(s, f);
-      if (h >= lo - 1 && h <= hi + 1) betweenCount++;  // tolerance of 1 for rounding
+      if (h >= lo - 1 && h <= hi + 1) betweenCount++; // tolerance of 1 for rounding
     }
     expect(betweenCount).toBe(srcData.length);
   });

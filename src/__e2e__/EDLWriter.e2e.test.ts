@@ -12,13 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  framesToTimecode,
-  generateEDL,
-  downloadEDL,
-  type EDLClip,
-  type EDLExportConfig,
-} from '../export/EDLWriter';
+import { framesToTimecode, generateEDL, downloadEDL, type EDLClip, type EDLExportConfig } from '../export/EDLWriter';
 import { PlaylistManager } from '../core/session/PlaylistManager';
 
 // ---------------------------------------------------------------------------
@@ -26,9 +20,7 @@ import { PlaylistManager } from '../core/session/PlaylistManager';
 // ---------------------------------------------------------------------------
 
 /** Simulate what PlaylistPanel.exportEDL does: map PlaylistClip -> EDLClip */
-function playlistClipsToEDLClips(
-  manager: PlaylistManager,
-): EDLClip[] {
+function playlistClipsToEDLClips(manager: PlaylistManager): EDLClip[] {
   return manager.getClips().map((clip) => ({
     sourceName: clip.sourceName,
     sourceIn: clip.inPoint,
@@ -191,8 +183,8 @@ describe('EDLWriter E2E', () => {
       expect(edl25).toContain(framesToTimecode(49, 25));
 
       // The two EDLs should differ because fps changes timecode
-      const editLine24 = edl24.split('\n').find(l => /^\d{3}\s/.test(l))!;
-      const editLine25 = edl25.split('\n').find(l => /^\d{3}\s/.test(l))!;
+      const editLine24 = edl24.split('\n').find((l) => /^\d{3}\s/.test(l))!;
+      const editLine25 = edl25.split('\n').find((l) => /^\d{3}\s/.test(l))!;
       expect(editLine24).not.toBe(editLine25);
     });
 
@@ -261,7 +253,7 @@ describe('EDLWriter E2E', () => {
       expect(edlText).toContain('FCM: NON-DROP FRAME');
 
       // Verify edit entries
-      const editLines = edlText.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const editLines = edlText.split('\n').filter((l) => /^\d{3}\s/.test(l));
       expect(editLines).toHaveLength(2);
       expect(editLines[0]).toMatch(/^001/);
       expect(editLines[1]).toMatch(/^002/);
@@ -314,7 +306,7 @@ describe('EDLWriter E2E', () => {
       expect(edlText).toContain('TITLE: OpenRV Playlist');
       expect(edlText).toContain('FCM: NON-DROP FRAME');
 
-      const editLines = edlText.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const editLines = edlText.split('\n').filter((l) => /^\d{3}\s/.test(l));
       expect(editLines).toHaveLength(0);
     });
   });
@@ -336,10 +328,18 @@ describe('EDLWriter E2E', () => {
       vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
       vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
       vi.spyOn(document, 'createElement').mockReturnValue({
-        set href(v: string) { capturedHref = v; },
-        get href() { return capturedHref; },
-        set download(v: string) { capturedDownload = v; },
-        get download() { return capturedDownload; },
+        set href(v: string) {
+          capturedHref = v;
+        },
+        get href() {
+          return capturedHref;
+        },
+        set download(v: string) {
+          capturedDownload = v;
+        },
+        get download() {
+          return capturedDownload;
+        },
         click: mockClick,
       } as unknown as HTMLAnchorElement);
       vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -388,11 +388,11 @@ describe('EDLWriter E2E', () => {
     });
 
     it('E2E-EDL-032: cleanup happens even if click throws', () => {
-      mockClick.mockImplementation(() => { throw new Error('click failed'); });
+      mockClick.mockImplementation(() => {
+        throw new Error('click failed');
+      });
 
-      const clips: EDLClip[] = [
-        { sourceName: 'ERR', sourceIn: 0, sourceOut: 24, recordIn: 0, recordOut: 24 },
-      ];
+      const clips: EDLClip[] = [{ sourceName: 'ERR', sourceIn: 0, sourceOut: 24, recordIn: 0, recordOut: 24 }];
 
       expect(() => downloadEDL(clips, 'test.edl')).toThrow('click failed');
       expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
@@ -418,8 +418,8 @@ describe('EDLWriter E2E', () => {
 
       // Both should contain the same timecodes for source in/out
       // Legacy uses outPoint + 1 (exclusive), same as new path
-      const legacyEditLines = legacyEDL.split('\n').filter(l => /^\d{3}\s/.test(l));
-      const newEditLines = newEDL.split('\n').filter(l => /^\d{3}\s/.test(l));
+      const legacyEditLines = legacyEDL.split('\n').filter((l) => /^\d{3}\s/.test(l));
+      const newEditLines = newEDL.split('\n').filter((l) => /^\d{3}\s/.test(l));
 
       expect(legacyEditLines).toHaveLength(newEditLines.length);
 
@@ -469,7 +469,7 @@ describe('EDLWriter E2E', () => {
       const edl = generateEDL(edlClips, { fps: 24 });
 
       // Reel name should be truncated + uppercased
-      const editLine = edl.split('\n').find(l => /^\d{3}\s/.test(l))!;
+      const editLine = edl.split('\n').find((l) => /^\d{3}\s/.test(l))!;
       expect(editLine).toBeDefined();
 
       // Comment should preserve original name

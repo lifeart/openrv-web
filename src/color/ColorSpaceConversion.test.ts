@@ -94,11 +94,7 @@ describe('CS-001: sRGB ↔ Rec.709 conversion accuracy', () => {
     for (const [r, g, b] of testValues) {
       const result = transform.apply(r, g, b);
       // Manual: decode sRGB → linear → encode Rec.709
-      const expected: RGB = [
-        rec709Encode(srgbDecode(r)),
-        rec709Encode(srgbDecode(g)),
-        rec709Encode(srgbDecode(b)),
-      ];
+      const expected: RGB = [rec709Encode(srgbDecode(r)), rec709Encode(srgbDecode(g)), rec709Encode(srgbDecode(b))];
       expect(result[0]).toBeCloseTo(expected[0], 3);
       expect(result[1]).toBeCloseTo(expected[1], 3);
       expect(result[2]).toBeCloseTo(expected[2], 3);
@@ -115,11 +111,7 @@ describe('CS-001: sRGB ↔ Rec.709 conversion accuracy', () => {
     for (const [r, g, b] of testValues) {
       const result = transform.apply(r, g, b);
       // Manual: decode Rec.709 → linear → encode sRGB
-      const expected: RGB = [
-        srgbEncode(rec709Decode(r)),
-        srgbEncode(rec709Decode(g)),
-        srgbEncode(rec709Decode(b)),
-      ];
+      const expected: RGB = [srgbEncode(rec709Decode(r)), srgbEncode(rec709Decode(g)), srgbEncode(rec709Decode(b))];
       expect(result[0]).toBeCloseTo(expected[0], 3);
       expect(result[1]).toBeCloseTo(expected[1], 3);
       expect(result[2]).toBeCloseTo(expected[2], 3);
@@ -191,7 +183,7 @@ describe('CS-002: Log to linear conversion accuracy', () => {
   it('CS-002-03: Sony S-Log3 18% gray (0.18 linear) encodes to ~0.406', () => {
     // Per Sony specification, 18% gray maps to ~0.406 (= 420/1023 × 1023/1023) in S-Log3
     const encoded = slog3Encode(0.18);
-    expect(encoded).toBeCloseTo(0.410, 1);
+    expect(encoded).toBeCloseTo(0.41, 1);
   });
 
   it('CS-002-04: Sony S-Log3 decode round-trip for 18% gray', () => {
@@ -344,7 +336,9 @@ describe('CS-003: Wide gamut (P3) clips to Rec.709 properly', () => {
   });
 
   it('CS-003-04: luminance preservation — clipped luminance close to source', () => {
-    const r = 1.3, g = 0.8, b = -0.2;
+    const r = 1.3,
+      g = 0.8,
+      b = -0.2;
     const L_in = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     const [cr, cg, cb] = gamutClip(r, g, b);
     const L_out = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
@@ -660,9 +654,7 @@ describe('CS-005: Scopes display in output color space', () => {
 
     // Values should have changed (ACEScg→sRGB is not identity)
     const changed =
-      imageData.data[0] !== originalR ||
-      imageData.data[1] !== originalG ||
-      imageData.data[2] !== originalB;
+      imageData.data[0] !== originalR || imageData.data[1] !== originalG || imageData.data[2] !== originalB;
     expect(changed).toBe(true);
   });
 
@@ -690,9 +682,7 @@ describe('CS-005: Scopes display in output color space', () => {
 
     // The two different input spaces should produce different outputs
     const differs =
-      imageA.data[0] !== imageB.data[0] ||
-      imageA.data[1] !== imageB.data[1] ||
-      imageA.data[2] !== imageB.data[2];
+      imageA.data[0] !== imageB.data[0] || imageA.data[1] !== imageB.data[1] || imageA.data[2] !== imageB.data[2];
     expect(differs).toBe(true);
   });
 });

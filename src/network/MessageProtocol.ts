@@ -109,12 +109,7 @@ export function isValidRoomCode(code: string): boolean {
 /**
  * Create a base SyncMessage with common fields filled in.
  */
-export function createMessage(
-  type: SyncMessageType,
-  roomId: string,
-  userId: string,
-  payload: unknown
-): SyncMessage {
+export function createMessage(type: SyncMessageType, roomId: string, userId: string, payload: unknown): SyncMessage {
   return {
     id: generateMessageId(),
     type,
@@ -149,44 +144,28 @@ export function createRoomLeaveMessage(roomId: string, userId: string, payload?:
 /**
  * Create a sync.playback message.
  */
-export function createPlaybackSyncMessage(
-  roomId: string,
-  userId: string,
-  payload: PlaybackSyncPayload
-): SyncMessage {
+export function createPlaybackSyncMessage(roomId: string, userId: string, payload: PlaybackSyncPayload): SyncMessage {
   return createMessage('sync.playback', roomId, userId, payload);
 }
 
 /**
  * Create a sync.frame message.
  */
-export function createFrameSyncMessage(
-  roomId: string,
-  userId: string,
-  payload: FrameSyncPayload
-): SyncMessage {
+export function createFrameSyncMessage(roomId: string, userId: string, payload: FrameSyncPayload): SyncMessage {
   return createMessage('sync.frame', roomId, userId, payload);
 }
 
 /**
  * Create a sync.view message.
  */
-export function createViewSyncMessage(
-  roomId: string,
-  userId: string,
-  payload: ViewSyncPayload
-): SyncMessage {
+export function createViewSyncMessage(roomId: string, userId: string, payload: ViewSyncPayload): SyncMessage {
   return createMessage('sync.view', roomId, userId, payload);
 }
 
 /**
  * Create a sync.color message.
  */
-export function createColorSyncMessage(
-  roomId: string,
-  userId: string,
-  payload: ColorSyncPayload
-): SyncMessage {
+export function createColorSyncMessage(roomId: string, userId: string, payload: ColorSyncPayload): SyncMessage {
   return createMessage('sync.color', roomId, userId, payload);
 }
 
@@ -196,7 +175,7 @@ export function createColorSyncMessage(
 export function createAnnotationSyncMessage(
   roomId: string,
   userId: string,
-  payload: AnnotationSyncPayload
+  payload: AnnotationSyncPayload,
 ): SyncMessage {
   return createMessage('sync.annotation', roomId, userId, payload);
 }
@@ -204,132 +183,84 @@ export function createAnnotationSyncMessage(
 /**
  * Create a sync.cursor message.
  */
-export function createCursorSyncMessage(
-  roomId: string,
-  userId: string,
-  payload: CursorSyncPayload
-): SyncMessage {
+export function createCursorSyncMessage(roomId: string, userId: string, payload: CursorSyncPayload): SyncMessage {
   return createMessage('sync.cursor', roomId, userId, payload);
 }
 
 /**
  * Create a user.permission message.
  */
-export function createPermissionMessage(
-  roomId: string,
-  userId: string,
-  payload: PermissionChangePayload
-): SyncMessage {
+export function createPermissionMessage(roomId: string, userId: string, payload: PermissionChangePayload): SyncMessage {
   return createMessage('user.permission', roomId, userId, payload);
 }
 
 /**
  * Create a sync.state-request message.
  */
-export function createStateRequestMessage(
-  roomId: string,
-  userId: string,
-  payload: StateRequestPayload
-): SyncMessage {
+export function createStateRequestMessage(roomId: string, userId: string, payload: StateRequestPayload): SyncMessage {
   return createMessage('sync.state-request', roomId, userId, payload);
 }
 
 /**
  * Create a sync.state-response message.
  */
-export function createStateResponseMessage(
-  roomId: string,
-  userId: string,
-  payload: StateResponsePayload
-): SyncMessage {
+export function createStateResponseMessage(roomId: string, userId: string, payload: StateResponsePayload): SyncMessage {
   return createMessage('sync.state-response', roomId, userId, payload);
 }
 
 /**
  * Create a sync.media-request message.
  */
-export function createMediaRequestMessage(
-  roomId: string,
-  userId: string,
-  payload: MediaRequestPayload
-): SyncMessage {
+export function createMediaRequestMessage(roomId: string, userId: string, payload: MediaRequestPayload): SyncMessage {
   return createMessage('sync.media-request', roomId, userId, payload);
 }
 
 /**
  * Create a sync.media-offer message.
  */
-export function createMediaOfferMessage(
-  roomId: string,
-  userId: string,
-  payload: MediaOfferPayload
-): SyncMessage {
+export function createMediaOfferMessage(roomId: string, userId: string, payload: MediaOfferPayload): SyncMessage {
   return createMessage('sync.media-offer', roomId, userId, payload);
 }
 
 /**
  * Create a sync.media-response message.
  */
-export function createMediaResponseMessage(
-  roomId: string,
-  userId: string,
-  payload: MediaResponsePayload
-): SyncMessage {
+export function createMediaResponseMessage(roomId: string, userId: string, payload: MediaResponsePayload): SyncMessage {
   return createMessage('sync.media-response', roomId, userId, payload);
 }
 
 /**
  * Create a sync.media-chunk message.
  */
-export function createMediaChunkMessage(
-  roomId: string,
-  userId: string,
-  payload: MediaChunkPayload
-): SyncMessage {
+export function createMediaChunkMessage(roomId: string, userId: string, payload: MediaChunkPayload): SyncMessage {
   return createMessage('sync.media-chunk', roomId, userId, payload);
 }
 
 /**
  * Create a sync.media-complete message.
  */
-export function createMediaCompleteMessage(
-  roomId: string,
-  userId: string,
-  payload: MediaCompletePayload
-): SyncMessage {
+export function createMediaCompleteMessage(roomId: string, userId: string, payload: MediaCompletePayload): SyncMessage {
   return createMessage('sync.media-complete', roomId, userId, payload);
 }
 
 /**
  * Create a sync.webrtc-offer message.
  */
-export function createWebRTCOfferMessage(
-  roomId: string,
-  userId: string,
-  payload: WebRTCOfferPayload
-): SyncMessage {
+export function createWebRTCOfferMessage(roomId: string, userId: string, payload: WebRTCOfferPayload): SyncMessage {
   return createMessage('sync.webrtc-offer', roomId, userId, payload);
 }
 
 /**
  * Create a sync.webrtc-answer message.
  */
-export function createWebRTCAnswerMessage(
-  roomId: string,
-  userId: string,
-  payload: WebRTCAnswerPayload
-): SyncMessage {
+export function createWebRTCAnswerMessage(roomId: string, userId: string, payload: WebRTCAnswerPayload): SyncMessage {
   return createMessage('sync.webrtc-answer', roomId, userId, payload);
 }
 
 /**
  * Create a sync.webrtc-ice message.
  */
-export function createWebRTCIceMessage(
-  roomId: string,
-  userId: string,
-  payload: WebRTCIcePayload
-): SyncMessage {
+export function createWebRTCIceMessage(roomId: string, userId: string, payload: WebRTCIcePayload): SyncMessage {
   return createMessage('sync.webrtc-ice', roomId, userId, payload);
 }
 
@@ -457,13 +388,20 @@ export function validateColorPayload(payload: unknown): payload is ColorSyncPayl
   if (payload === null || typeof payload !== 'object') return false;
   const p = payload as Record<string, unknown>;
   return (
-    typeof p.exposure === 'number' && Number.isFinite(p.exposure) &&
-    typeof p.gamma === 'number' && Number.isFinite(p.gamma) &&
-    typeof p.saturation === 'number' && Number.isFinite(p.saturation) &&
-    typeof p.contrast === 'number' && Number.isFinite(p.contrast) &&
-    typeof p.temperature === 'number' && Number.isFinite(p.temperature) &&
-    typeof p.tint === 'number' && Number.isFinite(p.tint) &&
-    typeof p.brightness === 'number' && Number.isFinite(p.brightness)
+    typeof p.exposure === 'number' &&
+    Number.isFinite(p.exposure) &&
+    typeof p.gamma === 'number' &&
+    Number.isFinite(p.gamma) &&
+    typeof p.saturation === 'number' &&
+    Number.isFinite(p.saturation) &&
+    typeof p.contrast === 'number' &&
+    Number.isFinite(p.contrast) &&
+    typeof p.temperature === 'number' &&
+    Number.isFinite(p.temperature) &&
+    typeof p.tint === 'number' &&
+    Number.isFinite(p.tint) &&
+    typeof p.brightness === 'number' &&
+    Number.isFinite(p.brightness)
   );
 }
 
@@ -606,8 +544,10 @@ export function validateAnnotationPayload(payload: unknown): payload is Annotati
   if (!validActions.includes(p.action)) return false;
   if (typeof p.timestamp !== 'number' || !Number.isFinite(p.timestamp)) return false;
   // remove and update require annotationId
-  if ((p.action === 'remove' || p.action === 'update') &&
-      (typeof p.annotationId !== 'string' || p.annotationId.length === 0)) {
+  if (
+    (p.action === 'remove' || p.action === 'update') &&
+    (typeof p.annotationId !== 'string' || p.annotationId.length === 0)
+  ) {
     return false;
   }
   return true;

@@ -8,7 +8,7 @@
  * This is a pure state manager with no DOM or rendering dependencies.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 
 export type ReferenceViewMode = 'split-h' | 'split-v' | 'overlay' | 'side-by-side' | 'toggle';
 
@@ -68,9 +68,8 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
   ): void {
     if (this.disposed) return;
 
-    const dataCopy = image.data instanceof Float32Array
-      ? new Float32Array(image.data)
-      : new Uint8ClampedArray(image.data);
+    const dataCopy =
+      image.data instanceof Float32Array ? new Float32Array(image.data) : new Uint8ClampedArray(image.data);
 
     const ref: ReferenceImage = {
       width: image.width,

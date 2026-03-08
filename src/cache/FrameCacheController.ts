@@ -14,20 +14,10 @@
  * Per-session with a shared memory budget across all source nodes.
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { MemoryBudgetManager, type MemoryPressureLevel } from './MemoryBudgetManager';
-import {
-  estimateFrameBytes,
-  regionCapacity,
-  calculateWindowSplit,
-  evictionGuardRadius,
-} from './FrameSizeEstimator';
-import {
-  type CacheMode,
-  type CacheConfig,
-  DEFAULT_CACHE_CONFIG,
-  CACHE_MODE_CYCLE,
-} from '../config/CacheConfig';
+import { estimateFrameBytes, regionCapacity, calculateWindowSplit, evictionGuardRadius } from './FrameSizeEstimator';
+import { type CacheMode, type CacheConfig, DEFAULT_CACHE_CONFIG, CACHE_MODE_CYCLE } from '../config/CacheConfig';
 
 // -----------------------------------------------------------------------
 // Types
@@ -143,11 +133,13 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
 
     this.config = { ...DEFAULT_CACHE_CONFIG, ...config };
 
-    this.budgetManager = budgetManager ?? new MemoryBudgetManager({
-      totalBudget: this.config.memoryBudgetBytes,
-      highWaterMark: this.config.highWaterMark,
-      criticalMark: this.config.criticalMark,
-    });
+    this.budgetManager =
+      budgetManager ??
+      new MemoryBudgetManager({
+        totalBudget: this.config.memoryBudgetBytes,
+        highWaterMark: this.config.highWaterMark,
+        criticalMark: this.config.criticalMark,
+      });
 
     // Forward pressure events
     this.budgetManager.on('pressureChanged', (level) => {
@@ -240,9 +232,7 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
   unregisterSource(sourceId: string): void {
     this.sources.delete(sourceId);
     if (this.activeSourceId === sourceId) {
-      this.activeSourceId = this.sources.size > 0
-        ? this.sources.keys().next().value ?? null
-        : null;
+      this.activeSourceId = this.sources.size > 0 ? (this.sources.keys().next().value ?? null) : null;
     }
   }
 
@@ -345,11 +335,7 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
    *
    * Resolves when minPrerollFrames are cached, or rejects on timeout (5s).
    */
-  warmUp(
-    frame: number,
-    direction: 1 | -1,
-    minFrames?: number,
-  ): Promise<void> {
+  warmUp(frame: number, direction: 1 | -1, minFrames?: number): Promise<void> {
     if (this.config.mode === 'off') {
       return Promise.resolve();
     }
@@ -464,9 +450,7 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
       return;
     }
 
-    const bytesPerFrame = estimateFrameBytes(
-      source.width, source.height, source.isHDR, source.targetSize,
-    );
+    const bytesPerFrame = estimateFrameBytes(source.width, source.height, source.isHDR, source.targetSize);
 
     const capacity = regionCapacity(this.config.memoryBudgetBytes, bytesPerFrame);
     if (capacity <= 0) {
@@ -486,20 +470,16 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
       splitMode = 'scrub';
     }
 
-    const direction = this.playbackInfo.isPlaying
-      ? this.playbackInfo.direction
-      : (this.scrubVelocity >= 0 ? 1 : -1);
+    const direction = this.playbackInfo.isPlaying ? this.playbackInfo.direction : this.scrubVelocity >= 0 ? 1 : -1;
 
-    const { aheadFrames, behindFrames } = calculateWindowSplit(
-      capacity, splitMode, direction as 1 | -1,
-    );
+    const { aheadFrames, behindFrames } = calculateWindowSplit(capacity, splitMode, direction as 1 | -1);
 
     // Apply lookahead depth adjustment
     let effectiveAhead = aheadFrames;
     if (this.config.mode === 'lookahead' && this.playbackInfo.isPlaying) {
       const throughput = this.getDecodeThroughput();
       if (throughput > 0) {
-        const adaptiveDepth = Math.ceil(throughput * 2 / this.playbackInfo.speed);
+        const adaptiveDepth = Math.ceil((throughput * 2) / this.playbackInfo.speed);
         effectiveAhead = Math.min(aheadFrames, adaptiveDepth);
       }
 
@@ -596,10 +576,7 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
 
     const cachedFrames = source.getCachedFrames();
     const { currentFrame } = this.playbackInfo;
-    const guardRadius = evictionGuardRadius(
-      this.playbackInfo.speed,
-      this.config.minEvictionGuard,
-    );
+    const guardRadius = evictionGuardRadius(this.playbackInfo.speed, this.config.minEvictionGuard);
 
     // Collect eviction candidates (outside guard radius and region)
     const candidates: Array<{ frame: number; distance: number }> = [];
@@ -618,7 +595,7 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
     candidates.sort((a, b) => b.distance - a.distance);
 
     const count = targetCount ?? candidates.length;
-    return candidates.slice(0, count).map(c => c.frame);
+    return candidates.slice(0, count).map((c) => c.frame);
   }
 
   /**
@@ -799,7 +776,7 @@ export class FrameCacheController extends EventEmitter<FrameCacheControllerEvent
 
     let count = 0;
     for (let i = 0; i < maxCount; i++) {
-      const f = frame + (i * direction);
+      const f = frame + i * direction;
       if (f < this.playbackInfo.inPoint || f > this.playbackInfo.outPoint) break;
       if (source.hasFrame(f)) count++;
     }

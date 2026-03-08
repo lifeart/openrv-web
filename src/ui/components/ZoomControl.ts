@@ -6,7 +6,7 @@
  * The "Fit" option remains as a special zoom mode.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
@@ -31,7 +31,7 @@ const ZOOM_LEVELS: { value: ZoomLevel; label: string }[] = [
 
 // Map string values back to ZoomLevel for type-safe parsing
 const ZOOM_VALUE_MAP: Record<string, ZoomLevel> = Object.fromEntries(
-  ZOOM_LEVELS.map(({ value }) => [String(value), value])
+  ZOOM_LEVELS.map(({ value }) => [String(value), value]),
 ) as Record<string, ZoomLevel>;
 
 export class ZoomControl extends EventEmitter<ZoomControlEvents> {
@@ -120,7 +120,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
       ZOOM_LEVELS.map(({ value, label }) => ({
         value: String(value),
         label,
-      }))
+      })),
     );
 
     this.dropdown.getElement().dataset.testid = 'zoom-dropdown';

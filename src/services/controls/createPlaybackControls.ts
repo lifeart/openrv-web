@@ -25,10 +25,7 @@ function parseSignalingServerList(raw: string | undefined): string[] {
 
 function resolveNetworkSyncConfigFromEnv(): Partial<NetworkSyncConfig> {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-  const raw =
-    env.VITE_NETWORK_SIGNALING_SERVERS ??
-    env.VITE_NETWORK_SIGNALING_URLS ??
-    env.VITE_NETWORK_SIGNALING_URL;
+  const raw = env.VITE_NETWORK_SIGNALING_SERVERS ?? env.VITE_NETWORK_SIGNALING_URLS ?? env.VITE_NETWORK_SIGNALING_URL;
 
   const signalingServers = parseSignalingServerList(raw);
   if (signalingServers.length === 0) return {};

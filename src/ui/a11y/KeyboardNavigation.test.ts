@@ -130,7 +130,7 @@ describe('Keyboard Navigation Integration', () => {
     it('KEY-002c: Tab button click switches tab', () => {
       const tabChangeSpy = vi.fn();
       tabBar.on('tabChanged', tabChangeSpy);
-      const colorTab = tabBar.getButtons().find(b => b.dataset.tabId === 'color');
+      const colorTab = tabBar.getButtons().find((b) => b.dataset.tabId === 'color');
       expect(colorTab).toBeDefined();
       colorTab!.click();
       expect(tabChangeSpy).toHaveBeenCalledWith('color');
@@ -237,7 +237,7 @@ describe('Keyboard Navigation Integration', () => {
       expect(viewContainer!.getAttribute('aria-labelledby')).toBe('tab-view');
 
       // Verify cross-reference: tab's aria-controls matches panel's id
-      const viewTab = tabBar.getButtons().find(b => b.dataset.tabId === 'view');
+      const viewTab = tabBar.getButtons().find((b) => b.dataset.tabId === 'view');
       expect(viewTab!.getAttribute('aria-controls')).toBe('tabpanel-view');
     });
 
@@ -277,23 +277,23 @@ describe('Keyboard Navigation Integration', () => {
     });
 
     it('KEY-005j: Active tab has aria-selected="true"', () => {
-      const activeButton = tabBar.getButtons().find(b => b.dataset.tabId === tabBar.activeTab);
+      const activeButton = tabBar.getButtons().find((b) => b.dataset.tabId === tabBar.activeTab);
       expect(activeButton).toBeDefined();
       expect(activeButton!.getAttribute('aria-selected')).toBe('true');
 
       // Switch tab and verify
       tabBar.setActiveTab('color');
-      const colorButton = tabBar.getButtons().find(b => b.dataset.tabId === 'color');
+      const colorButton = tabBar.getButtons().find((b) => b.dataset.tabId === 'color');
       expect(colorButton!.getAttribute('aria-selected')).toBe('true');
 
       // Old tab should be false
-      const viewButton = tabBar.getButtons().find(b => b.dataset.tabId === 'view');
+      const viewButton = tabBar.getButtons().find((b) => b.dataset.tabId === 'view');
       expect(viewButton!.getAttribute('aria-selected')).toBe('false');
     });
 
     it('KEY-005k: Tab buttons have unique IDs', () => {
       const buttons = tabBar.getButtons();
-      const ids = buttons.map(b => b.id);
+      const ids = buttons.map((b) => b.id);
       expect(ids).toContain('tab-view');
       expect(ids).toContain('tab-color');
       expect(ids).toContain('tab-effects');
@@ -302,8 +302,8 @@ describe('Keyboard Navigation Integration', () => {
     });
 
     it('KEY-005l: Inactive tabs have tabindex="-1"', () => {
-      const viewBtn = tabBar.getButtons().find(b => b.dataset.tabId === 'view');
-      const colorBtn = tabBar.getButtons().find(b => b.dataset.tabId === 'color');
+      const viewBtn = tabBar.getButtons().find((b) => b.dataset.tabId === 'view');
+      const colorBtn = tabBar.getButtons().find((b) => b.dataset.tabId === 'color');
       expect(viewBtn!.getAttribute('tabindex')).toBe('0');
       expect(colorBtn!.getAttribute('tabindex')).toBe('-1');
     });

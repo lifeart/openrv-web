@@ -6,16 +6,22 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ThemeManager, ThemeMode, ResolvedTheme } from './ThemeManager';
+import { ThemeManager, type ThemeMode, type ResolvedTheme } from './ThemeManager';
 
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: vi.fn((key: string) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
   };
 })();
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
@@ -43,10 +49,13 @@ const mockMediaQueryList = {
   removeListener: vi.fn(),
 };
 
-vi.stubGlobal('matchMedia', vi.fn(() => {
-  mockMediaQueryList.matches = mockMediaQueryMatches;
-  return mockMediaQueryList;
-}));
+vi.stubGlobal(
+  'matchMedia',
+  vi.fn(() => {
+    mockMediaQueryList.matches = mockMediaQueryMatches;
+    return mockMediaQueryList;
+  }),
+);
 
 describe('ThemeManager', () => {
   let manager: ThemeManager;
@@ -324,10 +333,7 @@ describe('ThemeManager', () => {
   describe('dispose', () => {
     it('THEME-M080: dispose removes media query listener', () => {
       manager.dispose();
-      expect(mockMediaQueryList.removeEventListener).toHaveBeenCalledWith(
-        'change',
-        expect.any(Function)
-      );
+      expect(mockMediaQueryList.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
     });
 
     it('THEME-M081: dispose can be called without error', () => {

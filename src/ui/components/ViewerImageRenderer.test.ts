@@ -70,12 +70,22 @@ function createMockContext(overrides: Partial<ImageRendererContext> = {}): Image
     })) as any,
     getImageCtx: vi.fn(() => imageCtx),
     getWipeManager: vi.fn(() => ({
-      computeStencilBoxes: vi.fn(() => [[0, 0.5, 0, 1], [0.5, 1, 0, 1]]),
+      computeStencilBoxes: vi.fn(() => [
+        [0, 0.5, 0, 1],
+        [0.5, 1, 0, 1],
+      ]),
       position: 0.5,
       mode: 'splitscreen-h' as const,
     })),
     getGhostFrameManager: vi.fn(() => ({
-      state: { enabled: false, framesBefore: 0, framesAfter: 0, opacityBase: 0.5, opacityFalloff: 0.7, colorTint: false },
+      state: {
+        enabled: false,
+        framesBefore: 0,
+        framesAfter: 0,
+        opacityBase: 0.5,
+        opacityFalloff: 0.7,
+        colorTint: false,
+      },
       getPoolCanvas: vi.fn(),
       trimPool: vi.fn(),
     })),
@@ -176,7 +186,10 @@ describe('renderWithWipe', () => {
 
   it('should compute rect coordinates from stencil boxes and display dimensions', () => {
     const wipeManager = {
-      computeStencilBoxes: vi.fn(() => [[0, 0.3, 0, 1], [0.3, 1, 0, 1]]),
+      computeStencilBoxes: vi.fn(() => [
+        [0, 0.3, 0, 1],
+        [0.3, 1, 0, 1],
+      ]),
       position: 0.3,
       mode: 'wipe-h' as const,
     };
@@ -238,12 +251,7 @@ describe('renderSplitScreen', () => {
 
     renderSplitScreen(ctx, 800, 600);
 
-    expect(ctx.drawWithTransform).toHaveBeenCalledWith(
-      ctx.getImageCtx(),
-      currentElement,
-      800,
-      600
-    );
+    expect(ctx.drawWithTransform).toHaveBeenCalledWith(ctx.getImageCtx(), currentElement, 800, 600);
   });
 
   it('should fallback to currentSource when sourceB element is null', () => {
@@ -259,12 +267,7 @@ describe('renderSplitScreen', () => {
 
     renderSplitScreen(ctx, 800, 600);
 
-    expect(ctx.drawWithTransform).toHaveBeenCalledWith(
-      ctx.getImageCtx(),
-      currentElement,
-      800,
-      600
-    );
+    expect(ctx.drawWithTransform).toHaveBeenCalledWith(ctx.getImageCtx(), currentElement, 800, 600);
   });
 
   it('should do nothing when no sources and no currentSource', () => {
@@ -287,7 +290,10 @@ describe('renderSplitScreen', () => {
     const elementA = createMockElement();
     const elementB = createMockElement();
     const wipeManager = {
-      computeStencilBoxes: vi.fn(() => [[0, 0.5, 0, 1], [0.5, 1, 0, 1]]),
+      computeStencilBoxes: vi.fn(() => [
+        [0, 0.5, 0, 1],
+        [0.5, 1, 0, 1],
+      ]),
       position: 0.5,
       mode: 'splitscreen-h' as const,
     };
@@ -308,19 +314,18 @@ describe('renderSplitScreen', () => {
     // Horizontal split at position 0.5: splitX = Math.floor(800 * 0.5) = 400
     expect(ctx.drawClippedSource).toHaveBeenCalledTimes(2);
     const imageCtx = ctx.getImageCtx();
-    expect(ctx.drawClippedSource).toHaveBeenCalledWith(
-      imageCtx, elementA, 0, 0, 400, 600, 800, 600
-    );
-    expect(ctx.drawClippedSource).toHaveBeenCalledWith(
-      imageCtx, elementB, 400, 0, 400, 600, 800, 600
-    );
+    expect(ctx.drawClippedSource).toHaveBeenCalledWith(imageCtx, elementA, 0, 0, 400, 600, 800, 600);
+    expect(ctx.drawClippedSource).toHaveBeenCalledWith(imageCtx, elementB, 400, 0, 400, 600, 800, 600);
   });
 
   it('should render vertical split screen with drawClippedSource', () => {
     const elementA = createMockElement();
     const elementB = createMockElement();
     const wipeManager = {
-      computeStencilBoxes: vi.fn(() => [[0, 1, 0, 0.5], [0, 1, 0.5, 1]]),
+      computeStencilBoxes: vi.fn(() => [
+        [0, 1, 0, 0.5],
+        [0, 1, 0.5, 1],
+      ]),
       position: 0.5,
       mode: 'splitscreen-v' as const,
     };
@@ -341,12 +346,8 @@ describe('renderSplitScreen', () => {
     // Vertical split at position 0.5: splitY = Math.floor(600 * 0.5) = 300
     expect(ctx.drawClippedSource).toHaveBeenCalledTimes(2);
     const imageCtx = ctx.getImageCtx();
-    expect(ctx.drawClippedSource).toHaveBeenCalledWith(
-      imageCtx, elementA, 0, 0, 800, 300, 800, 600
-    );
-    expect(ctx.drawClippedSource).toHaveBeenCalledWith(
-      imageCtx, elementB, 0, 300, 800, 300, 800, 600
-    );
+    expect(ctx.drawClippedSource).toHaveBeenCalledWith(imageCtx, elementA, 0, 0, 800, 300, 800, 600);
+    expect(ctx.drawClippedSource).toHaveBeenCalledWith(imageCtx, elementB, 0, 300, 800, 300, 800, 600);
   });
 
   it('should set imageSmoothingEnabled based on texture filter mode', () => {
@@ -391,7 +392,10 @@ describe('renderSplitScreen', () => {
         isSourceBUsingMediabunny: vi.fn(() => false),
       })) as any,
       getWipeManager: vi.fn(() => ({
-        computeStencilBoxes: vi.fn(() => [[0, 0.5, 0, 1], [0.5, 1, 0, 1]]),
+        computeStencilBoxes: vi.fn(() => [
+          [0, 0.5, 0, 1],
+          [0.5, 1, 0, 1],
+        ]),
         position: 0.5,
         mode: 'splitscreen-h' as const,
       })) as any,
@@ -401,9 +405,7 @@ describe('renderSplitScreen', () => {
 
     // The first call should use cachedCanvas (not elementA)
     const imageCtx = ctx.getImageCtx();
-    expect(ctx.drawClippedSource).toHaveBeenCalledWith(
-      imageCtx, cachedCanvas, 0, 0, 400, 600, 800, 600
-    );
+    expect(ctx.drawClippedSource).toHaveBeenCalledWith(imageCtx, cachedCanvas, 0, 0, 400, 600, 800, 600);
   });
 });
 
@@ -422,7 +424,14 @@ describe('renderGhostFrames', () => {
 
   it('should return early when current source is null', () => {
     const gfm = {
-      state: { enabled: true, framesBefore: 2, framesAfter: 2, opacityBase: 0.5, opacityFalloff: 0.7, colorTint: false },
+      state: {
+        enabled: true,
+        framesBefore: 2,
+        framesAfter: 2,
+        opacityBase: 0.5,
+        opacityFalloff: 0.7,
+        colorTint: false,
+      },
       getPoolCanvas: vi.fn(),
       trimPool: vi.fn(),
     };
@@ -442,7 +451,14 @@ describe('renderGhostFrames', () => {
   it('should render ghost frames from prerender buffer when available', () => {
     const ghostCanvas = createMockElement();
     const gfm = {
-      state: { enabled: true, framesBefore: 1, framesAfter: 0, opacityBase: 0.8, opacityFalloff: 0.5, colorTint: false },
+      state: {
+        enabled: true,
+        framesBefore: 1,
+        framesAfter: 0,
+        opacityBase: 0.8,
+        opacityFalloff: 0.5,
+        colorTint: false,
+      },
       getPoolCanvas: vi.fn(),
       trimPool: vi.fn(),
     };
@@ -472,7 +488,14 @@ describe('renderGhostFrames', () => {
   it('should apply opacity based on distance and falloff', () => {
     const ghostCanvas = createMockElement();
     const gfm = {
-      state: { enabled: true, framesBefore: 2, framesAfter: 0, opacityBase: 0.8, opacityFalloff: 0.5, colorTint: false },
+      state: {
+        enabled: true,
+        framesBefore: 2,
+        framesAfter: 0,
+        opacityBase: 0.8,
+        opacityFalloff: 0.5,
+        colorTint: false,
+      },
       getPoolCanvas: vi.fn(),
       trimPool: vi.fn(),
     };
@@ -735,7 +758,7 @@ describe('renderBlendMode', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getBlendModeState: vi.fn(() => ({
         mode: 'onionskin' as const,
         onionOpacity: 0.5,
@@ -756,7 +779,7 @@ describe('renderBlendMode', () => {
     // B = 0
     expect(result!.data[0]).toBe(128); // R
     expect(result!.data[1]).toBe(128); // G
-    expect(result!.data[2]).toBe(0);   // B
+    expect(result!.data[2]).toBe(0); // B
     expect(result!.data[3]).toBe(255); // A
   });
 
@@ -771,7 +794,7 @@ describe('renderBlendMode', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getBlendModeState: vi.fn(() => ({
         mode: 'blend' as const,
         onionOpacity: 0.5,
@@ -789,8 +812,8 @@ describe('renderBlendMode', () => {
     // G = round((255*0.3 + 0*1*0.7)/1.0) = round(76.5) = 77
     // B = 0
     expect(result!.data[0]).toBe(179); // R
-    expect(result!.data[1]).toBe(77);  // G
-    expect(result!.data[2]).toBe(0);   // B
+    expect(result!.data[1]).toBe(77); // G
+    expect(result!.data[2]).toBe(0); // B
     expect(result!.data[3]).toBe(255); // A
   });
 
@@ -805,7 +828,7 @@ describe('renderBlendMode', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getBlendModeState: vi.fn(() => ({
         mode: 'flicker' as const,
         onionOpacity: 0.5,
@@ -832,7 +855,7 @@ describe('renderBlendMode', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getBlendModeState: vi.fn(() => ({
         mode: 'flicker' as const,
         onionOpacity: 0.5,
@@ -859,7 +882,7 @@ describe('renderBlendMode', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getBlendModeState: vi.fn(() => ({
         mode: 'unknown-mode' as any,
         onionOpacity: 0.5,
@@ -932,7 +955,7 @@ describe('renderDifferenceMatte', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getDifferenceMatteState: vi.fn(() => ({
         enabled: true,
         gain: 1.0,
@@ -947,9 +970,9 @@ describe('renderDifferenceMatte', () => {
     // diffR=100, diffG=0, diffB=0 => magnitude = 100/3 ≈ 33.33
     // amplified = min(255, 33.33 * 1.0) ≈ 33.33
     // Grayscale: Uint8ClampedArray truncates to 33
-    expect(result!.data[0]).toBe(33);  // R (grayscale)
-    expect(result!.data[1]).toBe(33);  // G (grayscale)
-    expect(result!.data[2]).toBe(33);  // B (grayscale)
+    expect(result!.data[0]).toBe(33); // R (grayscale)
+    expect(result!.data[1]).toBe(33); // G (grayscale)
+    expect(result!.data[2]).toBe(33); // B (grayscale)
     expect(result!.data[3]).toBe(255); // A (full opacity)
   });
 
@@ -964,7 +987,7 @@ describe('renderDifferenceMatte', () => {
         sourceAIndex: 0,
         sourceBIndex: 1,
       })) as any,
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? dataA : dataB),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? dataA : dataB)),
       getDifferenceMatteState: vi.fn(() => ({
         enabled: true,
         gain: 5.0,
@@ -981,7 +1004,7 @@ describe('renderDifferenceMatte', () => {
     // r = round(0.6144*255) = 157, g = 255, b = round((1-0.6144)*128) = 49
     expect(result!.data[0]).toBe(157); // R (heatmap)
     expect(result!.data[1]).toBe(255); // G (heatmap)
-    expect(result!.data[2]).toBe(49);  // B (heatmap)
+    expect(result!.data[2]).toBe(49); // B (heatmap)
     expect(result!.data[3]).toBe(255); // A (full opacity)
   });
 });
@@ -1064,7 +1087,7 @@ describe('compositeStackLayers', () => {
         { id: '1', name: 'Layer 1', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 },
         { id: '2', name: 'Layer 2', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 1 },
       ]),
-      renderSourceToImageData: vi.fn((idx: number) => idx === 0 ? layer1Data : layer2Data),
+      renderSourceToImageData: vi.fn((idx: number) => (idx === 0 ? layer1Data : layer2Data)),
     });
 
     const result = compositeStackLayers(ctx, 1, 1);
@@ -1078,17 +1101,36 @@ describe('compositeStackLayers', () => {
     // 2x2 image, stencil box clips to right half only
     const layerData = new ImageData(
       new Uint8ClampedArray([
-        255, 0, 0, 255,   0, 255, 0, 255,   // row 0: red, green
-        0, 0, 255, 255,   255, 255, 0, 255,  // row 1: blue, yellow
+        255,
+        0,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255, // row 0: red, green
+        0,
+        0,
+        255,
+        255,
+        255,
+        255,
+        0,
+        255, // row 1: blue, yellow
       ]),
-      2, 2
+      2,
+      2,
     );
 
     const ctx = createMockContext({
       getStackLayers: vi.fn(() => [
         {
-          id: '1', name: 'Layer 1', visible: true, opacity: 1,
-          blendMode: 'normal', sourceIndex: 0,
+          id: '1',
+          name: 'Layer 1',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          sourceIndex: 0,
           stencilBox: [0.5, 1, 0, 1] as [number, number, number, number], // right half
         },
       ]),
@@ -1133,8 +1175,12 @@ describe('compositeStackLayers', () => {
     const ctx = createMockContext({
       getStackLayers: vi.fn(() => [
         {
-          id: '1', name: 'Layer 1', visible: true, opacity: 1,
-          blendMode: 'normal', sourceIndex: 0,
+          id: '1',
+          name: 'Layer 1',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          sourceIndex: 0,
           stencilBox: [0, 1, 0, 1] as [number, number, number, number], // full area - not active
         },
       ]),

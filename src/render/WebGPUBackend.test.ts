@@ -469,7 +469,9 @@ describe('WebGPUBackend', () => {
     });
 
     it('setDisplayColorState', () => {
-      expect(() => backend.setDisplayColorState({ transferFunction: 0, displayGamma: 0, displayBrightness: 1, customGamma: 2.2 })).not.toThrow();
+      expect(() =>
+        backend.setDisplayColorState({ transferFunction: 0, displayGamma: 0, displayBrightness: 1, customGamma: 2.2 }),
+      ).not.toThrow();
     });
 
     it('setHighlightsShadows', () => {

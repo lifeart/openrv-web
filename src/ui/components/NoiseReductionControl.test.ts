@@ -261,9 +261,11 @@ describe('NoiseReductionControl', () => {
       control.on('paramsChanged', callback);
 
       control.reset();
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        strength: DEFAULT_NOISE_REDUCTION_PARAMS.strength,
-      }));
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          strength: DEFAULT_NOISE_REDUCTION_PARAMS.strength,
+        }),
+      );
     });
 
     it('NRC-U053: reset button click triggers reset', () => {

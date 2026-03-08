@@ -37,7 +37,9 @@ function createMockVideoSourceNode(name?: string) {
   };
 }
 vi.mock('../../nodes/sources/VideoSourceNode', () => ({
-  VideoSourceNode: vi.fn(function(name?: string) { return createMockVideoSourceNode(name); }),
+  VideoSourceNode: vi.fn(function (name?: string) {
+    return createMockVideoSourceNode(name);
+  }),
 }));
 
 // Mock FileSourceNode
@@ -58,7 +60,9 @@ function createMockFileSourceNode(name?: string) {
   };
 }
 vi.mock('../../nodes/sources/FileSourceNode', () => ({
-  FileSourceNode: vi.fn(function(name?: string) { return createMockFileSourceNode(name); }),
+  FileSourceNode: vi.fn(function (name?: string) {
+    return createMockFileSourceNode(name);
+  }),
 }));
 
 // Import mocked modules so we can access them
@@ -113,7 +117,9 @@ function createImageSource(overrides: Partial<MediaSource> = {}): MediaSource {
 }
 
 function createVideoSource(overrides: Partial<MediaSource> = {}): MediaSource {
-  const mockVideoSourceNode = createMockVideoSourceNode('test-video') as unknown as InstanceType<typeof VideoSourceNode>;
+  const mockVideoSourceNode = createMockVideoSourceNode('test-video') as unknown as InstanceType<
+    typeof VideoSourceNode
+  >;
   return {
     type: 'video',
     name: 'test.mp4',
@@ -158,10 +164,10 @@ describe('MediaManager', () => {
     vi.clearAllMocks();
     // Re-establish default mock implementations after clearAllMocks
     vi.mocked(FileSourceNode).mockImplementation(
-      (name?: string) => createMockFileSourceNode(name) as unknown as FileSourceNode
+      (name?: string) => createMockFileSourceNode(name) as unknown as FileSourceNode,
     );
     vi.mocked(VideoSourceNode).mockImplementation(
-      (name?: string) => createMockVideoSourceNode(name) as unknown as VideoSourceNode
+      (name?: string) => createMockVideoSourceNode(name) as unknown as VideoSourceNode,
     );
     manager = new MediaManager();
     host = createMockHost();
@@ -427,16 +433,16 @@ describe('MediaManager', () => {
 
     it('MM-030: propagates errors from loadImageFile', async () => {
       vi.spyOn(manager, 'loadImageFile').mockRejectedValue(new Error('image load failed'));
-      await expect(
-        manager.loadFile(new File([], 'test.png', { type: 'image/png' }))
-      ).rejects.toThrow('image load failed');
+      await expect(manager.loadFile(new File([], 'test.png', { type: 'image/png' }))).rejects.toThrow(
+        'image load failed',
+      );
     });
 
     it('MM-031: propagates errors from loadVideoFile', async () => {
       vi.spyOn(manager, 'loadVideoFile').mockRejectedValue(new Error('video load failed'));
-      await expect(
-        manager.loadFile(new File([], 'test.mp4', { type: 'video/mp4' }))
-      ).rejects.toThrow('video load failed');
+      await expect(manager.loadFile(new File([], 'test.mp4', { type: 'video/mp4' }))).rejects.toThrow(
+        'video load failed',
+      );
     });
   });
 
@@ -471,14 +477,17 @@ describe('MediaManager', () => {
 
     it('MM-035: falls back to loadImage on FileSourceNode failure', async () => {
       // Make FileSourceNode.loadFile throw
-      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
-        loadFile: vi.fn().mockRejectedValue(new Error('unsupported format')),
-        isHDR: vi.fn().mockReturnValue(false),
-        formatName: null,
-        width: 0,
-        height: 0,
-        properties: { getValue: vi.fn().mockReturnValue('') },
-      }) as unknown as FileSourceNode);
+      vi.mocked(FileSourceNode).mockImplementationOnce(
+        () =>
+          ({
+            loadFile: vi.fn().mockRejectedValue(new Error('unsupported format')),
+            isHDR: vi.fn().mockReturnValue(false),
+            formatName: null,
+            width: 0,
+            height: 0,
+            properties: { getValue: vi.fn().mockReturnValue('') },
+          }) as unknown as FileSourceNode,
+      );
 
       vi.stubGlobal('URL', {
         createObjectURL: vi.fn(() => 'blob:fallback-url'),
@@ -492,14 +501,17 @@ describe('MediaManager', () => {
     });
 
     it('MM-036: revokes URL on fallback failure', async () => {
-      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
-        loadFile: vi.fn().mockRejectedValue(new Error('unsupported format')),
-        isHDR: vi.fn().mockReturnValue(false),
-        formatName: null,
-        width: 0,
-        height: 0,
-        properties: { getValue: vi.fn().mockReturnValue('') },
-      }) as unknown as FileSourceNode);
+      vi.mocked(FileSourceNode).mockImplementationOnce(
+        () =>
+          ({
+            loadFile: vi.fn().mockRejectedValue(new Error('unsupported format')),
+            isHDR: vi.fn().mockReturnValue(false),
+            formatName: null,
+            width: 0,
+            height: 0,
+            properties: { getValue: vi.fn().mockReturnValue('') },
+          }) as unknown as FileSourceNode,
+      );
 
       const revokeObjectURL = vi.fn();
       vi.stubGlobal('URL', {
@@ -509,9 +521,7 @@ describe('MediaManager', () => {
 
       vi.spyOn(manager, 'loadImage').mockRejectedValue(new Error('fallback also failed'));
 
-      await expect(
-        manager.loadImageFile(new File([], 'test.png'))
-      ).rejects.toThrow('fallback also failed');
+      await expect(manager.loadImageFile(new File([], 'test.png'))).rejects.toThrow('fallback also failed');
 
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:fallback-url');
     });
@@ -531,7 +541,12 @@ describe('MediaManager', () => {
         width: 640,
         height: 480,
       };
-      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return mockImg;
+        }),
+      );
 
       const promise = manager.loadImage('test.png', 'http://example.com/test.png');
       // Trigger the onload callback
@@ -556,7 +571,12 @@ describe('MediaManager', () => {
         width: 100,
         height: 100,
       };
-      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return mockImg;
+        }),
+      );
 
       const promise = manager.loadImage('test.png', 'http://example.com/test.png');
       mockImg.onload!();
@@ -574,7 +594,12 @@ describe('MediaManager', () => {
         width: 0,
         height: 0,
       };
-      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return mockImg;
+        }),
+      );
 
       const promise = manager.loadImage('test.png', 'http://example.com/bad.png');
       mockImg.onerror!();
@@ -592,7 +617,12 @@ describe('MediaManager', () => {
         width: 100,
         height: 100,
       };
-      vi.stubGlobal('Image', vi.fn(function() { return mockImg; }));
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return mockImg;
+        }),
+      );
 
       const promise = managerNoHost.loadImage('test.png', 'url');
       mockImg.onload!();
@@ -631,16 +661,17 @@ describe('MediaManager', () => {
         revokeObjectURL,
       });
 
-      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
-        loadFromEXR: vi.fn().mockRejectedValue(new Error('EXR decode error')),
-        width: 0,
-        height: 0,
-        properties: { getValue: vi.fn().mockReturnValue('') },
-      }) as unknown as FileSourceNode);
+      vi.mocked(FileSourceNode).mockImplementationOnce(
+        () =>
+          ({
+            loadFromEXR: vi.fn().mockRejectedValue(new Error('EXR decode error')),
+            width: 0,
+            height: 0,
+            properties: { getValue: vi.fn().mockReturnValue('') },
+          }) as unknown as FileSourceNode,
+      );
 
-      await expect(
-        manager.loadEXRFile(new File([new ArrayBuffer(10)], 'bad.exr'))
-      ).rejects.toThrow('EXR decode error');
+      await expect(manager.loadEXRFile(new File([new ArrayBuffer(10)], 'bad.exr'))).rejects.toThrow('EXR decode error');
 
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:exr-url');
     });
@@ -782,9 +813,9 @@ describe('MediaManager', () => {
     it('MM-047: throws when no valid sequence found', async () => {
       vi.mocked(createSequenceInfo).mockResolvedValue(null);
 
-      await expect(
-        manager.loadSequence([new File([], 'random.txt')])
-      ).rejects.toThrow('No valid image sequence found in the selected files');
+      await expect(manager.loadSequence([new File([], 'random.txt')])).rejects.toThrow(
+        'No valid image sequence found in the selected files',
+      );
     });
 
     it('MM-048: uses provided fps override', async () => {
@@ -1360,14 +1391,17 @@ describe('MediaManager', () => {
       // loadImageFile will use _host?.getFps() ?? 24
       // Without host, it should default to 24
       const loadFileSpy = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
-        loadFile: loadFileSpy,
-        isHDR: vi.fn().mockReturnValue(false),
-        formatName: null,
-        width: 100,
-        height: 100,
-        properties: { getValue: vi.fn().mockReturnValue('url') },
-      }) as unknown as FileSourceNode);
+      vi.mocked(FileSourceNode).mockImplementationOnce(
+        () =>
+          ({
+            loadFile: loadFileSpy,
+            isHDR: vi.fn().mockReturnValue(false),
+            formatName: null,
+            width: 100,
+            height: 100,
+            properties: { getValue: vi.fn().mockReturnValue('url') },
+          }) as unknown as FileSourceNode,
+      );
 
       // We can't easily verify the fps without checking the source
       // But the method should not throw

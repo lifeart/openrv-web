@@ -6,8 +6,8 @@
  * Now uses DraggableContainer for consistent draggable behavior.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { CurveEditor, CurveChannelType } from './CurveEditor';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { CurveEditor, type CurveChannelType } from './CurveEditor';
 import {
   type ColorCurvesData,
   CURVE_PRESETS,
@@ -17,11 +17,7 @@ import {
 } from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
-import {
-  createDraggableContainer,
-  createControlButton,
-  DraggableContainer,
-} from './shared/DraggableContainer';
+import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 
 interface CurvesControlEvents extends EventMap {
   curvesChanged: ColorCurvesData;

@@ -203,7 +203,8 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
     // State display (loading, error, empty)
     this.stateContainer = document.createElement('div');
     this.stateContainer.dataset.testid = 'shotgrid-state';
-    this.stateContainer.style.cssText = 'display: none; text-align: center; padding: 24px 16px; color: var(--text-muted); font-size: 12px;';
+    this.stateContainer.style.cssText =
+      'display: none; text-align: center; padding: 24px 16px; color: var(--text-muted); font-size: 12px;';
     this.container.appendChild(this.stateContainer);
 
     // Version list

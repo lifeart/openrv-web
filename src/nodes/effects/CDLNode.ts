@@ -2,7 +2,7 @@ import { RegisterNode } from '../base/NodeFactory';
 import { defineNodeProperty } from '../base/defineNodeProperty';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyCDLToImageData, isDefaultCDL, type CDLValues } from '../../color/CDL';
 

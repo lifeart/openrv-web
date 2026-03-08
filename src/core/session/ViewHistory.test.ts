@@ -224,7 +224,7 @@ describe('ViewHistory', () => {
 
       expect(history.size).toBe(2);
       const json = history.toJSON();
-      expect(json.map(e => e.nodeId)).toEqual(['b', 'c']);
+      expect(json.map((e) => e.nodeId)).toEqual(['b', 'c']);
     });
 
     it('handles removing the current entry', () => {

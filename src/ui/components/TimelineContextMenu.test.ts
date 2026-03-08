@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { TimelineContextMenu, TimelineContextMenuOptions } from './TimelineContextMenu';
+import { TimelineContextMenu, type TimelineContextMenuOptions } from './TimelineContextMenu';
 
 function makeOptions(overrides: Partial<TimelineContextMenuOptions> = {}): TimelineContextMenuOptions {
   return {
@@ -40,7 +40,7 @@ describe('TimelineContextMenu', () => {
   afterEach(() => {
     menu.dispose();
     // Clean up any leftover menus
-    document.querySelectorAll('.timeline-main-context-menu').forEach(el => el.remove());
+    document.querySelectorAll('.timeline-main-context-menu').forEach((el) => el.remove());
   });
 
   describe('visibility and lifecycle', () => {
@@ -125,8 +125,15 @@ describe('TimelineContextMenu', () => {
         const el = origCreate(tag, opts);
         if (tag === 'div') {
           vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-            width: 240, height: 200, top: 0, left: 0,
-            bottom: 200, right: 240, x: 0, y: 0, toJSON: () => {},
+            width: 240,
+            height: 200,
+            top: 0,
+            left: 0,
+            bottom: 200,
+            right: 240,
+            x: 0,
+            y: 0,
+            toJSON: () => {},
           } as DOMRect);
         }
         return el;
@@ -148,8 +155,15 @@ describe('TimelineContextMenu', () => {
         const el = origCreate(tag, opts);
         if (tag === 'div') {
           vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-            width: 240, height: 200, top: 0, left: 0,
-            bottom: 200, right: 240, x: 0, y: 0, toJSON: () => {},
+            width: 240,
+            height: 200,
+            top: 0,
+            left: 0,
+            bottom: 200,
+            right: 240,
+            x: 0,
+            y: 0,
+            toJSON: () => {},
           } as DOMRect);
         }
         return el;
@@ -170,8 +184,15 @@ describe('TimelineContextMenu', () => {
         const el = origCreate(tag, opts);
         if (tag === 'div') {
           vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-            width: 240, height: 200, top: 0, left: 0,
-            bottom: 200, right: 240, x: 0, y: 0, toJSON: () => {},
+            width: 240,
+            height: 200,
+            top: 0,
+            left: 0,
+            bottom: 200,
+            right: 240,
+            x: 0,
+            y: 0,
+            toJSON: () => {},
           } as DOMRect);
         }
         return el;
@@ -228,12 +249,12 @@ describe('TimelineContextMenu', () => {
       menu.show(makeOptions());
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
       const items = el.querySelectorAll('[role="menuitem"]');
-      const labels = Array.from(items).map(i => i.textContent);
-      expect(labels.some(l => l!.includes('Copy Timecode'))).toBe(true);
-      expect(labels.some(l => l!.includes('Go to Frame 42'))).toBe(true);
-      expect(labels.some(l => l!.includes('Set In Point Here'))).toBe(true);
-      expect(labels.some(l => l!.includes('Set Out Point Here'))).toBe(true);
-      expect(labels.some(l => l!.includes('Add Mark at Frame 42'))).toBe(true);
+      const labels = Array.from(items).map((i) => i.textContent);
+      expect(labels.some((l) => l!.includes('Copy Timecode'))).toBe(true);
+      expect(labels.some((l) => l!.includes('Go to Frame 42'))).toBe(true);
+      expect(labels.some((l) => l!.includes('Set In Point Here'))).toBe(true);
+      expect(labels.some((l) => l!.includes('Set Out Point Here'))).toBe(true);
+      expect(labels.some((l) => l!.includes('Add Mark at Frame 42'))).toBe(true);
     });
 
     it('TCM-021: menu items have role="menuitem"', () => {
@@ -247,7 +268,7 @@ describe('TimelineContextMenu', () => {
       menu.show(makeOptions());
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
       const items = el.querySelectorAll('[role="menuitem"]');
-      items.forEach(item => {
+      items.forEach((item) => {
         expect(item.getAttribute('tabindex')).toBe('-1');
       });
     });
@@ -295,8 +316,8 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ timecode: '00:01:02:03' });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const copyItem = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Copy Timecode')
+      const copyItem = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Copy Timecode'),
       );
       (copyItem as HTMLElement).click();
       expect(opts.onCopyTimecode).toHaveBeenCalledWith('00:01:02:03');
@@ -306,9 +327,7 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ frame: 42 });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Go to')
-      );
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent!.includes('Go to'));
       (item as HTMLElement).click();
       expect(opts.onGoToFrame).toHaveBeenCalledWith(42);
     });
@@ -317,8 +336,8 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ frame: 42 });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Set In Point Here')
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Set In Point Here'),
       );
       (item as HTMLElement).click();
       expect(opts.onSetInPoint).toHaveBeenCalledWith(42);
@@ -328,8 +347,8 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ frame: 42 });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Set Out Point Here')
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Set Out Point Here'),
       );
       (item as HTMLElement).click();
       expect(opts.onSetOutPoint).toHaveBeenCalledWith(42);
@@ -339,8 +358,8 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ hasCustomInOut: true });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Clear In/Out Range')
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Clear In/Out Range'),
       );
       (item as HTMLElement).click();
       expect(opts.onResetInOutPoints).toHaveBeenCalled();
@@ -350,8 +369,8 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ frame: 42, markerAtFrame: null });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Add Mark')
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Add Mark'),
       );
       (item as HTMLElement).click();
       expect(opts.onToggleMark).toHaveBeenCalledWith(42);
@@ -361,8 +380,8 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions({ frame: 50, markerAtFrame: { frame: 40 } });
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Remove Mark')
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) =>
+        i.textContent!.includes('Remove Mark'),
       );
       (item as HTMLElement).click();
       expect(opts.onRemoveMark).toHaveBeenCalledWith(40);
@@ -372,9 +391,7 @@ describe('TimelineContextMenu', () => {
       const opts = makeOptions();
       menu.show(opts);
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find(
-        i => i.textContent!.includes('Go to')
-      );
+      const item = Array.from(el.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent!.includes('Go to'));
       (item as HTMLElement).click();
       expect(menu.isVisible()).toBe(false);
     });
@@ -391,7 +408,7 @@ describe('TimelineContextMenu', () => {
     it('TCM-037: clicking outside the menu hides it', async () => {
       menu.show(makeOptions());
       // The outside click handler is deferred via setTimeout(0)
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(menu.isVisible()).toBe(false);
     });
@@ -459,7 +476,7 @@ describe('TimelineContextMenu', () => {
       const items = el.querySelectorAll<HTMLElement>('[role="menuitem"]');
 
       // Focus the "Go to Frame" item (index 1 usually)
-      const goToItem = Array.from(items).find(i => i.textContent!.includes('Go to'))!;
+      const goToItem = Array.from(items).find((i) => i.textContent!.includes('Go to'))!;
       goToItem.focus();
       el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       expect(opts.onGoToFrame).toHaveBeenCalled();
@@ -471,7 +488,7 @@ describe('TimelineContextMenu', () => {
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
       const items = el.querySelectorAll<HTMLElement>('[role="menuitem"]');
 
-      const copyItem = Array.from(items).find(i => i.textContent!.includes('Copy Timecode'))!;
+      const copyItem = Array.from(items).find((i) => i.textContent!.includes('Copy Timecode'))!;
       copyItem.focus();
       el.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
       expect(opts.onCopyTimecode).toHaveBeenCalled();

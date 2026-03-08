@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { DEFAULT_PERSPECTIVE_PARAMS, isPerspectiveActive } from '../../transform/PerspectiveCorrection';
@@ -151,8 +151,12 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -189,7 +193,8 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
 
       const sectionLabel = document.createElement('div');
       sectionLabel.textContent = label;
-      sectionLabel.style.cssText = 'color: var(--text-secondary); font-size: 11px; margin-bottom: 4px; font-weight: 500;';
+      sectionLabel.style.cssText =
+        'color: var(--text-secondary); font-size: 11px; margin-bottom: 4px; font-weight: 500;';
 
       const inputRow = document.createElement('div');
       inputRow.style.cssText = 'display: flex; gap: 8px;';
@@ -234,7 +239,10 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       cursor: pointer;
     `;
 
-    for (const [value, text] of [['bilinear', 'Bilinear (Fast)'], ['bicubic', 'Bicubic (Quality)']]) {
+    for (const [value, text] of [
+      ['bilinear', 'Bilinear (Fast)'],
+      ['bicubic', 'Bicubic (Quality)'],
+    ]) {
       const option = document.createElement('option');
       option.value = value!;
       option.textContent = text!;
@@ -256,7 +264,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
     testId: string,
     label: string,
     initialValue: number,
-    onChange: (val: number) => void
+    onChange: (val: number) => void,
   ): { container: HTMLElement; input: HTMLInputElement } {
     const container = document.createElement('div');
     container.style.cssText = 'flex: 1;';

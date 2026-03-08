@@ -147,7 +147,7 @@ describe('TimelineEditor', () => {
       editor = new TimelineEditor(container, session);
       editor.setTotalFrames(100);
 
-      editor.insertCut(1, 0, 1, 20);  // 20 frames
+      editor.insertCut(1, 0, 1, 20); // 20 frames
       editor.insertCut(21, 1, 1, 30); // 30 frames
 
       // Insert at beginning - should shift both existing cuts
@@ -155,9 +155,9 @@ describe('TimelineEditor', () => {
 
       const edl = editor.getEDL();
       expect(edl.length).toBe(3);
-      expect(edl[0]!.frame).toBe(1);   // New cut at frame 1
-      expect(edl[1]!.frame).toBe(11);  // Original first cut shifted by 10
-      expect(edl[2]!.frame).toBe(31);  // Original second cut shifted by 10
+      expect(edl[0]!.frame).toBe(1); // New cut at frame 1
+      expect(edl[1]!.frame).toBe(11); // Original first cut shifted by 10
+      expect(edl[2]!.frame).toBe(31); // Original second cut shifted by 10
     });
   });
 
@@ -190,8 +190,8 @@ describe('TimelineEditor', () => {
 
     it('TL-EDIT-U010: shifts subsequent cuts after deletion', () => {
       editor = new TimelineEditor(container, session);
-      editor.insertCut(1, 0, 1, 20);   // 20 frames
-      editor.insertCut(21, 1, 1, 30);  // 30 frames at frame 21
+      editor.insertCut(1, 0, 1, 20); // 20 frames
+      editor.insertCut(21, 1, 1, 30); // 30 frames at frame 21
 
       editor.deleteCut(0); // Delete first cut
 
@@ -241,8 +241,8 @@ describe('TimelineEditor', () => {
 
     it('TL-EDIT-U014: adjusts subsequent cuts when duration changes', () => {
       editor = new TimelineEditor(container, session);
-      editor.insertCut(1, 0, 1, 50);   // 50 frames
-      editor.insertCut(51, 1, 1, 30);  // 30 frames at frame 51
+      editor.insertCut(1, 0, 1, 50); // 50 frames
+      editor.insertCut(51, 1, 1, 30); // 30 frames at frame 51
 
       editor.trimCut(0, 1, 30); // Shrink to 30 frames
 
@@ -807,9 +807,7 @@ describe('TimelineEditor', () => {
       const menu = document.querySelector('.timeline-context-menu')!;
       // The separator is a div with height: 1px
       const children = Array.from(menu.children);
-      const separator = children.find(
-        (el) => (el as HTMLElement).style.height === '1px'
-      );
+      const separator = children.find((el) => (el as HTMLElement).style.height === '1px');
       expect(separator).toBeTruthy();
     });
   });

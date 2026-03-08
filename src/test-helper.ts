@@ -230,19 +230,41 @@ export interface ViewerState {
   wipePosition: number;
   cropEnabled: boolean;
   cropRegion: {
-    x: number;      // 0-1 normalized left position
-    y: number;      // 0-1 normalized top position
-    width: number;  // 0-1 normalized width
+    x: number; // 0-1 normalized left position
+    y: number; // 0-1 normalized top position
+    width: number; // 0-1 normalized width
     height: number; // 0-1 normalized height
   };
-  cropAspectRatio: string | null;  // null = free, "16:9", "4:3", "1:1", etc.
+  cropAspectRatio: string | null; // null = free, "16:9", "4:3", "1:1", etc.
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
-  stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
+  stereoMode:
+    | 'off'
+    | 'side-by-side'
+    | 'over-under'
+    | 'mirror'
+    | 'anaglyph'
+    | 'anaglyph-luminance'
+    | 'checkerboard'
+    | 'scanline';
   stereoEyeSwap: boolean;
   stereoOffset: number;
   // Per-eye transform state
-  stereoEyeTransformLeft: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
-  stereoEyeTransformRight: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformLeft: {
+    flipH: boolean;
+    flipV: boolean;
+    rotation: number;
+    scale: number;
+    translateX: number;
+    translateY: number;
+  };
+  stereoEyeTransformRight: {
+    flipH: boolean;
+    flipV: boolean;
+    rotation: number;
+    scale: number;
+    translateX: number;
+    translateY: number;
+  };
   stereoEyeTransformLinked: boolean;
   stereoAlignMode: 'off' | 'grid' | 'crosshair' | 'difference' | 'edges';
   histogramVisible: boolean;
@@ -679,8 +701,12 @@ export function exposeForTesting(app: App): void {
         stereoEyeSwap: stereoState.eyeSwap ?? false,
         stereoOffset: stereoState.offset ?? 0,
         // Per-eye transform state
-        stereoEyeTransformLeft: stereoEyeTransformState ? { ...stereoEyeTransformState.left } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
-        stereoEyeTransformRight: stereoEyeTransformState ? { ...stereoEyeTransformState.right } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformLeft: stereoEyeTransformState
+          ? { ...stereoEyeTransformState.left }
+          : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformRight: stereoEyeTransformState
+          ? { ...stereoEyeTransformState.right }
+          : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
         stereoEyeTransformLinked: stereoEyeTransformState?.linked ?? false,
         stereoAlignMode,
         histogramVisible: histogram?.isVisible?.() ?? false,
@@ -951,21 +977,28 @@ export function exposeForTesting(app: App): void {
       // Map 'none' tool to 'pan' for test interface consistency
       const tool = paintEngine?.tool ?? 'none';
       const toolMap: Record<string, 'pan' | 'pen' | 'eraser' | 'text' | 'rectangle' | 'ellipse' | 'line' | 'arrow'> = {
-        'none': 'pan',
-        'pen': 'pen',
-        'eraser': 'eraser',
-        'text': 'text',
-        'rectangle': 'rectangle',
-        'ellipse': 'ellipse',
-        'line': 'line',
-        'arrow': 'arrow',
+        none: 'pan',
+        pen: 'pen',
+        eraser: 'eraser',
+        text: 'text',
+        rectangle: 'rectangle',
+        ellipse: 'ellipse',
+        line: 'line',
+        arrow: 'arrow',
       };
       // Convert RGBA color array to hex string
       const color = paintEngine?.color ?? [1, 0, 0, 1];
-      const hexColor = '#' +
-        Math.round(color[0] * 255).toString(16).padStart(2, '0') +
-        Math.round(color[1] * 255).toString(16).padStart(2, '0') +
-        Math.round(color[2] * 255).toString(16).padStart(2, '0');
+      const hexColor =
+        '#' +
+        Math.round(color[0] * 255)
+          .toString(16)
+          .padStart(2, '0') +
+        Math.round(color[1] * 255)
+          .toString(16)
+          .padStart(2, '0') +
+        Math.round(color[2] * 255)
+          .toString(16)
+          .padStart(2, '0');
       // Get brush type - 0 is Circle, 1 is Gaussian (from BrushType enum)
       const brush = paintEngine?.brush ?? 0;
       const brushTypeMap: Record<number, 'circle' | 'gaussian'> = { 0: 'circle', 1: 'gaussian' };
@@ -1176,9 +1209,7 @@ export function exposeForTesting(app: App): void {
       const tm = getControl('transitionManager');
       const transitions = tm?.getTransitions?.() ?? [];
       return {
-        transitions: transitions.map((t: any) =>
-          t ? { type: t.type, durationFrames: t.durationFrames } : null
-        ),
+        transitions: transitions.map((t: any) => (t ? { type: t.type, durationFrames: t.durationFrames } : null)),
         totalOverlap: tm?.getTotalOverlap?.() ?? 0,
       };
     },
@@ -1255,7 +1286,7 @@ export function exposeForTesting(app: App): void {
           if (viewer?.setColorAdjustments) {
             viewer.setColorAdjustments(currentAdjustments);
           }
-        }
+        },
       );
       return true;
     },
@@ -1264,7 +1295,7 @@ export function exposeForTesting(app: App): void {
       const transformControl = getControl('transformControl');
       if (!transformControl) return;
       const viewer = appAny.viewer;
-      const previousTransform = { ...transformControl.getTransform?.() ?? {} };
+      const previousTransform = { ...(transformControl.getTransform?.() ?? {}) };
       const current = transformControl.getTransform?.() ?? {};
       const newTransform = {
         ...current,
@@ -1292,7 +1323,7 @@ export function exposeForTesting(app: App): void {
         `Rotation to ${degrees}\u00B0`,
         'transform',
         () => applyTransform(previousTransform),
-        () => applyTransform(newTransform)
+        () => applyTransform(newTransform),
       );
     },
 
@@ -1352,7 +1383,9 @@ export function exposeForTesting(app: App): void {
       },
       setViewerPan(x: number, y: number) {
         const viewer = appAny.viewer;
-        if (viewer?.setPan) { viewer.setPan(x, y); }
+        if (viewer?.setPan) {
+          viewer.setPan(x, y);
+        }
       },
 
       // ── Spotlight ──
@@ -1478,7 +1511,9 @@ export function exposeForTesting(app: App): void {
       },
       setInterpolationEnabled(enabled: boolean) {
         const session = appAny.session;
-        if (session) { session.interpolationEnabled = enabled; }
+        if (session) {
+          session.interpolationEnabled = enabled;
+        }
       },
       getInterpolationEnabled() {
         return appAny.session?.interpolationEnabled ?? false;
@@ -1576,7 +1611,9 @@ export function exposeForTesting(app: App): void {
       },
       setSessionFrame(frame: number) {
         const session = appAny.session;
-        if (session) { session.currentFrame = frame; }
+        if (session) {
+          session.currentFrame = frame;
+        }
       },
       getSessionSourceCount() {
         return appAny.session?.sources?.length ?? 0;

@@ -7,7 +7,7 @@ describe('FolderGroupNode', () => {
     frame: 1,
     width: 1920,
     height: 1080,
-    quality: 'full'
+    quality: 'full',
   };
 
   it('FGN-001: initializes with correct type and default name', () => {

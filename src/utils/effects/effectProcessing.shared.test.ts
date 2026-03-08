@@ -29,14 +29,7 @@ function createInterlacedImage(width: number, height: number): Uint8ClampedArray
 }
 
 // Helper: create solid color image
-function createSolidImage(
-  width: number,
-  height: number,
-  r: number,
-  g: number,
-  b: number,
-  a = 255,
-): Uint8ClampedArray {
+function createSolidImage(width: number, height: number, r: number, g: number, b: number, a = 255): Uint8ClampedArray {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < data.length; i += 4) {
     data[i] = r;
@@ -188,7 +181,11 @@ describe('applyFilmEmulationWorker', () => {
     const data = createSolidImage(2, 2, 128, 128, 128);
     const original = new Uint8ClampedArray(data);
     const params: WorkerFilmEmulationParams = {
-      enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 0, grainSeed: 1,
+      enabled: false,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
     expect(data).toEqual(original);
@@ -198,7 +195,11 @@ describe('applyFilmEmulationWorker', () => {
     const data = createSolidImage(2, 2, 128, 128, 128);
     const original = new Uint8ClampedArray(data);
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-portra-400', intensity: 0, grainIntensity: 0, grainSeed: 1,
+      enabled: true,
+      stock: 'kodak-portra-400',
+      intensity: 0,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
     expect(data).toEqual(original);
@@ -208,7 +209,11 @@ describe('applyFilmEmulationWorker', () => {
     const data = createSolidImage(2, 2, 128, 128, 128);
     const original = new Uint8ClampedArray(data);
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'nonexistent-stock', intensity: 100, grainIntensity: 0, grainSeed: 1,
+      enabled: true,
+      stock: 'nonexistent-stock',
+      intensity: 100,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
     expect(data).toEqual(original);
@@ -218,7 +223,11 @@ describe('applyFilmEmulationWorker', () => {
     const data = createSolidImage(2, 2, 128, 128, 128);
     const original = new Uint8ClampedArray(data);
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 0, grainSeed: 1,
+      enabled: true,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
     // At least some channel should differ (tone curve applied)
@@ -238,10 +247,18 @@ describe('applyFilmEmulationWorker', () => {
     const original = createSolidImage(2, 2, 100, 150, 200);
 
     const full: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-ektar-100', intensity: 100, grainIntensity: 0, grainSeed: 1,
+      enabled: true,
+      stock: 'kodak-ektar-100',
+      intensity: 100,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
     const half: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-ektar-100', intensity: 50, grainIntensity: 0, grainSeed: 1,
+      enabled: true,
+      stock: 'kodak-ektar-100',
+      intensity: 50,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
 
     applyFilmEmulationWorker(dataFull, 2, 2, full);
@@ -258,7 +275,11 @@ describe('applyFilmEmulationWorker', () => {
     const data2 = createSolidImage(4, 4, 128, 128, 128);
 
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 80, grainSeed: 42,
+      enabled: true,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 80,
+      grainSeed: 42,
     };
 
     applyFilmEmulationWorker(data1, 4, 4, params);
@@ -272,10 +293,18 @@ describe('applyFilmEmulationWorker', () => {
     const data2 = createSolidImage(4, 4, 128, 128, 128);
 
     const params1: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 80, grainSeed: 42,
+      enabled: true,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 80,
+      grainSeed: 42,
     };
     const params2: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 80, grainSeed: 99,
+      enabled: true,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 80,
+      grainSeed: 99,
     };
 
     applyFilmEmulationWorker(data1, 4, 4, params1);
@@ -284,7 +313,10 @@ describe('applyFilmEmulationWorker', () => {
     // At least some pixels should differ due to different grain
     let differs = false;
     for (let i = 0; i < data1.length; i++) {
-      if (data1[i] !== data2[i]) { differs = true; break; }
+      if (data1[i] !== data2[i]) {
+        differs = true;
+        break;
+      }
     }
     expect(differs).toBe(true);
   });
@@ -292,7 +324,11 @@ describe('applyFilmEmulationWorker', () => {
   it('FEW-008: alpha channel is preserved', () => {
     const data = createSolidImage(2, 2, 100, 150, 200, 128);
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 50, grainSeed: 1,
+      enabled: true,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 50,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
     for (let i = 3; i < data.length; i += 4) {
@@ -303,7 +339,11 @@ describe('applyFilmEmulationWorker', () => {
   it('FEW-009: B&W stock desaturates output', () => {
     const data = createSolidImage(2, 2, 100, 150, 200);
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'kodak-tri-x-400', intensity: 100, grainIntensity: 0, grainSeed: 1,
+      enabled: true,
+      stock: 'kodak-tri-x-400',
+      intensity: 100,
+      grainIntensity: 0,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
 
@@ -316,14 +356,22 @@ describe('applyFilmEmulationWorker', () => {
 
   it('FEW-010: all known stocks are recognized', () => {
     const stocks = [
-      'kodak-portra-400', 'kodak-ektar-100', 'fuji-pro-400h',
-      'fuji-velvia-50', 'kodak-tri-x-400', 'ilford-hp5',
+      'kodak-portra-400',
+      'kodak-ektar-100',
+      'fuji-pro-400h',
+      'fuji-velvia-50',
+      'kodak-tri-x-400',
+      'ilford-hp5',
     ];
     for (const stock of stocks) {
       const data = createSolidImage(2, 2, 128, 128, 128);
       const original = new Uint8ClampedArray(data);
       const params: WorkerFilmEmulationParams = {
-        enabled: true, stock, intensity: 100, grainIntensity: 0, grainSeed: 1,
+        enabled: true,
+        stock,
+        intensity: 100,
+        grainIntensity: 0,
+        grainSeed: 1,
       };
       applyFilmEmulationWorker(data, 2, 2, params);
       // Each stock should modify at least one pixel
@@ -342,7 +390,11 @@ describe('applyFilmEmulationWorker', () => {
     // Use extreme input values to test clamping
     const data = createSolidImage(2, 2, 255, 255, 255);
     const params: WorkerFilmEmulationParams = {
-      enabled: true, stock: 'fuji-velvia-50', intensity: 100, grainIntensity: 100, grainSeed: 1,
+      enabled: true,
+      stock: 'fuji-velvia-50',
+      intensity: 100,
+      grainIntensity: 100,
+      grainSeed: 1,
     };
     applyFilmEmulationWorker(data, 2, 2, params);
 

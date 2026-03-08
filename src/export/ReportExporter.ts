@@ -58,11 +58,13 @@ export interface ReportStatusManager {
 }
 
 export interface ReportVersionManager {
-  getGroupForSource(sourceIndex: number): {
-    shotName: string;
-    versions: { sourceIndex: number; label: string }[];
-    activeVersionIndex: number;
-  } | undefined;
+  getGroupForSource(sourceIndex: number):
+    | {
+        shotName: string;
+        versions: { sourceIndex: number; label: string }[];
+        activeVersionIndex: number;
+      }
+    | undefined;
 }
 
 export interface ReportSession {
@@ -122,7 +124,7 @@ export function buildReportRows(
     // Version label
     let versionLabel = '';
     if (versionGroup) {
-      const entry = versionGroup.versions.find(v => v.sourceIndex === i);
+      const entry = versionGroup.versions.find((v) => v.sourceIndex === i);
       versionLabel = entry?.label ?? '';
     }
 
@@ -133,7 +135,7 @@ export function buildReportRows(
     const setAt = statusEntry?.setAt ?? '';
 
     // Notes
-    const notes = noteManager.getNotesForSource(i).map(n => n.text);
+    const notes = noteManager.getNotesForSource(i).map((n) => n.text);
 
     // Frame range using editorial start frame
     const startFrame = source.startFrame ?? 1;
@@ -143,9 +145,7 @@ export function buildReportRows(
 
     // Timecodes (TC Out is exclusive: first frame after last)
     const tcIn = formatTimecode(frameToTimecode(frameIn, fps, 0));
-    const tcOut = duration > 0
-      ? formatTimecode(frameToTimecode(frameOut + 1, fps, 0))
-      : tcIn;
+    const tcOut = duration > 0 ? formatTimecode(frameToTimecode(frameOut + 1, fps, 0)) : tcIn;
 
     // Duration string
     const durationStr = duration > 0 ? `${duration} frames` : '0 frames';
@@ -249,25 +249,27 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
     .join(' &nbsp; ');
 
   // Table rows (columns match dynamic headers)
-  const tableRows = rows.map(row => {
-    const cells: string[] = [`<td>${escapeHTML(row.shotName)}</td>`];
-    if (options.includeVersions) cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
-    cells.push(`<td>${statusBadgeHTML(row.status)}</td>`);
-    if (options.includeNotes) cells.push(`<td>${row.notes.map(n => escapeHTML(n)).join('<br>')}</td>`);
-    if (options.includeTimecodes) {
+  const tableRows = rows
+    .map((row) => {
+      const cells: string[] = [`<td>${escapeHTML(row.shotName)}</td>`];
+      if (options.includeVersions) cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
+      cells.push(`<td>${statusBadgeHTML(row.status)}</td>`);
+      if (options.includeNotes) cells.push(`<td>${row.notes.map((n) => escapeHTML(n)).join('<br>')}</td>`);
+      if (options.includeTimecodes) {
+        cells.push(
+          `<td>${escapeHTML(row.frameRange)}</td>`,
+          `<td>${escapeHTML(row.timecodeIn)}</td>`,
+          `<td>${escapeHTML(row.timecodeOut)}</td>`,
+        );
+      }
       cells.push(
-        `<td>${escapeHTML(row.frameRange)}</td>`,
-        `<td>${escapeHTML(row.timecodeIn)}</td>`,
-        `<td>${escapeHTML(row.timecodeOut)}</td>`,
+        `<td>${escapeHTML(row.duration)}</td>`,
+        `<td>${escapeHTML(row.setBy)}</td>`,
+        `<td>${escapeHTML(row.setAt)}</td>`,
       );
-    }
-    cells.push(
-      `<td>${escapeHTML(row.duration)}</td>`,
-      `<td>${escapeHTML(row.setBy)}</td>`,
-      `<td>${escapeHTML(row.setAt)}</td>`,
-    );
-    return `<tr>${cells.join('')}</tr>`;
-  }).join('\n');
+      return `<tr>${cells.join('')}</tr>`;
+    })
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -307,11 +309,7 @@ ${tableRows}
 }
 
 function escapeHTML(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ---------------------------------------------------------------------------

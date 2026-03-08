@@ -64,7 +64,8 @@ export const FilterSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVFilterGaussian', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .float('sigma', settings.sigma ?? 0.03)
       .float('radius', settings.radius ?? 10.0)
       .end();
@@ -80,7 +81,8 @@ export const FilterSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVUnsharpMask', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .float('amount', settings.amount ?? 1.0)
       .float('threshold', settings.threshold ?? 5.0)
@@ -98,7 +100,8 @@ export const FilterSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVNoiseReduction', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .float('amount', settings.amount ?? 0.0)
       .float('radius', settings.radius ?? 0.0)
@@ -116,7 +119,8 @@ export const FilterSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVClarity', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .float('amount', settings.amount ?? 0.0)
       .float('radius', settings.radius ?? 20.0)

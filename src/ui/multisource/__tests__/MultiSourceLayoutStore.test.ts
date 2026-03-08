@@ -461,14 +461,8 @@ describe('MultiSourceLayoutStore', () => {
       store.setSpacing(10);
       store.saveToStorage();
 
-      expect(setItemSpy).toHaveBeenCalledWith(
-        'openrv-multi-source-layout',
-        expect.stringContaining('"mode":"row"'),
-      );
-      expect(setItemSpy).toHaveBeenCalledWith(
-        'openrv-multi-source-layout',
-        expect.stringContaining('"spacing":10'),
-      );
+      expect(setItemSpy).toHaveBeenCalledWith('openrv-multi-source-layout', expect.stringContaining('"mode":"row"'));
+      expect(setItemSpy).toHaveBeenCalledWith('openrv-multi-source-layout', expect.stringContaining('"spacing":10'));
 
       setItemSpy.mockRestore();
     });

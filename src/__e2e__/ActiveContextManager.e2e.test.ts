@@ -136,10 +136,10 @@ describe('ActiveContextManager E2E', () => {
         emissions.push({ newCtx, oldCtx });
       });
 
-      updateActiveContext(contextManager, 'view');      // global -> viewer
-      updateActiveContext(contextManager, 'annotate');   // viewer -> paint
-      updateActiveContext(contextManager, 'color');      // paint -> global
-      updateActiveContext(contextManager, 'transform');  // global -> transform
+      updateActiveContext(contextManager, 'view'); // global -> viewer
+      updateActiveContext(contextManager, 'annotate'); // viewer -> paint
+      updateActiveContext(contextManager, 'color'); // paint -> global
+      updateActiveContext(contextManager, 'transform'); // global -> transform
 
       expect(emissions).toEqual([
         { newCtx: 'viewer', oldCtx: 'global' },
@@ -192,9 +192,7 @@ describe('ActiveContextManager E2E', () => {
 
       expect(result).toBe('global');
       expect(contextManager.activeContext).toBe('global');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('popContext() called on an empty stack')
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('popContext() called on an empty stack'));
 
       warnSpy.mockRestore();
     });

@@ -8,7 +8,7 @@
  * Stripes animate diagonally for easy identification of clipping areas.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export type { ZebraState } from '../../core/types/effects';
@@ -152,8 +152,8 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
     const lowThresh = (this.state.lowThreshold / 100) * 255;
 
     // Stripe parameters
-    const stripeWidth = 6;   // Width of each stripe in pixels
-    const stripeGap = 6;     // Gap between stripes
+    const stripeWidth = 6; // Width of each stripe in pixels
+    const stripeGap = 6; // Gap between stripes
     const period = stripeWidth + stripeGap;
 
     for (let y = 0; y < height; y++) {
@@ -186,7 +186,7 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
         if (showZebra) {
           // Calculate stripe pattern with animation
           // Diagonal stripes: use (x + y) for right-leaning, (x - y) for left-leaning
-          const diag = stripeDirection > 0 ? (x + y) : (x - y);
+          const diag = stripeDirection > 0 ? x + y : x - y;
           const animatedPos = (diag + time) % period;
 
           // Check if we're in the stripe (not the gap)
@@ -279,7 +279,7 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
     min: number,
     max: number,
     unit: string,
-    onChange: (value: number) => void
+    onChange: (value: number) => void,
   ): HTMLElement {
     const row = document.createElement('div');
     row.style.cssText = `
@@ -302,7 +302,8 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
 
     const valueEl = document.createElement('span');
     valueEl.textContent = `${value}${unit}`;
-    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 11px; width: 40px; text-align: right; font-family: monospace;';
+    valueEl.style.cssText =
+      'color: var(--text-secondary); font-size: 11px; width: 40px; text-align: right; font-family: monospace;';
 
     slider.addEventListener('input', () => {
       const v = parseInt(slider.value, 10);

@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
@@ -114,13 +114,13 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
   }
 
   rotateRight(): void {
-    this.transform.rotation = ((this.transform.rotation + 90) % 360 + 360) % 360;
+    this.transform.rotation = (((this.transform.rotation + 90) % 360) + 360) % 360;
     this.updateRotationIndicator();
     this.emitChange();
   }
 
   rotateLeft(): void {
-    this.transform.rotation = ((this.transform.rotation - 90) % 360 + 360) % 360;
+    this.transform.rotation = (((this.transform.rotation - 90) % 360) + 360) % 360;
     this.updateRotationIndicator();
     this.emitChange();
   }
@@ -206,12 +206,7 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
    */
   hasScaleOrTranslate(): boolean {
     const { scale, translate } = this.transform;
-    return (
-      scale.x !== 1 ||
-      scale.y !== 1 ||
-      translate.x !== 0 ||
-      translate.y !== 0
-    );
+    return scale.x !== 1 || scale.y !== 1 || translate.x !== 0 || translate.y !== 0;
   }
 
   render(): HTMLElement {

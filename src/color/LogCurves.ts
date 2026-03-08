@@ -76,7 +76,7 @@ const ARRI_LOGC3: LogCurveParams = {
     const cut = 0.010591;
     const a = 5.555556;
     const b = 0.052272;
-    const c = 0.247190;
+    const c = 0.24719;
     const d = 0.385537;
     const e = 5.367655;
     const f = 0.092809;
@@ -93,7 +93,7 @@ const ARRI_LOGC3: LogCurveParams = {
     const cut = 0.010591;
     const a = 5.555556;
     const b = 0.052272;
-    const c = 0.247190;
+    const c = 0.24719;
     const d = 0.385537;
     const e = 5.367655;
     const f = 0.092809;
@@ -160,7 +160,7 @@ const SONY_SLOG3: LogCurveParams = {
     if (v >= cutPoint) {
       return Math.pow(10, (v * 1023 - 420) / 261.5) * (0.18 + 0.01) - 0.01;
     } else {
-      return (v * 1023 - 95) * 0.01125 / (171.2102946929 - 95);
+      return ((v * 1023 - 95) * 0.01125) / (171.2102946929 - 95);
     }
   },
   toLog: (v: number): number => {
@@ -169,7 +169,7 @@ const SONY_SLOG3: LogCurveParams = {
     if (linear >= 0.01125) {
       return (420 + Math.log10(linear / 0.19) * 261.5) / 1023;
     } else {
-      return (linear / 0.01125 * (171.2102946929 - 95) + 95) / 1023;
+      return ((linear / 0.01125) * (171.2102946929 - 95) + 95) / 1023;
     }
   },
 };
@@ -410,11 +410,6 @@ export function buildLogToLinearGLSL(curveId: LogCurveId): string {
  * @param b - Blue channel (0-1)
  * @returns Linear RGB values
  */
-export function applyLogCurve(
-  curve: LogCurveParams,
-  r: number,
-  g: number,
-  b: number
-): [number, number, number] {
+export function applyLogCurve(curve: LogCurveParams, r: number, g: number, b: number): [number, number, number] {
   return [curve.toLinear(r), curve.toLinear(g), curve.toLinear(b)];
 }

@@ -510,9 +510,7 @@ export class VirtualSliderController {
     }
 
     // Fine adjustment when Shift is held
-    const step = e.shiftKey
-      ? this.activeParam.coarseStep * FINE_ADJUSTMENT_MULTIPLIER
-      : this.activeParam.coarseStep;
+    const step = e.shiftKey ? this.activeParam.coarseStep * FINE_ADJUSTMENT_MULTIPLIER : this.activeParam.coarseStep;
 
     this.pendingDelta += dx * step;
 
@@ -545,12 +543,7 @@ export class VirtualSliderController {
 
   private updateHUD(): void {
     if (!this.activeParam) return;
-    this.hud.update(
-      this.activeParam,
-      this.currentValue,
-      this.state === VirtualSliderState.LOCKED,
-      this.numericBuffer,
-    );
+    this.hud.update(this.activeParam, this.currentValue, this.state === VirtualSliderState.LOCKED, this.numericBuffer);
   }
 
   // -----------------------------------------------------------------------

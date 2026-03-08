@@ -82,8 +82,12 @@ describe('FilmEmulationControl', () => {
       });
 
       const checkbox = document.querySelector('[data-testid="film-emulation-enabled-checkbox"]') as HTMLInputElement;
-      const stockSelect = document.querySelector('[data-testid="film-emulation-film-stock-select"]') as HTMLSelectElement;
-      const intensitySlider = document.querySelector('[data-testid="film-emulation-intensity-slider"]') as HTMLInputElement;
+      const stockSelect = document.querySelector(
+        '[data-testid="film-emulation-film-stock-select"]',
+      ) as HTMLSelectElement;
+      const intensitySlider = document.querySelector(
+        '[data-testid="film-emulation-intensity-slider"]',
+      ) as HTMLInputElement;
       const grainSlider = document.querySelector('[data-testid="film-emulation-grain-slider"]') as HTMLInputElement;
 
       expect(checkbox.checked).toBe(true);
@@ -100,7 +104,7 @@ describe('FilmEmulationControl', () => {
       });
 
       const desc = document.querySelector('[data-testid="film-emulation-stock-description"]');
-      const expectedStock = FILM_STOCKS.find(s => s.id === 'fuji-velvia-50');
+      const expectedStock = FILM_STOCKS.find((s) => s.id === 'fuji-velvia-50');
       expect(desc!.textContent).toBe(expectedStock?.description);
     });
 
@@ -112,7 +116,9 @@ describe('FilmEmulationControl', () => {
         grainIntensity: 77,
       });
 
-      const intensitySlider = document.querySelector('[data-testid="film-emulation-intensity-slider"]') as HTMLInputElement;
+      const intensitySlider = document.querySelector(
+        '[data-testid="film-emulation-intensity-slider"]',
+      ) as HTMLInputElement;
       const grainSlider = document.querySelector('[data-testid="film-emulation-grain-slider"]') as HTMLInputElement;
 
       // Value labels are siblings in the same labelRow
@@ -149,8 +155,12 @@ describe('FilmEmulationControl', () => {
       control.reset();
 
       const checkbox = document.querySelector('[data-testid="film-emulation-enabled-checkbox"]') as HTMLInputElement;
-      const stockSelect = document.querySelector('[data-testid="film-emulation-film-stock-select"]') as HTMLSelectElement;
-      const intensitySlider = document.querySelector('[data-testid="film-emulation-intensity-slider"]') as HTMLInputElement;
+      const stockSelect = document.querySelector(
+        '[data-testid="film-emulation-film-stock-select"]',
+      ) as HTMLSelectElement;
+      const intensitySlider = document.querySelector(
+        '[data-testid="film-emulation-intensity-slider"]',
+      ) as HTMLInputElement;
       const grainSlider = document.querySelector('[data-testid="film-emulation-grain-slider"]') as HTMLInputElement;
 
       expect(checkbox.checked).toBe(false);
@@ -165,7 +175,7 @@ describe('FilmEmulationControl', () => {
       control.reset();
 
       const desc = document.querySelector('[data-testid="film-emulation-stock-description"]');
-      const expectedStock = FILM_STOCKS.find(s => s.id === DEFAULT_FILM_EMULATION_PARAMS.stock);
+      const expectedStock = FILM_STOCKS.find((s) => s.id === DEFAULT_FILM_EMULATION_PARAMS.stock);
       expect(desc!.textContent).toBe(expectedStock?.description);
     });
   });
@@ -293,7 +303,7 @@ describe('FilmEmulationControl', () => {
       control.show();
       const desc = document.querySelector('[data-testid="film-emulation-stock-description"]');
       expect(desc).not.toBeNull();
-      const expectedStock = FILM_STOCKS.find(s => s.id === DEFAULT_FILM_EMULATION_PARAMS.stock);
+      const expectedStock = FILM_STOCKS.find((s) => s.id === DEFAULT_FILM_EMULATION_PARAMS.stock);
       expect(desc!.textContent).toBe(expectedStock?.description);
     });
 
@@ -322,7 +332,7 @@ describe('FilmEmulationControl', () => {
     it('FEC-033: stock select options have correct values', () => {
       control.show();
       const select = document.querySelector('[data-testid="film-emulation-film-stock-select"]') as HTMLSelectElement;
-      const values = Array.from(select.options).map(o => o.value);
+      const values = Array.from(select.options).map((o) => o.value);
       for (const stock of FILM_STOCKS) {
         expect(values).toContain(stock.id);
       }
@@ -364,7 +374,7 @@ describe('FilmEmulationControl', () => {
       select.dispatchEvent(new Event('change'));
 
       const desc = document.querySelector('[data-testid="film-emulation-stock-description"]');
-      const expectedStock = FILM_STOCKS.find(s => s.id === 'kodak-tri-x-400');
+      const expectedStock = FILM_STOCKS.find((s) => s.id === 'kodak-tri-x-400');
       expect(desc!.textContent).toBe(expectedStock?.description);
     });
 

@@ -16,26 +16,39 @@ import type { EXRDecodeOptions } from './EXRDecoder';
 import type { JP2DecodeOptions } from './JP2Decoder';
 
 /** Built-in format names (autocomplete-friendly) */
-export type BuiltinFormatName = 'exr' | 'DPX' | 'Cineon' | 'TIFF' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'avif' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf';
+export type BuiltinFormatName =
+  | 'exr'
+  | 'DPX'
+  | 'Cineon'
+  | 'TIFF'
+  | 'jpeg-gainmap'
+  | 'heic-gainmap'
+  | 'avif-gainmap'
+  | 'avif'
+  | 'raw-preview'
+  | 'hdr'
+  | 'jxl'
+  | 'jp2'
+  | 'mxf';
 /** Format name type: includes built-in names plus any string for plugin formats */
 export type FormatName = BuiltinFormatName | (string & {}) | null;
 
 /** Map from format name to its decoder-specific options type.
  *  Extensible via declaration merging for plugins. */
 export interface DecoderOptionsMap {
-  'exr': EXRDecodeOptions;
-  'DPX': DPXDecodeOptions;
-  'Cineon': CineonDecodeOptions;
-  'TIFF': Record<string, never>;
+  exr: EXRDecodeOptions;
+  DPX: DPXDecodeOptions;
+  Cineon: CineonDecodeOptions;
+  TIFF: Record<string, never>;
   'jpeg-gainmap': Record<string, never>;
   'heic-gainmap': Record<string, never>;
   'avif-gainmap': Record<string, never>;
-  'avif': Record<string, never>;
+  avif: Record<string, never>;
   'raw-preview': Record<string, never>;
-  'hdr': Record<string, never>;
-  'jxl': Record<string, never>;
-  'jp2': JP2DecodeOptions;
-  'mxf': Record<string, never>;
+  hdr: Record<string, never>;
+  jxl: Record<string, never>;
+  jp2: JP2DecodeOptions;
+  mxf: Record<string, never>;
 }
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
@@ -51,10 +64,7 @@ export interface DecodeResult {
 export interface FormatDecoder<TOptions = Record<string, unknown>> {
   formatName: string;
   canDecode(buffer: ArrayBuffer): boolean;
-  decode(
-    buffer: ArrayBuffer,
-    options?: TOptions
-  ): Promise<DecodeResult>;
+  decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>;
 }
 
 // =============================================================================
@@ -71,7 +81,7 @@ function readBoxTypeAt(view: DataView, offset: number): string {
     view.getUint8(offset),
     view.getUint8(offset + 1),
     view.getUint8(offset + 2),
-    view.getUint8(offset + 3)
+    view.getUint8(offset + 3),
   );
 }
 
@@ -80,7 +90,7 @@ function findBoxInRange(
   type: string,
   start: number,
   end: number,
-  isFullBox = false
+  isFullBox = false,
 ): { dataStart: number; dataEnd: number } | null {
   let offset = start;
   while (offset + 8 <= end) {
@@ -158,7 +168,8 @@ function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
     if (tagId === TAG_ID_BITS_PER_SAMPLE || tagId === TAG_ID_SAMPLE_FORMAT) {
       const count = view.getUint32(pos + 4, le);
       let val: number;
-      if (tagType === 3) { // SHORT
+      if (tagType === 3) {
+        // SHORT
         if (count <= 2) {
           // Value fits inline in the 4-byte value/offset field
           val = view.getUint16(pos + 8, le);
@@ -168,7 +179,8 @@ function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
           if (dataOffset + 2 > buffer.byteLength) continue;
           val = view.getUint16(dataOffset, le);
         }
-      } else if (tagType === 4) { // LONG
+      } else if (tagType === 4) {
+        // LONG
         if (count <= 1) {
           val = view.getUint32(pos + 8, le);
         } else {
@@ -192,7 +204,7 @@ function isTIFFAndFloat(buffer: ArrayBuffer): boolean {
 function isGainmapJPEG(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 4) return false;
   const view = new DataView(buffer);
-  if (view.getUint16(0) !== 0xFFD8) return false;
+  if (view.getUint16(0) !== 0xffd8) return false;
   // Scan for MPF APP2 marker
   return findMPFMarker(view) !== -1;
 }
@@ -202,22 +214,32 @@ function findMPFMarker(view: DataView): number {
   const length = view.byteLength;
 
   while (offset < length - 4) {
-    if (view.getUint8(offset) !== 0xFF) { offset++; continue; }
+    if (view.getUint8(offset) !== 0xff) {
+      offset++;
+      continue;
+    }
     const marker = view.getUint8(offset + 1);
-    if (marker === 0xDA || marker === 0xD9) break; // SOS or EOI
-    if (marker === 0xFF) { offset++; continue; } // padding
-    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
-      offset += 2; continue; // standalone markers
+    if (marker === 0xda || marker === 0xd9) break; // SOS or EOI
+    if (marker === 0xff) {
+      offset++;
+      continue;
+    } // padding
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0xd8 || marker === 0x01) {
+      offset += 2;
+      continue; // standalone markers
     }
     if (offset + 3 >= length) break;
     const segLen = view.getUint16(offset + 2);
     if (segLen < 2) break;
     // APP2 (0xE2) with 'MPF\0'
-    if (marker === 0xE2 && offset + 7 < length &&
-        view.getUint8(offset + 4) === 0x4D &&
-        view.getUint8(offset + 5) === 0x50 &&
-        view.getUint8(offset + 6) === 0x46 &&
-        view.getUint8(offset + 7) === 0x00) {
+    if (
+      marker === 0xe2 &&
+      offset + 7 < length &&
+      view.getUint8(offset + 4) === 0x4d &&
+      view.getUint8(offset + 5) === 0x50 &&
+      view.getUint8(offset + 6) === 0x46 &&
+      view.getUint8(offset + 7) === 0x00
+    ) {
       return offset;
     }
     offset += 2 + segLen;
@@ -243,7 +265,10 @@ function isGainmapAVIF(buffer: ArrayBuffer): boolean {
     for (let offset = 16; offset + 4 <= ftypSize; offset += 4) {
       const compat = readBoxTypeAt(view, offset);
       if (HEIC_BRANDS.has(compat)) return false;
-      if (AVIF_BRANDS.has(compat)) { isAVIF = true; break; }
+      if (AVIF_BRANDS.has(compat)) {
+        isAVIF = true;
+        break;
+      }
     }
   }
   if (!isAVIF) return false;
@@ -329,7 +354,7 @@ function isJXLFile(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 2) return false;
   const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 12));
   // Bare codestream magic
-  if (bytes[0] === 0xFF && bytes[1] === 0x0A) return true;
+  if (bytes[0] === 0xff && bytes[1] === 0x0a) return true;
   // ISOBMFF container: ftyp box with 'jxl ' brand
   if (buffer.byteLength >= 12) {
     const view = new DataView(buffer);
@@ -361,7 +386,10 @@ function isGainmapHEIC(buffer: ArrayBuffer): boolean {
     for (let offset = 16; offset + 4 <= ftypSize; offset += 4) {
       const compat = readBoxTypeAt(view, offset);
       if (AVIF_BRANDS.has(compat)) return false;
-      if (HEIC_BRANDS.has(compat)) { isHEIC = true; break; }
+      if (HEIC_BRANDS.has(compat)) {
+        isHEIC = true;
+        break;
+      }
     }
   }
   if (!isHEIC) return false;
@@ -405,13 +433,18 @@ function isJP2File(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 2) return false;
   const bytes = new Uint8Array(buffer);
   // Raw J2K codestream SOC marker
-  if (bytes[0] === 0xFF && bytes[1] === 0x4F) return true;
+  if (bytes[0] === 0xff && bytes[1] === 0x4f) return true;
   // JP2 box format signature
   if (buffer.byteLength >= 12) {
     const view = new DataView(buffer);
-    if (view.getUint32(0, false) === 0x0000000C &&
-        bytes[4] === 0x6A && bytes[5] === 0x50 && bytes[6] === 0x20 && bytes[7] === 0x20 &&
-        view.getUint32(8, false) === 0x0D0A870A) {
+    if (
+      view.getUint32(0, false) === 0x0000000c &&
+      bytes[4] === 0x6a &&
+      bytes[5] === 0x50 &&
+      bytes[6] === 0x20 &&
+      bytes[7] === 0x20 &&
+      view.getUint32(8, false) === 0x0d0a870a
+    ) {
       return true;
     }
   }
@@ -424,8 +457,16 @@ function isMXFFile(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 8) return false;
   const bytes = new Uint8Array(buffer, 0, 8);
   // SMPTE UL prefix for partition pack
-  return bytes[0] === 0x06 && bytes[1] === 0x0E && bytes[2] === 0x2B && bytes[3] === 0x34 &&
-         bytes[4] === 0x02 && bytes[5] === 0x05 && bytes[6] === 0x01 && bytes[7] === 0x01;
+  return (
+    bytes[0] === 0x06 &&
+    bytes[1] === 0x0e &&
+    bytes[2] === 0x2b &&
+    bytes[3] === 0x34 &&
+    bytes[4] === 0x02 &&
+    bytes[5] === 0x05 &&
+    bytes[6] === 0x01 &&
+    bytes[7] === 0x01
+  );
 }
 
 // =============================================================================
@@ -621,9 +662,15 @@ const rawPreviewDecoder: FormatDecoder = {
     const bitmap = await createImageBitmap(preview.jpegBlob);
     const width = bitmap.width;
     const height = bitmap.height;
-    const canvas = typeof OffscreenCanvas !== 'undefined'
-      ? new OffscreenCanvas(width, height)
-      : (() => { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; })();
+    const canvas =
+      typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(width, height)
+        : (() => {
+            const c = document.createElement('canvas');
+            c.width = width;
+            c.height = height;
+            return c;
+          })();
     const ctx = canvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close();
@@ -738,7 +785,7 @@ const mxfDecoder: FormatDecoder = {
   async decode(buffer: ArrayBuffer) {
     const { parseMXFHeader } = await import('./MXFDemuxer');
     const meta = parseMXFHeader(buffer);
-    const videoDesc = meta.essenceDescriptors.find(d => d.type === 'video');
+    const videoDesc = meta.essenceDescriptors.find((d) => d.type === 'video');
     return {
       // Dummy 1x1 pixel — MXF adapter is metadata-only, no pixel decoding is performed
       width: 1,
@@ -841,7 +888,7 @@ export class DecoderRegistry {
    * Get a decoder by its format name.
    */
   getDecoderByName(name: string): FormatDecoder | null {
-    return this.decoders.find(d => d.formatName === name) ?? null;
+    return this.decoders.find((d) => d.formatName === name) ?? null;
   }
 
   /**
@@ -855,7 +902,7 @@ export class DecoderRegistry {
    */
   async detectAndDecode(
     buffer: ArrayBuffer,
-    options?: Record<string, unknown>
+    options?: Record<string, unknown>,
   ): Promise<(DecodeResult & { formatName: string }) | null> {
     const decoder = this.getDecoder(buffer);
     if (!decoder) {
@@ -871,7 +918,7 @@ export class DecoderRegistry {
    */
   registerDecoder(decoder: FormatDecoder): void {
     // Avoid duplicates
-    const existing = this.decoders.findIndex(d => d.formatName === decoder.formatName);
+    const existing = this.decoders.findIndex((d) => d.formatName === decoder.formatName);
     if (existing >= 0) {
       this.decoders[existing] = decoder;
     } else {
@@ -884,7 +931,7 @@ export class DecoderRegistry {
    * Returns true if a decoder was found and removed.
    */
   unregisterDecoder(formatName: string): boolean {
-    const index = this.decoders.findIndex(d => d.formatName === formatName);
+    const index = this.decoders.findIndex((d) => d.formatName === formatName);
     if (index >= 0) {
       this.decoders.splice(index, 1);
       return true;
@@ -901,7 +948,7 @@ export async function decodeAs<F extends keyof DecoderOptionsMap>(
   registry: DecoderRegistry,
   formatName: F,
   buffer: ArrayBuffer,
-  options?: DecoderOptionsMap[F]
+  options?: DecoderOptionsMap[F],
 ): Promise<DecodeResult & { formatName: F }> {
   const decoder = registry.getDecoderByName(formatName);
   if (!decoder) {

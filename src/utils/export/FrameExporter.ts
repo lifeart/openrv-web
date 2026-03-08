@@ -7,7 +7,7 @@ export type ExportFormat = 'png' | 'jpeg' | 'webp';
 
 export interface ExportOptions {
   format: ExportFormat;
-  quality: number;  // 0-1 for JPEG/WebP
+  quality: number; // 0-1 for JPEG/WebP
   includeAnnotations: boolean;
   filename?: string;
   /**
@@ -29,10 +29,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
 /**
  * Export a canvas to a downloadable file
  */
-export function exportCanvas(
-  canvas: HTMLCanvasElement,
-  options: Partial<ExportOptions> = {}
-): void {
+export function exportCanvas(canvas: HTMLCanvasElement, options: Partial<ExportOptions> = {}): void {
   const opts = { ...DEFAULT_EXPORT_OPTIONS, ...options };
 
   // Get MIME type
@@ -44,9 +41,7 @@ export function exportCanvas(
   const mimeType = mimeTypes[opts.format];
 
   // Convert to data URL
-  const dataUrl = opts.format === 'png'
-    ? canvas.toDataURL(mimeType)
-    : canvas.toDataURL(mimeType, opts.quality);
+  const dataUrl = opts.format === 'png' ? canvas.toDataURL(mimeType) : canvas.toDataURL(mimeType, opts.quality);
 
   // Generate filename
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -63,7 +58,7 @@ export function exportMergedCanvases(
   canvases: HTMLCanvasElement[],
   width: number,
   height: number,
-  options: Partial<ExportOptions> = {}
+  options: Partial<ExportOptions> = {},
 ): void {
   // Create temporary canvas for merging, preserving color space if specified
   const mergedCanvas = document.createElement('canvas');
@@ -103,10 +98,7 @@ export function exportMergedCanvases(
 /**
  * Capture frame from video element
  */
-export function captureVideoFrame(
-  video: HTMLVideoElement,
-  options: Partial<ExportOptions> = {}
-): void {
+export function captureVideoFrame(video: HTMLVideoElement, options: Partial<ExportOptions> = {}): void {
   const canvas = document.createElement('canvas');
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -141,7 +133,7 @@ function downloadDataUrl(dataUrl: string, filename: string): void {
 export function canvasToBlob(
   canvas: HTMLCanvasElement,
   format: ExportFormat = 'png',
-  quality = 0.92
+  quality = 0.92,
 ): Promise<Blob | null> {
   return new Promise((resolve) => {
     const mimeTypes: Record<ExportFormat, string> = {
@@ -150,11 +142,7 @@ export function canvasToBlob(
       webp: 'image/webp',
     };
 
-    canvas.toBlob(
-      (blob) => resolve(blob),
-      mimeTypes[format],
-      format === 'png' ? undefined : quality
-    );
+    canvas.toBlob((blob) => resolve(blob), mimeTypes[format], format === 'png' ? undefined : quality);
   });
 }
 
@@ -166,9 +154,7 @@ export async function copyCanvasToClipboard(canvas: HTMLCanvasElement): Promise<
     const blob = await canvasToBlob(canvas, 'png');
     if (!blob) return false;
 
-    await navigator.clipboard.write([
-      new ClipboardItem({ 'image/png': blob })
-    ]);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 
     return true;
   } catch (err) {

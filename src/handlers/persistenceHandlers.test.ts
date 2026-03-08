@@ -21,18 +21,14 @@ function createMockSession(): Session {
 }
 
 function createMockOn(): {
-  on: <K extends keyof SessionEvents>(
-    session: Session,
-    event: K,
-    handler: (data: SessionEvents[K]) => void
-  ) => void;
+  on: <K extends keyof SessionEvents>(session: Session, event: K, handler: (data: SessionEvents[K]) => void) => void;
   handlers: EventHandlers;
 } {
   const handlers: EventHandlers = {};
   const on = <K extends keyof SessionEvents>(
     _session: Session,
     event: K,
-    handler: (data: SessionEvents[K]) => void
+    handler: (data: SessionEvents[K]) => void,
   ): void => {
     handlers[event] = handler as (data: any) => void;
   };
@@ -58,7 +54,15 @@ describe('bindPersistenceHandlers', () => {
     updateVectorscope = vi.fn();
     updateGamutDiagram = vi.fn();
 
-    bindPersistenceHandlers(context, session, mockOn.on, updateHistogram, updateWaveform, updateVectorscope, updateGamutDiagram);
+    bindPersistenceHandlers(
+      context,
+      session,
+      mockOn.on,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+      updateGamutDiagram,
+    );
   });
 
   it('PERH-U001: registers annotationsLoaded handler', () => {
@@ -225,8 +229,8 @@ describe('bindPersistenceHandlers', () => {
       paddingMode: 'per-side',
       padding: 0,
       paddingTop: 50,
-      paddingRight: 100,   // 2120 - 1920 - 100
-      paddingBottom: 50,   // 1180 - 1080 - 50
+      paddingRight: 100, // 2120 - 1920 - 100
+      paddingBottom: 50, // 1180 - 1080 - 50
       paddingLeft: 100,
     });
   });

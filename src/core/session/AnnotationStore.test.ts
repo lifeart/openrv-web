@@ -849,22 +849,25 @@ describe('AnnotationStore', () => {
     // Helper to create a mock PropertyDTO
     function mockProperty(val: unknown): { value(): unknown; exists(): boolean } {
       return {
-        value() { return val; },
-        exists() { return val !== undefined; },
+        value() {
+          return val;
+        },
+        exists() {
+          return val !== undefined;
+        },
       };
     }
 
     // Helper to create a mock ComponentDTO (with name, for components() iteration)
-    function mockComponentDTO(
-      compName: string,
-      props: Record<string, unknown>,
-    ) {
+    function mockComponentDTO(compName: string, props: Record<string, unknown>) {
       return {
         name: compName,
         property(name: string) {
           return mockProperty(props[name]);
         },
-        exists() { return true; },
+        exists() {
+          return true;
+        },
       };
     }
 
@@ -877,12 +880,18 @@ describe('AnnotationStore', () => {
       const namedComps = opts.namedComps ?? {};
       const nullComp = {
         name: '',
-        property(_n: string) { return mockProperty(undefined); },
-        exists() { return false; },
+        property(_n: string) {
+          return mockProperty(undefined);
+        },
+        exists() {
+          return false;
+        },
       };
       return {
         name: opts.name ?? 'paint0',
-        components() { return opts.comps; },
+        components() {
+          return opts.comps;
+        },
         component(name: string) {
           return namedComps[name] ?? nullComp;
         },
@@ -898,7 +907,7 @@ describe('AnnotationStore', () => {
           }
           return [];
         },
-      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
     // Helper to wrap a frame component so its order property has exists()
@@ -907,7 +916,12 @@ describe('AnnotationStore', () => {
         ...comp,
         property(name: string) {
           const prop = comp.property(name);
-          return { ...prop, exists() { return prop.value() !== undefined; } };
+          return {
+            ...prop,
+            exists() {
+              return prop.value() !== undefined;
+            },
+          };
         },
       };
     }
@@ -924,9 +938,11 @@ describe('AnnotationStore', () => {
         color: [1, 0, 0, 1],
         width: 0.01,
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:Alice'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:Alice'],
+        }),
+      );
 
       const paintObj = mockPaintObject({ comps: [frameComp, penComp] });
       const dto = mockDTO([paintObj]);
@@ -950,9 +966,11 @@ describe('AnnotationStore', () => {
         points: [[0.5, 0.5]],
         color: [0, 1, 0, 1],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User', 'pen:2:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User', 'pen:2:1:User'],
+        }),
+      );
 
       const paintObj = mockPaintObject({ comps: [frameComp, pen1, pen2] });
       const dto = mockDTO([paintObj]);
@@ -973,9 +991,11 @@ describe('AnnotationStore', () => {
       const textComp = mockComponentDTO('text:2:1:User', {
         text: 'hello',
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User', 'text:2:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User', 'text:2:1:User'],
+        }),
+      );
 
       const paintObj = mockPaintObject({ comps: [frameComp, penComp, textComp] });
       const dto = mockDTO([paintObj]);
@@ -991,9 +1011,11 @@ describe('AnnotationStore', () => {
       const penComp = mockComponentDTO('pen:1:1:User', {
         points: [[0, 0]],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User'],
+        }),
+      );
       const paintComp = mockComponentDTO('paint', {
         ghost: true,
         hold: false,
@@ -1020,9 +1042,11 @@ describe('AnnotationStore', () => {
       const penComp = mockComponentDTO('pen:1:1:User', {
         points: [[0, 0]],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User'],
+        }),
+      );
       const tagComp = mockComponentDTO('tag', {
         annotate: '{"ghost": true, "ghostBefore": 2}',
       });
@@ -1044,9 +1068,11 @@ describe('AnnotationStore', () => {
       const penComp = mockComponentDTO('pen:1:1:User', {
         points: [[0, 0]],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User'],
+        }),
+      );
       const annotationComp = mockComponentDTO('annotation', {
         ghost: true,
         hold: true,
@@ -1077,9 +1103,11 @@ describe('AnnotationStore', () => {
         points: [[rawX, rawY]],
         color: [1, 0, 0, 1],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User'],
+        }),
+      );
 
       const paintObj = mockPaintObject({ comps: [frameComp, penComp] });
       const dto = mockDTO([paintObj]);
@@ -1096,9 +1124,11 @@ describe('AnnotationStore', () => {
         points: [[0, 0]],
         color: [1, 0, 0, 1],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User'],
+        }),
+      );
       const paintComp = mockComponentDTO('paint', { ghost: true });
 
       const paintObj = mockPaintObject({
@@ -1120,18 +1150,22 @@ describe('AnnotationStore', () => {
         points: [[0, 0]],
         color: [1, 0, 0, 1],
       });
-      const frame1 = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:UserA'],
-      }));
+      const frame1 = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:UserA'],
+        }),
+      );
       const paintObj1 = mockPaintObject({ name: 'paint0', comps: [frame1, pen1] });
 
       const pen2 = mockComponentDTO('pen:2:5:UserB', {
         points: [[0.5, 0.5]],
         color: [0, 1, 0, 1],
       });
-      const frame5 = withExists(mockComponentDTO('frame:5', {
-        order: ['pen:2:5:UserB'],
-      }));
+      const frame5 = withExists(
+        mockComponentDTO('frame:5', {
+          order: ['pen:2:5:UserB'],
+        }),
+      );
       const paintObj2 = mockPaintObject({ name: 'paint1', comps: [frame5, pen2] });
 
       const dto = mockDTO([paintObj1, paintObj2]);
@@ -1147,9 +1181,11 @@ describe('AnnotationStore', () => {
       const pen1 = mockComponentDTO('pen:1:3:User', { points: [[0, 0]] });
       const pen2 = mockComponentDTO('pen:2:3:User', { points: [[0.1, 0.1]] });
       const pen3 = mockComponentDTO('pen:3:3:User', { points: [[0.2, 0.2]] });
-      const frameComp = withExists(mockComponentDTO('frame:3', {
-        order: ['pen:1:3:User', 'pen:2:3:User', 'pen:3:3:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:3', {
+          order: ['pen:1:3:User', 'pen:2:3:User', 'pen:3:3:User'],
+        }),
+      );
 
       const paintObj = mockPaintObject({ comps: [frameComp, pen1, pen2, pen3] });
       const dto = mockDTO([paintObj]);
@@ -1174,9 +1210,11 @@ describe('AnnotationStore', () => {
         points: [[0, 0]],
         color: [1, 0, 0, 1],
       });
-      const frameComp = withExists(mockComponentDTO('frame:1', {
-        order: ['pen:1:1:User'],
-      }));
+      const frameComp = withExists(
+        mockComponentDTO('frame:1', {
+          order: ['pen:1:1:User'],
+        }),
+      );
 
       const paintObj = mockPaintObject({ comps: [frameComp, penComp] });
       const dto = mockDTO([paintObj]);

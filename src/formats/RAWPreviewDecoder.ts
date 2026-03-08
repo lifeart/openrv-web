@@ -43,9 +43,7 @@ const JPEG_SOI = 0xffd8;
 const MAX_IFDS = 100;
 
 // RAW file extensions
-const RAW_EXTENSIONS = new Set([
-  'cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw',
-]);
+const RAW_EXTENSIONS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw']);
 
 /**
  * EXIF metadata extracted from RAW file IFD0
@@ -90,13 +88,20 @@ interface JPEGCandidate {
  */
 function getTypeSize(type: number): number {
   switch (type) {
-    case 1: return 1;  // BYTE
-    case 2: return 1;  // ASCII
-    case 3: return 2;  // SHORT
-    case 4: return 4;  // LONG
-    case 5: return 8;  // RATIONAL (two LONGs)
-    case 7: return 1;  // UNDEFINED
-    default: return 1;
+    case 1:
+      return 1; // BYTE
+    case 2:
+      return 1; // ASCII
+    case 3:
+      return 2; // SHORT
+    case 4:
+      return 4; // LONG
+    case 5:
+      return 8; // RATIONAL (two LONGs)
+    case 7:
+      return 1; // UNDEFINED
+    default:
+      return 1;
   }
 }
 
@@ -106,7 +111,7 @@ function getTypeSize(type: number): number {
 function parseIFDTags(
   view: DataView,
   ifdOffset: number,
-  le: boolean
+  le: boolean,
 ): { tags: Map<number, TIFFTag>; nextIFDOffset: number } {
   const tags = new Map<number, TIFFTag>();
 
@@ -137,9 +142,7 @@ function parseIFDTags(
 
   // Next IFD offset follows the tag entries
   const nextOffset = pos;
-  const nextIFDOffset = nextOffset + 4 <= view.byteLength
-    ? view.getUint32(nextOffset, le)
-    : 0;
+  const nextIFDOffset = nextOffset + 4 <= view.byteLength ? view.getUint32(nextOffset, le) : 0;
 
   return { tags, nextIFDOffset };
 }
@@ -152,21 +155,24 @@ function getTagValue(
   tags: Map<number, TIFFTag>,
   tagId: number,
   le: boolean,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const tag = tags.get(tagId);
   if (!tag) return defaultValue;
 
   if (tag.valueOffset + 2 > view.byteLength) return defaultValue;
 
-  if (tag.type === 3) { // SHORT
+  if (tag.type === 3) {
+    // SHORT
     return view.getUint16(tag.valueOffset, le);
   }
-  if (tag.type === 4) { // LONG
+  if (tag.type === 4) {
+    // LONG
     if (tag.valueOffset + 4 > view.byteLength) return defaultValue;
     return view.getUint32(tag.valueOffset, le);
   }
-  if (tag.type === 1) { // BYTE
+  if (tag.type === 1) {
+    // BYTE
     return view.getUint8(tag.valueOffset);
   }
   return defaultValue;
@@ -175,22 +181,20 @@ function getTagValue(
 /**
  * Read multiple LONG/SHORT values from a tag
  */
-function getTagValues(
-  view: DataView,
-  tag: TIFFTag,
-  le: boolean
-): number[] {
+function getTagValues(view: DataView, tag: TIFFTag, le: boolean): number[] {
   const values: number[] = [];
 
   // valueOffset is already resolved by parseIFDTags (inline or dereferenced)
   const dataOffset = tag.valueOffset;
 
   for (let i = 0; i < tag.count; i++) {
-    if (tag.type === 3) { // SHORT
+    if (tag.type === 3) {
+      // SHORT
       const off = dataOffset + i * 2;
       if (off + 2 > view.byteLength) break;
       values.push(view.getUint16(off, le));
-    } else if (tag.type === 4) { // LONG
+    } else if (tag.type === 4) {
+      // LONG
       const off = dataOffset + i * 4;
       if (off + 4 > view.byteLength) break;
       values.push(view.getUint32(off, le));
@@ -203,12 +207,7 @@ function getTagValues(
 /**
  * Read a RATIONAL value (two LONGs: numerator/denominator)
  */
-function getTagRational(
-  view: DataView,
-  tags: Map<number, TIFFTag>,
-  tagId: number,
-  le: boolean
-): number | null {
+function getTagRational(view: DataView, tags: Map<number, TIFFTag>, tagId: number, le: boolean): number | null {
   const tag = tags.get(tagId);
   if (!tag || tag.type !== 5) return null; // RATIONAL type = 5
 
@@ -224,11 +223,7 @@ function getTagRational(
 /**
  * Read an ASCII string from a tag
  */
-function getTagString(
-  view: DataView,
-  tags: Map<number, TIFFTag>,
-  tagId: number
-): string | null {
+function getTagString(view: DataView, tags: Map<number, TIFFTag>, tagId: number): string | null {
   const tag = tags.get(tagId);
   if (!tag || tag.type !== 2) return null; // ASCII type = 2
 
@@ -413,17 +408,11 @@ export function extractRAWPreview(buffer: ArrayBuffer): RAWPreviewResult | null 
 /**
  * Extract EXIF metadata from IFD0 tags
  */
-function extractExifFromTags(
-  view: DataView,
-  tags: Map<number, TIFFTag>,
-  le: boolean
-): RAWExifMetadata {
+function extractExifFromTags(view: DataView, tags: Map<number, TIFFTag>, le: boolean): RAWExifMetadata {
   return {
     make: getTagString(view, tags, TAG_MAKE),
     model: getTagString(view, tags, TAG_MODEL),
-    orientation: tags.has(TAG_ORIENTATION)
-      ? getTagValue(view, tags, TAG_ORIENTATION, le, 0) || null
-      : null,
+    orientation: tags.has(TAG_ORIENTATION) ? getTagValue(view, tags, TAG_ORIENTATION, le, 0) || null : null,
     dateTime: getTagString(view, tags, TAG_DATE_TIME),
     exposureTime: getTagRational(view, tags, TAG_EXPOSURE_TIME, le),
     fNumber: getTagRational(view, tags, TAG_FNUMBER, le),

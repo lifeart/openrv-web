@@ -19,13 +19,13 @@ import type { TmapMetadata } from './AVIFGainmapDecoder';
 
 export interface GainMapMetadata {
   channelCount: 1 | 3;
-  gainMapMin: number[];    // default [0]
-  gainMapMax: number[];    // required (= headroom per channel)
-  gamma: number[];         // default [1]
-  offsetSDR: number[];     // default [0] (see rationale below)
-  offsetHDR: number[];     // default [0]
-  hdrCapacityMin: number;  // default 0
-  hdrCapacityMax: number;  // required (= overall headroom)
+  gainMapMin: number[]; // default [0]
+  gainMapMax: number[]; // required (= headroom per channel)
+  gamma: number[]; // default [1]
+  offsetSDR: number[]; // default [0] (see rationale below)
+  offsetHDR: number[]; // default [0]
+  hdrCapacityMin: number; // default 0
+  hdrCapacityMax: number; // required (= overall headroom)
   baseRenditionIsHDR: boolean; // default false
 }
 
@@ -79,10 +79,7 @@ function parseXMPFloat(xmpText: string, namespace: string, field: string): numbe
 function parseXMPArray(xmpText: string, namespace: string, field: string): number[] | null {
   // Try rdf:Seq form:
   // <ns:Field><rdf:Seq><rdf:li>v1</rdf:li><rdf:li>v2</rdf:li><rdf:li>v3</rdf:li></rdf:Seq></ns:Field>
-  const seqRe = new RegExp(
-    `<${namespace}:${field}>\\s*<rdf:Seq>(.*?)</rdf:Seq>\\s*</${namespace}:${field}>`,
-    'is'
-  );
+  const seqRe = new RegExp(`<${namespace}:${field}>\\s*<rdf:Seq>(.*?)</rdf:Seq>\\s*</${namespace}:${field}>`, 'is');
   const seqMatch = xmpText.match(seqRe);
   if (seqMatch?.[1]) {
     const liValues: number[] = [];
@@ -183,9 +180,12 @@ export function parseGainMapMetadataFromXMP(xmpText: string): GainMapMetadata | 
  */
 export function tmapToGainMapMetadata(tmap: TmapMetadata): GainMapMetadata {
   const channelCount = (tmap.channelCount >= 3 ? 3 : 1) as 1 | 3;
-  const headroom = tmap.alternateHdrHeadroom > 0
-    ? tmap.alternateHdrHeadroom
-    : (tmap.gainMapMax.length > 0 && tmap.gainMapMax[0]! > 0 ? tmap.gainMapMax[0]! : 2.0);
+  const headroom =
+    tmap.alternateHdrHeadroom > 0
+      ? tmap.alternateHdrHeadroom
+      : tmap.gainMapMax.length > 0 && tmap.gainMapMax[0]! > 0
+        ? tmap.gainMapMax[0]!
+        : 2.0;
 
   return {
     channelCount,
@@ -337,11 +337,11 @@ export function reconstructHDR(
         const gainValue = gainData[srcIdx + gainChannel]!;
 
         const logRecovery = gammaLUTs[gainChannel]![gainValue]!;
-        const logBoost = meta.gainMapMin[gainChannel]! * (1.0 - logRecovery)
-          + meta.gainMapMax[gainChannel]! * logRecovery;
+        const logBoost =
+          meta.gainMapMin[gainChannel]! * (1.0 - logRecovery) + meta.gainMapMax[gainChannel]! * logRecovery;
 
-        const hdr = (sdrLinear[c]! + meta.offsetSDR[gainChannel]!) * Math.pow(2, logBoost)
-          - meta.offsetHDR[gainChannel]!;
+        const hdr =
+          (sdrLinear[c]! + meta.offsetSDR[gainChannel]!) * Math.pow(2, logBoost) - meta.offsetHDR[gainChannel]!;
 
         result[dstIdx + c] = hdr;
       }

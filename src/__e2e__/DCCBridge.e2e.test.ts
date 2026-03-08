@@ -81,7 +81,9 @@ class StubSession extends EventEmitter<StubSessionEvents> {
   currentFrame = 1;
   frameCount = 100;
   fps = 24;
-  goToFrame = vi.fn((frame: number) => { this.currentFrame = frame; });
+  goToFrame = vi.fn((frame: number) => {
+    this.currentFrame = frame;
+  });
 }
 
 class StubHeaderBar extends EventEmitter {
@@ -106,7 +108,7 @@ function createDCCBridgeWiring(dccUrl: string | null) {
 
   if (dccUrl) {
     // Capture the MockWebSocket instance when created
-    const wsImpl = vi.fn(function(url: string) {
+    const wsImpl = vi.fn(function (url: string) {
       mockWs = new MockWebSocket(url);
       return mockWs;
     }) as unknown as typeof WebSocket;
@@ -163,7 +165,6 @@ describe('DCCBridge E2E Integration', () => {
       expect(ctx.dccBridge!.state).toBe('connecting');
       ctx.dispose();
     });
-
   });
 
   // =========================================================================
@@ -236,10 +237,12 @@ describe('DCCBridge E2E Integration', () => {
 
     it('DCC-E2E-020: loadMedia emits loadURL on headerBar with the file path', () => {
       const ws = ctx.getMockWs()!;
-      ws.simulateMessage(JSON.stringify({
-        type: 'loadMedia',
-        path: '/mnt/shows/project/shot.exr',
-      }));
+      ws.simulateMessage(
+        JSON.stringify({
+          type: 'loadMedia',
+          path: '/mnt/shows/project/shot.exr',
+        }),
+      );
 
       // Verify the headerBar received the event
       const loadEvent = ctx.headerBar.emittedEvents.find((e) => e.event === 'loadURL');
@@ -264,10 +267,12 @@ describe('DCCBridge E2E Integration', () => {
       // directly to session.loadFile/loadURL instead of going through headerBar.
 
       const ws = ctx.getMockWs()!;
-      ws.simulateMessage(JSON.stringify({
-        type: 'loadMedia',
-        path: '/mnt/shows/shot.exr',
-      }));
+      ws.simulateMessage(
+        JSON.stringify({
+          type: 'loadMedia',
+          path: '/mnt/shows/shot.exr',
+        }),
+      );
 
       // The event IS emitted (EventEmitter allows any string at runtime),
       // but no handler is ever registered for 'loadURL' on HeaderBar in
@@ -371,17 +376,17 @@ describe('DCCBridge E2E Integration', () => {
       const syncColorListener = vi.fn();
       ctx.dccBridge!.on('syncColor', syncColorListener);
 
-      ctx.getMockWs()!.simulateMessage(JSON.stringify({
-        type: 'syncColor',
-        exposure: 1.5,
-        gamma: 2.2,
-      }));
+      ctx.getMockWs()!.simulateMessage(
+        JSON.stringify({
+          type: 'syncColor',
+          exposure: 1.5,
+          gamma: 2.2,
+        }),
+      );
 
       // The event IS emitted by DCCBridge and IS handled in App.ts
       expect(syncColorListener).toHaveBeenCalledTimes(1);
-      expect(syncColorListener).toHaveBeenCalledWith(
-        expect.objectContaining({ exposure: 1.5, gamma: 2.2 })
-      );
+      expect(syncColorListener).toHaveBeenCalledWith(expect.objectContaining({ exposure: 1.5, gamma: 2.2 }));
 
       ctx.dispose();
     });
@@ -428,7 +433,6 @@ describe('DCCBridge E2E Integration', () => {
       ctx.dispose();
     });
   });
-
 
   // =========================================================================
   // 8. Connection lifecycle
@@ -539,11 +543,13 @@ describe('DCCBridge E2E Integration', () => {
     });
 
     it('DCC-E2E-081: loadMedia with valid path is forwarded correctly', () => {
-      ctx.getMockWs()!.simulateMessage(JSON.stringify({
-        type: 'loadMedia',
-        path: 'https://cdn.example.com/shot.exr',
-        frame: 10,
-      }));
+      ctx.getMockWs()!.simulateMessage(
+        JSON.stringify({
+          type: 'loadMedia',
+          path: 'https://cdn.example.com/shot.exr',
+          frame: 10,
+        }),
+      );
 
       const loadEvent = ctx.headerBar.emittedEvents.find((e) => e.event === 'loadURL');
       expect(loadEvent).toBeDefined();
@@ -554,16 +560,16 @@ describe('DCCBridge E2E Integration', () => {
       const syncColorListener = vi.fn();
       ctx.dccBridge!.on('syncColor', syncColorListener);
 
-      ctx.getMockWs()!.simulateMessage(JSON.stringify({
-        type: 'syncColor',
-        exposure: 2.0,
-        // gamma, temperature, tint are all optional
-      }));
+      ctx.getMockWs()!.simulateMessage(
+        JSON.stringify({
+          type: 'syncColor',
+          exposure: 2.0,
+          // gamma, temperature, tint are all optional
+        }),
+      );
 
       expect(syncColorListener).toHaveBeenCalledTimes(1);
-      expect(syncColorListener).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'syncColor', exposure: 2.0 })
-      );
+      expect(syncColorListener).toHaveBeenCalledWith(expect.objectContaining({ type: 'syncColor', exposure: 2.0 }));
     });
 
     it('DCC-E2E-083: messageReceived fires for every valid inbound message', () => {
@@ -585,7 +591,7 @@ describe('DCCBridge E2E Integration', () => {
 
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'frameChanged', frame: 1, totalFrames: 100 })
+        expect.objectContaining({ type: 'frameChanged', frame: 1, totalFrames: 100 }),
       );
     });
   });

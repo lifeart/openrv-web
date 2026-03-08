@@ -368,9 +368,24 @@ export class WebGLScopesProcessor {
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
 
-    this.histogramShader = new ShaderProgram(gl, HISTOGRAM_BAR_VERTEX_SHADER, HISTOGRAM_BAR_FRAGMENT_SHADER, this.parallelCompileExt);
-    this.waveformShader = new ShaderProgram(gl, WAVEFORM_VERTEX_SHADER, WAVEFORM_FRAGMENT_SHADER, this.parallelCompileExt);
-    this.vectorscopeShader = new ShaderProgram(gl, VECTORSCOPE_VERTEX_SHADER, VECTORSCOPE_FRAGMENT_SHADER, this.parallelCompileExt);
+    this.histogramShader = new ShaderProgram(
+      gl,
+      HISTOGRAM_BAR_VERTEX_SHADER,
+      HISTOGRAM_BAR_FRAGMENT_SHADER,
+      this.parallelCompileExt,
+    );
+    this.waveformShader = new ShaderProgram(
+      gl,
+      WAVEFORM_VERTEX_SHADER,
+      WAVEFORM_FRAGMENT_SHADER,
+      this.parallelCompileExt,
+    );
+    this.vectorscopeShader = new ShaderProgram(
+      gl,
+      VECTORSCOPE_VERTEX_SHADER,
+      VECTORSCOPE_FRAGMENT_SHADER,
+      this.parallelCompileExt,
+    );
 
     this.imageTexture = gl.createTexture();
     this.histogramDataTexture = gl.createTexture();
@@ -599,10 +614,12 @@ export class WebGLScopesProcessor {
   }
 
   isReady(): boolean {
-    return this.isInitialized
-        && (this.histogramShader?.isReady() ?? false)
-        && (this.waveformShader?.isReady() ?? false)
-        && (this.vectorscopeShader?.isReady() ?? false);
+    return (
+      this.isInitialized &&
+      (this.histogramShader?.isReady() ?? false) &&
+      (this.waveformShader?.isReady() ?? false) &&
+      (this.vectorscopeShader?.isReady() ?? false)
+    );
   }
 
   setImage(imageData: ImageData): void {
@@ -682,11 +699,7 @@ export class WebGLScopesProcessor {
     // Upload float data as RGBA16F texture
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D, 0, gl.RGBA16F,
-      uploadWidth, uploadHeight, 0,
-      gl.RGBA, gl.FLOAT, uploadData,
-    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, uploadWidth, uploadHeight, 0, gl.RGBA, gl.FLOAT, uploadData);
 
     if (!this.textureConfigured) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -719,7 +732,10 @@ export class WebGLScopesProcessor {
         const srcX0 = Math.floor(dx * scaleX);
         const srcX1 = Math.min(Math.floor((dx + 1) * scaleX), srcWidth);
 
-        let r = 0, g = 0, b = 0, a = 0;
+        let r = 0,
+          g = 0,
+          b = 0,
+          a = 0;
         let count = 0;
         for (let sy = srcY0; sy < srcY1; sy++) {
           for (let sx = srcX0; sx < srcX1; sx++) {
@@ -762,7 +778,7 @@ export class WebGLScopesProcessor {
       maxValue: number;
     },
     mode: 'rgb' | 'luminance' | 'separate' = 'rgb',
-    logScale: boolean = false
+    logScale: boolean = false,
   ): void {
     if (!this.isInitialized || !this.histogramShader?.isReady() || !this.histogramDataTexture) return;
     this.resolveHistogramUniforms();
@@ -836,11 +852,7 @@ export class WebGLScopesProcessor {
     outputCtx.restore();
   }
 
-  renderWaveform(
-    outputCanvas: HTMLCanvasElement,
-    mode: WaveformMode = 'luma',
-    options?: WaveformRenderOptions,
-  ): void {
+  renderWaveform(outputCanvas: HTMLCanvasElement, mode: WaveformMode = 'luma', options?: WaveformRenderOptions): void {
     if (!this.isInitialized || !this.waveformShader?.isReady() || this.vertexCount === 0) return;
     this.resolveWaveformUniforms();
 
@@ -861,9 +873,10 @@ export class WebGLScopesProcessor {
     gl.uniform1i(this.waveformUniforms.u_image!, 0);
     gl.uniform2f(this.waveformUniforms.u_imageSize!, this.analysisWidth, this.analysisHeight);
     const requestedIntensity = options?.intensity;
-    const waveformOpacity = typeof requestedIntensity === 'number' && Number.isFinite(requestedIntensity)
-      ? Math.max(0, Math.min(1, requestedIntensity))
-      : 0.08;
+    const waveformOpacity =
+      typeof requestedIntensity === 'number' && Number.isFinite(requestedIntensity)
+        ? Math.max(0, Math.min(1, requestedIntensity))
+        : 0.08;
     // Opacity tuned to match CPU rendering brightness
     gl.uniform1f(this.waveformUniforms.u_opacity!, mode === 'rgb' ? waveformOpacity : 0.08);
     // HDR: scale Y-axis to [0, maxValue] instead of [0, 1]
@@ -904,10 +917,7 @@ export class WebGLScopesProcessor {
     outputCtx.restore();
   }
 
-  renderVectorscope(
-    outputCanvas: HTMLCanvasElement,
-    zoom: number = 1
-  ): void {
+  renderVectorscope(outputCanvas: HTMLCanvasElement, zoom: number = 1): void {
     if (!this.isInitialized || !this.vectorscopeShader?.isReady() || this.vertexCount === 0) return;
     this.resolveVectorscopeUniforms();
 

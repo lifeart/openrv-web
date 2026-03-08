@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ChannelSelect,
-  ChannelMode,
+  type ChannelMode,
   CHANNEL_LABELS,
   CHANNEL_SHORTCUTS,
   LUMINANCE_COEFFICIENTS,
@@ -343,7 +343,11 @@ describe('LUMINANCE_COEFFICIENTS', () => {
 });
 
 describe('applyChannelIsolation', () => {
-  function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+  function createTestImageData(
+    width: number,
+    height: number,
+    fill?: { r: number; g: number; b: number; a: number },
+  ): ImageData {
     const data = new Uint8ClampedArray(width * height * 4);
     if (fill) {
       for (let i = 0; i < data.length; i += 4) {
@@ -458,10 +462,22 @@ describe('applyChannelIsolation', () => {
   it('CH-033: processes multiple pixels correctly', () => {
     const imageData = createTestImageData(2, 2);
     // Set different values for each pixel
-    imageData.data[0] = 100; imageData.data[1] = 0; imageData.data[2] = 0; imageData.data[3] = 255;
-    imageData.data[4] = 0; imageData.data[5] = 150; imageData.data[6] = 0; imageData.data[7] = 255;
-    imageData.data[8] = 0; imageData.data[9] = 0; imageData.data[10] = 200; imageData.data[11] = 255;
-    imageData.data[12] = 50; imageData.data[13] = 100; imageData.data[14] = 150; imageData.data[15] = 255;
+    imageData.data[0] = 100;
+    imageData.data[1] = 0;
+    imageData.data[2] = 0;
+    imageData.data[3] = 255;
+    imageData.data[4] = 0;
+    imageData.data[5] = 150;
+    imageData.data[6] = 0;
+    imageData.data[7] = 255;
+    imageData.data[8] = 0;
+    imageData.data[9] = 0;
+    imageData.data[10] = 200;
+    imageData.data[11] = 255;
+    imageData.data[12] = 50;
+    imageData.data[13] = 100;
+    imageData.data[14] = 150;
+    imageData.data[15] = 255;
 
     applyChannelIsolation(imageData, 'red');
 
@@ -487,7 +503,10 @@ describe('applyChannelIsolation', () => {
 describe('getChannelValue', () => {
   function createTestImageData(): ImageData {
     const data = new Uint8ClampedArray([
-      100, 150, 200, 128 // Single pixel: R=100, G=150, B=200, A=128
+      100,
+      150,
+      200,
+      128, // Single pixel: R=100, G=150, B=200, A=128
     ]);
     return new ImageData(data, 1, 1);
   }

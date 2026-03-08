@@ -5,7 +5,7 @@
  * and allows jumping to any previous state.
  */
 
-import { EventEmitter, EventMap } from './EventEmitter';
+import { EventEmitter, type EventMap } from './EventEmitter';
 import { getIconSvg } from '../ui/components/shared/Icons';
 import type { ManagerBase } from '../core/ManagerBase';
 
@@ -52,7 +52,7 @@ export class HistoryManager extends EventEmitter<HistoryEvents> implements Manag
     description: string,
     category: HistoryEntry['category'],
     restore: () => void,
-    redo?: () => void
+    redo?: () => void,
   ): HistoryEntry {
     // If we're not at the end of history, remove future entries
     if (this.currentIndex < this.entries.length - 1) {
@@ -220,12 +220,18 @@ export class HistoryManager extends EventEmitter<HistoryEvents> implements Manag
    */
   static getCategoryIcon(category: HistoryEntry['category']): string {
     switch (category) {
-      case 'color': return getIconSvg('palette', 'sm');
-      case 'paint': return getIconSvg('pencil', 'sm');
-      case 'transform': return getIconSvg('move', 'sm');
-      case 'view': return getIconSvg('eye', 'sm');
-      case 'session': return getIconSvg('folder-open', 'sm');
-      default: return getIconSvg('info', 'sm');
+      case 'color':
+        return getIconSvg('palette', 'sm');
+      case 'paint':
+        return getIconSvg('pencil', 'sm');
+      case 'transform':
+        return getIconSvg('move', 'sm');
+      case 'view':
+        return getIconSvg('eye', 'sm');
+      case 'session':
+        return getIconSvg('folder-open', 'sm');
+      default:
+        return getIconSvg('info', 'sm');
     }
   }
 

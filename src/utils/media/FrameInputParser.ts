@@ -28,7 +28,7 @@ const DROP_FRAME_RATES = [29.97, 59.94];
 const DROP_FRAME_EPSILON = 0.01;
 
 function isDropFrameRate(fps: number): boolean {
-  return DROP_FRAME_RATES.some(df => Math.abs(fps - df) < DROP_FRAME_EPSILON);
+  return DROP_FRAME_RATES.some((df) => Math.abs(fps - df) < DROP_FRAME_EPSILON);
 }
 
 /**
@@ -63,10 +63,7 @@ function timecodeToFrame(
 
     return frameNumber;
   } else {
-    return hours * 3600 * roundedFps +
-      minutes * 60 * roundedFps +
-      seconds * roundedFps +
-      frames;
+    return hours * 3600 * roundedFps + minutes * 60 * roundedFps + seconds * roundedFps + frames;
   }
 }
 
@@ -262,9 +259,13 @@ export function parseFrameInput(
  */
 export function getFormatLabel(format: FrameInputFormat): string {
   switch (format) {
-    case 'frame': return 'Frame number';
-    case 'timecode': return 'SMPTE Timecode';
-    case 'seconds': return 'Seconds';
-    case 'relative': return 'Relative (+/-)';
+    case 'frame':
+      return 'Frame number';
+    case 'timecode':
+      return 'SMPTE Timecode';
+    case 'seconds':
+      return 'Seconds';
+    case 'relative':
+      return 'Relative (+/-)';
   }
 }

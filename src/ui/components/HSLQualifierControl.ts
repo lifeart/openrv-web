@@ -10,7 +10,7 @@
  * - Eyedropper for color picking
  */
 
-import { HSLQualifier, HSLQualifierState } from './HSLQualifier';
+import { type HSLQualifier, type HSLQualifierState } from './HSLQualifier';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
@@ -108,15 +108,19 @@ export class HSLQualifierControl {
     this.createDropdownContent();
 
     // Listen for state changes
-    this.subs.add(this.hslQualifier.on('stateChanged', () => {
-      this.updateButtonState();
-      this.updateSliders();
-    }));
+    this.subs.add(
+      this.hslQualifier.on('stateChanged', () => {
+        this.updateButtonState();
+        this.updateSliders();
+      }),
+    );
 
     // Listen for theme changes - CSS variables handle most updates automatically
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      this.updateButtonState();
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        this.updateButtonState();
+      }),
+    );
   }
 
   private createDropdownContent(): void {
@@ -165,9 +169,11 @@ export class HSLQualifierControl {
       this.hslQualifier.toggle();
     });
 
-    this.subs.add(this.hslQualifier.on('stateChanged', (state) => {
-      enableCheckbox.checked = state.enabled;
-    }));
+    this.subs.add(
+      this.hslQualifier.on('stateChanged', (state) => {
+        enableCheckbox.checked = state.enabled;
+      }),
+    );
 
     const title = document.createElement('span');
     title.textContent = 'HSL Qualifier';
@@ -190,8 +196,12 @@ export class HSLQualifierControl {
       cursor: pointer;
     `;
     resetBtn.addEventListener('click', () => this.hslQualifier.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--border-primary)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--bg-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--border-primary)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--bg-secondary)';
+    });
 
     header.appendChild(leftSide);
     header.appendChild(resetBtn);
@@ -265,7 +275,14 @@ export class HSLQualifierControl {
     return section;
   }
 
-  private createRangeControl(label: string, key: 'hue' | 'saturation' | 'luminance', min: number, max: number, step: number, isHue: boolean): HTMLElement {
+  private createRangeControl(
+    label: string,
+    key: 'hue' | 'saturation' | 'luminance',
+    min: number,
+    max: number,
+    step: number,
+    isHue: boolean,
+  ): HTMLElement {
     const control = document.createElement('div');
     control.style.cssText = 'margin-bottom: 8px;';
 
@@ -452,15 +469,36 @@ export class HSLQualifierControl {
     section.appendChild(sectionTitle);
 
     // Hue shift
-    const hueShift = this.createCorrectionSlider('Hue Shift', 'hueShift', -180, 180, 1, (v) => `${v > 0 ? '+' : ''}${v}°`);
+    const hueShift = this.createCorrectionSlider(
+      'Hue Shift',
+      'hueShift',
+      -180,
+      180,
+      1,
+      (v) => `${v > 0 ? '+' : ''}${v}°`,
+    );
     section.appendChild(hueShift);
 
     // Saturation scale
-    const satScale = this.createCorrectionSlider('Saturation', 'saturationScale', 0, 2, 0.01, (v) => `${Math.round(v * 100)}%`);
+    const satScale = this.createCorrectionSlider(
+      'Saturation',
+      'saturationScale',
+      0,
+      2,
+      0.01,
+      (v) => `${Math.round(v * 100)}%`,
+    );
     section.appendChild(satScale);
 
     // Luminance scale
-    const lumScale = this.createCorrectionSlider('Luminance', 'luminanceScale', 0, 2, 0.01, (v) => `${Math.round(v * 100)}%`);
+    const lumScale = this.createCorrectionSlider(
+      'Luminance',
+      'luminanceScale',
+      0,
+      2,
+      0.01,
+      (v) => `${Math.round(v * 100)}%`,
+    );
     section.appendChild(lumScale);
 
     return section;
@@ -472,7 +510,7 @@ export class HSLQualifierControl {
     min: number,
     max: number,
     step: number,
-    format: (v: number) => string
+    format: (v: number) => string,
   ): HTMLElement {
     const row = document.createElement('div');
     row.style.cssText = `
@@ -502,7 +540,8 @@ export class HSLQualifierControl {
     const valueEl = document.createElement('span');
     valueEl.className = `correction-${key}-value`;
     valueEl.textContent = format(value);
-    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 10px; font-family: monospace; width: 45px; text-align: right;';
+    valueEl.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; font-family: monospace; width: 45px; text-align: right;';
 
     slider.addEventListener('input', () => {
       const val = parseFloat(slider.value);
@@ -543,9 +582,11 @@ export class HSLQualifierControl {
       this.hslQualifier.setInvert(invertCheckbox.checked);
     });
 
-    this.subs.add(this.hslQualifier.on('stateChanged', (state) => {
-      invertCheckbox.checked = state.invert;
-    }));
+    this.subs.add(
+      this.hslQualifier.on('stateChanged', (state) => {
+        invertCheckbox.checked = state.invert;
+      }),
+    );
 
     const invertLabel = document.createElement('span');
     invertLabel.textContent = 'Invert';
@@ -573,9 +614,11 @@ export class HSLQualifierControl {
       this.hslQualifier.setMattePreview(matteCheckbox.checked);
     });
 
-    this.subs.add(this.hslQualifier.on('stateChanged', (state) => {
-      matteCheckbox.checked = state.mattePreview;
-    }));
+    this.subs.add(
+      this.hslQualifier.on('stateChanged', (state) => {
+        matteCheckbox.checked = state.mattePreview;
+      }),
+    );
 
     const matteLabel = document.createElement('span');
     matteLabel.textContent = 'Matte Preview';
@@ -651,15 +694,21 @@ export class HSLQualifierControl {
     if (hueShiftSlider) hueShiftSlider.value = String(state.correction.hueShift);
 
     const hueShiftValue = this.dropdown.querySelector('.correction-hueShift-value');
-    if (hueShiftValue) hueShiftValue.textContent = `${state.correction.hueShift > 0 ? '+' : ''}${state.correction.hueShift}°`;
+    if (hueShiftValue) {
+      hueShiftValue.textContent = `${state.correction.hueShift > 0 ? '+' : ''}${state.correction.hueShift}°`;
+    }
 
-    const satScaleSlider = this.dropdown.querySelector('[data-testid="hsl-correction-saturationScale"]') as HTMLInputElement;
+    const satScaleSlider = this.dropdown.querySelector(
+      '[data-testid="hsl-correction-saturationScale"]',
+    ) as HTMLInputElement;
     if (satScaleSlider) satScaleSlider.value = String(state.correction.saturationScale);
 
     const satScaleValue = this.dropdown.querySelector('.correction-saturationScale-value');
     if (satScaleValue) satScaleValue.textContent = `${Math.round(state.correction.saturationScale * 100)}%`;
 
-    const lumScaleSlider = this.dropdown.querySelector('[data-testid="hsl-correction-luminanceScale"]') as HTMLInputElement;
+    const lumScaleSlider = this.dropdown.querySelector(
+      '[data-testid="hsl-correction-luminanceScale"]',
+    ) as HTMLInputElement;
     if (lumScaleSlider) lumScaleSlider.value = String(state.correction.luminanceScale);
 
     const lumScaleValue = this.dropdown.querySelector('.correction-luminanceScale-value');

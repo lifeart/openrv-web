@@ -50,11 +50,7 @@ export function isStabilizationActive(params: StabilizationParams): boolean {
 /**
  * Convert RGBA ImageData to grayscale luminance array using Rec.709 coefficients.
  */
-export function toGrayscale(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-): Float32Array {
+export function toGrayscale(data: Uint8ClampedArray, width: number, height: number): Float32Array {
   const gray = new Float32Array(width * height);
   for (let i = 0; i < width * height; i++) {
     const idx = i * 4;
@@ -90,9 +86,7 @@ export function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]!
-    : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 /**
@@ -272,10 +266,7 @@ export function computeMotionVector(
  * @param vectors - Raw per-frame motion vectors
  * @param strength - 0–100 (0 = no smoothing / returns zero corrections, 100 = maximum smoothing)
  */
-export function smoothMotionPath(
-  vectors: MotionVector[],
-  strength: number,
-): MotionVector[] {
+export function smoothMotionPath(vectors: MotionVector[], strength: number): MotionVector[] {
   if (vectors.length === 0) return [];
   if (vectors.length === 1) return [{ dx: 0, dy: 0, confidence: vectors[0]!.confidence }];
   if (strength <= 0) return vectors.map((v) => ({ dx: 0, dy: 0, confidence: v.confidence }));
@@ -319,10 +310,7 @@ export function smoothMotionPath(
 /**
  * Apply stabilization to ImageData in-place: shift pixels and crop borders.
  */
-export function applyStabilization(
-  imageData: ImageData,
-  params: ApplyStabilizationParams,
-): void {
+export function applyStabilization(imageData: ImageData, params: ApplyStabilizationParams): void {
   const { data, width, height } = imageData;
   const { dx, dy, cropAmount } = params;
 
@@ -364,10 +352,7 @@ export function applyStabilization(
             const v11 = data[i11 + c]!;
 
             temp[dstIdx + c] = Math.round(
-              v00 * (1 - fx) * (1 - fy) +
-                v10 * fx * (1 - fy) +
-                v01 * (1 - fx) * fy +
-                v11 * fx * fy,
+              v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy,
             );
           }
         }
@@ -386,20 +371,10 @@ export function applyStabilization(
 /**
  * Black out pixels within cropAmount of each edge.
  */
-function applyCrop(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  cropAmount: number,
-): void {
+function applyCrop(data: Uint8ClampedArray, width: number, height: number, cropAmount: number): void {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (
-        x < cropAmount ||
-        x >= width - cropAmount ||
-        y < cropAmount ||
-        y >= height - cropAmount
-      ) {
+      if (x < cropAmount || x >= width - cropAmount || y < cropAmount || y >= height - cropAmount) {
         const idx = (y * width + x) * 4;
         data[idx] = 0;
         data[idx + 1] = 0;

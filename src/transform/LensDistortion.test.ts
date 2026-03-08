@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  LensDistortionParams,
+  type LensDistortionParams,
   DEFAULT_LENS_PARAMS,
   isDefaultLensParams,
   applyLensDistortion,
@@ -68,7 +68,7 @@ describe('LensDistortion', () => {
       const imageData = createTestImageData(20, 20, { r: 255, g: 0, b: 0, a: 255 });
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: -0.3,  // Barrel distortion
+        k1: -0.3, // Barrel distortion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -86,7 +86,7 @@ describe('LensDistortion', () => {
       const imageData = createTestImageData(20, 20, { r: 0, g: 255, b: 0, a: 255 });
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: 0.3,  // Pincushion distortion
+        k1: 0.3, // Pincushion distortion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -101,7 +101,7 @@ describe('LensDistortion', () => {
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
         k1: -0.2,
-        centerX: 0.2,  // Offset center to the right
+        centerX: 0.2, // Offset center to the right
         centerY: -0.1, // Offset center up
       };
 
@@ -116,7 +116,7 @@ describe('LensDistortion', () => {
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
         k1: -0.2,
-        scale: 1.2,  // Zoom out to show more after distortion
+        scale: 1.2, // Zoom out to show more after distortion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -128,7 +128,7 @@ describe('LensDistortion', () => {
       const imageData = createTestImageData(20, 20, { r: 255, g: 255, b: 255, a: 255 });
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: -0.8,  // Strong barrel distortion
+        k1: -0.8, // Strong barrel distortion
         scale: 0.5, // Will cause sampling outside bounds
       };
 
@@ -147,7 +147,7 @@ describe('LensDistortion', () => {
       for (let y = 0; y < 20; y++) {
         for (let x = 0; x < 20; x++) {
           const idx = (y * 20 + x) * 4;
-          imageData.data[idx] = Math.round((x / 19) * 255);     // R gradient
+          imageData.data[idx] = Math.round((x / 19) * 255); // R gradient
           imageData.data[idx + 1] = Math.round((y / 19) * 255); // G gradient
           imageData.data[idx + 2] = 128;
           imageData.data[idx + 3] = 255;
@@ -186,7 +186,7 @@ describe('LensDistortion', () => {
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
         k1: -0.1,
-        k2: 0.05,  // Secondary distortion
+        k2: 0.05, // Secondary distortion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -257,10 +257,10 @@ describe('LensDistortion', () => {
       // The grid should have been transformed
       // Check that we have both horizontal and vertical segments
       const horizontalLines = grid.lines.filter(
-        (line: { x1: number; y1: number; x2: number; y2: number }) => Math.abs(line.x1 - line.x2) > 1
+        (line: { x1: number; y1: number; x2: number; y2: number }) => Math.abs(line.x1 - line.x2) > 1,
       );
       const verticalLines = grid.lines.filter(
-        (line: { x1: number; y1: number; x2: number; y2: number }) => Math.abs(line.y1 - line.y2) > 1
+        (line: { x1: number; y1: number; x2: number; y2: number }) => Math.abs(line.y1 - line.y2) > 1,
       );
 
       expect(horizontalLines.length).toBeGreaterThan(0);
@@ -301,7 +301,7 @@ describe('LensDistortion', () => {
 
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: 0.8,  // Strong pincushion
+        k1: 0.8, // Strong pincushion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -339,7 +339,7 @@ describe('LensDistortion', () => {
 
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: -0.5,  // Barrel distortion
+        k1: -0.5, // Barrel distortion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -402,7 +402,7 @@ describe('LensDistortion', () => {
 
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: -0.3,  // Barrel distortion
+        k1: -0.3, // Barrel distortion
       };
 
       const result = applyLensDistortion(imageData, params);
@@ -473,10 +473,24 @@ describe('LensDistortion', () => {
     it('3DE4-004: Center point (0,0) stays at (0,0) regardless of coefficients', () => {
       const params: LensDistortionParams = {
         ...base3DE4Params,
-        cx02: 0.5, cx22: 0.3, cx04: 0.1, cx24: 0.2, cx44: 0.15,
-        cx06: 0.05, cx26: 0.02, cx46: 0.01, cx66: 0.03,
-        cy02: 0.4, cy22: 0.2, cy04: 0.15, cy24: 0.25, cy44: 0.1,
-        cy06: 0.08, cy26: 0.03, cy46: 0.02, cy66: 0.04,
+        cx02: 0.5,
+        cx22: 0.3,
+        cx04: 0.1,
+        cx24: 0.2,
+        cx44: 0.15,
+        cx06: 0.05,
+        cx26: 0.02,
+        cx46: 0.01,
+        cx66: 0.03,
+        cy02: 0.4,
+        cy22: 0.2,
+        cy04: 0.15,
+        cy24: 0.25,
+        cy44: 0.1,
+        cy06: 0.08,
+        cy26: 0.03,
+        cy46: 0.02,
+        cy66: 0.04,
       };
 
       const result = apply3DE4AnamorphicDeg6(0, 0, params);
@@ -558,8 +572,8 @@ describe('LensDistortion', () => {
       // Use different cx and cy coefficients to verify anamorphic behavior
       const params: LensDistortionParams = {
         ...base3DE4Params,
-        cx02: 0.2,  // x distortion only
-        cy02: 0.0,  // no y distortion
+        cx02: 0.2, // x distortion only
+        cy02: 0.0, // no y distortion
       };
 
       const result = apply3DE4AnamorphicDeg6(0.5, 0.5, params);

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-  OCIOState,
+  type OCIOState,
   DEFAULT_OCIO_STATE,
   getBuiltinConfig,
   getAvailableConfigs,
@@ -16,8 +16,8 @@ import {
   isDefaultOCIOState,
   registerCustomConfig,
   removeCustomConfig,
+  type OCIOConfigDefinition,
 } from './OCIOConfig';
-import type { OCIOConfigDefinition } from './OCIOConfig';
 
 describe('OCIOConfig', () => {
   describe('DEFAULT_OCIO_STATE', () => {
@@ -298,9 +298,7 @@ describe('OCIOConfig', () => {
       // Display spaces should not be working spaces (except Linear sRGB which is both)
       // sRGB and Rec.709 are display spaces with sdr-video encoding
       const config = getBuiltinConfig('aces_1.2');
-      const displayOnlySpaces = config.colorSpaces.filter(
-        (cs) => cs.isDisplaySpace && !cs.isWorkingSpace
-      );
+      const displayOnlySpaces = config.colorSpaces.filter((cs) => cs.isDisplaySpace && !cs.isWorkingSpace);
 
       for (const displaySpace of displayOnlySpaces) {
         expect(spaces).not.toContain(displaySpace.name);
@@ -399,9 +397,7 @@ describe('OCIOConfig', () => {
   describe('Edge cases: encoding types', () => {
     it('OCIO-047: scene-linear spaces have no gamma', () => {
       const config = getBuiltinConfig('aces_1.2');
-      const linearSpaces = config.colorSpaces.filter(
-        (cs) => cs.encoding === 'scene-linear'
-      );
+      const linearSpaces = config.colorSpaces.filter((cs) => cs.encoding === 'scene-linear');
 
       expect(linearSpaces.length).toBeGreaterThan(0);
       // All linear spaces should be working spaces
@@ -412,9 +408,7 @@ describe('OCIOConfig', () => {
 
     it('OCIO-048: data encoding space is only Raw', () => {
       const config = getBuiltinConfig('aces_1.2');
-      const dataSpaces = config.colorSpaces.filter(
-        (cs) => cs.encoding === 'data'
-      );
+      const dataSpaces = config.colorSpaces.filter((cs) => cs.encoding === 'data');
 
       expect(dataSpaces.length).toBe(1);
       expect(dataSpaces[0]!.name).toBe('Raw');
@@ -446,12 +440,8 @@ describe('OCIOConfig', () => {
           isDisplaySpace: true,
         },
       ],
-      displays: [
-        { name: 'Custom Display', views: ['Standard'] },
-      ],
-      looks: [
-        { name: 'None', description: 'No look' },
-      ],
+      displays: [{ name: 'Custom Display', views: ['Standard'] }],
+      looks: [{ name: 'None', description: 'No look' }],
       roles: {
         default: 'Custom Display',
         reference: 'Linear Custom',

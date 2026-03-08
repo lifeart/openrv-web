@@ -42,7 +42,7 @@ export interface InternalShaderState {
   cdlOffset: [number, number, number];
   cdlPower: [number, number, number];
   cdlSaturation: number;
-  cdlColorspace: number;  // 0=rec709/direct, 1=ACEScct
+  cdlColorspace: number; // 0=rec709/direct, 1=ACEScct
 
   // Curves
   curvesEnabled: boolean;
@@ -153,7 +153,7 @@ export interface InternalShaderState {
 
   // Deinterlace
   deinterlaceEnabled: boolean;
-  deinterlaceMethod: number;    // 0=bob, 1=weave, 2=blend
+  deinterlaceMethod: number; // 0=bob, 1=weave, 2=blend
   deinterlaceFieldOrder: number; // 0=tff, 1=bff
 
   // Film Emulation
@@ -171,7 +171,7 @@ export interface InternalShaderState {
   perspectiveQuality: number;
 
   // Linearize (RVLinearize log-to-linear conversion)
-  linearizeLogType: number;  // 0=none, 1=cineon, 2=viper, 3=logc3
+  linearizeLogType: number; // 0=none, 1=cineon, 2=viper, 3=logc3
   linearizeSRGB2linear: boolean;
   linearizeRec709ToLinear: boolean;
   linearizeFileGamma: number;
@@ -179,30 +179,30 @@ export interface InternalShaderState {
 
   // Inline 1D LUT (from RVColor luminanceLUT)
   inlineLUTEnabled: boolean;
-  inlineLUTChannels: number;   // 1=luminance, 3=per-channel RGB
-  inlineLUTSize: number;       // number of entries per channel
+  inlineLUTChannels: number; // 1=luminance, 3=per-channel RGB
+  inlineLUTSize: number; // number of entries per channel
   inlineLUTData: Float32Array | null;
   inlineLUTDirty: boolean;
 
   // Out-of-range visualization mode
-  outOfRange: number;  // 0=off, 1=clamp-to-black, 2=highlight
+  outOfRange: number; // 0=off, 1=clamp-to-black, 2=highlight
 
   // Spherical (equirectangular 360) projection
   sphericalEnabled: boolean;
-  sphericalFov: number;     // horizontal FOV in radians
-  sphericalAspect: number;  // canvas width / height
-  sphericalYaw: number;     // yaw in radians
-  sphericalPitch: number;   // pitch in radians
+  sphericalFov: number; // horizontal FOV in radians
+  sphericalAspect: number; // canvas width / height
+  sphericalYaw: number; // yaw in radians
+  sphericalPitch: number; // pitch in radians
 
   // Channel swizzle (RVChannelMap remapping)
   channelSwizzle: [number, number, number, number]; // default [0,1,2,3] = identity
 
   // Premultiply/unpremultiply alpha mode
-  premultMode: number;  // 0=off, 1=premultiply, 2=unpremultiply
+  premultMode: number; // 0=off, 1=premultiply, 2=unpremultiply
 
   // Dither + Quantize visualization
-  ditherMode: number;    // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
-  quantizeBits: number;  // 0=off, 2-16 = target bit depth for quantize/posterize
+  ditherMode: number; // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
+  quantizeBits: number; // 0=off, 2-16 = target bit depth for quantize/posterize
 
   // Contour visualization (luminance iso-lines)
   contourEnabled: boolean;
@@ -212,9 +212,9 @@ export interface InternalShaderState {
 
   // Automatic color primaries conversion
   inputPrimariesEnabled: boolean;
-  inputPrimariesMatrix: Float32Array;   // 9 floats, column-major mat3
+  inputPrimariesMatrix: Float32Array; // 9 floats, column-major mat3
   outputPrimariesEnabled: boolean;
-  outputPrimariesMatrix: Float32Array;  // 9 floats, column-major mat3
+  outputPrimariesMatrix: Float32Array; // 9 floats, column-major mat3
 }
 
 export function createDefaultInternalState(): InternalShaderState {

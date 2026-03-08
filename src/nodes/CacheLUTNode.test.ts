@@ -41,10 +41,10 @@ function createTestImage(width: number, height: number): IPImage {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
-      data[idx] = x / (width - 1);     // R
+      data[idx] = x / (width - 1); // R
       data[idx + 1] = y / (height - 1); // G
-      data[idx + 2] = 0.5;              // B
-      data[idx + 3] = 1.0;              // A
+      data[idx + 2] = 0.5; // B
+      data[idx + 3] = 1.0; // A
     }
   }
   return img;

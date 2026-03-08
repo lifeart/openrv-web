@@ -110,7 +110,8 @@ function parseHeader(data: Uint8Array): ParsedHeader {
   // Read lines until we find an empty line (header/data separator)
   let foundEmptyLine = false;
   while (offset < length) {
-    if (data[offset] === 0x0a) { // newline
+    if (data[offset] === 0x0a) {
+      // newline
       const line = decodeASCII(data, lineStart, offset);
       if (line.length === 0 && lines.length > 0) {
         foundEmptyLine = true;
@@ -235,11 +236,7 @@ function rgbeToFloat(r: number, g: number, b: number, e: number): [number, numbe
     return [0, 0, 0];
   }
   const scale = Math.pow(2, e - 128) / 256;
-  return [
-    (r + 0.5) * scale,
-    (g + 0.5) * scale,
-    (b + 0.5) * scale,
-  ];
+  return [(r + 0.5) * scale, (g + 0.5) * scale, (b + 0.5) * scale];
 }
 
 /**
@@ -361,13 +358,13 @@ function rearrangeOrientation(
       if (!isTransposed) {
         // Y-first orientations: first axis is Y, second is X
         // Row maps to Y, col maps to X
-        outY = firstAxis === '-Y' ? row : (scanHeight - 1 - row);
-        outX = secondAxis === '+X' ? col : (scanWidth - 1 - col);
+        outY = firstAxis === '-Y' ? row : scanHeight - 1 - row;
+        outX = secondAxis === '+X' ? col : scanWidth - 1 - col;
       } else {
         // X-first orientations (transposed): first axis is X, second is Y
         // Row maps to X, col maps to Y
-        outX = firstAxis === '+X' ? row : (scanHeight - 1 - row);
-        outY = secondAxis === '-Y' ? col : (scanWidth - 1 - col);
+        outX = firstAxis === '+X' ? row : scanHeight - 1 - row;
+        outY = secondAxis === '-Y' ? col : scanWidth - 1 - col;
       }
 
       const dstIdx = (outY * outWidth + outX) * 3;
@@ -403,9 +400,12 @@ export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
   // where (hi << 8 | lo) matches the expected scanline width, and scanWidth is in [8, 32767].
   // Checking the encoded width prevents false positives when uncompressed pixel
   // data happens to start with R=2, G=2.
-  const useNewRLE = scanWidth >= 8 && scanWidth <= 32767 &&
+  const useNewRLE =
+    scanWidth >= 8 &&
+    scanWidth <= 32767 &&
     offset + 4 <= data.length &&
-    data[offset] === 2 && data[offset + 1] === 2 &&
+    data[offset] === 2 &&
+    data[offset + 1] === 2 &&
     ((data[offset + 2]! << 8) | data[offset + 3]!) === scanWidth;
 
   if (useNewRLE) {
@@ -426,7 +426,7 @@ export async function decodeHDR(buffer: ArrayBuffer): Promise<HDRDecodeResult> {
           scanline[srcIdx]!,
           scanline[srcIdx + 1]!,
           scanline[srcIdx + 2]!,
-          scanline[srcIdx + 3]!
+          scanline[srcIdx + 3]!,
         );
         rgbFloat[dstIdx] = rf;
         rgbFloat[dstIdx + 1] = gf;

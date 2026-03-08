@@ -5,8 +5,8 @@
  * Shows active indicator when any scope is visible.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { getIconSvg, IconName } from './shared/Icons';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 
 export type { ScopeType, ScopesState } from '../../core/types/scopes';
@@ -221,18 +221,16 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
   }
 
   private getActiveCount(): number {
-    return (this.state.histogram ? 1 : 0) +
-           (this.state.waveform ? 1 : 0) +
-           (this.state.vectorscope ? 1 : 0) +
-           (this.state.gamutDiagram ? 1 : 0);
+    return (
+      (this.state.histogram ? 1 : 0) +
+      (this.state.waveform ? 1 : 0) +
+      (this.state.vectorscope ? 1 : 0) +
+      (this.state.gamutDiagram ? 1 : 0)
+    );
   }
 
   private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isOpen &&
-      !this.button.contains(e.target as Node) &&
-      !this.dropdown.contains(e.target as Node)
-    ) {
+    if (this.isOpen && !this.button.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       this.closeDropdown();
     }
   }

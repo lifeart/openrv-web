@@ -48,8 +48,12 @@ describe('timelineRenderHelpers', () => {
     it('TRHELP-002: uses correct colors for glow and playhead', () => {
       const fillStyles: string[] = [];
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { fillStyles.push(v); },
-        get() { return fillStyles[fillStyles.length - 1] || ''; },
+        set(v: string) {
+          fillStyles.push(v);
+        },
+        get() {
+          return fillStyles[fillStyles.length - 1] || '';
+        },
       });
 
       drawPlayhead(ctx, 50, 0, 40, '#00ff00', 'rgba(0,255,0,0.3)', 8);

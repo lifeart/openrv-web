@@ -289,7 +289,11 @@ describe('PlaylistPanel', () => {
       outInput.value = '20';
       outInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-      expect((manager.updateClipPoints as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual(['clip-1', 10, 20]);
+      expect((manager.updateClipPoints as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual([
+        'clip-1',
+        10,
+        20,
+      ]);
 
       document.body.removeChild(panel.render());
     });

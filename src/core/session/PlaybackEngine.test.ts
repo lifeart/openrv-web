@@ -887,7 +887,11 @@ describe('PlaybackEngine', () => {
       expect(ts.droppedFrameCount).toBe(0);
 
       // Simulate dropped frames by calling the timing controller directly
-      const tc = (engine as unknown as { _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void } })._timingController;
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
       tc.trackDroppedFrame(ts, 3);
       expect(engine.droppedFrameCount).toBe(3);
 

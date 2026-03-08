@@ -147,7 +147,7 @@ export function resizeHiDPICanvas(config: HiDPICanvasConfig): HiDPICanvasResult 
 export function createHiDPICanvas(
   width: number,
   height: number,
-  contextOptions?: CanvasRenderingContext2DSettings
+  contextOptions?: CanvasRenderingContext2DSettings,
 ): {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -213,7 +213,7 @@ export function resetCanvasFromHiDPI(
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
   width: number,
-  height: number
+  height: number,
 ): void {
   // Set canvas to standard dimensions (logical = physical)
   canvas.width = width;
@@ -253,7 +253,7 @@ export function clientToCanvasCoordinates(
   clientX: number,
   clientY: number,
   logicalWidth: number,
-  logicalHeight: number
+  logicalHeight: number,
 ): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
   // Scale from CSS coordinates to logical coordinates

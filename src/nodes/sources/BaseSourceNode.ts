@@ -11,7 +11,7 @@ export interface SourceMetadata {
   name: string;
   width: number;
   height: number;
-  duration: number;  // in frames
+  duration: number; // in frames
   fps: number;
 }
 

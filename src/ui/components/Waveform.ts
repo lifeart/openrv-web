@@ -10,21 +10,17 @@
  * - Draggable overlay display
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { OPACITY } from './shared/theme';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import {
   getSharedScopesProcessor,
-  WaveformMode as GPUWaveformMode,
-  WaveformRenderOptions,
+  type WaveformMode as GPUWaveformMode,
+  type WaveformRenderOptions,
 } from '../../scopes/WebGLScopes';
 import { clamp, floatRGBAToImageData } from '../../utils/math';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
-import {
-  createDraggableContainer,
-  createControlButton,
-  DraggableContainer,
-} from './shared/DraggableContainer';
+import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -179,10 +175,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.rgbControlsContainer.appendChild(this.intensitySlider);
 
     // Add RGB controls after content (above canvas)
-    this.draggableContainer.content.insertBefore(
-      this.rgbControlsContainer,
-      this.draggableContainer.content.firstChild
-    );
+    this.draggableContainer.content.insertBefore(this.rgbControlsContainer, this.draggableContainer.content.firstChild);
   }
 
   private createChannelButton(label: string, color: string, channel: 'r' | 'g' | 'b'): HTMLButtonElement {
@@ -374,7 +367,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     ctx.fillStyle = 'rgba(200, 200, 200, 0.15)';
 
     for (let x = 0; x < canvasWidth; x++) {
-      const srcX = Math.floor(x * srcWidth / canvasWidth);
+      const srcX = Math.floor((x * srcWidth) / canvasWidth);
       const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
 
       for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
@@ -386,12 +379,10 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
           // Calculate luminance using Rec.709 coefficients
           const luma = Math.round(
-            LUMINANCE_COEFFICIENTS.r * r +
-            LUMINANCE_COEFFICIENTS.g * g +
-            LUMINANCE_COEFFICIENTS.b * b
+            LUMINANCE_COEFFICIENTS.r * r + LUMINANCE_COEFFICIENTS.g * g + LUMINANCE_COEFFICIENTS.b * b,
           );
 
-          const y = canvasHeight - 1 - Math.floor(luma * (canvasHeight - 1) / 255);
+          const y = canvasHeight - 1 - Math.floor((luma * (canvasHeight - 1)) / 255);
           ctx.fillRect(x, y, 1, 1);
         }
       }
@@ -419,7 +410,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       ctx.globalCompositeOperation = 'lighter';
 
       for (let x = 0; x < canvasWidth; x++) {
-        const srcX = Math.floor(x * srcWidth / canvasWidth);
+        const srcX = Math.floor((x * srcWidth) / canvasWidth);
         const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
 
         for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
@@ -431,21 +422,21 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
             // Draw red (if enabled)
             if (enabledChannels.r) {
-              const yR = canvasHeight - 1 - Math.floor(r * (canvasHeight - 1) / 255);
+              const yR = canvasHeight - 1 - Math.floor((r * (canvasHeight - 1)) / 255);
               ctx.fillStyle = rStyle;
               ctx.fillRect(x, yR, 1, 1);
             }
 
             // Draw green (if enabled)
             if (enabledChannels.g) {
-              const yG = canvasHeight - 1 - Math.floor(g * (canvasHeight - 1) / 255);
+              const yG = canvasHeight - 1 - Math.floor((g * (canvasHeight - 1)) / 255);
               ctx.fillStyle = gStyle;
               ctx.fillRect(x, yG, 1, 1);
             }
 
             // Draw blue (if enabled)
             if (enabledChannels.b) {
-              const yB = canvasHeight - 1 - Math.floor(b * (canvasHeight - 1) / 255);
+              const yB = canvasHeight - 1 - Math.floor((b * (canvasHeight - 1)) / 255);
               ctx.fillStyle = bStyle;
               ctx.fillRect(x, yB, 1, 1);
             }
@@ -477,7 +468,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       ctx.fillStyle = color;
 
       for (let x = 0; x < sectionWidth; x++) {
-        const srcX = Math.floor(x * srcWidth / sectionWidth);
+        const srcX = Math.floor((x * srcWidth) / sectionWidth);
         const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
 
         for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
@@ -485,7 +476,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
             const i = (srcY * srcWidth + srcXi) * 4;
             const value = data[i + channelIndex]!;
 
-            const y = canvasHeight - 1 - Math.floor(value * (canvasHeight - 1) / 255);
+            const y = canvasHeight - 1 - Math.floor((value * (canvasHeight - 1)) / 255);
             ctx.fillRect(offset + x, y, 1, 1);
           }
         }
@@ -525,7 +516,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const crColor = 'rgba(255, 68, 68, 0.15)';
 
     for (let x = 0; x < sectionWidth; x++) {
-      const srcX = Math.floor(x * srcWidth / sectionWidth);
+      const srcX = Math.floor((x * srcWidth) / sectionWidth);
       const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
 
       for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
@@ -536,9 +527,9 @@ export class Waveform extends EventEmitter<WaveformEvents> {
           const b = data[i + 2]! / 255;
 
           // BT.709 YCbCr conversion
-          const y  = luminanceRec709(r, g, b);
-          const cb = -0.1146 * r - 0.3854 * g + 0.5000 * b + 0.5;
-          const cr =  0.5000 * r - 0.4542 * g - 0.0458 * b + 0.5;
+          const y = luminanceRec709(r, g, b);
+          const cb = -0.1146 * r - 0.3854 * g + 0.5 * b + 0.5;
+          const cr = 0.5 * r - 0.4542 * g - 0.0458 * b + 0.5;
 
           // Y channel (first column - white)
           const yPos = canvasHeight - 1 - Math.floor(clamp(y, 0, 1) * (canvasHeight - 1));

@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Viewer } from './Viewer';
-import { Session, MediaSource } from '../../core/session/Session';
+import { Session, type MediaSource } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { DEFAULT_TRANSFORM } from './TransformControl';

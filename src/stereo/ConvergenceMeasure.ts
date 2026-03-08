@@ -172,9 +172,16 @@ export function measureDisparityAtPoint(
     if (rx < 0 || rx >= right.width) continue;
 
     const sad = computeSAD(
-      left.data, left.width, left.height,
-      right.data, right.width, right.height,
-      cx, cy, rx, cy,
+      left.data,
+      left.width,
+      left.height,
+      right.data,
+      right.width,
+      right.height,
+      cx,
+      cy,
+      rx,
+      cy,
       windowRadius,
     );
 
@@ -189,7 +196,7 @@ export function measureDisparityAtPoint(
 
   // Confidence: 1 when best SAD is 0, 0 when best equals worst
   const range = worstSAD - bestSAD;
-  const confidence = range > 0 ? clamp(1 - bestSAD / worstSAD, 0, 1) : (bestSAD === 0 ? 1 : 0);
+  const confidence = range > 0 ? clamp(1 - bestSAD / worstSAD, 0, 1) : bestSAD === 0 ? 1 : 0;
 
   return {
     x: cx,
@@ -308,15 +315,7 @@ export function renderConvergenceGuide(
 /**
  * Alpha-blend a color onto a pixel in ImageData.
  */
-function blendPixel(
-  img: ImageData,
-  x: number,
-  y: number,
-  r: number,
-  g: number,
-  b: number,
-  alpha: number,
-): void {
+function blendPixel(img: ImageData, x: number, y: number, r: number, g: number, b: number, alpha: number): void {
   const idx = (y * img.width + x) * 4;
   const inv = 1 - alpha;
   img.data[idx] = Math.round(img.data[idx]! * inv + r * alpha);

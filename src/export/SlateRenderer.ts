@@ -242,11 +242,7 @@ export interface TextLine {
  * Lay out slate fields as centered text lines, returning positions.
  * @param fontSizeMultiplier Optional multiplier for font sizes (default: 1.0)
  */
-export function layoutText(
-  fields: SlateField[],
-  canvasHeight: number,
-  fontSizeMultiplier = 1.0,
-): TextLine[] {
+export function layoutText(fields: SlateField[], canvasHeight: number, fontSizeMultiplier = 1.0): TextLine[] {
   if (fields.length === 0) return [];
 
   const lines: TextLine[] = [];
@@ -283,10 +279,7 @@ export function layoutText(
  * Render a single slate frame onto the given canvas 2D context.
  * The context must already be sized to config.width x config.height.
  */
-export function renderSlate(
-  ctx: CanvasRenderingContext2D,
-  config: SlateConfig,
-): void {
+export function renderSlate(ctx: CanvasRenderingContext2D, config: SlateConfig): void {
   const { width, height } = config;
   const bgColor = config.backgroundColor ?? '#000000';
   const textColor = config.textColor ?? '#ffffff';
@@ -366,11 +359,7 @@ export function generateSlateFrame(config: SlateConfig): SlateFrame {
  * @param fps Frames per second
  * @returns Array of SlateFrame objects (all sharing the same pixel data)
  */
-export function generateLeaderFrames(
-  config: SlateConfig,
-  durationSeconds: number,
-  fps: number,
-): SlateFrame[] {
+export function generateLeaderFrames(config: SlateConfig, durationSeconds: number, fps: number): SlateFrame[] {
   if (durationSeconds <= 0 || fps <= 0) return [];
 
   const frameCount = Math.round(durationSeconds * fps);

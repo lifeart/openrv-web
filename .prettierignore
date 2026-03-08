@@ -1,0 +1,11 @@
+dist/
+node_modules/
+coverage/
+docs/api/
+docs/generated/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+pnpm-lock.yaml
+playwright-report/
+test-results/
+*.md

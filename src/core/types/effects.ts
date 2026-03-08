@@ -1,4 +1,13 @@
-export type ToneMappingOperator = 'off' | 'reinhard' | 'filmic' | 'aces' | 'agx' | 'pbrNeutral' | 'gt' | 'acesHill' | 'drago';
+export type ToneMappingOperator =
+  | 'off'
+  | 'reinhard'
+  | 'filmic'
+  | 'aces'
+  | 'agx'
+  | 'pbrNeutral'
+  | 'gt'
+  | 'acesHill'
+  | 'drago';
 
 export interface ToneMappingState {
   enabled: boolean;
@@ -6,10 +15,10 @@ export interface ToneMappingState {
   reinhardWhitePoint?: number;
   filmicExposureBias?: number;
   filmicWhitePoint?: number;
-  dragoBias?: number;        // default 0.85 (range 0.5-1.0)
-  dragoLwa?: number;         // scene average luminance (from LuminanceAnalyzer)
-  dragoLmax?: number;        // estimated scene max luminance (linearAvg * dynamic range multiplier)
-  dragoBrightness?: number;  // post-Drago brightness multiplier (default 2.0, range 0.5-5.0)
+  dragoBias?: number; // default 0.85 (range 0.5-1.0)
+  dragoLwa?: number; // scene average luminance (from LuminanceAnalyzer)
+  dragoLmax?: number; // estimated scene max luminance (linearAvg * dynamic range multiplier)
+  dragoBrightness?: number; // post-Drago brightness multiplier (default 2.0, range 0.5-5.0)
 }
 
 export const DEFAULT_TONE_MAPPING_STATE: ToneMappingState = {
@@ -64,10 +73,10 @@ export const DEFAULT_GAMUT_MAPPING_STATE: GamutMappingState = {
 
 export interface AutoExposureState {
   enabled: boolean;
-  targetKey: number;       // default 0.18 (mid-gray)
+  targetKey: number; // default 0.18 (mid-gray)
   adaptationSpeed: number; // 0.0-1.0 EMA alpha per update step
-  minExposure: number;     // floor in stops
-  maxExposure: number;     // ceiling in stops
+  minExposure: number; // floor in stops
+  maxExposure: number; // ceiling in stops
 }
 
 export const DEFAULT_AUTO_EXPOSURE_STATE: AutoExposureState = {

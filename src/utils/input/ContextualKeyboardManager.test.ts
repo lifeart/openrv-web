@@ -257,8 +257,8 @@ describe('ContextualKeyboardManager', () => {
 
       const paintBindings = keyManager.getBindingsForContext('paint');
       expect(paintBindings).toHaveLength(2);
-      expect(paintBindings.map(b => b.action)).toContain('paint.rectangle');
-      expect(paintBindings.map(b => b.action)).toContain('paint.ellipse');
+      expect(paintBindings.map((b) => b.action)).toContain('paint.rectangle');
+      expect(paintBindings.map((b) => b.action)).toContain('paint.ellipse');
     });
   });
 
@@ -270,8 +270,8 @@ describe('ContextualKeyboardManager', () => {
 
       const matches = keyManager.findAllMatches({ code: 'KeyR' });
       expect(matches).toHaveLength(2);
-      expect(matches.map(m => m.action)).toContain('paint.rectangle');
-      expect(matches.map(m => m.action)).toContain('timeline.resetInOut');
+      expect(matches.map((m) => m.action)).toContain('paint.rectangle');
+      expect(matches.map((m) => m.action)).toContain('timeline.resetInOut');
     });
 
     it('CKM-051: returns empty array for unregistered combo', () => {

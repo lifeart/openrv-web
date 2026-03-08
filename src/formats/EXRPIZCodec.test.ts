@@ -17,40 +17,19 @@ import {
 describe('EXRPIZCodec', () => {
   describe('decompressPIZ - empty data', () => {
     it('PIZ-U001: should return empty array for zero-length compressed data', () => {
-      const result = decompressPIZ(
-        new Uint8Array(0),
-        0,
-        0,
-        0,
-        0,
-        []
-      );
+      const result = decompressPIZ(new Uint8Array(0), 0, 0, 0, 0, []);
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(0);
     });
 
     it('PIZ-U002: should return zero-filled array for zero uncompressed size with data', () => {
-      const result = decompressPIZ(
-        new Uint8Array([1, 2, 3]),
-        0,
-        4,
-        1,
-        1,
-        [2]
-      );
+      const result = decompressPIZ(new Uint8Array([1, 2, 3]), 0, 4, 1, 1, [2]);
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(0);
     });
 
     it('PIZ-U003: should return zero-filled array for empty compressed data with nonzero size', () => {
-      const result = decompressPIZ(
-        new Uint8Array(0),
-        16,
-        4,
-        1,
-        1,
-        [2]
-      );
+      const result = decompressPIZ(new Uint8Array(0), 16, 4, 1, 1, [2]);
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(16);
       // All zeros since there was nothing to decompress
@@ -76,11 +55,11 @@ describe('EXRPIZCodec', () => {
     });
 
     it('PIZ-U011: should handle single pair', () => {
-      const input = new Uint8Array([0xAB, 0xCD]);
+      const input = new Uint8Array([0xab, 0xcd]);
       const result = reverseByteReorder(input, 2);
 
-      expect(result[0]).toBe(0xAB);
-      expect(result[1]).toBe(0xCD);
+      expect(result[0]).toBe(0xab);
+      expect(result[1]).toBe(0xcd);
     });
 
     it('PIZ-U012: should handle odd output size', () => {
@@ -329,14 +308,7 @@ describe('EXRPIZCodec', () => {
 
       const compressedData = new Uint8Array(parts);
 
-      const result = decompressPIZ(
-        compressedData,
-        uncompressedSize,
-        width,
-        numChannels,
-        numLines,
-        channelSizes
-      );
+      const result = decompressPIZ(compressedData, uncompressedSize, width, numChannels, numLines, channelSizes);
 
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(uncompressedSize);
@@ -361,14 +333,7 @@ describe('EXRPIZCodec', () => {
 
       const compressedData = new Uint8Array(parts);
 
-      const result = decompressPIZ(
-        compressedData,
-        uncompressedSize,
-        width,
-        numChannels,
-        numLines,
-        channelSizes
-      );
+      const result = decompressPIZ(compressedData, uncompressedSize, width, numChannels, numLines, channelSizes);
 
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(uncompressedSize);
@@ -391,14 +356,7 @@ describe('EXRPIZCodec', () => {
 
       const compressedData = new Uint8Array(parts);
 
-      const result = decompressPIZ(
-        compressedData,
-        uncompressedSize,
-        width,
-        numChannels,
-        numLines,
-        channelSizes
-      );
+      const result = decompressPIZ(compressedData, uncompressedSize, width, numChannels, numLines, channelSizes);
 
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(uncompressedSize);
@@ -420,14 +378,7 @@ describe('EXRPIZCodec', () => {
 
       const compressedData = new Uint8Array(parts);
 
-      const result = decompressPIZ(
-        compressedData,
-        uncompressedSize,
-        width,
-        numChannels,
-        numLines,
-        channelSizes
-      );
+      const result = decompressPIZ(compressedData, uncompressedSize, width, numChannels, numLines, channelSizes);
 
       expect(result).toBeInstanceOf(Uint8Array);
       expect(result.length).toBe(uncompressedSize);
@@ -438,13 +389,13 @@ describe('EXRPIZCodec', () => {
     it('PIZ-U070: byte reorder is reversible', () => {
       // Simulate the forward byte reorder (interleave -> deinterleave)
       // Forward: take pairs [H0,L0,H1,L1,...] and split to [H0,H1,...,L0,L1,...]
-      const original = new Uint8Array([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+      const original = new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
 
       // Forward reorder: split into MSBs and LSBs
       const halfSize = Math.ceil(original.length / 2);
       const reordered = new Uint8Array(original.length);
       for (let i = 0; i < halfSize; i++) {
-        reordered[i] = original[i * 2]!;         // MSBs
+        reordered[i] = original[i * 2]!; // MSBs
         if (i * 2 + 1 < original.length) {
           reordered[halfSize + i] = original[i * 2 + 1]!; // LSBs
         }

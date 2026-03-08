@@ -103,10 +103,7 @@ export class LuminanceAnalyzer {
     // 3. Read the 1x1 mip level
     const mipLevels = Math.log2(LUMINANCE_FBO_SIZE); // = 8
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.readbackFBO);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D,
-      this.fboTexture, mipLevels,
-    );
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fboTexture, mipLevels);
 
     // 4. Async PBO readback (double-buffered)
     const currentPBO = this.pbos[this.pboIndex];
@@ -181,11 +178,7 @@ export class LuminanceAnalyzer {
     // Create 256x256 RGBA16F texture for luminance
     this.fboTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.fboTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D, 0, gl.RGBA16F,
-      LUMINANCE_FBO_SIZE, LUMINANCE_FBO_SIZE,
-      0, gl.RGBA, gl.FLOAT, null,
-    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, LUMINANCE_FBO_SIZE, LUMINANCE_FBO_SIZE, 0, gl.RGBA, gl.FLOAT, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -194,10 +187,7 @@ export class LuminanceAnalyzer {
     // Create main FBO (renders to mip level 0)
     this.fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D,
-      this.fboTexture, 0,
-    );
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fboTexture, 0);
 
     // Create readback FBO (will attach desired mip level)
     this.readbackFBO = gl.createFramebuffer();
@@ -217,12 +207,7 @@ export class LuminanceAnalyzer {
     this.quadVBO = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVBO);
     // Full-screen quad: position (x,y) + texcoord (u,v)
-    const quadData = new Float32Array([
-      -1, -1, 0, 0,
-       1, -1, 1, 0,
-      -1,  1, 0, 1,
-       1,  1, 1, 1,
-    ]);
+    const quadData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
     gl.bufferData(gl.ARRAY_BUFFER, quadData, gl.STATIC_DRAW);
     const posLoc = this.shader.getAttributeLocation('a_position');
     const texLoc = this.shader.getAttributeLocation('a_texCoord');
@@ -240,16 +225,46 @@ export class LuminanceAnalyzer {
 
   dispose(): void {
     const gl = this.gl;
-    if (this.shader) { this.shader.dispose(); this.shader = null; }
-    if (this.fbo) { gl.deleteFramebuffer(this.fbo); this.fbo = null; }
-    if (this.readbackFBO) { gl.deleteFramebuffer(this.readbackFBO); this.readbackFBO = null; }
-    if (this.fboTexture) { gl.deleteTexture(this.fboTexture); this.fboTexture = null; }
-    if (this.quadVAO) { gl.deleteVertexArray(this.quadVAO); this.quadVAO = null; }
-    if (this.quadVBO) { gl.deleteBuffer(this.quadVBO); this.quadVBO = null; }
-    if (this.pbos[0]) { gl.deleteBuffer(this.pbos[0]); this.pbos[0] = null; }
-    if (this.pbos[1]) { gl.deleteBuffer(this.pbos[1]); this.pbos[1] = null; }
-    if (this.pboFences[0]) { gl.deleteSync(this.pboFences[0]); this.pboFences[0] = null; }
-    if (this.pboFences[1]) { gl.deleteSync(this.pboFences[1]); this.pboFences[1] = null; }
+    if (this.shader) {
+      this.shader.dispose();
+      this.shader = null;
+    }
+    if (this.fbo) {
+      gl.deleteFramebuffer(this.fbo);
+      this.fbo = null;
+    }
+    if (this.readbackFBO) {
+      gl.deleteFramebuffer(this.readbackFBO);
+      this.readbackFBO = null;
+    }
+    if (this.fboTexture) {
+      gl.deleteTexture(this.fboTexture);
+      this.fboTexture = null;
+    }
+    if (this.quadVAO) {
+      gl.deleteVertexArray(this.quadVAO);
+      this.quadVAO = null;
+    }
+    if (this.quadVBO) {
+      gl.deleteBuffer(this.quadVBO);
+      this.quadVBO = null;
+    }
+    if (this.pbos[0]) {
+      gl.deleteBuffer(this.pbos[0]);
+      this.pbos[0] = null;
+    }
+    if (this.pbos[1]) {
+      gl.deleteBuffer(this.pbos[1]);
+      this.pbos[1] = null;
+    }
+    if (this.pboFences[0]) {
+      gl.deleteSync(this.pboFences[0]);
+      this.pboFences[0] = null;
+    }
+    if (this.pboFences[1]) {
+      gl.deleteSync(this.pboFences[1]);
+      this.pboFences[1] = null;
+    }
     this.initialized = false;
     this.firstFrame = true;
   }

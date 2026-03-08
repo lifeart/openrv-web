@@ -64,23 +64,46 @@ export type {
 
 // Import settings types needed by method signatures in this file
 import type {
-  ColorExposureSettings, ColorCurveSettings, ColorTemperatureSettings,
-  ColorSaturationSettings, ColorVibranceSettings, ColorShadowSettings,
-  ColorHighlightSettings, ColorGrayScaleSettings, ColorCDLSettings,
-  ColorLinearToSRGBSettings, ColorSRGBToLinearSettings, PrimaryConvertSettings,
-  OCIOSettings, ICCSettings, LinearizeSettings, ColorSettings,
-  LookLUTSettings, DisplayColorSettings,
+  ColorExposureSettings,
+  ColorCurveSettings,
+  ColorTemperatureSettings,
+  ColorSaturationSettings,
+  ColorVibranceSettings,
+  ColorShadowSettings,
+  ColorHighlightSettings,
+  ColorGrayScaleSettings,
+  ColorCDLSettings,
+  ColorLinearToSRGBSettings,
+  ColorSRGBToLinearSettings,
+  PrimaryConvertSettings,
+  OCIOSettings,
+  ICCSettings,
+  LinearizeSettings,
+  ColorSettings,
+  LookLUTSettings,
+  DisplayColorSettings,
 } from './serializers/ColorSerializer';
 import type {
-  DispTransform2DSettings, Transform2DSettings, LensWarpSettings,
-  RotateCanvasSettings, ResizeSettings, FormatSettings,
+  DispTransform2DSettings,
+  Transform2DSettings,
+  LensWarpSettings,
+  RotateCanvasSettings,
+  ResizeSettings,
+  FormatSettings,
 } from './serializers/TransformSerializer';
 import type {
-  PaintSettings, OverlaySettings, OverlayRect, OverlayText, OverlayWindow,
+  PaintSettings,
+  OverlaySettings,
+  OverlayRect,
+  OverlayText,
+  OverlayWindow,
   ChannelMapSettings,
 } from './serializers/PaintSerializer';
 import type {
-  FilterGaussianSettings, UnsharpMaskSettings, NoiseReductionSettings, ClaritySettings,
+  FilterGaussianSettings,
+  UnsharpMaskSettings,
+  NoiseReductionSettings,
+  ClaritySettings,
 } from './serializers/FilterSerializer';
 
 interface PaintSnapshot {
@@ -417,11 +440,7 @@ export class SessionGTOExporter {
    * Generate complete GTO data for a new session export
    * Creates RVSession, source groups, sequence, connections, and paint objects
    */
-  static toGTOData(
-    session: Session,
-    paintEngine: PaintEngine,
-    options: SessionExportOptions = {}
-  ): GTOData {
+  static toGTOData(session: Session, paintEngine: PaintEngine, options: SessionExportOptions = {}): GTOData {
     const { name = 'rv', comment = '', includeSources = true, ocioSettings } = options;
     const viewNode = 'defaultSequence';
 
@@ -518,7 +537,10 @@ export class SessionGTOExporter {
       .component('evaluation')
       // lhs -> rhs: each source connects to the sequence
       .string('lhs', sourceGroupNames)
-      .string('rhs', sourceGroupNames.map(() => viewNode))
+      .string(
+        'rhs',
+        sourceGroupNames.map(() => viewNode),
+      )
       .end()
       .component('top')
       .string('nodes', [viewNode])
@@ -563,10 +585,7 @@ export class SessionGTOExporter {
         movieProcUrl = `${parts.join(',')}.movieproc`;
       }
 
-      movieProcObject
-        .component('movie')
-        .string('url', movieProcUrl)
-        .end();
+      movieProcObject.component('movie').string('url', movieProcUrl).end();
 
       movieProcObject.end();
       objects.push(movieProcBuilder.build().objects[0]!);
@@ -604,10 +623,7 @@ export class SessionGTOExporter {
       .int('out', 2147483647)
       .end();
 
-    sourceObject
-      .component('request')
-      .int('readAllChannels', 0)
-      .end();
+    sourceObject.component('request').int('readAllChannels', 0).end();
 
     // Add proxy/image dimensions if available
     if (source.width > 0 && source.height > 0) {
@@ -626,22 +642,13 @@ export class SessionGTOExporter {
   /**
    * Build sequence group objects (RVSequenceGroup + RVSequence)
    */
-  static buildSequenceGroupObjects(
-    groupName: string,
-    session: Session,
-    edl?: EDLData
-  ): ObjectData[] {
+  static buildSequenceGroupObjects(groupName: string, session: Session, edl?: EDLData): ObjectData[] {
     const objects: ObjectData[] = [];
     const sequenceName = `${groupName}_sequence`;
 
     // 1. RVSequenceGroup container
     const groupBuilder = new GTOBuilder();
-    groupBuilder
-      .object(groupName, 'RVSequenceGroup', 1)
-      .component('ui')
-      .string('name', 'Default Sequence')
-      .end()
-      .end();
+    groupBuilder.object(groupName, 'RVSequenceGroup', 1).component('ui').string('name', 'Default Sequence').end().end();
     objects.push(groupBuilder.build().objects[0]!);
 
     // 2. RVSequence node
@@ -684,21 +691,13 @@ export class SessionGTOExporter {
   /**
    * Build stack group objects (RVStackGroup + RVStack)
    */
-  static buildStackGroupObjects(
-    groupName: string,
-    settings?: StackGroupSettings
-  ): ObjectData[] {
+  static buildStackGroupObjects(groupName: string, settings?: StackGroupSettings): ObjectData[] {
     const objects: ObjectData[] = [];
     const stackName = `${groupName}_stack`;
 
     // 1. RVStackGroup container
     const groupBuilder = new GTOBuilder();
-    groupBuilder
-      .object(groupName, 'RVStackGroup', 1)
-      .component('ui')
-      .string('name', 'Stack')
-      .end()
-      .end();
+    groupBuilder.object(groupName, 'RVStackGroup', 1).component('ui').string('name', 'Stack').end().end();
     objects.push(groupBuilder.build().objects[0]!);
 
     // 2. RVStack node with compositing settings
@@ -735,10 +734,7 @@ export class SessionGTOExporter {
 
     // Per-layer composite settings (if provided)
     if (settings?.layerBlendModes && settings.layerBlendModes.length > 0) {
-      stackObject
-        .component('composite')
-        .string('type', settings.layerBlendModes)
-        .end();
+      stackObject.component('composite').string('type', settings.layerBlendModes).end();
     }
 
     if (settings?.layerOpacities && settings.layerOpacities.length > 0) {
@@ -755,10 +751,7 @@ export class SessionGTOExporter {
   /**
    * Build layout group objects (RVLayoutGroup + RVLayout)
    */
-  static buildLayoutGroupObjects(
-    groupName: string,
-    settings?: LayoutGroupSettings
-  ): ObjectData[] {
+  static buildLayoutGroupObjects(groupName: string, settings?: LayoutGroupSettings): ObjectData[] {
     const objects: ObjectData[] = [];
     const layoutName = `${groupName}_layout`;
 
@@ -800,10 +793,7 @@ export class SessionGTOExporter {
   /**
    * Build retime group objects (RVRetimeGroup + RVRetime)
    */
-  static buildRetimeGroupObjects(
-    groupName: string,
-    settings?: RetimeGroupSettings
-  ): ObjectData[] {
+  static buildRetimeGroupObjects(groupName: string, settings?: RetimeGroupSettings): ObjectData[] {
     const objects: ObjectData[] = [];
     const retimeName = `${groupName}_retime`;
 
@@ -837,10 +827,7 @@ export class SessionGTOExporter {
 
     // Output component
     if (settings?.outputFps !== undefined) {
-      retimeObject
-        .component('output')
-        .float('fps', settings.outputFps)
-        .end();
+      retimeObject.component('output').float('fps', settings.outputFps).end();
     }
 
     retimeObject.end();
@@ -852,10 +839,7 @@ export class SessionGTOExporter {
   /**
    * Build switch group objects (RVSwitchGroup + RVSwitch)
    */
-  static buildSwitchGroupObjects(
-    groupName: string,
-    settings?: SwitchGroupSettings
-  ): ObjectData[] {
+  static buildSwitchGroupObjects(groupName: string, settings?: SwitchGroupSettings): ObjectData[] {
     const objects: ObjectData[] = [];
     const switchName = `${groupName}_switch`;
 
@@ -875,9 +859,7 @@ export class SessionGTOExporter {
 
     // Output component
     const outputComp = switchObject.component('output');
-    outputComp
-      .float('fps', settings?.fps ?? 0.0)
-      .int('autoSize', settings?.autoSize !== false ? 1 : 0);
+    outputComp.float('fps', settings?.fps ?? 0.0).int('autoSize', settings?.autoSize !== false ? 1 : 0);
 
     if (settings?.size) {
       outputComp.int2('size', [settings.size]);
@@ -904,10 +886,7 @@ export class SessionGTOExporter {
   /**
    * Build folder group objects (RVFolderGroup)
    */
-  static buildFolderGroupObjects(
-    groupName: string,
-    settings?: FolderGroupSettings
-  ): ObjectData[] {
+  static buildFolderGroupObjects(groupName: string, settings?: FolderGroupSettings): ObjectData[] {
     const objects: ObjectData[] = [];
 
     // RVFolderGroup container
@@ -933,18 +912,10 @@ export class SessionGTOExporter {
   /**
    * Build a display group object (RVDisplayGroup)
    */
-  static buildDisplayGroupObject(
-    groupName: string = 'displayGroup',
-    displayName: string = 'Display'
-  ): ObjectData {
+  static buildDisplayGroupObject(groupName: string = 'displayGroup', displayName: string = 'Display'): ObjectData {
     const builder = new GTOBuilder();
 
-    builder
-      .object(groupName, 'RVDisplayGroup', 1)
-      .component('ui')
-      .string('name', displayName)
-      .end()
-      .end();
+    builder.object(groupName, 'RVDisplayGroup', 1).component('ui').string('name', displayName).end().end();
 
     return builder.build().objects[0]!;
   }
@@ -984,18 +955,10 @@ export class SessionGTOExporter {
   /**
    * Build an RVViewGroup object (view transformation hub)
    */
-  static buildViewGroupObject(
-    groupName: string = 'viewGroup',
-    displayName: string = 'View'
-  ): ObjectData {
+  static buildViewGroupObject(groupName: string = 'viewGroup', displayName: string = 'View'): ObjectData {
     const builder = new GTOBuilder();
 
-    builder
-      .object(groupName, 'RVViewGroup', 1)
-      .component('ui')
-      .string('name', displayName)
-      .end()
-      .end();
+    builder.object(groupName, 'RVViewGroup', 1).component('ui').string('name', displayName).end().end();
 
     return builder.build().objects[0]!;
   }
@@ -1143,7 +1106,7 @@ export class SessionGTOExporter {
   static buildLookLUTObject(
     name: string,
     settings: LookLUTSettings = {},
-    protocol: 'RVLookLUT' | 'RVCacheLUT' = 'RVLookLUT'
+    protocol: 'RVLookLUT' | 'RVCacheLUT' = 'RVLookLUT',
   ): ObjectData {
     return ColorSerializer.buildLookLUTObject(name, settings, protocol);
   }
@@ -1338,10 +1301,7 @@ export class SessionGTOExporter {
 
     // Output component
     if (settings.outputFps !== undefined) {
-      retimeObject
-        .component('output')
-        .float('fps', settings.outputFps)
-        .end();
+      retimeObject.component('output').float('fps', settings.outputFps).end();
     }
 
     // Warp component (variable speed)
@@ -1391,7 +1351,8 @@ export class SessionGTOExporter {
     mediaComp.end();
 
     // Image component
-    obj.component('image')
+    obj
+      .component('image')
       .int('width', settings.width ?? 640)
       .int('height', settings.height ?? 480)
       .int('uncropWidth', settings.uncropWidth ?? settings.width ?? 640)
@@ -1411,7 +1372,8 @@ export class SessionGTOExporter {
 
     // Cut component (optional)
     if (settings.cutIn !== undefined || settings.cutOut !== undefined) {
-      obj.component('cut')
+      obj
+        .component('cut')
         .int('in', settings.cutIn ?? -2147483648)
         .int('out', settings.cutOut ?? 2147483647)
         .end();
@@ -1440,7 +1402,8 @@ export class SessionGTOExporter {
     mediaComp.end();
 
     // Group component (playback settings)
-    obj.component('group')
+    obj
+      .component('group')
       .float('fps', settings.fps ?? 0.0)
       .float('volume', settings.volume ?? 1.0)
       .float('audioOffset', settings.audioOffset ?? 0.0)
@@ -1458,7 +1421,8 @@ export class SessionGTOExporter {
 
     // Cut component (optional)
     if (settings.cutIn !== undefined || settings.cutOut !== undefined) {
-      obj.component('cut')
+      obj
+        .component('cut')
         .int('in', settings.cutIn ?? -2147483648)
         .int('out', settings.cutOut ?? 2147483647)
         .end();
@@ -1478,7 +1442,7 @@ export class SessionGTOExporter {
     paintEngine: PaintEngine,
     name: string,
     viewNode: string,
-    comment = ''
+    comment = '',
   ): ObjectData {
     const builder = new GTOBuilder();
     const playback = session.getPlaybackState();
@@ -1488,8 +1452,7 @@ export class SessionGTOExporter {
     const paintState = paintEngine.toJSON() as PaintSnapshot;
     const paintEffects = paintState.effects;
 
-    const obj = builder
-      .object(name, 'RVSession', 1);
+    const obj = builder.object(name, 'RVSession', 1);
 
     obj
       .component('session')
@@ -1497,13 +1460,22 @@ export class SessionGTOExporter {
       .int2('range', [[playback.inPoint, playback.outPoint]])
       .int2('region', [[playback.inPoint, playback.outPoint]])
       .float('fps', playback.fps)
-      .float('realtime', session.playbackMode === 'playAllFrames' ? 0 : (metadata.realtime || playback.fps))
+      .float('realtime', session.playbackMode === 'playAllFrames' ? 0 : metadata.realtime || playback.fps)
       .int('inc', session.frameIncrement)
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
-      .int('marks', playback.marks.map(m => m.frame))
-      .string('markerNotes', playback.marks.map(m => m.note || ''))
-      .string('markerColors', playback.marks.map(m => m.color || '#ff4444'))
+      .int(
+        'marks',
+        playback.marks.map((m) => m.frame),
+      )
+      .string(
+        'markerNotes',
+        playback.marks.map((m) => m.note || ''),
+      )
+      .string(
+        'markerColors',
+        playback.marks.map((m) => m.color || '#ff4444'),
+      )
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
       .float4('bgColor', [metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]])
@@ -1533,27 +1505,16 @@ export class SessionGTOExporter {
       .int('ghostAfter', paintEffects.ghostAfter)
       .end();
 
-    obj
-      .component('internal')
-      .int('creationContext', metadata.creationContext)
-      .end();
+    obj.component('internal').int('creationContext', metadata.creationContext).end();
 
-    obj
-      .component('node')
-      .string('origin', metadata.origin)
-      .end();
+    obj.component('node').string('origin', metadata.origin).end();
 
-    obj
-      .component('membership')
-      .string('contains', metadata.membershipContains)
-      .end();
+    obj.component('membership').string('contains', metadata.membershipContains).end();
 
     // Notes component
     const notes = session.noteManager.getNotes();
     if (notes.length > 0) {
-      const notesComp = obj
-        .component('notes')
-        .int('totalNotes', notes.length);
+      const notesComp = obj.component('notes').int('totalNotes', notes.length);
       notes.forEach((note, idx) => {
         const p = `note_${String(idx + 1).padStart(3, '0')}`;
         notesComp.string(`${p}_id`, note.id);
@@ -1574,9 +1535,7 @@ export class SessionGTOExporter {
     // Versions component
     const versionGroups = session.versionManager.getGroups();
     if (versionGroups.length > 0) {
-      const versionsComp = obj
-        .component('versions')
-        .int('groupCount', versionGroups.length);
+      const versionsComp = obj.component('versions').int('groupCount', versionGroups.length);
       versionGroups.forEach((group, gIdx) => {
         const gp = `group_${String(gIdx).padStart(3, '0')}`;
         versionsComp.string(`${gp}_id`, group.id);
@@ -1606,20 +1565,12 @@ export class SessionGTOExporter {
     return PaintSerializer.buildPaintObject(session, paintEngine, name);
   }
 
-  static toText(
-    session: Session,
-    paintEngine: PaintEngine,
-    options: SessionExportOptions = {}
-  ): string {
+  static toText(session: Session, paintEngine: PaintEngine, options: SessionExportOptions = {}): string {
     const data = this.toGTOData(session, paintEngine, options);
     return SimpleWriter.write(data) as string;
   }
 
-  static toBinary(
-    session: Session,
-    paintEngine: PaintEngine,
-    options: SessionExportOptions = {}
-  ): ArrayBuffer {
+  static toBinary(session: Session, paintEngine: PaintEngine, options: SessionExportOptions = {}): ArrayBuffer {
     const data = this.toGTOData(session, paintEngine, options);
     return SimpleWriter.write(data, { binary: true }) as ArrayBuffer;
   }
@@ -1628,22 +1579,20 @@ export class SessionGTOExporter {
     session: Session,
     paintEngine: PaintEngine,
     filename = 'session.rv',
-    options: { binary?: boolean } = {}
+    options: { binary?: boolean } = {},
   ): Promise<void> {
     const isBinary = options.binary ?? filename.endsWith('.gto');
 
     let data: GTOData;
     if (session.gtoData) {
-        console.log('Patching existing GTO data for export');
-        data = this.updateGTOData(session.gtoData, session, paintEngine);
+      console.log('Patching existing GTO data for export');
+      data = this.updateGTOData(session.gtoData, session, paintEngine);
     } else {
-        console.log('Generating new GTO data for export');
-        data = this.toGTOData(session, paintEngine);
+      console.log('Generating new GTO data for export');
+      data = this.toGTOData(session, paintEngine);
     }
 
-    const payload = isBinary
-      ? SimpleWriter.write(data, { binary: true })
-      : SimpleWriter.write(data);
+    const payload = isBinary ? SimpleWriter.write(data, { binary: true }) : SimpleWriter.write(data);
     const blob = new Blob([payload], { type: isBinary ? 'application/octet-stream' : 'text/plain' });
     const url = URL.createObjectURL(blob);
 
@@ -1680,18 +1629,34 @@ export class SessionGTOExporter {
         this.updateProperty(sessionComp, 'range', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'region', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'fps', playback.fps);
-        this.updateProperty(sessionComp, 'realtime', session.playbackMode === 'playAllFrames' ? 0 : (session.metadata.realtime || playback.fps));
+        this.updateProperty(
+          sessionComp,
+          'realtime',
+          session.playbackMode === 'playAllFrames' ? 0 : session.metadata.realtime || playback.fps,
+        );
         this.updateProperty(sessionComp, 'bgColor', session.metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]);
 
         if (playback.marks.length > 0) {
-           this.updateProperty(sessionComp, 'marks', playback.marks.map(m => m.frame));
-           this.updateProperty(sessionComp, 'markerNotes', playback.marks.map(m => m.note || ''));
-           this.updateProperty(sessionComp, 'markerColors', playback.marks.map(m => m.color || '#ff4444'));
+          this.updateProperty(
+            sessionComp,
+            'marks',
+            playback.marks.map((m) => m.frame),
+          );
+          this.updateProperty(
+            sessionComp,
+            'markerNotes',
+            playback.marks.map((m) => m.note || ''),
+          );
+          this.updateProperty(
+            sessionComp,
+            'markerColors',
+            playback.marks.map((m) => m.color || '#ff4444'),
+          );
         } else {
-            // Remove marks property if empty? Or set to empty array?
-             this.updateProperty(sessionComp, 'marks', []);
-             this.updateProperty(sessionComp, 'markerNotes', []);
-             this.updateProperty(sessionComp, 'markerColors', []);
+          // Remove marks property if empty? Or set to empty array?
+          this.updateProperty(sessionComp, 'marks', []);
+          this.updateProperty(sessionComp, 'markerNotes', []);
+          this.updateProperty(sessionComp, 'markerColors', []);
         }
 
         // Update notes component — rebuild from scratch to avoid stale slots
@@ -1773,8 +1738,8 @@ export class SessionGTOExporter {
         if (node && node.type === 'RVFileSource') {
           const originalUrl = node.properties.getValue<string>('originalUrl');
           if (originalUrl) {
-             const mediaComp = this.findOrAddComponent(obj, 'media');
-             this.updateProperty(mediaComp, 'movie', originalUrl);
+            const mediaComp = this.findOrAddComponent(obj, 'media');
+            this.updateProperty(mediaComp, 'movie', originalUrl);
           }
         }
       }
@@ -1782,7 +1747,7 @@ export class SessionGTOExporter {
 
     // 3. Replace RVPaint object
     // Find index of existing paint object
-    const paintIndex = data.objects.findIndex(o => o.protocol === 'RVPaint');
+    const paintIndex = data.objects.findIndex((o) => o.protocol === 'RVPaint');
     if (paintIndex !== -1) {
       data.objects[paintIndex] = currentPaintObject;
     } else {
@@ -1826,9 +1791,13 @@ export class SessionGTOExporter {
       const matteHeightVisible = node.properties.getValue<number>('matteHeightVisible');
       const matteCenterPoint = node.properties.getValue<[number, number]>('matteCenterPoint');
 
-      if (typeof matteShow === 'boolean' || typeof matteOpacity === 'number' ||
-          typeof matteAspect === 'number' || typeof matteHeightVisible === 'number' ||
-          Array.isArray(matteCenterPoint)) {
+      if (
+        typeof matteShow === 'boolean' ||
+        typeof matteOpacity === 'number' ||
+        typeof matteAspect === 'number' ||
+        typeof matteHeightVisible === 'number' ||
+        Array.isArray(matteCenterPoint)
+      ) {
         settings.matte = {};
         if (typeof matteShow === 'boolean') settings.matte.show = matteShow;
         if (typeof matteOpacity === 'number') settings.matte.opacity = matteOpacity;
@@ -1838,8 +1807,12 @@ export class SessionGTOExporter {
       }
 
       // Only emit an overlay object if it has meaningful content
-      const hasContent = settings.rectangles || settings.texts || settings.windows ||
-                         settings.matte || typeof settings.show === 'boolean';
+      const hasContent =
+        settings.rectangles ||
+        settings.texts ||
+        settings.windows ||
+        settings.matte ||
+        typeof settings.show === 'boolean';
       if (hasContent) {
         data.objects[i] = this.buildOverlayObject(obj.name, settings);
       } else {
@@ -1855,7 +1828,7 @@ export class SessionGTOExporter {
     if (!obj.components) {
       obj.components = {};
     }
-    const components = (obj.components as unknown) as Record<string, GTOComponent>;
+    const components = obj.components as unknown as Record<string, GTOComponent>;
     let comp = components[name];
     if (!comp) {
       comp = { name, properties: [] };
@@ -1865,7 +1838,7 @@ export class SessionGTOExporter {
   }
 
   protected static updateProperty(comp: GTOComponent, name: string, value: unknown): void {
-    const prop = comp.properties.find(p => p.name === name);
+    const prop = comp.properties.find((p) => p.name === name);
     if (prop) {
       prop.value = value;
     } else {

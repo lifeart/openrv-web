@@ -65,44 +65,58 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   headerBar.setAutoSaveIndicator(controls.autoSaveIndicator.render());
 
   // Wire up fullscreen and presentation toggle from HeaderBar
-  subs.add(headerBar.on('fullscreenToggle', () => {
-    deps.getFullscreenManager()?.toggle();
-  }));
-  subs.add(headerBar.on('presentationToggle', () => {
-    controls.presentationMode.toggle();
-  }));
+  subs.add(
+    headerBar.on('fullscreenToggle', () => {
+      deps.getFullscreenManager()?.toggle();
+    }),
+  );
+  subs.add(
+    headerBar.on('presentationToggle', () => {
+      controls.presentationMode.toggle();
+    }),
+  );
 
   // Volume control (from HeaderBar) <-> session (bidirectional)
   const volumeControl = headerBar.getVolumeControl();
-  subs.add(volumeControl.on('volumeChanged', (volume) => {
-    session.volume = volume;
-    deps.getAudioMixer?.()?.setMasterVolume(volume);
-  }));
-  subs.add(volumeControl.on('mutedChanged', (muted) => {
-    session.muted = muted;
-    deps.getAudioMixer?.()?.setMasterMuted(muted);
-  }));
+  subs.add(
+    volumeControl.on('volumeChanged', (volume) => {
+      session.volume = volume;
+      deps.getAudioMixer?.()?.setMasterVolume(volume);
+    }),
+  );
+  subs.add(
+    volumeControl.on('mutedChanged', (muted) => {
+      session.muted = muted;
+      deps.getAudioMixer?.()?.setMasterMuted(muted);
+    }),
+  );
   // Audio scrub toggle
-  subs.add(volumeControl.on('audioScrubChanged', (enabled) => {
-    session.audioScrubEnabled = enabled;
-  }));
+  subs.add(
+    volumeControl.on('audioScrubChanged', (enabled) => {
+      session.audioScrubEnabled = enabled;
+    }),
+  );
   // Sync back from Session to VolumeControl (for external changes)
-  subs.add(session.on('volumeChanged', (volume) => {
-    volumeControl.syncVolume(volume);
-    deps.getAudioMixer?.()?.setMasterVolume(volume);
-  }));
-  subs.add(session.on('mutedChanged', (muted) => {
-    volumeControl.syncMuted(muted);
-    deps.getAudioMixer?.()?.setMasterMuted(muted);
-  }));
-  subs.add(session.on('audioScrubEnabledChanged', (enabled) => {
-    volumeControl.syncAudioScrub(enabled);
-  }));
+  subs.add(
+    session.on('volumeChanged', (volume) => {
+      volumeControl.syncVolume(volume);
+      deps.getAudioMixer?.()?.setMasterVolume(volume);
+    }),
+  );
+  subs.add(
+    session.on('mutedChanged', (muted) => {
+      volumeControl.syncMuted(muted);
+      deps.getAudioMixer?.()?.setMasterMuted(muted);
+    }),
+  );
+  subs.add(
+    session.on('audioScrubEnabledChanged', (enabled) => {
+      volumeControl.syncAudioScrub(enabled);
+    }),
+  );
 
   const syncAudioScrubAvailability = () => {
-    volumeControl.setScrubAudioAvailable(
-      isAudioScrubAvailable(session.currentSource, session.audioPlaybackManager),
-    );
+    volumeControl.setScrubAudioAvailable(isAudioScrubAvailable(session.currentSource, session.audioPlaybackManager));
   };
   syncAudioScrubAvailability();
   subs.add(session.on('sourceLoaded', syncAudioScrubAvailability));
@@ -112,78 +126,94 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
 
   // Export control (from HeaderBar) -> viewer
   const exportControl = headerBar.getExportControl();
-  subs.add(exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
-    viewer.exportFrame(format, includeAnnotations, quality);
-  }));
-  subs.add(exportControl.on('sourceExportRequested', ({ format, quality }) => {
-    viewer.exportSourceFrame(format, quality);
-  }));
-  subs.add(exportControl.on('copyRequested', () => {
-    viewer.copyFrameToClipboard(true);
-  }));
-  subs.add(exportControl.on('sequenceExportRequested', (request) => {
-    handleSequenceExport(session, viewer, request);
-  }));
-  subs.add(exportControl.on('videoExportRequested', (request) => {
-    if (videoExportInProgress) {
-      showAlert('A video export is already in progress', { type: 'warning', title: 'Export Busy' });
-      return;
-    }
-    videoExportInProgress = true;
-    void handleVideoExport(session, viewer, request, controls).finally(() => {
-      videoExportInProgress = false;
-    });
-  }));
-  subs.add(exportControl.on('rvSessionExportRequested', ({ format }) => {
-    persistenceManager.saveRvSession(format);
-  }));
-  subs.add(exportControl.on('annotationsJSONExportRequested', () => {
-    const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'annotations';
-    downloadAnnotationsJSON(ctx.paintEngine, sourceName);
-  }));
-  subs.add(exportControl.on('annotationsPDFExportRequested', () => {
-    void exportAnnotationsPDF(
-      ctx.paintEngine,
-      session,
-      async (frame: number) => {
-        const canvas = await viewer.renderFrameToCanvas(frame, true);
-        if (!canvas) {
-          throw new Error(`Failed to render frame ${frame}`);
-        }
-        return canvas;
-      },
-      { title: session.metadata?.displayName || 'Annotation Report' },
-    );
-  }));
-  subs.add(exportControl.on('reportExportRequested', ({ format }) => {
-    generateReport(
-      session,
-      session.noteManager,
-      session.statusManager,
-      session.versionManager,
-      {
+  subs.add(
+    exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
+      viewer.exportFrame(format, includeAnnotations, quality);
+    }),
+  );
+  subs.add(
+    exportControl.on('sourceExportRequested', ({ format, quality }) => {
+      viewer.exportSourceFrame(format, quality);
+    }),
+  );
+  subs.add(
+    exportControl.on('copyRequested', () => {
+      viewer.copyFrameToClipboard(true);
+    }),
+  );
+  subs.add(
+    exportControl.on('sequenceExportRequested', (request) => {
+      handleSequenceExport(session, viewer, request);
+    }),
+  );
+  subs.add(
+    exportControl.on('videoExportRequested', (request) => {
+      if (videoExportInProgress) {
+        showAlert('A video export is already in progress', { type: 'warning', title: 'Export Busy' });
+        return;
+      }
+      videoExportInProgress = true;
+      void handleVideoExport(session, viewer, request, controls).finally(() => {
+        videoExportInProgress = false;
+      });
+    }),
+  );
+  subs.add(
+    exportControl.on('rvSessionExportRequested', ({ format }) => {
+      persistenceManager.saveRvSession(format);
+    }),
+  );
+  subs.add(
+    exportControl.on('annotationsJSONExportRequested', () => {
+      const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'annotations';
+      downloadAnnotationsJSON(ctx.paintEngine, sourceName);
+    }),
+  );
+  subs.add(
+    exportControl.on('annotationsPDFExportRequested', () => {
+      void exportAnnotationsPDF(
+        ctx.paintEngine,
+        session,
+        async (frame: number) => {
+          const canvas = await viewer.renderFrameToCanvas(frame, true);
+          if (!canvas) {
+            throw new Error(`Failed to render frame ${frame}`);
+          }
+          return canvas;
+        },
+        { title: session.metadata?.displayName || 'Annotation Report' },
+      );
+    }),
+  );
+  subs.add(
+    exportControl.on('reportExportRequested', ({ format }) => {
+      generateReport(session, session.noteManager, session.statusManager, session.versionManager, {
         format,
         includeNotes: true,
         includeTimecodes: true,
         includeVersions: true,
         title: session.metadata.displayName || 'Dailies Report',
-      }
-    );
-  }));
+      });
+    }),
+  );
 
   // Snapshot panel restore
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
 
   // Note panel events
-  subs.add(controls.notePanel.on('noteSelected', ({ frame }) => {
-    session.goToFrame(frame);
-  }));
+  subs.add(
+    controls.notePanel.on('noteSelected', ({ frame }) => {
+      session.goToFrame(frame);
+    }),
+  );
 
   // Playlist panel events
   subs.add(controls.playlistPanel.on('addCurrentSource', () => addCurrentSourceToPlaylist(session, controls)));
-  subs.add(controls.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {
-    jumpToPlaylistClip(session, controls, sourceIndex, frame);
-  }));
+  subs.add(
+    controls.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {
+      jumpToPlaylistClip(session, controls, sourceIndex, frame);
+    }),
+  );
 
   // Set initial fps and keep playlist panel in sync with session fps
   controls.playlistPanel.setFps(session.fps || 24);
@@ -206,7 +236,7 @@ async function handleSequenceExport(
     includeAnnotations: boolean;
     quality: number;
     useInOutRange: boolean;
-  }
+  },
 ): Promise<void> {
   const source = session.currentSource;
   if (!source) {
@@ -316,7 +346,7 @@ async function handleSequenceExport(
         // Navigate to frame and render
         session.goToFrame(frame);
         // Small delay to allow frame to load
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         const canvas = await viewer.renderFrameToCanvas(frame, request.includeAnnotations);
         if (!canvas) {
           throw new Error(`Failed to render frame ${frame}`);
@@ -327,7 +357,7 @@ async function handleSequenceExport(
         progressText.textContent = `Exporting frames ${progress.currentFrame - startFrame + 1}/${totalFrames}...`;
         progressFill.style.width = `${progress.percent}%`;
       },
-      cancellationToken
+      cancellationToken,
     );
 
     // Restore original frame
@@ -359,7 +389,7 @@ async function handleSequenceExport(
 
 function resolveFrameRange(
   session: Session,
-  useInOutRange: boolean
+  useInOutRange: boolean,
 ): { startFrame: number; endFrame: number; totalFrames: number } | null {
   const frameCount = session.frameCount;
   if (frameCount <= 0) {
@@ -417,11 +447,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function normalizeCanvasSize(
-  canvas: HTMLCanvasElement,
-  width: number,
-  height: number
-): HTMLCanvasElement | null {
+function normalizeCanvasSize(canvas: HTMLCanvasElement, width: number, height: number): HTMLCanvasElement | null {
   if (canvas.width === width && canvas.height === height) {
     return canvas;
   }
@@ -556,7 +582,7 @@ async function handleVideoExport(
           return null;
         }
         return normalizeCanvasSize(canvas, width, height);
-      }
+      },
     );
 
     const mp4Blob = muxToMP4Blob(result.chunks, {
@@ -596,7 +622,7 @@ async function handleVideoExport(
  */
 function addCurrentSourceToPlaylist(
   session: Session,
-  controls: import('./AppControlRegistry').AppControlRegistry
+  controls: import('./AppControlRegistry').AppControlRegistry,
 ): void {
   const source = session.currentSource;
   if (!source) {
@@ -608,12 +634,7 @@ function addCurrentSourceToPlaylist(
   const inPoint = session.inPoint;
   const outPoint = session.outPoint;
 
-  controls.playlistManager.addClip(
-    sourceIndex,
-    source.name || `Source ${sourceIndex + 1}`,
-    inPoint,
-    outPoint
-  );
+  controls.playlistManager.addClip(sourceIndex, source.name || `Source ${sourceIndex + 1}`, inPoint, outPoint);
 
   showAlert(`Added "${source.name}" to playlist`, { type: 'success', title: 'Clip Added' });
 }
@@ -625,7 +646,7 @@ function jumpToPlaylistClip(
   session: Session,
   controls: import('./AppControlRegistry').AppControlRegistry,
   sourceIndex: number,
-  frame: number
+  frame: number,
 ): void {
   // Switch to the source if different
   if (session.currentSourceIndex !== sourceIndex) {
@@ -666,112 +687,120 @@ function wirePlaylistRuntime(
     previousLoopMode: null,
   };
 
-  subs.add(controls.playlistManager.on('enabledChanged', ({ enabled }) => {
-    if (enabled) {
+  subs.add(
+    controls.playlistManager.on('enabledChanged', ({ enabled }) => {
+      if (enabled) {
+        if (controls.playlistManager.getClipCount() === 0) {
+          controls.playlistManager.setEnabled(false);
+          showAlert('Add at least one clip before enabling playlist mode', {
+            type: 'warning',
+            title: 'Playlist',
+          });
+          return;
+        }
+
+        if (runtime.previousLoopMode === null) {
+          runtime.previousLoopMode = session.loopMode;
+        }
+        // Keep source playback looping at clip boundaries; PlaylistManager owns
+        // cross-clip behavior while playlist mode is active.
+        session.loopMode = 'loop';
+
+        const currentClip = findClipForSourceFrame(
+          controls.playlistManager.getClips(),
+          session.currentSourceIndex,
+          session.currentFrame,
+        );
+        const firstClip = controls.playlistManager.getClipByIndex(0);
+        const targetGlobalFrame = currentClip
+          ? currentClip.clip.globalStartFrame + (session.currentFrame - currentClip.clip.inPoint)
+          : firstClip?.globalStartFrame;
+
+        if (targetGlobalFrame !== undefined) {
+          runtime.syncing = true;
+          syncSessionToPlaylistFrame(session, controls, targetGlobalFrame, runtime);
+          runtime.syncing = false;
+        }
+      } else {
+        runtime.activeClipId = null;
+        if (runtime.previousLoopMode !== null) {
+          session.loopMode = runtime.previousLoopMode;
+          runtime.previousLoopMode = null;
+        }
+        session.resetInOutPoints();
+      }
+
+      runtime.lastFrame = session.currentFrame;
+      runtime.lastSourceIndex = session.currentSourceIndex;
+    }),
+  );
+
+  subs.add(
+    controls.playlistManager.on('clipsChanged', () => {
+      if (!controls.playlistManager.isEnabled()) return;
+
       if (controls.playlistManager.getClipCount() === 0) {
         controls.playlistManager.setEnabled(false);
-        showAlert('Add at least one clip before enabling playlist mode', {
-          type: 'warning',
+        showAlert('Playlist is empty. Playlist mode was disabled.', {
+          type: 'info',
           title: 'Playlist',
         });
         return;
       }
 
-      if (runtime.previousLoopMode === null) {
-        runtime.previousLoopMode = session.loopMode;
-      }
-      // Keep source playback looping at clip boundaries; PlaylistManager owns
-      // cross-clip behavior while playlist mode is active.
-      session.loopMode = 'loop';
+      const totalDuration = controls.playlistManager.getTotalDuration();
+      const clampedFrame = Math.max(1, Math.min(controls.playlistManager.getCurrentFrame(), totalDuration));
 
-      const currentClip = findClipForSourceFrame(
-        controls.playlistManager.getClips(),
-        session.currentSourceIndex,
-        session.currentFrame,
-      );
-      const firstClip = controls.playlistManager.getClipByIndex(0);
-      const targetGlobalFrame = currentClip
-        ? currentClip.clip.globalStartFrame + (session.currentFrame - currentClip.clip.inPoint)
-        : firstClip?.globalStartFrame;
-
-      if (targetGlobalFrame !== undefined) {
-        runtime.syncing = true;
-        syncSessionToPlaylistFrame(session, controls, targetGlobalFrame, runtime);
-        runtime.syncing = false;
-      }
-    } else {
-      runtime.activeClipId = null;
-      if (runtime.previousLoopMode !== null) {
-        session.loopMode = runtime.previousLoopMode;
-        runtime.previousLoopMode = null;
-      }
-      session.resetInOutPoints();
-    }
-
-    runtime.lastFrame = session.currentFrame;
-    runtime.lastSourceIndex = session.currentSourceIndex;
-  }));
-
-  subs.add(controls.playlistManager.on('clipsChanged', () => {
-    if (!controls.playlistManager.isEnabled()) return;
-
-    if (controls.playlistManager.getClipCount() === 0) {
-      controls.playlistManager.setEnabled(false);
-      showAlert('Playlist is empty. Playlist mode was disabled.', {
-        type: 'info',
-        title: 'Playlist',
-      });
-      return;
-    }
-
-    const totalDuration = controls.playlistManager.getTotalDuration();
-    const clampedFrame = Math.max(1, Math.min(controls.playlistManager.getCurrentFrame(), totalDuration));
-
-    runtime.syncing = true;
-    syncSessionToPlaylistFrame(session, controls, clampedFrame, runtime);
-    runtime.syncing = false;
-    runtime.lastFrame = session.currentFrame;
-    runtime.lastSourceIndex = session.currentSourceIndex;
-  }));
-
-  subs.add(session.on('frameChanged', (frame) => {
-    if (!controls.playlistManager.isEnabled() || runtime.syncing) {
-      runtime.lastFrame = frame;
-      runtime.lastSourceIndex = session.currentSourceIndex;
-      return;
-    }
-
-    const active = resolveActiveClip(session, controls, runtime);
-    if (!active) {
-      runtime.lastFrame = frame;
-      runtime.lastSourceIndex = session.currentSourceIndex;
-      return;
-    }
-
-    const direction = session.playDirection >= 0 ? 1 : -1;
-    const wrappedForward = direction > 0 &&
-      runtime.lastSourceIndex === active.clip.sourceIndex &&
-      runtime.lastFrame === active.clip.outPoint &&
-      frame === active.clip.inPoint;
-    const wrappedBackward = direction < 0 &&
-      runtime.lastSourceIndex === active.clip.sourceIndex &&
-      runtime.lastFrame === active.clip.inPoint &&
-      frame === active.clip.outPoint;
-
-    if (wrappedForward || wrappedBackward) {
-      handlePlaylistBoundaryWrap(session, controls, runtime, active, direction);
+      runtime.syncing = true;
+      syncSessionToPlaylistFrame(session, controls, clampedFrame, runtime);
+      runtime.syncing = false;
       runtime.lastFrame = session.currentFrame;
       runtime.lastSourceIndex = session.currentSourceIndex;
-      return;
-    }
+    }),
+  );
 
-    // Normal in-clip frame advance
-    const globalFrame = active.clip.globalStartFrame + (frame - active.clip.inPoint);
-    controls.playlistManager.setCurrentFrame(globalFrame);
+  subs.add(
+    session.on('frameChanged', (frame) => {
+      if (!controls.playlistManager.isEnabled() || runtime.syncing) {
+        runtime.lastFrame = frame;
+        runtime.lastSourceIndex = session.currentSourceIndex;
+        return;
+      }
 
-    runtime.lastFrame = frame;
-    runtime.lastSourceIndex = session.currentSourceIndex;
-  }));
+      const active = resolveActiveClip(session, controls, runtime);
+      if (!active) {
+        runtime.lastFrame = frame;
+        runtime.lastSourceIndex = session.currentSourceIndex;
+        return;
+      }
+
+      const direction = session.playDirection >= 0 ? 1 : -1;
+      const wrappedForward =
+        direction > 0 &&
+        runtime.lastSourceIndex === active.clip.sourceIndex &&
+        runtime.lastFrame === active.clip.outPoint &&
+        frame === active.clip.inPoint;
+      const wrappedBackward =
+        direction < 0 &&
+        runtime.lastSourceIndex === active.clip.sourceIndex &&
+        runtime.lastFrame === active.clip.inPoint &&
+        frame === active.clip.outPoint;
+
+      if (wrappedForward || wrappedBackward) {
+        handlePlaylistBoundaryWrap(session, controls, runtime, active, direction);
+        runtime.lastFrame = session.currentFrame;
+        runtime.lastSourceIndex = session.currentSourceIndex;
+        return;
+      }
+
+      // Normal in-clip frame advance
+      const globalFrame = active.clip.globalStartFrame + (frame - active.clip.inPoint);
+      controls.playlistManager.setCurrentFrame(globalFrame);
+
+      runtime.lastFrame = frame;
+      runtime.lastSourceIndex = session.currentSourceIndex;
+    }),
+  );
 }
 
 function handlePlaylistBoundaryWrap(
@@ -782,9 +811,7 @@ function handlePlaylistBoundaryWrap(
   direction: 1 | -1,
 ): void {
   const clip = active.clip;
-  const edgeGlobal = direction > 0
-    ? clip.globalStartFrame + clip.duration - 1
-    : clip.globalStartFrame;
+  const edgeGlobal = direction > 0 ? clip.globalStartFrame + clip.duration - 1 : clip.globalStartFrame;
 
   controls.playlistManager.setCurrentFrame(edgeGlobal);
 
@@ -800,9 +827,8 @@ function handlePlaylistBoundaryWrap(
   }
 
   const loopMode = controls.playlistManager.getLoopMode();
-  const atPlaylistEdge = direction > 0
-    ? active.index === controls.playlistManager.getClipCount() - 1
-    : active.index === 0;
+  const atPlaylistEdge =
+    direction > 0 ? active.index === controls.playlistManager.getClipCount() - 1 : active.index === 0;
 
   // No-loop edge: undo source-level wrap and stop on boundary.
   if (loopMode === 'none' && atPlaylistEdge) {
@@ -819,11 +845,12 @@ function handlePlaylistBoundaryWrap(
     return;
   }
 
-  const next = direction < 0 && loopMode === 'single'
-    ? { frame: clip.globalStartFrame + clip.duration - 1, clipChanged: false }
-    : (direction > 0
-      ? controls.playlistManager.getNextFrame(edgeGlobal)
-      : controls.playlistManager.getPreviousFrame(edgeGlobal));
+  const next =
+    direction < 0 && loopMode === 'single'
+      ? { frame: clip.globalStartFrame + clip.duration - 1, clipChanged: false }
+      : direction > 0
+        ? controls.playlistManager.getNextFrame(edgeGlobal)
+        : controls.playlistManager.getPreviousFrame(edgeGlobal);
 
   if (next.clipChanged) {
     runtime.syncing = true;
@@ -841,20 +868,24 @@ function resolveActiveClip(
 ): { clip: PlaylistClip; index: number } | null {
   if (runtime.activeClipId) {
     const clip = controls.playlistManager.getClip(runtime.activeClipId);
-    if (clip &&
-        clip.sourceIndex === session.currentSourceIndex &&
-        session.currentFrame >= clip.inPoint &&
-        session.currentFrame <= clip.outPoint) {
-      const index = controls.playlistManager.getClips().findIndex(c => c.id === clip.id);
+    if (
+      clip &&
+      clip.sourceIndex === session.currentSourceIndex &&
+      session.currentFrame >= clip.inPoint &&
+      session.currentFrame <= clip.outPoint
+    ) {
+      const index = controls.playlistManager.getClips().findIndex((c) => c.id === clip.id);
       if (index >= 0) return { clip, index };
     }
   }
 
   const currentMapping = controls.playlistManager.getClipAtFrame(controls.playlistManager.getCurrentFrame());
-  if (currentMapping &&
-      currentMapping.sourceIndex === session.currentSourceIndex &&
-      session.currentFrame >= currentMapping.clip.inPoint &&
-      session.currentFrame <= currentMapping.clip.outPoint) {
+  if (
+    currentMapping &&
+    currentMapping.sourceIndex === session.currentSourceIndex &&
+    session.currentFrame >= currentMapping.clip.inPoint &&
+    session.currentFrame <= currentMapping.clip.outPoint
+  ) {
     runtime.activeClipId = currentMapping.clip.id;
     return { clip: currentMapping.clip, index: currentMapping.clipIndex };
   }

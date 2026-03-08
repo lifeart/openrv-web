@@ -81,64 +81,84 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs };
 
   // Inbound: syncFrame with loop protection
-  subs.add(dccBridge.on('syncFrame', (msg) => {
-    state.suppressFrameSync = true;
-    try {
-      session.goToFrame(msg.frame);
-    } finally {
-      state.suppressFrameSync = false;
-    }
-  }));
+  subs.add(
+    dccBridge.on('syncFrame', (msg) => {
+      state.suppressFrameSync = true;
+      try {
+        session.goToFrame(msg.frame);
+      } finally {
+        state.suppressFrameSync = false;
+      }
+    }),
+  );
 
   // Inbound: loadMedia - dispatch to image or video loader
-  subs.add(dccBridge.on('loadMedia', (msg) => {
-    const path = msg.path;
-    const ext = path.split('.').pop()?.toLowerCase() ?? '';
-    const name = path.split('/').pop() ?? path;
-    if (VIDEO_EXTENSIONS.includes(ext)) {
-      session.loadVideo(name, path).then(() => {
-        if (typeof msg.frame === 'number') {
-          session.goToFrame(msg.frame);
-        }
-      }).catch((err) => { log.error('Failed to load video from DCC:', err); });
-    } else {
-      session.loadImage(name, path).then(() => {
-        if (typeof msg.frame === 'number') {
-          session.goToFrame(msg.frame);
-        }
-      }).catch((err) => { log.error('Failed to load image from DCC:', err); });
-    }
-  }));
+  subs.add(
+    dccBridge.on('loadMedia', (msg) => {
+      const path = msg.path;
+      const ext = path.split('.').pop()?.toLowerCase() ?? '';
+      const name = path.split('/').pop() ?? path;
+      if (VIDEO_EXTENSIONS.includes(ext)) {
+        session
+          .loadVideo(name, path)
+          .then(() => {
+            if (typeof msg.frame === 'number') {
+              session.goToFrame(msg.frame);
+            }
+          })
+          .catch((err) => {
+            log.error('Failed to load video from DCC:', err);
+          });
+      } else {
+        session
+          .loadImage(name, path)
+          .then(() => {
+            if (typeof msg.frame === 'number') {
+              session.goToFrame(msg.frame);
+            }
+          })
+          .catch((err) => {
+            log.error('Failed to load image from DCC:', err);
+          });
+      }
+    }),
+  );
 
   // Inbound: syncColor - apply color settings to viewer via controls
-  subs.add(dccBridge.on('syncColor', (msg: SyncColorMessage) => {
-    const adjustments: Partial<ColorAdjustments> = {};
-    if (typeof msg.exposure === 'number') adjustments.exposure = msg.exposure;
-    if (typeof msg.gamma === 'number') adjustments.gamma = msg.gamma;
-    if (typeof msg.temperature === 'number') adjustments.temperature = msg.temperature;
-    if (typeof msg.tint === 'number') adjustments.tint = msg.tint;
-    if (Object.keys(adjustments).length > 0) {
-      colorControls.setAdjustments(adjustments);
-      viewer.setColorAdjustments(colorControls.getAdjustments());
-    }
-  }));
+  subs.add(
+    dccBridge.on('syncColor', (msg: SyncColorMessage) => {
+      const adjustments: Partial<ColorAdjustments> = {};
+      if (typeof msg.exposure === 'number') adjustments.exposure = msg.exposure;
+      if (typeof msg.gamma === 'number') adjustments.gamma = msg.gamma;
+      if (typeof msg.temperature === 'number') adjustments.temperature = msg.temperature;
+      if (typeof msg.tint === 'number') adjustments.tint = msg.tint;
+      if (Object.keys(adjustments).length > 0) {
+        colorControls.setAdjustments(adjustments);
+        viewer.setColorAdjustments(colorControls.getAdjustments());
+      }
+    }),
+  );
 
   // Outbound: frameChanged (with loop protection)
-  subs.add(session.on('frameChanged', () => {
-    if (!state.suppressFrameSync) {
-      dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
-    }
-  }));
+  subs.add(
+    session.on('frameChanged', () => {
+      if (!state.suppressFrameSync) {
+        dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
+      }
+    }),
+  );
 
   // Outbound: adjustmentsChanged -> send color to DCC bridge
-  subs.add(colorControls.on('adjustmentsChanged', (adjustments: ColorAdjustments) => {
-    dccBridge.sendColorChanged({
-      exposure: adjustments.exposure,
-      gamma: adjustments.gamma,
-      temperature: adjustments.temperature,
-      tint: adjustments.tint,
-    });
-  }));
+  subs.add(
+    colorControls.on('adjustmentsChanged', (adjustments: ColorAdjustments) => {
+      dccBridge.sendColorChanged({
+        exposure: adjustments.exposure,
+        gamma: adjustments.gamma,
+        temperature: adjustments.temperature,
+        tint: adjustments.tint,
+      });
+    }),
+  );
 
   return state;
 }

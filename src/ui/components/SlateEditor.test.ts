@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  SlateEditor,
-  DEFAULT_SLATE_EDITOR_STATE,
-} from './SlateEditor';
+import { SlateEditor, DEFAULT_SLATE_EDITOR_STATE } from './SlateEditor';
 describe('SlateEditor', () => {
   let editor: SlateEditor;
 
@@ -79,9 +76,7 @@ describe('SlateEditor', () => {
       editor.on('stateChanged', handler);
       editor.setState({ fontSizeMultiplier: 1.5 });
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ fontSizeMultiplier: 1.5 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ fontSizeMultiplier: 1.5 }));
     });
 
     it('SE-013: setState merges partial state', () => {
@@ -364,8 +359,8 @@ describe('SlateEditor', () => {
         colorSpace: 'sRGB',
       });
       const fields = editor.buildFields();
-      expect(fields.some(f => f.value === 'H.264')).toBe(true);
-      expect(fields.some(f => f.value === 'sRGB')).toBe(true);
+      expect(fields.some((f) => f.value === 'H.264')).toBe(true);
+      expect(fields.some((f) => f.value === 'sRGB')).toBe(true);
     });
   });
 
@@ -397,9 +392,7 @@ describe('SlateEditor', () => {
       editor.on('configGenerated', handler);
       editor.generateConfig();
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ width: 1920, height: 1080 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ width: 1920, height: 1080 }));
     });
 
     it('SE-093: config reflects custom resolution', () => {
@@ -412,7 +405,7 @@ describe('SlateEditor', () => {
     it('SE-094: config includes custom fields', () => {
       editor.addCustomField({ label: 'Notes', value: 'Final', size: 'small' });
       const config = editor.generateConfig();
-      expect(config.fields.some(f => f.label === 'Notes' && f.value === 'Final')).toBe(true);
+      expect(config.fields.some((f) => f.label === 'Notes' && f.value === 'Final')).toBe(true);
     });
 
     it('SE-095: config includes fontSizeMultiplier', () => {

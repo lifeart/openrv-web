@@ -11,7 +11,7 @@ import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
-import { SessionGTOStore } from './core/session/SessionGTOStore';
+import type { SessionGTOStore } from './core/session/SessionGTOStore';
 import type { AutoSaveManager } from './core/session/AutoSaveManager';
 import type { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
 import type { SnapshotManager } from './core/session/SnapshotManager';
@@ -116,8 +116,8 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled'
-      )
+        session.currentSource?.name || 'Untitled',
+      ),
     );
     autoSaveIndicator.markUnsaved();
   }
@@ -136,7 +136,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled'
+        session.currentSource?.name || 'Untitled',
       );
       autoSaveManager.saveNow(state);
     } catch (err) {
@@ -158,7 +158,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled'
+        session.currentSource?.name || 'Untitled',
       );
       const now = new Date();
       const name = `Snapshot ${now.toLocaleTimeString()}`;
@@ -184,7 +184,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled'
+        session.currentSource?.name || 'Untitled',
       );
       await snapshotManager.createAutoCheckpoint(event, state);
     } catch (err) {
@@ -196,9 +196,21 @@ export class AppPersistenceManager {
    * Restore a snapshot by ID
    */
   async restoreSnapshot(id: string): Promise<void> {
-    const { session, paintEngine, viewer, snapshotManager, snapshotPanel,
-            colorControls, cdlControl, filterControl, transformControl, cropControl, lensControl,
-            noiseReductionControl, watermarkControl } = this.ctx;
+    const {
+      session,
+      paintEngine,
+      viewer,
+      snapshotManager,
+      snapshotPanel,
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+    } = this.ctx;
     try {
       const state = await snapshotManager.getSnapshot(id);
       if (!state) {
@@ -210,16 +222,13 @@ export class AppPersistenceManager {
       await this.createAutoCheckpoint('Before Restore');
 
       // Restore the session state
-      await SessionSerializer.fromJSON(
-        state,
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
-        }
-      );
+      await SessionSerializer.fromJSON(state, {
+        session,
+        paintEngine,
+        viewer,
+        playlistManager: this.ctx.playlistManager,
+        cacheManager: this.ctx.cacheManager,
+      });
 
       // Update UI controls with restored state
       if (state.color) colorControls.setAdjustments(state.color);
@@ -256,7 +265,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        'project'
+        'project',
       );
       await SessionSerializer.saveToFile(state, 'project.orvproject');
     } catch (err) {
@@ -297,16 +306,13 @@ export class AppPersistenceManager {
 
       if (ext === 'orvproject') {
         const state = await SessionSerializer.loadFromFile(file);
-        const result = await SessionSerializer.fromJSON(
-          state,
-          {
-            session,
-            paintEngine,
-            viewer,
-            playlistManager: this.ctx.playlistManager,
-            cacheManager: this.ctx.cacheManager,
-          }
-        );
+        const result = await SessionSerializer.fromJSON(state, {
+          session,
+          paintEngine,
+          viewer,
+          playlistManager: this.ctx.playlistManager,
+          cacheManager: this.ctx.cacheManager,
+        });
 
         if (result.warnings.length > 0) {
           showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
@@ -334,7 +340,7 @@ export class AppPersistenceManager {
       } else {
         showAlert(
           `Unable to open as project. Expected .orvproject, .rv, .gto, or .rvedl but got .${ext}. Use the Open Media button to load media files.`,
-          { type: 'warning', title: 'Unsupported File' }
+          { type: 'warning', title: 'Unsupported File' },
         );
       }
     } catch (err) {
@@ -363,7 +369,7 @@ export class AppPersistenceManager {
       autoSaveManager.on('storageWarning', (info) => {
         showAlert(
           `Storage space is running low (${info.percentUsed}% used). Consider clearing old auto-saves or freeing up browser storage.`,
-          { type: 'warning', title: 'Storage Warning' }
+          { type: 'warning', title: 'Storage Warning' },
         );
       });
 
@@ -382,7 +388,7 @@ export class AppPersistenceManager {
               title: 'Recover Session',
               confirmText: 'Recover',
               cancelText: 'Discard',
-            }
+            },
           );
 
           if (recover) {
@@ -402,9 +408,20 @@ export class AppPersistenceManager {
    * Recover session from auto-save
    */
   private async recoverAutoSave(id: string): Promise<void> {
-    const { autoSaveManager, session, paintEngine, viewer,
-            colorControls, cdlControl, filterControl, transformControl, cropControl, lensControl,
-            noiseReductionControl, watermarkControl } = this.ctx;
+    const {
+      autoSaveManager,
+      session,
+      paintEngine,
+      viewer,
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+    } = this.ctx;
     try {
       const state = await autoSaveManager.getAutoSave(id);
       if (state) {

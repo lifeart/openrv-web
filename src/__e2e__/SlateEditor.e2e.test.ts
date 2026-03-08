@@ -23,11 +23,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  SlateEditor,
-  DEFAULT_SLATE_EDITOR_STATE,
-  type SlateEditorState,
-} from '../ui/components/SlateEditor';
+import { SlateEditor, DEFAULT_SLATE_EDITOR_STATE, type SlateEditorState } from '../ui/components/SlateEditor';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -486,7 +482,7 @@ describe('SlateEditor E2E Integration', () => {
       const fields = editor.buildFields();
       expect(fields.length).toBeGreaterThanOrEqual(2);
 
-      const showField = fields.find(f => f.value === 'Avatar');
+      const showField = fields.find((f) => f.value === 'Avatar');
       expect(showField).toBeDefined();
     });
 
@@ -504,7 +500,7 @@ describe('SlateEditor E2E Integration', () => {
       editor.setMetadata({ showName: '', shotName: 'sh010' });
 
       const fields = editor.buildFields();
-      const emptyField = fields.find(f => f.value === '');
+      const emptyField = fields.find((f) => f.value === '');
       expect(emptyField).toBeUndefined();
     });
   });
@@ -571,7 +567,7 @@ describe('SlateEditor E2E Integration', () => {
 
       const config = editor.generateConfig();
 
-      expect(config.fields.some(f => f.label === 'Codec')).toBe(true);
+      expect(config.fields.some((f) => f.label === 'Codec')).toBe(true);
     });
   });
 
@@ -663,7 +659,7 @@ describe('SlateEditor E2E Integration', () => {
 
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback).toHaveBeenCalledWith(config);
-      expect(config.fields.some(f => f.value === 'Test Show')).toBe(true);
+      expect(config.fields.some((f) => f.value === 'Test Show')).toBe(true);
 
       editor.dispose();
     });
@@ -857,7 +853,7 @@ describe('SlateEditor E2E Integration', () => {
         // Config should include logo
         const config = editor.generateConfig();
         expect(config.logo).toBeDefined();
-        expect(config.fields.some(f => f.value === 'My Film')).toBe(true);
+        expect(config.fields.some((f) => f.value === 'My Film')).toBe(true);
       } finally {
         globalThis.Image = origImage;
       }

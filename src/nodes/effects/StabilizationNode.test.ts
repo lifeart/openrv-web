@@ -9,9 +9,17 @@ const context: EvalContext = { frame: 1, width: 4, height: 4, quality: 'full' };
 
 class TestSourceNode extends IPNode {
   private image: IPImage;
-  constructor(image: IPImage) { super('TestSource'); this.image = image; }
-  protected process(): IPImage | null { return this.image; }
-  setImage(img: IPImage) { this.image = img; this.markDirty(); }
+  constructor(image: IPImage) {
+    super('TestSource');
+    this.image = image;
+  }
+  protected process(): IPImage | null {
+    return this.image;
+  }
+  setImage(img: IPImage) {
+    this.image = img;
+    this.markDirty();
+  }
 }
 
 function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {

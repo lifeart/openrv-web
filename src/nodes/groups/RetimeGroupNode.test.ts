@@ -7,7 +7,7 @@ describe('RetimeGroupNode', () => {
     frame: 1,
     width: 1920,
     height: 1080,
-    quality: 'full'
+    quality: 'full',
   };
 
   it('RGN-001: initializes with standard properties', () => {
@@ -21,19 +21,19 @@ describe('RetimeGroupNode', () => {
     const node = new RetimeGroupNode();
     node.properties.setValue('scale', 2.0);
     node.properties.setValue('offset', 10);
-    
+
     expect(node.getRetimedFrame(5)).toBe(20); // 5 * 2 + 10
   });
 
   it('RGN-003: getRetimedFrame - reverse', () => {
     const node = new RetimeGroupNode();
     node.properties.setValue('reverse', true);
-    
+
     // Reverse on frame 1 of a 100-frame clip -> frame 100
     expect(node.getRetimedFrame(1, 100)).toBe(100);
     // Reverse on frame 100 of a 100-frame clip -> frame 1
     expect(node.getRetimedFrame(100, 100)).toBe(1);
-    
+
     // Using stored duration
     node.properties.setValue('duration', 50);
     expect(node.getRetimedFrame(1)).toBe(50);
@@ -58,10 +58,10 @@ describe('RetimeGroupNode', () => {
     node.properties.setValue('explicitFirstOutputFrame', 10);
     node.properties.setValue('explicitInputFrames', [1, 3, 5, 7]);
 
-    expect(node.getRetimedFrame(10)).toBe(1);  // index 0 -> 1
-    expect(node.getRetimedFrame(11)).toBe(3);  // index 1 -> 3
-    expect(node.getRetimedFrame(12)).toBe(5);  // index 2 -> 5
-    expect(node.getRetimedFrame(13)).toBe(7);  // index 3 -> 7
+    expect(node.getRetimedFrame(10)).toBe(1); // index 0 -> 1
+    expect(node.getRetimedFrame(11)).toBe(3); // index 1 -> 3
+    expect(node.getRetimedFrame(12)).toBe(5); // index 2 -> 5
+    expect(node.getRetimedFrame(13)).toBe(7); // index 3 -> 7
   });
 
   it('RT-EXP-002: Output frame before firstOutputFrame clamps to first input frame', () => {
@@ -129,8 +129,8 @@ describe('RetimeGroupNode', () => {
 
     // All output frames should map to frame 42
     expect(node.getRetimedFrame(1)).toBe(42);
-    expect(node.getRetimedFrame(0)).toBe(42);   // before range -> clamp to first (only) entry
-    expect(node.getRetimedFrame(2)).toBe(42);   // after range -> clamp to last (only) entry
+    expect(node.getRetimedFrame(0)).toBe(42); // before range -> clamp to first (only) entry
+    expect(node.getRetimedFrame(2)).toBe(42); // after range -> clamp to last (only) entry
     expect(node.getRetimedFrame(100)).toBe(42); // well past range
   });
 

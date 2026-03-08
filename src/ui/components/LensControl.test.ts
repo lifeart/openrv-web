@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LensControl } from './LensControl';
-import { DEFAULT_LENS_PARAMS, LensDistortionParams } from '../../transform/LensDistortion';
+import { DEFAULT_LENS_PARAMS, type LensDistortionParams } from '../../transform/LensDistortion';
 
 describe('LensControl', () => {
   let control: LensControl;

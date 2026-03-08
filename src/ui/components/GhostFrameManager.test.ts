@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GhostFrameManager } from './GhostFrameManager';
-import { DEFAULT_GHOST_FRAME_STATE, GhostFrameState } from './GhostFrameControl';
+import { DEFAULT_GHOST_FRAME_STATE, type GhostFrameState } from './GhostFrameControl';
 
 describe('GhostFrameManager', () => {
   let mgr: GhostFrameManager;

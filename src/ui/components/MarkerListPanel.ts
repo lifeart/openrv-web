@@ -9,8 +9,8 @@
  * - Delete markers
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { Session, Marker, MARKER_COLORS } from '../../core/session/Session';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type Session, type Marker, MARKER_COLORS } from '../../core/session/Session';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -290,7 +290,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     // Confirmation dialog for destructive action
     const confirmed = await showConfirm(
-      `Are you sure you want to delete all ${markerCount} marker${markerCount > 1 ? 's' : ''}? This cannot be undone.`
+      `Are you sure you want to delete all ${markerCount} marker${markerCount > 1 ? 's' : ''}? This cannot be undone.`,
     );
     if (confirmed) {
       this.session.clearMarks();
@@ -363,7 +363,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         Number.isFinite(m.frame) &&
         m.frame >= 0 &&
         typeof m.note === 'string' &&
-        typeof m.color === 'string'
+        typeof m.color === 'string',
     );
 
     if (mode === 'replace') {
@@ -433,7 +433,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private cycleMarkerColor(frame: number): void {
     const marker = this.session.getMarker(frame);
     if (marker) {
-      const currentIndex = MARKER_COLORS.indexOf(marker.color as typeof MARKER_COLORS[number]);
+      const currentIndex = MARKER_COLORS.indexOf(marker.color as (typeof MARKER_COLORS)[number]);
       const nextIndex = (currentIndex + 1) % MARKER_COLORS.length;
       // Safe to use ! assertion since nextIndex is always within bounds due to modulo
       this.session.setMarkerColor(frame, MARKER_COLORS[nextIndex]!);
@@ -499,7 +499,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
    */
   private createMarkerEntry(marker: Marker): HTMLElement {
     const currentFrame = this.session.currentFrame;
-    const isCurrentFrame = marker.frame === currentFrame ||
+    const isCurrentFrame =
+      marker.frame === currentFrame ||
       (marker.endFrame !== undefined && currentFrame >= marker.frame && currentFrame <= marker.endFrame);
     const isDurationMarker = marker.endFrame !== undefined && marker.endFrame > marker.frame;
     const isEditing = this.editingFrame === marker.frame;
@@ -783,7 +784,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     // Clear all highlights first
     const allEntries = this.entriesContainer.querySelectorAll('.marker-entry');
-    allEntries.forEach(entry => {
+    allEntries.forEach((entry) => {
       (entry as HTMLElement).style.background = '';
       const frameInfo = (entry as HTMLElement).querySelector('span');
       if (frameInfo) {
@@ -794,12 +795,11 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     // Highlight entries that match current frame (exact or within range)
     for (const marker of this.session.marks.values()) {
-      const isInRange = marker.frame === currentFrame ||
+      const isInRange =
+        marker.frame === currentFrame ||
         (marker.endFrame !== undefined && currentFrame >= marker.frame && currentFrame <= marker.endFrame);
       if (isInRange) {
-        const entry = this.entriesContainer.querySelector(
-          `[data-frame="${marker.frame}"]`
-        ) as HTMLElement | null;
+        const entry = this.entriesContainer.querySelector(`[data-frame="${marker.frame}"]`) as HTMLElement | null;
         if (entry) {
           entry.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
           const frameInfo = entry.querySelector('span');
@@ -876,7 +876,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private scrollToFocusedMarker(markers: Marker[]): void {
     // Remove focus styling from all entries
     const entries = this.entriesContainer.querySelectorAll('.marker-entry');
-    entries.forEach(entry => {
+    entries.forEach((entry) => {
       (entry as HTMLElement).style.outline = '';
     });
 
@@ -884,9 +884,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     if (this.focusedMarkerIndex >= 0 && this.focusedMarkerIndex < markers.length) {
       const marker = markers[this.focusedMarkerIndex];
       if (marker) {
-        const entry = this.entriesContainer.querySelector(
-          `[data-frame="${marker.frame}"]`
-        ) as HTMLElement | null;
+        const entry = this.entriesContainer.querySelector(`[data-frame="${marker.frame}"]`) as HTMLElement | null;
         if (entry) {
           entry.style.outline = '2px solid var(--accent-primary)';
           entry.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

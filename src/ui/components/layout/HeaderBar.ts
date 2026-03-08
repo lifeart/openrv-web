@@ -5,8 +5,8 @@
  * Height: 40px
  */
 
-import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
-import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
+import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
+import { type Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import type { LoopMode } from '../../../core/types/session';
 import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/media/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
@@ -16,8 +16,13 @@ import { ThemeControl } from '../ThemeControl';
 import { showAlert, showPrompt } from '../shared/Modal';
 import { DropdownMenu } from '../shared/DropdownMenu';
 import type { PatternName } from '../../../nodes/sources/ProceduralSourceNode';
-import { getIconSvg, IconName } from '../shared/Icons';
-import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
+import { getIconSvg, type IconName } from '../shared/Icons';
+import {
+  createButton as sharedCreateButton,
+  createIconButton as sharedCreateIconButton,
+  setButtonActive,
+  applyA11yFocus,
+} from '../shared/Button';
 import { Z_INDEX, SHADOWS } from '../shared/theme';
 import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
@@ -226,7 +231,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
     // Save Project button — icon-only
-    fileGroup.appendChild(this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
+    fileGroup.appendChild(
+      this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'),
+    );
 
     // Open Project button — icon-only
     fileGroup.appendChild(this.createIconButton('layers', '', () => this.projectInput.click(), 'Open project'));
@@ -237,7 +244,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Sources dropdown (procedural test patterns)
     this._sourcesMenu = new DropdownMenu({
       minWidth: '180px',
-      onSelect: (value) => { void this.handleProceduralSource(value); },
+      onSelect: (value) => {
+        void this.handleProceduralSource(value);
+      },
     });
     this._sourcesMenu.setItems([
       { value: 'smpte_bars', label: 'SMPTE Color Bars' },
@@ -286,16 +295,24 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     playbackGroup.setAttribute('aria-label', 'Playback controls');
     this.playbackGroup = playbackGroup;
 
-    playbackGroup.appendChild(this.createIconButton('skip-back', '', () => this.session.goToStart(), 'Go to start (Home)'));
-    playbackGroup.appendChild(this.createIconButton('step-back', '', () => this.session.stepBackward(), 'Step back (\u2190)'));
+    playbackGroup.appendChild(
+      this.createIconButton('skip-back', '', () => this.session.goToStart(), 'Go to start (Home)'),
+    );
+    playbackGroup.appendChild(
+      this.createIconButton('step-back', '', () => this.session.stepBackward(), 'Step back (\u2190)'),
+    );
 
     this.playButton = this.createIconButton('play', '', () => this.session.togglePlayback(), 'Play/Pause (Space)');
     this.playButton.setAttribute('aria-pressed', 'false');
     this.playButton.style.width = '36px';
     playbackGroup.appendChild(this.playButton);
 
-    playbackGroup.appendChild(this.createIconButton('step-forward', '', () => this.session.stepForward(), 'Step forward (\u2192)'));
-    playbackGroup.appendChild(this.createIconButton('skip-forward', '', () => this.session.goToEnd(), 'Go to end (End)'));
+    playbackGroup.appendChild(
+      this.createIconButton('step-forward', '', () => this.session.stepForward(), 'Step forward (\u2192)'),
+    );
+    playbackGroup.appendChild(
+      this.createIconButton('skip-forward', '', () => this.session.goToEnd(), 'Go to end (End)'),
+    );
 
     // Loop mode button
     this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
@@ -360,17 +377,32 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     utilityGroup.appendChild(this.layoutButton);
 
     // Presentation mode button
-    this.presentationButton = this.createIconButton('monitor', '', () => this.emit('presentationToggle', undefined), 'Presentation Mode (Ctrl+Shift+P)');
+    this.presentationButton = this.createIconButton(
+      'monitor',
+      '',
+      () => this.emit('presentationToggle', undefined),
+      'Presentation Mode (Ctrl+Shift+P)',
+    );
     this.presentationButton.dataset.testid = 'presentation-mode-button';
     utilityGroup.appendChild(this.presentationButton);
 
     // External Presentation button (opens a secondary window)
-    const externalPresentationButton = this.createIconButton('external-link', '', () => this.emit('externalPresentation', undefined), 'External Presentation (Ctrl+Shift+Alt+P)');
+    const externalPresentationButton = this.createIconButton(
+      'external-link',
+      '',
+      () => this.emit('externalPresentation', undefined),
+      'External Presentation (Ctrl+Shift+Alt+P)',
+    );
     externalPresentationButton.dataset.testid = 'external-presentation-button';
     utilityGroup.appendChild(externalPresentationButton);
 
     // Fullscreen button
-    this.fullscreenButton = this.createIconButton('maximize', '', () => this.emit('fullscreenToggle', undefined), 'Fullscreen (F11)');
+    this.fullscreenButton = this.createIconButton(
+      'maximize',
+      '',
+      () => this.emit('fullscreenToggle', undefined),
+      'Fullscreen (F11)',
+    );
     this.fullscreenButton.dataset.testid = 'fullscreen-toggle-button';
     utilityGroup.appendChild(this.fullscreenButton);
 
@@ -390,7 +422,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     utilityGroup.appendChild(docsButton);
 
     // Help dropdown button (combines Keyboard Shortcuts + Custom Key Bindings)
-    this.helpButton = this.createIconButton('help', '', () => this.showHelpMenu(this.helpButton), 'Help & Key Bindings');
+    this.helpButton = this.createIconButton(
+      'help',
+      '',
+      () => this.showHelpMenu(this.helpButton),
+      'Help & Key Bindings',
+    );
     this.helpButton.dataset.testid = 'help-menu-button';
     this.helpButton.setAttribute('aria-haspopup', 'menu');
     this.helpButton.style.marginLeft = '8px';
@@ -453,7 +490,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     });
   }
 
-
   private createSessionNameDisplay(): HTMLElement {
     const container = document.createElement('button');
     container.type = 'button';
@@ -479,7 +515,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Icon
     const icon = document.createElement('span');
-    icon.innerHTML = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
+    icon.innerHTML =
+      '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
     icon.style.cssText = `
       color: currentColor;
       display: flex;
@@ -580,7 +617,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createSpeedButton(): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.testid = 'playback-speed-button';
-    button.title = 'Playback speed: Click to cycle forward, Shift+Click to cycle backward, Right-click or Shift+Enter for menu (J/K/L keys)';
+    button.title =
+      'Playback speed: Click to cycle forward, Shift+Click to cycle backward, Right-click or Shift+Enter for menu (J/K/L keys)';
     button.setAttribute('aria-haspopup', 'menu');
     button.style.cssText = `
       background: transparent;
@@ -684,9 +722,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     const mode = this.session.playbackMode;
     // Check if native video path is active (play-all-frames not fully effective)
-    const isNativeVideo = this.session.currentSource?.type === 'video'
-      && !this.session.isUsingMediabunny()
-      && this.session.currentSource?.videoSourceNode === undefined;
+    const isNativeVideo =
+      this.session.currentSource?.type === 'video' &&
+      !this.session.isUsingMediabunny() &&
+      this.session.currentSource?.videoSourceNode === undefined;
     const isDimmed = mode === 'playAllFrames' && isNativeVideo;
 
     if (mode === 'playAllFrames') {
@@ -984,10 +1023,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       labelEl.textContent = label;
       item.appendChild(labelEl);
 
-      item.addEventListener('pointerenter', () => { item.style.background = 'var(--bg-hover)'; });
-      item.addEventListener('pointerleave', () => { item.style.background = 'transparent'; });
-      item.addEventListener('focus', () => { item.style.background = 'var(--bg-hover)'; });
-      item.addEventListener('blur', () => { item.style.background = 'transparent'; });
+      item.addEventListener('pointerenter', () => {
+        item.style.background = 'var(--bg-hover)';
+      });
+      item.addEventListener('pointerleave', () => {
+        item.style.background = 'transparent';
+      });
+      item.addEventListener('focus', () => {
+        item.style.background = 'var(--bg-hover)';
+      });
+      item.addEventListener('blur', () => {
+        item.style.background = 'transparent';
+      });
       item.addEventListener('click', () => {
         removeMenu();
         action();
@@ -1199,7 +1246,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   private cycleSpeed(direction: number): void {
     const currentSpeed = this.session.playbackSpeed;
-    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
+    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as (typeof PLAYBACK_SPEED_PRESETS)[number]);
 
     if (direction > 0) {
       // Cycle forward through all presets, wrapping from max to min.
@@ -1213,7 +1260,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       }
 
       // Not a preset: jump to nearest higher preset, or wrap to min.
-      const higherPreset = PLAYBACK_SPEED_PRESETS.find(p => p > currentSpeed);
+      const higherPreset = PLAYBACK_SPEED_PRESETS.find((p) => p > currentSpeed);
       if (higherPreset !== undefined) {
         this.session.playbackSpeed = higherPreset;
         return;
@@ -1233,7 +1280,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         }
       } else if (currentIndex === -1) {
         // Not a preset, find nearest lower preset
-        const lowerPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find(p => p < currentSpeed);
+        const lowerPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find((p) => p < currentSpeed);
         if (lowerPreset !== undefined) {
           this.session.playbackSpeed = lowerPreset;
           return;
@@ -1284,9 +1331,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private updateDirectionButton(): void {
     const isForward = this.session.playDirection === 1;
     this.directionButton.innerHTML = getIconSvg(isForward ? 'arrow-right' : 'arrow-left', 'sm');
-    this.directionButton.title = isForward
-      ? 'Playing forward (Up to reverse)'
-      : 'Playing backward (Up to reverse)';
+    this.directionButton.title = isForward ? 'Playing forward (Up to reverse)' : 'Playing backward (Up to reverse)';
   }
 
   private updatePlayButton(): void {
@@ -1303,27 +1348,29 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const fileArray = Array.from(files);
 
     // Check for .rvedl files in the selection
-    const edlFile = fileArray.find(f => f.name.toLowerCase().endsWith('.rvedl'));
+    const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
       try {
         const text = await edlFile.text();
         const entries = this.session.loadEDL(text);
         if (entries.length > 0) {
           // Build a summary of the loaded EDL sources
-          const uniqueSources = new Set(entries.map(e => {
-            // Extract filename from full path for display
-            const parts = e.sourcePath.split('/');
-            return parts[parts.length - 1] || e.sourcePath;
-          }));
+          const uniqueSources = new Set(
+            entries.map((e) => {
+              // Extract filename from full path for display
+              const parts = e.sourcePath.split('/');
+              return parts[parts.length - 1] || e.sourcePath;
+            }),
+          );
           const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
           const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
           showAlert(
             `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
-            `from ${edlFile.name} referencing ${uniqueSources.size} ` +
-            `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
-            `Source paths are local filesystem references. ` +
-            `Load the corresponding media files to resolve them.`,
-            { type: 'info', title: 'EDL Loaded' }
+              `from ${edlFile.name} referencing ${uniqueSources.size} ` +
+              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
+              `Source paths are local filesystem references. ` +
+              `Load the corresponding media files to resolve them.`,
+            { type: 'info', title: 'EDL Loaded' },
           );
           this.emit('fileLoaded', undefined);
         } else {
@@ -1338,7 +1385,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
 
     // Check for .rv or .gto files in the selection
-    const sessionFile = fileArray.find(f => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'));
+    const sessionFile = fileArray.find(
+      (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
+    );
 
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources
@@ -1392,7 +1441,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
         if (sequenceInfo) {
           // Successfully inferred a sequence
-          const sequenceFiles = sequenceInfo.frames.map(f => f.file);
+          const sequenceFiles = sequenceInfo.frames.map((f) => f.file);
           await this.session.loadSequence(sequenceFiles);
           this.emit('fileLoaded', undefined);
           input.value = '';
@@ -1443,10 +1492,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.layoutButton.setAttribute('aria-disabled', String(!hasPresets));
 
     const baseTitle = 'Layout presets (Alt+1..Alt+4)';
-    const activePreset = this._layoutPresets.find(p => p.id === this._activeLayoutPresetId);
-    this.layoutButton.title = activePreset
-      ? `${baseTitle} (Current: ${activePreset.label})`
-      : baseTitle;
+    const activePreset = this._layoutPresets.find((p) => p.id === this._activeLayoutPresetId);
+    this.layoutButton.title = activePreset ? `${baseTitle} (Current: ${activePreset.label})` : baseTitle;
   }
 
   // Public accessors for child controls
@@ -1551,10 +1598,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   /**
    * Configure layout presets for the header layout menu.
    */
-  setLayoutPresets(
-    presets: Pick<LayoutPreset, 'id' | 'label'>[],
-    onApply: (presetId: LayoutPresetId) => void,
-  ): void {
+  setLayoutPresets(presets: Pick<LayoutPreset, 'id' | 'label'>[], onApply: (presetId: LayoutPresetId) => void): void {
     this._layoutPresets = [...presets];
     this._layoutPresetApply = onApply;
     this.updateLayoutButtonState();
@@ -1599,10 +1643,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     let options: Record<string, unknown> = {};
 
     if (pattern === 'custom_resolution') {
-      const resStr = await showPrompt(
-        'Enter resolution (e.g. "1920 1080" or "3840 2160"):',
-        { defaultValue: '1920 1080', title: 'Custom Resolution' }
-      );
+      const resStr = await showPrompt('Enter resolution (e.g. "1920 1080" or "3840 2160"):', {
+        defaultValue: '1920 1080',
+        title: 'Custom Resolution',
+      });
       if (!resStr) return;
       const [w, h] = resStr.split(/[\sx,]+/).map(Number);
       if (!w || !h || isNaN(w) || isNaN(h) || w < 1 || h < 1) {
@@ -1619,7 +1663,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     if (pattern === 'solid') {
       const colorStr = await showPrompt(
         'Enter a color:\n  Hex: #FF0000\n  RGB 0-255: 255 0 0\n  RGB 0-1: 1.0 0.0 0.0\nValues are sRGB-encoded.',
-        { defaultValue: '0.5 0.5 0.5', title: 'Solid Color' }
+        { defaultValue: '0.5 0.5 0.5', title: 'Solid Color' },
       );
       if (!colorStr) return;
       const color = this.parseSolidColorInput(colorStr);
@@ -1643,7 +1687,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hex format: #RGB, #RRGGBB, #RRGGBBAA
     if (trimmed.startsWith('#')) {
       const hex = trimmed.slice(1);
-      let r: number, g: number, b: number, a = 1;
+      let r: number,
+        g: number,
+        b: number,
+        a = 1;
       if (hex.length === 3) {
         const h0 = hex.charAt(0);
         const h1 = hex.charAt(1);
@@ -1671,7 +1718,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     if (parts.length < 3 || parts.some(isNaN)) return null;
 
     // 0-255 integer range (any value > 1.0 triggers this)
-    if (parts.some(v => v > 1.0)) {
+    if (parts.some((v) => v > 1.0)) {
       return [
         (parts[0] ?? 0) / 255,
         (parts[1] ?? 0) / 255,
@@ -1681,12 +1728,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
 
     // 0-1 float range
-    return [
-      parts[0] ?? 0,
-      parts[1] ?? 0,
-      parts[2] ?? 0,
-      parts[3] ?? 1,
-    ];
+    return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 1];
   }
 
   /**

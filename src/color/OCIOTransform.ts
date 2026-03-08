@@ -7,33 +7,34 @@
 
 import { clamp } from '../utils/math';
 import {
-  pqEncode, pqDecode,
-  hlgEncode, hlgDecode,
-  logC3Encode, logC3Decode,
-  logC4Encode, logC4Decode,
-  log3G10Encode, log3G10Decode,
-  slog3Encode, slog3Decode,
-  gamma22Encode, gamma22Decode,
-  gamma24Encode, gamma24Decode,
-  gamma26Encode, gamma26Decode,
-  acescctEncode, acescctDecode,
-  smpte240mEncode, smpte240mDecode,
+  pqEncode,
+  pqDecode,
+  hlgEncode,
+  hlgDecode,
+  logC3Encode,
+  logC3Decode,
+  logC4Encode,
+  logC4Decode,
+  log3G10Encode,
+  log3G10Decode,
+  slog3Encode,
+  slog3Decode,
+  gamma22Encode,
+  gamma22Decode,
+  gamma24Encode,
+  gamma24Decode,
+  gamma26Encode,
+  gamma26Decode,
+  acescctEncode,
+  acescctDecode,
+  smpte240mEncode,
+  smpte240mDecode,
 } from './TransferFunctions';
 
 /**
  * 3x3 matrix type for color transforms
  */
-export type Matrix3x3 = [
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number,
-  number
-];
+export type Matrix3x3 = [number, number, number, number, number, number, number, number, number];
 
 /**
  * RGB triplet
@@ -57,7 +58,7 @@ export const D50_WHITE: RGB = [0.96422, 1.0, 0.82521];
 export const D55_WHITE: RGB = [0.95682, 1.0, 0.92149];
 
 /** Illuminant A (tungsten, ~2856K) */
-export const A_WHITE: RGB = [1.09850, 1.0, 0.35585];
+export const A_WHITE: RGB = [1.0985, 1.0, 0.35585];
 
 // =============================================================================
 // Color Space to XYZ Matrices
@@ -68,8 +69,7 @@ export const A_WHITE: RGB = [1.09850, 1.0, 0.35585];
  * Standard sRGB primaries with D65 white point
  */
 export const SRGB_TO_XYZ: Matrix3x3 = [
-  0.4124564, 0.3575761, 0.1804375, 0.2126729, 0.7151522, 0.0721750, 0.0193339,
-  0.1191920, 0.9503041,
+  0.4124564, 0.3575761, 0.1804375, 0.2126729, 0.7151522, 0.072175, 0.0193339, 0.119192, 0.9503041,
 ];
 
 /**
@@ -77,8 +77,7 @@ export const SRGB_TO_XYZ: Matrix3x3 = [
  * Inverse of SRGB_TO_XYZ
  */
 export const XYZ_TO_SRGB: Matrix3x3 = [
-  3.2404542, -1.5371385, -0.4985314, -0.9692660, 1.8760108, 0.0415560, 0.0556434,
-  -0.2040259, 1.0572252,
+  3.2404542, -1.5371385, -0.4985314, -0.969266, 1.8760108, 0.041556, 0.0556434, -0.2040259, 1.0572252,
 ];
 
 /**
@@ -86,8 +85,7 @@ export const XYZ_TO_SRGB: Matrix3x3 = [
  * ACES CG working space with AP1 primaries
  */
 export const ACESCG_TO_XYZ: Matrix3x3 = [
-  0.6624542, 0.1340042, 0.1561877, 0.2722287, 0.6740818, 0.0536895, -0.0055746,
-  0.0040607, 1.0103391,
+  0.6624542, 0.1340042, 0.1561877, 0.2722287, 0.6740818, 0.0536895, -0.0055746, 0.0040607, 1.0103391,
 ];
 
 /**
@@ -95,8 +93,7 @@ export const ACESCG_TO_XYZ: Matrix3x3 = [
  * Inverse of ACESCG_TO_XYZ
  */
 export const XYZ_TO_ACESCG: Matrix3x3 = [
-  1.6410234, -0.3248033, -0.2364247, -0.6636629, 1.6153316, 0.0167563, 0.0117219,
-  -0.0082844, 0.9883948,
+  1.6410234, -0.3248033, -0.2364247, -0.6636629, 1.6153316, 0.0167563, 0.0117219, -0.0082844, 0.9883948,
 ];
 
 /**
@@ -104,17 +101,13 @@ export const XYZ_TO_ACESCG: Matrix3x3 = [
  * ACES archival/interchange space
  */
 export const ACES2065_TO_XYZ: Matrix3x3 = [
-  0.9525524, 0.0, 0.0000937, 0.3439664, 0.7281661, -0.0721325, 0.0, 0.0,
-  1.0088251,
+  0.9525524, 0.0, 0.0000937, 0.3439664, 0.7281661, -0.0721325, 0.0, 0.0, 1.0088251,
 ];
 
 /**
  * XYZ (D60) to ACES2065-1 (AP0)
  */
-export const XYZ_TO_ACES2065: Matrix3x3 = [
-  1.0498110, 0.0, -0.0000974, -0.4959030, 1.3733130, 0.0982400, 0.0, 0.0,
-  0.9912520,
-];
+export const XYZ_TO_ACES2065: Matrix3x3 = [1.049811, 0.0, -0.0000974, -0.495903, 1.373313, 0.09824, 0.0, 0.0, 0.991252];
 
 /**
  * Rec.709 to XYZ (D65)
@@ -132,16 +125,14 @@ export const XYZ_TO_REC709: Matrix3x3 = XYZ_TO_SRGB;
  * Digital Cinema P3 with D65 white
  */
 export const DCIP3_TO_XYZ: Matrix3x3 = [
-  0.4865709, 0.2656677, 0.1982173, 0.2289746, 0.6917385, 0.0792869, 0.0, 0.0451134,
-  1.0439444,
+  0.4865709, 0.2656677, 0.1982173, 0.2289746, 0.6917385, 0.0792869, 0.0, 0.0451134, 1.0439444,
 ];
 
 /**
  * XYZ (D65) to DCI-P3
  */
 export const XYZ_TO_DCIP3: Matrix3x3 = [
-  2.4934969, -0.9313836, -0.4027108, -0.8294890, 1.7626641, 0.0236247, 0.0358458,
-  -0.0761724, 0.9568845,
+  2.4934969, -0.9313836, -0.4027108, -0.829489, 1.7626641, 0.0236247, 0.0358458, -0.0761724, 0.9568845,
 ];
 
 /**
@@ -149,9 +140,7 @@ export const XYZ_TO_DCIP3: Matrix3x3 = [
  * Wide gamut HDR broadcast
  */
 export const REC2020_TO_XYZ: Matrix3x3 = [
-  0.6369580, 0.1446169, 0.1688810,
-  0.2627002, 0.6779981, 0.0593017,
-  0.0000000, 0.0280727, 1.0609851,
+  0.636958, 0.1446169, 0.168881, 0.2627002, 0.6779981, 0.0593017, 0.0, 0.0280727, 1.0609851,
 ];
 
 /**
@@ -159,9 +148,7 @@ export const REC2020_TO_XYZ: Matrix3x3 = [
  * Inverse of REC2020_TO_XYZ
  */
 export const XYZ_TO_REC2020: Matrix3x3 = [
-  1.7166512, -0.3556708, -0.2533663,
-  -0.6666844, 1.6164812, 0.0157685,
-  0.0176399, -0.0427706, 0.9421031,
+  1.7166512, -0.3556708, -0.2533663, -0.6666844, 1.6164812, 0.0157685, 0.0176399, -0.0427706, 0.9421031,
 ];
 
 /**
@@ -169,9 +156,7 @@ export const XYZ_TO_REC2020: Matrix3x3 = [
  * Photography workflow
  */
 export const ADOBERGB_TO_XYZ: Matrix3x3 = [
-  0.5767309, 0.1855540, 0.1881852,
-  0.2973769, 0.6273491, 0.0752741,
-  0.0270343, 0.0706872, 0.9911085,
+  0.5767309, 0.185554, 0.1881852, 0.2973769, 0.6273491, 0.0752741, 0.0270343, 0.0706872, 0.9911085,
 ];
 
 /**
@@ -185,9 +170,7 @@ export const XYZ_TO_ADOBERGB: Matrix3x3 = invertMatrix(ADOBERGB_TO_XYZ);
  * Wide gamut photography - note: native white point is D50
  */
 export const PROPHOTO_TO_XYZ_D50: Matrix3x3 = [
-  0.7976749, 0.1351917, 0.0313534,
-  0.2880402, 0.7118741, 0.0000857,
-  0.0000000, 0.0000000, 0.8252100,
+  0.7976749, 0.1351917, 0.0313534, 0.2880402, 0.7118741, 0.0000857, 0.0, 0.0, 0.82521,
 ];
 
 /**
@@ -201,9 +184,7 @@ export const XYZ_D50_TO_PROPHOTO: Matrix3x3 = invertMatrix(PROPHOTO_TO_XYZ_D50);
  * ARRI ALEXA camera native color space
  */
 export const ARRI_WIDE_GAMUT3_TO_XYZ: Matrix3x3 = [
-  0.6380064, 0.2147038, 0.0975898,
-  0.2919938, 0.8238408, -0.1158345,
-  0.0027928, -0.0678150, 1.1530222,
+  0.6380064, 0.2147038, 0.0975898, 0.2919938, 0.8238408, -0.1158345, 0.0027928, -0.067815, 1.1530222,
 ];
 
 /**
@@ -217,9 +198,8 @@ export const XYZ_TO_ARRI_WIDE_GAMUT3: Matrix3x3 = invertMatrix(ARRI_WIDE_GAMUT3_
  * ARRI ALEXA 35 camera native color space
  */
 export const ARRI_WIDE_GAMUT4_TO_XYZ: Matrix3x3 = [
-  0.704858320407232, 0.129760295170463, 0.115837311473977,
-  0.254524176404027, 0.781477732712002, -0.036001909116029,
-  0.000000000000000, 0.000000000000000, 1.089057750759878,
+  0.704858320407232, 0.129760295170463, 0.115837311473977, 0.254524176404027, 0.781477732712002, -0.036001909116029,
+  0.0, 0.0, 1.089057750759878,
 ];
 
 /**
@@ -233,9 +213,7 @@ export const XYZ_TO_ARRI_WIDE_GAMUT4: Matrix3x3 = invertMatrix(ARRI_WIDE_GAMUT4_
  * RED camera native color space
  */
 export const REDWIDEGAMUT_TO_XYZ: Matrix3x3 = [
-  0.7352752, 0.0684739, 0.1465509,
-  0.2869164, 0.8429858, -0.1299022,
-  -0.0797972, -0.0347107, 1.2025079,
+  0.7352752, 0.0684739, 0.1465509, 0.2869164, 0.8429858, -0.1299022, -0.0797972, -0.0347107, 1.2025079,
 ];
 
 /**
@@ -249,9 +227,7 @@ export const XYZ_TO_REDWIDEGAMUT: Matrix3x3 = invertMatrix(REDWIDEGAMUT_TO_XYZ);
  * Sony camera native color space
  */
 export const SGAMUT3_TO_XYZ: Matrix3x3 = [
-  0.7064827, 0.1288010, 0.1151722,
-  0.2709797, 0.7866064, -0.0575861,
-  -0.0096778, 0.0046000, 1.0941356,
+  0.7064827, 0.128801, 0.1151722, 0.2709797, 0.7866064, -0.0575861, -0.0096778, 0.0046, 1.0941356,
 ];
 
 /**
@@ -265,9 +241,7 @@ export const XYZ_TO_SGAMUT3: Matrix3x3 = invertMatrix(SGAMUT3_TO_XYZ);
  * Sony cinema-optimized camera space
  */
 export const SGAMUT3CINE_TO_XYZ: Matrix3x3 = [
-  0.5990839, 0.2489255, 0.1024065,
-  0.2150758, 0.8850685, -0.1001443,
-  -0.0320658, -0.0276540, 1.1477198,
+  0.5990839, 0.2489255, 0.1024065, 0.2150758, 0.8850685, -0.1001443, -0.0320658, -0.027654, 1.1477198,
 ];
 
 /**
@@ -283,34 +257,25 @@ export const XYZ_TO_SGAMUT3CINE: Matrix3x3 = invertMatrix(SGAMUT3CINE_TO_XYZ);
 /**
  * Bradford matrix for chromatic adaptation
  */
-const BRADFORD: Matrix3x3 = [
-  0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296,
-];
+const BRADFORD: Matrix3x3 = [0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296];
 
 /**
  * Inverse Bradford matrix
  */
 const BRADFORD_INV: Matrix3x3 = [
-  0.9869929, -0.1470543, 0.1599627, 0.4323053, 0.5183603, 0.0492912, -0.0085287,
-  0.0400428, 0.9684867,
+  0.9869929, -0.1470543, 0.1599627, 0.4323053, 0.5183603, 0.0492912, -0.0085287, 0.0400428, 0.9684867,
 ];
 
 /**
  * Von Kries cone response matrix
  */
-const VON_KRIES: Matrix3x3 = [
-  0.4002400, 0.7076000, -0.0808100,
-  -0.2263000, 1.1653200, 0.0457000,
-  0.0000000, 0.0000000, 0.9182200,
-];
+const VON_KRIES: Matrix3x3 = [0.40024, 0.7076, -0.08081, -0.2263, 1.16532, 0.0457, 0.0, 0.0, 0.91822];
 
 /**
  * Inverse Von Kries cone response matrix
  */
 const VON_KRIES_INV: Matrix3x3 = [
-  1.8599364, -1.1293816, 0.2198974,
-  0.3611914, 0.6388125, -0.0000064,
-  0.0000000, 0.0000000, 1.0890636,
+  1.8599364, -1.1293816, 0.2198974, 0.3611914, 0.6388125, -0.0000064, 0.0, 0.0, 1.0890636,
 ];
 
 /**
@@ -327,7 +292,7 @@ export type AdaptationMethod = 'bradford' | 'vonKries';
 export function chromaticAdaptationMatrix(
   srcWhite: RGB,
   dstWhite: RGB,
-  method: AdaptationMethod = 'bradford'
+  method: AdaptationMethod = 'bradford',
 ): Matrix3x3 {
   // Select cone response matrices based on method
   const coneMatrix = method === 'vonKries' ? VON_KRIES : BRADFORD;
@@ -495,7 +460,7 @@ export function composeMatrices(...matrices: Matrix3x3[]): Matrix3x3 {
 export function srgbEncode(linear: number): number {
   // Handle NaN and Infinity
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   // Handle negative values (extended range) - mirror around zero
   if (linear < 0) {
@@ -513,7 +478,7 @@ export function srgbEncode(linear: number): number {
 export function srgbDecode(encoded: number): number {
   // Handle NaN and Infinity
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   // Handle negative values (extended range) - mirror around zero
   if (encoded < 0) {
@@ -532,7 +497,7 @@ export function srgbDecode(encoded: number): number {
 export function rec709Encode(linear: number): number {
   // Handle NaN and Infinity
   if (!Number.isFinite(linear)) {
-    return Number.isNaN(linear) ? 0 : (linear > 0 ? 1 : 0);
+    return Number.isNaN(linear) ? 0 : linear > 0 ? 1 : 0;
   }
   // Handle negative values (extended range) - mirror around zero
   if (linear < 0) {
@@ -550,7 +515,7 @@ export function rec709Encode(linear: number): number {
 export function rec709Decode(encoded: number): number {
   // Handle NaN and Infinity
   if (!Number.isFinite(encoded)) {
-    return Number.isNaN(encoded) ? 0 : (encoded > 0 ? 1 : 0);
+    return Number.isNaN(encoded) ? 0 : encoded > 0 ? 1 : 0;
   }
   // Handle negative values (extended range) - mirror around zero
   if (encoded < 0) {
@@ -675,7 +640,7 @@ function applyTransferDecodeRGB(func: TransferFunctionName, rgb: RGB): RGB {
 export function acesToneMap(x: number): number {
   // Handle NaN and Infinity
   if (!Number.isFinite(x)) {
-    return Number.isNaN(x) ? 0 : (x > 0 ? 1 : 0);
+    return Number.isNaN(x) ? 0 : x > 0 ? 1 : 0;
   }
   // Handle negative values - clamp to 0
   if (x < 0) {
@@ -764,11 +729,7 @@ function applyLookTransform(rgb: RGB, lookName: string, direction: 'forward' | '
           }
           return t;
         };
-        return [
-          invFilmic(rgb[0]) / 1.02,
-          invFilmic(rgb[1]),
-          invFilmic(rgb[2]) / 0.98,
-        ];
+        return [invFilmic(rgb[0]) / 1.02, invFilmic(rgb[1]), invFilmic(rgb[2]) / 0.98];
       }
     }
 
@@ -1359,15 +1320,11 @@ export class OCIOTransform {
     display: string,
     _view: string,
     look?: string,
-    lookDirection?: 'forward' | 'inverse'
+    lookDirection?: 'forward' | 'inverse',
   ): OCIOTransform {
     // If input and display are the same (identity), use simple path
     // Also if working space matches input, skip the intermediate step
-    if (
-      !workingSpace ||
-      inputSpace === display ||
-      workingSpace === inputSpace
-    ) {
+    if (!workingSpace || inputSpace === display || workingSpace === inputSpace) {
       // Simple path: input -> display (possibly with look)
       if (look && look !== 'None') {
         return OCIOTransform.createWithLook(inputSpace, display, _view, look, lookDirection ?? 'forward');
@@ -1404,7 +1361,7 @@ export class OCIOTransform {
     display: string,
     _view: string,
     look: string,
-    direction: 'forward' | 'inverse'
+    direction: 'forward' | 'inverse',
   ): OCIOTransform {
     const transform = new OCIOTransform(inputSpace, display);
 

@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { AppKeyboardHandler, KeyboardHandlerContext } from './AppKeyboardHandler';
+import type { KeyboardHandlerContext } from './AppKeyboardHandler';
+import { AppKeyboardHandler } from './AppKeyboardHandler';
 import { KeyboardManager } from './utils/input/KeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { closeModal } from './ui/components/shared/Modal';
@@ -13,9 +14,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
 })();
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true });
@@ -68,8 +75,9 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
     // Search for "toggle play" which matches "Toggle play/pause"
     fireInput(searchInput, 'toggle play');
 
-    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'))
-      .filter(r => r.style.display !== 'none');
+    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
+      (r) => r.style.display !== 'none',
+    );
 
     // Should have at least one match and fewer than all rows
     expect(visibleRows.length).toBeGreaterThan(0);
@@ -90,8 +98,9 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
 
     fireInput(searchInput, 'shift');
 
-    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'))
-      .filter(r => r.style.display !== 'none');
+    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
+      (r) => r.style.display !== 'none',
+    );
 
     expect(visibleRows.length).toBeGreaterThan(0);
     expect(visibleRows.length).toBeLessThan(allRows.length);
@@ -113,15 +122,17 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
 
     // First filter down
     fireInput(searchInput, 'toggle play');
-    const visibleAfterFilter = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'))
-      .filter(r => r.style.display !== 'none');
+    const visibleAfterFilter = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
+      (r) => r.style.display !== 'none',
+    );
     expect(visibleAfterFilter.length).toBeLessThan(totalCount);
 
     // Clear the search input
     fireInput(searchInput, '');
 
-    const visibleAfterClear = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'))
-      .filter(r => r.style.display !== 'none');
+    const visibleAfterClear = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
+      (r) => r.style.display !== 'none',
+    );
     expect(visibleAfterClear.length).toBe(totalCount);
   });
 

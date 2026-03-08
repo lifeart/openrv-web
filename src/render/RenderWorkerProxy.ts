@@ -18,7 +18,16 @@
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
+  GamutMappingState,
+} from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { TextureFilterMode } from '../core/types/filter';
@@ -27,11 +36,7 @@ import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState } from './RenderState';
-import type {
-  RenderWorkerMessage,
-  RenderWorkerResult,
-  RendererSyncState,
-} from './renderWorker.messages';
+import type { RenderWorkerMessage, RenderWorkerResult, RendererSyncState } from './renderWorker.messages';
 import {
   DATA_TYPE_CODES,
   TRANSFER_FUNCTION_CODES,
@@ -227,7 +232,13 @@ export class RenderWorkerProxy implements RendererBackend {
       const bitmapToClose = this.pendingBitmap;
       this.pendingBitmap = null;
       this.pendingBitmapSource = null;
-      bitmapToClose.then(bmp => { if (bmp) bmp.close(); }).catch((err) => { log.warn('Failed to close pending bitmap during dispose:', err); });
+      bitmapToClose
+        .then((bmp) => {
+          if (bmp) bmp.close();
+        })
+        .catch((err) => {
+          log.warn('Failed to close pending bitmap during dispose:', err);
+        });
     }
 
     // Terminate worker
@@ -294,22 +305,20 @@ export class RenderWorkerProxy implements RendererBackend {
    * Render an IPImage (HDR path). Synchronous interface for RendererBackend
    * compatibility - sends message to worker.
    */
-  renderImage(
-    image: IPImage,
-    _offsetX = 0,
-    _offsetY = 0,
-    _scaleX = 1,
-    _scaleY = 1,
-  ): void {
+  renderImage(image: IPImage, _offsetX = 0, _offsetY = 0, _scaleX = 1, _scaleY = 1): void {
     // Fire-and-forget for the synchronous interface
-    this.renderHDRAsync(image).catch((err) => { log.debug('renderImage fire-and-forget rejected', err); });
+    this.renderHDRAsync(image).catch((err) => {
+      log.debug('renderImage fire-and-forget rejected', err);
+    });
   }
 
   /**
    * Render tiled images. Currently delegates to renderImage for each tile
    * sequentially. A future implementation could batch-send to the worker.
    */
-  renderTiledImages(tiles: { image: IPImage; viewport: import('../nodes/groups/LayoutGroupNode').TileViewport }[]): void {
+  renderTiledImages(
+    tiles: { image: IPImage; viewport: import('../nodes/groups/LayoutGroupNode').TileViewport }[],
+  ): void {
     // Worker proxy does not support viewport/scissor control yet.
     // Fall back to rendering first tile only as a basic implementation.
     if (tiles.length > 0) {
@@ -368,7 +377,9 @@ export class RenderWorkerProxy implements RendererBackend {
     source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
   ): HTMLCanvasElement | null {
     // Fire-and-forget for the synchronous interface
-    this.renderSDRFrameAsync(source).catch((err) => { log.debug('renderSDRFrame fire-and-forget rejected', err); });
+    this.renderSDRFrameAsync(source).catch((err) => {
+      log.debug('renderSDRFrame fire-and-forget rejected', err);
+    });
     return this.canvas;
   }
 
@@ -424,10 +435,19 @@ export class RenderWorkerProxy implements RendererBackend {
     if (this.disposed || this.pendingBitmapSource === source) return;
     // Close previously pending bitmap to avoid GPU memory leak
     if (this.pendingBitmap) {
-      this.pendingBitmap.then(bmp => { if (bmp) bmp.close(); }).catch((err) => { log.warn('Failed to close previous pending bitmap:', err); });
+      this.pendingBitmap
+        .then((bmp) => {
+          if (bmp) bmp.close();
+        })
+        .catch((err) => {
+          log.warn('Failed to close previous pending bitmap:', err);
+        });
     }
     this.pendingBitmapSource = source;
-    this.pendingBitmap = createImageBitmap(source).catch((err) => { log.debug('prepareFrame createImageBitmap failed', err); return null; }) as Promise<ImageBitmap>;
+    this.pendingBitmap = createImageBitmap(source).catch((err) => {
+      log.debug('prepareFrame createImageBitmap failed', err);
+      return null;
+    }) as Promise<ImageBitmap>;
   }
 
   /**
@@ -637,22 +657,45 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
-  setFileLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+  setFileLUT(
+    _data: Float32Array | null,
+    _size: number,
+    _intensity: number,
+    _domainMin?: [number, number, number],
+    _domainMax?: [number, number, number],
+  ): void {
     // TODO: implement multi-point LUT pipeline for worker proxy
     this.hasDirtyState = true;
   }
 
-  setLookLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+  setLookLUT(
+    _data: Float32Array | null,
+    _size: number,
+    _intensity: number,
+    _domainMin?: [number, number, number],
+    _domainMax?: [number, number, number],
+  ): void {
     // TODO: implement multi-point LUT pipeline for worker proxy
     this.hasDirtyState = true;
   }
 
-  setDisplayLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void {
+  setDisplayLUT(
+    _data: Float32Array | null,
+    _size: number,
+    _intensity: number,
+    _domainMin?: [number, number, number],
+    _domainMax?: [number, number, number],
+  ): void {
     // TODO: implement multi-point LUT pipeline for worker proxy
     this.hasDirtyState = true;
   }
 
-  setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void {
+  setDisplayColorState(state: {
+    transferFunction: number;
+    displayGamma: number;
+    displayBrightness: number;
+    customGamma: number;
+  }): void {
     this.dirtyState.displayColorState = state;
     this.hasDirtyState = true;
   }

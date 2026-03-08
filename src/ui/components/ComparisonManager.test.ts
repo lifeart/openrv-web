@@ -7,15 +7,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  ComparisonManager,
-  DEFAULT_BLEND_MODE_STATE,
-  DEFAULT_QUAD_VIEW_STATE,
-} from './ComparisonManager';
-import type {
-  QuadViewState,
-  CompareState,
-} from './ComparisonManager';
+import { ComparisonManager, DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './ComparisonManager';
+import type { QuadViewState, CompareState } from './ComparisonManager';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 import { DEFAULT_STENCIL_BOX } from '../../core/types/wipe';
 
@@ -521,9 +514,7 @@ describe('ComparisonManager', () => {
       const callback = vi.fn();
       manager.on('quadViewChanged', callback);
       manager.setDifferenceMatteEnabled(true);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false }),
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('CM-076: enabling difference matte should not affect wipe if already off', () => {
@@ -674,9 +665,7 @@ describe('ComparisonManager', () => {
       const callback = vi.fn();
       manager.on('quadViewChanged', callback);
       manager.setBlendMode('blend');
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false }),
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('CM-098: blend mode off should not disable other modes', () => {
@@ -1114,9 +1103,7 @@ describe('ComparisonManager', () => {
       const callback = vi.fn();
       manager.on('quadViewChanged', callback);
       manager.setWipeMode('vertical');
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false }),
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('CM-157: setting wipe to off should not emit quadViewChanged', () => {
@@ -1503,9 +1490,7 @@ describe('ComparisonManager', () => {
 
       manager2.setBlendMode('onionskin');
       // Quad was on, so quadViewChanged should be emitted
-      expect(quadCallback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false }),
-      );
+      expect(quadCallback).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
       // Wipe was off, so no wipeModeChanged
       expect(wipeCallback).not.toHaveBeenCalled();
       // Diff matte was off, so no differenceMatteChanged

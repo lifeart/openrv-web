@@ -9,7 +9,7 @@
  */
 
 import {
-  LensDistortionParams,
+  type LensDistortionParams,
   DEFAULT_LENS_PARAMS,
   isDefaultLensParams,
   applyLensDistortion,

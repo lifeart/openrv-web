@@ -38,12 +38,12 @@ interface PluginEntry {
   initialized: boolean;
   /** Track registrations so we can unregister on deactivate */
   registrations: {
-    decoders: string[];       // formatName keys
-    nodes: string[];          // node type keys
-    tools: string[];          // tool name keys
-    exporters: string[];      // exporter name keys
-    blendModes: string[];     // blend mode name keys
-    uiPanels: string[];       // panel id keys
+    decoders: string[]; // formatName keys
+    nodes: string[]; // node type keys
+    tools: string[]; // tool name keys
+    exporters: string[]; // exporter name keys
+    blendModes: string[]; // blend mode name keys
+    uiPanels: string[]; // panel id keys
   };
   error?: Error;
 }
@@ -113,14 +113,15 @@ export class PluginRegistry {
       state: 'registered',
       initialized: false,
       registrations: {
-        decoders: [], nodes: [], tools: [],
-        exporters: [], blendModes: [], uiPanels: [],
+        decoders: [],
+        nodes: [],
+        tools: [],
+        exporters: [],
+        blendModes: [],
+        uiPanels: [],
       },
     });
-    this.pluginStateChanged.emit(
-      { id, state: 'registered' },
-      { id, state: 'registered' },
-    );
+    this.pluginStateChanged.emit({ id, state: 'registered' }, { id, state: 'registered' });
   }
 
   // -----------------------------------------------------------------------
@@ -166,26 +167,17 @@ export class PluginRegistry {
       entry.state = 'initialized';
 
       // Emit the Initialized state transition
-      this.pluginStateChanged.emit(
-        { id, state: 'initialized' },
-        { id, state: previousState },
-      );
+      this.pluginStateChanged.emit({ id, state: 'initialized' }, { id, state: previousState });
 
       // Activate
       await entry.plugin.activate(context);
       entry.state = 'active';
 
-      this.pluginStateChanged.emit(
-        { id, state: entry.state },
-        { id, state: 'initialized' },
-      );
+      this.pluginStateChanged.emit({ id, state: entry.state }, { id, state: 'initialized' });
     } catch (err) {
       entry.state = 'error';
       entry.error = err instanceof Error ? err : new Error(String(err));
-      this.pluginStateChanged.emit(
-        { id, state: entry.state },
-        { id, state: previousState },
-      );
+      this.pluginStateChanged.emit({ id, state: entry.state }, { id, state: previousState });
       throw err;
     }
   }
@@ -210,10 +202,7 @@ export class PluginRegistry {
     this.unregisterContributions(entry);
 
     entry.state = 'inactive';
-    this.pluginStateChanged.emit(
-      { id, state: entry.state },
-      { id, state: 'active' },
-    );
+    this.pluginStateChanged.emit({ id, state: entry.state }, { id, state: 'active' });
   }
 
   async dispose(id: PluginId): Promise<void> {
@@ -241,10 +230,7 @@ export class PluginRegistry {
     entry.state = 'disposed';
     // Retain the entry in the Map with 'disposed' state instead of deleting it.
     // This ensures getState(id) returns 'disposed' rather than undefined.
-    this.pluginStateChanged.emit(
-      { id, state: 'disposed' },
-      { id, state: previousState },
-    );
+    this.pluginStateChanged.emit({ id, state: 'disposed' }, { id, state: previousState });
   }
 
   // -----------------------------------------------------------------------
@@ -376,12 +362,9 @@ export class PluginRegistry {
         return registry.apiRef;
       },
       log: {
-        info: (msg: string, ...args: unknown[]) =>
-          console.log(`[plugin:${manifest.id}]`, msg, ...args),
-        warn: (msg: string, ...args: unknown[]) =>
-          console.warn(`[plugin:${manifest.id}]`, msg, ...args),
-        error: (msg: string, ...args: unknown[]) =>
-          console.error(`[plugin:${manifest.id}]`, msg, ...args),
+        info: (msg: string, ...args: unknown[]) => console.log(`[plugin:${manifest.id}]`, msg, ...args),
+        warn: (msg: string, ...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, msg, ...args),
+        error: (msg: string, ...args: unknown[]) => console.error(`[plugin:${manifest.id}]`, msg, ...args),
       },
     };
   }
@@ -399,14 +382,18 @@ export class PluginRegistry {
     try {
       // Decoders: delegate to DecoderRegistry.unregisterDecoder()
       for (const name of reg.decoders) {
-        try { decoderRegistry.unregisterDecoder(name); } catch (e) {
+        try {
+          decoderRegistry.unregisterDecoder(name);
+        } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister decoder "${name}":`, e);
         }
       }
 
       // Nodes: delegate to NodeFactory.unregister()
       for (const type of reg.nodes) {
-        try { NodeFactory.unregister(type); } catch (e) {
+        try {
+          NodeFactory.unregister(type);
+        } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister node "${type}":`, e);
         }
       }
@@ -414,7 +401,9 @@ export class PluginRegistry {
       // Tools: delegate to PaintEngine.unregisterAdvancedTool()
       if (this.paintEngineRef) {
         for (const name of reg.tools) {
-          try { this.paintEngineRef.unregisterAdvancedTool(name); } catch (e) {
+          try {
+            this.paintEngineRef.unregisterAdvancedTool(name);
+          } catch (e) {
             console.warn(`[plugin:${pluginId}] Failed to unregister tool "${name}":`, e);
           }
         }
@@ -422,14 +411,18 @@ export class PluginRegistry {
 
       // Exporters: delegate to standalone ExporterRegistry
       for (const name of reg.exporters) {
-        try { ExporterRegistry.unregister(name); } catch (e) {
+        try {
+          ExporterRegistry.unregister(name);
+        } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister exporter "${name}":`, e);
         }
       }
 
       // Blend modes
       for (const name of reg.blendModes) {
-        try { this.blendModeRegistry.delete(name); } catch (e) {
+        try {
+          this.blendModeRegistry.delete(name);
+        } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister blend mode "${name}":`, e);
         }
       }

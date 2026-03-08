@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  PrerenderBufferManager,
-  DEFAULT_PRERENDER_CONFIG,
-} from './PrerenderBufferManager';
+import { PrerenderBufferManager, DEFAULT_PRERENDER_CONFIG } from './PrerenderBufferManager';
 import { createDefaultEffectsState } from './EffectProcessor';
 
 // Mock canvas for testing
@@ -295,7 +292,7 @@ describe('PrerenderBufferManager', () => {
 
       // Should not exceed cache size (eventually)
       // Wait a bit for async operations
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const stats = manager.getStats();
       // Cache size should be bounded by maxCacheSize (20 in test config)
@@ -356,7 +353,7 @@ describe('Bug Fixes', () => {
     manager.preloadAround(50);
 
     // Wait for some prerendering
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const statsAfterFirst = manager.getStats();
     // Verify some cache activity occurred
@@ -374,7 +371,7 @@ describe('Bug Fixes', () => {
     manager.preloadAround(50);
 
     // Wait for prerendering
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Should have new cache entries (preload wasn't blocked by stale entries)
     // The test passes if no error occurs and cache can grow again
@@ -432,7 +429,7 @@ describe('Bug Fixes', () => {
 
     // Preload around frame 10
     smallManager.preloadAround(10);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const statsAfterFirst = smallManager.getStats();
     // Should have cached some frames around frame 10
@@ -442,7 +439,7 @@ describe('Bug Fixes', () => {
     // With old behavior, frames near 10 would be evicted immediately
     // With new behavior, they should be kept since cache is < 80% full (50 * 0.8 = 40)
     smallManager.preloadAround(100);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const stats = smallManager.getStats();
     // Cache should have grown (frames from both regions kept since under 80% capacity)
@@ -472,23 +469,23 @@ describe('Bug Fixes', () => {
 
     // Preload frames around different parts of the video
     smallVideoManager.preloadAround(1);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     const statsAfter1 = smallVideoManager.getStats();
     const cacheAfter1 = statsAfter1.cacheSize;
 
     smallVideoManager.preloadAround(25);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     const statsAfter25 = smallVideoManager.getStats();
     const cacheAfter25 = statsAfter25.cacheSize;
 
     smallVideoManager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     const statsAfter50 = smallVideoManager.getStats();
     const cacheAfter50 = statsAfter50.cacheSize;
 
     // Go back to frame 1 - frames should NOT be evicted since video < cache size
     smallVideoManager.preloadAround(1);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const finalStats = smallVideoManager.getStats();
 
@@ -545,7 +542,7 @@ describe('Stale cache fallback during playback', () => {
     // Wait for prerendering (poll until at least one frame is cached)
     let cachedFrameNumber = -1;
     for (let attempt = 0; attempt < 100; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
       for (let f = 1; f <= 100; f++) {
         if (manager.hasFrame(f)) {
           cachedFrameNumber = f;
@@ -583,7 +580,7 @@ describe('Stale cache fallback during playback', () => {
     manager.setPlaybackState(false);
     manager.preloadAround(50);
 
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const cacheSizeBefore = manager.getStats().cacheSize;
     expect(cacheSizeBefore).toBeGreaterThan(0);
@@ -635,7 +632,7 @@ describe('Stale cache fallback during playback', () => {
     manager.setPlaybackState(true, 1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const cacheSizeBefore = manager.getStats().cacheSize;
     expect(cacheSizeBefore).toBeGreaterThan(0);
@@ -657,7 +654,7 @@ describe('Stale cache fallback during playback', () => {
     manager.setPlaybackState(true, 1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     // Change effects
     const state2 = createDefaultEffectsState();
@@ -678,7 +675,7 @@ describe('Stale cache fallback during playback', () => {
     manager.setPlaybackState(true, 1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     // Get some fresh cache hits
     let freshHitCount = 0;
@@ -835,7 +832,7 @@ describe('Cache Update Callback', () => {
     manager.preloadAround(50);
 
     // Wait for preloading to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Callback should have been called for each cached frame
     expect(callback).toHaveBeenCalled();
@@ -852,7 +849,7 @@ describe('Cache Update Callback', () => {
     manager.updateEffects(state);
     manager.preloadAround(50);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Callback should not have been called since it was unset
     expect(callback).not.toHaveBeenCalled();
@@ -869,7 +866,7 @@ describe('Cache Update Callback', () => {
 
     // Preload a small window
     manager.preloadAround(5);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const callCount = callback.mock.calls.length;
     const stats = manager.getStats();
@@ -952,7 +949,7 @@ describe('Phase 2A: queuePriorityFrame', () => {
     manager.queuePriorityFrame(50);
 
     // Wait for processing
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     // Frame should now be in cache
     const cached = manager.getFrame(50);
@@ -968,7 +965,7 @@ describe('Phase 2A: queuePriorityFrame', () => {
 
     // First: cache the frame
     manager.queuePriorityFrame(50);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     expect(manager.hasFrame(50)).toBe(true);
 
@@ -1019,7 +1016,7 @@ describe('Phase 2A: onFrameProcessed callback', () => {
     manager.updateEffects(state);
 
     manager.queuePriorityFrame(50);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     expect(processedFrames).toContain(50);
   });
@@ -1033,7 +1030,7 @@ describe('Phase 2A: onFrameProcessed callback', () => {
 
     // Should not throw
     manager.queuePriorityFrame(50);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     expect(manager.hasFrame(50)).toBe(true);
   });
@@ -1049,7 +1046,7 @@ describe('Phase 2A: onFrameProcessed callback', () => {
     manager.updateEffects(state);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Should have processed multiple frames
     expect(processedFrames.length).toBeGreaterThan(0);
@@ -1098,7 +1095,7 @@ describe('Phase 2B: Dynamic preload-ahead', () => {
     // Process several frames to gather timing data
     manager.setPlaybackState(true, 1);
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Now update dynamic preload ahead
     manager.updateDynamicPreloadAhead(24);
@@ -1116,7 +1113,7 @@ describe('Phase 2B: Dynamic preload-ahead', () => {
 
     // Process frames to get timing data
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Very high FPS should give low preload ahead, but clamped to 30
     manager.updateDynamicPreloadAhead(1000);
@@ -1138,7 +1135,7 @@ describe('Phase 2B: Dynamic preload-ahead', () => {
     manager.updateEffects(state);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // After processing frames, the dynamic preload-ahead should be calculable
     // (we can't directly read frameProcessingTimes, but updateDynamicPreloadAhead
@@ -1183,7 +1180,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const cacheSizeBefore = manager.getStats().cacheSize;
     expect(cacheSizeBefore).toBeGreaterThan(0);
@@ -1205,7 +1202,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Verify frames are cached
     let cachedFrameNumber = -1;
@@ -1239,7 +1236,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Change effects
     const state2 = createDefaultEffectsState();
@@ -1248,7 +1245,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
 
     // Now prerender with new effects
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Reset stats to isolate measurements
     manager.resetStats();
@@ -1277,7 +1274,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const previousCacheSize = manager.getStats().cacheSize;
     expect(previousCacheSize).toBeGreaterThan(0);
@@ -1292,7 +1289,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     // Prerender enough frames with new effects to trigger cleanup
     // Threshold is max(10, floor(previousCacheSize / 2))
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     // Once new cache has enough frames, previousCache should be cleared
     const finalStats = manager.getStats();
@@ -1307,7 +1304,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Change effects to populate previousCache
     const state2 = createDefaultEffectsState();
@@ -1331,7 +1328,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const firstCacheSize = manager.getStats().cacheSize;
     expect(firstCacheSize).toBeGreaterThan(0);
@@ -1365,7 +1362,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
 
     // Now prerender some frames with state4, then change again
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const state4CacheSize = manager.getStats().cacheSize;
 
@@ -1390,7 +1387,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Change effects to populate previousCache
     const state2 = createDefaultEffectsState();
@@ -1431,7 +1428,7 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     manager.updateEffects(state1);
 
     manager.preloadAround(50);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Verify we have cached frames
     let cachedFrameNumber = -1;
@@ -1486,7 +1483,7 @@ describe('PrerenderBufferManager setTargetSize', () => {
   /** Helper: populate cache for frame via public API and wait for processing. */
   async function cacheFrame(mgr: PrerenderBufferManager, frame: number): Promise<void> {
     mgr.queuePriorityFrame(frame);
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
   it('PBM-TS-001: setTargetSize accepts positive dimensions', () => {

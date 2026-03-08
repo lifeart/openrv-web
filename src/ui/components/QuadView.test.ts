@@ -6,10 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  ComparisonManager,
-  DEFAULT_QUAD_VIEW_STATE,
-} from './ComparisonManager';
+import { ComparisonManager, DEFAULT_QUAD_VIEW_STATE } from './ComparisonManager';
 import { CompareControl } from './CompareControl';
 import { ABCompareManager } from '../../core/session/ABCompareManager';
 

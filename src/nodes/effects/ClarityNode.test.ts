@@ -10,8 +10,13 @@ const context: EvalContext = { frame: 1, width: 4, height: 4, quality: 'full' };
 
 class TestSourceNode extends IPNode {
   private image: IPImage;
-  constructor(image: IPImage) { super('TestSource'); this.image = image; }
-  protected process(): IPImage | null { return this.image; }
+  constructor(image: IPImage) {
+    super('TestSource');
+    this.image = image;
+  }
+  protected process(): IPImage | null {
+    return this.image;
+  }
 }
 
 function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {
@@ -83,7 +88,7 @@ describe('ClarityNode', () => {
       const h = halfData[i]!;
       const lo = Math.min(s, f);
       const hi = Math.max(s, f);
-      if (h >= lo - 1 && h <= hi + 1) betweenCount++;  // tolerance of 1 for rounding
+      if (h >= lo - 1 && h <= hi + 1) betweenCount++; // tolerance of 1 for rounding
     }
     expect(betweenCount).toBe(srcData.length);
   });

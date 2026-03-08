@@ -23,7 +23,7 @@
 import { OCIOWasmBridge, type OCIOWasmBridgeConfig } from './OCIOWasmBridge';
 import type { TranslatedShader, UniformInfo, ShaderTranslateOptions } from './OCIOShaderTranslator';
 import type { LUT3D } from '../LUTLoader';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,11 +165,7 @@ export class OCIOWasmPipeline extends EventEmitter<OCIOWasmPipelineEvents> {
   /**
    * Load an OCIO config with its referenced LUT files.
    */
-  async loadConfigWithFiles(
-    configYaml: string,
-    name: string,
-    options: { baseUrl?: string } = {},
-  ): Promise<void> {
+  async loadConfigWithFiles(configYaml: string, name: string, options: { baseUrl?: string } = {}): Promise<void> {
     this.ensureNotDisposed();
     if (!this.bridge.isReady()) {
       this.emit('error', { message: 'Cannot load config: WASM not ready', phase: 'loadConfigWithFiles' });
@@ -331,13 +327,7 @@ export class OCIOWasmPipeline extends EventEmitter<OCIOWasmPipelineEvents> {
   ): OCIOPipelineResult | null {
     try {
       // Build display processor and get translated shader
-      const shader = this.bridge.buildDisplayPipeline(
-        srcColorSpace,
-        display,
-        view,
-        look,
-        this.shaderOptions,
-      );
+      const shader = this.bridge.buildDisplayPipeline(srcColorSpace, display, view, look, this.shaderOptions);
 
       if (!shader) {
         return null;
@@ -372,13 +362,7 @@ export class OCIOWasmPipeline extends EventEmitter<OCIOWasmPipelineEvents> {
   ): OCIOPipelineResult | null {
     try {
       // Try to build a processor and bake the LUT even without shader generation
-      const shader = this.bridge.buildDisplayPipeline(
-        srcColorSpace,
-        display,
-        view,
-        look,
-        this.shaderOptions,
-      );
+      const shader = this.bridge.buildDisplayPipeline(srcColorSpace, display, view, look, this.shaderOptions);
 
       const lut3D = this.bridge.bake3DLUT(this.lutSize);
       if (!lut3D) {

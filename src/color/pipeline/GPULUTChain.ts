@@ -191,16 +191,12 @@ export class GPULUTChain {
     // Create position buffer (fullscreen quad)
     this.positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1, 1, -1, -1, 1, 1, 1,
-    ]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
     // Create texture coordinate buffer
     this.texCoordBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      0, 0, 1, 0, 0, 1, 1, 1,
-    ]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
 
     // Create image texture
     this.imageTexture = gl.createTexture();
@@ -246,19 +242,37 @@ export class GPULUTChain {
 
     const uniformNames = [
       'u_image',
-      'u_fileLUT', 'u_lookLUT', 'u_displayLUT',
-      'u_fileLUTIntensity', 'u_lookLUTIntensity', 'u_displayLUTIntensity',
-      'u_fileLUTEnabled', 'u_lookLUTEnabled', 'u_displayLUTEnabled',
-      'u_fileLUTDomainMin', 'u_fileLUTDomainMax', 'u_fileLUTSize',
-      'u_lookLUTDomainMin', 'u_lookLUTDomainMax', 'u_lookLUTSize',
-      'u_displayLUTDomainMin', 'u_displayLUTDomainMax', 'u_displayLUTSize',
+      'u_fileLUT',
+      'u_lookLUT',
+      'u_displayLUT',
+      'u_fileLUTIntensity',
+      'u_lookLUTIntensity',
+      'u_displayLUTIntensity',
+      'u_fileLUTEnabled',
+      'u_lookLUTEnabled',
+      'u_displayLUTEnabled',
+      'u_fileLUTDomainMin',
+      'u_fileLUTDomainMax',
+      'u_fileLUTSize',
+      'u_lookLUTDomainMin',
+      'u_lookLUTDomainMax',
+      'u_lookLUTSize',
+      'u_displayLUTDomainMin',
+      'u_displayLUTDomainMax',
+      'u_displayLUTSize',
       // Matrix uniforms
-      'u_fileLUTInMatrix', 'u_fileLUTOutMatrix',
-      'u_fileLUTHasInMatrix', 'u_fileLUTHasOutMatrix',
-      'u_lookLUTInMatrix', 'u_lookLUTOutMatrix',
-      'u_lookLUTHasInMatrix', 'u_lookLUTHasOutMatrix',
-      'u_displayLUTInMatrix', 'u_displayLUTOutMatrix',
-      'u_displayLUTHasInMatrix', 'u_displayLUTHasOutMatrix',
+      'u_fileLUTInMatrix',
+      'u_fileLUTOutMatrix',
+      'u_fileLUTHasInMatrix',
+      'u_fileLUTHasOutMatrix',
+      'u_lookLUTInMatrix',
+      'u_lookLUTOutMatrix',
+      'u_lookLUTHasInMatrix',
+      'u_lookLUTHasOutMatrix',
+      'u_displayLUTInMatrix',
+      'u_displayLUTOutMatrix',
+      'u_displayLUTHasInMatrix',
+      'u_displayLUTHasOutMatrix',
     ];
     for (const name of uniformNames) {
       this.uniforms[name] = this.shaderProgram.getUniformLocation(name);
@@ -284,31 +298,73 @@ export class GPULUTChain {
   }
 
   // --- File LUT ---
-  hasFileLUT(): boolean { return this.fileStage.lut !== null; }
-  setFileLUT(lut: LUT3D | null): void { this.setStageTexture(this.fileStage, lut); }
-  clearFileLUT(): void { this.setStageTexture(this.fileStage, null); }
-  setFileLUTIntensity(intensity: number): void { this.fileStage.intensity = Math.max(0, Math.min(1, intensity)); }
-  setFileLUTEnabled(enabled: boolean): void { this.fileStage.enabled = enabled; }
-  setFileLUTInMatrix(matrix: Float32Array | number[] | null): void { this.fileStage.inMatrix = sanitizeLUTMatrix(matrix); }
-  setFileLUTOutMatrix(matrix: Float32Array | number[] | null): void { this.fileStage.outMatrix = sanitizeLUTMatrix(matrix); }
+  hasFileLUT(): boolean {
+    return this.fileStage.lut !== null;
+  }
+  setFileLUT(lut: LUT3D | null): void {
+    this.setStageTexture(this.fileStage, lut);
+  }
+  clearFileLUT(): void {
+    this.setStageTexture(this.fileStage, null);
+  }
+  setFileLUTIntensity(intensity: number): void {
+    this.fileStage.intensity = Math.max(0, Math.min(1, intensity));
+  }
+  setFileLUTEnabled(enabled: boolean): void {
+    this.fileStage.enabled = enabled;
+  }
+  setFileLUTInMatrix(matrix: Float32Array | number[] | null): void {
+    this.fileStage.inMatrix = sanitizeLUTMatrix(matrix);
+  }
+  setFileLUTOutMatrix(matrix: Float32Array | number[] | null): void {
+    this.fileStage.outMatrix = sanitizeLUTMatrix(matrix);
+  }
 
   // --- Look LUT ---
-  hasLookLUT(): boolean { return this.lookStage.lut !== null; }
-  setLookLUT(lut: LUT3D | null): void { this.setStageTexture(this.lookStage, lut); }
-  clearLookLUT(): void { this.setStageTexture(this.lookStage, null); }
-  setLookLUTIntensity(intensity: number): void { this.lookStage.intensity = Math.max(0, Math.min(1, intensity)); }
-  setLookLUTEnabled(enabled: boolean): void { this.lookStage.enabled = enabled; }
-  setLookLUTInMatrix(matrix: Float32Array | number[] | null): void { this.lookStage.inMatrix = sanitizeLUTMatrix(matrix); }
-  setLookLUTOutMatrix(matrix: Float32Array | number[] | null): void { this.lookStage.outMatrix = sanitizeLUTMatrix(matrix); }
+  hasLookLUT(): boolean {
+    return this.lookStage.lut !== null;
+  }
+  setLookLUT(lut: LUT3D | null): void {
+    this.setStageTexture(this.lookStage, lut);
+  }
+  clearLookLUT(): void {
+    this.setStageTexture(this.lookStage, null);
+  }
+  setLookLUTIntensity(intensity: number): void {
+    this.lookStage.intensity = Math.max(0, Math.min(1, intensity));
+  }
+  setLookLUTEnabled(enabled: boolean): void {
+    this.lookStage.enabled = enabled;
+  }
+  setLookLUTInMatrix(matrix: Float32Array | number[] | null): void {
+    this.lookStage.inMatrix = sanitizeLUTMatrix(matrix);
+  }
+  setLookLUTOutMatrix(matrix: Float32Array | number[] | null): void {
+    this.lookStage.outMatrix = sanitizeLUTMatrix(matrix);
+  }
 
   // --- Display LUT ---
-  hasDisplayLUT(): boolean { return this.displayStage.lut !== null; }
-  setDisplayLUT(lut: LUT3D | null): void { this.setStageTexture(this.displayStage, lut); }
-  clearDisplayLUT(): void { this.setStageTexture(this.displayStage, null); }
-  setDisplayLUTIntensity(intensity: number): void { this.displayStage.intensity = Math.max(0, Math.min(1, intensity)); }
-  setDisplayLUTEnabled(enabled: boolean): void { this.displayStage.enabled = enabled; }
-  setDisplayLUTInMatrix(matrix: Float32Array | number[] | null): void { this.displayStage.inMatrix = sanitizeLUTMatrix(matrix); }
-  setDisplayLUTOutMatrix(matrix: Float32Array | number[] | null): void { this.displayStage.outMatrix = sanitizeLUTMatrix(matrix); }
+  hasDisplayLUT(): boolean {
+    return this.displayStage.lut !== null;
+  }
+  setDisplayLUT(lut: LUT3D | null): void {
+    this.setStageTexture(this.displayStage, lut);
+  }
+  clearDisplayLUT(): void {
+    this.setStageTexture(this.displayStage, null);
+  }
+  setDisplayLUTIntensity(intensity: number): void {
+    this.displayStage.intensity = Math.max(0, Math.min(1, intensity));
+  }
+  setDisplayLUTEnabled(enabled: boolean): void {
+    this.displayStage.enabled = enabled;
+  }
+  setDisplayLUTInMatrix(matrix: Float32Array | number[] | null): void {
+    this.displayStage.inMatrix = sanitizeLUTMatrix(matrix);
+  }
+  setDisplayLUTOutMatrix(matrix: Float32Array | number[] | null): void {
+    this.displayStage.outMatrix = sanitizeLUTMatrix(matrix);
+  }
 
   /** Get the number of active (has LUT + enabled) stages */
   getActiveStageCount(): number {
@@ -352,11 +408,7 @@ export class GPULUTChain {
     );
 
     // Upload outMatrix
-    gl.uniformMatrix4fv(
-      this.uniforms[outMatrixUniform] ?? null,
-      true,
-      hasOut ? stage.outMatrix! : IDENTITY_MATRIX_4X4,
-    );
+    gl.uniformMatrix4fv(this.uniforms[outMatrixUniform] ?? null, true, hasOut ? stage.outMatrix! : IDENTITY_MATRIX_4X4);
   }
 
   /**
@@ -380,7 +432,7 @@ export class GPULUTChain {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_3D, this.fileStage.texture ?? null);
     gl.uniform1i(this.uniforms['u_fileLUT'] ?? null, 1);
-    gl.uniform1i(this.uniforms['u_fileLUTEnabled'] ?? null, (this.fileStage.lut && this.fileStage.enabled) ? 1 : 0);
+    gl.uniform1i(this.uniforms['u_fileLUTEnabled'] ?? null, this.fileStage.lut && this.fileStage.enabled ? 1 : 0);
     gl.uniform1f(this.uniforms['u_fileLUTIntensity'] ?? null, this.fileStage.intensity);
     if (this.fileStage.lut) {
       gl.uniform3fv(this.uniforms['u_fileLUTDomainMin'] ?? null, this.fileStage.lut.domainMin);
@@ -389,15 +441,17 @@ export class GPULUTChain {
     }
     this.uploadStageMatrixUniforms(
       this.fileStage,
-      'u_fileLUTInMatrix', 'u_fileLUTOutMatrix',
-      'u_fileLUTHasInMatrix', 'u_fileLUTHasOutMatrix',
+      'u_fileLUTInMatrix',
+      'u_fileLUTOutMatrix',
+      'u_fileLUTHasInMatrix',
+      'u_fileLUTHasOutMatrix',
     );
 
     // Look LUT on unit 2
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_3D, this.lookStage.texture ?? null);
     gl.uniform1i(this.uniforms['u_lookLUT'] ?? null, 2);
-    gl.uniform1i(this.uniforms['u_lookLUTEnabled'] ?? null, (this.lookStage.lut && this.lookStage.enabled) ? 1 : 0);
+    gl.uniform1i(this.uniforms['u_lookLUTEnabled'] ?? null, this.lookStage.lut && this.lookStage.enabled ? 1 : 0);
     gl.uniform1f(this.uniforms['u_lookLUTIntensity'] ?? null, this.lookStage.intensity);
     if (this.lookStage.lut) {
       gl.uniform3fv(this.uniforms['u_lookLUTDomainMin'] ?? null, this.lookStage.lut.domainMin);
@@ -406,15 +460,20 @@ export class GPULUTChain {
     }
     this.uploadStageMatrixUniforms(
       this.lookStage,
-      'u_lookLUTInMatrix', 'u_lookLUTOutMatrix',
-      'u_lookLUTHasInMatrix', 'u_lookLUTHasOutMatrix',
+      'u_lookLUTInMatrix',
+      'u_lookLUTOutMatrix',
+      'u_lookLUTHasInMatrix',
+      'u_lookLUTHasOutMatrix',
     );
 
     // Display LUT on unit 3
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_3D, this.displayStage.texture ?? null);
     gl.uniform1i(this.uniforms['u_displayLUT'] ?? null, 3);
-    gl.uniform1i(this.uniforms['u_displayLUTEnabled'] ?? null, (this.displayStage.lut && this.displayStage.enabled) ? 1 : 0);
+    gl.uniform1i(
+      this.uniforms['u_displayLUTEnabled'] ?? null,
+      this.displayStage.lut && this.displayStage.enabled ? 1 : 0,
+    );
     gl.uniform1f(this.uniforms['u_displayLUTIntensity'] ?? null, this.displayStage.intensity);
     if (this.displayStage.lut) {
       gl.uniform3fv(this.uniforms['u_displayLUTDomainMin'] ?? null, this.displayStage.lut.domainMin);
@@ -423,8 +482,10 @@ export class GPULUTChain {
     }
     this.uploadStageMatrixUniforms(
       this.displayStage,
-      'u_displayLUTInMatrix', 'u_displayLUTOutMatrix',
-      'u_displayLUTHasInMatrix', 'u_displayLUTHasOutMatrix',
+      'u_displayLUTInMatrix',
+      'u_displayLUTOutMatrix',
+      'u_displayLUTHasInMatrix',
+      'u_displayLUTHasOutMatrix',
     );
 
     // Render

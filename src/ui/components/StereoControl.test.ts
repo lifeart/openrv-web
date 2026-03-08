@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StereoControl } from './StereoControl';
-import { DEFAULT_STEREO_STATE, StereoMode } from '../../stereo/StereoRenderer';
+import { DEFAULT_STEREO_STATE, type StereoMode } from '../../stereo/StereoRenderer';
 
 describe('StereoControl', () => {
   let control: StereoControl;

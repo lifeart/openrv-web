@@ -217,10 +217,14 @@ export function createRepresentation(config: AddRepresentationConfig): MediaRepr
  */
 function getDefaultPriority(kind: RepresentationKind): number {
   switch (kind) {
-    case 'frames': return 0;
-    case 'movie': return 1;
-    case 'proxy': return 2;
-    case 'streaming': return 3;
+    case 'frames':
+      return 0;
+    case 'movie':
+      return 1;
+    case 'proxy':
+      return 2;
+    case 'streaming':
+      return 3;
   }
 }
 

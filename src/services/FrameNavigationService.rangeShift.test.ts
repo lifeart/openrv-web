@@ -11,7 +11,9 @@ import { createMockSession } from '../../test/mocks';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeClip(overrides: Partial<NavPlaylistClip> & { id: string; globalStartFrame: number; duration: number }): NavPlaylistClip {
+function makeClip(
+  overrides: Partial<NavPlaylistClip> & { id: string; globalStartFrame: number; duration: number },
+): NavPlaylistClip {
   return {
     inPoint: 1,
     outPoint: overrides.duration,
@@ -87,9 +89,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-B03: includes duration marker endFrame as boundary', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [20, { frame: 20, endFrame: 40 }],
-      ]);
+      deps.session.marks = new Map([[20, { frame: 20, endFrame: 40 }]]);
       const boundaries = service.collectRangeBoundaries();
       expect(boundaries).toEqual([1, 20, 40, 100]);
     });
@@ -106,18 +106,14 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-B05: clamps marks beyond source duration', () => {
       deps.session.currentSource = { duration: 50 };
-      deps.session.marks = new Map([
-        [200, { frame: 200 }],
-      ]);
+      deps.session.marks = new Map([[200, { frame: 200 }]]);
       const boundaries = service.collectRangeBoundaries();
       expect(boundaries).toEqual([1, 50]);
     });
 
     it('RS-B06: clamps marks below 1 to 1', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [0, { frame: 0 }],
-      ]);
+      deps.session.marks = new Map([[0, { frame: 0 }]]);
       const boundaries = service.collectRangeBoundaries();
       expect(boundaries).toEqual([1, 100]);
     });
@@ -153,9 +149,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-B09: clamps duration marker endFrame to source duration', () => {
       deps.session.currentSource = { duration: 50 };
-      deps.session.marks = new Map([
-        [20, { frame: 20, endFrame: 200 }],
-      ]);
+      deps.session.marks = new Map([[20, { frame: 20, endFrame: 200 }]]);
       const boundaries = service.collectRangeBoundaries();
       expect(boundaries).toEqual([1, 20, 50]);
     });
@@ -256,9 +250,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-002: wraps around in loop mode', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 50;
       deps.session.currentFrame = 50;
       deps.session.loopMode = 'loop';
@@ -271,9 +263,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-003: does not wrap in once mode', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 50;
       deps.session.currentFrame = 75;
       deps.session.loopMode = 'once';
@@ -298,9 +288,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-008: single mark creates two segments, shifts between them', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 1;
 
@@ -311,9 +299,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-009: duration marker defines its own segment', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [20, { frame: 20, endFrame: 40 }],
-      ]);
+      deps.session.marks = new Map([[20, { frame: 20, endFrame: 40 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 1;
 
@@ -325,9 +311,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-011: playhead moves to in point of new range', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 25;
 
@@ -338,9 +322,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-012: range shift works with pingpong loop mode (wraps)', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 50;
       deps.session.currentFrame = 75;
       deps.session.loopMode = 'pingpong';
@@ -354,9 +336,7 @@ describe('FrameNavigationService - Range Shifting', () => {
       deps.session.currentSource = { duration: 100 };
       // Two marks at frame 50 (duplicate keys in Map won't happen, but
       // the boundary set deduplicates frame 50 with source boundary at 100)
-      deps.session.marks = new Map([
-        [50, { frame: 50, endFrame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50, endFrame: 50 }]]);
       deps.session.inPoint = 1;
 
       const result = service.shiftRangeToNext();
@@ -402,9 +382,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-017: duration marker endFrame is clamped to source duration', () => {
       deps.session.currentSource = { duration: 50 };
-      deps.session.marks = new Map([
-        [20, { frame: 20, endFrame: 200 }],
-      ]);
+      deps.session.marks = new Map([[20, { frame: 20, endFrame: 200 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 1;
 
@@ -415,9 +393,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-018: emits rangeShifted event after shift', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 1;
 
@@ -496,9 +472,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-005: wraps around in loop mode', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 25;
       deps.session.loopMode = 'loop';
@@ -510,9 +484,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-006: does not wrap in once mode', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 25;
       deps.session.loopMode = 'once';
@@ -588,9 +560,7 @@ describe('FrameNavigationService - Range Shifting', () => {
         makeClip({ id: 'c2', globalStartFrame: 101, duration: 100 }),
       ];
       deps.playlistManager.getClips.mockReturnValue(clips);
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 1;
 
@@ -660,9 +630,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-026: shift does not pause playback (no pause call)', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 1;
       deps.session.currentFrame = 1;
 
@@ -691,9 +659,7 @@ describe('FrameNavigationService - Range Shifting', () => {
 
     it('RS-028: shift from current frame that does not match any segment falls back to first', () => {
       deps.session.currentSource = { duration: 100 };
-      deps.session.marks = new Map([
-        [50, { frame: 50 }],
-      ]);
+      deps.session.marks = new Map([[50, { frame: 50 }]]);
       deps.session.inPoint = 200; // beyond duration
       deps.session.currentFrame = 200;
 

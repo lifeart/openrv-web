@@ -204,7 +204,19 @@ describe('ClientMode E2E', () => {
       const selectorString = selectors.join(' ');
 
       // All panel types that should be hidden
-      const expectedPanels = ['color', 'effects', 'transform', 'annotate', 'export', 'paint', 'channel', 'stereo', 'notes', 'snapshots', 'network'];
+      const expectedPanels = [
+        'color',
+        'effects',
+        'transform',
+        'annotate',
+        'export',
+        'paint',
+        'channel',
+        'stereo',
+        'notes',
+        'snapshots',
+        'network',
+      ];
       for (const panel of expectedPanels) {
         expect(selectorString).toContain(`data-panel="${panel}"`);
       }
@@ -434,9 +446,15 @@ describe('ClientMode E2E', () => {
       clientMode.enable();
 
       const playbackActions = [
-        'playback.toggle', 'playback.stepForward', 'playback.stepBackward',
-        'playback.toggleDirection', 'playback.goToStart', 'playback.goToEnd',
-        'playback.slower', 'playback.stop', 'playback.faster',
+        'playback.toggle',
+        'playback.stepForward',
+        'playback.stepBackward',
+        'playback.toggleDirection',
+        'playback.goToStart',
+        'playback.goToEnd',
+        'playback.slower',
+        'playback.stop',
+        'playback.faster',
       ];
 
       for (const action of playbackActions) {
@@ -448,16 +466,28 @@ describe('ClientMode E2E', () => {
       clientMode.enable();
 
       const viewActions = [
-        'view.fitToWindow', 'view.cycleWipeMode', 'view.toggleWaveform',
-        'view.toggleAB', 'view.toggleGuides', 'view.togglePixelProbe',
-        'view.toggleFalseColor', 'view.toggleToneMapping',
-        'view.toggleTimecodeOverlay', 'view.toggleFullscreen',
-        'view.togglePresentation', 'view.toggleZebraStripes',
-        'view.toggleSpotlight', 'view.cycleLuminanceVis',
-        'view.toggleGhostFrames', 'view.togglePAR',
-        'view.cycleBackgroundPattern', 'view.toggleCheckerboard',
-        'view.toggleDifferenceMatte', 'view.toggleSplitScreen',
-        'view.toggleInfoPanel', 'view.openPresentationWindow',
+        'view.fitToWindow',
+        'view.cycleWipeMode',
+        'view.toggleWaveform',
+        'view.toggleAB',
+        'view.toggleGuides',
+        'view.togglePixelProbe',
+        'view.toggleFalseColor',
+        'view.toggleToneMapping',
+        'view.toggleTimecodeOverlay',
+        'view.toggleFullscreen',
+        'view.togglePresentation',
+        'view.toggleZebraStripes',
+        'view.toggleSpotlight',
+        'view.cycleLuminanceVis',
+        'view.toggleGhostFrames',
+        'view.togglePAR',
+        'view.cycleBackgroundPattern',
+        'view.toggleCheckerboard',
+        'view.toggleDifferenceMatte',
+        'view.toggleSplitScreen',
+        'view.toggleInfoPanel',
+        'view.openPresentationWindow',
       ];
 
       for (const action of viewActions) {
@@ -469,13 +499,22 @@ describe('ClientMode E2E', () => {
       clientMode.enable();
 
       const blockedActions = [
-        'edit.undo', 'edit.redo',
-        'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle',
-        'annotation.previous', 'annotation.next',
-        'color.toggleColorWheels', 'color.toggleInversion',
-        'transform.rotateLeft', 'transform.flipHorizontal',
-        'export.quickExport', 'export.copyFrame',
-        'channel.red', 'channel.green',
+        'edit.undo',
+        'edit.redo',
+        'paint.pen',
+        'paint.eraser',
+        'paint.text',
+        'paint.rectangle',
+        'annotation.previous',
+        'annotation.next',
+        'color.toggleColorWheels',
+        'color.toggleInversion',
+        'transform.rotateLeft',
+        'transform.flipHorizontal',
+        'export.quickExport',
+        'export.copyFrame',
+        'channel.red',
+        'channel.green',
         'stereo.toggle',
         'display.cycleProfile',
         'snapshot.create',
@@ -493,11 +532,22 @@ describe('ClientMode E2E', () => {
       expect(clientMode.isEnabled()).toBe(false);
 
       const allActions = [
-        'playback.toggle', 'edit.undo', 'paint.pen', 'color.toggleColorWheels',
-        'transform.rotateLeft', 'export.quickExport', 'annotation.next',
-        'channel.red', 'stereo.toggle', 'display.cycleProfile',
-        'snapshot.create', 'notes.addNote', 'network.togglePanel',
-        'layout.default', 'view.fitToWindow', 'help.toggleCheatSheet',
+        'playback.toggle',
+        'edit.undo',
+        'paint.pen',
+        'color.toggleColorWheels',
+        'transform.rotateLeft',
+        'export.quickExport',
+        'annotation.next',
+        'channel.red',
+        'stereo.toggle',
+        'display.cycleProfile',
+        'snapshot.create',
+        'notes.addNote',
+        'network.togglePanel',
+        'layout.default',
+        'view.fitToWindow',
+        'help.toggleCheatSheet',
       ];
 
       for (const action of allActions) {

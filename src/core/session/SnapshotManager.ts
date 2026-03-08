@@ -5,7 +5,7 @@
  * Supports manual snapshots, auto-checkpoints, preview, and restore.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 
@@ -120,11 +120,7 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
   /**
    * Create a manual snapshot
    */
-  async createSnapshot(
-    name: string,
-    state: SessionState,
-    description?: string
-  ): Promise<Snapshot> {
+  async createSnapshot(name: string, state: SessionState, description?: string): Promise<Snapshot> {
     if (!this.db || !this.isInitialized) {
       throw new Error('SnapshotManager not initialized');
     }
@@ -160,10 +156,7 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
   /**
    * Create an auto-checkpoint before a major operation
    */
-  async createAutoCheckpoint(
-    event: string,
-    state: SessionState
-  ): Promise<Snapshot> {
+  async createAutoCheckpoint(event: string, state: SessionState): Promise<Snapshot> {
     if (!this.db || !this.isInitialized) {
       throw new Error('SnapshotManager not initialized');
     }
@@ -252,7 +245,7 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
    */
   private async pruneSnapshots(isAutoCheckpoint: boolean, maxCount: number): Promise<void> {
     const snapshots = await this.listSnapshots();
-    const filtered = snapshots.filter(s => s.isAutoCheckpoint === isAutoCheckpoint);
+    const filtered = snapshots.filter((s) => s.isAutoCheckpoint === isAutoCheckpoint);
 
     if (filtered.length > maxCount) {
       // Sort by date, oldest first
@@ -462,10 +455,14 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
     const metadata = await this.getSnapshotMetadata(id);
     if (!state || !metadata) return null;
 
-    return JSON.stringify({
-      metadata,
-      state,
-    }, null, 2);
+    return JSON.stringify(
+      {
+        metadata,
+        state,
+      },
+      null,
+      2,
+    );
   }
 
   /**
@@ -523,7 +520,7 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
     // Check version compatibility
     if (data.metadata.version > SESSION_STATE_VERSION) {
       throw new Error(
-        `Snapshot version ${data.metadata.version} is newer than supported version ${SESSION_STATE_VERSION}`
+        `Snapshot version ${data.metadata.version} is newer than supported version ${SESSION_STATE_VERSION}`,
       );
     }
 

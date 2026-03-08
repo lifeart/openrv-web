@@ -457,13 +457,13 @@ export function createMockVideo(
   });
   // Simulate currentTime setter dispatching a 'seeked' event
   // so that tests waiting for video.addEventListener('seeked', ...) resolve.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (video as any)._currentTime = 0;
   Object.defineProperty(video, 'currentTime', {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     get: () => (video as any)._currentTime,
     set: (v: number) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (video as any)._currentTime = v;
       setTimeout(() => video.dispatchEvent(new Event('seeked')), 0);
     },

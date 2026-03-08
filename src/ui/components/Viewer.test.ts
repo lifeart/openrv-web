@@ -45,7 +45,15 @@ interface TestableViewer {
     updateCropCursor(handle: CropDragHandle): void;
     handleCropPointerMove(e: PointerEvent): void;
     constrainToAspectRatio(region: CropRegion, handle: CropDragHandle): CropRegion;
-    drawUncropBackground(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
+    drawUncropBackground(
+      imageCtx: CanvasRenderingContext2D,
+      displayWidth: number,
+      displayHeight: number,
+      uncropOffsetX: number,
+      uncropOffsetY: number,
+      imageDisplayW: number,
+      imageDisplayH: number,
+    ): void;
     clearOutsideCropRegion(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number): void;
   };
 
@@ -95,7 +103,9 @@ interface TestableViewer {
   pixelProbe: PixelProbe;
   pixelSamplingManager: {
     lastMouseMoveUpdate: number;
-    cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null;
+    cursorColorCallback:
+      | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+      | null;
     getImageData(): ImageData | null;
     getSourceImageData(): ImageData | null;
   };
@@ -193,7 +203,6 @@ interface TestableViewer {
 function testable(viewer: Viewer): TestableViewer {
   return viewer as unknown as TestableViewer;
 }
-
 
 describe('Viewer', () => {
   let session: Session;
@@ -350,24 +359,24 @@ describe('Viewer', () => {
 
   describe('LUT handling', () => {
     it('VWR-021: setLUT stores LUT', () => {
-      const mockLUT: LUT3D = { 
-        title: 'Test', 
-        size: 17, 
+      const mockLUT: LUT3D = {
+        title: 'Test',
+        size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
         domainMin: [0, 0, 0],
-        domainMax: [1, 1, 1]
+        domainMax: [1, 1, 1],
       };
       viewer.setLUT(mockLUT);
       expect(viewer.getLUT()).toBe(mockLUT);
     });
 
     it('VWR-022: setLUT accepts null', () => {
-      const mockLUT: LUT3D = { 
-        title: 'Test', 
-        size: 17, 
+      const mockLUT: LUT3D = {
+        title: 'Test',
+        size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
         domainMin: [0, 0, 0],
-        domainMax: [1, 1, 1]
+        domainMax: [1, 1, 1],
       };
       viewer.setLUT(mockLUT);
       viewer.setLUT(null);
@@ -588,7 +597,8 @@ describe('Viewer', () => {
 
       const dataA = new ImageData(new Uint8ClampedArray([255, 0, 0, 255]), 1, 1);
       const dataB = new ImageData(new Uint8ClampedArray([0, 255, 0, 255]), 1, 1);
-      const renderSourceToImageData = vi.spyOn(viewer as any, 'renderSourceToImageData')
+      const renderSourceToImageData = vi
+        .spyOn(viewer as any, 'renderSourceToImageData')
         .mockReturnValueOnce(dataA)
         .mockReturnValueOnce(dataB);
 
@@ -681,8 +691,7 @@ describe('Viewer', () => {
       } as any;
 
       viewer.setDifferenceMatteState({ enabled: true, gain: 1, heatmap: false });
-      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData')
-        .mockReturnValue(new ImageData(2, 1));
+      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData').mockReturnValue(new ImageData(2, 1));
 
       const out = (viewer as any).renderDifferenceMatte(2, 1) as ImageData;
       expect(out).not.toBeNull();
@@ -705,8 +714,7 @@ describe('Viewer', () => {
         { id: 'A', name: 'A', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
         { id: 'B', name: 'B', sourceIndex: 1, blendMode: 'normal', opacity: 1, visible: true },
       ]);
-      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData')
-        .mockReturnValue(new ImageData(2, 1));
+      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData').mockReturnValue(new ImageData(2, 1));
 
       const out = (viewer as any).compositeStackLayers(2, 1) as ImageData;
       expect(out).not.toBeNull();
@@ -925,7 +933,17 @@ describe('Viewer', () => {
       testable(viewer).cropManager._isDraggingCrop = true;
       testable(viewer).cropManager.cropDragHandle = 'br';
       testable(viewer).cropManager.cropOverlay = {
-        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 800,
+          height: 600,
+          right: 800,
+          bottom: 600,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }),
       };
       testable(viewer).cropManager.cropDragStart = {
         x: 1.0,
@@ -950,7 +968,17 @@ describe('Viewer', () => {
       testable(viewer).cropManager._isDraggingCrop = true;
       testable(viewer).cropManager.cropDragHandle = 'move';
       testable(viewer).cropManager.cropOverlay = {
-        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 800,
+          height: 600,
+          right: 800,
+          bottom: 600,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }),
       };
       testable(viewer).cropManager.cropDragStart = {
         x: 0.65,
@@ -976,7 +1004,17 @@ describe('Viewer', () => {
       testable(viewer).cropManager._isDraggingCrop = true;
       testable(viewer).cropManager.cropDragHandle = 'br';
       testable(viewer).cropManager.cropOverlay = {
-        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 800,
+          height: 600,
+          right: 800,
+          bottom: 600,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }),
       };
       testable(viewer).cropManager.cropDragStart = {
         x: 0.5,
@@ -1001,7 +1039,17 @@ describe('Viewer', () => {
       testable(viewer).cropManager._isDraggingCrop = true;
       testable(viewer).cropManager.cropDragHandle = 'tl';
       testable(viewer).cropManager.cropOverlay = {
-        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 800,
+          height: 600,
+          right: 800,
+          bottom: 600,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }),
       };
       testable(viewer).cropManager.cropDragStart = {
         x: 0,
@@ -1028,7 +1076,17 @@ describe('Viewer', () => {
       testable(viewer).cropManager._isDraggingCrop = true;
       testable(viewer).cropManager.cropDragHandle = 'right';
       testable(viewer).cropManager.cropOverlay = {
-        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 800,
+          height: 600,
+          right: 800,
+          bottom: 600,
+          x: 0,
+          y: 0,
+          toJSON: () => {},
+        }),
       };
       testable(viewer).cropManager.cropDragStart = {
         x: 1.0,
@@ -1056,7 +1114,15 @@ describe('Viewer', () => {
       // Mock source
       testable(viewer).session = {
         ...session,
-        currentSource: { type: 'image' as const, name: 'test', url: '', width: 1920, height: 1080, duration: 1, fps: 24 },
+        currentSource: {
+          type: 'image' as const,
+          name: 'test',
+          url: '',
+          width: 1920,
+          height: 1080,
+          duration: 1,
+          fps: 24,
+        },
       };
 
       const input = { x: 0, y: 0, width: 0.6, height: 0.8 };
@@ -1079,7 +1145,15 @@ describe('Viewer', () => {
 
       testable(viewer).session = {
         ...session,
-        currentSource: { type: 'image' as const, name: 'test', url: '', width: 1920, height: 1080, duration: 1, fps: 24 },
+        currentSource: {
+          type: 'image' as const,
+          name: 'test',
+          url: '',
+          width: 1920,
+          height: 1080,
+          duration: 1,
+          fps: 24,
+        },
       };
 
       const input = { x: 0.8, y: 0.8, width: 0.5, height: 0.5 };
@@ -1191,7 +1265,9 @@ describe('Viewer', () => {
     });
 
     it('VWR-045: getStackLayers returns copy', () => {
-      const layers: StackLayer[] = [{ id: '1', name: 'L1', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true }];
+      const layers: StackLayer[] = [
+        { id: '1', name: 'L1', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
+      ];
       viewer.setStackLayers(layers);
       const l1 = viewer.getStackLayers();
       const l2 = viewer.getStackLayers();
@@ -1598,5 +1674,4 @@ describe('Viewer', () => {
       expect(t.paintHasContent).toBe(true);
     });
   });
-
 });

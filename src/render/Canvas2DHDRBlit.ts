@@ -81,10 +81,7 @@ export class Canvas2DHDRBlit {
         // Use a fresh canvas for each attempt because getContext('2d') on the
         // same canvas always returns the same context with its original settings.
         const testCanvas = document.createElement('canvas');
-        const ctx = testCanvas.getContext(
-          '2d',
-          attempt.settings as unknown as CanvasRenderingContext2DSettings
-        );
+        const ctx = testCanvas.getContext('2d', attempt.settings as unknown as CanvasRenderingContext2DSettings);
         if (!ctx) continue;
 
         // Configure HDR extended range if available

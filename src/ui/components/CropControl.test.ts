@@ -5,11 +5,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   CropControl,
-  CropRegion,
+  type CropRegion,
   DEFAULT_CROP_REGION,
   DEFAULT_CROP_STATE,
   DEFAULT_UNCROP_STATE,
-  UncropState,
+  type UncropState,
   ASPECT_RATIOS,
   MIN_CROP_FRACTION,
   MAX_UNCROP_PADDING,
@@ -79,9 +79,7 @@ describe('CropControl', () => {
       control.setCropRegion(region);
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ region: region })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ region: region }));
     });
 
     it('CRP-008: stores copy of region', () => {
@@ -307,7 +305,7 @@ describe('CropControl', () => {
       // For 1:1 on a 16:9 source, width should be reduced (narrower), so it centers horizontally
       expect(state.region.y).toBeCloseTo(0, 5);
       // x should be offset to center the square crop
-      const expectedWidth = (1080 / 1920); // normalized width for 1:1 on 1920x1080
+      const expectedWidth = 1080 / 1920; // normalized width for 1:1 on 1920x1080
       expect(state.region.x).toBeCloseTo((1 - expectedWidth) / 2, 3);
     });
 
@@ -424,7 +422,7 @@ describe('CropControl', () => {
 
   describe('ASPECT_RATIOS constant', () => {
     it('CRP-039: contains expected presets', () => {
-      const labels = ASPECT_RATIOS.map(ar => ar.label);
+      const labels = ASPECT_RATIOS.map((ar) => ar.label);
       expect(labels).toContain('Free');
       expect(labels).toContain('16:9');
       expect(labels).toContain('4:3');
@@ -433,22 +431,22 @@ describe('CropControl', () => {
     });
 
     it('CRP-040: Free has null ratio', () => {
-      const free = ASPECT_RATIOS.find(ar => ar.label === 'Free');
+      const free = ASPECT_RATIOS.find((ar) => ar.label === 'Free');
       expect(free?.ratio).toBeNull();
       expect(free?.value).toBeNull();
     });
 
     it('CRP-041: all presets have correct numeric ratios', () => {
-      const r16_9 = ASPECT_RATIOS.find(ar => ar.value === '16:9');
+      const r16_9 = ASPECT_RATIOS.find((ar) => ar.value === '16:9');
       expect(r16_9?.ratio).toBeCloseTo(16 / 9, 5);
 
-      const r4_3 = ASPECT_RATIOS.find(ar => ar.value === '4:3');
+      const r4_3 = ASPECT_RATIOS.find((ar) => ar.value === '4:3');
       expect(r4_3?.ratio).toBeCloseTo(4 / 3, 5);
 
-      const r1_1 = ASPECT_RATIOS.find(ar => ar.value === '1:1');
+      const r1_1 = ASPECT_RATIOS.find((ar) => ar.value === '1:1');
       expect(r1_1?.ratio).toBe(1);
 
-      const r9_16 = ASPECT_RATIOS.find(ar => ar.value === '9:16');
+      const r9_16 = ASPECT_RATIOS.find((ar) => ar.value === '9:16');
       expect(r9_16?.ratio).toBeCloseTo(9 / 16, 5);
     });
   });
@@ -749,9 +747,7 @@ describe('CropControl', () => {
       });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true, padding: 50 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, padding: 50 }));
     });
 
     it('UNCRP-005: setUncropState stores copy of state', () => {

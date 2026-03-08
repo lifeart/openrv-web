@@ -6,7 +6,7 @@
  * global frame calculation and frame-level transition detection.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { TransitionConfig, TransitionFrameInfo } from '../types/transition';
 import type { PlaylistClip } from './PlaylistManager';
 import type { ManagerBase } from '../ManagerBase';
@@ -69,11 +69,7 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
    * Additionally, the combined durations of adjacent transitions on a single clip
    * must not exceed that clip's duration.
    */
-  validateTransition(
-    gapIndex: number,
-    config: TransitionConfig,
-    clips: PlaylistClip[]
-  ): TransitionConfig | null {
+  validateTransition(gapIndex: number, config: TransitionConfig, clips: PlaylistClip[]): TransitionConfig | null {
     if (gapIndex < 0 || gapIndex >= clips.length - 1) {
       return null;
     }
@@ -137,10 +133,7 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
    * - transitionEnd = clips[i+1].globalStartFrame + durationFrames - 1
    * - progress = (globalFrame - transitionStart) / (durationFrames - 1)
    */
-  getTransitionAtFrame(
-    globalFrame: number,
-    clips: PlaylistClip[]
-  ): TransitionFrameInfo | null {
+  getTransitionAtFrame(globalFrame: number, clips: PlaylistClip[]): TransitionFrameInfo | null {
     // Calculate overlap-adjusted clips
     const adjustedClips = this.calculateOverlapAdjustedFrames(clips);
 
@@ -160,9 +153,7 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
 
       if (globalFrame >= transitionStart && globalFrame <= transitionEnd) {
         // Calculate progress
-        const progress = durationFrames === 1
-          ? 1.0
-          : (globalFrame - transitionStart) / (durationFrames - 1);
+        const progress = durationFrames === 1 ? 1.0 : (globalFrame - transitionStart) / (durationFrames - 1);
 
         // Calculate local frames
         // Outgoing clip: the transition covers the LAST durationFrames of the outgoing clip
@@ -218,7 +209,7 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
   calculateOverlapAdjustedFrames(clips: PlaylistClip[]): PlaylistClip[] {
     if (clips.length === 0) return [];
 
-    const adjusted: PlaylistClip[] = clips.map(clip => ({ ...clip }));
+    const adjusted: PlaylistClip[] = clips.map((clip) => ({ ...clip }));
 
     adjusted[0]!.globalStartFrame = 1;
 
@@ -227,7 +218,7 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
       const next = adjusted[i + 1]!;
 
       const transition = this.transitions[i];
-      const overlap = (transition && transition.type !== 'cut') ? transition.durationFrames : 0;
+      const overlap = transition && transition.type !== 'cut' ? transition.durationFrames : 0;
 
       next.globalStartFrame = current.globalStartFrame + current.duration - overlap;
     }
@@ -265,14 +256,14 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
    * Get state for serialization.
    */
   getState(): (TransitionConfig | null)[] {
-    return this.transitions.map(t => (t ? { ...t } : null));
+    return this.transitions.map((t) => (t ? { ...t } : null));
   }
 
   /**
    * Restore state from serialization.
    */
   setState(transitions: (TransitionConfig | null)[]): void {
-    this.transitions = transitions.map(t => (t ? { ...t } : null));
+    this.transitions = transitions.map((t) => (t ? { ...t } : null));
   }
 
   /**

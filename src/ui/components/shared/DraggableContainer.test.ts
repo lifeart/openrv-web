@@ -15,11 +15,7 @@ if (typeof globalThis.PointerEvent === 'undefined') {
   };
 }
 
-import {
-  createDraggableContainer,
-  createControlButton,
-  DraggableContainer,
-} from './DraggableContainer';
+import { createDraggableContainer, createControlButton, type DraggableContainer } from './DraggableContainer';
 
 describe('createDraggableContainer', () => {
   let container: DraggableContainer;

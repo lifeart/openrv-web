@@ -8,24 +8,24 @@ function createMockGL() {
 
   const mockGL = {
     // Constants
-    TEXTURE_2D: 0x0DE1,
+    TEXTURE_2D: 0x0de1,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
     LINEAR: 0x2601,
     NEAREST: 0x2600,
-    CLAMP_TO_EDGE: 0x812F,
+    CLAMP_TO_EDGE: 0x812f,
     RGBA8: 0x8058,
-    RGBA16F: 0x881A,
+    RGBA16F: 0x881a,
     RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
-    HALF_FLOAT: 0x140B,
+    HALF_FLOAT: 0x140b,
     FLOAT: 0x1406,
-    FRAMEBUFFER: 0x8D40,
-    COLOR_ATTACHMENT0: 0x8CE0,
-    FRAMEBUFFER_COMPLETE: 0x8CD5,
-    INVALID_INDEX: 0xFFFFFFFF,
+    FRAMEBUFFER: 0x8d40,
+    COLOR_ATTACHMENT0: 0x8ce0,
+    FRAMEBUFFER_COMPLETE: 0x8cd5,
+    INVALID_INDEX: 0xffffffff,
 
     // Methods
     createTexture: vi.fn(() => ({ _id: textureId++ })),
@@ -35,7 +35,7 @@ function createMockGL() {
     texParameteri: vi.fn(),
     bindFramebuffer: vi.fn(),
     framebufferTexture2D: vi.fn(),
-    checkFramebufferStatus: vi.fn(() => 0x8CD5), // FRAMEBUFFER_COMPLETE
+    checkFramebufferStatus: vi.fn(() => 0x8cd5), // FRAMEBUFFER_COMPLETE
     deleteTexture: vi.fn(),
     deleteFramebuffer: vi.fn(),
     viewport: vi.fn(),
@@ -88,9 +88,9 @@ describe('FBOPingPong', () => {
 
     const calls = vi.mocked(gl.texImage2D).mock.calls;
     // internalFormat should be RGBA16F (0x881A)
-    expect(calls[0]![2]).toBe(0x881A);
+    expect(calls[0]![2]).toBe(0x881a);
     // type is arg[7] = HALF_FLOAT (0x140B)
-    expect(calls[0]![7]).toBe(0x140B);
+    expect(calls[0]![7]).toBe(0x140b);
   });
 
   // ─── A-2: Ping-pong alternation ──────────────────────────────────
@@ -187,7 +187,7 @@ describe('FBOPingPong', () => {
     expect(pingPong.ensure(gl, 640, 480, 'rgba16f')).toBe(false);
 
     // RGBA8: always succeed
-    vi.mocked(gl.checkFramebufferStatus).mockReturnValue(0x8CD5);
+    vi.mocked(gl.checkFramebufferStatus).mockReturnValue(0x8cd5);
     expect(pingPong.ensure(gl, 640, 480, 'rgba8')).toBe(true);
   });
 
@@ -253,8 +253,8 @@ describe('FBOPingPong', () => {
     const calls = vi.mocked(gl.texParameteri).mock.calls;
 
     // Find MIN_FILTER and MAG_FILTER calls
-    const minFilterCalls = calls.filter(c => c[1] === gl.TEXTURE_MIN_FILTER);
-    const magFilterCalls = calls.filter(c => c[1] === gl.TEXTURE_MAG_FILTER);
+    const minFilterCalls = calls.filter((c) => c[1] === gl.TEXTURE_MIN_FILTER);
+    const magFilterCalls = calls.filter((c) => c[1] === gl.TEXTURE_MAG_FILTER);
 
     // All MIN and MAG filter calls should use NEAREST
     for (const call of minFilterCalls) {
@@ -276,8 +276,8 @@ describe('FBOPingPong', () => {
     pingPong.setFilteringMode(gl, true);
 
     const calls = vi.mocked(gl.texParameteri).mock.calls;
-    const minFilterCalls = calls.filter(c => c[1] === gl.TEXTURE_MIN_FILTER);
-    const magFilterCalls = calls.filter(c => c[1] === gl.TEXTURE_MAG_FILTER);
+    const minFilterCalls = calls.filter((c) => c[1] === gl.TEXTURE_MIN_FILTER);
+    const magFilterCalls = calls.filter((c) => c[1] === gl.TEXTURE_MAG_FILTER);
 
     for (const call of minFilterCalls) {
       expect(call[2]).toBe(gl.LINEAR);
@@ -296,7 +296,7 @@ describe('FBOPingPong', () => {
     pingPong.setFilteringMode(gl, false);
 
     const calls = vi.mocked(gl.texParameteri).mock.calls;
-    const minFilterCalls = calls.filter(c => c[1] === gl.TEXTURE_MIN_FILTER);
+    const minFilterCalls = calls.filter((c) => c[1] === gl.TEXTURE_MIN_FILTER);
     expect(minFilterCalls.length).toBeGreaterThan(0);
     for (const call of minFilterCalls) {
       expect(call[2]).toBe(gl.NEAREST);
@@ -312,10 +312,7 @@ describe('FBOPingPong', () => {
 
     pingPong.beginPass(gl);
 
-    expect(gl.invalidateFramebuffer).toHaveBeenCalledWith(
-      gl.FRAMEBUFFER,
-      [gl.COLOR_ATTACHMENT0],
-    );
+    expect(gl.invalidateFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
   });
 
   it('A-6b: calls invalidateFramebuffer on each pass', () => {
@@ -462,10 +459,8 @@ describe('FBOPingPong', () => {
 
     pingPong.setFilteringMode(gl, true);
 
-    const minFilterCalls = vi.mocked(gl.texParameteri).mock.calls
-      .filter(c => c[1] === gl.TEXTURE_MIN_FILTER);
-    const magFilterCalls = vi.mocked(gl.texParameteri).mock.calls
-      .filter(c => c[1] === gl.TEXTURE_MAG_FILTER);
+    const minFilterCalls = vi.mocked(gl.texParameteri).mock.calls.filter((c) => c[1] === gl.TEXTURE_MIN_FILTER);
+    const magFilterCalls = vi.mocked(gl.texParameteri).mock.calls.filter((c) => c[1] === gl.TEXTURE_MAG_FILTER);
     expect(minFilterCalls).toHaveLength(1);
     expect(magFilterCalls).toHaveLength(1);
   });

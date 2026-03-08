@@ -31,11 +31,7 @@ import {
  * Build a minimal valid ICC profile binary for testing.
  * This creates a display profile with sRGB-like characteristics.
  */
-function buildTestProfile(options?: {
-  gamma?: number;
-  profileClass?: string;
-  colorSpace?: string;
-}): ArrayBuffer {
+function buildTestProfile(options?: { gamma?: number; profileClass?: string; colorSpace?: string }): ArrayBuffer {
   const gamma = options?.gamma ?? 2.2;
   const profileClassStr = options?.profileClass ?? 'mntr';
   const colorSpaceStr = options?.colorSpace ?? 'RGB ';
@@ -72,8 +68,8 @@ function buildTestProfile(options?: {
   const view = new DataView(buffer);
 
   // --- Header (128 bytes) ---
-  view.setUint32(0, totalSize, false);  // Profile size
-  view.setUint32(4, 0, false);          // Preferred CMM
+  view.setUint32(0, totalSize, false); // Profile size
+  view.setUint32(4, 0, false); // Preferred CMM
   view.setUint32(8, 0x02400000, false); // Version 2.4
 
   // Profile class at offset 12
@@ -89,7 +85,7 @@ function buildTestProfile(options?: {
   // PCS at offset 20 ('XYZ ')
   view.setUint8(20, 0x58); // X
   view.setUint8(21, 0x59); // Y
-  view.setUint8(22, 0x5A); // Z
+  view.setUint8(22, 0x5a); // Z
   view.setUint8(23, 0x20); // space
 
   // Signature 'acsp' at offset 36
@@ -108,9 +104,9 @@ function buildTestProfile(options?: {
     [0x72545243, rTRCOffset, trcDataSize], // rTRC
     [0x67545243, gTRCOffset, trcDataSize], // gTRC
     [0x62545243, bTRCOffset, trcDataSize], // bTRC
-    [0x7258595A, rXYZOffset, xyzDataSize], // rXYZ
-    [0x6758595A, gXYZOffset, xyzDataSize], // gXYZ
-    [0x6258595A, bXYZOffset, xyzDataSize], // bXYZ
+    [0x7258595a, rXYZOffset, xyzDataSize], // rXYZ
+    [0x6758595a, gXYZOffset, xyzDataSize], // gXYZ
+    [0x6258595a, bXYZOffset, xyzDataSize], // bXYZ
     [0x77747074, wtptOffset, xyzDataSize], // wtpt
   ];
 
@@ -123,17 +119,17 @@ function buildTestProfile(options?: {
 
   // --- TRC data (gamma curves) ---
   for (const trcOffset of [rTRCOffset, gTRCOffset, bTRCOffset]) {
-    view.setUint32(trcOffset, 0x63757276, false);     // 'curv'
-    view.setUint32(trcOffset + 4, 0, false);           // reserved
-    view.setUint32(trcOffset + 8, 1, false);           // count = 1 (gamma)
+    view.setUint32(trcOffset, 0x63757276, false); // 'curv'
+    view.setUint32(trcOffset + 4, 0, false); // reserved
+    view.setUint32(trcOffset + 8, 1, false); // count = 1 (gamma)
     // u8Fixed8Number: gamma * 256
     view.setUint16(trcOffset + 12, Math.round(gamma * 256), false);
   }
 
   // --- XYZ data (sRGB primaries) ---
   function writeXYZ(offset: number, X: number, Y: number, Z: number): void {
-    view.setUint32(offset, 0x58595A20, false);      // 'XYZ '
-    view.setUint32(offset + 4, 0, false);            // reserved
+    view.setUint32(offset, 0x58595a20, false); // 'XYZ '
+    view.setUint32(offset + 4, 0, false); // reserved
     view.setInt32(offset + 8, Math.round(X * 65536), false);
     view.setInt32(offset + 12, Math.round(Y * 65536), false);
     view.setInt32(offset + 16, Math.round(Z * 65536), false);
@@ -145,7 +141,7 @@ function buildTestProfile(options?: {
   writeXYZ(bXYZOffset, 0.1805, 0.0722, 0.9505);
 
   // D50 white point
-  writeXYZ(wtptOffset, 0.9505, 1.0000, 1.0890);
+  writeXYZ(wtptOffset, 0.9505, 1.0, 1.089);
 
   return buffer;
 }

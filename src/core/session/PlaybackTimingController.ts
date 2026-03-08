@@ -58,7 +58,6 @@ export interface StarvationCheckResult {
  * moving the logic into a standalone, independently testable class.
  */
 export class PlaybackTimingController {
-
   // -----------------------------------------------------------------
   // Timing reset
   // -----------------------------------------------------------------
@@ -91,16 +90,14 @@ export class PlaybackTimingController {
    * Compute the effective playback speed, capping reverse playback.
    */
   getEffectiveSpeed(playbackSpeed: number, playDirection: number): number {
-    return playDirection < 0
-      ? Math.min(playbackSpeed, MAX_REVERSE_SPEED)
-      : playbackSpeed;
+    return playDirection < 0 ? Math.min(playbackSpeed, MAX_REVERSE_SPEED) : playbackSpeed;
   }
 
   /**
    * Compute the duration of a single frame in milliseconds.
    */
   getFrameDuration(fps: number, effectiveSpeed: number): number {
-    return (1000 / fps) / effectiveSpeed;
+    return 1000 / fps / effectiveSpeed;
   }
 
   /**
@@ -239,9 +236,7 @@ export class PlaybackTimingController {
     playDirection: number,
     now: number = performance.now(),
   ): StarvationCheckResult {
-    const starvationDurationMs = state.starvationStartTime !== 0
-      ? now - state.starvationStartTime
-      : 0;
+    const starvationDurationMs = state.starvationStartTime !== 0 ? now - state.starvationStartTime : 0;
 
     if (starvationDurationMs <= STARVATION_TIMEOUT_MS) {
       return {
@@ -255,12 +250,9 @@ export class PlaybackTimingController {
     // Timeout exceeded
     state.consecutiveStarvationSkips++;
 
-    const shouldPause =
-      state.consecutiveStarvationSkips >= MAX_CONSECUTIVE_STARVATION_SKIPS;
+    const shouldPause = state.consecutiveStarvationSkips >= MAX_CONSECUTIVE_STARVATION_SKIPS;
 
-    const nearEnd = playDirection > 0
-      ? nextFrame >= outPoint - 2
-      : nextFrame <= inPoint + 2;
+    const nearEnd = playDirection > 0 ? nextFrame >= outPoint - 2 : nextFrame <= inPoint + 2;
 
     return {
       timedOut: true,
@@ -340,8 +332,7 @@ export class PlaybackTimingController {
 
     // Update FPS calculation every 500ms for smooth display
     if (elapsed >= 500) {
-      state.effectiveFps =
-        Math.round((state.fpsFrameCount / elapsed) * 1000 * 10) / 10;
+      state.effectiveFps = Math.round((state.fpsFrameCount / elapsed) * 1000 * 10) / 10;
       state.fpsFrameCount = 0;
       state.fpsLastTime = now;
     }
@@ -431,9 +422,7 @@ export class PlaybackTimingController {
 
     // Compute the fractional position between current frame and next
     const ratio = Math.max(0, Math.min(1, state.frameAccumulator / frameDuration));
-    const nextFrame = this.computeNextFrame(
-      currentFrame, playDirection, inPoint, outPoint, loopMode,
-    );
+    const nextFrame = this.computeNextFrame(currentFrame, playDirection, inPoint, outPoint, loopMode);
 
     const newPosition: SubFramePosition = {
       baseFrame: currentFrame,

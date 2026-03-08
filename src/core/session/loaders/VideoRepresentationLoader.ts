@@ -44,9 +44,7 @@ export class VideoRepresentationLoader implements RepresentationLoader {
       },
       par: representation.par ?? 1.0,
       startFrame: representation.startFrame ?? 0,
-      colorSpace: videoSourceNode.isHDR()
-        ? { transferFunction: 'PQ', colorPrimaries: 'bt2020' }
-        : undefined,
+      colorSpace: videoSourceNode.isHDR() ? { transferFunction: 'PQ', colorPrimaries: 'bt2020' } : undefined,
     };
   }
 

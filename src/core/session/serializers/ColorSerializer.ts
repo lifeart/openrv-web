@@ -446,7 +446,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorExposure', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('exposure', settings.exposure ?? 0.0)
       .end();
@@ -462,7 +463,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorCurve', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('contrast', settings.contrast ?? 0.0)
       .end();
@@ -478,7 +480,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorTemperature', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('inWhitePrimary', settings.inWhitePrimary ?? [0.3457, 0.3585])
       .float('inTemperature', settings.inTemperature ?? 6500.0)
@@ -497,7 +500,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorSaturation', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('saturation', settings.saturation ?? 1.0)
       .end();
@@ -513,7 +517,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorVibrance', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('vibrance', settings.vibrance ?? 0.0)
       .end();
@@ -529,7 +534,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorShadow', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('shadow', settings.shadow ?? 0.0)
       .end();
@@ -545,7 +551,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorHighlight', 1);
-    obj.component('color')
+    obj
+      .component('color')
       .int('active', settings.active !== false ? 1 : 0)
       .float('highlight', settings.highlight ?? 0.0)
       .end();
@@ -561,7 +568,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorGrayScale', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active ? 1 : 0)
       .end();
 
@@ -602,7 +610,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorLinearToSRGB', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .end();
 
@@ -617,7 +626,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVColorSRGBToLinear', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .end();
 
@@ -632,7 +642,8 @@ export const ColorSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVPrimaryConvert', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .string('inPrimaries', settings.inPrimaries ?? 'sRGB')
       .string('outPrimaries', settings.outPrimaries ?? 'sRGB')
@@ -653,8 +664,7 @@ export const ColorSerializer = {
 
     // Main OCIO component
     const ocioComp = ocioObject.component('ocio');
-    ocioComp
-      .int('active', settings.active !== false ? 1 : 0);
+    ocioComp.int('active', settings.active !== false ? 1 : 0);
     if (settings.function) {
       ocioComp.string('function', settings.function);
     }
@@ -668,10 +678,7 @@ export const ColorSerializer = {
 
     // Color output component
     if (settings.outColorSpace) {
-      ocioObject
-        .component('ocio_color')
-        .string('outColorSpace', settings.outColorSpace)
-        .end();
+      ocioObject.component('ocio_color').string('outColorSpace', settings.outColorSpace).end();
     }
 
     // Look component
@@ -708,18 +715,12 @@ export const ColorSerializer = {
 
     // Input transform component
     if (settings.inTransformUrl) {
-      ocioObject
-        .component('inTransform')
-        .string('url', settings.inTransformUrl)
-        .end();
+      ocioObject.component('inTransform').string('url', settings.inTransformUrl).end();
     }
 
     // Output transform component
     if (settings.outTransformUrl) {
-      ocioObject
-        .component('outTransform')
-        .string('url', settings.outTransformUrl)
-        .end();
+      ocioObject.component('outTransform').string('url', settings.outTransformUrl).end();
     }
 
     // Config component
@@ -867,7 +868,7 @@ export const ColorSerializer = {
   buildLookLUTObject(
     name: string,
     settings: LookLUTSettings = {},
-    protocol: 'RVLookLUT' | 'RVCacheLUT' = 'RVLookLUT'
+    protocol: 'RVLookLUT' | 'RVCacheLUT' = 'RVLookLUT',
   ): ObjectData {
     const builder = new GTOBuilder();
 
@@ -986,10 +987,7 @@ export const ColorSerializer = {
         ? (settings.outputMatrix as number[][]).flat()
         : (settings.outputMatrix as number[]);
 
-      colorObject
-        .component('matrix:output')
-        .float('RGBA', matrixData)
-        .end();
+      colorObject.component('matrix:output').float('RGBA', matrixData).end();
     }
 
     colorObject.end();

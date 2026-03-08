@@ -141,20 +141,36 @@ export const VIRTUAL_SLIDER_KEYS = new Set(Object.keys(VIRTUAL_SLIDER_PARAMS));
  * these states to prevent other shortcuts from firing.
  */
 export const VIRTUAL_SLIDER_ACTIVE_KEYS = new Set([
-  'Equal',       // + key
-  'NumpadAdd',   // numpad +
-  'Minus',       // - key
+  'Equal', // + key
+  'NumpadAdd', // numpad +
+  'Minus', // - key
   'NumpadSubtract', // numpad -
-  'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
-  'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9',
-  'Numpad0', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4',
-  'Numpad5', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9',
-  'Period',      // .
+  'Digit0',
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
+  'Digit7',
+  'Digit8',
+  'Digit9',
+  'Numpad0',
+  'Numpad1',
+  'Numpad2',
+  'Numpad3',
+  'Numpad4',
+  'Numpad5',
+  'Numpad6',
+  'Numpad7',
+  'Numpad8',
+  'Numpad9',
+  'Period', // .
   'NumpadDecimal',
   'Enter',
   'NumpadEnter',
   'Escape',
-  'KeyL',        // lock toggle
+  'KeyL', // lock toggle
   'Backspace',
   'ShiftLeft',
   'ShiftRight',

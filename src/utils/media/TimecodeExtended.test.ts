@@ -12,7 +12,7 @@ import {
   getAllDisplayModes,
   getNextDisplayMode,
   getDisplayModeLabel,
-  TimecodeDisplayMode,
+  type TimecodeDisplayMode,
 } from './Timecode';
 
 // ---------------------------------------------------------------------------

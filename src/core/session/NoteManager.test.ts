@@ -161,7 +161,7 @@ describe('NoteManager', () => {
 
       const replies = manager.getReplies(parent.id);
       expect(replies.length).toBe(2);
-      expect(replies.every(r => r.parentId === parent.id)).toBe(true);
+      expect(replies.every((r) => r.parentId === parent.id)).toBe(true);
     });
 
     it('returns empty array for note with no replies', () => {
@@ -197,19 +197,21 @@ describe('NoteManager', () => {
     });
 
     it('NOTE-014: fromSerializable triggers callback', () => {
-      const serialized: Note[] = [{
-        id: 'test-id',
-        sourceIndex: 0,
-        frameStart: 1,
-        frameEnd: 5,
-        text: 'Restored note',
-        author: 'Alice',
-        createdAt: '2026-01-01T00:00:00Z',
-        modifiedAt: '2026-01-01T00:00:00Z',
-        status: 'open',
-        parentId: null,
-        color: '#fbbf24',
-      }];
+      const serialized: Note[] = [
+        {
+          id: 'test-id',
+          sourceIndex: 0,
+          frameStart: 1,
+          frameEnd: 5,
+          text: 'Restored note',
+          author: 'Alice',
+          createdAt: '2026-01-01T00:00:00Z',
+          modifiedAt: '2026-01-01T00:00:00Z',
+          status: 'open',
+          parentId: null,
+          color: '#fbbf24',
+        },
+      ];
       onNotesChanged.mockClear();
       manager.fromSerializable(serialized);
       expect(onNotesChanged).toHaveBeenCalledOnce();

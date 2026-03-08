@@ -34,25 +34,29 @@ export function wireStackControls(ctx: AppWiringContext): StatefulWiringResult<S
     sessionBridge.scheduleUpdateScopes();
   };
 
-  subs.add(controls.stackControl.on('layerAdded', (layer) => {
-    // When adding a layer, use the current source index
-    layer.sourceIndex = session.currentSourceIndex;
-    // Use incrementing layer number that never decreases (even when layers are removed)
-    layer.name = `Layer ${state.nextLayerNumber++}`;
-    controls.stackControl.updateLayerSource(layer.id, layer.sourceIndex);
-    controls.stackControl.updateLayerName(layer.id, layer.name);
-    syncLayers();
-  }));
+  subs.add(
+    controls.stackControl.on('layerAdded', (layer) => {
+      // When adding a layer, use the current source index
+      layer.sourceIndex = session.currentSourceIndex;
+      // Use incrementing layer number that never decreases (even when layers are removed)
+      layer.name = `Layer ${state.nextLayerNumber++}`;
+      controls.stackControl.updateLayerSource(layer.id, layer.sourceIndex);
+      controls.stackControl.updateLayerName(layer.id, layer.name);
+      syncLayers();
+    }),
+  );
 
   for (const event of ['layerChanged', 'layerRemoved', 'layerReordered'] as const) {
     subs.add(controls.stackControl.on(event, syncLayers));
   }
 
-  subs.add(controls.stackControl.on('layerSourceChanged', ({ layerId, sourceIndex }) => {
-    controls.stackControl.updateLayerSource(layerId, sourceIndex);
-    // Don't update layer name - keep the original "Layer N" name
-    syncLayers();
-  }));
+  subs.add(
+    controls.stackControl.on('layerSourceChanged', ({ layerId, sourceIndex }) => {
+      controls.stackControl.updateLayerSource(layerId, sourceIndex);
+      // Don't update layer name - keep the original "Layer N" name
+      syncLayers();
+    }),
+  );
 
   return { subscriptions: subs, state };
 }

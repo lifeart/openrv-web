@@ -5,7 +5,7 @@
  * Each shortcut maps to an action name that the KeyboardManager will dispatch to.
  */
 
-import { KeyCombination } from './KeyboardManager';
+import { type KeyCombination } from './KeyboardManager';
 import type { BindingContext } from './ActiveContextManager';
 
 export interface KeyBindingEntry extends KeyCombination {
@@ -24,213 +24,213 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Playback controls
   'playback.toggle': {
     code: 'Space',
-    description: 'Toggle play/pause'
+    description: 'Toggle play/pause',
   },
   'playback.stepForward': {
     code: 'ArrowRight',
-    description: 'Step forward one frame'
+    description: 'Step forward one frame',
   },
   'playback.stepBackward': {
     code: 'ArrowLeft',
-    description: 'Step backward one frame'
+    description: 'Step backward one frame',
   },
   'playback.toggleDirection': {
     code: 'ArrowUp',
-    description: 'Toggle play direction'
+    description: 'Toggle play direction',
   },
   'playback.goToStart': {
     code: 'Home',
-    description: 'Go to first frame'
+    description: 'Go to first frame',
   },
   'playback.goToEnd': {
     code: 'End',
-    description: 'Go to last frame'
+    description: 'Go to last frame',
   },
 
   // Speed controls (JKL system)
   'playback.slower': {
     code: 'KeyJ',
-    description: 'Decrease playback speed'
+    description: 'Decrease playback speed',
   },
   'playback.stop': {
     code: 'KeyK',
-    description: 'Stop playback'
+    description: 'Stop playback',
   },
   'playback.faster': {
     code: 'KeyL',
-    description: 'Increase playback speed'
+    description: 'Increase playback speed',
   },
 
   // Timeline controls
   'timeline.setInPoint': {
     code: 'KeyI',
-    description: 'Set in point'
+    description: 'Set in point',
   },
   'timeline.setInPointAlt': {
     code: 'BracketLeft',
-    description: 'Set in point (alternative)'
+    description: 'Set in point (alternative)',
   },
   'timeline.setOutPoint': {
     code: 'KeyO',
     context: 'timeline',
-    description: 'Set out point'
+    description: 'Set out point',
   },
   'timeline.setOutPointAlt': {
     code: 'BracketRight',
-    description: 'Set out point (alternative)'
+    description: 'Set out point (alternative)',
   },
   'timeline.toggleMark': {
     code: 'KeyM',
-    description: 'Toggle mark at current frame'
+    description: 'Toggle mark at current frame',
   },
   'timeline.nextMarkOrBoundary': {
     code: 'ArrowRight',
     alt: true,
-    description: 'Go to next mark or source boundary'
+    description: 'Go to next mark or source boundary',
   },
   'timeline.previousMarkOrBoundary': {
     code: 'ArrowLeft',
     alt: true,
-    description: 'Go to previous mark or source boundary'
+    description: 'Go to previous mark or source boundary',
   },
   'timeline.nextShot': {
     code: 'PageDown',
-    description: 'Go to next shot in playlist'
+    description: 'Go to next shot in playlist',
   },
   'timeline.previousShot': {
     code: 'PageUp',
-    description: 'Go to previous shot in playlist'
+    description: 'Go to previous shot in playlist',
   },
   'timeline.resetInOut': {
     code: 'KeyR',
     context: 'timeline',
-    description: 'Reset in/out points to full range'
+    description: 'Reset in/out points to full range',
   },
   'timeline.cycleLoopMode': {
     code: 'KeyL',
     ctrl: true,
-    description: 'Cycle loop mode'
+    description: 'Cycle loop mode',
   },
   'timeline.toggleMagnifier': {
     code: 'F3',
-    description: 'Toggle timeline magnifier'
+    description: 'Toggle timeline magnifier',
   },
   // Range shifting - primary bindings (no OS-level conflicts)
   'timeline.shiftRangeNext': {
     code: 'ArrowDown',
     shift: true,
-    description: 'Shift in/out range to next mark pair'
+    description: 'Shift in/out range to next mark pair',
   },
   'timeline.shiftRangePrevious': {
     code: 'ArrowUp',
     shift: true,
-    description: 'Shift in/out range to previous mark pair'
+    description: 'Shift in/out range to previous mark pair',
   },
   // Range shifting - secondary bindings (note: Ctrl+Arrow conflicts with macOS Spaces)
   'timeline.shiftRangeNextAlt': {
     code: 'ArrowRight',
     ctrl: true,
-    description: 'Shift in/out range to next mark pair'
+    description: 'Shift in/out range to next mark pair',
   },
   'timeline.shiftRangePreviousAlt': {
     code: 'ArrowLeft',
     ctrl: true,
-    description: 'Shift in/out range to previous mark pair'
+    description: 'Shift in/out range to previous mark pair',
   },
 
   // View controls
   'view.fitToWindow': {
     code: 'KeyF',
-    description: 'Fit image to window'
+    description: 'Fit image to window',
   },
   'view.fitToWindowAlt': {
     code: 'KeyF',
     shift: true,
-    description: 'Fit image to window (alternative)'
+    description: 'Fit image to window (alternative)',
   },
   'view.zoom50': {
     code: 'Digit0',
-    description: 'Zoom to 50% (when on View tab)'
+    description: 'Zoom to 50% (when on View tab)',
   },
   'view.cycleWipeMode': {
     code: 'KeyW',
     shift: true,
-    description: 'Cycle wipe mode'
+    description: 'Cycle wipe mode',
   },
   'view.fitToWidth': {
     code: 'KeyW',
-    description: 'Fit image width to window'
+    description: 'Fit image width to window',
   },
   'view.toggleWaveform': {
     code: 'KeyW',
-    description: 'Toggle waveform scope'
+    description: 'Toggle waveform scope',
   },
   'view.toggleAB': {
     code: 'Backquote',
-    description: 'Toggle A/B source compare'
+    description: 'Toggle A/B source compare',
   },
   'view.toggleABAlt': {
     code: 'Backquote',
     shift: true,
-    description: 'Toggle A/B source compare (alternative)'
+    description: 'Toggle A/B source compare (alternative)',
   },
   'view.toggleDifferenceMatte': {
     code: 'KeyD',
     shift: true,
-    description: 'Toggle difference matte mode'
+    description: 'Toggle difference matte mode',
   },
   'view.toggleSplitScreen': {
     code: 'KeyS',
     shift: true,
     alt: true,
-    description: 'Toggle split screen A/B comparison'
+    description: 'Toggle split screen A/B comparison',
   },
 
   // Panel toggles
   'panel.color': {
     code: 'KeyC',
-    description: 'Toggle color controls panel'
+    description: 'Toggle color controls panel',
   },
   'panel.effects': {
     code: 'KeyE',
     shift: true,
     alt: true,
-    description: 'Toggle effects panel'
+    description: 'Toggle effects panel',
   },
   'panel.curves': {
     code: 'KeyU',
-    description: 'Toggle curves panel'
+    description: 'Toggle curves panel',
   },
   'panel.crop': {
     code: 'KeyK',
     shift: true,
-    description: 'Toggle crop mode'
+    description: 'Toggle crop mode',
   },
   'panel.waveform': {
     code: 'KeyW',
-    description: 'Toggle waveform scope'
+    description: 'Toggle waveform scope',
   },
   'panel.vectorscope': {
     code: 'KeyY',
-    description: 'Toggle vectorscope'
+    description: 'Toggle vectorscope',
   },
   'panel.gamutDiagram': {
     code: 'KeyG',
     context: 'panel',
-    description: 'Toggle CIE gamut diagram'
+    description: 'Toggle CIE gamut diagram',
   },
   'view.fitToHeight': {
     code: 'KeyH',
-    description: 'Fit image height to window'
+    description: 'Fit image height to window',
   },
   'panel.histogram': {
     code: 'KeyH',
-    description: 'Toggle histogram'
+    description: 'Toggle histogram',
   },
   'panel.ocio': {
     code: 'KeyO',
     shift: true,
-    description: 'Toggle OCIO color management panel'
+    description: 'Toggle OCIO color management panel',
   },
 
   // Transform controls
@@ -238,57 +238,57 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyR',
     shift: true,
     context: 'transform',
-    description: 'Rotate left 90 degrees'
+    description: 'Rotate left 90 degrees',
   },
   'transform.rotateRight': {
     code: 'KeyR',
     alt: true,
-    description: 'Rotate right 90 degrees'
+    description: 'Rotate right 90 degrees',
   },
   'transform.flipHorizontal': {
     code: 'KeyH',
     alt: true,
-    description: 'Flip horizontal'
+    description: 'Flip horizontal',
   },
   'transform.flipVertical': {
     code: 'KeyV',
     shift: true,
-    description: 'Flip vertical'
+    description: 'Flip vertical',
   },
   'transform.resetRotation': {
     code: 'Digit0',
     ctrl: true,
-    description: 'Reset rotation to 0'
+    description: 'Reset rotation to 0',
   },
 
   // Export controls
   'export.quickExport': {
     code: 'KeyS',
     ctrl: true,
-    description: 'Quick export current frame'
+    description: 'Quick export current frame',
   },
   'export.copyFrame': {
     code: 'KeyC',
     ctrl: true,
-    description: 'Copy current frame to clipboard'
+    description: 'Copy current frame to clipboard',
   },
 
   // Undo/Redo
   'edit.undo': {
     code: 'KeyZ',
     ctrl: true,
-    description: 'Undo last action'
+    description: 'Undo last action',
   },
   'edit.redo': {
     code: 'KeyY',
     ctrl: true,
-    description: 'Redo last action'
+    description: 'Redo last action',
   },
   'edit.redo-alt': {
     code: 'KeyZ',
     ctrl: true,
     shift: true,
-    description: 'Redo last action (alternate)'
+    description: 'Redo last action (alternate)',
   },
 
   // Navigation
@@ -300,96 +300,96 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Annotation navigation
   'annotation.previous': {
     code: 'Comma',
-    description: 'Go to previous annotated frame'
+    description: 'Go to previous annotated frame',
   },
   'annotation.next': {
     code: 'Period',
-    description: 'Go to next annotated frame'
+    description: 'Go to next annotated frame',
   },
 
   // Tab navigation
   'tab.view': {
     code: 'Digit1',
-    description: 'Switch to View tab'
+    description: 'Switch to View tab',
   },
   'tab.color': {
     code: 'Digit2',
-    description: 'Switch to Color tab'
+    description: 'Switch to Color tab',
   },
   'tab.effects': {
     code: 'Digit3',
-    description: 'Switch to Effects tab'
+    description: 'Switch to Effects tab',
   },
   'tab.transform': {
     code: 'Digit4',
-    description: 'Switch to Transform tab'
+    description: 'Switch to Transform tab',
   },
   'tab.annotate': {
     code: 'Digit5',
-    description: 'Switch to Annotate tab'
+    description: 'Switch to Annotate tab',
   },
   'tab.qc': {
     code: 'Digit6',
-    description: 'Switch to QC tab'
+    description: 'Switch to QC tab',
   },
 
   // Paint tools (handled by PaintToolbar component)
   'paint.pan': {
     code: 'KeyV',
-    description: 'Select pan tool'
+    description: 'Select pan tool',
   },
   'paint.pen': {
     code: 'KeyP',
-    description: 'Select pen tool'
+    description: 'Select pen tool',
   },
   'paint.eraser': {
     code: 'KeyE',
-    description: 'Select eraser tool'
+    description: 'Select eraser tool',
   },
   'paint.text': {
     code: 'KeyT',
-    description: 'Select text tool'
+    description: 'Select text tool',
   },
   'paint.rectangle': {
     code: 'KeyR',
     context: 'paint',
-    description: 'Select rectangle tool'
+    description: 'Select rectangle tool',
   },
   'paint.ellipse': {
     code: 'KeyO',
     context: 'paint',
-    description: 'Select ellipse tool'
+    description: 'Select ellipse tool',
   },
   'paint.line': {
     code: 'KeyL',
-    description: 'Select line tool'
+    description: 'Select line tool',
   },
   'paint.arrow': {
     code: 'KeyA',
-    description: 'Select arrow tool'
+    description: 'Select arrow tool',
   },
   'paint.toggleBrush': {
     code: 'KeyB',
-    description: 'Toggle brush type'
+    description: 'Toggle brush type',
   },
   'paint.toggleGhost': {
     code: 'KeyG',
     context: 'paint',
-    description: 'Toggle ghost mode'
+    description: 'Toggle ghost mode',
   },
   'view.toggleGhostFrames': {
     code: 'KeyG',
     ctrl: true,
-    description: 'Toggle ghost frames (onion skin)'
+    description: 'Toggle ghost frames (onion skin)',
   },
   'view.togglePAR': {
     code: 'KeyP',
     shift: true,
-    description: 'Toggle pixel aspect ratio correction'
+    description: 'Toggle pixel aspect ratio correction',
   },
   'paint.toggleHold': {
     code: 'KeyX',
-    description: 'Toggle hold mode'
+    description: 'Toggle hold mode',
   },
 
   // Channel selection (handled by ChannelSelect component)
@@ -397,72 +397,72 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyR',
     shift: true,
     context: 'channel',
-    description: 'Select red channel'
+    description: 'Select red channel',
   },
   'channel.green': {
     code: 'KeyG',
     shift: true,
-    description: 'Select green channel'
+    description: 'Select green channel',
   },
   'channel.blue': {
     code: 'KeyB',
     shift: true,
-    description: 'Select blue channel'
+    description: 'Select blue channel',
   },
   'channel.alpha': {
     code: 'KeyA',
     shift: true,
-    description: 'Select alpha channel'
+    description: 'Select alpha channel',
   },
   'channel.luminance': {
     code: 'KeyL',
     shift: true,
-    description: 'Select luminance channel'
+    description: 'Select luminance channel',
   },
   'channel.grayscale': {
     code: 'KeyY',
     shift: true,
-    description: 'Toggle grayscale mode (alias for luminance)'
+    description: 'Toggle grayscale mode (alias for luminance)',
   },
   'channel.none': {
     code: 'KeyN',
     shift: true,
-    description: 'Select no channel'
+    description: 'Select no channel',
   },
 
   // Stereo controls (handled by StereoControl component)
   'stereo.toggle': {
     code: 'Digit3',
     shift: true,
-    description: 'Toggle stereo viewing mode'
+    description: 'Toggle stereo viewing mode',
   },
   'stereo.eyeTransform': {
     code: 'KeyE',
     shift: true,
-    description: 'Toggle per-eye transform panel'
+    description: 'Toggle per-eye transform panel',
   },
   'stereo.cycleAlign': {
     code: 'Digit4',
     shift: true,
-    description: 'Cycle stereo alignment overlay mode'
+    description: 'Cycle stereo alignment overlay mode',
   },
 
   // Safe areas / guides
   'view.toggleGuides': {
     code: 'Semicolon',
-    description: 'Toggle safe areas and guides overlay'
+    description: 'Toggle safe areas and guides overlay',
   },
 
   'panel.close': {
     code: 'Escape',
-    description: 'Close open panels'
+    description: 'Close open panels',
   },
 
   // Pixel probe
   'view.togglePixelProbe': {
     code: 'KeyI',
     shift: true,
-    description: 'Toggle pixel color probe'
+    description: 'Toggle pixel color probe',
   },
 
   // False color display
@@ -470,7 +470,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyF',
     shift: true,
     alt: true,
-    description: 'Toggle false color exposure display'
+    description: 'Toggle false color exposure display',
   },
 
   // Timecode overlay
@@ -478,7 +478,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyT',
     shift: true,
     alt: true,
-    description: 'Toggle timecode overlay on viewer'
+    description: 'Toggle timecode overlay on viewer',
   },
 
   // FPS indicator
@@ -486,7 +486,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyF',
     ctrl: true,
     shift: true,
-    description: 'Toggle FPS indicator overlay'
+    description: 'Toggle FPS indicator overlay',
   },
 
   // Zebra stripes
@@ -494,7 +494,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyZ',
     shift: true,
     alt: true,
-    description: 'Toggle zebra stripes exposure warning'
+    description: 'Toggle zebra stripes exposure warning',
   },
 
   // Luminance visualization cycle
@@ -502,7 +502,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyV',
     shift: true,
     alt: true,
-    description: 'Cycle luminance visualization modes'
+    description: 'Cycle luminance visualization modes',
   },
 
   // Color wheels
@@ -510,14 +510,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyW',
     shift: true,
     alt: true,
-    description: 'Toggle Lift/Gamma/Gain color wheels'
+    description: 'Toggle Lift/Gamma/Gain color wheels',
   },
 
   // Spotlight / Focus tool
   'view.toggleSpotlight': {
     code: 'KeyQ',
     shift: true,
-    description: 'Toggle spotlight focus tool'
+    description: 'Toggle spotlight focus tool',
   },
 
   // Tone mapping for HDR content
@@ -525,7 +525,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyJ',
     shift: true,
     alt: true,
-    description: 'Toggle tone mapping for HDR content'
+    description: 'Toggle tone mapping for HDR content',
   },
 
   // Color inversion
@@ -547,7 +547,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'color.toggleHSLQualifier': {
     code: 'KeyH',
     shift: true,
-    description: 'Toggle HSL Qualifier for secondary color correction'
+    description: 'Toggle HSL Qualifier for secondary color correction',
   },
 
   // History panel
@@ -555,7 +555,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyH',
     shift: true,
     alt: true,
-    description: 'Toggle undo/redo history panel'
+    description: 'Toggle undo/redo history panel',
   },
 
   // Snapshot controls
@@ -563,14 +563,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyS',
     ctrl: true,
     shift: true,
-    description: 'Create quick snapshot of current session'
+    description: 'Create quick snapshot of current session',
   },
   'panel.snapshots': {
     code: 'KeyS',
     ctrl: true,
     shift: true,
     alt: true,
-    description: 'Toggle snapshots panel'
+    description: 'Toggle snapshots panel',
   },
 
   // Markers panel
@@ -578,7 +578,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyM',
     shift: true,
     alt: true,
-    description: 'Toggle markers list panel'
+    description: 'Toggle markers list panel',
   },
 
   // Playlist panel
@@ -586,7 +586,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyP',
     shift: true,
     alt: true,
-    description: 'Toggle playlist panel'
+    description: 'Toggle playlist panel',
   },
 
   // Notes panel
@@ -594,32 +594,32 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyN',
     shift: true,
     alt: true,
-    description: 'Toggle notes panel'
+    description: 'Toggle notes panel',
   },
 
   // Texture filter mode toggle (N key, matching desktop OpenRV)
   'view.toggleFilterMode': {
     code: 'KeyN',
-    description: 'Toggle nearest-neighbor / bilinear filtering'
+    description: 'Toggle nearest-neighbor / bilinear filtering',
   },
 
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
     context: 'annotate',
-    description: 'Add note at current frame'
+    description: 'Add note at current frame',
   },
   'notes.next': {
     code: 'BracketRight',
     alt: true,
     shift: true,
-    description: 'Go to next note'
+    description: 'Go to next note',
   },
   'notes.previous': {
     code: 'BracketLeft',
     alt: true,
     shift: true,
-    description: 'Go to previous note'
+    description: 'Go to previous note',
   },
 
   // Info panel
@@ -627,85 +627,85 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyI',
     shift: true,
     alt: true,
-    description: 'Toggle info panel overlay'
+    description: 'Toggle info panel overlay',
   },
 
   // Theme control
   'theme.cycle': {
     code: 'KeyT',
     shift: true,
-    description: 'Cycle theme'
+    description: 'Cycle theme',
   },
 
   // Background pattern
   'view.cycleBackgroundPattern': {
     code: 'KeyB',
     shift: true,
-    description: 'Cycle background pattern (Black/Grey18/Grey50/Checker)'
+    description: 'Cycle background pattern (Black/Grey18/Grey50/Checker)',
   },
   'view.toggleCheckerboard': {
     code: 'KeyB',
     shift: true,
     alt: true,
-    description: 'Toggle checkerboard background on/off'
+    description: 'Toggle checkerboard background on/off',
   },
 
   // Fullscreen / Presentation mode
   'view.toggleFullscreen': {
     code: 'F11',
-    description: 'Toggle fullscreen mode'
+    description: 'Toggle fullscreen mode',
   },
   'view.togglePresentation': {
     code: 'KeyP',
     shift: true,
     ctrl: true,
-    description: 'Toggle presentation mode'
+    description: 'Toggle presentation mode',
   },
 
   // Network Sync
   'network.togglePanel': {
     code: 'KeyN',
     shift: true,
-    description: 'Toggle network sync panel'
+    description: 'Toggle network sync panel',
   },
   'network.disconnect': {
     code: 'KeyN',
     shift: true,
     ctrl: true,
-    description: 'Quick disconnect from sync room'
+    description: 'Quick disconnect from sync room',
   },
 
   // Layout presets
   'layout.default': {
     code: 'Digit1',
     alt: true,
-    description: 'Switch to Default layout'
+    description: 'Switch to Default layout',
   },
   'layout.review': {
     code: 'Digit2',
     alt: true,
-    description: 'Switch to Review layout'
+    description: 'Switch to Review layout',
   },
   'layout.color': {
     code: 'Digit3',
     alt: true,
-    description: 'Switch to Color layout'
+    description: 'Switch to Color layout',
   },
   'layout.paint': {
     code: 'Digit4',
     alt: true,
-    description: 'Switch to Paint layout'
+    description: 'Switch to Paint layout',
   },
 
   // Focus zone navigation
   'focus.nextZone': {
     code: 'F6',
-    description: 'Focus next zone'
+    description: 'Focus next zone',
   },
   'focus.previousZone': {
     code: 'F6',
     shift: true,
-    description: 'Focus previous zone'
+    description: 'Focus previous zone',
   },
 
   // External presentation window
@@ -714,7 +714,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     shift: true,
     alt: true,
-    description: 'Open external presentation window'
+    description: 'Open external presentation window',
   },
 
   // Reference capture/toggle
@@ -722,13 +722,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyR',
     alt: true,
     shift: true,
-    description: 'Capture current frame as reference'
+    description: 'Capture current frame as reference',
   },
   'view.toggleReference': {
     code: 'KeyR',
     ctrl: true,
     shift: true,
-    description: 'Toggle reference comparison overlay'
+    description: 'Toggle reference comparison overlay',
   },
 
   // Info strip overlay
@@ -746,14 +746,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'help.toggleCheatSheet': {
     code: 'Slash',
     shift: true,
-    description: 'Toggle keyboard shortcuts cheat sheet'
+    description: 'Toggle keyboard shortcuts cheat sheet',
   },
 
   // Audio mute toggle
   'audio.toggleMute': {
     code: 'KeyM',
     shift: true,
-    description: 'Toggle audio mute'
+    description: 'Toggle audio mute',
   },
 
   // Playback mode toggle
@@ -761,7 +761,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyA',
     ctrl: true,
     shift: true,
-    description: 'Toggle between Realtime and Play All Frames'
+    description: 'Toggle between Realtime and Play All Frames',
   },
 
   // Scale presets - magnification
@@ -869,20 +869,34 @@ export function describeKeyCombo(combo: KeyCombination): string {
 function codeToKey(code: string): string {
   // Handle special keys
   switch (code) {
-    case 'Space': return 'Space';
-    case 'ArrowUp': return '↑';
-    case 'ArrowDown': return '↓';
-    case 'ArrowLeft': return '←';
-    case 'ArrowRight': return '→';
-    case 'Home': return 'Home';
-    case 'End': return 'End';
-    case 'Escape': return 'Esc';
-    case 'BracketLeft': return '[';
-    case 'BracketRight': return ']';
-    case 'Comma': return ',';
-    case 'Period': return '.';
-    case 'Backquote': return '`';
-    case 'Semicolon': return ';';
+    case 'Space':
+      return 'Space';
+    case 'ArrowUp':
+      return '↑';
+    case 'ArrowDown':
+      return '↓';
+    case 'ArrowLeft':
+      return '←';
+    case 'ArrowRight':
+      return '→';
+    case 'Home':
+      return 'Home';
+    case 'End':
+      return 'End';
+    case 'Escape':
+      return 'Esc';
+    case 'BracketLeft':
+      return '[';
+    case 'BracketRight':
+      return ']';
+    case 'Comma':
+      return ',';
+    case 'Period':
+      return '.';
+    case 'Backquote':
+      return '`';
+    case 'Semicolon':
+      return ';';
     default:
       // For KeyX format, extract the X
       if (code.startsWith('Key')) {

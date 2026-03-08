@@ -13,12 +13,11 @@
  * - Alpha channel display
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { clamp } from '../../utils/math';
 import { rgbToHsl as rgbToHslFloat } from '../../utils/color';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
-
 
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
@@ -72,7 +71,7 @@ export function calculateAreaAverage(
   imageData: ImageData,
   centerX: number,
   centerY: number,
-  sampleSize: SampleSize
+  sampleSize: SampleSize,
 ): { r: number; g: number; b: number; a: number } {
   const { width, height, data } = imageData;
   const halfSize = Math.floor(sampleSize / 2);
@@ -151,7 +150,6 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private valueRows: Map<string, HTMLElement> = new Map();
   private overlayInteractionActive = false;
 
-
   constructor() {
     super();
 
@@ -186,7 +184,6 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     this.createOverlayContent();
     this.bindOverlayInteractionEvents();
-
   }
 
   private bindOverlayInteractionEvents(): void {
@@ -573,12 +570,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.updateSourceModeButtons();
   }
 
-  private createValueRow(
-    container: HTMLElement,
-    label: string,
-    initialValue: string,
-    copyKey: string
-  ): HTMLElement {
+  private createValueRow(container: HTMLElement, label: string, initialValue: string, copyKey: string): HTMLElement {
     const row = document.createElement('div');
     row.style.cssText = `
       display: flex;
@@ -649,7 +641,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     y: number,
     imageData: ImageData | null,
     displayWidth: number,
-    displayHeight: number
+    displayHeight: number,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
@@ -659,12 +651,13 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Choose image data based on source mode
     const activeImageData =
-      this.state.sourceMode === 'source' && this.sourceImageData
-        ? this.sourceImageData
-        : imageData;
+      this.state.sourceMode === 'source' && this.sourceImageData ? this.sourceImageData : imageData;
 
     // Get pixel value (with area averaging if sampleSize > 1)
-    let r = 0, g = 0, b = 0, a = 255;
+    let r = 0,
+      g = 0,
+      b = 0,
+      a = 255;
     if (activeImageData) {
       if (this.state.sampleSize > 1) {
         const avg = calculateAreaAverage(activeImageData, px, py, this.state.sampleSize);
@@ -714,7 +707,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     b: number,
     a: number,
     displayWidth: number,
-    displayHeight: number
+    displayHeight: number,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 

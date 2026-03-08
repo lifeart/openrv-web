@@ -57,10 +57,7 @@ class MockDirectoryHandle {
 
   constructor(readonly name: string) {}
 
-  async getDirectoryHandle(
-    name: string,
-    options?: { create?: boolean },
-  ): Promise<MockDirectoryHandle> {
+  async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<MockDirectoryHandle> {
     let child = this.children.get(name);
     if (!child || !(child instanceof MockDirectoryHandle)) {
       if (options?.create) {
@@ -73,10 +70,7 @@ class MockDirectoryHandle {
     return child as MockDirectoryHandle;
   }
 
-  async getFileHandle(
-    name: string,
-    options?: { create?: boolean },
-  ): Promise<MockFileHandle> {
+  async getFileHandle(name: string, options?: { create?: boolean }): Promise<MockFileHandle> {
     let child = this.children.get(name);
     if (!child || !(child instanceof MockFileHandle)) {
       if (options?.create) {

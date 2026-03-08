@@ -36,9 +36,9 @@ export interface TransitionFrameInfo {
 
 /** Map transition type to GLSL uniform int */
 export const TRANSITION_TYPE_CODES: Record<TransitionType, number> = {
-  'cut': -1,
-  'crossfade': 0,
-  'dissolve': 1,
+  cut: -1,
+  crossfade: 0,
+  dissolve: 1,
   'wipe-left': 2,
   'wipe-right': 3,
   'wipe-up': 4,

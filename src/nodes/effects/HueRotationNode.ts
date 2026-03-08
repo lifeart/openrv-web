@@ -1,7 +1,7 @@
 import { RegisterNode } from '../base/NodeFactory';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyHueRotationInto, isIdentityHueRotation } from '../../color/HueRotation';
 import { defineNodeProperty } from '../base/defineNodeProperty';
@@ -65,13 +65,7 @@ export class HueRotationNode extends EffectNode {
       // uint8: normalize by 255, then scale back
       const scale = 1 / 255;
       for (let i = 0; i < len; i += channels) {
-        applyHueRotationInto(
-          data[i]! * scale,
-          data[i + 1]! * scale,
-          data[i + 2]! * scale,
-          degrees,
-          out,
-        );
+        applyHueRotationInto(data[i]! * scale, data[i + 1]! * scale, data[i + 2]! * scale, degrees, out);
         data[i] = Math.round(out[0] * 255);
         data[i + 1] = Math.round(out[1] * 255);
         data[i + 2] = Math.round(out[2] * 255);
@@ -80,13 +74,7 @@ export class HueRotationNode extends EffectNode {
       // uint16: normalize by 65535, then scale back
       const scale = 1 / 65535;
       for (let i = 0; i < len; i += channels) {
-        applyHueRotationInto(
-          data[i]! * scale,
-          data[i + 1]! * scale,
-          data[i + 2]! * scale,
-          degrees,
-          out,
-        );
+        applyHueRotationInto(data[i]! * scale, data[i + 1]! * scale, data[i + 2]! * scale, degrees, out);
         data[i] = Math.round(out[0] * 65535);
         data[i + 1] = Math.round(out[1] * 65535);
         data[i + 2] = Math.round(out[2] * 65535);

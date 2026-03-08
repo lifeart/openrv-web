@@ -5,9 +5,9 @@
  * custom key bindings management, and key binding prompts.
  */
 
-import { KeyboardManager, type KeyCombination } from './utils/input/KeyboardManager';
+import type { KeyboardManager, KeyCombination } from './utils/input/KeyboardManager';
 import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/input/KeyBindings';
-import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
+import type { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { showModal } from './ui/components/shared/Modal';
 
 /**
@@ -32,27 +32,27 @@ export class AppKeyboardHandler {
    * These are only registered when the user has set a custom (non-conflicting) combo.
    */
   private static readonly CONTEXTUAL_DEFAULTS = new Set([
-    'paint.line',      // L key - handled by playback.faster
+    'paint.line', // L key - handled by playback.faster
     'paint.rectangle', // R key - handled by timeline.resetInOut
-    'paint.ellipse',   // O key - handled by timeline.setOutPoint
+    'paint.ellipse', // O key - handled by timeline.setOutPoint
     'navigation.gotoFrame', // G key - handled with paint/panel context variants
-    'paint.toggleGhost',    // G key - handled with global/panel context variants
-    'panel.gamutDiagram',   // G key - handled with global/paint context variants
-    'channel.red',     // Shift+R is reserved for transform.rotateLeft
-    'channel.blue',    // Shift+B is reserved for view.cycleBackgroundPattern
-    'channel.none',    // Shift+N is reserved for network.togglePanel
+    'paint.toggleGhost', // G key - handled with global/panel context variants
+    'panel.gamutDiagram', // G key - handled with global/paint context variants
+    'channel.red', // Shift+R is reserved for transform.rotateLeft
+    'channel.blue', // Shift+B is reserved for view.cycleBackgroundPattern
+    'channel.none', // Shift+N is reserved for network.togglePanel
   ]);
   private static readonly HIDDEN_DEFAULTS = new Set([
     'view.toggleWaveform', // W key - now used for view.fitToWidth
-    'panel.waveform',      // W key - now used for view.fitToWidth
-    'panel.histogram',     // H key - now used for view.fitToHeight
-    'notes.addNote',   // N key - handled by view.toggleFilterMode
+    'panel.waveform', // W key - now used for view.fitToWidth
+    'panel.histogram', // H key - now used for view.fitToHeight
+    'notes.addNote', // N key - handled by view.toggleFilterMode
   ]);
 
   constructor(
     keyboardManager: KeyboardManager,
     customKeyBindingsManager: CustomKeyBindingsManager,
-    context: KeyboardHandlerContext
+    context: KeyboardHandlerContext,
   ) {
     this.keyboardManager = keyboardManager;
     this.customKeyBindingsManager = customKeyBindingsManager;
@@ -144,20 +144,64 @@ export class AppKeyboardHandler {
 
     // Group shortcuts by category
     const categories = {
-      'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
-      'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster', 'playback.togglePlaybackMode'],
-      'NAVIGATION': ['navigation.gotoFrame'],
-      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.fitToWidth', 'view.fitToHeight', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier', 'view.toggleInfoStrip', 'view.toggleInfoStripPath', 'view.toggleFPSIndicator', 'view.toggleFilterMode'],
+      TABS: ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
+      PLAYBACK: [
+        'playback.toggle',
+        'playback.stepBackward',
+        'playback.stepForward',
+        'playback.goToStart',
+        'playback.goToEnd',
+        'playback.toggleDirection',
+        'playback.slower',
+        'playback.stop',
+        'playback.faster',
+        'playback.togglePlaybackMode',
+      ],
+      NAVIGATION: ['navigation.gotoFrame'],
+      VIEW: [
+        'view.fitToWindow',
+        'view.fitToWindowAlt',
+        'view.fitToWidth',
+        'view.fitToHeight',
+        'view.zoom50',
+        'view.toggleAB',
+        'view.toggleABAlt',
+        'view.toggleSpotlight',
+        'color.toggleHSLQualifier',
+        'view.toggleInfoStrip',
+        'view.toggleInfoStripPath',
+        'view.toggleFPSIndicator',
+        'view.toggleFilterMode',
+      ],
       'SCALE PRESETS': [
-        'view.zoom1to1', 'view.zoom2to1', 'view.zoom3to1', 'view.zoom4to1',
-        'view.zoom5to1', 'view.zoom6to1', 'view.zoom7to1', 'view.zoom8to1',
-        'view.zoom1to2', 'view.zoom1to3', 'view.zoom1to4', 'view.zoom1to5',
-        'view.zoom1to6', 'view.zoom1to7', 'view.zoom1to8',
+        'view.zoom1to1',
+        'view.zoom2to1',
+        'view.zoom3to1',
+        'view.zoom4to1',
+        'view.zoom5to1',
+        'view.zoom6to1',
+        'view.zoom7to1',
+        'view.zoom8to1',
+        'view.zoom1to2',
+        'view.zoom1to3',
+        'view.zoom1to4',
+        'view.zoom1to5',
+        'view.zoom1to6',
+        'view.zoom1to7',
+        'view.zoom1to8',
       ],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
-      'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
-      'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
-      'TIMELINE': [
+      'CHANNEL ISOLATION': [
+        'channel.red',
+        'channel.green',
+        'channel.blue',
+        'channel.alpha',
+        'channel.luminance',
+        'channel.grayscale',
+        'channel.none',
+      ],
+      SCOPES: ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
+      TIMELINE: [
         'timeline.setInPoint',
         'timeline.setInPointAlt',
         'timeline.setOutPoint',
@@ -173,23 +217,43 @@ export class AppKeyboardHandler {
         'timeline.shiftRangeNext',
         'timeline.shiftRangePrevious',
         'timeline.shiftRangeNextAlt',
-        'timeline.shiftRangePreviousAlt'
+        'timeline.shiftRangePreviousAlt',
       ],
-      'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
-      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
+      'PAINT (Annotate tab)': [
+        'paint.pan',
+        'paint.pen',
+        'paint.eraser',
+        'paint.text',
+        'paint.rectangle',
+        'paint.ellipse',
+        'paint.line',
+        'paint.arrow',
+        'paint.toggleBrush',
+        'paint.toggleGhost',
+        'paint.toggleHold',
+        'edit.undo',
+        'edit.redo',
+      ],
+      COLOR: ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': ['audio.toggleMute'], // Also has special non-binding entries below
-      'EXPORT': ['export.quickExport', 'export.copyFrame'],
-      'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
-      'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical', 'transform.resetRotation'],
-      'PANELS': ['panel.effects', 'panel.crop', 'panel.close'],
-      'STEREO': ['stereo.toggle', 'stereo.eyeTransform', 'stereo.cycleAlign']
+      EXPORT: ['export.quickExport', 'export.copyFrame'],
+      ANNOTATIONS: ['annotation.previous', 'annotation.next'],
+      TRANSFORM: [
+        'transform.rotateLeft',
+        'transform.rotateRight',
+        'transform.flipHorizontal',
+        'transform.flipVertical',
+        'transform.resetRotation',
+      ],
+      PANELS: ['panel.effects', 'panel.crop', 'panel.close'],
+      STEREO: ['stereo.toggle', 'stereo.eyeTransform', 'stereo.cycleAlign'],
     };
 
     // Add special audio shortcuts
     const audioShortcuts = [
       { key: 'Hover vol', desc: 'Show volume slider' },
-      { key: 'Click icon', desc: 'Toggle mute' }
+      { key: 'Click icon', desc: 'Toggle mute' },
     ];
 
     // Generate content for each category
@@ -217,7 +281,8 @@ export class AppKeyboardHandler {
           const isCustom = this.customKeyBindingsManager.hasCustomBinding(actionKey);
 
           const shortcutDiv = document.createElement('div');
-          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.style.cssText =
+            'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
           shortcutDiv.setAttribute('data-shortcut-row', '');
 
           const keyText = describeKeyCombo(effectiveCombo);
@@ -240,7 +305,8 @@ export class AppKeyboardHandler {
         // Then render special non-binding audio shortcuts
         for (const shortcut of audioShortcuts) {
           const shortcutDiv = document.createElement('div');
-          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.style.cssText =
+            'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
           shortcutDiv.setAttribute('data-shortcut-row', '');
           shortcutDiv.setAttribute('data-shortcut-key', shortcut.key.toLowerCase());
           shortcutDiv.setAttribute('data-shortcut-desc', shortcut.desc.toLowerCase());
@@ -263,12 +329,13 @@ export class AppKeyboardHandler {
           { key: 'Scroll', desc: 'Zoom in/out' },
           { key: 'Dbl-click', desc: 'Reset individual slider (color panel)' },
           { key: 'Dbl-click', desc: 'Jump to nearest annotation (timeline)' },
-          { key: 'Drag line', desc: 'Adjust wipe position' }
+          { key: 'Drag line', desc: 'Adjust wipe position' },
         ];
 
         for (const shortcut of mouseShortcuts) {
           const shortcutDiv = document.createElement('div');
-          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.style.cssText =
+            'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
           shortcutDiv.setAttribute('data-shortcut-row', '');
           shortcutDiv.setAttribute('data-shortcut-key', shortcut.key.toLowerCase());
           shortcutDiv.setAttribute('data-shortcut-desc', shortcut.desc.toLowerCase());
@@ -295,7 +362,8 @@ export class AppKeyboardHandler {
           const isCustom = this.customKeyBindingsManager.hasCustomBinding(actionKey);
 
           const shortcutDiv = document.createElement('div');
-          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+          shortcutDiv.style.cssText =
+            'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
           shortcutDiv.setAttribute('data-shortcut-row', '');
 
           const keyText = describeKeyCombo(effectiveCombo);
@@ -389,7 +457,7 @@ export class AppKeyboardHandler {
           if (matches) anyVisible = true;
         }
         // Hide entire category if no rows match (unless search is empty)
-        catDiv.style.display = (term === '' || anyVisible) ? '' : 'none';
+        catDiv.style.display = term === '' || anyVisible ? '' : 'none';
       }
     });
 
@@ -650,7 +718,7 @@ export class AppKeyboardHandler {
         ctrl: e.ctrlKey || e.metaKey,
         shift: e.shiftKey,
         alt: e.altKey,
-        meta: e.metaKey && !e.ctrlKey
+        meta: e.metaKey && !e.ctrlKey,
       };
 
       // Check for conflicts with other actions

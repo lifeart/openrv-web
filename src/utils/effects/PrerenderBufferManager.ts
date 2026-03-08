@@ -13,7 +13,7 @@
  * - Direction-aware preloading (more frames in playback direction)
  */
 
-import { EffectProcessor, AllEffectsState, computeEffectsHash, hasActiveEffects } from './EffectProcessor';
+import { EffectProcessor, type AllEffectsState, computeEffectsHash, hasActiveEffects } from './EffectProcessor';
 import { WorkerPool } from '../WorkerPool';
 import EffectWorker from '../../workers/effectProcessor.worker?worker';
 
@@ -31,12 +31,12 @@ export interface CachedFrame {
  * Configuration for the prerender buffer
  */
 export interface PrerenderConfig {
-  maxCacheSize: number;       // Max frames to keep in cache
-  preloadAhead: number;       // Frames to preload ahead during playback
-  preloadBehind: number;      // Frames to keep behind during playback
-  maxConcurrent: number;      // Max concurrent prerender operations
-  useWorkers: boolean;        // Enable Web Worker parallel processing
-  numWorkers: number;         // Number of workers (default: navigator.hardwareConcurrency or 4)
+  maxCacheSize: number; // Max frames to keep in cache
+  preloadAhead: number; // Frames to preload ahead during playback
+  preloadBehind: number; // Frames to keep behind during playback
+  maxConcurrent: number; // Max concurrent prerender operations
+  useWorkers: boolean; // Enable Web Worker parallel processing
+  numWorkers: number; // Number of workers (default: navigator.hardwareConcurrency or 4)
 }
 
 // Calculate number of workers based on hardware concurrency
@@ -61,7 +61,7 @@ interface PreloadRequest {
   inProgress: boolean;
   cancelled: boolean;
   startTime: number;
-  effectsHash: string;  // Captured at creation time to avoid race with async workers
+  effectsHash: string; // Captured at creation time to avoid race with async workers
   promise?: Promise<void>;
 }
 
@@ -151,11 +151,7 @@ export class PrerenderBufferManager {
   // Half-resolution flag for CPU effects during interactions
   private _halfRes: boolean = false;
 
-  constructor(
-    totalFrames: number,
-    frameLoader: FrameLoader,
-    config: Partial<PrerenderConfig> = {}
-  ) {
+  constructor(totalFrames: number, frameLoader: FrameLoader, config: Partial<PrerenderConfig> = {}) {
     this.totalFrames = totalFrames;
     this.frameLoader = frameLoader;
     this.config = { ...DEFAULT_PRERENDER_CONFIG, ...config };
@@ -439,8 +435,7 @@ export class PrerenderBufferManager {
 
     // Only evict distant frames when cache is near capacity (80% full)
     // Skip eviction entirely if entire video fits in cache
-    if (this.totalFrames > this.config.maxCacheSize &&
-        this.cache.size >= this.config.maxCacheSize * 0.8) {
+    if (this.totalFrames > this.config.maxCacheSize && this.cache.size >= this.config.maxCacheSize * 0.8) {
       this.evictDistantFrames(centerFrame);
     }
   }
@@ -453,14 +448,14 @@ export class PrerenderBufferManager {
     const dir = this.playbackDirection;
 
     for (let i = 1; i <= preloadAhead; i++) {
-      const frame = centerFrame + (i * dir);
+      const frame = centerFrame + i * dir;
       if (frame >= 1 && frame <= this.totalFrames && !this.hasFrame(frame)) {
         list.push({ frame, priority: i });
       }
     }
 
     for (let i = 1; i <= preloadBehind; i++) {
-      const frame = centerFrame - (i * dir);
+      const frame = centerFrame - i * dir;
       if (frame >= 1 && frame <= this.totalFrames && !this.hasFrame(frame)) {
         list.push({ frame, priority: preloadAhead + i });
       }
@@ -527,10 +522,7 @@ export class PrerenderBufferManager {
       }, 0);
     } else if (typeof requestIdleCallback !== 'undefined') {
       this.usingIdleCallback = true;
-      this.idleCallbackId = requestIdleCallback(
-        (deadline) => this.processQueue(deadline),
-        { timeout: 100 }
-      );
+      this.idleCallbackId = requestIdleCallback((deadline) => this.processQueue(deadline), { timeout: 100 });
     } else {
       this.usingIdleCallback = false;
       this.idleCallbackId = window.setTimeout(() => {
@@ -548,7 +540,7 @@ export class PrerenderBufferManager {
     }
 
     const pending = Array.from(this.pendingRequests.values())
-      .filter(r => !r.cancelled && !r.inProgress)
+      .filter((r) => !r.cancelled && !r.inProgress)
       .sort((a, b) => a.priority - b.priority);
 
     let processed = 0;
@@ -650,7 +642,7 @@ export class PrerenderBufferManager {
             halfRes: this._halfRes,
           },
           [imageData.data.buffer],
-          request.priority
+          request.priority,
         );
 
         if (request.cancelled) {
@@ -662,7 +654,7 @@ export class PrerenderBufferManager {
           const expectedLength = width * height * 4;
           if (result.imageData.length !== expectedLength) {
             console.warn(
-              `Worker returned invalid imageData: expected ${expectedLength} bytes, got ${result.imageData.length}`
+              `Worker returned invalid imageData: expected ${expectedLength} bytes, got ${result.imageData.length}`,
             );
             return;
           }
@@ -682,11 +674,7 @@ export class PrerenderBufferManager {
           }
 
           if (ctx) {
-            const processedImageData = new ImageData(
-              new Uint8ClampedArray(result.imageData),
-              width,
-              height
-            );
+            const processedImageData = new ImageData(new Uint8ClampedArray(result.imageData), width, height);
             ctx.putImageData(processedImageData, 0, 0);
 
             this.addToCache(request.frame, {

@@ -8,12 +8,7 @@
  * - Frame sync threshold to avoid jitter
  */
 
-import type {
-  PlaybackSyncPayload,
-  ViewSyncPayload,
-  ColorSyncPayload,
-  SyncSettings,
-} from './types';
+import type { PlaybackSyncPayload, ViewSyncPayload, ColorSyncPayload, SyncSettings } from './types';
 import { DEFAULT_SYNC_SETTINGS } from './types';
 
 // ---- Conflict Resolution Strategy ----
@@ -191,7 +186,7 @@ export class SyncStateManager {
       panY: payload.panY,
       zoom: payload.zoom,
       channelMode: payload.channelMode,
-      fitMode: (payload as unknown as Record<string, unknown>).fitMode as string | null ?? null,
+      fitMode: ((payload as unknown as Record<string, unknown>).fitMode as string | null) ?? null,
     };
   }
 
@@ -252,9 +247,7 @@ export class SyncStateManager {
   resolvePlaybackConflict(strategy: ConflictStrategy = 'host-authority'): PlaybackState {
     if (strategy === 'host-authority') {
       // Host always wins for playback
-      return this._isHost
-        ? { ...this._localPlayback }
-        : { ...this._remotePlayback };
+      return this._isHost ? { ...this._localPlayback } : { ...this._remotePlayback };
     }
 
     // Last-write-wins: use the more recent timestamp
@@ -270,9 +263,7 @@ export class SyncStateManager {
   resolveViewConflict(strategy: ConflictStrategy = 'last-write-wins'): ViewState {
     // For view state, last-write-wins is the default
     if (strategy === 'host-authority') {
-      return this._isHost
-        ? { ...this._localView }
-        : { ...this._remoteView };
+      return this._isHost ? { ...this._localView } : { ...this._remoteView };
     }
     // For LWW with no timestamps on view state, defer to remote
     return { ...this._remoteView };
@@ -291,7 +282,7 @@ export class SyncStateManager {
 
     // Calculate how many frames have elapsed since the timestamp
     // accounting for half the round-trip time (one-way latency)
-    const elapsedMs = Date.now() - state.timestamp + (this._rtt / 2);
+    const elapsedMs = Date.now() - state.timestamp + this._rtt / 2;
     const elapsedFrames = (elapsedMs / 1000) * fps * state.playbackSpeed * state.playDirection;
 
     return Math.round(state.currentFrame + elapsedFrames);

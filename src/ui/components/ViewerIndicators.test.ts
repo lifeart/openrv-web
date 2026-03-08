@@ -56,7 +56,6 @@ describe('ViewerIndicators', () => {
       const el = createLutIndicator();
       expect(el.style.display).toBe('none');
     });
-
   });
 
   describe('createABIndicator', () => {
@@ -234,7 +233,6 @@ describe('ViewerIndicators', () => {
       vi.advanceTimersByTime(300);
       expect(container.contains(result.indicator)).toBe(false);
     });
-
   });
 
   describe('showFitModeIndicator', () => {

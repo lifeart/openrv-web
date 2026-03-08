@@ -247,7 +247,7 @@ describe('MarkerManager', () => {
       manager.setMarker(2, 'b');
       const arr = manager.toArray();
       expect(arr.length).toBe(2);
-      expect(arr.map(m => m.frame).sort()).toEqual([1, 2]);
+      expect(arr.map((m) => m.frame).sort()).toEqual([1, 2]);
     });
   });
 

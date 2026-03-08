@@ -35,19 +35,25 @@ function normalizeHDRTransferPreset(value: string | undefined | null): HDRTransf
   return null;
 }
 
-function detectHDRTransferPreset(source: ReturnType<SessionBridgeContext['getSession']>['currentSource']): HDRTransferPreset {
+function detectHDRTransferPreset(
+  source: ReturnType<SessionBridgeContext['getSession']>['currentSource'],
+): HDRTransferPreset {
   if (!source) return null;
 
   // File HDR path: transfer function is persisted in the decoded IPImage metadata.
-  const fileSource = source.fileSourceNode as { getIPImage?: () => { metadata?: { transferFunction?: string } } | null } | undefined;
+  const fileSource = source.fileSourceNode as
+    | { getIPImage?: () => { metadata?: { transferFunction?: string } } | null }
+    | undefined;
   const fileTF = normalizeHDRTransferPreset(fileSource?.getIPImage?.()?.metadata?.transferFunction);
   if (fileTF) return fileTF;
 
   // Video HDR path: read transfer from track/frame color-space metadata.
-  const videoSource = source.videoSourceNode as {
-    getVideoColorSpace?: () => { transfer?: string } | null;
-    getCachedHDRIPImage?: (frame: number) => { metadata?: { transferFunction?: string } } | null;
-  } | undefined;
+  const videoSource = source.videoSourceNode as
+    | {
+        getVideoColorSpace?: () => { transfer?: string } | null;
+        getCachedHDRIPImage?: (frame: number) => { metadata?: { transferFunction?: string } } | null;
+      }
+    | undefined;
 
   const videoTF = normalizeHDRTransferPreset(videoSource?.getVideoColorSpace?.()?.transfer);
   if (videoTF) return videoTF;
@@ -76,20 +82,13 @@ function applyAutoToneMappingPreset(
   autoState.toneMappingAutoPreset = preset;
 }
 
-function applyAutoGamma(
-  context: SessionBridgeContext,
-  autoState: HDRAutoConfigState,
-  gamma: number,
-): void {
+function applyAutoGamma(context: SessionBridgeContext, autoState: HDRAutoConfigState, gamma: number): void {
   context.getColorControls().setAdjustments({ gamma });
   autoState.gammaAutoApplied = true;
   autoState.gammaAutoValue = gamma;
 }
 
-function maybeResetAutoHDROverridesForSDR(
-  context: SessionBridgeContext,
-  autoState: HDRAutoConfigState,
-): void {
+function maybeResetAutoHDROverridesForSDR(context: SessionBridgeContext, autoState: HDRAutoConfigState): void {
   if (autoState.toneMappingAutoApplied && autoState.toneMappingAutoPreset) {
     const toneMappingControl = context.getToneMappingControl();
     const toneMapping = toneMappingControl.getState();
@@ -162,7 +161,7 @@ export function handleSourceLoaded(
   updateWaveform: () => void,
   updateVectorscope: () => void,
   updateGamutDiagram?: () => void,
-  loadedSource?: ReturnType<SessionBridgeContext['getSession']>['currentSource']
+  loadedSource?: ReturnType<SessionBridgeContext['getSession']>['currentSource'],
 ): void {
   const session = context.getSession();
   const hdrAutoState = getHDRAutoConfigState(context);
@@ -274,9 +273,8 @@ export function handleSourceLoaded(
   // Wire EXR window overlay: extract dataWindow/displayWindow from IPImage attributes
   const exrOverlay = context.getViewer().getEXRWindowOverlay();
   const fileSource = source?.fileSourceNode;
-  const ipImage = fileSource && typeof (fileSource as any).getIPImage === 'function'
-    ? (fileSource as any).getIPImage()
-    : null;
+  const ipImage =
+    fileSource && typeof (fileSource as any).getIPImage === 'function' ? (fileSource as any).getIPImage() : null;
   const attrs = ipImage?.metadata?.attributes;
   if (attrs && attrs.dataWindow && attrs.displayWindow) {
     exrOverlay.setWindows(attrs.dataWindow, attrs.displayWindow);
@@ -341,7 +339,7 @@ export async function handleEXRLayerChange(
   context: SessionBridgeContext,
   layerName: string | null,
   remapping: EXRChannelRemapping | null,
-  scheduleUpdateScopes: () => void
+  scheduleUpdateScopes: () => void,
 ): Promise<void> {
   const source = context.getSession().currentSource;
   if (!source) return;

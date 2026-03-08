@@ -150,7 +150,7 @@ export function unpackDPX10bit(
   width: number,
   height: number,
   numChannels: number,
-  bigEndian: boolean
+  bigEndian: boolean,
 ): Float32Array {
   const totalPixels = width * height;
   const totalComponents = totalPixels * numChannels;
@@ -197,12 +197,7 @@ export function unpackDPX10bit(
 /**
  * Unpack 8-bit data from DPX
  */
-function unpack8bit(
-  view: DataView,
-  width: number,
-  height: number,
-  numChannels: number
-): Float32Array {
+function unpack8bit(view: DataView, width: number, height: number, numChannels: number): Float32Array {
   const totalComponents = width * height * numChannels;
   const result = new Float32Array(totalComponents);
 
@@ -221,7 +216,7 @@ function unpack16bit(
   width: number,
   height: number,
   numChannels: number,
-  bigEndian: boolean
+  bigEndian: boolean,
 ): Float32Array {
   const totalComponents = width * height * numChannels;
   const result = new Float32Array(totalComponents);
@@ -244,7 +239,7 @@ function unpack12bit(
   width: number,
   height: number,
   numChannels: number,
-  bigEndian: boolean
+  bigEndian: boolean,
 ): Float32Array {
   const totalComponents = width * height * numChannels;
   const result = new Float32Array(totalComponents);
@@ -271,7 +266,7 @@ function applyLogToLinearRGBA(
   width: number,
   height: number,
   bitDepth: number,
-  options?: LogLinearOptions
+  options?: LogLinearOptions,
 ): void {
   sharedApplyLogToLinearRGBA(data, width, height, bitDepth, (codeValue) => _dpxLogToLinear(codeValue, options));
 }
@@ -283,10 +278,7 @@ function applyLogToLinearRGBA(
  * @param options - Decode options
  * @param options.applyLogToLinear - Whether to convert log data to linear (default: false for DPX)
  */
-export async function decodeDPX(
-  buffer: ArrayBuffer,
-  options?: DPXDecodeOptions
-): Promise<DPXDecodeResult> {
+export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions): Promise<DPXDecodeResult> {
   const info = getDPXInfo(buffer);
   if (!info) {
     throw new DecoderError('DPX', 'Invalid DPX file');
@@ -325,7 +317,7 @@ export async function decodeDPX(
   }
 
   // Convert to RGBA
-  let rgbaData = toRGBA(componentData, width, height, inputChannels);
+  const rgbaData = toRGBA(componentData, width, height, inputChannels);
 
   // Determine color space
   const isLog = transfer === 'logarithmic';

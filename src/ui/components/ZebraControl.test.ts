@@ -451,7 +451,7 @@ describe('ZebraControl', () => {
 
       // Find divider by style
       let hasDivider = false;
-      dividers.forEach(div => {
+      dividers.forEach((div) => {
         if (div.style.height === '1px' && div.style.background === 'var(--border-primary)') {
           hasDivider = true;
         }
@@ -471,9 +471,7 @@ describe('ZebraControl', () => {
       zebraStripes = new ZebraStripes();
       control = new ZebraControl(zebraStripes);
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(0);
       addSpy.mockRestore();
     });
@@ -486,9 +484,7 @@ describe('ZebraControl', () => {
       addSpy.mockClear();
       button.click(); // open
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       addSpy.mockRestore();
     });
@@ -502,9 +498,7 @@ describe('ZebraControl', () => {
       removeSpy.mockClear();
       button.click(); // close
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });
@@ -518,9 +512,7 @@ describe('ZebraControl', () => {
       removeSpy.mockClear();
       control.dispose();
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });
@@ -587,9 +579,8 @@ describe('ZebraControl', () => {
       // Check for diagonal stripe pattern element
       const elements = dropdown.querySelectorAll('div');
       let hasHighIndicator = false;
-      elements.forEach(el => {
-        if (el.style.cssText.includes('repeating-linear-gradient') &&
-            el.style.cssText.includes('45deg')) {
+      elements.forEach((el) => {
+        if (el.style.cssText.includes('repeating-linear-gradient') && el.style.cssText.includes('45deg')) {
           hasHighIndicator = true;
         }
       });
@@ -606,9 +597,8 @@ describe('ZebraControl', () => {
       // Check for diagonal stripe pattern element (left-leaning)
       const elements = dropdown.querySelectorAll('div');
       let hasLowIndicator = false;
-      elements.forEach(el => {
-        if (el.style.cssText.includes('repeating-linear-gradient') &&
-            el.style.cssText.includes('-45deg')) {
+      elements.forEach((el) => {
+        if (el.style.cssText.includes('repeating-linear-gradient') && el.style.cssText.includes('-45deg')) {
           hasLowIndicator = true;
         }
       });

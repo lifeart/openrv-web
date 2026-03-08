@@ -42,12 +42,10 @@ export interface PrecisionAnalysis {
 export function comparePrecision(
   reference: Float32Array,
   actual: Float32Array,
-  peakValue: number = 1.0
+  peakValue: number = 1.0,
 ): PrecisionAnalysis {
   if (reference.length !== actual.length) {
-    throw new Error(
-      `Buffer length mismatch: reference=${reference.length}, actual=${actual.length}`
-    );
+    throw new Error(`Buffer length mismatch: reference=${reference.length}, actual=${actual.length}`);
   }
 
   const pixelCount = reference.length / 4;
@@ -107,7 +105,7 @@ export function measureLUTAccuracy(
   lut: LUT3D,
   referenceFunc: (r: number, g: number, b: number) => [number, number, number],
   method: 'trilinear' | 'tetrahedral' = 'tetrahedral',
-  numSamples: number = 10
+  numSamples: number = 10,
 ): PrecisionAnalysis {
   if (numSamples < 2) {
     throw new Error('numSamples must be at least 2');
@@ -318,10 +316,10 @@ export function generateTestGradient(width: number, height: number): Float32Arra
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
-      data[i] = width > 1 ? x / (width - 1) : 0;     // R: horizontal gradient
+      data[i] = width > 1 ? x / (width - 1) : 0; // R: horizontal gradient
       data[i + 1] = height > 1 ? y / (height - 1) : 0; // G: vertical gradient
-      data[i + 2] = 0.5;              // B: constant
-      data[i + 3] = 1.0;              // A: opaque
+      data[i + 2] = 0.5; // B: constant
+      data[i + 3] = 1.0; // A: opaque
     }
   }
   return data;
@@ -336,19 +334,15 @@ export function generateTestGradient(width: number, height: number): Float32Arra
  * @param maxValue - Maximum value in the gradient (default 5.0)
  * @returns Float32Array with RGBA HDR gradient data
  */
-export function generateHDRTestGradient(
-  width: number,
-  height: number,
-  maxValue: number = 5.0
-): Float32Array {
+export function generateHDRTestGradient(width: number, height: number, maxValue: number = 5.0): Float32Array {
   const data = new Float32Array(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
-      data[i] = (width > 1 ? x / (width - 1) : 0) * maxValue;     // R: 0 to maxValue
+      data[i] = (width > 1 ? x / (width - 1) : 0) * maxValue; // R: 0 to maxValue
       data[i + 1] = (height > 1 ? y / (height - 1) : 0) * maxValue; // G: 0 to maxValue
-      data[i + 2] = maxValue * 0.5;                 // B: constant at midpoint
-      data[i + 3] = 1.0;                            // A: opaque
+      data[i + 2] = maxValue * 0.5; // B: constant at midpoint
+      data[i + 3] = 1.0; // A: opaque
     }
   }
   return data;

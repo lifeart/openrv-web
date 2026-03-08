@@ -12,19 +12,19 @@
  */
 
 import {
-  CropState,
-  CropRegion,
+  type CropState,
+  type CropRegion,
   DEFAULT_CROP_STATE,
   DEFAULT_CROP_REGION,
   ASPECT_RATIOS,
   MIN_CROP_FRACTION,
-  UncropState,
+  type UncropState,
   DEFAULT_UNCROP_STATE,
 } from './CropControl';
 import { renderCropOverlay as renderCropOverlayUtil, isFullCropRegion } from './ViewerRenderingUtils';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 import { resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
-import { Session } from '../../core/session/Session';
+import { type Session } from '../../core/session/Session';
 import { clamp } from '../../utils/math';
 
 /**
@@ -147,8 +147,12 @@ export class CropManager {
     if (this._uncropState.paddingMode === 'uniform') {
       return this._uncropState.padding > 0;
     }
-    return this._uncropState.paddingTop > 0 || this._uncropState.paddingRight > 0 ||
-           this._uncropState.paddingBottom > 0 || this._uncropState.paddingLeft > 0;
+    return (
+      this._uncropState.paddingTop > 0 ||
+      this._uncropState.paddingRight > 0 ||
+      this._uncropState.paddingBottom > 0 ||
+      this._uncropState.paddingLeft > 0
+    );
   }
 
   /**
@@ -249,7 +253,7 @@ export class CropManager {
     imageX: number,
     imageY: number,
     imageW: number,
-    imageH: number
+    imageH: number,
   ): void {
     const ctx = imageCtx;
     const tileSize = 8;
@@ -346,7 +350,10 @@ export class CropManager {
       return 'bl';
     }
     // Bottom-right
-    if (Math.abs(x - (region.x + region.width)) < handleSizeX && Math.abs(y - (region.y + region.height)) < handleSizeY) {
+    if (
+      Math.abs(x - (region.x + region.width)) < handleSizeX &&
+      Math.abs(y - (region.y + region.height)) < handleSizeY
+    ) {
       return 'br';
     }
 
@@ -357,33 +364,44 @@ export class CropManager {
     const hasVerticalEdge = region.height > 2 * handleSizeY;
 
     // Top edge
-    if (hasHorizontalEdge &&
-        x > region.x + handleSizeX && x < region.x + region.width - handleSizeX &&
-        Math.abs(y - region.y) < edgeThresholdY) {
+    if (
+      hasHorizontalEdge &&
+      x > region.x + handleSizeX &&
+      x < region.x + region.width - handleSizeX &&
+      Math.abs(y - region.y) < edgeThresholdY
+    ) {
       return 'top';
     }
     // Bottom edge
-    if (hasHorizontalEdge &&
-        x > region.x + handleSizeX && x < region.x + region.width - handleSizeX &&
-        Math.abs(y - (region.y + region.height)) < edgeThresholdY) {
+    if (
+      hasHorizontalEdge &&
+      x > region.x + handleSizeX &&
+      x < region.x + region.width - handleSizeX &&
+      Math.abs(y - (region.y + region.height)) < edgeThresholdY
+    ) {
       return 'bottom';
     }
     // Left edge
-    if (hasVerticalEdge &&
-        y > region.y + handleSizeY && y < region.y + region.height - handleSizeY &&
-        Math.abs(x - region.x) < edgeThresholdX) {
+    if (
+      hasVerticalEdge &&
+      y > region.y + handleSizeY &&
+      y < region.y + region.height - handleSizeY &&
+      Math.abs(x - region.x) < edgeThresholdX
+    ) {
       return 'left';
     }
     // Right edge
-    if (hasVerticalEdge &&
-        y > region.y + handleSizeY && y < region.y + region.height - handleSizeY &&
-        Math.abs(x - (region.x + region.width)) < edgeThresholdX) {
+    if (
+      hasVerticalEdge &&
+      y > region.y + handleSizeY &&
+      y < region.y + region.height - handleSizeY &&
+      Math.abs(x - (region.x + region.width)) < edgeThresholdX
+    ) {
       return 'right';
     }
 
     // Check if inside region (for moving)
-    if (x > region.x && x < region.x + region.width &&
-        y > region.y && y < region.y + region.height) {
+    if (x > region.x && x < region.x + region.width && y > region.y && y < region.y + region.height) {
       return 'move';
     }
 
@@ -487,7 +505,7 @@ export class CropManager {
 
   constrainToAspectRatio(region: CropRegion, handle: CropDragHandle): CropRegion {
     // Look up target pixel ratio from the shared ASPECT_RATIOS constant
-    const arEntry = ASPECT_RATIOS.find(a => a.value === this._cropState.aspectRatio);
+    const arEntry = ASPECT_RATIOS.find((a) => a.value === this._cropState.aspectRatio);
     if (!arEntry?.ratio) return region;
 
     // Account for source aspect ratio: normalized coords don't map 1:1 to pixels
@@ -507,11 +525,11 @@ export class CropManager {
     // Edge drags: adjust the dimension perpendicular to the edge being dragged.
     // Corner drags: adjust whichever dimension is "too large" relative to the ratio.
     const adjustWidth =
-      (handle === 'top' || handle === 'bottom')
-        ? true  // Vertical edge: user controls height, width follows
-        : (handle === 'left' || handle === 'right')
-          ? false  // Horizontal edge: user controls width, height follows
-          : (result.width / result.height > normalizedTargetRatio);  // Corner: shrink the larger dimension
+      handle === 'top' || handle === 'bottom'
+        ? true // Vertical edge: user controls height, width follows
+        : handle === 'left' || handle === 'right'
+          ? false // Horizontal edge: user controls width, height follows
+          : result.width / result.height > normalizedTargetRatio; // Corner: shrink the larger dimension
 
     if (adjustWidth) {
       result.width = result.height * normalizedTargetRatio;
@@ -562,7 +580,11 @@ export class CropManager {
     }
     // Release pointer capture
     if (this.cropDragPointerId !== null) {
-      try { this.context.container.releasePointerCapture(this.cropDragPointerId); } catch (e) { if (typeof console !== 'undefined') console.debug('Pointer capture already released', e); }
+      try {
+        this.context.container.releasePointerCapture(this.cropDragPointerId);
+      } catch (e) {
+        if (typeof console !== 'undefined') console.debug('Pointer capture already released', e);
+      }
       this.cropDragPointerId = null;
     }
     this._isDraggingCrop = false;
@@ -573,17 +595,17 @@ export class CropManager {
 
   updateCropCursor(handle: CropDragHandle): void {
     const cursors: Record<string, string> = {
-      'tl': 'nwse-resize',
-      'br': 'nwse-resize',
-      'tr': 'nesw-resize',
-      'bl': 'nesw-resize',
-      'top': 'ns-resize',
-      'bottom': 'ns-resize',
-      'left': 'ew-resize',
-      'right': 'ew-resize',
-      'move': 'move',
+      tl: 'nwse-resize',
+      br: 'nwse-resize',
+      tr: 'nesw-resize',
+      bl: 'nesw-resize',
+      top: 'ns-resize',
+      bottom: 'ns-resize',
+      left: 'ew-resize',
+      right: 'ew-resize',
+      move: 'move',
     };
-    this.context.container.style.cursor = handle ? (cursors[handle] || 'default') : 'default';
+    this.context.container.style.cursor = handle ? cursors[handle] || 'default' : 'default';
   }
 
   // =========================================================================
@@ -593,7 +615,11 @@ export class CropManager {
   dispose(): void {
     // Cleanup crop drag state
     if (this._isDraggingCrop && this.cropDragPointerId !== null) {
-      try { this.context.container.releasePointerCapture(this.cropDragPointerId); } catch (e) { if (typeof console !== 'undefined') console.debug('Pointer capture already released', e); }
+      try {
+        this.context.container.releasePointerCapture(this.cropDragPointerId);
+      } catch (e) {
+        if (typeof console !== 'undefined') console.debug('Pointer capture already released', e);
+      }
     }
     this._isDraggingCrop = false;
     this.cropDragHandle = null;

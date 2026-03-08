@@ -24,9 +24,7 @@ export class EffectRegistry {
    */
   register(effect: ImageEffect): void {
     if (this.effects.has(effect.name)) {
-      throw new Error(
-        `EffectRegistry: effect "${effect.name}" is already registered.`
-      );
+      throw new Error(`EffectRegistry: effect "${effect.name}" is already registered.`);
     }
     this.effects.set(effect.name, effect);
   }
@@ -85,11 +83,7 @@ export class EffectRegistry {
   /**
    * Apply only the active effects from a specific category.
    */
-  applyByCategory(
-    category: EffectCategory,
-    imageData: ImageData,
-    params: Record<string, unknown>
-  ): void {
+  applyByCategory(category: EffectCategory, imageData: ImageData, params: Record<string, unknown>): void {
     for (const effect of this.effects.values()) {
       if (effect.category === category && effect.isActive(params)) {
         effect.apply(imageData, params);

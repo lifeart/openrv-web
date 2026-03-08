@@ -10,7 +10,7 @@
  * relative to left eye. Negative = shifted leftward.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 
 // ---------------------------------------------------------------------------
@@ -167,17 +167,7 @@ export function measureDisparity(
 
   // Search negative and positive offsets
   for (let offset = -searchRange; offset <= searchRange; offset++) {
-    const sad = computeBlockSAD(
-      left.data,
-      right.data,
-      left.width,
-      right.width,
-      left.height,
-      cx,
-      cy,
-      offset,
-      blockSize,
-    );
+    const sad = computeBlockSAD(left.data, right.data, left.width, right.width, left.height, cx, cy, offset, blockSize);
 
     if (sad < bestSAD || (sad === bestSAD && Math.abs(offset) < Math.abs(bestOffset))) {
       bestSAD = sad;

@@ -6,11 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  DifferenceMatteControl,
-  DEFAULT_DIFFERENCE_MATTE_STATE,
-  applyDifferenceMatte,
-} from './DifferenceMatteControl';
+import { DifferenceMatteControl, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 
 describe('DifferenceMatteControl', () => {
   let control: DifferenceMatteControl;
@@ -539,10 +535,5 @@ function createImageData(width: number, height: number, color: [number, number, 
 
 function getPixel(imageData: ImageData, x: number, y: number): [number, number, number, number] {
   const i = (y * imageData.width + x) * 4;
-  return [
-    imageData.data[i]!,
-    imageData.data[i + 1]!,
-    imageData.data[i + 2]!,
-    imageData.data[i + 3]!,
-  ];
+  return [imageData.data[i]!, imageData.data[i + 1]!, imageData.data[i + 2]!, imageData.data[i + 3]!];
 }

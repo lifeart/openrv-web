@@ -4,7 +4,7 @@
  * Uses WebGL2 for real-time edge-preserving noise reduction.
  */
 
-import { NoiseReductionParams, applyNoiseReduction } from './NoiseReduction';
+import { type NoiseReductionParams, applyNoiseReduction } from './NoiseReduction';
 import { ShaderProgram } from '../render/ShaderProgram';
 
 // Maximum radius supported by the bilateral filter kernel
@@ -193,16 +193,7 @@ export class WebGLNoiseReductionProcessor {
     const gl = this.gl;
     const buffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([
-        -1, -1,
-         1, -1,
-        -1,  1,
-         1,  1,
-      ]),
-      gl.STATIC_DRAW
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     return buffer;
   }
 
@@ -210,16 +201,7 @@ export class WebGLNoiseReductionProcessor {
     const gl = this.gl;
     const buffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([
-        0, 0,
-        1, 0,
-        0, 1,
-        1, 1,
-      ]),
-      gl.STATIC_DRAW
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
     return buffer;
   }
 
@@ -355,11 +337,7 @@ export function createNoiseReductionProcessor(): {
     // Fallback to CPU implementation
     return {
       process: (imageData: ImageData, params: NoiseReductionParams) => {
-        const copy = new ImageData(
-          new Uint8ClampedArray(imageData.data),
-          imageData.width,
-          imageData.height
-        );
+        const copy = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
         applyNoiseReduction(copy, params);
         return copy;
       },

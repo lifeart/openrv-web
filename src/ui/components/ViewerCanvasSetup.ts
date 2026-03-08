@@ -9,9 +9,7 @@
  */
 
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
-import {
-  drawPlaceholder as drawPlaceholderUtil,
-} from './ViewerRenderingUtils';
+import { drawPlaceholder as drawPlaceholderUtil } from './ViewerRenderingUtils';
 import type { BackgroundPatternState } from './BackgroundPatternControl';
 import { PATTERN_COLORS } from './BackgroundPatternControl';
 import type { TransformManager } from './TransformManager';
@@ -143,8 +141,8 @@ export function updatePaintCanvasSize(
   containerHeight?: number,
 ): void {
   const transformManager = ctx.getTransformManager();
-  const viewW = (containerWidth && containerWidth > 0) ? containerWidth : logicalWidth;
-  const viewH = (containerHeight && containerHeight > 0) ? containerHeight : logicalHeight;
+  const viewW = containerWidth && containerWidth > 0 ? containerWidth : logicalWidth;
+  const viewH = containerHeight && containerHeight > 0 ? containerHeight : logicalHeight;
 
   const centerX = (viewW - logicalWidth) / 2 + transformManager.panX;
   const centerY = (viewH - logicalHeight) / 2 + transformManager.panY;
@@ -265,7 +263,7 @@ export function updateCanvasPosition(ctx: CanvasSetupContext): void {
 export function updateCSSBackground(
   container: HTMLElement,
   imageCanvas: HTMLCanvasElement,
-  backgroundPatternState: BackgroundPatternState
+  backgroundPatternState: BackgroundPatternState,
 ): void {
   const { pattern, checkerSize, customColor } = backgroundPatternState;
 
@@ -316,10 +314,7 @@ export function updateCSSBackground(
  * Listen for DPR changes (user moves window between displays).
  * Returns a cleanup function to remove the listener.
  */
-export function listenForDPRChange(
-  onDPRChange: () => void,
-  previousCleanup: (() => void) | null
-): (() => void) | null {
+export function listenForDPRChange(onDPRChange: () => void, previousCleanup: (() => void) | null): (() => void) | null {
   if (typeof window === 'undefined' || !window.matchMedia) return null;
 
   // Clean up previous listener

@@ -11,11 +11,7 @@
 import { EventEmitter } from '../utils/EventEmitter';
 import type { SyncMessage, WebSocketClientEvents, NetworkSyncConfig } from './types';
 import { DEFAULT_NETWORK_SYNC_CONFIG } from './types';
-import {
-  serializeMessage,
-  deserializeMessage,
-  createPingMessage,
-} from './MessageProtocol';
+import { serializeMessage, deserializeMessage, createPingMessage } from './MessageProtocol';
 
 export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private ws: WebSocket | null = null;
@@ -296,7 +292,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
     // Exponential backoff with jitter
     const delay = Math.min(
       this.config.reconnectBaseDelay * Math.pow(2, this.reconnectAttempts - 1),
-      this.config.reconnectMaxDelay
+      this.config.reconnectMaxDelay,
     );
     const jitter = delay * 0.1 * Math.random();
 
@@ -315,10 +311,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   }
 
   private normalizeServerUrls(config: NetworkSyncConfig): string[] {
-    const candidates = [
-      config.serverUrl,
-      ...(Array.isArray(config.serverUrls) ? config.serverUrls : []),
-    ];
+    const candidates = [config.serverUrl, ...(Array.isArray(config.serverUrls) ? config.serverUrls : [])];
 
     const seen = new Set<string>();
     const urls: string[] = [];

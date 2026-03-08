@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Session, MediaSource } from './Session';
+import { Session, type MediaSource } from './Session';
 
 // Mock SequenceLoader
 vi.mock('../../utils/media/SequenceLoader', () => ({
@@ -11,32 +11,32 @@ vi.mock('../../utils/media/SequenceLoader', () => ({
 }));
 
 const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) => {
-    const video = document.createElement('video') as any;
-    video._currentTime = currentTimeSec;
-    Object.defineProperty(video, 'duration', {
-        get: () => durationSec,
-        configurable: true
-    });
-    Object.defineProperty(video, 'currentTime', {
-        get: () => video._currentTime,
-        set: (v) => video._currentTime = v,
-        configurable: true
-    });
-    Object.defineProperty(video, 'ended', {
-        get: () => video._currentTime >= durationSec,
-        configurable: true
-    });
-    video.play = vi.fn();
-    video.pause = vi.fn();
-    return video;
+  const video = document.createElement('video') as any;
+  video._currentTime = currentTimeSec;
+  Object.defineProperty(video, 'duration', {
+    get: () => durationSec,
+    configurable: true,
+  });
+  Object.defineProperty(video, 'currentTime', {
+    get: () => video._currentTime,
+    set: (v) => (video._currentTime = v),
+    configurable: true,
+  });
+  Object.defineProperty(video, 'ended', {
+    get: () => video._currentTime >= durationSec,
+    configurable: true,
+  });
+  video.play = vi.fn();
+  video.pause = vi.fn();
+  return video;
 };
 
 class TestSession extends Session {
   public setSources(s: MediaSource[]) {
     (this as any)._media.resetSourcesInternal();
-    s.forEach(src => {
-        this.addSource(src);
-        (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
+    s.forEach((src) => {
+      this.addSource(src);
+      (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
     });
   }
 }
@@ -93,7 +93,12 @@ describe('Session', () => {
 
     it('loadImage succeeds', async () => {
       const img = { crossOrigin: '', src: '', onload: null as any, onerror: null as any, width: 100, height: 100 };
-      vi.stubGlobal('Image', vi.fn(function() { return img; }));
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return img;
+        }),
+      );
 
       const promise = session.loadImage('test.png', 'url');
       img.onload();
@@ -105,7 +110,12 @@ describe('Session', () => {
 
     it('loadImage fails', async () => {
       const img = { src: '', onload: null as any, onerror: null as any };
-      vi.stubGlobal('Image', vi.fn(function() { return img; }));
+      vi.stubGlobal(
+        'Image',
+        vi.fn(function () {
+          return img;
+        }),
+      );
 
       const promise = session.loadImage('test.png', 'url');
       img.onerror();
@@ -113,30 +123,39 @@ describe('Session', () => {
     });
 
     it('loadVideo succeeds', async () => {
-        const video = {
-          src: '', oncanplay: null as any, onerror: null as any,
-          duration: 10, videoWidth: 100, videoHeight: 100,
-          load: vi.fn(),
-          style: {},
-          crossOrigin: '', preload: '', muted: false, volume: 1, loop: false, playsInline: false
-        };
-        vi.spyOn(document, 'createElement').mockReturnValue(video as any);
+      const video = {
+        src: '',
+        oncanplay: null as any,
+        onerror: null as any,
+        duration: 10,
+        videoWidth: 100,
+        videoHeight: 100,
+        load: vi.fn(),
+        style: {},
+        crossOrigin: '',
+        preload: '',
+        muted: false,
+        volume: 1,
+        loop: false,
+        playsInline: false,
+      };
+      vi.spyOn(document, 'createElement').mockReturnValue(video as any);
 
-        const promise = session.loadVideo('test.mp4', 'url');
-        video.oncanplay();
-        await promise;
+      const promise = session.loadVideo('test.mp4', 'url');
+      video.oncanplay();
+      await promise;
 
-        expect(session.currentSource?.type).toBe('video');
-        expect(session.currentSource?.duration).toBe(240); // 10 * 24
+      expect(session.currentSource?.type).toBe('video');
+      expect(session.currentSource?.duration).toBe(240); // 10 * 24
     });
 
     it('loadVideo fails', async () => {
-        const video = { src: '', onerror: null as any, load: vi.fn() };
-        vi.spyOn(document, 'createElement').mockReturnValue(video as any);
+      const video = { src: '', onerror: null as any, load: vi.fn() };
+      vi.spyOn(document, 'createElement').mockReturnValue(video as any);
 
-        const promise = session.loadVideo('test.mp4', 'url');
-        video.onerror('error');
-        await expect(promise).rejects.toThrow('Failed to load video');
+      const promise = session.loadVideo('test.mp4', 'url');
+      video.onerror('error');
+      await expect(promise).rejects.toThrow('Failed to load video');
     });
   });
 
@@ -144,7 +163,11 @@ describe('Session', () => {
     it('loadSequence sets up source and preloads', async () => {
       const { createSequenceInfo, preloadFrames } = await import('../../utils/media/SequenceLoader');
       (createSequenceInfo as any).mockResolvedValue({
-        name: 'seq', width: 100, height: 100, frames: [ { image: {} } ], fps: 24
+        name: 'seq',
+        width: 100,
+        height: 100,
+        frames: [{ image: {} }],
+        fps: 24,
       });
 
       await session.loadSequence([]);
@@ -159,30 +182,42 @@ describe('Session', () => {
     });
 
     it('getSequenceFrameImage preloads and releases and returns image', async () => {
-        const { loadFrameImage, preloadFrames, releaseDistantFrames } = await import('../../utils/media/SequenceLoader');
-        const mockImg = {} as any;
-        (loadFrameImage as any).mockResolvedValue(mockImg);
+      const { loadFrameImage, preloadFrames, releaseDistantFrames } = await import('../../utils/media/SequenceLoader');
+      const mockImg = {} as any;
+      (loadFrameImage as any).mockResolvedValue(mockImg);
 
-        const source: MediaSource = {
-            type: 'sequence', name: 's', url: '', width: 100, height: 100, duration: 10, fps: 24,
-            sequenceFrames: [{}] as any
-        };
-        session.setSources([source]);
+      const source: MediaSource = {
+        type: 'sequence',
+        name: 's',
+        url: '',
+        width: 100,
+        height: 100,
+        duration: 10,
+        fps: 24,
+        sequenceFrames: [{}] as any,
+      };
+      session.setSources([source]);
 
-        const img = await session.getSequenceFrameImage(1);
-        expect(img).toBe(mockImg);
-        expect(preloadFrames).toHaveBeenCalled();
-        expect(releaseDistantFrames).toHaveBeenCalled();
+      const img = await session.getSequenceFrameImage(1);
+      expect(img).toBe(mockImg);
+      expect(preloadFrames).toHaveBeenCalled();
+      expect(releaseDistantFrames).toHaveBeenCalled();
     });
 
     it('getSequenceFrameSync returns cached image', () => {
-        const mockImg = {} as any;
-        const source: MediaSource = {
-            type: 'sequence', name: 's', url: '', width: 100, height: 100, duration: 10, fps: 24,
-            sequenceFrames: [{ image: mockImg }] as any
-        };
-        session.setSources([source]);
-        expect(session.getSequenceFrameSync(1)).toBe(mockImg);
+      const mockImg = {} as any;
+      const source: MediaSource = {
+        type: 'sequence',
+        name: 's',
+        url: '',
+        width: 100,
+        height: 100,
+        duration: 10,
+        fps: 24,
+        sequenceFrames: [{ image: mockImg }] as any,
+      };
+      session.setSources([source]);
+      expect(session.getSequenceFrameSync(1)).toBe(mockImg);
     });
   });
 
@@ -378,8 +413,13 @@ describe('Session', () => {
 
     it('SES-HDR-002: isVideoHDR returns false for image source', () => {
       const source: MediaSource = {
-        name: 'test.png', type: 'image', url: 'test.png',
-        width: 100, height: 100, duration: 1, fps: 24,
+        name: 'test.png',
+        type: 'image',
+        url: 'test.png',
+        width: 100,
+        height: 100,
+        duration: 1,
+        fps: 24,
       };
       session.setSources([source]);
       expect(session.isVideoHDR()).toBe(false);
@@ -387,8 +427,13 @@ describe('Session', () => {
 
     it('SES-HDR-003: isVideoHDR returns false for video without videoSourceNode', () => {
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
       };
       session.setSources([source]);
       expect(session.isVideoHDR()).toBe(false);
@@ -397,8 +442,13 @@ describe('Session', () => {
     it('SES-HDR-004: isVideoHDR returns false for non-HDR video', () => {
       const mockVideoNode = { isHDR: vi.fn().mockReturnValue(false) };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -409,8 +459,13 @@ describe('Session', () => {
     it('SES-HDR-005: isVideoHDR returns true for HDR video', () => {
       const mockVideoNode = { isHDR: () => true };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -427,8 +482,13 @@ describe('Session', () => {
         getCachedHDRIPImage: vi.fn(),
       };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -443,8 +503,13 @@ describe('Session', () => {
         getCachedHDRIPImage: vi.fn().mockReturnValue(mockIPImage),
       };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -460,8 +525,13 @@ describe('Session', () => {
         getCachedHDRIPImage: vi.fn().mockReturnValue(null),
       };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -476,8 +546,13 @@ describe('Session', () => {
         fetchHDRFrame: vi.fn(),
       };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -492,8 +567,13 @@ describe('Session', () => {
         fetchHDRFrame: vi.fn().mockResolvedValue(null),
       };
       const source: MediaSource = {
-        name: 'test.mp4', type: 'video', url: 'test.mp4',
-        width: 100, height: 100, duration: 100, fps: 24,
+        name: 'test.mp4',
+        type: 'video',
+        url: 'test.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
         videoSourceNode: mockVideoNode as any,
       };
       session.setSources([source]);
@@ -516,10 +596,23 @@ describe('Session', () => {
       Object.defineProperty(video, 'playbackRate', { get: () => 1, set: () => {}, configurable: true });
 
       const source1: MediaSource = {
-        name: 'v1.mp4', type: 'video', duration: 10, fps: 24, width: 100, height: 100, url: 'v1.mp4', element: video
+        name: 'v1.mp4',
+        type: 'video',
+        duration: 10,
+        fps: 24,
+        width: 100,
+        height: 100,
+        url: 'v1.mp4',
+        element: video,
       };
       const source2: MediaSource = {
-        name: 'i1.png', type: 'image', duration: 1, fps: 24, width: 100, height: 100, url: 'i1.png'
+        name: 'i1.png',
+        type: 'image',
+        duration: 1,
+        fps: 24,
+        width: 100,
+        height: 100,
+        url: 'i1.png',
       };
 
       const sessionInternal = session as any;
@@ -537,7 +630,14 @@ describe('Session', () => {
     it('SES-037: dispose cleans up sequence and clears sources', () => {
       const sequenceFrames = [{} as any];
       const source: MediaSource = {
-        name: 's1', type: 'sequence', url: 's1', duration: 3, fps: 24, width: 100, height: 100, sequenceFrames
+        name: 's1',
+        type: 'sequence',
+        url: 's1',
+        duration: 3,
+        fps: 24,
+        width: 100,
+        height: 100,
+        sequenceFrames,
       };
 
       const sessionInternal = session as any;
@@ -551,5 +651,4 @@ describe('Session', () => {
       expect(session.allSources).toEqual([]);
     });
   });
-
 });

@@ -63,9 +63,9 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
     const hdr = new Float32Array([0.5, 0.3, 0.1]); // within SDR range
     applyHighlightsShadowsHDR(img, DEFAULT_PARAMS, hdr, 3, 1.0);
     expect(img.data[0]).toBe(128); // 0.5 * 255 ≈ 128
-    expect(img.data[1]).toBe(77);  // 0.3 * 255 ≈ 77
-    expect(img.data[2]).toBe(26);  // 0.1 * 255 ≈ 26
-    expect(img.data[3]).toBe(0);   // alpha unset in this helper
+    expect(img.data[1]).toBe(77); // 0.3 * 255 ≈ 77
+    expect(img.data[2]).toBe(26); // 0.1 * 255 ≈ 26
+    expect(img.data[3]).toBe(0); // alpha unset in this helper
   });
 
   it('HL-006-002: HDR values above 1.0 are preserved (not clipped to 255)', () => {
@@ -83,15 +83,15 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
     // Two pixels: one bright (HDR), one dark
     const img = createImageDataNpx(2);
     const hdr = new Float32Array([
-      2.5, 2.5, 2.5, // bright HDR pixel (lum ~2.5)
-      0.1, 0.1, 0.1, // dark pixel
+      2.5,
+      2.5,
+      2.5, // bright HDR pixel (lum ~2.5)
+      0.1,
+      0.1,
+      0.1, // dark pixel
     ]);
     const peak = 3.0;
-    applyHighlightsShadowsHDR(
-      img,
-      { ...DEFAULT_PARAMS, highlights: 50 },
-      hdr, 3, peak,
-    );
+    applyHighlightsShadowsHDR(img, { ...DEFAULT_PARAMS, highlights: 50 }, hdr, 3, peak);
     // Bright pixel: normalized lum = 2.5/3 ≈ 0.833, highlightMask > 0
     // Adjustment applied and scaled by peak. Should be darker than original.
     const originalBright = Math.round((2.5 / 3.0) * 255); // ~213
@@ -106,15 +106,15 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
   it('HL-006-004: shadow adjustment scales with HDR peak', () => {
     const img = createImageDataNpx(2);
     const hdr = new Float32Array([
-      0.2, 0.2, 0.2, // dark pixel (lum ~0.2)
-      2.5, 2.5, 2.5, // bright HDR pixel
+      0.2,
+      0.2,
+      0.2, // dark pixel (lum ~0.2)
+      2.5,
+      2.5,
+      2.5, // bright HDR pixel
     ]);
     const peak = 3.0;
-    applyHighlightsShadowsHDR(
-      img,
-      { ...DEFAULT_PARAMS, shadows: 50 },
-      hdr, 3, peak,
-    );
+    applyHighlightsShadowsHDR(img, { ...DEFAULT_PARAMS, shadows: 50 }, hdr, 3, peak);
     // Dark pixel: normalized lum = 0.2/3 ≈ 0.067, shadowMask ≈ 1.0
     // Shadow lift applied. Should be brighter than original.
     const originalDark = Math.round((0.2 / 3.0) * 255); // ~17
@@ -130,16 +130,18 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
     // Three pixels at different HDR levels
     const img = createImageDataNpx(3);
     const hdr = new Float32Array([
-      0.5, 0.5, 0.5, // low (normalized: 0.1)
-      2.5, 2.5, 2.5, // mid-high (normalized: 0.5)
-      4.5, 4.5, 4.5, // very bright (normalized: 0.9)
+      0.5,
+      0.5,
+      0.5, // low (normalized: 0.1)
+      2.5,
+      2.5,
+      2.5, // mid-high (normalized: 0.5)
+      4.5,
+      4.5,
+      4.5, // very bright (normalized: 0.9)
     ]);
     const peak = 5.0;
-    applyHighlightsShadowsHDR(
-      img,
-      { ...DEFAULT_PARAMS, highlights: 80 },
-      hdr, 3, peak,
-    );
+    applyHighlightsShadowsHDR(img, { ...DEFAULT_PARAMS, highlights: 80 }, hdr, 3, peak);
     // With peak=5, the highlight mask should differentiate:
     // 0.5/5=0.1 → almost no highlight effect
     // 2.5/5=0.5 → edge of highlight zone (smoothstep 0.5-1.0 at 0.5 = 0)
@@ -170,11 +172,7 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
     const hdr = new Float32Array([2.0, 2.0, 2.0]);
     const peak = 3.0;
     // Apply whites=50 to compress the white point
-    applyHighlightsShadowsHDR(
-      img,
-      { ...DEFAULT_PARAMS, whites: 50 },
-      hdr, 3, peak,
-    );
+    applyHighlightsShadowsHDR(img, { ...DEFAULT_PARAMS, whites: 50 }, hdr, 3, peak);
     // With whites=50: whitePoint = 3.0 * (1 - 0.5 * 55/255) = 3.0 * 0.892 ≈ 2.676
     // blackPoint = 0
     // Remapped: (2.0 - 0) / 2.676 * 3.0 = 2.243
@@ -189,11 +187,7 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
     const img = createImageDataNpx(1);
     // Very dark pixel with strong shadow crush
     const hdr = new Float32Array([0.05, 0.05, 0.05]);
-    applyHighlightsShadowsHDR(
-      img,
-      { ...DEFAULT_PARAMS, shadows: -100 },
-      hdr, 3, 1.0,
-    );
+    applyHighlightsShadowsHDR(img, { ...DEFAULT_PARAMS, shadows: -100 }, hdr, 3, 1.0);
     // Should not produce negative display values
     expect(img.data[0]!).toBeGreaterThanOrEqual(0);
     expect(img.data[1]!).toBeGreaterThanOrEqual(0);
@@ -204,11 +198,7 @@ describe('applyHighlightsShadowsHDR (HL-006)', () => {
     const img = createImageDataNpx(1);
     img.data[3] = 200; // set alpha
     const hdr = new Float32Array([1.0, 1.0, 1.0]);
-    applyHighlightsShadowsHDR(
-      img,
-      { ...DEFAULT_PARAMS, highlights: -50 },
-      hdr, 3, 1.0,
-    );
+    applyHighlightsShadowsHDR(img, { ...DEFAULT_PARAMS, highlights: -50 }, hdr, 3, 1.0);
     expect(img.data[3]).toBe(200);
   });
 

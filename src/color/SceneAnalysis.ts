@@ -78,9 +78,9 @@ export function computeSceneLuminance(
     for (let x = 0; x < width; x += stepX) {
       const i = (y * width + x) * 4;
       // sRGB to linear approximation (gamma 2.2)
-      const rLin = Math.pow((data[i]! / 255), 2.2);
-      const gLin = Math.pow((data[i + 1]! / 255), 2.2);
-      const bLin = Math.pow((data[i + 2]! / 255), 2.2);
+      const rLin = Math.pow(data[i]! / 255, 2.2);
+      const gLin = Math.pow(data[i + 1]! / 255, 2.2);
+      const bLin = Math.pow(data[i + 2]! / 255, 2.2);
 
       const luminance = 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
       sumLogLuminance += Math.log(luminance + MIN_LUMINANCE);

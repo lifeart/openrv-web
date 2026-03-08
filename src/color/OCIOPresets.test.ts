@@ -6,12 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  WORKFLOW_PRESETS,
-  getPresetById,
-  getPresetsByCategory,
-  type WorkflowPreset,
-} from './OCIOPresets';
+import { WORKFLOW_PRESETS, getPresetById, getPresetsByCategory, type WorkflowPreset } from './OCIOPresets';
 
 describe('WORKFLOW_PRESETS', () => {
   it('PRESET-U001: contains 12 presets', () => {

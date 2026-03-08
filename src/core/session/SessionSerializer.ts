@@ -6,11 +6,7 @@
 
 import type { Session } from './Session';
 import type { MediaSource } from './SessionTypes';
-import type {
-  SessionState,
-  MediaReference,
-  ViewState,
-} from './SessionState';
+import type { SessionState, MediaReference, ViewState } from './SessionState';
 import { SESSION_STATE_VERSION, DEFAULT_VIEW_STATE, DEFAULT_PLAYBACK_STATE } from './SessionState';
 import { DEFAULT_PLAYLIST_STATE } from './PlaylistManager';
 import type { PlaylistManager } from './PlaylistManager';
@@ -48,10 +44,7 @@ export class SessionSerializer {
   /**
    * Serialize all session state to JSON
    */
-  static toJSON(
-    components: SessionComponents,
-    projectName: string = 'Untitled'
-  ): SessionState {
+  static toJSON(components: SessionComponents, projectName: string = 'Untitled'): SessionState {
     const { session, paintEngine, viewer } = components;
     const now = new Date().toISOString();
 
@@ -119,7 +112,7 @@ export class SessionSerializer {
    * with `requiresReload: true` so the user can re-select the file on project load.
    */
   private static serializeMedia(sources: MediaSource[], cacheManager?: MediaCacheManager): MediaReference[] {
-    return sources.map(source => {
+    return sources.map((source) => {
       // Check if the URL is a blob URL (not portable across sessions)
       const isBlob = source.url.startsWith('blob:');
 
@@ -170,7 +163,7 @@ export class SessionSerializer {
    */
   static async fromJSON(
     state: SessionState,
-    components: SessionComponents
+    components: SessionComponents,
   ): Promise<{ loadedMedia: number; warnings: string[] }> {
     const { session, paintEngine, viewer } = components;
     const warnings: string[] = [];
@@ -189,7 +182,9 @@ export class SessionSerializer {
             try {
               const cached = await components.cacheManager.get(ref.opfsCacheKey);
               if (cached) {
-                const cachedFile = new File([cached], ref.name, { type: ref.type === 'video' ? 'video/mp4' : 'image/png' });
+                const cachedFile = new File([cached], ref.name, {
+                  type: ref.type === 'video' ? 'video/mp4' : 'image/png',
+                });
                 await session.loadFile(cachedFile);
                 loadedMedia++;
                 continue;
@@ -210,7 +205,7 @@ export class SessionSerializer {
             try {
               await session.loadFile(file);
               loadedMedia++;
-            } catch (loadErr) {
+            } catch (_loadErr) {
               warnings.push(`Failed to reload: ${ref.name}`);
             }
           } else {
@@ -223,7 +218,9 @@ export class SessionSerializer {
         // Defensive check: blob URLs should have been marked with requiresReload during save
         // If we encounter one here, it indicates a bug in serialization
         if (ref.path.startsWith('blob:')) {
-          console.warn(`[SessionSerializer] Unexpected blob URL in saved project: ${ref.name}. This indicates a serialization bug.`);
+          console.warn(
+            `[SessionSerializer] Unexpected blob URL in saved project: ${ref.name}. This indicates a serialization bug.`,
+          );
           warnings.push(`Cannot load blob URL: ${ref.name}`);
           continue;
         }
@@ -238,7 +235,7 @@ export class SessionSerializer {
           // Sequences require file selection - emit warning
           warnings.push(`Sequence "${ref.name}" requires manual file selection`);
         }
-      } catch (err) {
+      } catch (_err) {
         warnings.push(`Failed to load: ${ref.name}`);
       }
     }
@@ -366,10 +363,7 @@ export class SessionSerializer {
   /**
    * Save to .orvproject file (triggers download)
    */
-  static async saveToFile(
-    state: SessionState,
-    filename: string = 'project.orvproject'
-  ): Promise<void> {
+  static async saveToFile(state: SessionState, filename: string = 'project.orvproject'): Promise<void> {
     const json = JSON.stringify(state, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

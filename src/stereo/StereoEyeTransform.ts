@@ -14,19 +14,19 @@
 
 /** Per-eye geometric transform */
 export interface EyeTransform {
-  flipH: boolean;       // Horizontal flip (flop)
-  flipV: boolean;       // Vertical flip
-  rotation: number;     // Degrees, -180 to +180
-  scale: number;        // Uniform scale factor, 0.5 to 2.0
-  translateX: number;   // Horizontal offset in pixels, -100 to +100
-  translateY: number;   // Vertical offset in pixels, -100 to +100
+  flipH: boolean; // Horizontal flip (flop)
+  flipV: boolean; // Vertical flip
+  rotation: number; // Degrees, -180 to +180
+  scale: number; // Uniform scale factor, 0.5 to 2.0
+  translateX: number; // Horizontal offset in pixels, -100 to +100
+  translateY: number; // Vertical offset in pixels, -100 to +100
 }
 
 /** Complete per-eye transform state */
 export interface StereoEyeTransformState {
   left: EyeTransform;
   right: EyeTransform;
-  linked: boolean;      // When true, L/R controls are mirrored
+  linked: boolean; // When true, L/R controls are mirrored
 }
 
 /** Alignment tool mode */
@@ -265,11 +265,7 @@ export function applyEyeTransform(imageData: ImageData, transform: EyeTransform)
 
   // 5. Translation
   if (transform.translateX !== 0 || transform.translateY !== 0) {
-    result = applyTranslation(
-      result,
-      clampTranslation(transform.translateX),
-      clampTranslation(transform.translateY)
-    );
+    result = applyTranslation(result, clampTranslation(transform.translateX), clampTranslation(transform.translateY));
   }
 
   return result;

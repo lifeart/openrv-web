@@ -119,10 +119,14 @@ export function getNextDisplayMode(current: TimecodeDisplayMode): TimecodeDispla
  */
 export function getDisplayModeLabel(mode: TimecodeDisplayMode): string {
   switch (mode) {
-    case 'frames': return 'F#';
-    case 'timecode': return 'TC';
-    case 'seconds': return 'SEC';
-    case 'footage': return 'FT';
+    case 'frames':
+      return 'F#';
+    case 'timecode':
+      return 'TC';
+    case 'seconds':
+      return 'SEC';
+    case 'footage':
+      return 'FT';
   }
 }
 
@@ -134,11 +138,7 @@ export function getDisplayModeLabel(mode: TimecodeDisplayMode): string {
  * @param mode - display mode
  * @returns Formatted string for display
  */
-export function formatFrameDisplay(
-  frame: number,
-  fps: number,
-  mode: TimecodeDisplayMode
-): string {
+export function formatFrameDisplay(frame: number, fps: number, mode: TimecodeDisplayMode): string {
   switch (mode) {
     case 'timecode':
       return formatTimecode(frame, fps);

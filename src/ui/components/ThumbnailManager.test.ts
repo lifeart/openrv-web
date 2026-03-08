@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThumbnailManager } from './ThumbnailManager';
-import type { Session } from '../../core/session/Session';
-import type { MediaSource } from '../../core/session/Session';
+import type { Session, MediaSource } from '../../core/session/Session';
 
 /**
  * Minimal stub that satisfies the subset of Session used by ThumbnailManager.
@@ -526,7 +525,7 @@ describe('ThumbnailManager', () => {
         manager.pauseLoading(); // Ensure paused
 
         // Wait a bit to see if any retry processing happens
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         // No additional calls should have been made
         expect(loadCallCount.count).toBe(0);
@@ -566,7 +565,7 @@ describe('ThumbnailManager', () => {
         manager.resumeLoading();
 
         // Wait for the async loadThumbnails to complete
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
         // Now getVideoFrameCanvas should have been called for slots
         expect(callCount).toBeGreaterThan(0);
@@ -668,7 +667,7 @@ describe('ThumbnailManager', () => {
         expect(manager.isLoadingPaused).toBe(false);
 
         // Wait for async resume to trigger loadThumbnails
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         // Should have attempted to load frames after resume
         expect(stub.getVideoFrameCanvas).toHaveBeenCalled();
@@ -690,11 +689,18 @@ describe('ThumbnailManager', () => {
         width: number;
         height: number;
         getContext = mockGetContext;
-        constructor(w: number, h: number) { this.width = w; this.height = h; }
+        constructor(w: number, h: number) {
+          this.width = w;
+          this.height = h;
+        }
       } as any;
 
       stub.currentSource = {
-        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 10,
+        name: 'test.exr',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 10,
         element: document.createElement('canvas'),
       } as unknown as MediaSource;
 
@@ -706,9 +712,7 @@ describe('ThumbnailManager', () => {
       await manager.loadThumbnails();
 
       // createElement('canvas') should NOT have been called in the OffscreenCanvas path
-      const canvasCreations = createElementSpy.mock.calls.filter(
-        ([tag]) => tag === 'canvas'
-      );
+      const canvasCreations = createElementSpy.mock.calls.filter(([tag]) => tag === 'canvas');
       expect(canvasCreations.length).toBe(0);
 
       createElementSpy.mockRestore();
@@ -725,11 +729,18 @@ describe('ThumbnailManager', () => {
         width: number;
         height: number;
         getContext = mockGetContext;
-        constructor(w: number, h: number) { this.width = w; this.height = h; }
+        constructor(w: number, h: number) {
+          this.width = w;
+          this.height = h;
+        }
       } as any;
 
       stub.currentSource = {
-        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 5,
+        name: 'test.exr',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 5,
         element: document.createElement('canvas'),
       } as unknown as MediaSource;
 
@@ -750,7 +761,11 @@ describe('ThumbnailManager', () => {
       delete (globalThis as any).OffscreenCanvas;
 
       stub.currentSource = {
-        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 3,
+        name: 'test.exr',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 3,
         element: document.createElement('canvas'),
       } as unknown as MediaSource;
 
@@ -775,11 +790,18 @@ describe('ThumbnailManager', () => {
         width: number;
         height: number;
         getContext = vi.fn(() => ({ drawImage: vi.fn() }));
-        constructor(w: number, h: number) { this.width = w; this.height = h; }
+        constructor(w: number, h: number) {
+          this.width = w;
+          this.height = h;
+        }
       } as any;
 
       stub.currentSource = {
-        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 3,
+        name: 'test.exr',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 3,
         element: document.createElement('canvas'),
       } as unknown as MediaSource;
 
@@ -828,7 +850,11 @@ describe('ThumbnailManager', () => {
       (manager as any).sourceId = 'test.exr-1920x1080';
 
       stub.currentSource = {
-        name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 5,
+        name: 'test.exr',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 5,
         element: document.createElement('canvas'),
       } as unknown as MediaSource;
 
@@ -871,7 +897,9 @@ describe('ThumbnailManager', () => {
 
       const mockCtx = {
         drawImage: vi.fn(),
-        strokeRect: vi.fn(), strokeStyle: '', lineWidth: 1,
+        strokeRect: vi.fn(),
+        strokeStyle: '',
+        lineWidth: 1,
       } as unknown as CanvasRenderingContext2D;
 
       manager.drawThumbnails(mockCtx);
@@ -1044,8 +1072,12 @@ describe('ThumbnailManager', () => {
       // Track shadowBlur assignments via instance-level property descriptor
       let shadowBlurSet = false;
       Object.defineProperty(ctx, 'shadowBlur', {
-        set() { shadowBlurSet = true; },
-        get() { return 0; },
+        set() {
+          shadowBlurSet = true;
+        },
+        get() {
+          return 0;
+        },
         configurable: true,
       });
 
@@ -1126,7 +1158,7 @@ describe('ThumbnailManager', () => {
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
 
       // Wait for async thumbnail generation to process
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // The detached bitmap should have been detected and the frame queued for retry
       // (not thrown an error). The manager should still be functional.

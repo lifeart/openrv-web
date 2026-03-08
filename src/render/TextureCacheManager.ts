@@ -42,7 +42,7 @@ function calculateTextureSize(
   width: number,
   height: number,
   internalFormat: number,
-  gl: WebGL2RenderingContext
+  gl: WebGL2RenderingContext,
 ): number {
   let bytesPerPixel = 4; // Default RGBA8
 
@@ -182,7 +182,7 @@ export class TextureCacheManager implements ManagerBase {
     height: number,
     internalFormat?: number,
     format?: number,
-    type?: number
+    type?: number,
   ): WebGLTexture {
     // Check for context loss
     if (this.contextLost) {
@@ -198,11 +198,7 @@ export class TextureCacheManager implements ManagerBase {
     const existing = this.cache.get(key);
     if (existing) {
       // Check if dimensions match
-      if (
-        existing.width === width &&
-        existing.height === height &&
-        existing.internalFormat === iFormat
-      ) {
+      if (existing.width === width && existing.height === height && existing.internalFormat === iFormat) {
         // Move to end (MRU position) and return existing texture
         this.cache.delete(key);
         this.cache.set(key, existing);
@@ -269,32 +265,12 @@ export class TextureCacheManager implements ManagerBase {
     gl.bindTexture(gl.TEXTURE_2D, entry.texture);
 
     if (data instanceof ImageData) {
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        data.width,
-        data.height,
-        entry.format,
-        entry.type,
-        data.data
-      );
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, data.width, data.height, entry.format, entry.type, data.data);
     } else if (data instanceof HTMLCanvasElement || data instanceof HTMLImageElement) {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, entry.format, entry.type, data);
     } else {
       // ArrayBufferView
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        entry.width,
-        entry.height,
-        entry.format,
-        entry.type,
-        data
-      );
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, entry.width, entry.height, entry.format, entry.type, data);
     }
 
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -383,10 +359,7 @@ export class TextureCacheManager implements ManagerBase {
     }
 
     // Check memory limit
-    while (
-      this.currentMemoryUsage + requiredSize > this.config.maxMemoryBytes &&
-      this.cache.size > 0
-    ) {
+    while (this.currentMemoryUsage + requiredSize > this.config.maxMemoryBytes && this.cache.size > 0) {
       this.evictLRU();
     }
   }

@@ -59,12 +59,7 @@ function defaultBrush(overrides?: Partial<BrushParams>): BrushParams {
 
 function getPixel(buffer: PixelBuffer, x: number, y: number): [number, number, number, number] {
   const idx = (y * buffer.width + x) * 4;
-  return [
-    buffer.data[idx]!,
-    buffer.data[idx + 1]!,
-    buffer.data[idx + 2]!,
-    buffer.data[idx + 3]!,
-  ];
+  return [buffer.data[idx]!, buffer.data[idx + 1]!, buffer.data[idx + 2]!, buffer.data[idx + 3]!];
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +75,9 @@ describe('AdvancedPaintTools E2E - PaintEngine tool type wiring', () => {
 
   it('APT-E2E-001: PaintEngine accepts all four advanced tool types without error', () => {
     for (const tool of ADVANCED_TOOLS) {
-      expect(() => { engine.tool = tool; }).not.toThrow();
+      expect(() => {
+        engine.tool = tool;
+      }).not.toThrow();
       expect(engine.tool).toBe(tool);
     }
   });
@@ -774,7 +771,7 @@ describe('AdvancedPaintTools E2E - HDR content support', () => {
 
     // Paint an HDR pixel at (30, 30)
     const idx = (30 * 50 + 30) * 4;
-    buffer.data[idx] = 5.0;   // HDR red
+    buffer.data[idx] = 5.0; // HDR red
     buffer.data[idx + 1] = 3.5; // HDR green
     buffer.data[idx + 2] = 2.0; // HDR blue
     buffer.data[idx + 3] = 1.0;
@@ -798,7 +795,7 @@ describe('AdvancedPaintTools E2E - HDR content support', () => {
 
     // Paint an HDR spot at (5, 25)
     const idx = (25 * 50 + 5) * 4;
-    buffer.data[idx] = 4.0;   // HDR value
+    buffer.data[idx] = 4.0; // HDR value
     buffer.data[idx + 1] = 3.0;
     buffer.data[idx + 2] = 2.0;
 

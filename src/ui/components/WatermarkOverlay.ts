@@ -4,7 +4,7 @@
  * Supports 9 preset positions (3x3 grid), custom positioning, scale, opacity, and margin controls.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 
 export type WatermarkPosition =
@@ -222,7 +222,7 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
     canvasWidth: number,
     canvasHeight: number,
     watermarkWidth: number,
-    watermarkHeight: number
+    watermarkHeight: number,
   ): { x: number; y: number } {
     const margin = this.state.margin;
 
@@ -297,7 +297,7 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
 
   setState(state: Partial<WatermarkState>): void {
     const changed = Object.keys(state).some(
-      (key) => this.state[key as keyof WatermarkState] !== state[key as keyof WatermarkState]
+      (key) => this.state[key as keyof WatermarkState] !== state[key as keyof WatermarkState],
     );
 
     if (changed) {

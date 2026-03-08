@@ -109,7 +109,7 @@ describe('pixelCompare', () => {
     const a = new Uint8Array([255, 0, 0, 255]);
     const b = new Uint8Array([0, 0, 0, 255]);
     // diffs = [255, 0, 0, 0], sum of squares = 255^2 = 65025, RMSE = sqrt(65025/4)
-    expect(computeRMSE(a, b)).toBeCloseTo(Math.sqrt(255 * 255 / 4), 6);
+    expect(computeRMSE(a, b)).toBeCloseTo(Math.sqrt((255 * 255) / 4), 6);
   });
 
   // ─── NaN handling ──────────────────────────────────────────────────

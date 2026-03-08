@@ -8,13 +8,8 @@
  * - Guide color and opacity controls
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import {
-  SafeAreasOverlay,
-  SafeAreasState,
-  AspectRatioGuide,
-  ASPECT_RATIOS,
-} from './SafeAreasOverlay';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type SafeAreasOverlay, type SafeAreasState, type AspectRatioGuide, ASPECT_RATIOS } from './SafeAreasOverlay';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
@@ -102,11 +97,13 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     this.dropdown = this.createDropdown();
 
     // Listen to overlay state changes
-    this.unsubscribers.push(this.overlay.on('stateChanged', (state) => {
-      this.updateButtonLabel();
-      this.updateDropdownState();
-      this.emit('stateChanged', state);
-    }));
+    this.unsubscribers.push(
+      this.overlay.on('stateChanged', (state) => {
+        this.updateButtonLabel();
+        this.updateDropdownState();
+        this.emit('stateChanged', state);
+      }),
+    );
   }
 
   private createDropdown(): HTMLElement {
@@ -127,23 +124,17 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     `;
 
     // Enable/Disable toggle
-    dropdown.appendChild(
-      this.createCheckboxItem('enabled', 'Enable Guides', () => this.overlay.toggle())
-    );
+    dropdown.appendChild(this.createCheckboxItem('enabled', 'Enable Guides', () => this.overlay.toggle()));
 
     dropdown.appendChild(this.createSeparator());
 
     // Safe areas section
     dropdown.appendChild(this.createSectionLabel('Safe Areas'));
     dropdown.appendChild(
-      this.createCheckboxItem('actionSafe', 'Action Safe (90%)', () =>
-        this.overlay.toggleActionSafe()
-      )
+      this.createCheckboxItem('actionSafe', 'Action Safe (90%)', () => this.overlay.toggleActionSafe()),
     );
     dropdown.appendChild(
-      this.createCheckboxItem('titleSafe', 'Title Safe (80%)', () =>
-        this.overlay.toggleTitleSafe()
-      )
+      this.createCheckboxItem('titleSafe', 'Title Safe (80%)', () => this.overlay.toggleTitleSafe()),
     );
 
     dropdown.appendChild(this.createSeparator());
@@ -151,14 +142,10 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     // Composition guides section
     dropdown.appendChild(this.createSectionLabel('Composition'));
     dropdown.appendChild(
-      this.createCheckboxItem('centerCrosshair', 'Center Crosshair', () =>
-        this.overlay.toggleCenterCrosshair()
-      )
+      this.createCheckboxItem('centerCrosshair', 'Center Crosshair', () => this.overlay.toggleCenterCrosshair()),
     );
     dropdown.appendChild(
-      this.createCheckboxItem('ruleOfThirds', 'Rule of Thirds', () =>
-        this.overlay.toggleRuleOfThirds()
-      )
+      this.createCheckboxItem('ruleOfThirds', 'Rule of Thirds', () => this.overlay.toggleRuleOfThirds()),
     );
 
     dropdown.appendChild(this.createSeparator());
@@ -193,11 +180,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     return sep;
   }
 
-  private createCheckboxItem(
-    key: keyof SafeAreasState,
-    label: string,
-    onClick: () => void
-  ): HTMLElement {
+  private createCheckboxItem(key: keyof SafeAreasState, label: string, onClick: () => void): HTMLElement {
     const item = document.createElement('div');
     item.className = `safe-areas-item-${key}`;
     item.dataset.testid = `safe-areas-item-${key}`;
@@ -366,9 +349,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     updateCheckbox('ruleOfThirds', state.ruleOfThirds);
 
     // Update aspect ratio select
-    const select = this.dropdown.querySelector(
-      '[data-testid="safe-areas-aspect-ratio"]'
-    ) as HTMLSelectElement;
+    const select = this.dropdown.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
     if (select) {
       select.value = state.aspectRatio || '';
     }
@@ -416,10 +397,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
   }
 
   private handleOutsideClick(e: MouseEvent): void {
-    if (
-      !this.dropdown.contains(e.target as Node) &&
-      !this.button.contains(e.target as Node)
-    ) {
+    if (!this.dropdown.contains(e.target as Node) && !this.button.contains(e.target as Node)) {
       this.closeDropdown();
     }
   }

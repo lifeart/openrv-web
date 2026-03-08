@@ -5,7 +5,7 @@
  * Persists to localStorage with debounced saves.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -292,7 +292,7 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
   // --- Presets ---
 
   applyPreset(presetId: LayoutPresetId): void {
-    const preset = LAYOUT_PRESETS.find(p => p.id === presetId);
+    const preset = LAYOUT_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
 
     this._layout.panels = {
@@ -355,7 +355,7 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
     const key = `${LAYOUT_STORAGE_KEY}-custom-${name.toLowerCase().replace(/\s+/g, '-')}`;
     try {
       localStorage.removeItem(key);
-      const list = this.getCustomLayoutNames().filter(n => n !== name);
+      const list = this.getCustomLayoutNames().filter((n) => n !== name);
       localStorage.setItem(LAYOUT_CUSTOM_LIST_KEY, JSON.stringify(list));
     } catch {
       // localStorage unavailable

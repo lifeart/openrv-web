@@ -89,7 +89,9 @@ function defaultConfig(overrides?: Partial<DCCBridgeConfig>): DCCBridgeConfig {
   };
 }
 
-async function createConnectedBridge(config?: Partial<DCCBridgeConfig>): Promise<{ bridge: DCCBridge; ws: MockWebSocket }> {
+async function createConnectedBridge(
+  config?: Partial<DCCBridgeConfig>,
+): Promise<{ bridge: DCCBridge; ws: MockWebSocket }> {
   let capturedWs: MockWebSocket | null = null;
   class WsMockClass {
     static CONNECTING = 0;
@@ -107,8 +109,8 @@ async function createConnectedBridge(config?: Partial<DCCBridgeConfig>): Promise
   bridge.connect();
 
   // Wait for mock connection to establish
-  await new Promise<void>(resolve => queueMicrotask(resolve));
-  await new Promise<void>(resolve => queueMicrotask(resolve));
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
 
   return { bridge, ws: capturedWs! };
 }
@@ -174,11 +176,13 @@ describe('DCCBridge', () => {
       const listener = vi.fn();
       bridge.on('loadMedia', listener);
 
-      ws.simulateMessage(JSON.stringify({
-        type: 'loadMedia',
-        path: '/path/to/movie.mov',
-        frame: 42,
-      }));
+      ws.simulateMessage(
+        JSON.stringify({
+          type: 'loadMedia',
+          path: '/path/to/movie.mov',
+          frame: 42,
+        }),
+      );
 
       expect(listener).toHaveBeenCalledTimes(1);
       const msg = listener.mock.calls[0][0] as LoadMediaMessage;
@@ -192,10 +196,12 @@ describe('DCCBridge', () => {
       const listener = vi.fn();
       bridge.on('syncFrame', listener);
 
-      ws.simulateMessage(JSON.stringify({
-        type: 'syncFrame',
-        frame: 100,
-      }));
+      ws.simulateMessage(
+        JSON.stringify({
+          type: 'syncFrame',
+          frame: 100,
+        }),
+      );
 
       expect(listener).toHaveBeenCalledTimes(1);
       const msg = listener.mock.calls[0][0] as SyncFrameMessage;
@@ -208,12 +214,14 @@ describe('DCCBridge', () => {
       const listener = vi.fn();
       bridge.on('syncColor', listener);
 
-      ws.simulateMessage(JSON.stringify({
-        type: 'syncColor',
-        exposure: 1.5,
-        gamma: 2.2,
-        temperature: 6500,
-      }));
+      ws.simulateMessage(
+        JSON.stringify({
+          type: 'syncColor',
+          exposure: 1.5,
+          gamma: 2.2,
+          temperature: 6500,
+        }),
+      );
 
       expect(listener).toHaveBeenCalledTimes(1);
       const msg = listener.mock.calls[0][0] as SyncColorMessage;
@@ -228,10 +236,12 @@ describe('DCCBridge', () => {
       const listener = vi.fn();
       bridge.on('ping', listener);
 
-      ws.simulateMessage(JSON.stringify({
-        type: 'ping',
-        id: 'ping-1',
-      }));
+      ws.simulateMessage(
+        JSON.stringify({
+          type: 'ping',
+          id: 'ping-1',
+        }),
+      );
 
       expect(listener).toHaveBeenCalledTimes(1);
       // Should have sent a pong

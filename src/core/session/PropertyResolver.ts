@@ -214,10 +214,7 @@ export function resolveGTOByAt(data: GTOData, address: string): GTOAtResolveResu
  * @param address - Property address string
  * @returns Matching results, or null if the address format is invalid
  */
-export function resolveProperty(
-  graph: Graph,
-  address: string,
-): HashResolveResult[] | AtResolveResult[] | null {
+export function resolveProperty(graph: Graph, address: string): HashResolveResult[] | AtResolveResult[] | null {
   if (address.startsWith('#')) {
     return resolveByHash(graph, address);
   }

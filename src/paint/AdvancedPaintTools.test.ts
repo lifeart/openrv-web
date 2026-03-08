@@ -38,9 +38,9 @@ function createGradientBuffer(width: number, height: number): PixelBuffer {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
-      data[i] = x / width;       // R increases with x
-      data[i + 1] = y / height;  // G increases with y
-      data[i + 2] = 0.5;         // B constant
+      data[i] = x / width; // R increases with x
+      data[i + 1] = y / height; // G increases with y
+      data[i + 2] = 0.5; // B constant
       data[i + 3] = 1.0;
     }
   }
@@ -59,12 +59,7 @@ function defaultBrush(overrides?: Partial<BrushParams>): BrushParams {
 
 function getPixel(buffer: PixelBuffer, x: number, y: number): [number, number, number, number] {
   const idx = (y * buffer.width + x) * 4;
-  return [
-    buffer.data[idx]!,
-    buffer.data[idx + 1]!,
-    buffer.data[idx + 2]!,
-    buffer.data[idx + 3]!,
-  ];
+  return [buffer.data[idx]!, buffer.data[idx + 1]!, buffer.data[idx + 2]!, buffer.data[idx + 3]!];
 }
 
 // ---------------------------------------------------------------------------

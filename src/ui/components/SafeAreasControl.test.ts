@@ -476,7 +476,7 @@ describe('SafeAreasControl', () => {
       // Open dropdown
       const btn = control.render().querySelector('button') as HTMLButtonElement;
       btn.click();
-      
+
       const dropdown = document.querySelector('.safe-areas-dropdown');
       expect(document.body.contains(dropdown)).toBe(true);
 

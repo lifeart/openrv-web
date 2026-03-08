@@ -7,7 +7,7 @@ import {
   applyNoiseReduction,
   isNoiseReductionActive,
   createNoiseReductionParams,
-  NoiseReductionParams,
+  type NoiseReductionParams,
   DEFAULT_NOISE_REDUCTION_PARAMS,
 } from './NoiseReduction';
 

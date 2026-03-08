@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { PreferencesManager, PREFERENCE_STORAGE_KEYS } from './PreferencesManager';
 
 function createStorage(seed?: Record<string, string>) {
-  let store: Record<string, string> = { ...(seed ?? {}) };
+  const store: Record<string, string> = { ...(seed ?? {}) };
   return {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
   };
 }
 
@@ -45,4 +49,3 @@ describe('PreferencesManager', () => {
     expect(manager.setString(PREFERENCE_STORAGE_KEYS.themeMode, 'dark')).toBe(false);
   });
 });
-

@@ -99,7 +99,9 @@ describe('PerspectiveCorrectionControl', () => {
   describe('events', () => {
     it('PC-005: emits perspectiveChanged on setParams', () => {
       let emitted = false;
-      control.on('perspectiveChanged', () => { emitted = true; });
+      control.on('perspectiveChanged', () => {
+        emitted = true;
+      });
       control.setParams({
         ...DEFAULT_PERSPECTIVE_PARAMS,
         enabled: true,
@@ -108,7 +110,9 @@ describe('PerspectiveCorrectionControl', () => {
       // setParams calls emitChange internally via updateButtonState
       // The event should NOT be emitted by setParams directly (only from user interaction)
       // Let's verify that reset does emit
-      control.on('perspectiveChanged', () => { emitted = true; });
+      control.on('perspectiveChanged', () => {
+        emitted = true;
+      });
       control.reset();
       expect(emitted).toBe(true);
     });

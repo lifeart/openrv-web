@@ -7,9 +7,7 @@
 
 import type { RepresentationLoader, RepresentationLoadResult } from './RepresentationLoader';
 import type { MediaRepresentation } from '../../types/representation';
-import {
-  createSequenceInfo,
-} from '../../../utils/media/SequenceLoader';
+import { createSequenceInfo } from '../../../utils/media/SequenceLoader';
 import { BaseSourceNode } from '../../../nodes/sources/BaseSourceNode';
 import type { SequenceInfo, SequenceFrame } from '../../../utils/media/SequenceLoader';
 import type { IPImage } from '../../image/Image';

@@ -74,12 +74,7 @@ describe('Comparison Annotations', () => {
 
     it('COMP-001f: shape annotation has version', () => {
       engine.annotationVersion = 'B';
-      const shape = engine.addShape(
-        15,
-        ShapeType.Rectangle,
-        { x: 0.1, y: 0.1 },
-        { x: 0.5, y: 0.5 }
-      );
+      const shape = engine.addShape(15, ShapeType.Rectangle, { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 });
 
       expect(shape.version).toBe('B');
     });
@@ -113,13 +108,13 @@ describe('Comparison Annotations', () => {
     it('COMP-002a: filtering by A shows only A annotations', () => {
       const visible = engine.getAnnotationsForFrame(10, 'A');
       expect(visible).toHaveLength(2);
-      visible.forEach(a => expect(a.version).toBe('A'));
+      visible.forEach((a) => expect(a.version).toBe('A'));
     });
 
     it('COMP-002b: filtering by B shows only B annotations', () => {
       const visible = engine.getAnnotationsForFrame(10, 'B');
       expect(visible).toHaveLength(1);
-      visible.forEach(a => expect(a.version).toBe('B'));
+      visible.forEach((a) => expect(a.version).toBe('B'));
     });
 
     it('COMP-002c: no filter shows all annotations', () => {
@@ -147,7 +142,7 @@ describe('Comparison Annotations', () => {
       // Ghost from A should show
       const ghostA = engine.getAnnotationsWithGhost(11, 'A');
       expect(ghostA.length).toBeGreaterThan(0);
-      ghostA.forEach(g => {
+      ghostA.forEach((g) => {
         expect(g.annotation.version).toBe('A');
         expect(g.opacity).toBeLessThan(1); // Ghost opacity
       });
@@ -155,7 +150,7 @@ describe('Comparison Annotations', () => {
       // Ghost from B should show
       const ghostB = engine.getAnnotationsWithGhost(11, 'B');
       expect(ghostB.length).toBeGreaterThan(0);
-      ghostB.forEach(g => {
+      ghostB.forEach((g) => {
         expect(g.annotation.version).toBe('B');
       });
     });
@@ -293,12 +288,12 @@ describe('Comparison Annotations', () => {
       // Filter A: pen + shape = 2
       const aAnns = engine.getAnnotationsForFrame(30, 'A');
       expect(aAnns).toHaveLength(2);
-      expect(aAnns.map(a => a.type).sort()).toEqual(['pen', 'shape']);
+      expect(aAnns.map((a) => a.type).sort()).toEqual(['pen', 'shape']);
 
       // Filter B: text + shape = 2
       const bAnns = engine.getAnnotationsForFrame(30, 'B');
       expect(bAnns).toHaveLength(2);
-      expect(bAnns.map(a => a.type).sort()).toEqual(['shape', 'text']);
+      expect(bAnns.map((a) => a.type).sort()).toEqual(['shape', 'text']);
     });
   });
 
@@ -391,12 +386,12 @@ describe('Comparison Annotations', () => {
       // Filter A: pen stroke (A) + shape (all) + polygon (A) = 3
       const aAnns = engine2.getAnnotationsForFrame(1, 'A');
       expect(aAnns).toHaveLength(3);
-      aAnns.forEach(a => expect(a.version === 'A' || a.version === 'all').toBe(true));
+      aAnns.forEach((a) => expect(a.version === 'A' || a.version === 'all').toBe(true));
 
       // Filter B: text (B) + shape (all) = 2
       const bAnns = engine2.getAnnotationsForFrame(1, 'B');
       expect(bAnns).toHaveLength(2);
-      bAnns.forEach(a => expect(a.version === 'B' || a.version === 'all').toBe(true));
+      bAnns.forEach((a) => expect(a.version === 'B' || a.version === 'all').toBe(true));
 
       // All annotations present without filter
       expect(engine2.getAnnotationsForFrame(1)).toHaveLength(4);

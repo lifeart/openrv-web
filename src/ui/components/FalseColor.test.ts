@@ -6,13 +6,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  FalseColor,
-  DEFAULT_FALSE_COLOR_STATE,
-} from './FalseColor';
+import { FalseColor, DEFAULT_FALSE_COLOR_STATE } from './FalseColor';
 
 // Helper to create test ImageData
-function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+function createTestImageData(
+  width: number,
+  height: number,
+  fill?: { r: number; g: number; b: number; a: number },
+): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   if (fill) {
     for (let i = 0; i < data.length; i += 4) {
@@ -76,9 +77,7 @@ describe('FalseColor', () => {
       falseColor.enable();
 
       expect(falseColor.isEnabled()).toBe(true);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('FC-011: disable turns off false color', () => {
@@ -89,9 +88,7 @@ describe('FalseColor', () => {
       falseColor.disable();
 
       expect(falseColor.isEnabled()).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('FC-005: toggle enables/disables (FEATURES.md FC-005)', () => {
@@ -137,9 +134,7 @@ describe('FalseColor', () => {
 
       falseColor.setPreset('red');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ preset: 'red' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ preset: 'red' }));
     });
 
     it('FC-022: setPreset is idempotent', () => {
@@ -169,7 +164,7 @@ describe('FalseColor', () => {
       expect(legend[0]).toHaveProperty('label');
 
       // Verify some expected labels exist
-      const labels = legend.map(l => l.label);
+      const labels = legend.map((l) => l.label);
       expect(labels).toContain('Black crush');
       expect(labels).toContain('Mid grey');
       expect(labels).toContain('Clipped');
@@ -183,7 +178,7 @@ describe('FalseColor', () => {
       const arriLegend = falseColor.getLegend();
 
       // Labels should be different for ARRI preset
-      const arriLabels = arriLegend.map(l => l.label);
+      const arriLabels = arriLegend.map((l) => l.label);
       expect(arriLabels).toContain('Black');
       expect(arriLabels).toContain('Middle grey');
     });
@@ -192,7 +187,7 @@ describe('FalseColor', () => {
       falseColor.setPreset('red');
       const redLegend = falseColor.getLegend();
 
-      const redLabels = redLegend.map(l => l.label);
+      const redLabels = redLegend.map((l) => l.label);
       expect(redLabels).toContain('Crushed');
       expect(redLabels).toContain('Proper exposure');
     });
@@ -208,7 +203,7 @@ describe('FalseColor', () => {
 
       // Black (lum 0) should map to purple (128, 0, 128)
       expect(imageData.data[0]).toBe(128); // R
-      expect(imageData.data[1]).toBe(0);   // G
+      expect(imageData.data[1]).toBe(0); // G
       expect(imageData.data[2]).toBe(128); // B
     });
 
@@ -234,8 +229,8 @@ describe('FalseColor', () => {
 
       // Bright should map to red (255, 0, 0)
       expect(imageData.data[0]).toBe(255); // R
-      expect(imageData.data[1]).toBe(0);   // G
-      expect(imageData.data[2]).toBe(0);   // B
+      expect(imageData.data[1]).toBe(0); // G
+      expect(imageData.data[2]).toBe(0); // B
     });
 
     it('FC-004: clipped areas clearly red/pink (FEATURES.md FC-004)', () => {
@@ -442,7 +437,10 @@ describe('FalseColor', () => {
       // LUT should have changed
       let changed = false;
       for (let i = 0; i < standardLUT.length; i++) {
-        if (standardLUT[i] !== arriLUT[i]) { changed = true; break; }
+        if (standardLUT[i] !== arriLUT[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
 
@@ -473,13 +471,13 @@ describe('FalseColor', () => {
       // Luminance 150 is in range 141-166 which maps to yellow
       expect(imageData.data[0]).toBe(255); // R
       expect(imageData.data[1]).toBe(255); // G
-      expect(imageData.data[2]).toBe(0);   // B
+      expect(imageData.data[2]).toBe(0); // B
 
       // Verify last pixel was also transformed
       const lastPixelIdx = (100 * 100 - 1) * 4;
-      expect(imageData.data[lastPixelIdx]).toBe(255);     // R
+      expect(imageData.data[lastPixelIdx]).toBe(255); // R
       expect(imageData.data[lastPixelIdx + 1]).toBe(255); // G
-      expect(imageData.data[lastPixelIdx + 2]).toBe(0);   // B
+      expect(imageData.data[lastPixelIdx + 2]).toBe(0); // B
     });
 
     it('FC-091: LUT produces consistent results for same luminance', () => {
@@ -493,8 +491,8 @@ describe('FalseColor', () => {
       falseColor.apply(imageData2);
 
       // Both should map to blue [0, 0, 255]
-      expect(imageData1.data[0]).toBe(0);   // R
-      expect(imageData1.data[1]).toBe(0);   // G
+      expect(imageData1.data[0]).toBe(0); // R
+      expect(imageData1.data[1]).toBe(0); // G
       expect(imageData1.data[2]).toBe(255); // B
 
       // LUT should produce identical results for same input

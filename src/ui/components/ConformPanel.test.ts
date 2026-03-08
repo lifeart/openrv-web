@@ -29,12 +29,12 @@ function createMockManager(
   return {
     _resolved: resolved,
 
-    getUnresolvedClips: vi.fn(() => clips.filter(c => !resolved.has(c.id))),
+    getUnresolvedClips: vi.fn(() => clips.filter((c) => !resolved.has(c.id))),
 
     getAvailableSources: vi.fn(() => sources),
 
     relinkClip: vi.fn((clipId: string, _sourceIndex: number) => {
-      const clip = clips.find(c => c.id === clipId);
+      const clip = clips.find((c) => c.id === clipId);
       if (!clip) return false;
       resolved.add(clipId);
       return true;
@@ -179,10 +179,7 @@ describe('ConformPanel', () => {
         makeClip({ id: 'clip-1', originalUrl: '/shots/shot_010.exr' }),
         makeClip({ id: 'clip-2', originalUrl: '/shots/shot_020.exr' }),
       ];
-      const sources = [
-        makeSource({ index: 0, name: 'shot_010.exr' }),
-        makeSource({ index: 1, name: 'shot_020.exr' }),
-      ];
+      const sources = [makeSource({ index: 0, name: 'shot_010.exr' }), makeSource({ index: 1, name: 'shot_020.exr' })];
       const manager = createMockManager(clips, sources);
 
       const count = batchRelinkByName(manager);
@@ -232,9 +229,7 @@ describe('ConformPanel', () => {
 
     it('appends trailing slash to folder URL', () => {
       const clips = [makeClip({ id: 'clip-1', originalUrl: '/old/shot_010_comp_v02.exr' })];
-      const sources = [
-        makeSource({ index: 0, name: 'shot_010_comp_v02.exr', url: '/new/shot_010_comp_v02.exr' }),
-      ];
+      const sources = [makeSource({ index: 0, name: 'shot_010_comp_v02.exr', url: '/new/shot_010_comp_v02.exr' })];
       const manager = createMockManager(clips, sources);
 
       const count = batchRelinkByFolder(manager, '/new');
@@ -290,10 +285,7 @@ describe('ConformPanel', () => {
     });
 
     it('CONFORM-009: shows suggestions dropdown for matching sources', () => {
-      setup(
-        [makeClip({ id: 'clip-1' })],
-        [makeSource({ index: 0, name: 'shot_010_comp_v02.exr' })],
-      );
+      setup([makeClip({ id: 'clip-1' })], [makeSource({ index: 0, name: 'shot_010_comp_v02.exr' })]);
 
       const select = container.querySelector('.conform-suggestions') as HTMLSelectElement;
       expect(select).not.toBeNull();
@@ -303,10 +295,7 @@ describe('ConformPanel', () => {
     });
 
     it('CONFORM-010: selecting a suggestion relinks the clip', () => {
-      setup(
-        [makeClip({ id: 'clip-1' })],
-        [makeSource({ index: 3, name: 'shot_010_comp_v02.exr' })],
-      );
+      setup([makeClip({ id: 'clip-1' })], [makeSource({ index: 3, name: 'shot_010_comp_v02.exr' })]);
 
       const select = container.querySelector('.conform-suggestions') as HTMLSelectElement;
       select.value = '3';
@@ -421,10 +410,7 @@ describe('ConformPanel', () => {
     });
 
     it('suggestions select has aria-label', () => {
-      setup(
-        [makeClip({ id: 'clip-1', name: 'Shot 010' })],
-        [makeSource({ index: 0, name: 'shot_010_comp_v02.exr' })],
-      );
+      setup([makeClip({ id: 'clip-1', name: 'Shot 010' })], [makeSource({ index: 0, name: 'shot_010_comp_v02.exr' })]);
 
       const select = container.querySelector('.conform-suggestions') as HTMLSelectElement;
       expect(select.getAttribute('aria-label')).toBe('Re-link source for Shot 010');

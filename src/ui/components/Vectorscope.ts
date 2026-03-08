@@ -10,14 +10,10 @@
  * - Draggable overlay display
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
 import { floatRGBAToImageData } from '../../utils/math';
-import {
-  createDraggableContainer,
-  createControlButton,
-  DraggableContainer,
-} from './shared/DraggableContainer';
+import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
@@ -98,13 +94,15 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     this.drawGraticule();
 
     // Listen for theme changes to redraw with new colors
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      if (this.lastFloatFrame || this.lastImageData) {
-        this.redrawLastFrame();
-      } else {
-        this.drawGraticule();
-      }
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        if (this.lastFloatFrame || this.lastImageData) {
+          this.redrawLastFrame();
+        } else {
+          this.drawGraticule();
+        }
+      }),
+    );
   }
 
   private createControls(): void {
@@ -159,10 +157,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(centerX, centerY);
-    ctx.lineTo(
-      centerX + Math.cos(SKIN_TONE_ANGLE) * radius,
-      centerY - Math.sin(SKIN_TONE_ANGLE) * radius
-    );
+    ctx.lineTo(centerX + Math.cos(SKIN_TONE_ANGLE) * radius, centerY - Math.sin(SKIN_TONE_ANGLE) * radius);
     ctx.stroke();
 
     // Draw color targets
@@ -207,7 +202,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     const { data, width, height } = imageData;
 
     // Sample pixels to find maximum chrominance distance
-    const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 5000)));
+    const sampleStep = Math.max(1, Math.floor(Math.sqrt((width * height) / 5000)));
     let maxDistance = 0;
 
     for (let srcY = 0; srcY < height; srcY += sampleStep) {
@@ -235,10 +230,10 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     // At zoom 2x: half range displayed (radius covers 0.25 distance)
     // At zoom 4x: quarter range displayed (radius covers 0.125 distance)
 
-    if (maxDistance < 0.10) {
+    if (maxDistance < 0.1) {
       // Very low saturation content - zoom in to 4x
       return 4;
-    } else if (maxDistance < 0.20) {
+    } else if (maxDistance < 0.2) {
       // Low saturation content - zoom to 2x
       return 2;
     } else {
@@ -295,7 +290,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     // Calculate effective zoom for auto mode (sample float data)
     if (this.zoomMode === 'auto') {
       // Quick auto-zoom from float data: sample to estimate max chrominance
-      const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 5000)));
+      const sampleStep = Math.max(1, Math.floor(Math.sqrt((width * height) / 5000)));
       let maxDistance = 0;
       for (let srcY = 0; srcY < height; srcY += sampleStep) {
         for (let srcX = 0; srcX < width; srcX += sampleStep) {
@@ -309,7 +304,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
           if (distance > maxDistance) maxDistance = distance;
         }
       }
-      this.effectiveZoom = maxDistance < 0.10 ? 4 : maxDistance < 0.20 ? 2 : 1;
+      this.effectiveZoom = maxDistance < 0.1 ? 4 : maxDistance < 0.2 ? 2 : 1;
       this.updateZoomButtonText();
     } else {
       this.effectiveZoom = this.zoomMode;
@@ -371,7 +366,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     const radius = GRATICULE_RADIUS * this.effectiveZoom * dpr;
 
     // Sample pixels and plot on vectorscope
-    const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 10000)));
+    const sampleStep = Math.max(1, Math.floor(Math.sqrt((width * height) / 10000)));
 
     // Use a data image for efficient point plotting (physical pixels)
     const plotData = ctx.getImageData(0, 0, physicalWidth, physicalHeight);

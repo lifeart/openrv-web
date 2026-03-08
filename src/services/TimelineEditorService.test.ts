@@ -139,9 +139,7 @@ describe('TimelineEditorService', () => {
     it('TLE-001: subscribes to timeline editor UI events', () => {
       service.bindEvents();
 
-      const calls = deps.timelineEditor.on.mock.calls.map(
-        (c: unknown[]) => c[0],
-      );
+      const calls = deps.timelineEditor.on.mock.calls.map((c: unknown[]) => c[0]);
       expect(calls).toContain('cutSelected');
       expect(calls).toContain('cutTrimmed');
       expect(calls).toContain('cutMoved');
@@ -153,9 +151,7 @@ describe('TimelineEditorService', () => {
     it('TLE-002: subscribes to session sync events', () => {
       service.bindEvents();
 
-      const calls = deps.session.on.mock.calls.map(
-        (c: unknown[]) => c[0],
-      );
+      const calls = deps.session.on.mock.calls.map((c: unknown[]) => c[0]);
       expect(calls).toContain('graphLoaded');
       expect(calls).toContain('durationChanged');
       expect(calls).toContain('sourceLoaded');
@@ -164,9 +160,7 @@ describe('TimelineEditorService', () => {
     it('TLE-003: subscribes to playlistManager clipsChanged event', () => {
       service.bindEvents();
 
-      const calls = deps.playlistManager.on.mock.calls.map(
-        (c: unknown[]) => c[0],
-      );
+      const calls = deps.playlistManager.on.mock.calls.map((c: unknown[]) => c[0]);
       expect(calls).toContain('clipsChanged');
     });
   });
@@ -185,9 +179,7 @@ describe('TimelineEditorService', () => {
     it('TLE-005: returns SequenceGroupNode when found in graph', () => {
       const seqNode = makeSequenceNode();
       deps.session.graph = { getAllNodes: () => [seqNode, { type: 'other' }] };
-      deps.isSequenceGroupNode.mockImplementation(
-        (node: unknown) => node === seqNode,
-      );
+      deps.isSequenceGroupNode.mockImplementation((node: unknown) => node === seqNode);
 
       expect(service.getSequenceGroupNodeFromGraph()).toBe(seqNode);
     });
@@ -207,13 +199,8 @@ describe('TimelineEditorService', () => {
     it('TLE-007: navigates to EDL entry frame when SequenceGroupNode exists', () => {
       const seqNode = makeSequenceNode();
       deps.session.graph = { getAllNodes: () => [seqNode] };
-      deps.isSequenceGroupNode.mockImplementation(
-        (node: unknown) => node === seqNode,
-      );
-      deps.timelineEditor.getEDL.mockReturnValue([
-        makeEDLEntry({ frame: 10 }),
-        makeEDLEntry({ frame: 40 }),
-      ]);
+      deps.isSequenceGroupNode.mockImplementation((node: unknown) => node === seqNode);
+      deps.timelineEditor.getEDL.mockReturnValue([makeEDLEntry({ frame: 10 }), makeEDLEntry({ frame: 40 })]);
 
       service.handleCutSelected(1);
 
@@ -231,9 +218,7 @@ describe('TimelineEditorService', () => {
 
     it('TLE-009: falls back to EDL entry source navigation when no playlist clip', () => {
       deps.playlistManager.getClipByIndex.mockReturnValue(undefined);
-      deps.timelineEditor.getEDL.mockReturnValue([
-        makeEDLEntry({ frame: 1, source: 1, inPoint: 5 }),
-      ]);
+      deps.timelineEditor.getEDL.mockReturnValue([makeEDLEntry({ frame: 1, source: 1, inPoint: 5 })]);
       deps.session.currentSourceIndex = 0;
 
       service.handleCutSelected(0);
@@ -312,10 +297,7 @@ describe('TimelineEditorService', () => {
     });
 
     it('TLE-016: filters out entries with non-finite source', () => {
-      const edl = [
-        makeEDLEntry({ source: NaN }),
-        makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 10 }),
-      ];
+      const edl = [makeEDLEntry({ source: NaN }), makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 10 })];
 
       const result = service.normalizeEDL(edl);
 
@@ -364,9 +346,7 @@ describe('TimelineEditorService', () => {
     it('TLE-021: loads from SequenceGroupNode when present', () => {
       const seqNode = makeSequenceNode();
       deps.session.graph = { getAllNodes: () => [seqNode] };
-      deps.isSequenceGroupNode.mockImplementation(
-        (node: unknown) => node === seqNode,
-      );
+      deps.isSequenceGroupNode.mockImplementation((node: unknown) => node === seqNode);
 
       service.syncFromGraph();
 
@@ -498,9 +478,7 @@ describe('TimelineEditorService', () => {
 
   describe('applyEdits', () => {
     it('TLE-031: delegates to applyEditsToPlaylist when no SequenceGroupNode', () => {
-      deps.timelineEditor.getEDL.mockReturnValue([
-        makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 10 }),
-      ]);
+      deps.timelineEditor.getEDL.mockReturnValue([makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 10 })]);
 
       service.applyEdits();
 
@@ -511,12 +489,8 @@ describe('TimelineEditorService', () => {
     it('TLE-032: updates SequenceGroupNode EDL when present', () => {
       const seqNode = makeSequenceNode();
       deps.session.graph = { getAllNodes: () => [seqNode] };
-      deps.isSequenceGroupNode.mockImplementation(
-        (node: unknown) => node === seqNode,
-      );
-      deps.timelineEditor.getEDL.mockReturnValue([
-        makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 30 }),
-      ]);
+      deps.isSequenceGroupNode.mockImplementation((node: unknown) => node === seqNode);
+      deps.timelineEditor.getEDL.mockReturnValue([makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 30 })]);
 
       service.applyEdits();
 
@@ -531,13 +505,9 @@ describe('TimelineEditorService', () => {
     it('TLE-033: clamps currentFrame to totalDuration when it exceeds it', () => {
       const seqNode = makeSequenceNode({ getTotalDurationFromEDL: vi.fn().mockReturnValue(20) });
       deps.session.graph = { getAllNodes: () => [seqNode] };
-      deps.isSequenceGroupNode.mockImplementation(
-        (node: unknown) => node === seqNode,
-      );
+      deps.isSequenceGroupNode.mockImplementation((node: unknown) => node === seqNode);
       deps.session.currentFrame = 50;
-      deps.timelineEditor.getEDL.mockReturnValue([
-        makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 20 }),
-      ]);
+      deps.timelineEditor.getEDL.mockReturnValue([makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 20 })]);
 
       service.applyEdits();
 
@@ -547,13 +517,9 @@ describe('TimelineEditorService', () => {
     it('TLE-034: does not navigate when currentFrame is within duration', () => {
       const seqNode = makeSequenceNode({ getTotalDurationFromEDL: vi.fn().mockReturnValue(100) });
       deps.session.graph = { getAllNodes: () => [seqNode] };
-      deps.isSequenceGroupNode.mockImplementation(
-        (node: unknown) => node === seqNode,
-      );
+      deps.isSequenceGroupNode.mockImplementation((node: unknown) => node === seqNode);
       deps.session.currentFrame = 50;
-      deps.timelineEditor.getEDL.mockReturnValue([
-        makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 100 }),
-      ]);
+      deps.timelineEditor.getEDL.mockReturnValue([makeEDLEntry({ frame: 1, source: 0, inPoint: 1, outPoint: 100 })]);
 
       service.applyEdits();
 

@@ -9,7 +9,7 @@
  * - Integration with Web Audio API for native resampling
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { clamp } from '../utils/math';
 import type { ManagerBase } from '../core/ManagerBase';
 import { Logger } from '../utils/Logger';
@@ -114,11 +114,16 @@ const WAVEFORM_PEAKS_PER_SECOND = 100;
  */
 export function detectChannelLayout(channelCount: number): ChannelLayout {
   switch (channelCount) {
-    case 1: return 'mono';
-    case 2: return 'stereo';
-    case 6: return '5.1';
-    case 8: return '7.1';
-    default: return channelCount <= 2 ? 'stereo' : '5.1';
+    case 1:
+      return 'mono';
+    case 2:
+      return 'stereo';
+    case 6:
+      return '5.1';
+    case 8:
+      return '7.1';
+    default:
+      return channelCount <= 2 ? 'stereo' : '5.1';
   }
 }
 
@@ -253,10 +258,7 @@ export function downmixToStereo(
       return [new Float32Array(mono), new Float32Array(mono)];
     }
     case 'stereo':
-      return [
-        new Float32Array(buffer.getChannelData(0)),
-        new Float32Array(buffer.getChannelData(1)),
-      ];
+      return [new Float32Array(buffer.getChannelData(0)), new Float32Array(buffer.getChannelData(1))];
     case '5.1':
       return downmix51ToStereo(buffer, coefficients);
     case '7.1':
@@ -349,9 +351,15 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  get masterVolume(): number { return this._masterVolume; }
-  get masterMuted(): boolean { return this._masterMuted; }
-  get isPlaying(): boolean { return this._isPlaying; }
+  get masterVolume(): number {
+    return this._masterVolume;
+  }
+  get masterMuted(): boolean {
+    return this._masterMuted;
+  }
+  get isPlaying(): boolean {
+    return this._isPlaying;
+  }
 
   /**
    * Initialize the audio context and master bus.
@@ -396,7 +404,9 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
     }
 
     if (this.audioContext) {
-      this.audioContext.close().catch((err) => { log.debug('AudioContext close during dispose:', err); });
+      this.audioContext.close().catch((err) => {
+        log.debug('AudioContext close during dispose:', err);
+      });
       this.audioContext = null;
     }
   }
@@ -614,13 +624,7 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
     if (!track || !track.buffer) return null;
 
     const [left, right] = downmixToStereo(track.buffer, this.downmixCoefficients);
-    return generateWaveformData(
-      left,
-      right,
-      track.buffer.sampleRate,
-      track.buffer.duration,
-      peaksPerSecond,
-    );
+    return generateWaveformData(left, right, track.buffer.sampleRate, track.buffer.duration, peaksPerSecond);
   }
 
   /**
@@ -695,7 +699,9 @@ export class AudioMixer extends EventEmitter<AudioMixerEvents> implements Manage
       try {
         track.sourceNode.stop();
         track.sourceNode.disconnect();
-      } catch { /* ignore already stopped */ }
+      } catch {
+        /* ignore already stopped */
+      }
       track.sourceNode = null;
     }
   }

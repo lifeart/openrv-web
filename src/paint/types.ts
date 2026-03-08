@@ -2,7 +2,7 @@
 
 export enum BrushType {
   Gaussian = 0, // Soft edges, anti-aliased
-  Circle = 1,   // Hard edges, sharp
+  Circle = 1, // Hard edges, sharp
 }
 
 export enum LineJoin {
@@ -77,7 +77,7 @@ export interface PenStroke {
   splat: boolean;
   mode: StrokeMode;
   startFrame: number; // -1 = from current frame
-  duration: number;   // -1 = all subsequent frames
+  duration: number; // -1 = all subsequent frames
 }
 
 export interface TextAnnotation {
@@ -117,7 +117,7 @@ export interface ShapeAnnotation {
   shapeType: ShapeType;
   // Bounding points (normalized 0-1)
   startPoint: Point; // First corner or start of line
-  endPoint: Point;   // Opposite corner or end of line
+  endPoint: Point; // Opposite corner or end of line
   // Styling
   strokeColor: [number, number, number, number]; // RGBA 0-1
   strokeWidth: number;
@@ -202,12 +202,7 @@ export function adjustSaturation(
   const [r, g, b, a] = color;
   // Luminance-weighted desaturation (Rec. 709)
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return [
-    luma + (r - luma) * factor,
-    luma + (g - luma) * factor,
-    luma + (b - luma) * factor,
-    a,
-  ];
+  return [luma + (r - luma) * factor, luma + (g - luma) * factor, luma + (b - luma) * factor, a];
 }
 
 // Default values

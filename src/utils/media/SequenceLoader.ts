@@ -4,16 +4,16 @@
  */
 
 export interface SequenceFrame {
-  index: number;      // 0-based frame index
+  index: number; // 0-based frame index
   frameNumber: number; // Original frame number from filename
   file: File;
-  url?: string;       // Object URL when loaded
+  url?: string; // Object URL when loaded
   image?: ImageBitmap;
 }
 
 export interface SequenceInfo {
   name: string;
-  pattern: string;    // Detected pattern like "frame_####.png"
+  pattern: string; // Detected pattern like "frame_####.png"
   frames: SequenceFrame[];
   startFrame: number;
   endFrame: number;
@@ -25,20 +25,31 @@ export interface SequenceInfo {
 
 // Common frame number patterns
 const FRAME_PATTERNS = [
-  /(\d+)(?=\.[^.]+$)/,           // Any numbers before extension: file123.png
-  /[._-](\d+)(?=\.[^.]+$)/,      // Separator then numbers: file_001.png, file-001.png, file.001.png
-  /(\d{3,})(?=\.[^.]+$)/,        // 3+ digit numbers: file0001.png
+  /(\d+)(?=\.[^.]+$)/, // Any numbers before extension: file123.png
+  /[._-](\d+)(?=\.[^.]+$)/, // Separator then numbers: file_001.png, file-001.png, file.001.png
+  /(\d{3,})(?=\.[^.]+$)/, // 3+ digit numbers: file0001.png
 ];
 
 const IMAGE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'exr', 'dpx', 'cin', 'cineon'
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+  'gif',
+  'bmp',
+  'tiff',
+  'tif',
+  'exr',
+  'dpx',
+  'cin',
+  'cineon',
 ]);
 
 /**
  * Filter files to only include supported image formats
  */
 export function filterImageFiles(files: File[]): File[] {
-  return files.filter(file => {
+  return files.filter((file) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     return IMAGE_EXTENSIONS.has(ext);
   });
@@ -140,9 +151,9 @@ export async function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal)
     // We explicitly disable colorspace conversion and premultiplied alpha so we get raw pixels.
     const bitmap = await createImageBitmap(frame.file, {
       premultiplyAlpha: 'none',
-      colorSpaceConversion: 'none'
+      colorSpaceConversion: 'none',
     });
-    
+
     if (signal?.aborted) {
       bitmap.close();
       throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
@@ -169,7 +180,7 @@ export async function preloadFrames(
   frames: SequenceFrame[],
   currentIndex: number,
   windowSize: number = 5,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) {
     throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
@@ -193,11 +204,7 @@ export async function preloadFrames(
 /**
  * Release memory for frames outside the cache window
  */
-export function releaseDistantFrames(
-  frames: SequenceFrame[],
-  currentIndex: number,
-  keepWindow: number = 10
-): void {
+export function releaseDistantFrames(frames: SequenceFrame[], currentIndex: number, keepWindow: number = 10): void {
   for (let i = 0; i < frames.length; i++) {
     const distance = Math.abs(i - currentIndex);
     if (distance > keepWindow) {
@@ -219,10 +226,7 @@ export function releaseDistantFrames(
 /**
  * Create a SequenceInfo from a list of files
  */
-export async function createSequenceInfo(
-  files: File[],
-  fps: number = 24
-): Promise<SequenceInfo | null> {
+export async function createSequenceInfo(files: File[], fps: number = 24): Promise<SequenceInfo | null> {
   // Filter to image files only
   const imageFiles = filterImageFiles(files);
   if (imageFiles.length === 0) return null;
@@ -232,7 +236,7 @@ export async function createSequenceInfo(
   if (frames.length === 0) return null;
 
   // Detect pattern
-  const pattern = detectPattern(imageFiles.map(f => f.name)) || 'unknown';
+  const pattern = detectPattern(imageFiles.map((f) => f.name)) || 'unknown';
 
   // Load first frame to get dimensions
   const firstFrame = frames[0]!;
@@ -240,9 +244,7 @@ export async function createSequenceInfo(
 
   // Get base name (remove frame numbers and extension)
   const firstFile = frames[0]!.file;
-  const baseName = firstFile.name
-    .replace(/[._-]?\d+(?=\.[^.]+$)/, '')
-    .replace(/\.[^.]+$/, '');
+  const baseName = firstFile.name.replace(/[._-]?\d+(?=\.[^.]+$)/, '').replace(/\.[^.]+$/, '');
 
   // Detect missing frames in the sequence
   const missingFrames = detectMissingFrames(frames);
@@ -266,7 +268,7 @@ export async function createSequenceInfo(
 export function detectMissingFrames(frames: SequenceFrame[]): number[] {
   if (frames.length < 2) return [];
 
-  const frameNumbers = frames.map(f => f.frameNumber).sort((a, b) => a - b);
+  const frameNumbers = frames.map((f) => f.frameNumber).sort((a, b) => a - b);
   const missing: number[] = [];
   const presentSet = new Set(frameNumbers);
 
@@ -294,7 +296,7 @@ export function isFrameMissing(sequenceInfo: SequenceInfo, frameNumber: number):
  * Returns -1 if the frame is missing
  */
 export function getFrameIndexByNumber(sequenceInfo: SequenceInfo, frameNumber: number): number {
-  const frame = sequenceInfo.frames.find(f => f.frameNumber === frameNumber);
+  const frame = sequenceInfo.frames.find((f) => f.frameNumber === frameNumber);
   return frame ? frame.index : -1;
 }
 
@@ -327,19 +329,19 @@ export type PatternNotation = 'hash' | 'printf' | 'at';
  * Parsed pattern information
  */
 export interface ParsedPattern {
-  prefix: string;      // Everything before the frame number placeholder
-  suffix: string;      // Everything after (including extension)
-  padding: number;     // Number of digits (0 = no padding)
+  prefix: string; // Everything before the frame number placeholder
+  suffix: string; // Everything after (including extension)
+  padding: number; // Number of digits (0 = no padding)
   notation: PatternNotation;
-  extension: string;   // File extension without dot
+  extension: string; // File extension without dot
 }
 
 /**
  * Pattern matching regex for different notations
  */
-const PRINTF_PATTERN = /%(\d*)d/;          // %d, %04d, %4d
-const HASH_PATTERN = /(#+)/;               // #, ##, ####
-const AT_PATTERN = /(@+)/;                 // @, @@, @@@@
+const PRINTF_PATTERN = /%(\d*)d/; // %d, %04d, %4d
+const HASH_PATTERN = /(#+)/; // #, ##, ####
+const AT_PATTERN = /(@+)/; // @, @@, @@@@
 
 /**
  * Parse a printf-style pattern notation (e.g., "frame_%04d.png")
@@ -422,18 +424,14 @@ export function parseAtPattern(pattern: string): ParsedPattern | null {
  * Tries printf, hash, then at-sign notation
  */
 export function parsePatternNotation(pattern: string): ParsedPattern | null {
-  return parsePrintfPattern(pattern) ||
-         parseHashPattern(pattern) ||
-         parseAtPattern(pattern);
+  return parsePrintfPattern(pattern) || parseHashPattern(pattern) || parseAtPattern(pattern);
 }
 
 /**
  * Generate a filename from a parsed pattern and frame number
  */
 export function generateFilename(parsed: ParsedPattern, frameNumber: number): string {
-  const numStr = parsed.padding > 0
-    ? String(frameNumber).padStart(parsed.padding, '0')
-    : String(frameNumber);
+  const numStr = parsed.padding > 0 ? String(frameNumber).padStart(parsed.padding, '0') : String(frameNumber);
   return parsed.prefix + numStr + parsed.suffix;
 }
 
@@ -568,7 +566,7 @@ export function findMatchingFiles(files: File[], pattern: InferredSequencePatter
   // Sort by frame number
   matches.sort((a, b) => a.frameNumber - b.frameNumber);
 
-  return matches.map(m => m.file);
+  return matches.map((m) => m.file);
 }
 
 /**
@@ -582,7 +580,7 @@ export function findMatchingFiles(files: File[], pattern: InferredSequencePatter
 export async function inferSequenceFromSingleFile(
   singleFile: File,
   availableFiles: File[],
-  fps: number = 24
+  fps: number = 24,
 ): Promise<SequenceInfo | null> {
   // Extract pattern from the single file
   const pattern = extractPatternFromFilename(singleFile.name);
@@ -642,10 +640,7 @@ export function discoverSequences(files: File[]): Map<string, File[]> {
  * If multiple sequences are found, returns the one with the most frames
  * If the target file is provided, prefer sequences containing that file
  */
-export function getBestSequence(
-  files: File[],
-  targetFile?: File
-): File[] | null {
+export function getBestSequence(files: File[], targetFile?: File): File[] | null {
   const sequences = discoverSequences(files);
 
   if (sequences.size === 0) return null;
@@ -653,7 +648,7 @@ export function getBestSequence(
   // If target file is specified, find a sequence containing it
   if (targetFile) {
     for (const [, seqFiles] of sequences) {
-      if (seqFiles.some(f => f.name === targetFile.name)) {
+      if (seqFiles.some((f) => f.name === targetFile.name)) {
         return seqFiles;
       }
     }

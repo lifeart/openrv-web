@@ -6,9 +6,9 @@
  * and general user preferences.
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import {
-  PreferencesManager as StoragePreferencesManager,
+  type PreferencesManager as StoragePreferencesManager,
   getPreferencesManager,
   PREFERENCE_STORAGE_KEYS,
 } from '../utils/preferences/PreferencesManager';
@@ -487,4 +487,3 @@ export function getCorePreferencesManager(): PreferencesManager {
 export function resetCorePreferencesManagerForTests(): void {
   sharedCorePreferencesManager = null;
 }
-

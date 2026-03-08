@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  ColorControls,
-  DEFAULT_COLOR_ADJUSTMENTS,
-} from './ColorControls';
+import { ColorControls, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import type { LUT3D } from '../../color/ColorProcessingFacade';
 
 describe('ColorControls', () => {
@@ -307,7 +304,7 @@ describe('ColorControls', () => {
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
         domainMin: [0, 0, 0] as [number, number, number],
-        domainMax: [1, 1, 1] as [number, number, number]
+        domainMax: [1, 1, 1] as [number, number, number],
       };
       controls.setLUT(mockLUT);
 
@@ -320,7 +317,7 @@ describe('ColorControls', () => {
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
         domainMin: [0, 0, 0] as [number, number, number],
-        domainMax: [1, 1, 1] as [number, number, number]
+        domainMax: [1, 1, 1] as [number, number, number],
       };
       controls.setLUT(mockLUT);
       expect(controls.getLUT()).not.toBeNull();
@@ -336,7 +333,7 @@ describe('ColorControls', () => {
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
         domainMin: [0, 0, 0] as [number, number, number],
-        domainMax: [1, 1, 1] as [number, number, number]
+        domainMax: [1, 1, 1] as [number, number, number],
       };
       controls.setLUT(mockLUT);
       controls.on('lutLoaded', handler);
@@ -373,8 +370,8 @@ describe('ColorControls', () => {
       controls.on('adjustmentsChanged', handler);
 
       // Access the private throttle method to test its behavior directly
-      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
-      const adjustments = (controls as unknown as { adjustments: Record<string, number> });
+      const throttle = controls as unknown as { throttledEmitAdjustments: () => void };
+      const adjustments = controls as unknown as { adjustments: Record<string, number> };
 
       // First call emits immediately
       adjustments.adjustments.exposure = 1.0;
@@ -403,8 +400,8 @@ describe('ColorControls', () => {
       const handler = vi.fn();
       controls.on('adjustmentsChanged', handler);
 
-      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
-      const adjustments = (controls as unknown as { adjustments: Record<string, number> });
+      const throttle = controls as unknown as { throttledEmitAdjustments: () => void };
+      const adjustments = controls as unknown as { adjustments: Record<string, number> };
 
       // First burst
       adjustments.adjustments.exposure = 1.0;
@@ -426,7 +423,7 @@ describe('ColorControls', () => {
       const handler = vi.fn();
       controls.on('adjustmentsChanged', handler);
 
-      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
+      const throttle = controls as unknown as { throttledEmitAdjustments: () => void };
 
       // Single call - emits immediately
       throttle.throttledEmitAdjustments();
@@ -464,7 +461,7 @@ describe('ColorControls', () => {
     });
 
     it('COL-042: dispose cleans up throttle timer without errors', () => {
-      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
+      const throttle = controls as unknown as { throttledEmitAdjustments: () => void };
 
       // Start a throttle timer
       throttle.throttledEmitAdjustments();
@@ -478,11 +475,11 @@ describe('ColorControls', () => {
     });
 
     it('COL-043: throttle internal state is cleaned up on dispose', () => {
-      const internals = (controls as unknown as {
+      const internals = controls as unknown as {
         throttledEmitAdjustments: () => void;
         _inputThrottleTimer: ReturnType<typeof setTimeout> | null;
         _pendingAdjustments: unknown;
-      });
+      };
 
       internals.throttledEmitAdjustments();
       internals.throttledEmitAdjustments();
@@ -563,7 +560,7 @@ describe('ColorControls', () => {
 
       // Find the click handler that was added by looking for the last call to addEventListener with 'click'
       // Note: This assumes no other active global click listeners are added during test execution
-      const clickCalls = addSpy.mock.calls.filter(call => call[0] === 'click');
+      const clickCalls = addSpy.mock.calls.filter((call) => call[0] === 'click');
       const lastClickCall = clickCalls[clickCalls.length - 1]; // The one added by constructor
 
       expect(lastClickCall).toBeDefined();

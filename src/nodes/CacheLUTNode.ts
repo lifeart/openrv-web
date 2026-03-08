@@ -11,7 +11,7 @@
 
 import { IPNode } from './base/IPNode';
 import { RegisterNode } from './base/NodeFactory';
-import { IPImage } from '../core/image/Image';
+import { type IPImage } from '../core/image/Image';
 import type { EvalContext } from '../core/graph/Graph';
 
 /**
@@ -83,8 +83,11 @@ function applyGamma(value: number, gamma: number): number {
  * Operates on individual R, G, B channels.
  */
 function applyTemperatureTint(
-  r: number, g: number, b: number,
-  temperature: number, tint: number
+  r: number,
+  g: number,
+  b: number,
+  temperature: number,
+  tint: number,
 ): [number, number, number] {
   // Temperature: positive = warmer (more red/yellow), negative = cooler (more blue)
   const tempScale = temperature * 0.1;
@@ -101,10 +104,7 @@ function applyTemperatureTint(
 /**
  * Apply saturation adjustment around luminance.
  */
-function applySaturation(
-  r: number, g: number, b: number,
-  saturation: number
-): [number, number, number] {
+function applySaturation(r: number, g: number, b: number, saturation: number): [number, number, number] {
   // Rec. 709 luminance weights
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   r = luma + (r - luma) * saturation;
@@ -117,8 +117,10 @@ function applySaturation(
  * Apply the full color transform pipeline to an RGB triplet.
  */
 export function applyColorTransform(
-  r: number, g: number, b: number,
-  params: ColorTransformParams
+  r: number,
+  g: number,
+  b: number,
+  params: ColorTransformParams,
 ): [number, number, number] {
   // 1. Exposure
   r = applyExposure(r, params.exposure);
@@ -186,10 +188,7 @@ export function generateLUT3D(size: number, params: ColorTransformParams): Cache
 /**
  * Look up and trilinearly interpolate a value from a 3D LUT.
  */
-export function lookupLUT3D(
-  r: number, g: number, b: number,
-  lut: CachedLUT3D
-): [number, number, number] {
+export function lookupLUT3D(r: number, g: number, b: number, lut: CachedLUT3D): [number, number, number] {
   const { size, data } = lut;
   const maxIdx = size - 1;
 
@@ -363,9 +362,16 @@ export class CacheLUTNode extends IPNode {
     // Normalize factor based on data type
     let maxVal: number;
     switch (output.dataType) {
-      case 'uint8': maxVal = 255; break;
-      case 'uint16': maxVal = 65535; break;
-      case 'float32': default: maxVal = 1; break;
+      case 'uint8':
+        maxVal = 255;
+        break;
+      case 'uint16':
+        maxVal = 65535;
+        break;
+      case 'float32':
+      default:
+        maxVal = 1;
+        break;
     }
 
     for (let i = 0; i < pixelCount; i++) {

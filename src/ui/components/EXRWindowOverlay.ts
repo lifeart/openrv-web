@@ -217,13 +217,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
       ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
 
       if (this.state.showLabels) {
-        this.drawLabel(
-          ctx,
-          'Display Window',
-          rect.x + 4,
-          rect.y + 14,
-          this.state.displayWindowColor,
-        );
+        this.drawLabel(ctx, 'Display Window', rect.x + 4, rect.y + 14, this.state.displayWindowColor);
       }
     }
 
@@ -234,26 +228,14 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
       ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
 
       if (this.state.showLabels) {
-        this.drawLabel(
-          ctx,
-          'Data Window',
-          rect.x + 4,
-          rect.y + rect.h - 6,
-          this.state.dataWindowColor,
-        );
+        this.drawLabel(ctx, 'Data Window', rect.x + 4, rect.y + rect.h - 6, this.state.dataWindowColor);
       }
     }
 
     ctx.restore();
   }
 
-  private drawLabel(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    x: number,
-    y: number,
-    color: string,
-  ): void {
+  private drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string): void {
     ctx.save();
     ctx.setLineDash([]);
     ctx.font = '11px monospace';
@@ -264,12 +246,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
     const metrics = ctx.measureText(text);
     const padding = 3;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(
-      x - padding,
-      y - 11 - padding,
-      metrics.width + padding * 2,
-      14 + padding * 2,
-    );
+    ctx.fillRect(x - padding, y - 11 - padding, metrics.width + padding * 2, 14 + padding * 2);
 
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);

@@ -41,12 +41,7 @@ function buildOTIOJson(overrides: Record<string, unknown> = {}): string {
 }
 
 /** Helper to build a clip object */
-function buildClip(
-  name: string,
-  startFrame: number,
-  duration: number,
-  targetUrl?: string
-) {
+function buildClip(name: string, startFrame: number, duration: number, targetUrl?: string) {
   const clip: Record<string, unknown> = {
     OTIO_SCHEMA: 'Clip.1',
     name,
@@ -100,7 +95,7 @@ function buildTransition(
   inOffset: number,
   outOffset: number,
   rate = 24,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ) {
   const t: Record<string, unknown> = {
     OTIO_SCHEMA: 'Transition.1',
@@ -130,7 +125,7 @@ function buildMultiTrackOTIOJson(
     kind: string;
     children: unknown[];
   }>,
-  overrides: Record<string, unknown> = {}
+  overrides: Record<string, unknown> = {},
 ): string {
   const base = {
     OTIO_SCHEMA: 'Timeline.1',
@@ -321,10 +316,7 @@ describe('OTIOParser', () => {
               OTIO_SCHEMA: 'Track.1',
               name: 'Video 1',
               kind: 'Video',
-              children: [
-                buildClip('shot_01', 0, 48),
-                buildClip('shot_02', 10, 72),
-              ],
+              children: [buildClip('shot_01', 0, 48), buildClip('shot_02', 10, 72)],
             },
           ],
         },
@@ -414,11 +406,7 @@ describe('OTIOParser', () => {
               OTIO_SCHEMA: 'Track.1',
               name: 'Video 1',
               kind: 'Video',
-              children: [
-                buildClip('shot_01', 0, 24),
-                buildGap(12),
-                buildClip('shot_02', 0, 24),
-              ],
+              children: [buildClip('shot_01', 0, 24), buildGap(12), buildClip('shot_02', 0, 24)],
             },
           ],
         },
@@ -625,8 +613,8 @@ describe('OTIOParser', () => {
           JSON.stringify({
             OTIO_SCHEMA: 'Clip.1',
             name: 'not a timeline',
-          })
-        )
+          }),
+        ),
       ).toBeNull();
     });
 
@@ -636,8 +624,8 @@ describe('OTIOParser', () => {
           JSON.stringify({
             OTIO_SCHEMA: 'Timeline.1',
             name: 'No tracks',
-          })
-        )
+          }),
+        ),
       ).toBeNull();
     });
 
@@ -651,8 +639,8 @@ describe('OTIOParser', () => {
               OTIO_SCHEMA: 'Track.1',
               children: [],
             },
-          })
-        )
+          }),
+        ),
       ).toBeNull();
     });
 
@@ -763,15 +751,11 @@ describe('parseOTIOMultiTrack', () => {
     });
 
     it('OTIO-M002: returns null for wrong schema', () => {
-      expect(
-        parseOTIOMultiTrack(JSON.stringify({ OTIO_SCHEMA: 'Clip.1', name: 'x' }))
-      ).toBeNull();
+      expect(parseOTIOMultiTrack(JSON.stringify({ OTIO_SCHEMA: 'Clip.1', name: 'x' }))).toBeNull();
     });
 
     it('OTIO-M003: returns null when tracks stack is missing', () => {
-      expect(
-        parseOTIOMultiTrack(JSON.stringify({ OTIO_SCHEMA: 'Timeline.1', name: 'x' }))
-      ).toBeNull();
+      expect(parseOTIOMultiTrack(JSON.stringify({ OTIO_SCHEMA: 'Timeline.1', name: 'x' }))).toBeNull();
     });
   });
 
@@ -781,10 +765,7 @@ describe('parseOTIOMultiTrack', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildClip('shot_01', 0, 48, '/media/shot_01.exr'),
-            buildClip('shot_02', 10, 72),
-          ],
+          children: [buildClip('shot_01', 0, 48, '/media/shot_01.exr'), buildClip('shot_02', 10, 72)],
         },
       ]);
 
@@ -898,10 +879,7 @@ describe('parseOTIOMultiTrack', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildGap(10),
-            buildClip('v1_clip', 0, 24),
-          ],
+          children: [buildGap(10), buildClip('v1_clip', 0, 24)],
         },
         {
           name: 'Video 2',
@@ -1138,10 +1116,7 @@ describe('parseOTIOMultiTrack', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildTransition('OrphanDiss', 'SMPTE_Dissolve', 6, 6),
-            buildClip('shot_01', 0, 48),
-          ],
+          children: [buildTransition('OrphanDiss', 'SMPTE_Dissolve', 6, 6), buildClip('shot_01', 0, 48)],
         },
       ]);
 
@@ -1156,10 +1131,7 @@ describe('parseOTIOMultiTrack', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildClip('shot_01', 0, 48),
-            buildTransition('TrailingDiss', 'SMPTE_Dissolve', 6, 6),
-          ],
+          children: [buildClip('shot_01', 0, 48), buildTransition('TrailingDiss', 'SMPTE_Dissolve', 6, 6)],
         },
       ]);
 
@@ -1259,7 +1231,7 @@ describe('parseOTIOMultiTrack', () => {
             value: 0,
             rate: 30,
           },
-        }
+        },
       );
 
       const result = parseOTIOMultiTrack(json)!;
@@ -1275,7 +1247,7 @@ describe('parseOTIOMultiTrack', () => {
             children: [buildClip('clip', 0, 48)],
           },
         ],
-        { global_start_time: undefined }
+        { global_start_time: undefined },
       );
 
       const result = parseOTIOMultiTrack(json)!;

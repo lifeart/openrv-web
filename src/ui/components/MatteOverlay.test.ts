@@ -99,9 +99,7 @@ describe('MatteOverlay', () => {
       overlay.setSettings({ show: true });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ show: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ show: true }));
     });
 
     it('MATTE-023: settingsChanged event data is a copy', () => {
@@ -151,9 +149,7 @@ describe('MatteOverlay', () => {
 
       overlay.enable();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ show: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ show: true }));
     });
 
     it('MATTE-034: disable emits settingsChanged', () => {
@@ -163,9 +159,7 @@ describe('MatteOverlay', () => {
 
       overlay.disable();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ show: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ show: false }));
     });
   });
 
@@ -199,9 +193,7 @@ describe('MatteOverlay', () => {
 
       overlay.setAspect(1.85);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ aspect: 1.85 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ aspect: 1.85 }));
     });
   });
 
@@ -230,9 +222,7 @@ describe('MatteOverlay', () => {
 
       overlay.setOpacity(0.5);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ opacity: 0.5 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ opacity: 0.5 }));
     });
   });
 
@@ -251,9 +241,7 @@ describe('MatteOverlay', () => {
 
       overlay.setCenterPoint(1, -1);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ centerPoint: [1, -1] })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ centerPoint: [1, -1] }));
     });
   });
 
@@ -567,7 +555,7 @@ describe('MatteOverlay', () => {
       expect(clearRectFn).toHaveBeenCalled();
       // Find the call with canvas dimensions (800, 600 from setViewerDimensions)
       const matchingCall = clearRectFn.mock.calls.find(
-        (call: number[]) => call[0] === 0 && call[1] === 0 && call[2] === 800 && call[3] === 600
+        (call: number[]) => call[0] === 0 && call[1] === 0 && call[2] === 800 && call[3] === 600,
       );
       expect(matchingCall).toBeDefined();
     });

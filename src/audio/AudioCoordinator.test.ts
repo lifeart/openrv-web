@@ -6,10 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioCoordinator, type AudioCoordinatorCallbacks } from './AudioCoordinator';
-import {
-  createMockAudioContext,
-  createMockSourceNode as createMockSourceNodeFactory,
-} from '../../test/mocks';
+import { createMockAudioContext, type createMockSourceNode as createMockSourceNodeFactory } from '../../test/mocks';
 
 describe('AudioCoordinator', () => {
   let coordinator: AudioCoordinator;
@@ -28,11 +25,19 @@ describe('AudioCoordinator', () => {
     mockAudioContext = audioMock.context;
     createdSourceNodes = audioMock.createdSourceNodes;
 
-    vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
-    }));
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function () {
+        return mockAudioContext;
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      }),
+    );
 
     coordinator = new AudioCoordinator();
     callbacks = { onAudioPathChanged: vi.fn() };
@@ -594,9 +599,9 @@ describe('AudioCoordinator', () => {
       expect(coordinator.isWebAudioActive).toBe(true);
 
       // Rapid speed changes
-      coordinator.onSpeedChanged(2);   // should deactivate
+      coordinator.onSpeedChanged(2); // should deactivate
       coordinator.onSpeedChanged(0.5); // should deactivate (!=1 && preservesPitch)
-      coordinator.onSpeedChanged(1);   // should re-activate
+      coordinator.onSpeedChanged(1); // should re-activate
 
       expect(coordinator.isWebAudioActive).toBe(true);
     });
@@ -741,7 +746,11 @@ describe('AudioCoordinator', () => {
       // and make resume() hang so manager.play() stays in-flight
       let resolveResume!: () => void;
       mockAudioContext.state = 'suspended';
-      mockAudioContext.resume.mockReturnValue(new Promise<void>(r => { resolveResume = r; }));
+      mockAudioContext.resume.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveResume = r;
+        }),
+      );
 
       coordinator.onPlaybackStarted(1, 24, 1, 1);
 
@@ -770,7 +779,11 @@ describe('AudioCoordinator', () => {
 
       let resolveResume!: () => void;
       mockAudioContext.state = 'suspended';
-      mockAudioContext.resume.mockReturnValue(new Promise<void>(r => { resolveResume = r; }));
+      mockAudioContext.resume.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveResume = r;
+        }),
+      );
 
       // Record what isWebAudioActive returns inside the callback
       let activeInCallback: boolean | undefined;
@@ -848,7 +861,11 @@ describe('AudioCoordinator', () => {
       // after the tab loses focus)
       let resolveResume!: () => void;
       mockAudioContext.state = 'suspended';
-      mockAudioContext.resume.mockReturnValue(new Promise<void>(r => { resolveResume = r; }));
+      mockAudioContext.resume.mockReturnValue(
+        new Promise<void>((r) => {
+          resolveResume = r;
+        }),
+      );
 
       coordinator.onPlaybackStarted(10, 24, 1, 1);
 

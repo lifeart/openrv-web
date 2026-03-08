@@ -391,7 +391,9 @@ describe('wirePlaybackControls', () => {
     (controls.playlistManager.getClipCount as ReturnType<typeof vi.fn>).mockReturnValue(clips.length);
     (controls.playlistManager.getClips as ReturnType<typeof vi.fn>).mockReturnValue(clips);
     (controls.playlistManager.getClipByIndex as ReturnType<typeof vi.fn>).mockImplementation((i: number) => clips[i]);
-    (controls.playlistManager.getClip as ReturnType<typeof vi.fn>).mockImplementation((id: string) => clips.find(c => c.id === id));
+    (controls.playlistManager.getClip as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
+      clips.find((c) => c.id === id),
+    );
     (controls.playlistManager.getCurrentFrame as ReturnType<typeof vi.fn>).mockImplementation(() => currentGlobal);
     (controls.playlistManager.setCurrentFrame as ReturnType<typeof vi.fn>).mockImplementation((frame: number) => {
       currentGlobal = frame;
@@ -472,7 +474,7 @@ describe('wirePlaybackControls', () => {
     exportControl.emit('annotationsJSONExportRequested', undefined);
     expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(
       expect.anything(), // paintEngine
-      'shot_v001',       // filename without extension
+      'shot_v001', // filename without extension
     );
   });
 
@@ -480,10 +482,7 @@ describe('wirePlaybackControls', () => {
     session.currentSource = null;
     const exportControl = headerBar.getExportControl();
     exportControl.emit('annotationsJSONExportRequested', undefined);
-    expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(
-      expect.anything(),
-      'annotations',
-    );
+    expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), 'annotations');
   });
 
   it('PW-015: annotationsPDFExportRequested calls exportAnnotationsPDF', () => {

@@ -22,7 +22,7 @@ export interface CurveChannel {
 }
 
 export interface ColorCurvesData {
-  master: CurveChannel;  // Applied to all channels
+  master: CurveChannel; // Applied to all channels
   red: CurveChannel;
   green: CurveChannel;
   blue: CurveChannel;
@@ -124,7 +124,7 @@ export function applyCurvesToPixel(
   r: number,
   g: number,
   b: number,
-  luts: CurveLUTs
+  luts: CurveLUTs,
 ): { r: number; g: number; b: number } {
   // Apply channel-specific curves first
   let outR = luts.red[Math.round(r)] ?? r;
@@ -197,10 +197,10 @@ function curvesEqual(a: ColorCurvesData, b: ColorCurvesData): boolean {
  */
 function deepCopyCurves(curves: ColorCurvesData): ColorCurvesData {
   return {
-    master: { enabled: curves.master.enabled, points: curves.master.points.map(p => ({ x: p.x, y: p.y })) },
-    red: { enabled: curves.red.enabled, points: curves.red.points.map(p => ({ x: p.x, y: p.y })) },
-    green: { enabled: curves.green.enabled, points: curves.green.points.map(p => ({ x: p.x, y: p.y })) },
-    blue: { enabled: curves.blue.enabled, points: curves.blue.points.map(p => ({ x: p.x, y: p.y })) },
+    master: { enabled: curves.master.enabled, points: curves.master.points.map((p) => ({ x: p.x, y: p.y })) },
+    red: { enabled: curves.red.enabled, points: curves.red.points.map((p) => ({ x: p.x, y: p.y })) },
+    green: { enabled: curves.green.enabled, points: curves.green.points.map((p) => ({ x: p.x, y: p.y })) },
+    blue: { enabled: curves.blue.enabled, points: curves.blue.points.map((p) => ({ x: p.x, y: p.y })) },
   };
 }
 
@@ -429,12 +429,7 @@ export function importCurvesJSON(json: string): ColorCurvesData | null {
   try {
     const data = JSON.parse(json);
     // Validate structure
-    if (
-      data.master?.points &&
-      data.red?.points &&
-      data.green?.points &&
-      data.blue?.points
-    ) {
+    if (data.master?.points && data.red?.points && data.green?.points && data.blue?.points) {
       return data as ColorCurvesData;
     }
     return null;
@@ -467,12 +462,7 @@ export function removePointFromCurve(curve: CurveChannel, index: number): CurveC
 /**
  * Update a point in a curve
  */
-export function updatePointInCurve(
-  curve: CurveChannel,
-  index: number,
-  x: number,
-  y: number
-): CurveChannel {
+export function updatePointInCurve(curve: CurveChannel, index: number, x: number, y: number): CurveChannel {
   const newPoints = [...curve.points];
 
   // First and last points can only move on Y axis

@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  FilterControl,
-  DEFAULT_FILTER_SETTINGS,
-} from './FilterControl';
+import { FilterControl, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 
 describe('FilterControl', () => {
   let control: FilterControl;
@@ -146,7 +143,7 @@ describe('FilterControl', () => {
         expect.objectContaining({
           blur: expect.any(Number),
           sharpen: expect.any(Number),
-        })
+        }),
       );
     });
   });

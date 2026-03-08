@@ -11,7 +11,7 @@
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
-import { getThemeManager, ThemeMode } from '../../utils/ui/ThemeManager';
+import { getThemeManager, type ThemeMode } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 
 export class ThemeControl {
@@ -140,10 +140,10 @@ export class ThemeControl {
     const modes: ThemeMode[] = ['auto', 'dark', 'light'];
 
     this.dropdownMenu.setItems(
-      modes.map(mode => ({
+      modes.map((mode) => ({
         value: mode,
         label: this.getModeLabel(mode),
-      }))
+      })),
     );
 
     this.updateSelectedValue();

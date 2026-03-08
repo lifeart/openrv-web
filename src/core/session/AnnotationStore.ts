@@ -1,14 +1,14 @@
 import type { GTODTO } from 'gto-js';
 import {
-  Annotation,
-  PenStroke,
-  TextAnnotation,
+  type Annotation,
+  type PenStroke,
+  type TextAnnotation,
   BrushType,
   LineJoin,
   LineCap,
   StrokeMode,
   TextOrigin,
-  PaintEffects,
+  type PaintEffects,
   RV_PEN_WIDTH_SCALE,
   RV_TEXT_SIZE_SCALE,
 } from '../../paint/types';
@@ -310,7 +310,6 @@ export class AnnotationStore {
           effects = { ...effects, ...nextEffects };
         }
       }
-
     }
 
     log.debug('Total annotations parsed:', annotations.length);
@@ -332,10 +331,9 @@ export class AnnotationStore {
       if (rawValue === undefined || rawValue === null) return;
       const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
       const booleanVal = getBooleanValue(value);
-      const numberVal = getNumberValue(value) ??
-        (typeof value === 'string' && value.length > 0 && !isNaN(Number(value))
-          ? Number(value)
-          : undefined);
+      const numberVal =
+        getNumberValue(value) ??
+        (typeof value === 'string' && value.length > 0 && !isNaN(Number(value)) ? Number(value) : undefined);
 
       switch (key) {
         case 'ghost':
@@ -426,7 +424,7 @@ export class AnnotationStore {
 
     // Parse width - can be a single value or array (per-point width)
     let width = 3;
-      if (widthValue) {
+    if (widthValue) {
       if (Array.isArray(widthValue) && widthValue.length > 0) {
         // Use the first width value, convert from normalized to pixel
         width = (widthValue[0] as number) * RV_PEN_WIDTH_SCALE;
@@ -434,7 +432,6 @@ export class AnnotationStore {
         width = widthValue * RV_PEN_WIDTH_SCALE;
       }
     }
-
 
     // Parse brush type
     const brushType = brushValue === 'gaussian' ? BrushType.Gaussian : BrushType.Circle;
@@ -517,7 +514,12 @@ export class AnnotationStore {
 
   // Parse a single text annotation from RV GTO format
   // textId format: "text:ID:FRAME:USER" e.g., "text:6:1:User"
-  parseTextAnnotation(textId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): TextAnnotation | null {
+  parseTextAnnotation(
+    textId: string,
+    frame: number,
+    comp: GTOComponentDTO,
+    aspectRatio: number,
+  ): TextAnnotation | null {
     const parts = textId.split(':');
     const user = parts[3] ?? 'unknown';
     const id = parts[1] ?? '0';
@@ -533,7 +535,8 @@ export class AnnotationStore {
 
     // Parse position
     // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -0.5 to +0.5
-    let x = 0.5, y = 0.5;
+    let x = 0.5,
+      y = 0.5;
     if (positionValue && Array.isArray(positionValue)) {
       // Check if it's a double-wrapped array [[[x,y]]] or [[x,y]] or flat [x,y]
       let posData = positionValue;

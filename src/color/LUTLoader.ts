@@ -7,10 +7,10 @@ import { clamp } from '../utils/math';
 
 export interface LUT3D {
   title: string;
-  size: number;  // Cube dimension (e.g., 33 for 33x33x33)
+  size: number; // Cube dimension (e.g., 33 for 33x33x33)
   domainMin: [number, number, number];
   domainMax: [number, number, number];
-  data: Float32Array;  // Flattened RGB data
+  data: Float32Array; // Flattened RGB data
 }
 
 export interface LUT1D {
@@ -18,7 +18,7 @@ export interface LUT1D {
   size: number;
   domainMin: [number, number, number];
   domainMax: [number, number, number];
-  data: Float32Array;  // R, G, B channels
+  data: Float32Array; // R, G, B channels
 }
 
 export type LUT = LUT3D | LUT1D;
@@ -161,12 +161,7 @@ export function parseCubeLUT(content: string): LUT {
 /**
  * Apply a 3D LUT to a color value using trilinear interpolation
  */
-export function applyLUT3D(
-  lut: LUT3D,
-  r: number,
-  g: number,
-  b: number
-): [number, number, number] {
+export function applyLUT3D(lut: LUT3D, r: number, g: number, b: number): [number, number, number] {
   const { size, domainMin, domainMax, data } = lut;
 
   // Normalize input to 0-1 range based on domain
@@ -232,12 +227,7 @@ export function applyLUT3D(
  * Apply a 1D LUT to a color value using linear interpolation
  * Each channel is processed independently through its own curve
  */
-export function applyLUT1D(
-  lut: LUT1D,
-  r: number,
-  g: number,
-  b: number
-): [number, number, number] {
+export function applyLUT1D(lut: LUT1D, r: number, g: number, b: number): [number, number, number] {
   const { size, domainMin, domainMax, data } = lut;
 
   // Helper to apply 1D LUT to a single channel
@@ -305,10 +295,7 @@ export function applyLUTToImageData(imageData: ImageData, lut: LUT): void {
 /**
  * Create a WebGL 3D texture from a LUT
  */
-export function createLUTTexture(
-  gl: WebGL2RenderingContext,
-  lut: LUT3D
-): WebGLTexture | null {
+export function createLUTTexture(gl: WebGL2RenderingContext, lut: LUT3D): WebGLTexture | null {
   const texture = gl.createTexture();
   if (!texture) return null;
 
@@ -322,18 +309,7 @@ export function createLUTTexture(
   gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
   // Upload data
-  gl.texImage3D(
-    gl.TEXTURE_3D,
-    0,
-    gl.RGB32F,
-    lut.size,
-    lut.size,
-    lut.size,
-    0,
-    gl.RGB,
-    gl.FLOAT,
-    lut.data
-  );
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB32F, lut.size, lut.size, lut.size, 0, gl.RGB, gl.FLOAT, lut.data);
 
   gl.bindTexture(gl.TEXTURE_3D, null);
 
@@ -344,10 +320,7 @@ export function createLUTTexture(
  * Create a WebGL 2D texture from a 1D LUT
  * The texture is size x 3 (width x height) where each row is a channel (R, G, B)
  */
-export function createLUT1DTexture(
-  gl: WebGL2RenderingContext,
-  lut: LUT1D
-): WebGLTexture | null {
+export function createLUT1DTexture(gl: WebGL2RenderingContext, lut: LUT1D): WebGLTexture | null {
   const texture = gl.createTexture();
   if (!texture) return null;
 
@@ -364,23 +337,13 @@ export function createLUT1DTexture(
   const reorganizedData = new Float32Array(lut.size * 3);
 
   for (let i = 0; i < lut.size; i++) {
-    reorganizedData[i] = lut.data[i * 3]!;                    // R row
-    reorganizedData[lut.size + i] = lut.data[i * 3 + 1]!;     // G row
+    reorganizedData[i] = lut.data[i * 3]!; // R row
+    reorganizedData[lut.size + i] = lut.data[i * 3 + 1]!; // G row
     reorganizedData[lut.size * 2 + i] = lut.data[i * 3 + 2]!; // B row
   }
 
   // Upload as size x 3 texture (width x height)
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.R32F,
-    lut.size,
-    3,
-    0,
-    gl.RED,
-    gl.FLOAT,
-    reorganizedData
-  );
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, lut.size, 3, 0, gl.RED, gl.FLOAT, reorganizedData);
 
   gl.bindTexture(gl.TEXTURE_2D, null);
 

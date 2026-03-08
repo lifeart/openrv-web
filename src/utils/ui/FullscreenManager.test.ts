@@ -24,10 +24,7 @@ describe('FullscreenManager', () => {
     it('FS-U002: should attach fullscreenchange listener', () => {
       const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
       manager = new FullscreenManager(container);
-      expect(addEventListenerSpy).toHaveBeenCalledWith(
-        'fullscreenchange',
-        expect.any(Function)
-      );
+      expect(addEventListenerSpy).toHaveBeenCalledWith('fullscreenchange', expect.any(Function));
     });
   });
 
@@ -139,10 +136,7 @@ describe('FullscreenManager', () => {
       const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
       manager = new FullscreenManager(container);
       manager.dispose();
-      expect(removeEventListenerSpy).toHaveBeenCalledWith(
-        'fullscreenchange',
-        expect.any(Function)
-      );
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('fullscreenchange', expect.any(Function));
     });
   });
 
@@ -200,20 +194,14 @@ describe('FullscreenManager', () => {
     it('FS-U016: should also listen for webkitfullscreenchange', () => {
       const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
       manager = new FullscreenManager(container);
-      expect(addEventListenerSpy).toHaveBeenCalledWith(
-        'webkitfullscreenchange',
-        expect.any(Function)
-      );
+      expect(addEventListenerSpy).toHaveBeenCalledWith('webkitfullscreenchange', expect.any(Function));
     });
 
     it('FS-U017: should remove webkitfullscreenchange listener on dispose', () => {
       const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
       manager = new FullscreenManager(container);
       manager.dispose();
-      expect(removeEventListenerSpy).toHaveBeenCalledWith(
-        'webkitfullscreenchange',
-        expect.any(Function)
-      );
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('webkitfullscreenchange', expect.any(Function));
     });
   });
 

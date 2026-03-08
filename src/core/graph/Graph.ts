@@ -1,5 +1,5 @@
-import { IPNode } from '../../nodes/base/IPNode';
-import { IPImage } from '../image/Image';
+import { type IPNode } from '../../nodes/base/IPNode';
+import { type IPImage } from '../image/Image';
 import { Signal } from './Signal';
 
 export interface EvalContext {
@@ -87,10 +87,7 @@ export class Graph {
     node.reorderInput(fromIndex, toIndex);
 
     // Emit connectionChanged to notify listeners of the structural change
-    this.connectionChanged.emit(
-      { from: inputBefore, to: node },
-      { from: inputBefore, to: node }
-    );
+    this.connectionChanged.emit({ from: inputBefore, to: node }, { from: inputBefore, to: node });
   }
 
   /**

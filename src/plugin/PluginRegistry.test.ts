@@ -89,22 +89,36 @@ describe('PluginRegistry', () => {
     });
 
     it('PREG-003: register with empty manifest ID throws', () => {
-      const plugin = { manifest: { id: '', name: 'X', version: '1.0.0', contributes: ['decoder' as const] }, activate: vi.fn() };
+      const plugin = {
+        manifest: { id: '', name: 'X', version: '1.0.0', contributes: ['decoder' as const] },
+        activate: vi.fn(),
+      };
       expect(() => registry.register(plugin)).toThrow('manifest.id must be a non-empty string');
     });
 
     it('PREG-004: register with missing contributes throws', () => {
-      const plugin = { manifest: { id: 'x', name: 'X', version: '1.0.0', contributes: [] as string[] }, activate: vi.fn() };
-      expect(() => registry.register(plugin as unknown as Plugin)).toThrow('manifest.contributes must be a non-empty array');
+      const plugin = {
+        manifest: { id: 'x', name: 'X', version: '1.0.0', contributes: [] as string[] },
+        activate: vi.fn(),
+      };
+      expect(() => registry.register(plugin as unknown as Plugin)).toThrow(
+        'manifest.contributes must be a non-empty array',
+      );
     });
 
     it('PREG-004b: register with missing manifest name throws', () => {
-      const plugin = { manifest: { id: 'x', name: '', version: '1.0.0', contributes: ['decoder' as const] }, activate: vi.fn() };
+      const plugin = {
+        manifest: { id: 'x', name: '', version: '1.0.0', contributes: ['decoder' as const] },
+        activate: vi.fn(),
+      };
       expect(() => registry.register(plugin)).toThrow('manifest.name must be a non-empty string');
     });
 
     it('PREG-004c: register with missing manifest version throws', () => {
-      const plugin = { manifest: { id: 'x', name: 'X', version: '', contributes: ['decoder' as const] }, activate: vi.fn() };
+      const plugin = {
+        manifest: { id: 'x', name: 'X', version: '', contributes: ['decoder' as const] },
+        activate: vi.fn(),
+      };
       expect(() => registry.register(plugin)).toThrow('manifest.version must be a non-empty string');
     });
   });
@@ -117,8 +131,12 @@ describe('PluginRegistry', () => {
     it('PREG-005: calls init() then activate() in order', async () => {
       const order: string[] = [];
       const plugin = createPlugin({
-        init: vi.fn(() => { order.push('init'); }),
-        activate: vi.fn(() => { order.push('activate'); }),
+        init: vi.fn(() => {
+          order.push('init');
+        }),
+        activate: vi.fn(() => {
+          order.push('activate');
+        }),
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -130,11 +148,15 @@ describe('PluginRegistry', () => {
       const order: string[] = [];
       const pluginA = createPlugin({
         manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] },
-        activate: vi.fn(() => { order.push('a'); }),
+        activate: vi.fn(() => {
+          order.push('a');
+        }),
       });
       const pluginB = createPlugin({
         manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'], dependencies: ['a'] },
-        activate: vi.fn(() => { order.push('b'); }),
+        activate: vi.fn(() => {
+          order.push('b');
+        }),
       });
       registry.register(pluginA);
       registry.register(pluginB);
@@ -209,7 +231,9 @@ describe('PluginRegistry', () => {
 
     it('PREG-013: activate when init() throws sets state to Error and propagates', async () => {
       const plugin = createPlugin({
-        init: vi.fn(() => { throw new Error('init failed'); }),
+        init: vi.fn(() => {
+          throw new Error('init failed');
+        }),
       });
       registry.register(plugin);
       await expect(registry.activate('test.plugin')).rejects.toThrow('init failed');
@@ -226,7 +250,9 @@ describe('PluginRegistry', () => {
       const deactivateFn = vi.fn();
       const decoder = { formatName: 'test-fmt', canDecode: () => false, decode: vi.fn() };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerDecoder(decoder); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerDecoder(decoder);
+        },
         deactivate: deactivateFn,
       });
       registry.register(plugin);
@@ -242,12 +268,16 @@ describe('PluginRegistry', () => {
       const pluginA = createPlugin({
         manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] },
         activate: vi.fn(),
-        deactivate: vi.fn(() => { order.push('deactivate-a'); }),
+        deactivate: vi.fn(() => {
+          order.push('deactivate-a');
+        }),
       });
       const pluginB = createPlugin({
         manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'], dependencies: ['a'] },
         activate: vi.fn(),
-        deactivate: vi.fn(() => { order.push('deactivate-b'); }),
+        deactivate: vi.fn(() => {
+          order.push('deactivate-b');
+        }),
       });
       registry.register(pluginA);
       registry.register(pluginB);
@@ -299,11 +329,15 @@ describe('PluginRegistry', () => {
       const order: string[] = [];
       const pluginA = createPlugin({
         manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] },
-        activate: vi.fn(() => { order.push('a'); }),
+        activate: vi.fn(() => {
+          order.push('a');
+        }),
       });
       const pluginB = createPlugin({
         manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'], dependencies: ['a'] },
-        activate: vi.fn(() => { order.push('b'); }),
+        activate: vi.fn(() => {
+          order.push('b');
+        }),
       });
       // Register B first to verify dependency ordering regardless of registration order
       registry.register(pluginB);
@@ -323,7 +357,9 @@ describe('PluginRegistry', () => {
       registry.setAPI(fakeAPI);
       let capturedContext: PluginContext | null = null;
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { capturedContext = ctx; },
+        activate: (ctx: PluginContext) => {
+          capturedContext = ctx;
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -333,7 +369,9 @@ describe('PluginRegistry', () => {
     it('PREG-020: api throws before setAPI() is called', async () => {
       let capturedContext: PluginContext | null = null;
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { capturedContext = ctx; },
+        activate: (ctx: PluginContext) => {
+          capturedContext = ctx;
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -350,7 +388,9 @@ describe('PluginRegistry', () => {
       const decoder = { formatName: 'plugin-fmt-021', canDecode: () => false, decode: vi.fn() };
       cleanupDecoders.push('plugin-fmt-021');
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerDecoder(decoder); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerDecoder(decoder);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -377,10 +417,18 @@ describe('PluginRegistry', () => {
       };
       registry.setPaintEngine(mockEngine as unknown as import('../paint/PaintEngine').PaintEngine);
 
-      const toolFactory = () => ({ name: 'plugin-tool', apply: vi.fn(), beginStroke: vi.fn(), endStroke: vi.fn(), reset: vi.fn() });
+      const toolFactory = () => ({
+        name: 'plugin-tool',
+        apply: vi.fn(),
+        beginStroke: vi.fn(),
+        endStroke: vi.fn(),
+        reset: vi.fn(),
+      });
       const plugin = createPlugin({
         manifest: { id: 'test.tool', name: 'Tool Plugin', version: '1.0.0', contributes: ['tool'] },
-        activate: (ctx: PluginContext) => { ctx.registerTool('plugin-tool', toolFactory); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerTool('plugin-tool', toolFactory);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.tool');
@@ -396,7 +444,9 @@ describe('PluginRegistry', () => {
         export: vi.fn(),
       };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerExporter('test-export', exporter); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('test-export', exporter);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -406,7 +456,9 @@ describe('PluginRegistry', () => {
     it('PREG-025: registerBlendMode stores in blend mode registry', async () => {
       const blend: BlendModeContribution = { label: 'Test Blend', blend: (a, b) => a * b };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerBlendMode('test-blend', blend); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerBlendMode('test-blend', blend);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -421,7 +473,9 @@ describe('PluginRegistry', () => {
         render: vi.fn(),
       };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerUIPanel(panel); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -432,7 +486,9 @@ describe('PluginRegistry', () => {
       cleanupDecoders.push('plugin-fmt-027');
       const decoder = { formatName: 'plugin-fmt-027', canDecode: () => false, decode: vi.fn() };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerDecoder(decoder); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerDecoder(decoder);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -463,21 +519,20 @@ describe('PluginRegistry', () => {
   describe('loadFromURL()', () => {
     it('PREG-029: rejects URL from disallowed origin', async () => {
       registry.setAllowedOrigins(['https://trusted.example.com']);
-      await expect(registry.loadFromURL('https://evil.example.com/plugin.js'))
-        .rejects.toThrow('not in the allowed origins list');
+      await expect(registry.loadFromURL('https://evil.example.com/plugin.js')).rejects.toThrow(
+        'not in the allowed origins list',
+      );
     });
 
     it('PREG-030: rejects invalid URL when origins are configured', async () => {
       registry.setAllowedOrigins(['https://trusted.example.com']);
-      await expect(registry.loadFromURL('not-a-url'))
-        .rejects.toThrow('Invalid plugin URL');
+      await expect(registry.loadFromURL('not-a-url')).rejects.toThrow('Invalid plugin URL');
     });
 
     it('PREG-030b: accepts URL from allowed origin (import will fail in test env)', async () => {
       registry.setAllowedOrigins(['https://trusted.example.com']);
       // The URL passes origin validation but import() will fail in test env
-      await expect(registry.loadFromURL('https://trusted.example.com/plugin.js'))
-        .rejects.toThrow(); // import() fails, but origin validation passed
+      await expect(registry.loadFromURL('https://trusted.example.com/plugin.js')).rejects.toThrow(); // import() fails, but origin validation passed
     });
   });
 
@@ -495,7 +550,9 @@ describe('PluginRegistry', () => {
     it('PREG-032: getUIPanels returns copy of UI panel map', async () => {
       const panel: UIPanelContribution = { id: 'p1', label: 'P1', location: 'left', render: vi.fn() };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerUIPanel(panel); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -516,7 +573,9 @@ describe('PluginRegistry', () => {
   describe('pluginStateChanged signal', () => {
     it('PREG-034: emits state transitions during lifecycle', async () => {
       const states: string[] = [];
-      registry.pluginStateChanged.connect((data) => { states.push(data.state); });
+      registry.pluginStateChanged.connect((data) => {
+        states.push(data.state);
+      });
       const plugin = createPlugin({
         init: vi.fn(),
         activate: vi.fn(),
@@ -538,7 +597,11 @@ describe('PluginRegistry', () => {
         manifest: { id: 'test.tool.err', name: 'Tool Err', version: '1.0.0', contributes: ['tool'] },
         activate: (ctx: PluginContext) => {
           ctx.registerTool('bad-tool', () => ({
-            name: 'bad-tool', apply: vi.fn(), beginStroke: vi.fn(), endStroke: vi.fn(), reset: vi.fn(),
+            name: 'bad-tool',
+            apply: vi.fn(),
+            beginStroke: vi.fn(),
+            endStroke: vi.fn(),
+            reset: vi.fn(),
           }));
         },
       });
@@ -555,7 +618,9 @@ describe('PluginRegistry', () => {
     it('PREG-036: activate() when activate callback throws sets state to Error', async () => {
       const plugin = createPlugin({
         init: vi.fn(),
-        activate: vi.fn(() => { throw new Error('activate failed'); }),
+        activate: vi.fn(() => {
+          throw new Error('activate failed');
+        }),
       });
       registry.register(plugin);
       await expect(registry.activate('test.plugin')).rejects.toThrow('activate failed');
@@ -568,7 +633,9 @@ describe('PluginRegistry', () => {
       cleanupExporters.push('test-export-037');
       const exporter: ExporterContribution = { kind: 'blob', label: 'T', extensions: ['t'], export: vi.fn() };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerExporter('test-export-037', exporter); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('test-export-037', exporter);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -580,7 +647,9 @@ describe('PluginRegistry', () => {
     it('PREG-038: deactivation removes blend mode from registry', async () => {
       const blend: BlendModeContribution = { label: 'T', blend: (a, b) => a * b };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerBlendMode('test-blend-038', blend); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerBlendMode('test-blend-038', blend);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -591,9 +660,17 @@ describe('PluginRegistry', () => {
 
     it('PREG-039: deactivation calls destroy() on UI panels and removes them', async () => {
       const destroyFn = vi.fn();
-      const panel: UIPanelContribution = { id: 'p-039', label: 'T', location: 'right', render: vi.fn(), destroy: destroyFn };
+      const panel: UIPanelContribution = {
+        id: 'p-039',
+        label: 'T',
+        location: 'right',
+        render: vi.fn(),
+        destroy: destroyFn,
+      };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerUIPanel(panel); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -613,7 +690,11 @@ describe('PluginRegistry', () => {
         manifest: { id: 'test.tool.040', name: 'T', version: '1.0.0', contributes: ['tool'] },
         activate: (ctx: PluginContext) => {
           ctx.registerTool('tool-040', () => ({
-            name: 'tool-040', apply: vi.fn(), beginStroke: vi.fn(), endStroke: vi.fn(), reset: vi.fn(),
+            name: 'tool-040',
+            apply: vi.fn(),
+            beginStroke: vi.fn(),
+            endStroke: vi.fn(),
+            reset: vi.fn(),
           }));
         },
       });
@@ -635,7 +716,9 @@ describe('PluginRegistry', () => {
     it('PREG-042: dispose still sets state to disposed even if dispose hook throws', async () => {
       const plugin = createPlugin({
         activate: vi.fn(),
-        dispose: vi.fn(() => { throw new Error('dispose boom'); }),
+        dispose: vi.fn(() => {
+          throw new Error('dispose boom');
+        }),
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -648,7 +731,9 @@ describe('PluginRegistry', () => {
   describe('signal emissions during full lifecycle', () => {
     it('PREG-043: emits correct states for deactivate and dispose', async () => {
       const states: string[] = [];
-      registry.pluginStateChanged.connect((data) => { states.push(data.state); });
+      registry.pluginStateChanged.connect((data) => {
+        states.push(data.state);
+      });
       const plugin = createPlugin({ init: vi.fn(), activate: vi.fn() });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -670,7 +755,9 @@ describe('PluginRegistry', () => {
 
       let capturedCtx: PluginContext | null = null;
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { capturedCtx = ctx; },
+        activate: (ctx: PluginContext) => {
+          capturedCtx = ctx;
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -697,10 +784,15 @@ describe('PluginRegistry', () => {
     it('PREG-045: getExporter delegates to ExporterRegistry', async () => {
       cleanupExporters.push('query-exp');
       const exporter: ExporterContribution = {
-        kind: 'blob', label: 'Q', extensions: ['q'], export: vi.fn(),
+        kind: 'blob',
+        label: 'Q',
+        extensions: ['q'],
+        export: vi.fn(),
       };
       const plugin = createPlugin({
-        activate: (ctx: PluginContext) => { ctx.registerExporter('query-exp', exporter); },
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('query-exp', exporter);
+        },
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
@@ -711,7 +803,13 @@ describe('PluginRegistry', () => {
     it('PREG-046: getExporters returns all registered exporters', async () => {
       cleanupExporters.push('exp-a', 'exp-b');
       const expA: ExporterContribution = { kind: 'blob', label: 'A', extensions: ['a'], export: vi.fn() };
-      const expB: ExporterContribution = { kind: 'text', label: 'B', extensions: ['b'], mimeType: 'text/plain', export: vi.fn() };
+      const expB: ExporterContribution = {
+        kind: 'text',
+        label: 'B',
+        extensions: ['b'],
+        mimeType: 'text/plain',
+        export: vi.fn(),
+      };
       const plugin = createPlugin({
         activate: (ctx: PluginContext) => {
           ctx.registerExporter('exp-a', expA);

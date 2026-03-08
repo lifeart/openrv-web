@@ -9,7 +9,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ClippingOverlay, DEFAULT_CLIPPING_OVERLAY_STATE } from './ClippingOverlay';
 
 // Helper to create ImageData with specific pixel values at specific positions
-function createImageDataWithPixels(width: number, height: number, pixels: Array<{ x: number; y: number; r: number; g: number; b: number }>): ImageData {
+function createImageDataWithPixels(
+  width: number,
+  height: number,
+  pixels: Array<{ x: number; y: number; r: number; g: number; b: number }>,
+): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   // Fill with mid-gray by default
   for (let i = 0; i < data.length; i += 4) {
@@ -84,9 +88,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.enable();
 
       expect(clippingOverlay.isEnabled()).toBe(true);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('CLIP-U011: enable is idempotent (no duplicate events)', () => {
@@ -107,9 +109,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.disable();
 
       expect(clippingOverlay.isEnabled()).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('CLIP-U013: disable is idempotent (no duplicate events)', () => {
@@ -226,9 +226,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.enable();
       clippingOverlay.setShowHighlights(false);
 
-      const imageData = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 255, g: 255, b: 255 },
-      ]);
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 255, b: 255 }]);
 
       clippingOverlay.apply(imageData);
 
@@ -289,9 +287,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.enable();
       clippingOverlay.setShowShadows(false);
 
-      const imageData = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 0, g: 0, b: 0 },
-      ]);
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 0, g: 0, b: 0 }]);
 
       clippingOverlay.apply(imageData);
 
@@ -308,17 +304,13 @@ describe('ClippingOverlay', () => {
       clippingOverlay.enable();
 
       // Test with default opacity (0.7)
-      const imageData1 = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData1 = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
       clippingOverlay.apply(imageData1);
       const pixel1 = getPixel(imageData1, 0, 0);
 
       // Change opacity to 0.3
       clippingOverlay.setOpacity(0.3);
-      const imageData2 = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData2 = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
       clippingOverlay.apply(imageData2);
       const pixel2 = getPixel(imageData2, 0, 0);
 
@@ -411,9 +403,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.setShowHighlights(false);
 
       expect(clippingOverlay.getState().showHighlights).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showHighlights: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showHighlights: false }));
     });
 
     it('CLIP-U061: setShowHighlights is idempotent', () => {
@@ -431,9 +421,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.setShowShadows(false);
 
       expect(clippingOverlay.getState().showShadows).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showShadows: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showShadows: false }));
     });
 
     it('CLIP-U063: setShowShadows is idempotent', () => {
@@ -472,9 +460,7 @@ describe('ClippingOverlay', () => {
         opacity: 1.0, // Full opacity for clear test
       });
 
-      const imageData = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 255, g: 100, b: 100 },
-      ]);
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 100, b: 100 }]);
 
       clippingOverlay.apply(imageData);
 
@@ -492,9 +478,7 @@ describe('ClippingOverlay', () => {
         opacity: 1.0, // Full opacity for clear test
       });
 
-      const imageData = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 0, g: 0, b: 0 },
-      ]);
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 0, g: 0, b: 0 }]);
 
       clippingOverlay.apply(imageData);
 
@@ -535,9 +519,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.enable();
       clippingOverlay.setState({ opacity: 1.0 });
 
-      const imageData = createImageDataWithPixels(1, 1, [
-        { x: 0, y: 0, r: 255, g: 255, b: 255 },
-      ]);
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 255, b: 255 }]);
 
       clippingOverlay.apply(imageData);
 

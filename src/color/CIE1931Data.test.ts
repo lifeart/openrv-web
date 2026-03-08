@@ -32,7 +32,7 @@ describe('CIE_1931_XY_LOCUS', () => {
   it('CIE-U003: first point is near 380nm (deep violet)', () => {
     const first = CIE_1931_XY_LOCUS[0]!;
     expect(first.x).toBeCloseTo(0.1741, 3);
-    expect(first.y).toBeCloseTo(0.0050, 3);
+    expect(first.y).toBeCloseTo(0.005, 3);
   });
 
   it('CIE-U004: last point is near 700nm (deep red)', () => {
@@ -62,7 +62,7 @@ describe('xyzToXY', () => {
     // D65 white point: X=0.95047, Y=1.0, Z=1.08883
     const result = xyzToXY(0.95047, 1.0, 1.08883);
     expect(result.x).toBeCloseTo(0.3127, 3);
-    expect(result.y).toBeCloseTo(0.3290, 3);
+    expect(result.y).toBeCloseTo(0.329, 3);
   });
 
   it('CIE-U011: guards against division by zero', () => {
@@ -134,8 +134,8 @@ describe('COLOR_SPACE_PRIMARIES', () => {
     expect(srgb).not.toBeNull();
     expect(srgb!.red.x).toBeCloseTo(0.64, 1);
     expect(srgb!.red.y).toBeCloseTo(0.33, 1);
-    expect(srgb!.green.x).toBeCloseTo(0.30, 1);
-    expect(srgb!.green.y).toBeCloseTo(0.60, 1);
+    expect(srgb!.green.x).toBeCloseTo(0.3, 1);
+    expect(srgb!.green.y).toBeCloseTo(0.6, 1);
     expect(srgb!.blue.x).toBeCloseTo(0.15, 1);
     expect(srgb!.blue.y).toBeCloseTo(0.06, 1);
   });
@@ -144,7 +144,7 @@ describe('COLOR_SPACE_PRIMARIES', () => {
     const srgb = getColorSpacePrimaries('sRGB');
     expect(srgb).not.toBeNull();
     expect(srgb!.white.x).toBeCloseTo(0.3127, 2);
-    expect(srgb!.white.y).toBeCloseTo(0.3290, 2);
+    expect(srgb!.white.y).toBeCloseTo(0.329, 2);
   });
 
   it('CIE-U022: Rec.709 has same primaries as sRGB', () => {
@@ -175,8 +175,14 @@ describe('COLOR_SPACE_PRIMARIES', () => {
 
   it('CIE-U025: all known color spaces have entries', () => {
     const expectedSpaces = [
-      'sRGB', 'Rec.709', 'ACEScg', 'ACES2065-1',
-      'DCI-P3', 'Rec.2020', 'Adobe RGB', 'ProPhoto RGB',
+      'sRGB',
+      'Rec.709',
+      'ACEScg',
+      'ACES2065-1',
+      'DCI-P3',
+      'Rec.2020',
+      'Adobe RGB',
+      'ProPhoto RGB',
     ];
     for (const name of expectedSpaces) {
       expect(COLOR_SPACE_PRIMARIES[name]).toBeDefined();

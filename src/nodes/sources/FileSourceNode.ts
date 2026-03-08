@@ -6,14 +6,10 @@
  */
 
 import { BaseSourceNode } from './BaseSourceNode';
-import { IPImage, ImageMetadata, TransferFunction, ColorPrimaries } from '../../core/image/Image';
+import { IPImage, type ImageMetadata, type TransferFunction, type ColorPrimaries } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
-import type {
-  EXRLayerInfo,
-  EXRDecodeOptions,
-  EXRChannelRemapping,
-} from '../../formats/EXRDecoder';
+import type { EXRLayerInfo, EXRDecodeOptions, EXRChannelRemapping } from '../../formats/EXRDecoder';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
 import type { HEICGainmapInfo, HEICColorInfo } from '../../formats/HEICGainmapDecoder';
 import { isRAWExtension } from '../../formats/RAWPreviewDecoder';
@@ -139,7 +135,7 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
     type: string,
     start: number,
     end: number,
-    isFullBox = false
+    isFullBox = false,
   ): { contentStart: number; contentEnd: number } | null {
     let offset = start;
     while (offset + 8 <= end) {
@@ -148,7 +144,7 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
         view.getUint8(offset + 4),
         view.getUint8(offset + 5),
         view.getUint8(offset + 6),
-        view.getUint8(offset + 7)
+        view.getUint8(offset + 7),
       );
 
       if (boxSize < 8 || offset + boxSize > end) break;
@@ -167,21 +163,31 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
   }
 
   // Skip past ftyp box to find top-level meta box
-  if (length < 12) { return null; }
+  if (length < 12) {
+    return null;
+  }
   const ftypSize = view.getUint32(0);
-  if (ftypSize < 8 || ftypSize > length) { return null; }
+  if (ftypSize < 8 || ftypSize > length) {
+    return null;
+  }
 
   // Find 'meta' box (FullBox - has version+flags)
   const meta = findBox('meta', ftypSize, length, true);
-  if (!meta) { return null; }
+  if (!meta) {
+    return null;
+  }
 
   // Find 'iprp' box inside meta (plain container)
   const iprp = findBox('iprp', meta.contentStart, meta.contentEnd);
-  if (!iprp) { return null; }
+  if (!iprp) {
+    return null;
+  }
 
   // Find 'ipco' box inside iprp (plain container)
   const ipco = findBox('ipco', iprp.contentStart, iprp.contentEnd);
-  if (!ipco) { return null; }
+  if (!ipco) {
+    return null;
+  }
 
   // Scan ALL 'colr' boxes inside ipco — AVIF files may have multiple
   // (e.g. ICC profile 'prof'/'ricc' + coded 'nclx'). Collect nclx and ICC profile data.
@@ -193,8 +199,10 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
     while (scanOffset + 8 <= ipco.contentEnd) {
       const boxSize = view.getUint32(scanOffset);
       const boxType = String.fromCharCode(
-        view.getUint8(scanOffset + 4), view.getUint8(scanOffset + 5),
-        view.getUint8(scanOffset + 6), view.getUint8(scanOffset + 7)
+        view.getUint8(scanOffset + 4),
+        view.getUint8(scanOffset + 5),
+        view.getUint8(scanOffset + 6),
+        view.getUint8(scanOffset + 7),
       );
       if (boxSize < 8 || scanOffset + boxSize > ipco.contentEnd) break;
 
@@ -203,8 +211,10 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
         const cEnd = scanOffset + boxSize;
         if (cStart + 4 <= cEnd) {
           const ct = String.fromCharCode(
-            view.getUint8(cStart), view.getUint8(cStart + 1),
-            view.getUint8(cStart + 2), view.getUint8(cStart + 3)
+            view.getUint8(cStart),
+            view.getUint8(cStart + 1),
+            view.getUint8(cStart + 2),
+            view.getUint8(cStart + 3),
           );
           if (ct === 'nclx') {
             nclxColr = { contentStart: cStart, contentEnd: cEnd };
@@ -264,11 +274,7 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
  * 2. CICP tag ('cicp', ICC v4.4+) for PQ/HLG transfer characteristics
  * 3. TRC curve tag ('rTRC') — parametric PQ curve detection
  */
-function detectHDRFromICCProfile(
-  view: DataView,
-  start: number,
-  end: number
-): AVIFColorInfo | null {
+function detectHDRFromICCProfile(view: DataView, start: number, end: number): AVIFColorInfo | null {
   const profileSize = end - start;
 
   // ICC profile minimum: 128-byte header + 4-byte tag count
@@ -289,8 +295,10 @@ function detectHDRFromICCProfile(
     if (tagEntry + 12 > end) break;
 
     const sig = String.fromCharCode(
-      view.getUint8(tagEntry), view.getUint8(tagEntry + 1),
-      view.getUint8(tagEntry + 2), view.getUint8(tagEntry + 3)
+      view.getUint8(tagEntry),
+      view.getUint8(tagEntry + 1),
+      view.getUint8(tagEntry + 2),
+      view.getUint8(tagEntry + 3),
     );
     const tagOffset = view.getUint32(tagEntry + 4);
     const tagSize = view.getUint32(tagEntry + 8);
@@ -308,8 +316,10 @@ function detectHDRFromICCProfile(
     if (sig === 'cicp' && tagSize >= 12) {
       // cicp tag: type signature(4) + reserved(4) + primaries(1) + transfer(1) + matrix(1) + range(1)
       const typeTag = String.fromCharCode(
-        view.getUint8(tagDataStart), view.getUint8(tagDataStart + 1),
-        view.getUint8(tagDataStart + 2), view.getUint8(tagDataStart + 3)
+        view.getUint8(tagDataStart),
+        view.getUint8(tagDataStart + 1),
+        view.getUint8(tagDataStart + 2),
+        view.getUint8(tagDataStart + 3),
       );
       if (typeTag === 'cicp') {
         cicpPrimaries = view.getUint8(tagDataStart + 8);
@@ -371,8 +381,10 @@ function readICCDescriptionTag(view: DataView, start: number, end: number): stri
   if (start + 8 > end) return '';
 
   const typeSig = String.fromCharCode(
-    view.getUint8(start), view.getUint8(start + 1),
-    view.getUint8(start + 2), view.getUint8(start + 3)
+    view.getUint8(start),
+    view.getUint8(start + 1),
+    view.getUint8(start + 2),
+    view.getUint8(start + 3),
   );
 
   // 'desc' type (ICC v2): type(4) + reserved(4) + length(4) + ASCII string
@@ -423,8 +435,10 @@ function detectPQParametricCurve(view: DataView, start: number, end: number): bo
   if (start + 8 > end) return false;
 
   const typeSig = String.fromCharCode(
-    view.getUint8(start), view.getUint8(start + 1),
-    view.getUint8(start + 2), view.getUint8(start + 3)
+    view.getUint8(start),
+    view.getUint8(start + 1),
+    view.getUint8(start + 2),
+    view.getUint8(start + 3),
   );
 
   // 'para' type: parametric curve
@@ -491,8 +505,10 @@ function parseJXLColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
     if (boxSize < 8 || offset + boxSize > length) break;
 
     const boxType = String.fromCharCode(
-      view.getUint8(offset + 4), view.getUint8(offset + 5),
-      view.getUint8(offset + 6), view.getUint8(offset + 7)
+      view.getUint8(offset + 4),
+      view.getUint8(offset + 5),
+      view.getUint8(offset + 6),
+      view.getUint8(offset + 7),
     );
 
     if (boxType === 'colr') {
@@ -500,8 +516,10 @@ function parseJXLColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
       const cEnd = offset + boxSize;
       if (cStart + 4 <= cEnd) {
         const colourType = String.fromCharCode(
-          view.getUint8(cStart), view.getUint8(cStart + 1),
-          view.getUint8(cStart + 2), view.getUint8(cStart + 3)
+          view.getUint8(cStart),
+          view.getUint8(cStart + 1),
+          view.getUint8(cStart + 2),
+          view.getUint8(cStart + 3),
         );
         if (colourType === 'nclx' && cStart + 4 + 4 <= cEnd) {
           const primariesCode = view.getUint16(cStart + 4);
@@ -782,7 +800,8 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          const { isHEICFile, isGainmapHEIC, parseHEICGainmapInfo, parseHEICColorInfo } = await import('../../formats/HEICGainmapDecoder');
+          const { isHEICFile, isGainmapHEIC, parseHEICGainmapInfo, parseHEICColorInfo } =
+            await import('../../formats/HEICGainmapDecoder');
           if (isHEICFile(buffer)) {
             // Check for gainmap FIRST (gainmap HEIC may also have nclx HDR markers)
             if (isGainmapHEIC(buffer)) {
@@ -932,7 +951,7 @@ export class FileSourceNode extends BaseSourceNode {
     name: string,
     url: string,
     originalUrl?: string,
-    options?: EXRDecodeOptions
+    options?: EXRDecodeOptions,
   ): Promise<void> {
     return this.loadEXRFromBuffer(buffer, name, url, originalUrl, options);
   }
@@ -945,7 +964,7 @@ export class FileSourceNode extends BaseSourceNode {
     name: string,
     url: string,
     originalUrl?: string,
-    options?: EXRDecodeOptions
+    options?: EXRDecodeOptions,
   ): Promise<void> {
     const { isEXRFile, decodeEXR, exrToIPImage } = await import('../../formats/EXRDecoder');
 
@@ -1000,12 +1019,7 @@ export class FileSourceNode extends BaseSourceNode {
   /**
    * Load HDR format file (DPX, Cineon, Float TIFF, Radiance HDR) from ArrayBuffer
    */
-  private async loadHDRFromBuffer(
-    buffer: ArrayBuffer,
-    name: string,
-    url: string,
-    originalUrl?: string
-  ): Promise<void> {
+  private async loadHDRFromBuffer(buffer: ArrayBuffer, name: string, url: string, originalUrl?: string): Promise<void> {
     // Detect format and decode via registry
     const result = await decoderRegistry.detectAndDecode(buffer, { applyLogToLinear: true });
     if (!result) {
@@ -1068,7 +1082,7 @@ export class FileSourceNode extends BaseSourceNode {
     info: import('../../formats/JPEGGainmapDecoder').GainmapInfo,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<void> {
     const { decodeGainmapToFloat32 } = await import('../../formats/JPEGGainmapDecoder');
     const result = await decodeGainmapToFloat32(buffer, info);
@@ -1134,7 +1148,7 @@ export class FileSourceNode extends BaseSourceNode {
     info: import('../../formats/AVIFGainmapDecoder').AVIFGainmapInfo,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<void> {
     const { decodeAVIFGainmapToFloat32 } = await import('../../formats/AVIFGainmapDecoder');
     const result = await decodeAVIFGainmapToFloat32(buffer, info);
@@ -1201,7 +1215,7 @@ export class FileSourceNode extends BaseSourceNode {
     colorInfo: AVIFColorInfo,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<void> {
     this.cachedIPImage?.close();
 
@@ -1243,8 +1257,20 @@ export class FileSourceNode extends BaseSourceNode {
 
       videoFrame = null; // Ownership transferred to IPImage
     } catch (e) {
-      if (!bitmapClosed) { try { bitmap.close(); } catch { /* */ } }
-      if (videoFrame) { try { videoFrame.close(); } catch { /* */ } }
+      if (!bitmapClosed) {
+        try {
+          bitmap.close();
+        } catch {
+          /* */
+        }
+      }
+      if (videoFrame) {
+        try {
+          videoFrame.close();
+        } catch {
+          /* */
+        }
+      }
       throw e;
     }
 
@@ -1283,7 +1309,7 @@ export class FileSourceNode extends BaseSourceNode {
     colorInfo: AVIFColorInfo,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<void> {
     this.cachedIPImage?.close();
 
@@ -1325,8 +1351,20 @@ export class FileSourceNode extends BaseSourceNode {
 
       videoFrame = null; // Ownership transferred to IPImage
     } catch (e) {
-      if (!bitmapClosed) { try { bitmap.close(); } catch { /* */ } }
-      if (videoFrame) { try { videoFrame.close(); } catch { /* */ } }
+      if (!bitmapClosed) {
+        try {
+          bitmap.close();
+        } catch {
+          /* */
+        }
+      }
+      if (videoFrame) {
+        try {
+          videoFrame.close();
+        } catch {
+          /* */
+        }
+      }
       throw e;
     }
 
@@ -1364,7 +1402,7 @@ export class FileSourceNode extends BaseSourceNode {
     info: HEICGainmapInfo,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<void> {
     const { decodeHEICGainmapToFloat32 } = await import('../../formats/HEICGainmapDecoder');
     const result = await decodeHEICGainmapToFloat32(buffer, info);
@@ -1432,7 +1470,7 @@ export class FileSourceNode extends BaseSourceNode {
     colorInfo: HEICColorInfo,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<void> {
     this.cachedIPImage?.close();
 
@@ -1474,8 +1512,20 @@ export class FileSourceNode extends BaseSourceNode {
 
       videoFrame = null; // Ownership transferred to IPImage
     } catch (e) {
-      if (!bitmapClosed) { try { bitmap.close(); } catch { /* */ } }
-      if (videoFrame) { try { videoFrame.close(); } catch { /* */ } }
+      if (!bitmapClosed) {
+        try {
+          bitmap.close();
+        } catch {
+          /* */
+        }
+      }
+      if (videoFrame) {
+        try {
+          videoFrame.close();
+        } catch {
+          /* */
+        }
+      }
       throw e;
     }
 
@@ -1508,12 +1558,7 @@ export class FileSourceNode extends BaseSourceNode {
   /**
    * Load SDR JXL file from ArrayBuffer via @jsquash/jxl WASM decoder.
    */
-  private async loadJXLFromBuffer(
-    buffer: ArrayBuffer,
-    name: string,
-    url: string,
-    originalUrl?: string
-  ): Promise<void> {
+  private async loadJXLFromBuffer(buffer: ArrayBuffer, name: string, url: string, originalUrl?: string): Promise<void> {
     const { decodeJXL } = await import('../../formats/JXLDecoder');
     const result = await decodeJXL(buffer);
 
@@ -1563,12 +1608,7 @@ export class FileSourceNode extends BaseSourceNode {
    * Returns true if the browser supports JXL natively and the image loaded.
    * Returns false if the browser can't decode JXL (caller should fall back to WASM).
    */
-  private tryLoadJXLNative(
-    buffer: ArrayBuffer,
-    name: string,
-    url: string,
-    originalUrl?: string
-  ): Promise<boolean> {
+  private tryLoadJXLNative(buffer: ArrayBuffer, name: string, url: string, originalUrl?: string): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       const blob = new Blob([buffer], { type: 'image/jxl' });
       const blobUrl = URL.createObjectURL(blob);
@@ -1612,12 +1652,7 @@ export class FileSourceNode extends BaseSourceNode {
    * Returns true if the browser supports HEIC natively (Safari) and the image loaded.
    * Returns false if the browser can't decode HEIC (caller should fall back to WASM).
    */
-  private tryLoadHEICNative(
-    buffer: ArrayBuffer,
-    name: string,
-    url: string,
-    originalUrl?: string
-  ): Promise<boolean> {
+  private tryLoadHEICNative(buffer: ArrayBuffer, name: string, url: string, originalUrl?: string): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       const blob = new Blob([buffer], { type: 'image/heic' });
       const blobUrl = URL.createObjectURL(blob);
@@ -1666,7 +1701,7 @@ export class FileSourceNode extends BaseSourceNode {
     buffer: ArrayBuffer,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
   ): Promise<boolean> {
     const preview = extractRAWPreviewFn(buffer);
     if (!preview) return Promise.resolve(false);
@@ -1713,12 +1748,7 @@ export class FileSourceNode extends BaseSourceNode {
    * Load SDR HEIC file from ArrayBuffer via libheif-js WASM decoder.
    * Used as fallback on Chrome/Firefox/Edge which lack native HEIC support.
    */
-  private async loadHEICSDRWasm(
-    buffer: ArrayBuffer,
-    name: string,
-    url: string,
-    originalUrl?: string
-  ): Promise<void> {
+  private async loadHEICSDRWasm(buffer: ArrayBuffer, name: string, url: string, originalUrl?: string): Promise<void> {
     const { decodeHEICToImageData } = await import('../../formats/HEICWasmDecoder');
     const result = await decodeHEICToImageData(buffer);
 
@@ -1815,7 +1845,7 @@ export class FileSourceNode extends BaseSourceNode {
       this.metadata.name,
       this.url,
       this.properties.getValue<string>('originalUrl') || undefined,
-      Object.keys(options).length > 0 ? options : undefined
+      Object.keys(options).length > 0 ? options : undefined,
     );
 
     return true;
@@ -1940,7 +1970,8 @@ export class FileSourceNode extends BaseSourceNode {
     if (isHEICExtension(file.name)) {
       try {
         const buffer = await file.arrayBuffer();
-        const { isHEICFile, isGainmapHEIC, parseHEICGainmapInfo, parseHEICColorInfo } = await import('../../formats/HEICGainmapDecoder');
+        const { isHEICFile, isGainmapHEIC, parseHEICGainmapInfo, parseHEICColorInfo } =
+          await import('../../formats/HEICGainmapDecoder');
         if (isHEICFile(buffer)) {
           // Check for gainmap FIRST
           if (isGainmapHEIC(buffer)) {

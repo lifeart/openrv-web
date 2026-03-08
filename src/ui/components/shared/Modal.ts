@@ -163,15 +163,19 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
     header.appendChild(titleEl);
 
     if (closable) {
-      const closeBtn = createButton('', () => {
-        hideContainer();
-        onClose?.();
-      }, {
-        variant: 'ghost',
-        size: 'sm',
-        icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
-        title: 'Close',
-      });
+      const closeBtn = createButton(
+        '',
+        () => {
+          hideContainer();
+          onClose?.();
+        },
+        {
+          variant: 'ghost',
+          size: 'sm',
+          icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          title: 'Close',
+        },
+      );
       header.appendChild(closeBtn);
     }
 
@@ -192,7 +196,14 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
     const container = getModalContainer();
     container.innerHTML = '';
 
-    const modal = createModalBase({ ...options, title, onClose: () => { onClose?.(); resolve(); } });
+    const modal = createModalBase({
+      ...options,
+      title,
+      onClose: () => {
+        onClose?.();
+        resolve();
+      },
+    });
 
     // Content
     const content = document.createElement('div');
@@ -245,12 +256,16 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
       }
     };
 
-    const okBtn = createButton('OK', () => {
-      hideContainer();
-      onClose?.();
-      resolve();
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: 'primary', minWidth: '80px' });
+    const okBtn = createButton(
+      'OK',
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve();
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'primary', minWidth: '80px' },
+    );
 
     footer.appendChild(okBtn);
     modal.appendChild(footer);
@@ -282,7 +297,14 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
     const container = getModalContainer();
     container.innerHTML = '';
 
-    const modal = createModalBase({ ...options, title, onClose: () => { onClose?.(); resolve(false); } });
+    const modal = createModalBase({
+      ...options,
+      title,
+      onClose: () => {
+        onClose?.();
+        resolve(false);
+      },
+    });
 
     // Content
     const content = document.createElement('div');
@@ -321,19 +343,27 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
       }
     };
 
-    const cancelBtn = createButton(cancelText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(false);
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: 'default', minWidth: '80px' });
+    const cancelBtn = createButton(
+      cancelText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(false);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
 
-    const confirmBtn = createButton(confirmText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(true);
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: confirmVariant, minWidth: '80px' });
+    const confirmBtn = createButton(
+      confirmText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(true);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: confirmVariant, minWidth: '80px' },
+    );
 
     footer.appendChild(cancelBtn);
     footer.appendChild(confirmBtn);
@@ -367,7 +397,14 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
     const container = getModalContainer();
     container.innerHTML = '';
 
-    const modal = createModalBase({ ...options, title, onClose: () => { onClose?.(); resolve(null); } });
+    const modal = createModalBase({
+      ...options,
+      title,
+      onClose: () => {
+        onClose?.();
+        resolve(null);
+      },
+    });
 
     // Content
     const content = document.createElement('div');
@@ -435,19 +472,27 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
       }
     };
 
-    const cancelBtn = createButton(cancelText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(null);
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: 'default', minWidth: '80px' });
+    const cancelBtn = createButton(
+      cancelText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
 
-    const confirmBtn = createButton(confirmText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(input.value);
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: 'primary', minWidth: '80px' });
+    const confirmBtn = createButton(
+      confirmText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(input.value);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'primary', minWidth: '80px' },
+    );
 
     footer.appendChild(cancelBtn);
     footer.appendChild(confirmBtn);
@@ -526,10 +571,7 @@ export interface FileReloadOptions extends ModalOptions {
  * Show a dialog prompting user to reload a file
  * Returns the selected File or null if skipped
  */
-export function showFileReloadPrompt(
-  filename: string,
-  options: FileReloadOptions = {}
-): Promise<File | null> {
+export function showFileReloadPrompt(filename: string, options: FileReloadOptions = {}): Promise<File | null> {
   return new Promise((resolve) => {
     cleanupCustomModalEscapeHandler();
     const {
@@ -543,7 +585,14 @@ export function showFileReloadPrompt(
     const container = getModalContainer();
     container.innerHTML = '';
 
-    const modal = createModalBase({ ...options, title, onClose: () => { onClose?.(); resolve(null); } });
+    const modal = createModalBase({
+      ...options,
+      title,
+      onClose: () => {
+        onClose?.();
+        resolve(null);
+      },
+    });
     modal.setAttribute('data-testid', 'file-reload-dialog');
 
     // Content
@@ -616,9 +665,6 @@ export function showFileReloadPrompt(
     `;
     warningEl.textContent = '\u26A0\uFE0F Filename does not match. Make sure you selected the correct file.';
 
-    // Load button reference for enabling/disabling
-    let loadBtn: HTMLButtonElement;
-
     fileInput.addEventListener('change', () => {
       const file = fileInput.files?.[0];
       if (file) {
@@ -675,25 +721,37 @@ export function showFileReloadPrompt(
       }
     };
 
-    const skipBtn = createButton(skipText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(null);
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: 'default', minWidth: '80px' });
+    const skipBtn = createButton(
+      skipText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
     skipBtn.setAttribute('data-testid', 'file-reload-skip');
 
-    const browseBtn = createButton(browseText, () => {
-      fileInput.click();
-    }, { variant: 'default', minWidth: '100px' });
+    const browseBtn = createButton(
+      browseText,
+      () => {
+        fileInput.click();
+      },
+      { variant: 'default', minWidth: '100px' },
+    );
     browseBtn.setAttribute('data-testid', 'file-reload-browse');
 
-    loadBtn = createButton('Load', () => {
-      hideContainer();
-      onClose?.();
-      resolve(selectedFile);
-      document.removeEventListener('keydown', handleKeydown);
-    }, { variant: 'primary', minWidth: '80px' });
+    const loadBtn = createButton(
+      'Load',
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(selectedFile);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'primary', minWidth: '80px' },
+    );
     loadBtn.setAttribute('data-testid', 'file-reload-load');
 
     // Disable load button until a file is selected

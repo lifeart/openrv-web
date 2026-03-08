@@ -642,17 +642,13 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       controls.notePanel.addNoteAtCurrentFrame();
     },
     'notes.next': () => {
-      const frame = session.noteManager.getNextNoteFrame(
-        session.currentSourceIndex, session.currentFrame,
-      );
+      const frame = session.noteManager.getNextNoteFrame(session.currentSourceIndex, session.currentFrame);
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
       }
     },
     'notes.previous': () => {
-      const frame = session.noteManager.getPreviousNoteFrame(
-        session.currentSourceIndex, session.currentFrame,
-      );
+      const frame = session.noteManager.getPreviousNoteFrame(session.currentSourceIndex, session.currentFrame);
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
       }

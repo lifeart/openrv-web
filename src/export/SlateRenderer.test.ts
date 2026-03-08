@@ -92,9 +92,9 @@ describe('SlateRenderer', () => {
         fps: 24,
       });
 
-      const tcIn = fields.find(f => f.label === 'TC In');
-      const tcOut = fields.find(f => f.label === 'TC Out');
-      const dur = fields.find(f => f.label === 'Duration');
+      const tcIn = fields.find((f) => f.label === 'TC In');
+      const tcOut = fields.find((f) => f.label === 'TC Out');
+      const dur = fields.find((f) => f.label === 'Duration');
 
       expect(tcIn).toBeDefined();
       expect(tcOut).toBeDefined();
@@ -109,8 +109,8 @@ describe('SlateRenderer', () => {
         fps: 0,
       });
 
-      expect(fields.find(f => f.label === 'TC In')).toBeUndefined();
-      expect(fields.find(f => f.label === 'TC Out')).toBeUndefined();
+      expect(fields.find((f) => f.label === 'TC In')).toBeUndefined();
+      expect(fields.find((f) => f.label === 'TC Out')).toBeUndefined();
     });
 
     it('sets small size for resolution, codec, colorSpace', () => {
@@ -120,7 +120,7 @@ describe('SlateRenderer', () => {
         colorSpace: 'sRGB',
       });
 
-      expect(fields.every(f => f.size === 'small')).toBe(true);
+      expect(fields.every((f) => f.size === 'small')).toBe(true);
     });
   });
 
@@ -179,7 +179,7 @@ describe('SlateRenderer', () => {
 
     it('handles all four corner positions', () => {
       const positions: LogoPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-      const rects = positions.map(p => computeLogoRect(100, 100, 1920, 1080, p, 0.1));
+      const rects = positions.map((p) => computeLogoRect(100, 100, 1920, 1080, p, 0.1));
 
       // top-left should have small x,y
       expect(rects[0]!.x).toBeLessThan(1920 / 2);
@@ -208,9 +208,7 @@ describe('SlateRenderer', () => {
 
   describe('layoutText', () => {
     it('SLATE-007: vertically centers text block', () => {
-      const fields: SlateField[] = [
-        { label: '', value: 'Title', size: 'large' },
-      ];
+      const fields: SlateField[] = [{ label: '', value: 'Title', size: 'large' }];
 
       const lines = layoutText(fields, 1080);
       expect(lines.length).toBe(1);
@@ -232,18 +230,14 @@ describe('SlateRenderer', () => {
     });
 
     it('includes label prefix in text', () => {
-      const fields: SlateField[] = [
-        { label: 'Version', value: 'v02' },
-      ];
+      const fields: SlateField[] = [{ label: 'Version', value: 'v02' }];
 
       const lines = layoutText(fields, 1080);
       expect(lines[0]!.text).toBe('Version: v02');
     });
 
     it('omits label prefix for empty label', () => {
-      const fields: SlateField[] = [
-        { label: '', value: 'Title' },
-      ];
+      const fields: SlateField[] = [{ label: '', value: 'Title' }];
 
       const lines = layoutText(fields, 1080);
       expect(lines[0]!.text).toBe('Title');
@@ -267,9 +261,7 @@ describe('SlateRenderer', () => {
     });
 
     it('applies fontSizeMultiplier to font sizes', () => {
-      const fields: SlateField[] = [
-        { label: '', value: 'Title', size: 'large' },
-      ];
+      const fields: SlateField[] = [{ label: '', value: 'Title', size: 'large' }];
 
       const normal = layoutText(fields, 1080, 1.0);
       const bigger = layoutText(fields, 1080, 2.0);
@@ -278,9 +270,7 @@ describe('SlateRenderer', () => {
     });
 
     it('defaults fontSizeMultiplier to 1.0', () => {
-      const fields: SlateField[] = [
-        { label: '', value: 'Title', size: 'large' },
-      ];
+      const fields: SlateField[] = [{ label: '', value: 'Title', size: 'large' }];
 
       const defaultLines = layoutText(fields, 1080);
       const explicitLines = layoutText(fields, 1080, 1.0);
@@ -371,11 +361,7 @@ describe('SlateRenderer', () => {
     });
 
     it('SLATE-012: all leader frames share the same pixel data', () => {
-      const frames = generateLeaderFrames(
-        makeConfig({ width: 64, height: 64 }),
-        1,
-        24,
-      );
+      const frames = generateLeaderFrames(makeConfig({ width: 64, height: 64 }), 1, 24);
 
       // All frames should reference the same pixels object
       for (let i = 1; i < frames.length; i++) {
@@ -394,11 +380,7 @@ describe('SlateRenderer', () => {
     });
 
     it('rounds frame count for fractional durations', () => {
-      const frames = generateLeaderFrames(
-        makeConfig({ width: 64, height: 64 }),
-        1.5,
-        24,
-      );
+      const frames = generateLeaderFrames(makeConfig({ width: 64, height: 64 }), 1.5, 24);
       expect(frames.length).toBe(36); // 1.5 * 24
     });
 

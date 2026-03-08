@@ -27,8 +27,12 @@ import { EventEmitter } from '../utils/EventEmitter';
 class StubColorInversionToggle extends EventEmitter {}
 class StubColorControls extends EventEmitter {
   private adjustments = { exposure: 0, contrast: 0, saturation: 1 };
-  getAdjustments() { return { ...this.adjustments }; }
-  setAdjustments(adj: Record<string, number>) { this.adjustments = { ...adj } as any; }
+  getAdjustments() {
+    return { ...this.adjustments };
+  }
+  setAdjustments(adj: Record<string, number>) {
+    this.adjustments = { ...adj } as any;
+  }
 }
 class StubCDLControl extends EventEmitter {}
 class StubCurvesControl extends EventEmitter {}
@@ -36,7 +40,9 @@ class StubOCIOControl extends EventEmitter {
   private _processor = {
     bakeTo3DLUT: vi.fn(() => new Float32Array(33 * 33 * 33 * 3)),
   };
-  getProcessor() { return this._processor; }
+  getProcessor() {
+    return this._processor;
+  }
 }
 class StubDisplayProfileControl extends EventEmitter {}
 class StubGamutMappingControl extends EventEmitter {}

@@ -7,7 +7,7 @@
  * - Threshold sliders for fine-tuning
  */
 
-import { ZebraStripes } from './ZebraStripes';
+import { type ZebraStripes } from './ZebraStripes';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
@@ -117,10 +117,12 @@ export class ZebraControl {
     this.createDropdownContent();
 
     // Listen for state changes
-    this.unsubscribers.push(this.zebraStripes.on('stateChanged', () => {
-      this.updateButtonState();
-      this.updateControlsState();
-    }));
+    this.unsubscribers.push(
+      this.zebraStripes.on('stateChanged', () => {
+        this.updateButtonState();
+        this.updateControlsState();
+      }),
+    );
   }
 
   private createDropdownContent(): void {
@@ -133,7 +135,7 @@ export class ZebraControl {
       70,
       100,
       (enabled) => this.zebraStripes.setState({ highEnabled: enabled, enabled: true }),
-      (threshold) => this.zebraStripes.setHighThreshold(threshold)
+      (threshold) => this.zebraStripes.setHighThreshold(threshold),
     );
     this.dropdown.appendChild(highSection.container);
     this.highCheckbox = highSection.checkbox;
@@ -158,7 +160,7 @@ export class ZebraControl {
       0,
       30,
       (enabled) => this.zebraStripes.setState({ lowEnabled: enabled, enabled: true }),
-      (threshold) => this.zebraStripes.setLowThreshold(threshold)
+      (threshold) => this.zebraStripes.setLowThreshold(threshold),
     );
     this.dropdown.appendChild(lowSection.container);
     this.lowCheckbox = lowSection.checkbox;
@@ -177,7 +179,7 @@ export class ZebraControl {
     min: number,
     max: number,
     onEnableChange: (enabled: boolean) => void,
-    onThresholdChange: (threshold: number) => void
+    onThresholdChange: (threshold: number) => void,
   ): {
     container: HTMLElement;
     checkbox: HTMLInputElement;

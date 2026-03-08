@@ -1,10 +1,10 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
 import {
-  StereoMode,
-  StereoState,
+  type StereoMode,
+  type StereoState,
   DEFAULT_STEREO_STATE,
   getStereoModeLabel,
 } from '../../stereo/StereoRenderer';
@@ -424,9 +424,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
 
   setState(state: StereoState): void {
     const changed =
-      state.mode !== this.state.mode ||
-      state.eyeSwap !== this.state.eyeSwap ||
-      state.offset !== this.state.offset;
+      state.mode !== this.state.mode || state.eyeSwap !== this.state.eyeSwap || state.offset !== this.state.offset;
 
     if (changed) {
       this.state = { ...state };

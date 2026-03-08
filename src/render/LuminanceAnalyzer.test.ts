@@ -34,16 +34,14 @@ vi.mock('./shaders/luminance.frag.glsl?raw', () => ({ default: 'mock shader sour
  * `clientWaitSyncStatus` controls the value returned by clientWaitSync.
  * `extensionAvailable` controls whether EXT_color_buffer_float is present.
  */
-function createMockGL(opts: {
-  extensionAvailable?: boolean;
-  clientWaitSyncStatus?: number;
-  readbackPixels?: Float32Array;
-} = {}) {
-  const {
-    extensionAvailable = true,
-    clientWaitSyncStatus,
-    readbackPixels,
-  } = opts;
+function createMockGL(
+  opts: {
+    extensionAvailable?: boolean;
+    clientWaitSyncStatus?: number;
+    readbackPixels?: Float32Array;
+  } = {},
+) {
+  const { extensionAvailable = true, clientWaitSyncStatus, readbackPixels } = opts;
 
   const constants = {
     FRAMEBUFFER_BINDING: 0x8ca6,
@@ -85,9 +83,7 @@ function createMockGL(opts: {
   const gl = {
     ...constants,
 
-    getExtension: vi.fn((name: string) =>
-      name === 'EXT_color_buffer_float' && extensionAvailable ? {} : null,
-    ),
+    getExtension: vi.fn((name: string) => (name === 'EXT_color_buffer_float' && extensionAvailable ? {} : null)),
 
     getParameter: vi.fn((param: number) => {
       if (param === constants.FRAMEBUFFER_BINDING) return null;
@@ -199,9 +195,7 @@ describe('LuminanceAnalyzer', () => {
 
     noExtAnalyzer.computeLuminanceStats(mockSourceTexture, 0);
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      'LuminanceAnalyzer: EXT_color_buffer_float not available',
-    );
+    expect(warnSpy).toHaveBeenCalledWith('LuminanceAnalyzer: EXT_color_buffer_float not available');
   });
 
   // =========================================================================
@@ -288,9 +282,7 @@ describe('LuminanceAnalyzer', () => {
     const result = customAnalyzer.computeLuminanceStats(mockSourceTexture, 0);
 
     expect(result).toEqual({ avg: 0.18, linearAvg: 1.0 });
-    expect(warnSpy).toHaveBeenCalledWith(
-      'LuminanceAnalyzer: NaN/Infinity in readback, using cached result',
-    );
+    expect(warnSpy).toHaveBeenCalledWith('LuminanceAnalyzer: NaN/Infinity in readback, using cached result');
   });
 
   it('LA-010: falls back to cached result when readback contains Infinity', () => {

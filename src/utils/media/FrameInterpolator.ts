@@ -41,11 +41,7 @@ export interface SubFramePosition {
  * @param ratio - Blend ratio in range [0, 1]. 0 = 100% frameA, 1 = 100% frameB.
  * @returns A new ImageData containing the blended result, or null if inputs are invalid.
  */
-export function blendFrames(
-  frameA: ImageData,
-  frameB: ImageData,
-  ratio: number
-): ImageData | null {
+export function blendFrames(frameA: ImageData, frameB: ImageData, ratio: number): ImageData | null {
   // Validate inputs
   if (!frameA || !frameB) {
     return null;
@@ -60,18 +56,10 @@ export function blendFrames(
 
   // Fast path: no blending needed
   if (t === 0) {
-    return new ImageData(
-      new Uint8ClampedArray(frameA.data),
-      frameA.width,
-      frameA.height
-    );
+    return new ImageData(new Uint8ClampedArray(frameA.data), frameA.width, frameA.height);
   }
   if (t === 1) {
-    return new ImageData(
-      new Uint8ClampedArray(frameB.data),
-      frameB.width,
-      frameB.height
-    );
+    return new ImageData(new Uint8ClampedArray(frameB.data), frameB.width, frameB.height);
   }
 
   const length = frameA.data.length;
@@ -85,7 +73,7 @@ export function blendFrames(
   // Linear interpolation per channel (RGBA)
   // Process 4 channels at a time for better cache locality
   for (let i = 0; i < length; i += 4) {
-    result[i] = (dataA[i]! * invT + dataB[i]! * t + 0.5) | 0;       // R
+    result[i] = (dataA[i]! * invT + dataB[i]! * t + 0.5) | 0; // R
     result[i + 1] = (dataA[i + 1]! * invT + dataB[i + 1]! * t + 0.5) | 0; // G
     result[i + 2] = (dataA[i + 2]! * invT + dataB[i + 2]! * t + 0.5) | 0; // B
     result[i + 3] = (dataA[i + 3]! * invT + dataB[i + 3]! * t + 0.5) | 0; // A
@@ -114,7 +102,7 @@ export function blendFrames(
 export function blendCanvasFrames(
   canvasA: HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
   canvasB: HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
-  ratio: number
+  ratio: number,
 ): ImageData | null {
   try {
     const ctxA = getCanvasContext(canvasA);
@@ -140,7 +128,7 @@ export function blendCanvasFrames(
  * Get a 2D rendering context from either an HTMLCanvasElement or OffscreenCanvas.
  */
 function getCanvasContext(
-  canvas: HTMLCanvasElement | OffscreenCanvas | ImageBitmap
+  canvas: HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
 ): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null {
   if (typeof ImageBitmap !== 'undefined' && canvas instanceof ImageBitmap) {
     // ImageBitmap has no getContext - draw to a temp OffscreenCanvas
@@ -200,7 +188,7 @@ export class FrameInterpolator {
   getBlendedFrame(
     canvasA: HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
     canvasB: HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
-    position: SubFramePosition
+    position: SubFramePosition,
   ): HTMLCanvasElement | null {
     if (!this._enabled) return null;
 

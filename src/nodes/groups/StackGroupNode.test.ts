@@ -811,11 +811,11 @@ describe('StackGroupNode', () => {
     describe('ipImageToImageData conversion', () => {
       it('converts uint8 RGBA image correctly', () => {
         const image = new IPImage({
-          width: 2, height: 2, channels: 4, dataType: 'uint8',
-          data: new Uint8Array([
-            255, 0, 0, 255,  0, 255, 0, 255,
-            0, 0, 255, 255,  128, 128, 128, 255,
-          ]).buffer,
+          width: 2,
+          height: 2,
+          channels: 4,
+          dataType: 'uint8',
+          data: new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 128, 128, 128, 255]).buffer,
         });
 
         const imageData = StackGroupNode.ipImageToImageData(image, 2, 2);
@@ -823,28 +823,34 @@ describe('StackGroupNode', () => {
         expect(imageData.width).toBe(2);
         expect(imageData.height).toBe(2);
         expect(imageData.data[0]).toBe(255); // R of pixel (0,0)
-        expect(imageData.data[1]).toBe(0);   // G of pixel (0,0)
-        expect(imageData.data[4]).toBe(0);   // R of pixel (1,0)
+        expect(imageData.data[1]).toBe(0); // G of pixel (0,0)
+        expect(imageData.data[4]).toBe(0); // R of pixel (1,0)
         expect(imageData.data[5]).toBe(255); // G of pixel (1,0)
       });
 
       it('converts float32 RGBA image correctly', () => {
         const image = new IPImage({
-          width: 1, height: 1, channels: 4, dataType: 'float32',
+          width: 1,
+          height: 1,
+          channels: 4,
+          dataType: 'float32',
           data: new Float32Array([0.5, 0.25, 1.0, 1.0]).buffer,
         });
 
         const imageData = StackGroupNode.ipImageToImageData(image, 1, 1);
 
         expect(imageData.data[0]).toBe(128); // 0.5 * 255 = 127.5 -> 128
-        expect(imageData.data[1]).toBe(64);  // 0.25 * 255 = 63.75 -> 64
+        expect(imageData.data[1]).toBe(64); // 0.25 * 255 = 63.75 -> 64
         expect(imageData.data[2]).toBe(255); // 1.0 * 255 = 255
         expect(imageData.data[3]).toBe(255); // 1.0 * 255 = 255
       });
 
       it('converts 3-channel image (adds alpha=255)', () => {
         const image = new IPImage({
-          width: 1, height: 1, channels: 3, dataType: 'uint8',
+          width: 1,
+          height: 1,
+          channels: 3,
+          dataType: 'uint8',
           data: new Uint8Array([100, 150, 200]).buffer,
         });
 
@@ -858,7 +864,10 @@ describe('StackGroupNode', () => {
 
       it('converts 1-channel grayscale image', () => {
         const image = new IPImage({
-          width: 1, height: 1, channels: 1, dataType: 'uint8',
+          width: 1,
+          height: 1,
+          channels: 1,
+          dataType: 'uint8',
           data: new Uint8Array([128]).buffer,
         });
 
@@ -872,11 +881,11 @@ describe('StackGroupNode', () => {
 
       it('resizes image when dimensions differ', () => {
         const image = new IPImage({
-          width: 2, height: 2, channels: 4, dataType: 'uint8',
-          data: new Uint8Array([
-            255, 0, 0, 255,  0, 255, 0, 255,
-            0, 0, 255, 255,  255, 255, 0, 255,
-          ]).buffer,
+          width: 2,
+          height: 2,
+          channels: 4,
+          dataType: 'uint8',
+          data: new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]).buffer,
         });
 
         const imageData = StackGroupNode.ipImageToImageData(image, 4, 4);
@@ -891,7 +900,10 @@ describe('StackGroupNode', () => {
     describe('imageDataToIPImage conversion', () => {
       it('creates valid IPImage from ImageData', () => {
         const imageData = new ImageData(2, 2);
-        imageData.data[0] = 255; imageData.data[1] = 0; imageData.data[2] = 0; imageData.data[3] = 255;
+        imageData.data[0] = 255;
+        imageData.data[1] = 0;
+        imageData.data[2] = 0;
+        imageData.data[3] = 255;
 
         const image = StackGroupNode.imageDataToIPImage(imageData);
 
@@ -958,18 +970,18 @@ describe('StackGroupNode', () => {
 
       it('compositeLayers public method works directly', () => {
         const img1 = new IPImage({
-          width: 2, height: 2, channels: 4, dataType: 'uint8',
-          data: new Uint8Array([
-            255, 0, 0, 255,  255, 0, 0, 255,
-            255, 0, 0, 255,  255, 0, 0, 255,
-          ]).buffer,
+          width: 2,
+          height: 2,
+          channels: 4,
+          dataType: 'uint8',
+          data: new Uint8Array([255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255]).buffer,
         });
         const img2 = new IPImage({
-          width: 2, height: 2, channels: 4, dataType: 'uint8',
-          data: new Uint8Array([
-            0, 0, 255, 255,  0, 0, 255, 255,
-            0, 0, 255, 255,  0, 0, 255, 255,
-          ]).buffer,
+          width: 2,
+          height: 2,
+          channels: 4,
+          dataType: 'uint8',
+          data: new Uint8Array([0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255]).buffer,
         });
 
         const result = stackNode.compositeLayers([
@@ -988,7 +1000,10 @@ describe('StackGroupNode', () => {
     describe('uint16 and float32 input handling', () => {
       it('handles uint16 inputs', () => {
         const img = new IPImage({
-          width: 1, height: 1, channels: 4, dataType: 'uint16',
+          width: 1,
+          height: 1,
+          channels: 4,
+          dataType: 'uint16',
           data: new Uint16Array([32768, 0, 0, 65535]).buffer,
         });
 
@@ -1001,14 +1016,17 @@ describe('StackGroupNode', () => {
 
       it('clamps float32 values outside 0-1', () => {
         const img = new IPImage({
-          width: 1, height: 1, channels: 4, dataType: 'float32',
+          width: 1,
+          height: 1,
+          channels: 4,
+          dataType: 'float32',
           data: new Float32Array([1.5, -0.5, 0.5, 1.0]).buffer,
         });
 
         const imageData = StackGroupNode.ipImageToImageData(img, 1, 1);
 
         expect(imageData.data[0]).toBe(255); // 1.5 clamped to 1.0
-        expect(imageData.data[1]).toBe(0);   // -0.5 clamped to 0.0
+        expect(imageData.data[1]).toBe(0); // -0.5 clamped to 0.0
         expect(imageData.data[2]).toBe(128); // 0.5 -> 128
       });
     });
@@ -1016,7 +1034,10 @@ describe('StackGroupNode', () => {
     describe('2-channel grayscale+alpha input handling', () => {
       it('converts 2-channel image as gray+alpha', () => {
         const img = new IPImage({
-          width: 1, height: 1, channels: 2, dataType: 'uint8',
+          width: 1,
+          height: 1,
+          channels: 2,
+          dataType: 'uint8',
           data: new Uint8Array([200, 128]).buffer,
         });
 

@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import {
-  createButton,
-  setButtonActive,
-  createIconButton,
-} from './Button';
+import { createButton, setButtonActive, createIconButton } from './Button';
 
 // PointerEvent polyfill for jsdom
 if (typeof globalThis.PointerEvent === 'undefined') {
@@ -372,7 +368,7 @@ describe('createIconButton', () => {
   it('BTN-U101: createIconButton has no visible text', () => {
     const btn = createIconButton('<svg></svg>', () => {});
     const textSpans = Array.from(btn.querySelectorAll('span')).filter(
-      (s) => s.textContent && s.textContent.trim().length > 0
+      (s) => s.textContent && s.textContent.trim().length > 0,
     );
     // Should only have icon span with svg, no text span
     expect(textSpans.length).toBeLessThanOrEqual(1);

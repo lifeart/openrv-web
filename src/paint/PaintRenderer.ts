@@ -1,32 +1,32 @@
 import {
-  Annotation,
-  PenStroke,
-  TextAnnotation,
-  ShapeAnnotation,
+  type Annotation,
+  type PenStroke,
+  type TextAnnotation,
+  type ShapeAnnotation,
   ShapeType,
   BrushType,
   StrokeMode,
   TextOrigin,
-  StrokePoint,
+  type StrokePoint,
   LineJoin,
   LineCap,
-  PressureMapping,
+  type PressureMapping,
   DEFAULT_PRESSURE_MAPPING,
   adjustSaturation,
 } from './types';
 import { safeCanvasContext2D } from '../color/SafeCanvasContext';
 
 export interface RenderOptions {
-  width: number;  // Image width in logical pixels
+  width: number; // Image width in logical pixels
   height: number; // Image height in logical pixels
-  canvasWidth?: number;  // Output canvas width in logical pixels (defaults to width)
+  canvasWidth?: number; // Output canvas width in logical pixels (defaults to width)
   canvasHeight?: number; // Output canvas height in logical pixels (defaults to height)
   offsetX?: number; // Image-space X offset in output canvas pixels
   offsetY?: number; // Image-space Y offset in output canvas pixels
   opacity?: number;
   ghostTintBefore?: string; // Tint for ghost annotations from before
-  ghostTintAfter?: string;  // Tint for ghost annotations from after
-  dpr?: number;  // Device pixel ratio for retina support (default: 1)
+  ghostTintAfter?: string; // Tint for ghost annotations from after
+  dpr?: number; // Device pixel ratio for retina support (default: 1)
 }
 
 export class PaintRenderer {
@@ -45,11 +45,7 @@ export class PaintRenderer {
    */
   constructor(colorSpace?: 'srgb' | 'display-p3') {
     this.canvas = document.createElement('canvas');
-    const ctx = safeCanvasContext2D(
-      this.canvas,
-      {},
-      colorSpace === 'display-p3' ? 'display-p3' : undefined,
-    );
+    const ctx = safeCanvasContext2D(this.canvas, {}, colorSpace === 'display-p3' ? 'display-p3' : undefined);
     this.ctx = ctx;
   }
 
@@ -75,10 +71,7 @@ export class PaintRenderer {
   }
 
   // Render all annotations with optional ghost effect
-  renderAnnotations(
-    annotations: Array<{ annotation: Annotation; opacity: number }>,
-    options: RenderOptions
-  ): void {
+  renderAnnotations(annotations: Array<{ annotation: Annotation; opacity: number }>, options: RenderOptions): void {
     this.resize(options.canvasWidth ?? options.width, options.canvasHeight ?? options.height, options.dpr);
     this.clear();
 
@@ -245,7 +238,10 @@ export class PaintRenderer {
 
       // Create radial gradient for soft edge
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      gradient.addColorStop(0, `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a * opacityFactor})`);
+      gradient.addColorStop(
+        0,
+        `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a * opacityFactor})`,
+      );
       gradient.addColorStop(1, `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, 0)`);
 
       ctx.fillStyle = gradient;
@@ -369,12 +365,7 @@ export class PaintRenderer {
       const [br, bg, bb, ba] = text.backgroundColor;
       const padding = 4;
       ctx.fillStyle = `rgba(${Math.round(br * 255)}, ${Math.round(bg * 255)}, ${Math.round(bb * 255)}, ${ba})`;
-      ctx.fillRect(
-        bgX - padding,
-        bgY - padding,
-        textWidth + padding * 2,
-        textHeight + padding * 2
-      );
+      ctx.fillRect(bgX - padding, bgY - padding, textWidth + padding * 2, textHeight + padding * 2);
       // Restore text color
       ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
     }
@@ -420,7 +411,7 @@ export class PaintRenderer {
     // Set line style
     const [r, g, b, a] = text.color;
     ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
-    ctx.lineWidth = Math.max(1, text.size * text.scale / 12);
+    ctx.lineWidth = Math.max(1, (text.size * text.scale) / 12);
     ctx.lineCap = 'round';
 
     // Draw leader line
@@ -430,20 +421,14 @@ export class PaintRenderer {
     ctx.stroke();
 
     // Draw arrowhead at the end
-    const arrowSize = Math.max(6, text.size * text.scale / 4);
+    const arrowSize = Math.max(6, (text.size * text.scale) / 4);
     const angle = Math.atan2(endY - startY, endX - startX);
 
     ctx.beginPath();
     ctx.moveTo(endX, endY);
-    ctx.lineTo(
-      endX - arrowSize * Math.cos(angle - Math.PI / 6),
-      endY - arrowSize * Math.sin(angle - Math.PI / 6)
-    );
+    ctx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI / 6), endY - arrowSize * Math.sin(angle - Math.PI / 6));
     ctx.moveTo(endX, endY);
-    ctx.lineTo(
-      endX - arrowSize * Math.cos(angle + Math.PI / 6),
-      endY - arrowSize * Math.sin(angle + Math.PI / 6)
-    );
+    ctx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI / 6), endY - arrowSize * Math.sin(angle + Math.PI / 6));
     ctx.stroke();
 
     ctx.restore();
@@ -512,8 +497,11 @@ export class PaintRenderer {
 
   private renderRectangle(
     ctx: CanvasRenderingContext2D,
-    x1: number, y1: number, x2: number, y2: number,
-    shape: ShapeAnnotation
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    shape: ShapeAnnotation,
   ): void {
     const left = Math.min(x1, x2);
     const top = Math.min(y1, y2);
@@ -521,7 +509,7 @@ export class PaintRenderer {
     const rectHeight = Math.abs(y2 - y1);
 
     const cornerRadius = shape.cornerRadius ?? 0;
-    const radius = cornerRadius * Math.min(rectWidth, rectHeight) / 2;
+    const radius = (cornerRadius * Math.min(rectWidth, rectHeight)) / 2;
 
     if (radius > 0) {
       // Rounded rectangle
@@ -550,8 +538,11 @@ export class PaintRenderer {
 
   private renderEllipse(
     ctx: CanvasRenderingContext2D,
-    x1: number, y1: number, x2: number, y2: number,
-    shape: ShapeAnnotation
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    shape: ShapeAnnotation,
   ): void {
     const centerX = (x1 + x2) / 2;
     const centerY = (y1 + y2) / 2;
@@ -567,10 +558,7 @@ export class PaintRenderer {
     ctx.stroke();
   }
 
-  private renderLine(
-    ctx: CanvasRenderingContext2D,
-    x1: number, y1: number, x2: number, y2: number
-  ): void {
+  private renderLine(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number): void {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
@@ -579,8 +567,11 @@ export class PaintRenderer {
 
   private renderArrow(
     ctx: CanvasRenderingContext2D,
-    x1: number, y1: number, x2: number, y2: number,
-    shape: ShapeAnnotation
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    shape: ShapeAnnotation,
   ): void {
     // Draw the line
     ctx.beginPath();
@@ -594,23 +585,13 @@ export class PaintRenderer {
 
     ctx.beginPath();
     ctx.moveTo(x2, y2);
-    ctx.lineTo(
-      x2 - arrowSize * Math.cos(angle - Math.PI / 6),
-      y2 - arrowSize * Math.sin(angle - Math.PI / 6)
-    );
+    ctx.lineTo(x2 - arrowSize * Math.cos(angle - Math.PI / 6), y2 - arrowSize * Math.sin(angle - Math.PI / 6));
     ctx.moveTo(x2, y2);
-    ctx.lineTo(
-      x2 - arrowSize * Math.cos(angle + Math.PI / 6),
-      y2 - arrowSize * Math.sin(angle + Math.PI / 6)
-    );
+    ctx.lineTo(x2 - arrowSize * Math.cos(angle + Math.PI / 6), y2 - arrowSize * Math.sin(angle + Math.PI / 6));
     ctx.stroke();
   }
 
-  private renderPolygon(
-    ctx: CanvasRenderingContext2D,
-    shape: ShapeAnnotation,
-    options: RenderOptions
-  ): void {
+  private renderPolygon(ctx: CanvasRenderingContext2D, shape: ShapeAnnotation, options: RenderOptions): void {
     const points = shape.points;
     if (!points || points.length < 2) return;
 
@@ -646,7 +627,7 @@ export class PaintRenderer {
     width: number,
     brush: BrushType,
     isEraser: boolean,
-    options: RenderOptions
+    options: RenderOptions,
   ): void {
     if (points.length === 0) return;
 
@@ -686,7 +667,7 @@ export class PaintRenderer {
     endPoint: { x: number; y: number },
     color: [number, number, number, number],
     width: number,
-    options: RenderOptions
+    options: RenderOptions,
   ): void {
     // Ensure canvas is properly sized (don't clear - may have existing annotations)
     const dpr = options.dpr ?? 1;

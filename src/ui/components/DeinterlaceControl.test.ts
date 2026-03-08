@@ -67,7 +67,9 @@ describe('DeinterlaceControl', () => {
 
       const checkbox = document.querySelector('[data-testid="deinterlace-enabled-checkbox"]') as HTMLInputElement;
       const methodSelect = document.querySelector('[data-testid="deinterlace-method-select"]') as HTMLSelectElement;
-      const fieldOrderSelect = document.querySelector('[data-testid="deinterlace-field-order-select"]') as HTMLSelectElement;
+      const fieldOrderSelect = document.querySelector(
+        '[data-testid="deinterlace-field-order-select"]',
+      ) as HTMLSelectElement;
 
       expect(checkbox.checked).toBe(true);
       expect(methodSelect.value).toBe('blend');
@@ -89,7 +91,9 @@ describe('DeinterlaceControl', () => {
 
       const checkbox = document.querySelector('[data-testid="deinterlace-enabled-checkbox"]') as HTMLInputElement;
       const methodSelect = document.querySelector('[data-testid="deinterlace-method-select"]') as HTMLSelectElement;
-      const fieldOrderSelect = document.querySelector('[data-testid="deinterlace-field-order-select"]') as HTMLSelectElement;
+      const fieldOrderSelect = document.querySelector(
+        '[data-testid="deinterlace-field-order-select"]',
+      ) as HTMLSelectElement;
 
       expect(checkbox.checked).toBe(false);
       expect(methodSelect.value).toBe('bob');
@@ -213,7 +217,7 @@ describe('DeinterlaceControl', () => {
       control.show();
       const select = document.querySelector('[data-testid="deinterlace-method-select"]') as HTMLSelectElement;
       expect(select.options.length).toBe(3);
-      const values = Array.from(select.options).map(o => o.value);
+      const values = Array.from(select.options).map((o) => o.value);
       expect(values).toContain('bob');
       expect(values).toContain('weave');
       expect(values).toContain('blend');
@@ -223,7 +227,7 @@ describe('DeinterlaceControl', () => {
       control.show();
       const select = document.querySelector('[data-testid="deinterlace-field-order-select"]') as HTMLSelectElement;
       expect(select.options.length).toBe(2);
-      const values = Array.from(select.options).map(o => o.value);
+      const values = Array.from(select.options).map((o) => o.value);
       expect(values).toContain('tff');
       expect(values).toContain('bff');
     });

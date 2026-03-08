@@ -30,20 +30,44 @@ function defaultMuxerConfig(overrides?: Partial<MuxerConfig>): MuxerConfig {
 function fakeH264KeyFrame(timestamp: number): EncodedChunk {
   // Minimal SPS NAL unit (type 7): start code + header + profile/level
   const sps = new Uint8Array([
-    0x00, 0x00, 0x00, 0x01,  // Start code
-    0x67, 0x42, 0x00, 0x1f,  // SPS: type=7, profile=66 (Baseline), compat=0, level=31
-    0xe9, 0x40, 0x10, 0x18,  // Encoded SPS data (dummy)
+    0x00,
+    0x00,
+    0x00,
+    0x01, // Start code
+    0x67,
+    0x42,
+    0x00,
+    0x1f, // SPS: type=7, profile=66 (Baseline), compat=0, level=31
+    0xe9,
+    0x40,
+    0x10,
+    0x18, // Encoded SPS data (dummy)
   ]);
   // Minimal PPS NAL unit (type 8)
   const pps = new Uint8Array([
-    0x00, 0x00, 0x00, 0x01,  // Start code
-    0x68, 0xce, 0x38, 0x80,  // PPS: type=8 + dummy data
+    0x00,
+    0x00,
+    0x00,
+    0x01, // Start code
+    0x68,
+    0xce,
+    0x38,
+    0x80, // PPS: type=8 + dummy data
   ]);
   // IDR slice NAL unit (type 5)
   const idr = new Uint8Array([
-    0x00, 0x00, 0x00, 0x01,  // Start code
-    0x65, 0x88, 0x80, 0x40,  // IDR: type=5 + dummy data
-    0x00, 0x01, 0x02, 0x03,
+    0x00,
+    0x00,
+    0x00,
+    0x01, // Start code
+    0x65,
+    0x88,
+    0x80,
+    0x40, // IDR: type=5 + dummy data
+    0x00,
+    0x01,
+    0x02,
+    0x03,
   ]);
 
   const data = new Uint8Array(sps.length + pps.length + idr.length);
@@ -62,9 +86,18 @@ function fakeH264KeyFrame(timestamp: number): EncodedChunk {
 function fakeDeltaFrame(timestamp: number): EncodedChunk {
   // Non-IDR slice (type 1)
   const data = new Uint8Array([
-    0x00, 0x00, 0x00, 0x01,  // Start code
-    0x41, 0x9a, 0x00, 0x04,  // non-IDR: type=1 + dummy data
-    0x10, 0x20, 0x30, 0x40,
+    0x00,
+    0x00,
+    0x00,
+    0x01, // Start code
+    0x41,
+    0x9a,
+    0x00,
+    0x04, // non-IDR: type=1 + dummy data
+    0x10,
+    0x20,
+    0x30,
+    0x40,
   ]);
   return {
     data,
@@ -78,8 +111,7 @@ function fakeDeltaFrame(timestamp: number): EncodedChunk {
  * Read a big-endian 32-bit uint from a buffer at a given offset.
  */
 function readU32(buf: Uint8Array, offset: number): number {
-  return ((buf[offset]! << 24) | (buf[offset + 1]! << 16) |
-    (buf[offset + 2]! << 8) | buf[offset + 3]!) >>> 0;
+  return ((buf[offset]! << 24) | (buf[offset + 1]! << 16) | (buf[offset + 2]! << 8) | buf[offset + 3]!) >>> 0;
 }
 
 /**
@@ -144,12 +176,12 @@ describe('buildAVCDecoderConfig', () => {
 
     const config = buildAVCDecoderConfig(sps, pps);
 
-    expect(config[0]).toBe(1);        // configurationVersion
-    expect(config[1]).toBe(0x42);     // AVCProfileIndication (from sps[1])
-    expect(config[2]).toBe(0x00);     // profile_compatibility (from sps[2])
-    expect(config[3]).toBe(0x1f);     // AVCLevelIndication (from sps[3])
-    expect(config[4]).toBe(0xff);     // lengthSizeMinusOne = 3
-    expect(config[5]).toBe(0xe1);     // numOfSequenceParameterSets = 1
+    expect(config[0]).toBe(1); // configurationVersion
+    expect(config[1]).toBe(0x42); // AVCProfileIndication (from sps[1])
+    expect(config[2]).toBe(0x00); // profile_compatibility (from sps[2])
+    expect(config[3]).toBe(0x1f); // AVCLevelIndication (from sps[3])
+    expect(config[4]).toBe(0xff); // lengthSizeMinusOne = 3
+    expect(config[5]).toBe(0xe1); // numOfSequenceParameterSets = 1
   });
 
   it('MUX-002: includes SPS and PPS data', () => {
@@ -165,11 +197,7 @@ describe('buildAVCDecoderConfig', () => {
 
 describe('muxToMP4', () => {
   it('MUX-003: produces a valid MP4 buffer', () => {
-    const chunks = [
-      fakeH264KeyFrame(0),
-      fakeDeltaFrame(41667),
-      fakeDeltaFrame(83333),
-    ];
+    const chunks = [fakeH264KeyFrame(0), fakeDeltaFrame(41667), fakeDeltaFrame(83333)];
 
     const mp4 = muxToMP4(chunks, defaultMuxerConfig());
 
@@ -191,7 +219,7 @@ describe('muxToMP4', () => {
     const buf = muxToMP4(chunks, defaultMuxerConfig());
 
     const boxes = findBoxes(buf);
-    const moov = boxes.find(b => b.type === 'moov');
+    const moov = boxes.find((b) => b.type === 'moov');
     expect(moov).toBeDefined();
 
     // Should contain trak inside moov
@@ -204,7 +232,7 @@ describe('muxToMP4', () => {
     const buf = muxToMP4(chunks, defaultMuxerConfig());
 
     const boxes = findBoxes(buf);
-    const mdat = boxes.find(b => b.type === 'mdat');
+    const mdat = boxes.find((b) => b.type === 'mdat');
     expect(mdat).toBeDefined();
     expect(mdat!.size).toBeGreaterThan(8); // More than just header
   });
@@ -242,11 +270,7 @@ describe('muxToMP4', () => {
   });
 
   it('MUX-010: contains stss box for sync samples (keyframes)', () => {
-    const chunks = [
-      fakeH264KeyFrame(0),
-      fakeDeltaFrame(41667),
-      fakeDeltaFrame(83333),
-    ];
+    const chunks = [fakeH264KeyFrame(0), fakeDeltaFrame(41667), fakeDeltaFrame(83333)];
     const buf = muxToMP4(chunks, defaultMuxerConfig());
 
     const stss = findBoxRecursive(buf, 'stss');
@@ -254,10 +278,7 @@ describe('muxToMP4', () => {
   });
 
   it('MUX-011: omits stss when all frames are keyframes', () => {
-    const chunks = [
-      fakeH264KeyFrame(0),
-      fakeH264KeyFrame(41667),
-    ];
+    const chunks = [fakeH264KeyFrame(0), fakeH264KeyFrame(41667)];
     const buf = muxToMP4(chunks, defaultMuxerConfig());
 
     // When all samples are sync, stss can be omitted
@@ -279,17 +300,19 @@ describe('muxToMP4', () => {
     const buf = muxToMP4(chunks, defaultMuxerConfig());
 
     const boxes = findBoxes(buf);
-    const moovIdx = boxes.findIndex(b => b.type === 'moov');
-    const mdatIdx = boxes.findIndex(b => b.type === 'mdat');
+    const moovIdx = boxes.findIndex((b) => b.type === 'moov');
+    const mdatIdx = boxes.findIndex((b) => b.type === 'mdat');
     expect(moovIdx).toBeLessThan(mdatIdx);
   });
 
   it('MUX-014: works with VP9 codec', () => {
-    const chunks: EncodedChunk[] = [{
-      data: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
-      type: 'key',
-      timestamp: 0,
-    }];
+    const chunks: EncodedChunk[] = [
+      {
+        data: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
+        type: 'key',
+        timestamp: 0,
+      },
+    ];
 
     const buf = muxToMP4(chunks, defaultMuxerConfig({ codec: 'vp09.00.10.08' }));
     expect(buf.length).toBeGreaterThan(0);
@@ -300,7 +323,7 @@ describe('muxToMP4', () => {
     const buf = muxToMP4(chunks, defaultMuxerConfig());
 
     const boxes = findBoxes(buf);
-    const mdatBox = boxes.find(b => b.type === 'mdat');
+    const mdatBox = boxes.find((b) => b.type === 'mdat');
     expect(mdatBox).toBeDefined();
 
     // The stco chunk offset should point to the data within mdat (after header)

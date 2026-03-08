@@ -9,8 +9,12 @@ import { ManagedVideoFrame } from './ManagedVideoFrame';
 function createMockFrame(): VideoFrame {
   let closed = false;
   return {
-    get format() { return closed ? null : 'RGBA'; },
-    close() { closed = true; },
+    get format() {
+      return closed ? null : 'RGBA';
+    },
+    close() {
+      closed = true;
+    },
     displayWidth: 1920,
     displayHeight: 1080,
     codedWidth: 1920,
@@ -121,8 +125,12 @@ describe('ManagedVideoFrame', () => {
 
     it('handles VideoFrame.close() throwing gracefully', () => {
       const mockFrame = {
-        get format() { return 'RGBA'; },
-        close() { throw new Error('Already closed externally'); },
+        get format() {
+          return 'RGBA';
+        },
+        close() {
+          throw new Error('Already closed externally');
+        },
       } as unknown as VideoFrame;
 
       const managed = ManagedVideoFrame.wrap(mockFrame);

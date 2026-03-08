@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { PerspectiveCorrectionParams, Point2D } from '../../transform/PerspectiveCorrection';
 import { DEFAULT_PERSPECTIVE_PARAMS, generatePerspectiveGrid } from '../../transform/PerspectiveCorrection';
 
@@ -13,7 +13,10 @@ const HANDLE_COLOR = 'rgba(0, 180, 255, 0.9)';
 const HANDLE_BORDER = 'rgba(255, 255, 255, 0.9)';
 
 const CORNER_KEYS: ('topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft')[] = [
-  'topLeft', 'topRight', 'bottomRight', 'bottomLeft',
+  'topLeft',
+  'topRight',
+  'bottomRight',
+  'bottomLeft',
 ];
 
 export class PerspectiveGridOverlay extends EventEmitter<PerspectiveGridOverlayEvents> {

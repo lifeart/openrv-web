@@ -20,14 +20,14 @@ import {
   applyScale,
   applyTranslation,
   applyEyeTransform,
-  EyeTransform,
+  type EyeTransform,
 } from './StereoEyeTransform';
 
 // Helper to create test ImageData
 function createTestImageData(
   width: number,
   height: number,
-  fill?: (x: number, y: number) => [number, number, number, number]
+  fill?: (x: number, y: number) => [number, number, number, number],
 ): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
@@ -161,9 +161,7 @@ describe('StereoEyeTransform', () => {
   describe('flipH', () => {
     it('SET-U020: Horizontal flip reverses pixel columns', () => {
       // Create 4x2 image with left half RED, right half BLUE
-      const source = createTestImageData(4, 2, (x) =>
-        x < 2 ? [255, 0, 0, 255] : [0, 0, 255, 255]
-      );
+      const source = createTestImageData(4, 2, (x) => (x < 2 ? [255, 0, 0, 255] : [0, 0, 255, 255]));
       const result = applyFlipH(source);
 
       // After flip, first pixel should be blue (was right edge)
@@ -187,9 +185,7 @@ describe('StereoEyeTransform', () => {
   describe('flipV', () => {
     it('SET-U022: Vertical flip reverses pixel rows', () => {
       // Create 2x4 image with top half RED, bottom half BLUE
-      const source = createTestImageData(2, 4, (_x, y) =>
-        y < 2 ? [255, 0, 0, 255] : [0, 0, 255, 255]
-      );
+      const source = createTestImageData(2, 4, (_x, y) => (y < 2 ? [255, 0, 0, 255] : [0, 0, 255, 255]));
       const result = applyFlipV(source);
 
       // After flip, top should be blue (was bottom)
@@ -359,9 +355,7 @@ describe('StereoEyeTransform', () => {
 
     it('SET-U051: Positive X shifts image right', () => {
       // Single red pixel at (0,0), rest black
-      const source = createTestImageData(4, 4, (x, y) =>
-        x === 0 && y === 0 ? [255, 0, 0, 255] : [0, 0, 0, 255]
-      );
+      const source = createTestImageData(4, 4, (x, y) => (x === 0 && y === 0 ? [255, 0, 0, 255] : [0, 0, 0, 255]));
       const result = applyTranslation(source, 2, 0);
       // Red pixel should now be at x=2
       expect(getPixel(result, 2, 0)[0]).toBe(255);
@@ -369,26 +363,20 @@ describe('StereoEyeTransform', () => {
     });
 
     it('SET-U052: Negative X shifts image left', () => {
-      const source = createTestImageData(4, 4, (x, y) =>
-        x === 3 && y === 0 ? [255, 0, 0, 255] : [0, 0, 0, 255]
-      );
+      const source = createTestImageData(4, 4, (x, y) => (x === 3 && y === 0 ? [255, 0, 0, 255] : [0, 0, 0, 255]));
       const result = applyTranslation(source, -2, 0);
       expect(getPixel(result, 1, 0)[0]).toBe(255);
     });
 
     it('SET-U053: Positive Y shifts image down', () => {
-      const source = createTestImageData(4, 4, (x, y) =>
-        x === 0 && y === 0 ? [255, 0, 0, 255] : [0, 0, 0, 255]
-      );
+      const source = createTestImageData(4, 4, (x, y) => (x === 0 && y === 0 ? [255, 0, 0, 255] : [0, 0, 0, 255]));
       const result = applyTranslation(source, 0, 2);
       expect(getPixel(result, 0, 2)[0]).toBe(255);
       expect(getPixel(result, 0, 0)[0]).toBe(0);
     });
 
     it('SET-U054: Negative Y shifts image up', () => {
-      const source = createTestImageData(4, 4, (x, y) =>
-        x === 0 && y === 3 ? [255, 0, 0, 255] : [0, 0, 0, 255]
-      );
+      const source = createTestImageData(4, 4, (x, y) => (x === 0 && y === 3 ? [255, 0, 0, 255] : [0, 0, 0, 255]));
       const result = applyTranslation(source, 0, -2);
       expect(getPixel(result, 0, 1)[0]).toBe(255);
     });
@@ -412,9 +400,7 @@ describe('StereoEyeTransform', () => {
   describe('combined transforms (applyEyeTransform)', () => {
     it('SET-U060: Transforms applied in correct order (flip, rotate, scale, translate)', () => {
       // Verify order matters: flipH + translate should differ from translate + flipH
-      const source = createTestImageData(10, 10, (x) =>
-        x < 5 ? [255, 0, 0, 255] : [0, 0, 255, 255]
-      );
+      const source = createTestImageData(10, 10, (x) => (x < 5 ? [255, 0, 0, 255] : [0, 0, 255, 255]));
 
       const transform: EyeTransform = {
         flipH: true,
@@ -433,9 +419,7 @@ describe('StereoEyeTransform', () => {
     });
 
     it('SET-U061: FlipH then rotation differs from rotation then flipH', () => {
-      const source = createTestImageData(8, 8, (x, y) =>
-        x < 4 && y < 4 ? [255, 0, 0, 255] : [0, 0, 255, 255]
-      );
+      const source = createTestImageData(8, 8, (x, y) => (x < 4 && y < 4 ? [255, 0, 0, 255] : [0, 0, 255, 255]));
 
       // FlipH first, then rotation (actual pipeline order)
       const t1: EyeTransform = { flipH: true, flipV: false, rotation: 45, scale: 1.0, translateX: 0, translateY: 0 };

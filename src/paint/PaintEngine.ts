@@ -1,20 +1,20 @@
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import {
-  Annotation,
-  PenStroke,
-  TextAnnotation,
-  ShapeAnnotation,
+  type Annotation,
+  type PenStroke,
+  type TextAnnotation,
+  type ShapeAnnotation,
   ShapeType,
-  Point,
-  PaintState,
-  PaintEffects,
-  StrokePoint,
+  type Point,
+  type PaintState,
+  type PaintEffects,
+  type StrokePoint,
   BrushType,
   LineJoin,
   LineCap,
   StrokeMode,
   TextOrigin,
-  PaintSnapshot,
+  type PaintSnapshot,
   DEFAULT_STROKE_COLOR,
   DEFAULT_STROKE_WIDTH,
   DEFAULT_BRUSH_TYPE,
@@ -22,11 +22,7 @@ import {
   type AnnotationVersion,
   type AnnotationEye,
 } from './types';
-import {
-  createAdvancedTool,
-  type PaintToolInterface,
-  type AdvancedToolName,
-} from './AdvancedPaintTools';
+import { createAdvancedTool, type PaintToolInterface, type AdvancedToolName } from './AdvancedPaintTools';
 
 export interface PaintEngineEvents extends EventMap {
   strokeAdded: Annotation;
@@ -37,7 +33,19 @@ export interface PaintEngineEvents extends EventMap {
   brushChanged: BrushType;
 }
 
-export type BuiltinPaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'dodge' | 'burn' | 'clone' | 'smudge';
+export type BuiltinPaintTool =
+  | 'pen'
+  | 'text'
+  | 'eraser'
+  | 'none'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'arrow'
+  | 'dodge'
+  | 'burn'
+  | 'clone'
+  | 'smudge';
 export type PaintTool = BuiltinPaintTool | (string & {});
 
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
@@ -269,7 +277,13 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   }
 
   // Text operations
-  addText(frame: number, position: StrokePoint, text: string, size = 24, options?: Partial<TextAnnotation>): TextAnnotation {
+  addText(
+    frame: number,
+    position: StrokePoint,
+    text: string,
+    size = 24,
+    options?: Partial<TextAnnotation>,
+  ): TextAnnotation {
     // When hold mode is enabled, annotations persist on all subsequent frames
     // duration: 0 = visible only on drawn frame, -1 = visible on all subsequent frames
     const defaultDuration = this.state.effects.hold ? -1 : 0;
@@ -312,7 +326,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const annotations = this.state.annotations.get(frame);
     if (!annotations) return false;
 
-    const annotation = annotations.find(a => a.id === id && a.type === 'text') as TextAnnotation | undefined;
+    const annotation = annotations.find((a) => a.id === id && a.type === 'text') as TextAnnotation | undefined;
     if (!annotation) return false;
 
     // Apply updates
@@ -343,7 +357,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     shapeType: ShapeType,
     startPoint: Point,
     endPoint: Point,
-    options?: Partial<ShapeAnnotation>
+    options?: Partial<ShapeAnnotation>,
   ): ShapeAnnotation {
     // When hold mode is enabled, annotations persist on all subsequent frames
     // duration: 0 = visible only on drawn frame, -1 = visible on all subsequent frames
@@ -376,48 +390,28 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   /**
    * Add a rectangle shape
    */
-  addRectangle(
-    frame: number,
-    startPoint: Point,
-    endPoint: Point,
-    options?: Partial<ShapeAnnotation>
-  ): ShapeAnnotation {
+  addRectangle(frame: number, startPoint: Point, endPoint: Point, options?: Partial<ShapeAnnotation>): ShapeAnnotation {
     return this.addShape(frame, ShapeType.Rectangle, startPoint, endPoint, options);
   }
 
   /**
    * Add an ellipse shape
    */
-  addEllipse(
-    frame: number,
-    startPoint: Point,
-    endPoint: Point,
-    options?: Partial<ShapeAnnotation>
-  ): ShapeAnnotation {
+  addEllipse(frame: number, startPoint: Point, endPoint: Point, options?: Partial<ShapeAnnotation>): ShapeAnnotation {
     return this.addShape(frame, ShapeType.Ellipse, startPoint, endPoint, options);
   }
 
   /**
    * Add a line shape
    */
-  addLine(
-    frame: number,
-    startPoint: Point,
-    endPoint: Point,
-    options?: Partial<ShapeAnnotation>
-  ): ShapeAnnotation {
+  addLine(frame: number, startPoint: Point, endPoint: Point, options?: Partial<ShapeAnnotation>): ShapeAnnotation {
     return this.addShape(frame, ShapeType.Line, startPoint, endPoint, options);
   }
 
   /**
    * Add an arrow shape
    */
-  addArrow(
-    frame: number,
-    startPoint: Point,
-    endPoint: Point,
-    options?: Partial<ShapeAnnotation>
-  ): ShapeAnnotation {
+  addArrow(frame: number, startPoint: Point, endPoint: Point, options?: Partial<ShapeAnnotation>): ShapeAnnotation {
     return this.addShape(frame, ShapeType.Arrow, startPoint, endPoint, options);
   }
 
@@ -430,7 +424,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   addPolygon(
     frame: number,
     points: Array<{ x: number; y: number }>,
-    options?: Partial<ShapeAnnotation>
+    options?: Partial<ShapeAnnotation>,
   ): ShapeAnnotation {
     // Calculate bounding box from points for startPoint/endPoint
     if (points.length === 0) {
@@ -467,7 +461,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       strokeWidth: options?.strokeWidth ?? this._width,
       fillColor: options?.fillColor,
       rotation: options?.rotation ?? 0,
-      points: points.map(p => ({ x: p.x, y: p.y })),
+      points: points.map((p) => ({ x: p.x, y: p.y })),
       startFrame: frame,
       duration: options?.duration ?? defaultDuration,
     };
@@ -483,7 +477,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const annotations = this.state.annotations.get(frame);
     if (!annotations) return false;
 
-    const annotation = annotations.find(a => a.id === id && a.type === 'shape') as ShapeAnnotation | undefined;
+    const annotation = annotations.find((a) => a.id === id && a.type === 'shape') as ShapeAnnotation | undefined;
     if (!annotation) return false;
 
     // Apply updates
@@ -495,7 +489,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     if (updates.rotation !== undefined) annotation.rotation = updates.rotation;
     if (updates.cornerRadius !== undefined) annotation.cornerRadius = updates.cornerRadius;
     if (updates.arrowheadSize !== undefined) annotation.arrowheadSize = updates.arrowheadSize;
-    if (updates.points !== undefined) annotation.points = updates.points.map(p => ({ x: p.x, y: p.y }));
+    if (updates.points !== undefined) annotation.points = updates.points.map((p) => ({ x: p.x, y: p.y }));
 
     this.emit('annotationsChanged', frame);
     return true;
@@ -633,10 +627,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const annotations = this.state.annotations.get(frame);
     if (!annotations || annotations.length === 0) return false;
     if (!versionFilter && !eyeFilter) return true;
-    return annotations.some(a =>
-      this.matchesVersionFilter(a, versionFilter) &&
-      this.matchesEyeFilter(a, eyeFilter)
-    );
+    return annotations.some((a) => this.matchesVersionFilter(a, versionFilter) && this.matchesEyeFilter(a, eyeFilter));
   }
 
   // Get annotations for display
@@ -648,9 +639,11 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     // Get annotations visible on this frame
     for (const [_annotationFrame, annotations] of this.state.annotations) {
       for (const annotation of annotations) {
-        if (this.isAnnotationVisibleOnFrame(annotation, frame) &&
-            this.matchesVersionFilter(annotation, versionFilter) &&
-            this.matchesEyeFilter(annotation, eyeFilter)) {
+        if (
+          this.isAnnotationVisibleOnFrame(annotation, frame) &&
+          this.matchesVersionFilter(annotation, versionFilter) &&
+          this.matchesEyeFilter(annotation, eyeFilter)
+        ) {
           result.push(annotation);
         }
       }
@@ -660,7 +653,11 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   }
 
   // Get annotations with ghost effect
-  getAnnotationsWithGhost(frame: number, versionFilter?: 'A' | 'B', eyeFilter?: 'left' | 'right'): Array<{ annotation: Annotation; opacity: number }> {
+  getAnnotationsWithGhost(
+    frame: number,
+    versionFilter?: 'A' | 'B',
+    eyeFilter?: 'left' | 'right',
+  ): Array<{ annotation: Annotation; opacity: number }> {
     if (!this.state.show) return [];
 
     const result: Array<{ annotation: Annotation; opacity: number }> = [];
@@ -685,7 +682,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
             result.push({ annotation, opacity: opacity * 0.5 });
           } else if (frameDiff < 0 && -frameDiff <= ghostAfter) {
             // Ghost from after (green-ish tint could be applied in renderer)
-            const opacity = 1 - (-frameDiff) / (ghostAfter + 1);
+            const opacity = 1 - -frameDiff / (ghostAfter + 1);
             result.push({ annotation, opacity: opacity * 0.5 });
           }
         }
@@ -781,8 +778,11 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       // Only remove the annotations that were part of the original clear,
       // preserving any annotations added after the undo point
       const current = this.state.annotations.get(lastAction.frame) || [];
-      const idsToRemove = new Set(lastAction.annotations.map(a => a.id));
-      this.state.annotations.set(lastAction.frame, current.filter(a => !idsToRemove.has(a.id)));
+      const idsToRemove = new Set(lastAction.annotations.map((a) => a.id));
+      this.state.annotations.set(
+        lastAction.frame,
+        current.filter((a) => !idsToRemove.has(a.id)),
+      );
       this.emit('annotationsChanged', lastAction.frame);
     }
 

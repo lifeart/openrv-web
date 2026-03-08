@@ -7,10 +7,10 @@ import { HSLQualifier } from './HSLQualifier';
 function createImageData(width: number, height: number, fillValue: number = 128): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = fillValue;     // R
+    data[i] = fillValue; // R
     data[i + 1] = fillValue; // G
     data[i + 2] = fillValue; // B
-    data[i + 3] = 255;       // A
+    data[i + 3] = 255; // A
   }
   return new ImageData(data, width, height);
 }
@@ -21,7 +21,7 @@ function createImageData(width: number, height: number, fillValue: number = 128)
 function createColoredImageData(
   width: number,
   height: number,
-  colors: Array<{ x: number; y: number; r: number; g: number; b: number }>
+  colors: Array<{ x: number; y: number; r: number; g: number; b: number }>,
 ): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   // Fill with gray
@@ -388,8 +388,8 @@ describe('HSLQualifier', () => {
 
       // Create image with red pixel and blue pixel
       const imageData = createColoredImageData(2, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },   // Red - should be selected (white matte)
-        { x: 1, y: 0, r: 0, g: 0, b: 255 },   // Blue - should not be selected (black matte)
+        { x: 0, y: 0, r: 255, g: 0, b: 0 }, // Red - should be selected (white matte)
+        { x: 1, y: 0, r: 0, g: 0, b: 255 }, // Blue - should not be selected (black matte)
       ]);
 
       hslQualifier.apply(imageData);
@@ -412,9 +412,7 @@ describe('HSLQualifier', () => {
       hslQualifier.setLuminanceRange({ center: 50, width: 100, softness: 50 });
 
       // Create red image (hue ~0)
-      const imageData = createColoredImageData(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData = createColoredImageData(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
 
       hslQualifier.apply(imageData);
 
@@ -434,7 +432,7 @@ describe('HSLQualifier', () => {
 
       // Create saturated red and nearly-gray pink
       const imageData = createColoredImageData(2, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },     // Fully saturated (100%)
+        { x: 0, y: 0, r: 255, g: 0, b: 0 }, // Fully saturated (100%)
         { x: 1, y: 0, r: 150, g: 130, b: 130 }, // Very low saturation (~15%)
       ]);
 
@@ -458,7 +456,7 @@ describe('HSLQualifier', () => {
       const imageData = createColoredImageData(3, 1, [
         { x: 0, y: 0, r: 255, g: 255, b: 255 }, // Bright (high lum)
         { x: 1, y: 0, r: 128, g: 128, b: 128 }, // Mid (gray)
-        { x: 2, y: 0, r: 32, g: 32, b: 32 },    // Dark (low lum)
+        { x: 2, y: 0, r: 32, g: 32, b: 32 }, // Dark (low lum)
       ]);
 
       hslQualifier.apply(imageData);
@@ -484,9 +482,9 @@ describe('HSLQualifier', () => {
 
       // Create colors at different hue distances
       const imageData = createColoredImageData(3, 1, [
-        { x: 0, y: 0, r: 255, g: 255, b: 0 },   // Yellow (hue 60) - fully selected
-        { x: 1, y: 0, r: 255, g: 200, b: 0 },   // Orange-yellow - partially selected
-        { x: 2, y: 0, r: 255, g: 128, b: 0 },   // Orange (hue ~30) - less selected
+        { x: 0, y: 0, r: 255, g: 255, b: 0 }, // Yellow (hue 60) - fully selected
+        { x: 1, y: 0, r: 255, g: 200, b: 0 }, // Orange-yellow - partially selected
+        { x: 2, y: 0, r: 255, g: 128, b: 0 }, // Orange (hue ~30) - less selected
       ]);
 
       hslQualifier.apply(imageData);
@@ -509,9 +507,7 @@ describe('HSLQualifier', () => {
       hslQualifier.setHueRange({ center: 0, width: 60, softness: 20 });
 
       // Create red pixel
-      const imageData = createColoredImageData(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData = createColoredImageData(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
 
       hslQualifier.apply(imageData);
 
@@ -536,7 +532,7 @@ describe('HSLQualifier', () => {
       hslQualifier.apply(imageData);
 
       expect(imageData.data[0]).toBeGreaterThan(200); // Red pixel -> white matte
-      expect(imageData.data[4]).toBeLessThan(50);     // Green pixel -> black matte
+      expect(imageData.data[4]).toBeLessThan(50); // Green pixel -> black matte
     });
   });
 
@@ -549,17 +545,13 @@ describe('HSLQualifier', () => {
       hslQualifier.setLuminanceRange({ center: 50, width: 100, softness: 50 });
 
       // Red pixel
-      const imageData1 = createColoredImageData(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData1 = createColoredImageData(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
       hslQualifier.apply(imageData1);
       const normalMatte = imageData1.data[0]!;
 
       // Now with invert
       hslQualifier.setInvert(true);
-      const imageData2 = createColoredImageData(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData2 = createColoredImageData(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
       hslQualifier.apply(imageData2);
       const invertedMatte = imageData2.data[0]!;
 
@@ -579,8 +571,8 @@ describe('HSLQualifier', () => {
       hslQualifier.setCorrection({ saturationScale: 0 });
 
       const imageData = createColoredImageData(2, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },   // Red - should be desaturated
-        { x: 1, y: 0, r: 0, g: 255, b: 0 },   // Green - should stay green
+        { x: 0, y: 0, r: 255, g: 0, b: 0 }, // Red - should be desaturated
+        { x: 1, y: 0, r: 0, g: 255, b: 0 }, // Green - should stay green
       ]);
 
       hslQualifier.apply(imageData);
@@ -608,9 +600,7 @@ describe('HSLQualifier', () => {
       // Shift hue by 120 (red -> green)
       hslQualifier.setCorrection({ hueShift: 120 });
 
-      const imageData = createColoredImageData(1, 1, [
-        { x: 0, y: 0, r: 255, g: 0, b: 0 },
-      ]);
+      const imageData = createColoredImageData(1, 1, [{ x: 0, y: 0, r: 255, g: 0, b: 0 }]);
 
       hslQualifier.apply(imageData);
 

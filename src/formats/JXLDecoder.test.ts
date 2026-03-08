@@ -69,11 +69,15 @@ describe('JXLDecoder', () => {
       const view = new DataView(buffer);
       view.setUint32(0, 12, false);
       // 'ftyp'
-      view.setUint8(4, 0x66); view.setUint8(5, 0x74);
-      view.setUint8(6, 0x79); view.setUint8(7, 0x70);
+      view.setUint8(4, 0x66);
+      view.setUint8(5, 0x74);
+      view.setUint8(6, 0x79);
+      view.setUint8(7, 0x70);
       // 'jxl '
-      view.setUint8(8, 0x6a); view.setUint8(9, 0x78);
-      view.setUint8(10, 0x6c); view.setUint8(11, 0x20);
+      view.setUint8(8, 0x6a);
+      view.setUint8(9, 0x78);
+      view.setUint8(10, 0x6c);
+      view.setUint8(11, 0x20);
       expect(isJXLContainer(buffer)).toBe(true);
     });
 
@@ -110,10 +114,22 @@ describe('JXLDecoder', () => {
         width: 2,
         height: 2,
         data: new Uint8ClampedArray([
-          255, 0, 0, 255,   // red
-          0, 255, 0, 255,   // green
-          0, 0, 255, 255,   // blue
-          255, 255, 255, 255, // white
+          255,
+          0,
+          0,
+          255, // red
+          0,
+          255,
+          0,
+          255, // green
+          0,
+          0,
+          255,
+          255, // blue
+          255,
+          255,
+          255,
+          255, // white
         ]),
       };
 
@@ -151,11 +167,15 @@ describe('JXLDecoder', () => {
       const view = new DataView(buffer);
       view.setUint32(0, 12, false);
       // 'ftyp'
-      view.setUint8(4, 'f'.charCodeAt(0)); view.setUint8(5, 't'.charCodeAt(0));
-      view.setUint8(6, 'y'.charCodeAt(0)); view.setUint8(7, 'p'.charCodeAt(0));
+      view.setUint8(4, 'f'.charCodeAt(0));
+      view.setUint8(5, 't'.charCodeAt(0));
+      view.setUint8(6, 'y'.charCodeAt(0));
+      view.setUint8(7, 'p'.charCodeAt(0));
       // 'jxl '
-      view.setUint8(8, 'j'.charCodeAt(0)); view.setUint8(9, 'x'.charCodeAt(0));
-      view.setUint8(10, 'l'.charCodeAt(0)); view.setUint8(11, ' '.charCodeAt(0));
+      view.setUint8(8, 'j'.charCodeAt(0));
+      view.setUint8(9, 'x'.charCodeAt(0));
+      view.setUint8(10, 'l'.charCodeAt(0));
+      view.setUint8(11, ' '.charCodeAt(0));
 
       const mockImageData = {
         width: 1,
@@ -205,8 +225,14 @@ describe('JXLDecoder', () => {
         width: 2,
         height: 1,
         data: new Uint8ClampedArray([
-          0, 0, 0, 0,           // all zeros
-          255, 255, 255, 255,   // all max
+          0,
+          0,
+          0,
+          0, // all zeros
+          255,
+          255,
+          255,
+          255, // all max
         ]),
       };
 

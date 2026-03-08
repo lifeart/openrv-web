@@ -6,12 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  ColorWheels,
-  ColorWheelsState,
-  DEFAULT_WHEEL_VALUES,
-  DEFAULT_COLOR_WHEELS_STATE,
-} from './ColorWheels';
+import { ColorWheels, type ColorWheelsState, DEFAULT_WHEEL_VALUES, DEFAULT_COLOR_WHEELS_STATE } from './ColorWheels';
 
 // Canvas mocks are provided by test/setup.ts
 
@@ -23,7 +18,11 @@ function createMockParent(): HTMLElement {
 }
 
 // Helper to create test ImageData
-function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+function createTestImageData(
+  width: number,
+  height: number,
+  fill?: { r: number; g: number; b: number; a: number },
+): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   if (fill) {
     for (let i = 0; i < data.length; i += 4) {
@@ -400,9 +399,7 @@ describe('ColorWheels', () => {
 
       colorWheels.reset(); // Saves state to undo stack
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ canUndo: true, canRedo: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ canUndo: true, canRedo: false }));
     });
   });
 
@@ -443,7 +440,7 @@ describe('ColorWheels', () => {
       colorWheels.apply(imageData);
 
       expect(imageData.data[0]).toBeGreaterThan(30); // Red increased
-      expect(imageData.data[2]).toBeLessThan(30);    // Blue decreased
+      expect(imageData.data[2]).toBeLessThan(30); // Blue decreased
     });
 
     it('WHEEL-062: gain affects highlights (high luminance)', () => {

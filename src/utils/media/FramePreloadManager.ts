@@ -17,12 +17,12 @@ export interface PreloadRequest<T> {
 }
 
 export interface PreloadConfig {
-  maxCacheSize: number;       // Max frames to keep in cache
-  preloadAhead: number;       // Frames to preload ahead during playback
-  preloadBehind: number;      // Frames to keep behind during playback
-  scrubWindow: number;        // Frames to preload in each direction when scrubbing
-  maxConcurrent: number;      // Max concurrent preload requests
-  priorityDecayRate: number;  // How much priority degrades with distance
+  maxCacheSize: number; // Max frames to keep in cache
+  preloadAhead: number; // Frames to preload ahead during playback
+  preloadBehind: number; // Frames to keep behind during playback
+  scrubWindow: number; // Frames to preload in each direction when scrubbing
+  maxConcurrent: number; // Max concurrent preload requests
+  priorityDecayRate: number; // How much priority degrades with distance
 }
 
 export const DEFAULT_PRELOAD_CONFIG: PreloadConfig = {
@@ -30,9 +30,9 @@ export const DEFAULT_PRELOAD_CONFIG: PreloadConfig = {
   preloadAhead: 30,
   preloadBehind: 5,
   scrubWindow: 10,
-  maxConcurrent: 3,  // Kept low: MediabunnyFrameExtractor serializes decoding internally,
-                     // so extra concurrency just queues up without throughput gain.
-                     // 3 slots = 1 for current frame + 2 for sequential preloading ahead.
+  maxConcurrent: 3, // Kept low: MediabunnyFrameExtractor serializes decoding internally,
+  // so extra concurrency just queues up without throughput gain.
+  // 3 slots = 1 for current frame + 2 for sequential preloading ahead.
   priorityDecayRate: 1.0,
 };
 
@@ -84,7 +84,7 @@ export class FramePreloadManager<T> {
     totalFrames: number,
     loader: FrameLoader<T>,
     disposer?: FrameDisposer<T>,
-    config: Partial<PreloadConfig> = {}
+    config: Partial<PreloadConfig> = {},
   ) {
     this.totalFrames = totalFrames;
     this.loader = loader;
@@ -94,10 +94,7 @@ export class FramePreloadManager<T> {
     const mergedConfig = { ...DEFAULT_PRELOAD_CONFIG, ...config };
 
     // Clamp maxCacheSize to valid bounds to prevent memory exhaustion
-    mergedConfig.maxCacheSize = Math.max(
-      MIN_CACHE_SIZE,
-      Math.min(MAX_CACHE_SIZE, mergedConfig.maxCacheSize)
-    );
+    mergedConfig.maxCacheSize = Math.max(MIN_CACHE_SIZE, Math.min(MAX_CACHE_SIZE, mergedConfig.maxCacheSize));
 
     // Ensure maxConcurrent is reasonable
     mergedConfig.maxConcurrent = Math.max(1, Math.min(16, mergedConfig.maxConcurrent));
@@ -135,8 +132,7 @@ export class FramePreloadManager<T> {
     if (!entry.resolution) {
       return true;
     }
-    return entry.resolution.w >= this.currentTargetSize.w &&
-           entry.resolution.h >= this.currentTargetSize.h;
+    return entry.resolution.w >= this.currentTargetSize.w && entry.resolution.h >= this.currentTargetSize.h;
   }
 
   /**
@@ -210,13 +206,13 @@ export class FramePreloadManager<T> {
 
     // Pass abort signal to loader for cancellation support
     const loadPromise = this.loader(frame, requestSignal)
-      .then(data => {
+      .then((data) => {
         if (data !== null && !request.cancelled && !requestSignal.aborted) {
           this.addToCache(frame, data);
         }
         return data;
       })
-      .catch(e => {
+      .catch((e) => {
         // Don't log abort errors as warnings
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
           console.warn(`Failed to load frame ${frame}:`, e);
@@ -345,8 +341,7 @@ export class FramePreloadManager<T> {
 
     // Evict distant frames only when cache is near capacity (80% full)
     // Skip eviction entirely if entire video fits in cache
-    if (this.totalFrames > this.config.maxCacheSize &&
-        this.cache.size >= this.config.maxCacheSize * 0.8) {
+    if (this.totalFrames > this.config.maxCacheSize && this.cache.size >= this.config.maxCacheSize * 0.8) {
       this.evictDistantFrames(centerFrame);
     }
   }
@@ -362,7 +357,7 @@ export class FramePreloadManager<T> {
 
     // Ahead frames (in playback direction) with higher priority
     for (let i = 1; i <= preloadAhead; i++) {
-      const frame = centerFrame + (i * dir);
+      const frame = centerFrame + i * dir;
       if (frame >= 1 && frame <= this.totalFrames && !this.cache.has(frame)) {
         list.push({
           frame,
@@ -373,7 +368,7 @@ export class FramePreloadManager<T> {
 
     // Behind frames with lower priority
     for (let i = 1; i <= preloadBehind; i++) {
-      const frame = centerFrame - (i * dir);
+      const frame = centerFrame - i * dir;
       if (frame >= 1 && frame <= this.totalFrames && !this.cache.has(frame)) {
         list.push({
           frame,
@@ -515,13 +510,13 @@ export class FramePreloadManager<T> {
 
     // Pass abort signal to loader for cancellation support
     request.promise = this.loader(request.frame, requestSignal)
-      .then(data => {
+      .then((data) => {
         if (data !== null && !request.cancelled && !requestSignal.aborted) {
           this.addToCache(request.frame, data);
         }
         return data;
       })
-      .catch(e => {
+      .catch((e) => {
         // Don't log abort errors as warnings
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
           console.warn(`Preload failed for frame ${request.frame}:`, e);
@@ -560,7 +555,7 @@ export class FramePreloadManager<T> {
 
     // Remove cancelled entries from sorted array
     if (hasCancelled) {
-      this.sortedPending = this.sortedPending.filter(r => !r.cancelled);
+      this.sortedPending = this.sortedPending.filter((r) => !r.cancelled);
     }
   }
 
@@ -581,7 +576,7 @@ export class FramePreloadManager<T> {
     const requestSignal = this.abortController.signal;
 
     const promise = this.loader(frame, requestSignal)
-      .then(data => {
+      .then((data) => {
         if (data !== null && !requestSignal.aborted) {
           // Dispose old entry before replacing
           const oldEntry = this.cache.get(frame);
@@ -592,7 +587,7 @@ export class FramePreloadManager<T> {
         }
         return data;
       })
-      .catch(e => {
+      .catch((e) => {
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
           console.warn(`Upgrade extraction failed for frame ${frame}:`, e);
         }
@@ -758,10 +753,7 @@ export class FramePreloadManager<T> {
 
     // Clamp maxCacheSize to valid bounds
     if (config.maxCacheSize !== undefined) {
-      mergedConfig.maxCacheSize = Math.max(
-        MIN_CACHE_SIZE,
-        Math.min(MAX_CACHE_SIZE, mergedConfig.maxCacheSize)
-      );
+      mergedConfig.maxCacheSize = Math.max(MIN_CACHE_SIZE, Math.min(MAX_CACHE_SIZE, mergedConfig.maxCacheSize));
     }
 
     // Ensure maxConcurrent is reasonable

@@ -112,11 +112,7 @@ export function isFloatTIFF(buffer: ArrayBuffer): boolean {
 /**
  * Parse IFD (Image File Directory) tags
  */
-function parseIFD(
-  view: DataView,
-  ifdOffset: number,
-  le: boolean
-): Map<number, TIFFTag> {
+function parseIFD(view: DataView, ifdOffset: number, le: boolean): Map<number, TIFFTag> {
   const tags = new Map<number, TIFFTag>();
 
   if (ifdOffset + 2 > view.byteLength) return tags;
@@ -151,12 +147,18 @@ function parseIFD(
  */
 function getTypeSize(type: number): number {
   switch (type) {
-    case 1: return 1; // BYTE
-    case 2: return 1; // ASCII
-    case 3: return 2; // SHORT
-    case 4: return 4; // LONG
-    case 5: return 8; // RATIONAL
-    default: return 1;
+    case 1:
+      return 1; // BYTE
+    case 2:
+      return 1; // ASCII
+    case 3:
+      return 2; // SHORT
+    case 4:
+      return 4; // LONG
+    case 5:
+      return 8; // RATIONAL
+    default:
+      return 1;
   }
 }
 
@@ -168,7 +170,7 @@ function getTagSingleValue(
   tags: Map<number, TIFFTag>,
   tagId: number,
   le: boolean,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const tag = tags.get(tagId);
   if (!tag) return defaultValue;
@@ -200,12 +202,7 @@ function getTagSingleValue(
 /**
  * Read multiple values from a tag
  */
-function getTagMultipleValues(
-  view: DataView,
-  tags: Map<number, TIFFTag>,
-  tagId: number,
-  le: boolean
-): number[] {
+function getTagMultipleValues(view: DataView, tags: Map<number, TIFFTag>, tagId: number, le: boolean): number[] {
   const tag = tags.get(tagId);
   if (!tag) return [];
 
@@ -489,7 +486,10 @@ function applyPredictor(
     return result;
   }
 
-  throw new DecoderError('TIFF', `Unsupported TIFF predictor: ${predictor}. Supported: 1 (none), 2 (horizontal), 3 (floating-point).`);
+  throw new DecoderError(
+    'TIFF',
+    `Unsupported TIFF predictor: ${predictor}. Supported: 1 (none), 2 (horizontal), 3 (floating-point).`,
+  );
 }
 
 /**
@@ -607,7 +607,10 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   validateImageDimensions(width, height, 'TIFF');
 
   if (sampleFormatValue !== SAMPLE_FORMAT_FLOAT) {
-    throw new DecoderError('TIFF', `Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`);
+    throw new DecoderError(
+      'TIFF',
+      `Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`,
+    );
   }
 
   if (bitsPerSample !== 32) {
@@ -616,15 +619,24 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
   const supportedCompressions = [COMPRESSION_NONE, COMPRESSION_LZW, COMPRESSION_DEFLATE, COMPRESSION_ADOBE_DEFLATE];
   if (!supportedCompressions.includes(compression)) {
-    throw new DecoderError('TIFF', `Unsupported TIFF compression: ${compression}. Supported: uncompressed (1), LZW (5), Deflate (8, 32946).`);
+    throw new DecoderError(
+      'TIFF',
+      `Unsupported TIFF compression: ${compression}. Supported: uncompressed (1), LZW (5), Deflate (8, 32946).`,
+    );
   }
 
   if (predictor !== PREDICTOR_NONE && predictor !== PREDICTOR_HORIZONTAL && predictor !== PREDICTOR_FLOATING_POINT) {
-    throw new DecoderError('TIFF', `Unsupported TIFF predictor: ${predictor}. Supported: 1 (none), 2 (horizontal), 3 (floating-point).`);
+    throw new DecoderError(
+      'TIFF',
+      `Unsupported TIFF predictor: ${predictor}. Supported: 1 (none), 2 (horizontal), 3 (floating-point).`,
+    );
   }
 
   if (samplesPerPixel < 3 || samplesPerPixel > 4) {
-    throw new DecoderError('TIFF', `Unsupported samples per pixel: ${samplesPerPixel}. Only 3 (RGB) or 4 (RGBA) are supported.`);
+    throw new DecoderError(
+      'TIFF',
+      `Unsupported samples per pixel: ${samplesPerPixel}. Only 3 (RGB) or 4 (RGBA) are supported.`,
+    );
   }
 
   // Detect tiled vs strip layout
@@ -637,9 +649,20 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
   if (isTiled) {
     return decodeTiledTIFF(
-      buffer, view, le, width, height, tileWidth, tileLength,
-      tileOffsets, tileByteCounts, samplesPerPixel, compression, predictor,
-      bitsPerSample, bigEndian
+      buffer,
+      view,
+      le,
+      width,
+      height,
+      tileWidth,
+      tileLength,
+      tileOffsets,
+      tileByteCounts,
+      samplesPerPixel,
+      compression,
+      predictor,
+      bitsPerSample,
+      bigEndian,
     );
   }
 

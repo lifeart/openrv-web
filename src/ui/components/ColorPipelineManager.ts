@@ -9,7 +9,7 @@
  * is responsible for syncing this state to the Renderer and scheduling renders.
  */
 
-import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
+import { type ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import {
   type LUT3D,
   WebGLLUTProcessor,
@@ -24,7 +24,7 @@ import {
   DEFAULT_DISPLAY_COLOR_STATE,
   getSharedOCIOProcessor,
 } from '../../color/ColorProcessingFacade';
-import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
+import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 
 /**
  * Snapshot of all color pipeline state, used by the Viewer to sync state

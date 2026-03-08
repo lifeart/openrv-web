@@ -783,7 +783,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith(
         expect.objectContaining({
           blendMode: expect.objectContaining({ mode: 'onionskin' }),
-        })
+        }),
       );
     });
 
@@ -823,7 +823,7 @@ describe('CompareControl', () => {
 
     afterEach(() => {
       // Clean up any appended elements
-      document.querySelectorAll('.compare-control, .compare-dropdown').forEach(el => el.remove());
+      document.querySelectorAll('.compare-control, .compare-dropdown').forEach((el) => el.remove());
     });
 
     it('CMP-U180: A button has aria-pressed=true when source is A', () => {
@@ -1018,9 +1018,7 @@ describe('CompareControl', () => {
       const callback = vi.fn();
       control.on('quadViewChanged', callback);
       control.setQuadViewSource(0, 'B');
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ sources: ['B', 'B', 'C', 'D'] })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ sources: ['B', 'B', 'C', 'D'] }));
     });
 
     it('QUAD-009: getQuadViewState returns a copy', () => {
@@ -1051,9 +1049,7 @@ describe('CompareControl', () => {
       control.on('quadViewChanged', callback);
 
       control.setQuadViewEnabled(true);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true, sources: ['A', 'B', 'C', 'D'] })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, sources: ['A', 'B', 'C', 'D'] }));
     });
 
     it('QUAD-021: setQuadViewEnabled emits stateChanged event', () => {
@@ -1062,7 +1058,7 @@ describe('CompareControl', () => {
 
       control.setQuadViewEnabled(true);
       expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ quadView: expect.objectContaining({ enabled: true }) })
+        expect.objectContaining({ quadView: expect.objectContaining({ enabled: true }) }),
       );
     });
 
@@ -1079,14 +1075,10 @@ describe('CompareControl', () => {
       control.on('quadViewChanged', callback);
 
       control.toggleQuadView();
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
 
       control.toggleQuadView();
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
   });
 
@@ -1227,7 +1219,7 @@ describe('CompareControl', () => {
     }
 
     afterEach(() => {
-      document.querySelectorAll('.compare-control, .compare-dropdown').forEach(el => el.remove());
+      document.querySelectorAll('.compare-control, .compare-dropdown').forEach((el) => el.remove());
     });
 
     it('QUAD-050: dropdown has quad view toggle button', () => {

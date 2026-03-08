@@ -63,16 +63,19 @@ let mockWSInstances: MockWebSocket[] = [];
 let mockAutoConnect = true;
 
 // Mock the global WebSocket
-vi.stubGlobal('WebSocket', class extends MockWebSocket {
-  constructor(url: string) {
-    super(url);
-    mockWSInstances.push(this);
-  }
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
-});
+vi.stubGlobal(
+  'WebSocket',
+  class extends MockWebSocket {
+    constructor(url: string) {
+      super(url);
+      mockWSInstances.push(this);
+    }
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+  },
+);
 
 describe('WebSocketClient', () => {
   let client: WebSocketClient;
@@ -215,7 +218,7 @@ describe('WebSocketClient', () => {
 
       // Should have sent at least one ping
       const newMessages = ws.sentMessages.slice(initialCount);
-      const pings = newMessages.filter(m => JSON.parse(m).type === 'ping');
+      const pings = newMessages.filter((m) => JSON.parse(m).type === 'ping');
       expect(pings.length).toBeGreaterThan(0);
     });
 

@@ -27,12 +27,7 @@ export {
   type VideoExporterEvents,
 } from './VideoExporter';
 
-export {
-  muxToMP4,
-  muxToMP4Blob,
-  buildAVCDecoderConfig,
-  type MuxerConfig,
-} from './MP4Muxer';
+export { muxToMP4, muxToMP4Blob, buildAVCDecoderConfig, type MuxerConfig } from './MP4Muxer';
 
 export {
   framesToTimecode,

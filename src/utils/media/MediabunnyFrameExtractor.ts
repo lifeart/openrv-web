@@ -166,10 +166,7 @@ export class MediabunnyFrameExtractor {
    * Check if WebCodecs API is available
    */
   static isSupported(): boolean {
-    return (
-      typeof VideoDecoder !== 'undefined' &&
-      typeof VideoEncoder !== 'undefined'
-    );
+    return typeof VideoDecoder !== 'undefined' && typeof VideoEncoder !== 'undefined';
   }
 
   /**
@@ -229,9 +226,7 @@ export class MediabunnyFrameExtractor {
         if (isProfessionalCodec(codecFamily)) {
           throw new UnsupportedCodecException(codec, file instanceof File ? file.name : undefined);
         }
-        throw new Error(
-          `Cannot decode video codec: ${codec ?? 'unknown'}. WebCodecs may not support this format.`
-        );
+        throw new Error(`Cannot decode video codec: ${codec ?? 'unknown'}. WebCodecs may not support this format.`);
       }
 
       // Get video duration
@@ -290,8 +285,14 @@ export class MediabunnyFrameExtractor {
                     fullRange: cs.fullRange ?? undefined,
                   };
                 }
-                if (transferName === 'pq' || transferName === 'hlg' || transferName === 'smpte2084' || transferName === 'arib-std-b67' ||
-                    primariesName === 'bt2020' || primariesName === 'smpte432') {
+                if (
+                  transferName === 'pq' ||
+                  transferName === 'hlg' ||
+                  transferName === 'smpte2084' ||
+                  transferName === 'arib-std-b67' ||
+                  primariesName === 'bt2020' ||
+                  primariesName === 'smpte432'
+                ) {
                   isHDR = true;
                   log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
                 }
@@ -405,9 +406,15 @@ export class MediabunnyFrameExtractor {
       // Log raw vs sorted timestamps for debugging
       log.debug(`Frame index: collected ${frameTimestamps.length} frames`);
       if (frameTimestamps.length <= 10) {
-        log.debug('Sorted timestamps:', frameTimestamps.map(t => t.toFixed(4)));
+        log.debug(
+          'Sorted timestamps:',
+          frameTimestamps.map((t) => t.toFixed(4)),
+        );
       } else {
-        log.debug('First 10 sorted timestamps:', frameTimestamps.slice(0, 10).map(t => t.toFixed(4)));
+        log.debug(
+          'First 10 sorted timestamps:',
+          frameTimestamps.slice(0, 10).map((t) => t.toFixed(4)),
+        );
       }
 
       // Build frame index from sorted timestamps
@@ -423,7 +430,7 @@ export class MediabunnyFrameExtractor {
       if (actualFrameCount > 0 && lastTimestamp > 0) {
         // FPS = (frameCount - 1) / lastTimestamp (since first frame is at t=0)
         // For safety, use frameCount / (lastTimestamp + avgFrameDuration)
-        this.detectedFps = actualFrameCount / (lastTimestamp + (lastTimestamp / Math.max(1, actualFrameCount - 1)));
+        this.detectedFps = actualFrameCount / (lastTimestamp + lastTimestamp / Math.max(1, actualFrameCount - 1));
 
         // Round to common FPS values if close
         const commonFps = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
@@ -522,7 +529,11 @@ export class MediabunnyFrameExtractor {
    *   Capped at source resolution (never upscales). Requires browser support
    *   for createImageBitmap resize options; falls back to full resolution if unsupported.
    */
-  async getFrame(frame: number, signal?: AbortSignal, targetSize?: { w: number; h: number }): Promise<FrameResult | null> {
+  async getFrame(
+    frame: number,
+    signal?: AbortSignal,
+    targetSize?: { w: number; h: number },
+  ): Promise<FrameResult | null> {
     // Use provided signal or the internal one
     const abortSignal = signal ?? this.abortController.signal;
 
@@ -657,7 +668,7 @@ export class MediabunnyFrameExtractor {
         if (bestTimestampDiff > 0.01) {
           log.warn(
             `Frame ${clampedFrame}: expected timestamp ${expectedTimestamp.toFixed(4)}, ` +
-            `got ${bestMatch.timestamp.toFixed(4)} (diff: ${bestTimestampDiff.toFixed(4)})`
+              `got ${bestMatch.timestamp.toFixed(4)} (diff: ${bestTimestampDiff.toFixed(4)})`,
           );
         }
 
@@ -673,7 +684,7 @@ export class MediabunnyFrameExtractor {
       } else {
         log.warn(
           `Frame ${clampedFrame}: no frame found in range ` +
-          `[${startTimestamp.toFixed(4)}, ${endTimestamp.toFixed(4)}]`
+            `[${startTimestamp.toFixed(4)}, ${endTimestamp.toFixed(4)}]`,
         );
       }
 
@@ -785,9 +796,7 @@ export class MediabunnyFrameExtractor {
    * Extract multiple frames at specific frame numbers (1-based)
    * Fetches each frame individually to ensure correct frame-to-content mapping
    */
-  async *getFrames(
-    frames: number[]
-  ): AsyncGenerator<FrameResult | null, void, unknown> {
+  async *getFrames(frames: number[]): AsyncGenerator<FrameResult | null, void, unknown> {
     if (!this.canvasSink || !this.metadata) {
       throw new Error('Extractor not initialized. Call load() first.');
     }
@@ -805,10 +814,7 @@ export class MediabunnyFrameExtractor {
   /**
    * Extract frames in a range (inclusive, 1-based frame numbers)
    */
-  async *getFrameRange(
-    startFrame: number,
-    endFrame: number
-  ): AsyncGenerator<FrameResult, void, unknown> {
+  async *getFrameRange(startFrame: number, endFrame: number): AsyncGenerator<FrameResult, void, unknown> {
     if (!this.canvasSink || !this.metadata) {
       throw new Error('Extractor not initialized. Call load() first.');
     }
@@ -860,7 +866,7 @@ export class MediabunnyFrameExtractor {
   async getFrameBlob(
     frame: number,
     type: 'image/png' | 'image/jpeg' | 'image/webp' = 'image/png',
-    quality?: number
+    quality?: number,
   ): Promise<Blob | null> {
     const result = await this.getFrame(frame);
     if (!result) return null;
@@ -885,10 +891,7 @@ export class MediabunnyFrameExtractor {
   /**
    * Generate thumbnail at specific frame
    */
-  async getThumbnail(
-    frame: number,
-    maxSize: number = 256
-  ): Promise<HTMLCanvasElement | null> {
+  async getThumbnail(frame: number, maxSize: number = 256): Promise<HTMLCanvasElement | null> {
     const result = await this.getFrame(frame);
     if (!result) return null;
 
@@ -924,10 +927,7 @@ export class MediabunnyFrameExtractor {
   /**
    * Generate multiple thumbnails evenly distributed across the video
    */
-  async *generateThumbnails(
-    count: number,
-    maxSize: number = 128
-  ): AsyncGenerator<HTMLCanvasElement, void, unknown> {
+  async *generateThumbnails(count: number, maxSize: number = 128): AsyncGenerator<HTMLCanvasElement, void, unknown> {
     if (!this.metadata) {
       throw new Error('Extractor not initialized. Call load() first.');
     }
@@ -943,10 +943,7 @@ export class MediabunnyFrameExtractor {
 
     for await (const result of this.getFrames(frames)) {
       if (result) {
-        const thumb = await this.createThumbnailFromCanvas(
-          result.canvas,
-          maxSize
-        );
+        const thumb = await this.createThumbnailFromCanvas(result.canvas, maxSize);
         yield thumb;
       }
     }
@@ -954,7 +951,7 @@ export class MediabunnyFrameExtractor {
 
   private async createThumbnailFromCanvas(
     sourceCanvas: HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
-    maxSize: number
+    maxSize: number,
   ): Promise<HTMLCanvasElement> {
     const { width, height } = sourceCanvas;
 
@@ -1038,10 +1035,7 @@ export class MediabunnyFrameExtractor {
  * Create a MediabunnyFrameExtractor and load a file
  * Convenience function for one-shot usage
  */
-export async function createFrameExtractor(
-  file: File | Blob,
-  fps: number = 24
-): Promise<MediabunnyFrameExtractor> {
+export async function createFrameExtractor(file: File | Blob, fps: number = 24): Promise<MediabunnyFrameExtractor> {
   const extractor = new MediabunnyFrameExtractor();
   await extractor.load(file, fps);
   return extractor;

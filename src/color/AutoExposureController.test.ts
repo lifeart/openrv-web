@@ -133,7 +133,10 @@ describe('AutoExposureController', () => {
   describe('computeBatch', () => {
     it('returns empty map when disabled', () => {
       const ctrl = new AutoExposureController();
-      const luminances = new Map([[1, 0.5], [2, 0.3]]);
+      const luminances = new Map([
+        [1, 0.5],
+        [2, 0.3],
+      ]);
       const result = ctrl.computeBatch(luminances, { ...defaultConfig, enabled: false });
       expect(result.size).toBe(0);
     });
@@ -141,11 +144,11 @@ describe('AutoExposureController', () => {
     it('applies temporal smoothing across frames', () => {
       const ctrl = new AutoExposureController();
       const luminances = new Map([
-        [1, 0.01],  // dark
-        [2, 0.01],  // dark
-        [3, 2.0],   // bright jump
-        [4, 2.0],   // bright
-        [5, 2.0],   // bright
+        [1, 0.01], // dark
+        [2, 0.01], // dark
+        [3, 2.0], // bright jump
+        [4, 2.0], // bright
+        [5, 2.0], // bright
       ]);
       const config = { ...defaultConfig, adaptationSpeed: 0.2 };
       const result = ctrl.computeBatch(luminances, config);

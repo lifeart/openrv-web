@@ -320,7 +320,7 @@ colorspaces:
     description: sRGB
     family: Display
     encoding: sdr-video
-`)
+`),
       ).toThrow();
     });
 
@@ -330,7 +330,7 @@ colorspaces:
 ocio_profile_version: 2
 roles:
   default: sRGB
-`)
+`),
       ).toThrow();
     });
   });

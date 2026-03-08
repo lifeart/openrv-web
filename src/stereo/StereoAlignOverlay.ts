@@ -10,7 +10,7 @@
  * These overlays are drawn after the stereo composite step.
  */
 
-import { StereoAlignMode } from './StereoEyeTransform';
+import { type StereoAlignMode } from './StereoEyeTransform';
 
 /**
  * Apply alignment overlay to the stereo composite output.
@@ -28,7 +28,7 @@ export function applyAlignmentOverlay(
   output: ImageData,
   mode: StereoAlignMode,
   left?: ImageData,
-  right?: ImageData
+  right?: ImageData,
 ): ImageData {
   switch (mode) {
     case 'off':

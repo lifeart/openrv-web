@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  StatusManager,
-  STATUS_COLORS,
-  VALID_STATUSES,
-  type ShotStatus,
-  type StatusEntry,
-} from './StatusManager';
+import { StatusManager, STATUS_COLORS, VALID_STATUSES, type ShotStatus, type StatusEntry } from './StatusManager';
 
 describe('StatusManager', () => {
   let manager: StatusManager;
@@ -97,7 +91,7 @@ describe('StatusManager', () => {
 
     it('returns all zeros on empty manager', () => {
       const counts = manager.getStatusCounts();
-      expect(Object.values(counts).every(c => c === 0)).toBe(true);
+      expect(Object.values(counts).every((c) => c === 0)).toBe(true);
     });
   });
 

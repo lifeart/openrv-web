@@ -17,9 +17,6 @@ export function createAnnotateControls(deps: AnnotateControlDeps): AnnotateContr
 
   return {
     paintToolbar: new PaintToolbar(paintEngine),
-    textFormattingToolbar: new TextFormattingToolbar(
-      paintEngine,
-      () => session.currentFrame,
-    ),
+    textFormattingToolbar: new TextFormattingToolbar(paintEngine, () => session.currentFrame),
   };
 }

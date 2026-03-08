@@ -16,7 +16,7 @@ function makeClip(
   sourceIndex: number,
   inPoint: number,
   outPoint: number,
-  globalStartFrame: number
+  globalStartFrame: number,
 ): PlaylistClip {
   return {
     id,
@@ -144,9 +144,9 @@ describe('TransitionManager', () => {
 
   describe('validateTransition', () => {
     const clips: PlaylistClip[] = [
-      makeClip('clip-1', 0, 1, 50, 1),   // 50 frames
-      makeClip('clip-2', 1, 1, 40, 51),  // 40 frames
-      makeClip('clip-3', 2, 1, 30, 91),  // 30 frames
+      makeClip('clip-1', 0, 1, 50, 1), // 50 frames
+      makeClip('clip-2', 1, 1, 40, 51), // 40 frames
+      makeClip('clip-3', 2, 1, 30, 91), // 30 frames
     ];
 
     it('should return config unchanged when within limits', () => {
@@ -209,9 +209,7 @@ describe('TransitionManager', () => {
     });
 
     it('should return null for single clip (no gaps possible)', () => {
-      const singleClip: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),
-      ];
+      const singleClip: PlaylistClip[] = [makeClip('clip-1', 0, 1, 50, 1)];
       const config: TransitionConfig = { type: 'crossfade', durationFrames: 12 };
       expect(manager.validateTransition(0, config, singleClip)).toBeNull();
     });
@@ -233,8 +231,8 @@ describe('TransitionManager', () => {
   describe('getTransitionAtFrame', () => {
     // Two clips: A (50 frames) and B (40 frames) with a 12-frame crossfade
     const clips: PlaylistClip[] = [
-      makeClip('clip-1', 0, 1, 50, 1),   // 50 frames, starts at global 1
-      makeClip('clip-2', 1, 1, 40, 51),  // 40 frames, starts at global 51 (before overlap)
+      makeClip('clip-1', 0, 1, 50, 1), // 50 frames, starts at global 1
+      makeClip('clip-2', 1, 1, 40, 51), // 40 frames, starts at global 51 (before overlap)
     ];
 
     it('should return null outside transition regions', () => {
@@ -333,9 +331,9 @@ describe('TransitionManager', () => {
 
     it('should handle multiple transitions between three clips', () => {
       const threeClips: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),    // 50 frames
-        makeClip('clip-2', 1, 1, 40, 51),   // 40 frames
-        makeClip('clip-3', 2, 1, 30, 91),   // 30 frames
+        makeClip('clip-1', 0, 1, 50, 1), // 50 frames
+        makeClip('clip-2', 1, 1, 40, 51), // 40 frames
+        makeClip('clip-3', 2, 1, 30, 91), // 30 frames
       ];
 
       manager.setTransition(0, { type: 'crossfade', durationFrames: 10 });
@@ -365,9 +363,7 @@ describe('TransitionManager', () => {
     });
 
     it('should return null for a single clip (no gaps)', () => {
-      const singleClip: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),
-      ];
+      const singleClip: PlaylistClip[] = [makeClip('clip-1', 0, 1, 50, 1)];
       manager.setTransition(0, { type: 'crossfade', durationFrames: 12 });
       expect(manager.getTransitionAtFrame(1, singleClip)).toBeNull();
       expect(manager.getTransitionAtFrame(50, singleClip)).toBeNull();
@@ -430,8 +426,8 @@ describe('TransitionManager', () => {
 
     it('should calculate correct frames without transitions', () => {
       const clips: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),   // 50 frames
-        makeClip('clip-2', 1, 1, 40, 51),  // 40 frames
+        makeClip('clip-1', 0, 1, 50, 1), // 50 frames
+        makeClip('clip-2', 1, 1, 40, 51), // 40 frames
       ];
 
       const adjusted = manager.calculateOverlapAdjustedFrames(clips);
@@ -441,8 +437,8 @@ describe('TransitionManager', () => {
 
     it('should calculate correct frames with transitions', () => {
       const clips: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),   // 50 frames
-        makeClip('clip-2', 1, 1, 40, 51),  // 40 frames
+        makeClip('clip-1', 0, 1, 50, 1), // 50 frames
+        makeClip('clip-2', 1, 1, 40, 51), // 40 frames
       ];
 
       manager.setTransition(0, { type: 'crossfade', durationFrames: 12 });
@@ -454,9 +450,9 @@ describe('TransitionManager', () => {
 
     it('should handle multiple clips with transitions', () => {
       const clips: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),    // 50 frames
-        makeClip('clip-2', 1, 1, 40, 51),   // 40 frames
-        makeClip('clip-3', 2, 1, 30, 91),   // 30 frames
+        makeClip('clip-1', 0, 1, 50, 1), // 50 frames
+        makeClip('clip-2', 1, 1, 40, 51), // 40 frames
+        makeClip('clip-3', 2, 1, 30, 91), // 30 frames
       ];
 
       manager.setTransition(0, { type: 'crossfade', durationFrames: 10 });
@@ -469,10 +465,7 @@ describe('TransitionManager', () => {
     });
 
     it('should not mutate original clips', () => {
-      const clips: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),
-        makeClip('clip-2', 1, 1, 40, 51),
-      ];
+      const clips: PlaylistClip[] = [makeClip('clip-1', 0, 1, 50, 1), makeClip('clip-2', 1, 1, 40, 51)];
 
       manager.setTransition(0, { type: 'crossfade', durationFrames: 12 });
 
@@ -482,10 +475,7 @@ describe('TransitionManager', () => {
     });
 
     it('should treat cut transitions as zero overlap', () => {
-      const clips: PlaylistClip[] = [
-        makeClip('clip-1', 0, 1, 50, 1),
-        makeClip('clip-2', 1, 1, 40, 51),
-      ];
+      const clips: PlaylistClip[] = [makeClip('clip-1', 0, 1, 50, 1), makeClip('clip-2', 1, 1, 40, 51)];
 
       manager.setTransition(0, { type: 'cut', durationFrames: 0 });
 
@@ -537,9 +527,7 @@ describe('TransitionManager', () => {
 
       manager.resizeToClips(2); // 1 gap
 
-      expect(manager.getTransitions()).toEqual([
-        { type: 'crossfade', durationFrames: 12 },
-      ]);
+      expect(manager.getTransitions()).toEqual([{ type: 'crossfade', durationFrames: 12 }]);
     });
 
     it('should result in empty array for 0 or 1 clips', () => {
@@ -556,9 +544,7 @@ describe('TransitionManager', () => {
       manager.setTransition(0, { type: 'crossfade', durationFrames: 12 });
 
       manager.resizeToClips(2); // Already 1 gap
-      expect(manager.getTransitions()).toEqual([
-        { type: 'crossfade', durationFrames: 12 },
-      ]);
+      expect(manager.getTransitions()).toEqual([{ type: 'crossfade', durationFrames: 12 }]);
     });
   });
 
@@ -622,9 +608,7 @@ describe('TransitionManager', () => {
     });
 
     it('should accept deep copies in setState', () => {
-      const state: (TransitionConfig | null)[] = [
-        { type: 'crossfade', durationFrames: 12 },
-      ];
+      const state: (TransitionConfig | null)[] = [{ type: 'crossfade', durationFrames: 12 }];
 
       manager.setState(state);
 

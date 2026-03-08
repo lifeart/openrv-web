@@ -25,8 +25,8 @@ export function isStencilBoxActive(box: StencilBox): boolean {
 export function computeHorizontalWipeBoxes(position: number): [StencilBox, StencilBox] {
   const p = Math.max(0, Math.min(1, position));
   return [
-    [0, p, 0, 1],  // left input: visible from 0 to position
-    [p, 1, 0, 1],  // right input: visible from position to 1
+    [0, p, 0, 1], // left input: visible from 0 to position
+    [p, 1, 0, 1], // right input: visible from position to 1
   ];
 }
 
@@ -37,15 +37,15 @@ export function computeHorizontalWipeBoxes(position: number): [StencilBox, Stenc
 export function computeVerticalWipeBoxes(position: number): [StencilBox, StencilBox] {
   const p = Math.max(0, Math.min(1, position));
   return [
-    [0, 1, 0, p],  // top input: visible from 0 to position
-    [0, 1, p, 1],  // bottom input: visible from position to 1
+    [0, 1, 0, p], // top input: visible from 0 to position
+    [0, 1, p, 1], // bottom input: visible from position to 1
   ];
 }
 
 export interface WipeState {
   mode: WipeMode;
-  position: number;  // 0-1, position of wipe line
-  showOriginal: WipeSide;  // Which side shows original (no color adjustments)
+  position: number; // 0-1, position of wipe line
+  showOriginal: WipeSide; // Which side shows original (no color adjustments)
 }
 
 export const DEFAULT_WIPE_STATE: WipeState = {

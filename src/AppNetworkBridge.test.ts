@@ -87,8 +87,12 @@ class MockNetworkSyncManager extends EventEmitter {
       endApplyRemote,
       shouldApplyFrameSync,
     };
-    beginApplyRemote.mockImplementation(() => { sm.isApplyingRemoteState = true; });
-    endApplyRemote.mockImplementation(() => { sm.isApplyingRemoteState = false; });
+    beginApplyRemote.mockImplementation(() => {
+      sm.isApplyingRemoteState = true;
+    });
+    endApplyRemote.mockImplementation(() => {
+      sm.isApplyingRemoteState = false;
+    });
     shouldApplyFrameSync.mockReturnValue(true);
     this._sm = sm;
   }
@@ -131,10 +135,21 @@ function createMockViewer() {
   return {
     setZoom: vi.fn(),
     getColorAdjustments: vi.fn(() => ({
-      exposure: 0, gamma: 1, saturation: 1, vibrance: 0,
-      vibranceSkinProtection: false, contrast: 1, clarity: 0,
-      hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-      highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      exposure: 0,
+      gamma: 1,
+      saturation: 1,
+      vibrance: 0,
+      vibranceSkinProtection: false,
+      contrast: 1,
+      clarity: 0,
+      hueRotation: 0,
+      temperature: 0,
+      tint: 0,
+      brightness: 0,
+      highlights: 0,
+      shadows: 0,
+      whites: 0,
+      blacks: 0,
     })),
     setColorAdjustments: vi.fn(),
     getWipeState: vi.fn(() => ({ mode: 'none', position: 0.5 })),
@@ -152,10 +167,21 @@ function createMockHeaderBar() {
 
 class MockColorControls extends EventEmitter {
   getAdjustments = vi.fn(() => ({
-    exposure: 0, gamma: 1, saturation: 1, vibrance: 0,
-    vibranceSkinProtection: false, contrast: 1, clarity: 0,
-    hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-    highlights: 0, shadows: 0, whites: 0, blacks: 0,
+    exposure: 0,
+    gamma: 1,
+    saturation: 1,
+    vibrance: 0,
+    vibranceSkinProtection: false,
+    contrast: 1,
+    clarity: 0,
+    hueRotation: 0,
+    temperature: 0,
+    tint: 0,
+    brightness: 0,
+    highlights: 0,
+    shadows: 0,
+    whites: 0,
+    blacks: 0,
   }));
 }
 
@@ -312,10 +338,10 @@ describe('AppNetworkBridge', () => {
 
     it('ANB-030: dispose() calls unsubscribe for NetworkControl listeners', () => {
       bridge.setup();
-      
+
       // We expect at least one listener (e.g. createRoom)
       expect(networkUnsubscribers.size).toBeGreaterThan(0);
-      
+
       bridge.dispose();
 
       for (const unsub of networkUnsubscribers) {
@@ -414,14 +440,36 @@ describe('AppNetworkBridge', () => {
 
       // Add multiple annotations
       ctx._paintEngine.addRemoteAnnotation({
-        type: 'pen', id: 'a1', frame: 7, user: 'alice',
-        color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
-        join: 3, cap: 2, splat: false, mode: 0, startFrame: 7, duration: 0,
+        type: 'pen',
+        id: 'a1',
+        frame: 7,
+        user: 'alice',
+        color: [1, 0, 0, 1],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0, y: 0 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 7,
+        duration: 0,
       } as any);
       ctx._paintEngine.addRemoteAnnotation({
-        type: 'pen', id: 'a2', frame: 7, user: 'bob',
-        color: [0, 1, 0, 1], width: 3, brush: 0, points: [{ x: 0.5, y: 0.5 }],
-        join: 3, cap: 2, splat: false, mode: 0, startFrame: 7, duration: 0,
+        type: 'pen',
+        id: 'a2',
+        frame: 7,
+        user: 'bob',
+        color: [0, 1, 0, 1],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0.5, y: 0.5 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 7,
+        duration: 0,
       } as any);
       expect(ctx._paintEngine.getAnnotationsForFrame(7)).toHaveLength(2);
 
@@ -448,9 +496,7 @@ describe('AppNetworkBridge', () => {
         expect.objectContaining({
           frame: 10,
           action: 'add',
-          strokes: expect.arrayContaining([
-            expect.objectContaining({ frame: 10, type: 'pen' }),
-          ]),
+          strokes: expect.arrayContaining([expect.objectContaining({ frame: 10, type: 'pen' })]),
         }),
       );
     });
@@ -460,11 +506,24 @@ describe('AppNetworkBridge', () => {
 
       ctx._networkSyncManager.emit('syncAnnotation', {
         frame: 1,
-        strokes: [{
-          type: 'pen', id: 'remote-3', frame: 1, user: 'alice',
-          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
-          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
-        }],
+        strokes: [
+          {
+            type: 'pen',
+            id: 'remote-3',
+            frame: 1,
+            user: 'alice',
+            color: [1, 0, 0, 1],
+            width: 3,
+            brush: 0,
+            points: [{ x: 0, y: 0 }],
+            join: 3,
+            cap: 2,
+            splat: false,
+            mode: 0,
+            startFrame: 1,
+            duration: 0,
+          },
+        ],
         action: 'add',
         timestamp: Date.now(),
       });
@@ -516,10 +575,21 @@ describe('AppNetworkBridge', () => {
       bridge.setup();
 
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 2.0, gamma: 1.8, saturation: 0.5, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.2, clarity: 0,
-        hueRotation: 0, temperature: 300, tint: 5, brightness: 0.2,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 2.0,
+        gamma: 1.8,
+        saturation: 0.5,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.2,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 300,
+        tint: 5,
+        brightness: 0.2,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
 
       expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
@@ -543,10 +613,21 @@ describe('AppNetworkBridge', () => {
       sm.isApplyingRemoteState = true;
 
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 1.0,
+        gamma: 1.0,
+        saturation: 1.0,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.0,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
 
       expect(ctx._networkSyncManager.sendColorSync).not.toHaveBeenCalled();
@@ -564,12 +645,24 @@ describe('AppNetworkBridge', () => {
 
       ctx._networkSyncManager.emit('syncAnnotation', {
         frame: 1,
-        strokes: [{
-          // Missing 'type'
-          id: 'bad-1', frame: 1, user: 'alice',
-          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
-          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
-        }],
+        strokes: [
+          {
+            // Missing 'type'
+            id: 'bad-1',
+            frame: 1,
+            user: 'alice',
+            color: [1, 0, 0, 1],
+            width: 3,
+            brush: 0,
+            points: [{ x: 0, y: 0 }],
+            join: 3,
+            cap: 2,
+            splat: false,
+            mode: 0,
+            startFrame: 1,
+            duration: 0,
+          },
+        ],
         action: 'add',
         timestamp: Date.now(),
       });
@@ -582,13 +675,24 @@ describe('AppNetworkBridge', () => {
 
       ctx._networkSyncManager.emit('syncAnnotation', {
         frame: 1,
-        strokes: [{
-          type: 'pen',
-          // Missing 'id'
-          frame: 1, user: 'alice',
-          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
-          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
-        }],
+        strokes: [
+          {
+            type: 'pen',
+            // Missing 'id'
+            frame: 1,
+            user: 'alice',
+            color: [1, 0, 0, 1],
+            width: 3,
+            brush: 0,
+            points: [{ x: 0, y: 0 }],
+            join: 3,
+            cap: 2,
+            splat: false,
+            mode: 0,
+            startFrame: 1,
+            duration: 0,
+          },
+        ],
         action: 'add',
         timestamp: Date.now(),
       });
@@ -601,11 +705,24 @@ describe('AppNetworkBridge', () => {
 
       ctx._networkSyncManager.emit('syncAnnotation', {
         frame: 1,
-        strokes: [{
-          type: 'invalid_type', id: 'bad-3', frame: 1, user: 'alice',
-          color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
-          join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
-        }],
+        strokes: [
+          {
+            type: 'invalid_type',
+            id: 'bad-3',
+            frame: 1,
+            user: 'alice',
+            color: [1, 0, 0, 1],
+            width: 3,
+            brush: 0,
+            points: [{ x: 0, y: 0 }],
+            join: 3,
+            cap: 2,
+            splat: false,
+            mode: 0,
+            startFrame: 1,
+            duration: 0,
+          },
+        ],
         action: 'add',
         timestamp: Date.now(),
       });
@@ -621,15 +738,36 @@ describe('AppNetworkBridge', () => {
         strokes: [
           {
             // Invalid: no id
-            type: 'pen', frame: 1, user: 'alice',
-            color: [1, 0, 0, 1], width: 3, brush: 0, points: [{ x: 0, y: 0 }],
-            join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+            type: 'pen',
+            frame: 1,
+            user: 'alice',
+            color: [1, 0, 0, 1],
+            width: 3,
+            brush: 0,
+            points: [{ x: 0, y: 0 }],
+            join: 3,
+            cap: 2,
+            splat: false,
+            mode: 0,
+            startFrame: 1,
+            duration: 0,
           },
           {
             // Valid
-            type: 'pen', id: 'good-1', frame: 1, user: 'bob',
-            color: [0, 1, 0, 1], width: 2, brush: 0, points: [{ x: 0.5, y: 0.5 }],
-            join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0,
+            type: 'pen',
+            id: 'good-1',
+            frame: 1,
+            user: 'bob',
+            color: [0, 1, 0, 1],
+            width: 2,
+            brush: 0,
+            points: [{ x: 0.5, y: 0.5 }],
+            join: 3,
+            cap: 2,
+            splat: false,
+            mode: 0,
+            startFrame: 1,
+            duration: 0,
           },
         ],
         action: 'add',
@@ -771,9 +909,7 @@ describe('AppNetworkBridge', () => {
       expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'snapshot',
-          notes: expect.arrayContaining([
-            expect.objectContaining({ text: 'Local note' }),
-          ]),
+          notes: expect.arrayContaining([expect.objectContaining({ text: 'Local note' })]),
         }),
       );
     });
@@ -804,16 +940,30 @@ describe('AppNetworkBridge', () => {
         action: 'snapshot',
         notes: [
           {
-            id: 'snap-1', sourceIndex: 0, frameStart: 10, frameEnd: 20,
-            text: 'Snapshot note 1', author: 'bob',
-            createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
-            status: 'open', parentId: null, color: '#00ff00',
+            id: 'snap-1',
+            sourceIndex: 0,
+            frameStart: 10,
+            frameEnd: 20,
+            text: 'Snapshot note 1',
+            author: 'bob',
+            createdAt: new Date().toISOString(),
+            modifiedAt: new Date().toISOString(),
+            status: 'open',
+            parentId: null,
+            color: '#00ff00',
           },
           {
-            id: 'snap-2', sourceIndex: 0, frameStart: 30, frameEnd: 40,
-            text: 'Snapshot note 2', author: 'charlie',
-            createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
-            status: 'resolved', parentId: null, color: '#0000ff',
+            id: 'snap-2',
+            sourceIndex: 0,
+            frameStart: 30,
+            frameEnd: 40,
+            text: 'Snapshot note 2',
+            author: 'charlie',
+            createdAt: new Date().toISOString(),
+            modifiedAt: new Date().toISOString(),
+            status: 'resolved',
+            parentId: null,
+            color: '#0000ff',
           },
         ],
         timestamp: Date.now(),
@@ -821,7 +971,7 @@ describe('AppNetworkBridge', () => {
 
       const notes = ctx._session.noteManager.getNotes();
       expect(notes).toHaveLength(2);
-      expect(notes.map(n => n.text).sort()).toEqual(['Snapshot note 1', 'Snapshot note 2']);
+      expect(notes.map((n) => n.text).sort()).toEqual(['Snapshot note 1', 'Snapshot note 2']);
     });
   });
 
@@ -841,10 +991,21 @@ describe('AppNetworkBridge', () => {
       bridge.setup();
 
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 1.0,
+        gamma: 1.0,
+        saturation: 1.0,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.0,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
 
       expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
@@ -855,18 +1016,40 @@ describe('AppNetworkBridge', () => {
 
       // First call fires immediately
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 1.0,
+        gamma: 1.0,
+        saturation: 1.0,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.0,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
 
       // Second call within interval is batched
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 2.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 2.0,
+        gamma: 1.0,
+        saturation: 1.0,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.0,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
 
       expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
@@ -883,16 +1066,38 @@ describe('AppNetworkBridge', () => {
       bridge.setup();
 
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 1.0,
+        gamma: 1.0,
+        saturation: 1.0,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.0,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
       ctx._colorControls.emit('adjustmentsChanged', {
-        exposure: 3.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
-        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 3.0,
+        gamma: 1.0,
+        saturation: 1.0,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.0,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       });
 
       bridge.dispose();
@@ -939,8 +1144,12 @@ describe('AppNetworkBridge', () => {
       bridge.setup();
 
       ctx._networkSyncManager.emit('roomCreated', {
-        roomId: 'r1', roomCode: 'ABCD-1234', hostId: 'h1',
-        users: [], createdAt: Date.now(), maxUsers: 10,
+        roomId: 'r1',
+        roomCode: 'ABCD-1234',
+        hostId: 'h1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
       });
 
       expect(ctx._paintEngine.idPrefix).toBe('test-user-id');
@@ -950,8 +1159,12 @@ describe('AppNetworkBridge', () => {
       bridge.setup();
 
       ctx._networkSyncManager.emit('roomJoined', {
-        roomId: 'r1', roomCode: 'ABCD-1234', hostId: 'h1',
-        users: [], createdAt: Date.now(), maxUsers: 10,
+        roomId: 'r1',
+        roomCode: 'ABCD-1234',
+        hostId: 'h1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
       });
 
       expect(ctx._paintEngine.idPrefix).toBe('test-user-id');

@@ -11,11 +11,7 @@ import { HDRFrameResizer, type HDRResizeTier } from './HDRFrameResizer';
 
 // --- Mock VideoFrame ---
 
-function createMockVideoFrame(opts: {
-  displayWidth: number;
-  displayHeight: number;
-  timestamp?: number;
-}): VideoFrame {
+function createMockVideoFrame(opts: { displayWidth: number; displayHeight: number; timestamp?: number }): VideoFrame {
   const frame = {
     displayWidth: opts.displayWidth,
     displayHeight: opts.displayHeight,
@@ -32,7 +28,7 @@ function setupOffscreenCanvasMock(contextReturnsNull = false) {
     drawImage: vi.fn(),
   };
 
-  const MockOffscreenCanvas = vi.fn(function(this: any, w: number, h: number) {
+  const MockOffscreenCanvas = vi.fn(function (this: any, w: number, h: number) {
     this.width = w;
     this.height = h;
     this.getContext = vi.fn().mockReturnValue(contextReturnsNull ? null : mockCtx);
@@ -42,7 +38,7 @@ function setupOffscreenCanvasMock(contextReturnsNull = false) {
 
   // Mock VideoFrame constructor for the resized frame
   const originalVideoFrame = globalThis.VideoFrame;
-  const MockVideoFrame = vi.fn(function(this: any, _source: unknown, opts: { timestamp: number }) {
+  const MockVideoFrame = vi.fn(function (this: any, _source: unknown, opts: { timestamp: number }) {
     return createMockVideoFrame({
       displayWidth: 960,
       displayHeight: 540,
@@ -120,11 +116,7 @@ describe('HDRFrameResizer', () => {
       const resizer = new HDRFrameResizer('rec2100');
       const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160, timestamp: 42000 });
 
-      const result = resizer.resize(
-        frame,
-        { w: 1920, h: 1080 },
-        { transfer: 'arib-std-b67', primaries: 'bt2020' },
-      );
+      const result = resizer.resize(frame, { w: 1920, h: 1080 }, { transfer: 'arib-std-b67', primaries: 'bt2020' });
 
       expect(result.resized).toBe(true);
       expect(result.width).toBe(1920);
@@ -140,18 +132,17 @@ describe('HDRFrameResizer', () => {
       const resizer = new HDRFrameResizer('rec2100');
       const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160 });
 
-      resizer.resize(
-        frame,
-        { w: 1920, h: 1080 },
-        { transfer: 'smpte2084', primaries: 'bt2020' },
-      );
+      resizer.resize(frame, { w: 1920, h: 1080 }, { transfer: 'smpte2084', primaries: 'bt2020' });
 
       // Verify getContext was called with rec2100-pq
       const canvas = (OffscreenCanvas as unknown as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-      expect(canvas.getContext).toHaveBeenCalledWith('2d', expect.objectContaining({
-        colorSpace: 'rec2100-pq',
-        colorType: 'float16',
-      }));
+      expect(canvas.getContext).toHaveBeenCalledWith(
+        '2d',
+        expect.objectContaining({
+          colorSpace: 'rec2100-pq',
+          colorType: 'float16',
+        }),
+      );
     });
 
     it('should default to rec2100-hlg when transfer is unknown', () => {
@@ -162,9 +153,12 @@ describe('HDRFrameResizer', () => {
       resizer.resize(frame, { w: 1920, h: 1080 });
 
       const canvas = (OffscreenCanvas as unknown as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-      expect(canvas.getContext).toHaveBeenCalledWith('2d', expect.objectContaining({
-        colorSpace: 'rec2100-hlg',
-      }));
+      expect(canvas.getContext).toHaveBeenCalledWith(
+        '2d',
+        expect.objectContaining({
+          colorSpace: 'rec2100-hlg',
+        }),
+      );
     });
   });
 
@@ -174,11 +168,7 @@ describe('HDRFrameResizer', () => {
       const resizer = new HDRFrameResizer('display-p3-float16');
       const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160 });
 
-      const result = resizer.resize(
-        frame,
-        { w: 1920, h: 1080 },
-        { transfer: 'arib-std-b67', primaries: 'bt2020' },
-      );
+      const result = resizer.resize(frame, { w: 1920, h: 1080 }, { transfer: 'arib-std-b67', primaries: 'bt2020' });
 
       expect(result.resized).toBe(true);
       expect(result.metadataOverrides).toEqual({
@@ -187,10 +177,13 @@ describe('HDRFrameResizer', () => {
       });
 
       const canvas = (OffscreenCanvas as unknown as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-      expect(canvas.getContext).toHaveBeenCalledWith('2d', expect.objectContaining({
-        colorSpace: 'display-p3',
-        colorType: 'float16',
-      }));
+      expect(canvas.getContext).toHaveBeenCalledWith(
+        '2d',
+        expect.objectContaining({
+          colorSpace: 'display-p3',
+          colorType: 'float16',
+        }),
+      );
       expect(mockCtx.drawImage).toHaveBeenCalledWith(frame, 0, 0, 1920, 1080);
     });
   });
@@ -210,7 +203,9 @@ describe('HDRFrameResizer', () => {
 
     it('should return original frame when drawImage throws', () => {
       const { mockCtx } = setupOffscreenCanvasMock();
-      mockCtx.drawImage.mockImplementation(() => { throw new Error('draw failed'); });
+      mockCtx.drawImage.mockImplementation(() => {
+        throw new Error('draw failed');
+      });
       const resizer = new HDRFrameResizer('rec2100');
       const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160 });
 
@@ -223,7 +218,12 @@ describe('HDRFrameResizer', () => {
 
     it('should return original frame when VideoFrame constructor throws', () => {
       setupOffscreenCanvasMock();
-      vi.stubGlobal('VideoFrame', vi.fn(function() { throw new Error('VideoFrame construction failed'); }));
+      vi.stubGlobal(
+        'VideoFrame',
+        vi.fn(function () {
+          throw new Error('VideoFrame construction failed');
+        }),
+      );
       const resizer = new HDRFrameResizer('rec2100');
       const frame = createMockVideoFrame({ displayWidth: 3840, displayHeight: 2160 });
 

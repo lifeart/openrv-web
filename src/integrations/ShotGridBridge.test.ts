@@ -159,49 +159,53 @@ describe('ShotGridBridge', () => {
       // Auth
       mockFetch.mockResolvedValueOnce(authResponse());
       // Step 1: connections
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        data: [
-          { version: { id: 101 }, sg_sort_order: 1 },
-          { version: { id: 102 }, sg_sort_order: 2 },
-        ],
-      }));
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            { version: { id: 101 }, sg_sort_order: 1 },
+            { version: { id: 102 }, sg_sort_order: 2 },
+          ],
+        }),
+      );
       // Step 2: versions
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        data: [
-          {
-            id: 102,
-            code: 'shot010_comp_v004',
-            entity: { type: 'Shot', id: 10, name: 'shot010' },
-            sg_status_list: 'apr',
-            sg_path_to_movie: '/movie2.mov',
-            sg_path_to_frames: '',
-            sg_uploaded_movie: null,
-            image: null,
-            frame_range: null,
-            description: null,
-            sg_first_frame: null,
-            sg_last_frame: null,
-            created_at: '2024-01-16T10:30:00Z',
-            user: { type: 'HumanUser', id: 5, name: 'Artist' },
-          },
-          {
-            id: 101,
-            code: 'shot010_comp_v003',
-            entity: { type: 'Shot', id: 10, name: 'shot010' },
-            sg_status_list: 'rev',
-            sg_path_to_movie: '/path/to/movie.mov',
-            sg_path_to_frames: '/path/to/frames/',
-            sg_uploaded_movie: null,
-            image: null,
-            frame_range: null,
-            description: null,
-            sg_first_frame: null,
-            sg_last_frame: null,
-            created_at: '2024-01-15T10:30:00Z',
-            user: { type: 'HumanUser', id: 5, name: 'Artist' },
-          },
-        ],
-      }));
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 102,
+              code: 'shot010_comp_v004',
+              entity: { type: 'Shot', id: 10, name: 'shot010' },
+              sg_status_list: 'apr',
+              sg_path_to_movie: '/movie2.mov',
+              sg_path_to_frames: '',
+              sg_uploaded_movie: null,
+              image: null,
+              frame_range: null,
+              description: null,
+              sg_first_frame: null,
+              sg_last_frame: null,
+              created_at: '2024-01-16T10:30:00Z',
+              user: { type: 'HumanUser', id: 5, name: 'Artist' },
+            },
+            {
+              id: 101,
+              code: 'shot010_comp_v003',
+              entity: { type: 'Shot', id: 10, name: 'shot010' },
+              sg_status_list: 'rev',
+              sg_path_to_movie: '/path/to/movie.mov',
+              sg_path_to_frames: '/path/to/frames/',
+              sg_uploaded_movie: null,
+              image: null,
+              frame_range: null,
+              description: null,
+              sg_first_frame: null,
+              sg_last_frame: null,
+              created_at: '2024-01-15T10:30:00Z',
+              user: { type: 'HumanUser', id: 5, name: 'Artist' },
+            },
+          ],
+        }),
+      );
 
       const versions = await bridge.getVersionsForPlaylist(99);
 
@@ -212,9 +216,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-002b: returns empty array if no connections', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       const versions = await bridge.getVersionsForPlaylist(99);
       expect(versions).toEqual([]);
@@ -223,9 +225,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-002c: queries connections endpoint with playlist filter', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       await bridge.getVersionsForPlaylist(42);
 
@@ -236,9 +236,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-002d: returns empty array for null connection data', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: null }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: null }));
 
       const versions = await bridge.getVersionsForPlaylist(99);
       expect(versions).toEqual([]);
@@ -322,9 +320,8 @@ describe('ShotGridBridge', () => {
 
   describe('getVersionsForShot', () => {
     it('SG-010: returns versions for a shot', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(
+        jsonResponse({
           data: [
             {
               id: 201,
@@ -343,7 +340,8 @@ describe('ShotGridBridge', () => {
               user: { type: 'HumanUser', id: 3, name: 'FXArtist' },
             },
           ],
-        }));
+        }),
+      );
 
       const versions = await bridge.getVersionsForShot(20);
       expect(versions).toHaveLength(1);
@@ -351,9 +349,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-010b: uses filter[entity] on versions endpoint', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       await bridge.getVersionsForShot(20);
 
@@ -364,9 +360,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-010c: returns empty array for null data', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: null }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: null }));
 
       const versions = await bridge.getVersionsForShot(10);
       expect(versions).toEqual([]);
@@ -375,9 +369,8 @@ describe('ShotGridBridge', () => {
 
   describe('getNotesForVersion', () => {
     it('SG-NOTE-001: fetches notes for a version', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(
+        jsonResponse({
           data: [
             {
               id: 700,
@@ -388,7 +381,8 @@ describe('ShotGridBridge', () => {
               user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
             },
           ],
-        }));
+        }),
+      );
 
       const notes = await bridge.getNotesForVersion(101);
       expect(notes).toHaveLength(1);
@@ -397,9 +391,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-NOTE-002: queries notes endpoint with note_links filter', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       await bridge.getNotesForVersion(101);
 
@@ -412,9 +404,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-NOTE-003: returns empty array when no notes', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       const notes = await bridge.getNotesForVersion(999);
       expect(notes).toEqual([]);
@@ -426,14 +416,18 @@ describe('ShotGridBridge', () => {
       mockFetch
         .mockResolvedValueOnce(authResponse())
         // Page 1
-        .mockResolvedValueOnce(jsonResponse({
-          data: [{ id: 1, code: 'v1' }],
-          links: { next: 'https://studio.shotgrid.autodesk.com/api/v1/entity/versions?page=2' },
-        }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            data: [{ id: 1, code: 'v1' }],
+            links: { next: 'https://studio.shotgrid.autodesk.com/api/v1/entity/versions?page=2' },
+          }),
+        )
         // Page 2 (no next = last page)
-        .mockResolvedValueOnce(jsonResponse({
-          data: [{ id: 2, code: 'v2' }],
-        }));
+        .mockResolvedValueOnce(
+          jsonResponse({
+            data: [{ id: 2, code: 'v2' }],
+          }),
+        );
 
       const versions = await bridge.getVersionsForShot(10);
       expect(versions).toHaveLength(2);
@@ -446,10 +440,12 @@ describe('ShotGridBridge', () => {
 
       // Return infinite pagination (always has next)
       for (let i = 0; i < 12; i++) {
-        mockFetch.mockResolvedValueOnce(jsonResponse({
-          data: [{ id: i }],
-          links: { next: `https://studio.shotgrid.autodesk.com/api/v1/entity/versions?page=${i + 2}` },
-        }));
+        mockFetch.mockResolvedValueOnce(
+          jsonResponse({
+            data: [{ id: i }],
+            links: { next: `https://studio.shotgrid.autodesk.com/api/v1/entity/versions?page=${i + 2}` },
+          }),
+        );
       }
 
       const versions = await bridge.getVersionsForShot(10);
@@ -460,9 +456,8 @@ describe('ShotGridBridge', () => {
 
   describe('pushNote', () => {
     it('SG-003: sends correct POST body', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(
+        jsonResponse({
           data: {
             id: 500,
             subject: 'Fix edge blend',
@@ -471,7 +466,8 @@ describe('ShotGridBridge', () => {
             created_at: '2024-03-01T12:00:00Z',
             user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
           },
-        }));
+        }),
+      );
 
       const result = await bridge.pushNote(101, {
         text: 'Fix edge blending on left side',
@@ -491,11 +487,10 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-003b: subject is truncated at word boundary', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: { id: 501 } }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 501 } }));
 
-      const longText = 'The edge blending on the left side of the frame needs adjustment because the compositing mask is not aligned properly with the plate';
+      const longText =
+        'The edge blending on the left side of the frame needs adjustment because the compositing mask is not aligned properly with the plate';
       await bridge.pushNote(101, { text: longText });
 
       const body = JSON.parse(mockFetch.mock.calls[1]![1]?.body as string);
@@ -505,9 +500,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-003c: includes frame_range when provided', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: { id: 502 } }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 502 } }));
 
       await bridge.pushNote(101, { text: 'Edge issue', frameRange: '1045-1052' });
 
@@ -516,9 +509,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-003d: omits frame_range when not provided', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: { id: 503 } }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 503 } }));
 
       await bridge.pushNote(101, { text: 'General note' });
 
@@ -534,9 +525,7 @@ describe('ShotGridBridge', () => {
 
       for (let i = 0; i < statuses.length; i++) {
         mockFetch.mockReset();
-        mockFetch
-          .mockResolvedValueOnce(authResponse())
-          .mockResolvedValueOnce(jsonResponse({ data: {} }));
+        mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: {} }));
 
         bridge = new ShotGridBridge(defaultConfig(), mockFetch as unknown as typeof fetch);
         await bridge.pushStatus(100 + i, statuses[i]!);
@@ -547,9 +536,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-004b: sends correct PUT to version endpoint', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: {} }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: {} }));
 
       await bridge.pushStatus(777, 'approved');
 
@@ -590,9 +577,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-006b: throws ShotGridAPIError with status on non-OK response', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ error: 'forbidden' }, 403));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ error: 'forbidden' }, 403));
 
       try {
         await bridge.getVersionsForShot(10);
@@ -653,9 +638,7 @@ describe('ShotGridBridge', () => {
         text: () => Promise.resolve('rate limited'),
       } as Response;
 
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValue(rateResponse);
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValue(rateResponse);
 
       await expect(bridge.getVersionsForShot(10)).rejects.toThrow(ShotGridAPIError);
     });
@@ -663,9 +646,7 @@ describe('ShotGridBridge', () => {
 
   describe('auto-authentication', () => {
     it('SG-008: auto-authenticates on first request', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       const versions = await bridge.getVersionsForShot(10);
       expect(versions).toEqual([]);
@@ -688,9 +669,7 @@ describe('ShotGridBridge', () => {
       vi.useFakeTimers();
       try {
         // Token expires in 60s, buffer is 30s, so effective lifetime is 30s
-        mockFetch
-          .mockResolvedValueOnce(authResponse('token-1', 60))
-          .mockResolvedValueOnce(jsonResponse({ data: [] }));
+        mockFetch.mockResolvedValueOnce(authResponse('token-1', 60)).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
         await bridge.getVersionsForShot(10);
         expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -699,9 +678,7 @@ describe('ShotGridBridge', () => {
         vi.advanceTimersByTime(31_000);
 
         // Should need to re-auth
-        mockFetch
-          .mockResolvedValueOnce(authResponse('token-2', 300))
-          .mockResolvedValueOnce(jsonResponse({ data: [] }));
+        mockFetch.mockResolvedValueOnce(authResponse('token-2', 300)).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
         await bridge.getVersionsForShot(20);
         // 2 (initial) + 2 (re-auth + request)
@@ -714,9 +691,7 @@ describe('ShotGridBridge', () => {
 
   describe('request headers', () => {
     it('SG-009: sends Authorization Bearer header', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse('my-token-123'))
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse('my-token-123')).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       await bridge.getVersionsForShot(10);
 
@@ -726,9 +701,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-009b: POST requests include Content-Type JSON', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: { id: 500 } }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 500 } }));
 
       await bridge.pushNote(101, { text: 'Test' });
 
@@ -737,9 +710,7 @@ describe('ShotGridBridge', () => {
     });
 
     it('SG-009c: GET requests omit Content-Type', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       await bridge.getVersionsForShot(10);
 
@@ -776,13 +747,14 @@ describe('ShotGridBridge', () => {
     it('SG-CONC-001: concurrent requests share a single auth call', async () => {
       let authResolve: (() => void) | null = null;
       // Auth returns a promise we control manually
-      mockFetch.mockImplementationOnce(() => new Promise<Response>(resolve => {
-        authResolve = () => resolve(authResponse());
-      }));
+      mockFetch.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            authResolve = () => resolve(authResponse());
+          }),
+      );
       // Two data responses for the concurrent requests
-      mockFetch
-        .mockResolvedValueOnce(jsonResponse({ data: [] }))
-        .mockResolvedValueOnce(jsonResponse({ data: [] }));
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: [] })).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
       // Fire two requests concurrently before auth completes
       const p1 = bridge.getVersionsForShot(10);

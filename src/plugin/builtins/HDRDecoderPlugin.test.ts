@@ -39,9 +39,7 @@ describe('HDRDecoderPlugin', () => {
     activated = true;
 
     // The HDR decoder should be findable via its magic bytes
-    const hdrMagic = new Uint8Array([
-      0x23, 0x3F, 0x52, 0x41, 0x44, 0x49, 0x41, 0x4E, 0x43, 0x45
-    ]); // "#?RADIANCE"
+    const hdrMagic = new Uint8Array([0x23, 0x3f, 0x52, 0x41, 0x44, 0x49, 0x41, 0x4e, 0x43, 0x45]); // "#?RADIANCE"
     const decoder = decoderRegistry.getDecoder(hdrMagic.buffer);
     expect(decoder).not.toBeNull();
     expect(decoder?.formatName).toBe('hdr');

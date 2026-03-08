@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SequenceGroupNode } from './SequenceGroupNode';
 import { IPNode } from '../base/IPNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 
 // Simple mock node for testing
 class MockInputNode extends IPNode {

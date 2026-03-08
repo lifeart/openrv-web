@@ -4,7 +4,12 @@
 
 export * from './EXRDecoder';
 export type { GainMapMetadata } from './GainMapMetadata';
-export { parseGainMapMetadataFromXMP, reconstructHDR, srgbToLinear as srgbToLinearShared, isSimpleGainMap } from './GainMapMetadata';
+export {
+  parseGainMapMetadataFromXMP,
+  reconstructHDR,
+  srgbToLinear as srgbToLinearShared,
+  isSimpleGainMap,
+} from './GainMapMetadata';
 export {
   isMultiViewEXR,
   getEXRViews,
@@ -56,13 +61,7 @@ export {
   extractJPEGOrientation,
   type GainmapInfo,
 } from './JPEGGainmapDecoder';
-export {
-  isHDRFile,
-  getHDRInfo,
-  decodeHDR,
-  type HDRInfo,
-  type HDRDecodeResult,
-} from './HDRDecoder';
+export { isHDRFile, getHDRInfo, decodeHDR, type HDRInfo, type HDRDecodeResult } from './HDRDecoder';
 export {
   isGainmapAVIF,
   parseGainmapAVIF,
@@ -73,12 +72,7 @@ export {
   type AVIFGainmapInfo,
   type ISOBMFFTransformInfo,
 } from './AVIFGainmapDecoder';
-export {
-  isJXLFile,
-  isJXLContainer,
-  decodeJXL,
-  type JXLDecodeResult,
-} from './JXLDecoder';
+export { isJXLFile, isJXLContainer, decodeJXL, type JXLDecodeResult } from './JXLDecoder';
 export {
   isHEICFile,
   isGainmapHEIC,
@@ -98,10 +92,7 @@ export {
   type RAWExifMetadata,
   type RAWPreviewResult,
 } from './RAWPreviewDecoder';
-export {
-  parseRVEDL,
-  type RVEDLEntry,
-} from './RVEDLParser';
+export { parseRVEDL, type RVEDLEntry } from './RVEDLParser';
 export {
   isJP2File,
   parseJP2Header,
@@ -128,7 +119,4 @@ export {
   type MXFDemuxResult,
   type KLVTriplet,
 } from './MXFDemuxer';
-export {
-  isAvifFile,
-  decodeAvif,
-} from './avif';
+export { isAvifFile, decodeAvif } from './avif';

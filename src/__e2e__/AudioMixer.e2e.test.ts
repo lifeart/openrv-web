@@ -72,7 +72,9 @@ function createAudioMixerWiring() {
   const initAudio = () => {
     if (audioInitialized) return;
     audioInitialized = true;
-    audioMixer.initialize().catch(() => { /* AudioContext may be unavailable */ });
+    audioMixer.initialize().catch(() => {
+      /* AudioContext may be unavailable */
+    });
     document.removeEventListener('click', initAudio);
     document.removeEventListener('keydown', initAudio);
   };

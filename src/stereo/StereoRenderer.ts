@@ -15,8 +15,8 @@
  */
 
 import {
-  StereoEyeTransformState,
-  StereoAlignMode,
+  type StereoEyeTransformState,
+  type StereoAlignMode,
   isDefaultStereoEyeTransformState,
   applyEyeTransform,
 } from './StereoEyeTransform';
@@ -24,11 +24,7 @@ import { applyAlignmentOverlay } from './StereoAlignOverlay';
 import { luminanceRec709 } from '../color/PixelMath';
 
 // Re-export types from StereoEyeTransform for convenience
-export type {
-  EyeTransform,
-  StereoEyeTransformState,
-  StereoAlignMode,
-} from './StereoEyeTransform';
+export type { EyeTransform, StereoEyeTransformState, StereoAlignMode } from './StereoEyeTransform';
 export {
   DEFAULT_EYE_TRANSFORM,
   DEFAULT_STEREO_EYE_TRANSFORM_STATE,
@@ -58,7 +54,7 @@ import type { StereoState, StereoMode, StereoInputFormat } from '../core/types/s
 export function applyStereoMode(
   sourceData: ImageData,
   state: StereoState,
-  inputFormat: StereoInputFormat = 'side-by-side'
+  inputFormat: StereoInputFormat = 'side-by-side',
 ): ImageData {
   if (state.mode === 'off') {
     return sourceData;
@@ -112,7 +108,7 @@ export function applyStereoModeWithEyeTransforms(
   state: StereoState,
   eyeTransformState?: StereoEyeTransformState,
   alignMode?: StereoAlignMode,
-  inputFormat: StereoInputFormat = 'side-by-side'
+  inputFormat: StereoInputFormat = 'side-by-side',
 ): ImageData {
   if (state.mode === 'off') {
     return sourceData;
@@ -183,7 +179,7 @@ export function applyStereoModeWithEyeTransforms(
 export function extractStereoEyes(
   sourceData: ImageData,
   inputFormat: StereoInputFormat,
-  eyeSwap: boolean
+  eyeSwap: boolean,
 ): { left: ImageData; right: ImageData } {
   const { width, height, data } = sourceData;
 
@@ -290,12 +286,7 @@ function applyHorizontalOffset(imageData: ImageData, offsetPercent: number): Ima
  * Render side-by-side stereo output
  * Displays left and right eyes horizontally adjacent
  */
-function renderSideBySide(
-  left: ImageData,
-  right: ImageData,
-  outputWidth: number,
-  outputHeight: number
-): ImageData {
+function renderSideBySide(left: ImageData, right: ImageData, outputWidth: number, outputHeight: number): ImageData {
   const result = new ImageData(outputWidth, outputHeight);
   const leftWidth = Math.floor(outputWidth / 2);
   const rightWidth = outputWidth - leftWidth; // Handles odd widths correctly
@@ -313,12 +304,7 @@ function renderSideBySide(
  * Render over/under stereo output
  * Displays left eye on top, right eye on bottom
  */
-function renderOverUnder(
-  left: ImageData,
-  right: ImageData,
-  outputWidth: number,
-  outputHeight: number
-): ImageData {
+function renderOverUnder(left: ImageData, right: ImageData, outputWidth: number, outputHeight: number): ImageData {
   const result = new ImageData(outputWidth, outputHeight);
   const topHeight = Math.floor(outputHeight / 2);
   const bottomHeight = outputHeight - topHeight; // Handles odd heights correctly
@@ -336,12 +322,7 @@ function renderOverUnder(
  * Render mirror stereo output
  * Side-by-side with right eye horizontally flipped
  */
-function renderMirror(
-  left: ImageData,
-  right: ImageData,
-  outputWidth: number,
-  outputHeight: number
-): ImageData {
+function renderMirror(left: ImageData, right: ImageData, outputWidth: number, outputHeight: number): ImageData {
   const result = new ImageData(outputWidth, outputHeight);
   const leftWidth = Math.floor(outputWidth / 2);
   const rightWidth = outputWidth - leftWidth; // Handles odd widths correctly
@@ -389,9 +370,7 @@ function renderAnaglyph(left: ImageData, right: ImageData, useLuminance: boolean
   const result = new ImageData(width, height);
 
   // Scale right eye if dimensions don't match
-  const scaledRight = right.width !== width || right.height !== height
-    ? scaleImage(right, width, height)
-    : right;
+  const scaledRight = right.width !== width || right.height !== height ? scaleImage(right, width, height) : right;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -411,14 +390,14 @@ function renderAnaglyph(left: ImageData, right: ImageData, useLuminance: boolean
         const leftLuma = Math.round(luminanceRec709(leftR, leftG, leftB));
         const rightLuma = Math.round(luminanceRec709(rightR, rightG, rightB));
 
-        result.data[idx] = leftLuma;     // Red channel from left eye luminance
+        result.data[idx] = leftLuma; // Red channel from left eye luminance
         result.data[idx + 1] = rightLuma; // Green channel from right eye luminance
         result.data[idx + 2] = rightLuma; // Blue channel from right eye luminance
       } else {
         // Color anaglyph - left eye red, right eye cyan
-        result.data[idx] = leftR;        // Red channel from left eye
-        result.data[idx + 1] = rightG;   // Green channel from right eye
-        result.data[idx + 2] = rightB;   // Blue channel from right eye
+        result.data[idx] = leftR; // Red channel from left eye
+        result.data[idx + 1] = rightG; // Green channel from right eye
+        result.data[idx + 2] = rightB; // Blue channel from right eye
       }
       result.data[idx + 3] = Math.max(left.data[idx + 3]!, scaledRight.data[idx + 3]!);
     }
@@ -437,9 +416,7 @@ function renderCheckerboard(left: ImageData, right: ImageData): ImageData {
   const height = left.height;
   const result = new ImageData(width, height);
 
-  const scaledRight = right.width !== width || right.height !== height
-    ? scaleImage(right, width, height)
-    : right;
+  const scaledRight = right.width !== width || right.height !== height ? scaleImage(right, width, height) : right;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -467,9 +444,7 @@ function renderScanline(left: ImageData, right: ImageData): ImageData {
   const height = left.height;
   const result = new ImageData(width, height);
 
-  const scaledRight = right.width !== width || right.height !== height
-    ? scaleImage(right, width, height)
-    : right;
+  const scaledRight = right.width !== width || right.height !== height ? scaleImage(right, width, height) : right;
 
   for (let y = 0; y < height; y++) {
     const isEvenLine = y % 2 === 0;
@@ -490,11 +465,7 @@ function renderScanline(left: ImageData, right: ImageData): ImageData {
 /**
  * Render a single eye (left-only or right-only) scaled to full output dimensions
  */
-function renderSingleEye(
-  eye: ImageData,
-  outputWidth: number,
-  outputHeight: number
-): ImageData {
+function renderSingleEye(eye: ImageData, outputWidth: number, outputHeight: number): ImageData {
   if (eye.width === outputWidth && eye.height === outputHeight) {
     // Already the right size, return a copy
     return new ImageData(new Uint8ClampedArray(eye.data), eye.width, eye.height);
@@ -559,7 +530,7 @@ function scaleAndCopyToRegion(
   destX: number,
   destY: number,
   destWidth: number,
-  destHeight: number
+  destHeight: number,
 ): void {
   const xRatio = source.width / destWidth;
   const yRatio = source.height / destHeight;
@@ -584,11 +555,7 @@ function scaleAndCopyToRegion(
  * Check if a stereo state is at default values
  */
 export function isDefaultStereoState(state: StereoState): boolean {
-  return (
-    state.mode === 'off' &&
-    state.eyeSwap === false &&
-    state.offset === 0
-  );
+  return state.mode === 'off' && state.eyeSwap === false && state.offset === 0;
 }
 
 /**
@@ -596,14 +563,14 @@ export function isDefaultStereoState(state: StereoState): boolean {
  */
 export function getStereoModeLabel(mode: StereoMode): string {
   const labels: Record<StereoMode, string> = {
-    'off': 'Off',
+    off: 'Off',
     'side-by-side': 'Side-by-Side',
     'over-under': 'Over/Under',
-    'mirror': 'Mirror',
-    'anaglyph': 'Anaglyph',
+    mirror: 'Mirror',
+    anaglyph: 'Anaglyph',
     'anaglyph-luminance': 'Anaglyph (Luma)',
-    'checkerboard': 'Checkerboard',
-    'scanline': 'Scanline',
+    checkerboard: 'Checkerboard',
+    scanline: 'Scanline',
     'left-only': 'Left Only',
     'right-only': 'Right Only',
   };
@@ -615,14 +582,14 @@ export function getStereoModeLabel(mode: StereoMode): string {
  */
 export function getStereoModeShortLabel(mode: StereoMode): string {
   const labels: Record<StereoMode, string> = {
-    'off': 'Off',
+    off: 'Off',
     'side-by-side': 'SbS',
     'over-under': 'O/U',
-    'mirror': 'Mir',
-    'anaglyph': 'Ana',
+    mirror: 'Mir',
+    anaglyph: 'Ana',
     'anaglyph-luminance': 'Ana-L',
-    'checkerboard': 'Chk',
-    'scanline': 'Scn',
+    checkerboard: 'Chk',
+    scanline: 'Scn',
     'left-only': 'L',
     'right-only': 'R',
   };

@@ -8,7 +8,7 @@
  * Per-session with a shared budget across all source nodes (A/B compare).
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { MB, GB } from '../config/CacheConfig';
 
 /**
@@ -155,7 +155,7 @@ export class MemoryBudgetManager extends EventEmitter<MemoryBudgetEvents> {
    * Check if an allocation of the given size can be made within the budget.
    */
   canAllocate(bytes: number): boolean {
-    return (this.currentUsageBytes + bytes) <= this.config.totalBudget;
+    return this.currentUsageBytes + bytes <= this.config.totalBudget;
   }
 
   /**

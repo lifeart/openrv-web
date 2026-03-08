@@ -1,21 +1,12 @@
 import { SimpleReader, GTODTO } from 'gto-js';
 import type { GTOData } from 'gto-js';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { parseRVEDL, type RVEDLEntry } from '../../formats/RVEDLParser';
-import { Graph } from '../graph/Graph';
+import { type Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
-import {
-  resolveProperty as _resolveProperty,
-  resolveGTOByHash,
-  resolveGTOByAt,
-} from './PropertyResolver';
-import type {
-  HashResolveResult,
-  AtResolveResult,
-  GTOHashResolveResult,
-  GTOAtResolveResult,
-} from './PropertyResolver';
+import { resolveProperty as _resolveProperty, resolveGTOByHash, resolveGTOByAt } from './PropertyResolver';
+import type { HashResolveResult, AtResolveResult, GTOHashResolveResult, GTOAtResolveResult } from './PropertyResolver';
 import { parseInitialSettings as _parseInitialSettings } from './GTOSettingsParser';
 import { getNumberValue, getNumberArray } from './AnnotationStore';
 import type { SessionMetadata, GTOViewSettings } from './SessionTypes';
@@ -162,27 +153,28 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       origin: patch.origin !== undefined ? patch.origin : current.origin,
       creationContext: patch.creationContext !== undefined ? patch.creationContext : current.creationContext,
       clipboard: patch.clipboard !== undefined ? patch.clipboard : current.clipboard,
-      membershipContains: patch.membershipContains !== undefined
-        ? [...patch.membershipContains]
-        : current.membershipContains,
+      membershipContains:
+        patch.membershipContains !== undefined ? [...patch.membershipContains] : current.membershipContains,
       realtime: patch.realtime !== undefined ? patch.realtime : current.realtime,
-      bgColor: patch.bgColor !== undefined ? [...patch.bgColor] as [number, number, number, number] : current.bgColor,
+      bgColor: patch.bgColor !== undefined ? ([...patch.bgColor] as [number, number, number, number]) : current.bgColor,
     };
 
-    const membershipChanged = next.membershipContains.length !== current.membershipContains.length
-      || next.membershipContains.some((value, index) => value !== current.membershipContains[index]);
+    const membershipChanged =
+      next.membershipContains.length !== current.membershipContains.length ||
+      next.membershipContains.some((value, index) => value !== current.membershipContains[index]);
 
     const bgColorChanged = next.bgColor.some((v, i) => v !== current.bgColor[i]);
 
-    const hasChanged = next.displayName !== current.displayName
-      || next.comment !== current.comment
-      || next.version !== current.version
-      || next.origin !== current.origin
-      || next.creationContext !== current.creationContext
-      || next.clipboard !== current.clipboard
-      || membershipChanged
-      || next.realtime !== current.realtime
-      || bgColorChanged;
+    const hasChanged =
+      next.displayName !== current.displayName ||
+      next.comment !== current.comment ||
+      next.version !== current.version ||
+      next.origin !== current.origin ||
+      next.creationContext !== current.creationContext ||
+      next.clipboard !== current.clipboard ||
+      membershipChanged ||
+      next.realtime !== current.realtime ||
+      bgColorChanged;
 
     if (!hasChanged) {
       return;
@@ -253,7 +245,7 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
           bytes[0] === 0x47 && // 'G'
           bytes[1] === 0x54 && // 'T'
           bytes[2] === 0x4f && // 'O'
-          bytes[3] === 0x61;   // 'a'
+          bytes[3] === 0x61; // 'a'
 
         if (isTextFormat) {
           // Convert to string for text format parsing
@@ -337,13 +329,17 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       }
 
       // Apply session metadata
-      if (result.sessionInfo.displayName || result.sessionInfo.comment ||
-          result.sessionInfo.version || result.sessionInfo.origin ||
-          result.sessionInfo.creationContext !== undefined ||
-          result.sessionInfo.clipboard !== undefined ||
-          result.sessionInfo.membershipContains ||
-          result.sessionInfo.realtime !== undefined ||
-          result.sessionInfo.bgColor) {
+      if (
+        result.sessionInfo.displayName ||
+        result.sessionInfo.comment ||
+        result.sessionInfo.version ||
+        result.sessionInfo.origin ||
+        result.sessionInfo.creationContext !== undefined ||
+        result.sessionInfo.clipboard !== undefined ||
+        result.sessionInfo.membershipContains ||
+        result.sessionInfo.realtime !== undefined ||
+        result.sessionInfo.bgColor
+      ) {
         this._metadata = {
           displayName: result.sessionInfo.displayName ?? '',
           comment: result.sessionInfo.comment ?? '',

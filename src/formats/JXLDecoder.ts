@@ -48,13 +48,9 @@ export function isJXLFile(buffer: ArrayBuffer): boolean {
   // Check ISOBMFF container: ftyp box with 'jxl ' brand
   if (buffer.byteLength >= 12) {
     const view = new DataView(buffer);
-    const boxType = String.fromCharCode(
-      view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-    );
+    const boxType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
     if (boxType === 'ftyp') {
-      const brand = String.fromCharCode(
-        view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)
-      );
+      const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
       return brand === 'jxl ';
     }
   }
@@ -69,13 +65,9 @@ export function isJXLFile(buffer: ArrayBuffer): boolean {
 export function isJXLContainer(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 12) return false;
   const view = new DataView(buffer);
-  const boxType = String.fromCharCode(
-    view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-  );
+  const boxType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
   if (boxType !== 'ftyp') return false;
-  const brand = String.fromCharCode(
-    view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)
-  );
+  const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
   return brand === 'jxl ';
 }
 

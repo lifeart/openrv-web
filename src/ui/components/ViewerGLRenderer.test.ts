@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ViewerGLRenderer, GLRendererContext } from './ViewerGLRenderer';
+import { ViewerGLRenderer, type GLRendererContext } from './ViewerGLRenderer';
 import type { Renderer } from '../../render/Renderer';
 import type { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import type { RenderState } from '../../render/RenderState';
@@ -33,12 +33,23 @@ interface TestableViewerGLRenderer {
   _hdrPresentationTarget: 'gl' | 'webgpu' | 'canvas2d' | null;
   _sdrWebGLRenderActive: boolean;
   _lastHDRBlitFrame: { data: Float32Array; width: number; height: number } | null;
-  _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void } | null;
-  _canvas2dBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void; dispose?: () => void } | null;
+  _webgpuBlit: {
+    initialized: boolean;
+    getCanvas: () => HTMLCanvasElement;
+    uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void;
+  } | null;
+  _canvas2dBlit: {
+    initialized: boolean;
+    getCanvas: () => HTMLCanvasElement;
+    uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void;
+    dispose?: () => void;
+  } | null;
   _canvas2dBlitFailed: boolean;
   _logicalWidth: number;
   _logicalHeight: number;
-  _luminanceAnalyzer: { computeLuminanceStats: (texture: WebGLTexture, inputTransfer: number) => { avg: number; linearAvg: number } } | null;
+  _luminanceAnalyzer: {
+    computeLuminanceStats: (texture: WebGLTexture, inputTransfer: number) => { avg: number; linearAvg: number };
+  } | null;
 }
 
 function createMockContext(): GLRendererContext {
@@ -61,9 +72,26 @@ function createMockContext(): GLRendererContext {
     isInteractionActive: vi.fn(() => false),
     isToneMappingEnabled: vi.fn(() => false),
     getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
-    getFilmEmulationParams: vi.fn(() => ({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 })),
-    getPerspectiveParams: vi.fn(() => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' })),
-    getGamutMappingState: vi.fn(() => ({ mode: 'off' as const, sourceGamut: 'srgb' as const, targetGamut: 'srgb' as const })),
+    getFilmEmulationParams: vi.fn(() => ({
+      enabled: false,
+      stock: 'kodak-portra-400',
+      intensity: 100,
+      grainIntensity: 30,
+      grainSeed: 0,
+    })),
+    getPerspectiveParams: vi.fn(() => ({
+      enabled: false,
+      topLeft: { x: 0, y: 0 },
+      topRight: { x: 1, y: 0 },
+      bottomRight: { x: 1, y: 1 },
+      bottomLeft: { x: 0, y: 1 },
+      quality: 'bilinear',
+    })),
+    getGamutMappingState: vi.fn(() => ({
+      mode: 'off' as const,
+      sourceGamut: 'srgb' as const,
+      targetGamut: 'srgb' as const,
+    })),
     getNoiseReductionParams: vi.fn(() => ({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 })),
     getLuminanceVisualization: vi.fn(() => ({
       getMode: () => 'off' as const,
@@ -185,7 +213,9 @@ describe('ViewerGLRenderer', () => {
       expect(() => renderer.setColorAdjustments({ exposure: 1 } as ColorAdjustments)).not.toThrow();
       expect(() => renderer.setColorInversion(true)).not.toThrow();
       expect(() => renderer.setToneMappingState({ enabled: true, operator: 'aces' })).not.toThrow();
-      expect(() => renderer.setDisplayColorState({ transferFunction: 0, displayGamma: 2.2, displayBrightness: 1, customGamma: 1 })).not.toThrow();
+      expect(() =>
+        renderer.setDisplayColorState({ transferFunction: 0, displayGamma: 2.2, displayBrightness: 1, customGamma: 1 }),
+      ).not.toThrow();
       expect(() => renderer.setHDRHeadroom(3.0)).not.toThrow();
     });
 
@@ -399,26 +429,26 @@ describe('ViewerGLRenderer', () => {
   // HDR path — displayColor overrides
   // =========================================================================
   function createDefaultRenderState(): RenderState {
-      return {
-        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
-        colorInversion: false,
-        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
-        backgroundPattern: { ...DEFAULT_BACKGROUND_PATTERN_STATE },
-        cdl: JSON.parse(JSON.stringify(DEFAULT_CDL)),
-        curvesLUT: null,
-        colorWheels: JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE)),
-        falseColor: { enabled: false, lut: null },
-        zebraStripes: { ...DEFAULT_ZEBRA_STATE },
-        channelMode: 'rgb',
-        lut: { data: null, size: 0, intensity: 0 },
-        displayColor: { transferFunction: 3, displayGamma: 2.4, displayBrightness: 1.5, customGamma: 2.2 },
-        highlightsShadows: { highlights: 0, shadows: 0, whites: 0, blacks: 0 },
-        vibrance: { amount: 0, skinProtection: true },
-        clarity: 0,
-        sharpen: 0,
-        hslQualifier: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
-      };
-    }
+    return {
+      colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+      colorInversion: false,
+      toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+      backgroundPattern: { ...DEFAULT_BACKGROUND_PATTERN_STATE },
+      cdl: JSON.parse(JSON.stringify(DEFAULT_CDL)),
+      curvesLUT: null,
+      colorWheels: JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE)),
+      falseColor: { enabled: false, lut: null },
+      zebraStripes: { ...DEFAULT_ZEBRA_STATE },
+      channelMode: 'rgb',
+      lut: { data: null, size: 0, intensity: 0 },
+      displayColor: { transferFunction: 3, displayGamma: 2.4, displayBrightness: 1.5, customGamma: 2.2 },
+      highlightsShadows: { highlights: 0, shadows: 0, whites: 0, blacks: 0 },
+      vibrance: { amount: 0, skinProtection: true },
+      clarity: 0,
+      sharpen: 0,
+      hslQualifier: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
+    };
+  }
 
   describe('HDR path displayColor overrides', () => {
     function setupHDRRenderer(hdrOutputMode: string) {
@@ -503,7 +533,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'hlg' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -521,7 +554,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -540,7 +576,10 @@ describe('ViewerGLRenderer', () => {
 
       // Gainmap content with 'srgb' transfer function (linear float data)
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { transferFunction: 'srgb', colorPrimaries: 'bt709' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -560,7 +599,10 @@ describe('ViewerGLRenderer', () => {
 
       // EXR content with no explicit transferFunction
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
@@ -573,7 +615,10 @@ describe('ViewerGLRenderer', () => {
     it('VGLR-038: setColorPrimaries called with bt2020 input for bt2020 image', () => {
       const { glRenderer, mockRendererObj } = setupHDRRenderer('hlg');
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { colorPrimaries: 'bt2020' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -585,7 +630,10 @@ describe('ViewerGLRenderer', () => {
     it('VGLR-039: HLG output mode sets output color space to rec2020', () => {
       const { glRenderer, mockRendererObj } = setupHDRRenderer('hlg');
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
@@ -601,14 +649,17 @@ describe('ViewerGLRenderer', () => {
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
-      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({} as WebGLTexture));
+      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({}) as WebGLTexture);
 
       const stateWithTM = createDefaultRenderState();
       stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'hlg' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -632,7 +683,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -647,7 +701,10 @@ describe('ViewerGLRenderer', () => {
     it('VGLR-104: renderTiledHDR applies HDR display overrides and color primaries', () => {
       const { glRenderer, capturedStates, mockRendererObj } = setupHDRRenderer('hlg');
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { colorPrimaries: 'bt2020' },
       });
 
@@ -678,7 +735,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { transferFunction: 'hlg' },
       });
       const ok = glRenderer.renderTiledHDR(
@@ -736,8 +796,13 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
 
       return {
-        glRenderer, mockRendererObj, syncReadback, asyncReadback,
-        setPendingChanges: (v: boolean) => { pendingChanges = v; },
+        glRenderer,
+        mockRendererObj,
+        syncReadback,
+        asyncReadback,
+        setPendingChanges: (v: boolean) => {
+          pendingChanges = v;
+        },
       };
     }
 
@@ -899,8 +964,14 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
 
       return {
-        glRenderer, capturedStates, mockRendererObj, syncReadback, asyncReadback,
-        setPendingChanges: (v: boolean) => { pendingChanges = v; },
+        glRenderer,
+        capturedStates,
+        mockRendererObj,
+        syncReadback,
+        asyncReadback,
+        setPendingChanges: (v: boolean) => {
+          pendingChanges = v;
+        },
       };
     }
 
@@ -912,7 +983,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'hlg' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -930,7 +1004,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -948,7 +1025,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { transferFunction: 'srgb' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -966,14 +1046,17 @@ describe('ViewerGLRenderer', () => {
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
-      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({} as WebGLTexture));
+      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({}) as WebGLTexture);
 
       const stateWithTM = createDefaultRenderState();
       stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -1001,7 +1084,13 @@ describe('ViewerGLRenderer', () => {
       stateWithGamma.colorAdjustments = { ...stateWithGamma.colorAdjustments, gamma: 2.2 };
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithGamma);
 
-      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32', metadata: { transferFunction: 'hlg' } });
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        metadata: { transferFunction: 'hlg' },
+      });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
@@ -1021,7 +1110,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -1187,8 +1279,12 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
 
       return {
-        glRenderer, capturedStates, mockRendererObj,
-        setPendingChanges: (v: boolean) => { pendingChanges = v; },
+        glRenderer,
+        capturedStates,
+        mockRendererObj,
+        setPendingChanges: (v: boolean) => {
+          pendingChanges = v;
+        },
       };
     }
 
@@ -1200,7 +1296,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'hlg' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -1218,7 +1317,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -1236,7 +1338,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'float32',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
@@ -1258,7 +1363,10 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithHighlights);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'hlg' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -1278,14 +1386,17 @@ describe('ViewerGLRenderer', () => {
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
-      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({} as WebGLTexture));
+      (mockRendererObj as any).ensureImageTexture = vi.fn(() => ({}) as WebGLTexture);
 
       const stateWithTM = createDefaultRenderState();
       stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
 
       const image = new IPImage({
-        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
         metadata: { transferFunction: 'pq' },
       });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
@@ -1399,16 +1510,49 @@ describe('ViewerGLRenderer', () => {
         displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
       });
       (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
-      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
-      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
-      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({
+        hasAdjustments: () => false,
+        getState: () => DEFAULT_COLOR_WHEELS_STATE,
+      });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getColorLUT: () => null,
+      });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_ZEBRA_STATE,
+      });
       (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
       (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
-      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
-      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
-      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
-      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
-      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_HSL_QUALIFIER_STATE,
+      });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        method: 'bob',
+        fieldOrder: 'tff',
+      });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        stock: 'kodak-portra-400',
+        intensity: 100,
+        grainIntensity: 30,
+        grainSeed: 0,
+      });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      });
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: 'off',
+        sourceGamut: 'srgb',
+        targetGamut: 'srgb',
+      });
 
       return new ViewerGLRenderer(effectsCtx);
     }
@@ -1431,17 +1575,50 @@ describe('ViewerGLRenderer', () => {
         displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
       });
       (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
-      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
-      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
-      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({
+        hasAdjustments: () => false,
+        getState: () => DEFAULT_COLOR_WHEELS_STATE,
+      });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getColorLUT: () => null,
+      });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_ZEBRA_STATE,
+      });
       (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
       (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
-      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
-      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
-      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
-      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_HSL_QUALIFIER_STATE,
+      });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        method: 'bob',
+        fieldOrder: 'tff',
+      });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        stock: 'kodak-portra-400',
+        intensity: 100,
+        grainIntensity: 30,
+        grainSeed: 0,
+      });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      });
       // Active gamut mapping
-      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: 'clip',
+        sourceGamut: 'rec2020',
+        targetGamut: 'srgb',
+      });
 
       const r = new ViewerGLRenderer(effectsCtx);
       expect(r.hasGPUShaderEffectsActive()).toBe(true);
@@ -1460,17 +1637,50 @@ describe('ViewerGLRenderer', () => {
         displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
       });
       (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
-      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
-      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
-      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({
+        hasAdjustments: () => false,
+        getState: () => DEFAULT_COLOR_WHEELS_STATE,
+      });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getColorLUT: () => null,
+      });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_ZEBRA_STATE,
+      });
       (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
       (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
-      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
-      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
-      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
-      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_HSL_QUALIFIER_STATE,
+      });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        method: 'bob',
+        fieldOrder: 'tff',
+      });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        stock: 'kodak-portra-400',
+        intensity: 100,
+        grainIntensity: 30,
+        grainSeed: 0,
+      });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      });
       // Gamut mapping with same source and target — no-op
-      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: 'clip',
+        sourceGamut: 'srgb',
+        targetGamut: 'srgb',
+      });
 
       const r = new ViewerGLRenderer(effectsCtx);
       expect(r.hasGPUShaderEffectsActive()).toBe(false);
@@ -1500,17 +1710,52 @@ describe('ViewerGLRenderer', () => {
         displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
       });
       (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
-      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
-      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
-      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
-      (effectsCtx.getBackgroundPatternState as ReturnType<typeof vi.fn>).mockReturnValue({ ...DEFAULT_BACKGROUND_PATTERN_STATE });
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({
+        hasAdjustments: () => false,
+        getState: () => DEFAULT_COLOR_WHEELS_STATE,
+      });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getColorLUT: () => null,
+      });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_ZEBRA_STATE,
+      });
+      (effectsCtx.getBackgroundPatternState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_BACKGROUND_PATTERN_STATE,
+      });
       (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
       (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
-      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
-      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
-      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
-      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
-      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({
+        isEnabled: () => false,
+        getState: () => DEFAULT_HSL_QUALIFIER_STATE,
+      });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        method: 'bob',
+        fieldOrder: 'tff',
+      });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        stock: 'kodak-portra-400',
+        intensity: 100,
+        grainIntensity: 30,
+        grainSeed: 0,
+      });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      });
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: 'off',
+        sourceGamut: 'srgb',
+        targetGamut: 'srgb',
+      });
 
       const hsvLUT = new Uint8Array(256 * 3);
       hsvLUT[0] = 255; // red at index 0
@@ -1520,7 +1765,7 @@ describe('ViewerGLRenderer', () => {
       const mode = lumVisOverrides?.mode ?? 'off';
       const contourLevels = lumVisOverrides?.contourLevels ?? 10;
       const contourDesaturate = lumVisOverrides?.contourDesaturate ?? true;
-      const contourLineColor = lumVisOverrides?.contourLineColor ?? [255, 255, 255] as [number, number, number];
+      const contourLineColor = lumVisOverrides?.contourLineColor ?? ([255, 255, 255] as [number, number, number]);
 
       (effectsCtx.getLuminanceVisualization as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
         getMode: () => mode,

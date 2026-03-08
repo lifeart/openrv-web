@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SwitchGroupNode } from './SwitchGroupNode';
 import { IPNode } from '../base/IPNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 
 // Simple mock node for testing

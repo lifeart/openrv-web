@@ -9,11 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  EffectProcessor,
-  AllEffectsState,
-  createDefaultEffectsState,
-} from './EffectProcessor';
+import { EffectProcessor, type AllEffectsState, createDefaultEffectsState } from './EffectProcessor';
 import { createGradientImageData } from '../../../test/utils';
 
 // Mock postMessage before importing the worker (jsdom requires targetOrigin)
@@ -44,12 +40,7 @@ function computeRMSError(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
 }
 
 // Helper: check pixel-exact match (allows rounding tolerance of ±1)
-function assertPixelMatch(
-  a: Uint8ClampedArray,
-  b: Uint8ClampedArray,
-  tolerance = 1,
-  label = 'pixels'
-): void {
+function assertPixelMatch(a: Uint8ClampedArray, b: Uint8ClampedArray, tolerance = 1, label = 'pixels'): void {
   let maxDiff = 0;
   let diffCount = 0;
   for (let i = 0; i < a.length; i += 4) {
@@ -60,9 +51,7 @@ function assertPixelMatch(
     }
   }
   if (diffCount > 0) {
-    throw new Error(
-      `${label}: ${diffCount} pixels differ by more than ±${tolerance} (max diff: ${maxDiff})`
-    );
+    throw new Error(`${label}: ${diffCount} pixels differ by more than ±${tolerance} (max diff: ${maxDiff})`);
   }
 }
 
@@ -208,7 +197,11 @@ describe('EffectProcessor E2E', () => {
       state.cdlValues.power = { r: 0.9, g: 1.0, b: 1.1 };
       // Curves
       state.curvesData.master.enabled = true;
-      state.curvesData.master.points = [{ x: 0, y: 0.05 }, { x: 0.5, y: 0.55 }, { x: 1, y: 0.95 }];
+      state.curvesData.master.points = [
+        { x: 0, y: 0.05 },
+        { x: 0.5, y: 0.55 },
+        { x: 1, y: 0.95 },
+      ];
       // Clarity
       state.colorAdjustments.clarity = 40;
       // Sharpen
@@ -234,7 +227,11 @@ describe('EffectProcessor E2E', () => {
       state.cdlValues.offset = { r: 0.5, g: 0.5, b: 0.5 };
       state.cdlValues.power = { r: 0.5, g: 0.5, b: 0.5 };
       state.curvesData.master.enabled = true;
-      state.curvesData.master.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }];
+      state.curvesData.master.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.7 },
+        { x: 1, y: 1 },
+      ];
       state.colorInversionEnabled = true;
 
       expect(() => {
@@ -304,7 +301,7 @@ describe('EffectProcessor E2E', () => {
 
       const rms = computeRMSError(imgFull.data, imgHalf.data);
       // Interactive preview: RMS error should be under 10%
-      expect(rms).toBeLessThan(0.10);
+      expect(rms).toBeLessThan(0.1);
     });
 
     it('E2E-HALF-002: worker full pipeline with halfRes=true is within acceptable RMS', () => {
@@ -324,7 +321,7 @@ describe('EffectProcessor E2E', () => {
       workerProcessEffects(halfData, width, height, toWorkerState(state), true);
 
       const rms = computeRMSError(fullData, halfData);
-      expect(rms).toBeLessThan(0.10);
+      expect(rms).toBeLessThan(0.1);
     });
 
     it('E2E-HALF-003: main-thread halfRes vs worker halfRes produce same output', () => {

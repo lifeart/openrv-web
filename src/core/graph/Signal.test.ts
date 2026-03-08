@@ -181,7 +181,7 @@ describe('ComputedSignal', () => {
 
   describe('value', () => {
     it('returns computed value', () => {
-      let multiplier = 2;
+      const multiplier = 2;
       const computed = new ComputedSignal(() => 10 * multiplier);
 
       expect(computed.value).toBe(20);

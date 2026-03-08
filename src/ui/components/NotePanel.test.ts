@@ -230,17 +230,21 @@ describe('NotePanel', () => {
       editBtn.click();
 
       // Textarea should appear
-      const textarea = panel.getElement().querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
       expect(textarea).not.toBeNull();
       expect(textarea.value).toBe('Original text');
 
       // Simulate typing and Ctrl+Enter
       textarea.value = 'Updated text';
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        ctrlKey: true,
-        bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
 
       // Verify note was updated
       const updatedNote = session.noteManager.getNote(note.id);
@@ -255,12 +259,16 @@ describe('NotePanel', () => {
       const editBtn = panel.getElement().querySelector(`[data-testid="note-edit-${note.id}"]`) as HTMLElement;
       editBtn.click();
 
-      const textarea = panel.getElement().querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
       textarea.value = 'This should not be saved';
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Escape',
-        bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+        }),
+      );
 
       // Verify note was NOT updated
       const originalNote = session.noteManager.getNote(note.id);
@@ -323,14 +331,18 @@ describe('NotePanel', () => {
       replyBtn.click();
 
       // Type and submit
-      const textarea = panel.getElement().querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
       expect(textarea).not.toBeNull();
       textarea.value = 'This is a reply';
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter',
-        ctrlKey: true,
-        bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
 
       // Verify reply was created
       const replies = session.noteManager.getReplies(parent.id);
@@ -487,11 +499,17 @@ describe('NotePanel', () => {
       const replyBtn = panel.getElement().querySelector(`[data-testid="note-reply-${parent.id}"]`) as HTMLElement;
       replyBtn.click();
 
-      const textarea = panel.getElement().querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
+      const textarea = panel
+        .getElement()
+        .querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
       textarea.value = 'A reply';
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter', ctrlKey: true, bubbles: true,
-      }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
 
       const replies = session.noteManager.getReplies(parent.id);
       expect(replies.length).toBe(1);
@@ -548,7 +566,7 @@ describe('NotePanel', () => {
       exportBtn.click();
 
       // Find the anchor element that was created for download
-      const anchorCalls = createElementSpy.mock.calls.filter(c => c[0] === 'a');
+      const anchorCalls = createElementSpy.mock.calls.filter((c) => c[0] === 'a');
       expect(anchorCalls.length).toBeGreaterThan(0);
 
       createElementSpy.mockRestore();

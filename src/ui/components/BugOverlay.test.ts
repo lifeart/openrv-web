@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  BugOverlay,
-  DEFAULT_BUG_OVERLAY_STATE,
-  BugPosition,
-} from './BugOverlay';
+import { BugOverlay, DEFAULT_BUG_OVERLAY_STATE, type BugPosition } from './BugOverlay';
 
 // Canvas mocks are provided by test/setup.ts
 
@@ -106,9 +102,7 @@ describe('BugOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setPosition('top-right');
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ position: 'top-right' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ position: 'top-right' }));
     });
 
     it('BUG-023: setPosition does not emit if unchanged', () => {
@@ -152,9 +146,7 @@ describe('BugOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setSize(0.1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ size: 0.1 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ size: 0.1 }));
     });
 
     it('BUG-034: setSize does not emit if unchanged', () => {
@@ -190,9 +182,7 @@ describe('BugOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setOpacity(0.3);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ opacity: 0.3 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ opacity: 0.3 }));
     });
 
     it('BUG-044: setOpacity does not emit if unchanged', () => {
@@ -228,9 +218,7 @@ describe('BugOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.setMargin(20);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ margin: 20 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ margin: 20 }));
     });
   });
 
@@ -260,9 +248,7 @@ describe('BugOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.enable();
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
   });
 
@@ -331,9 +317,7 @@ describe('BugOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
       overlay.removeImage();
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false, imageUrl: null })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false, imageUrl: null }));
     });
   });
 

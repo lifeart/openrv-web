@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PixelSamplingManager, PixelSamplingContext } from './PixelSamplingManager';
+import { PixelSamplingManager, type PixelSamplingContext } from './PixelSamplingManager';
 
 describe('PixelSamplingManager', () => {
   let manager: PixelSamplingManager;
@@ -32,9 +32,7 @@ describe('PixelSamplingManager', () => {
     getSession: vi.fn(() => ({ currentSource: null })) as any,
     getDisplayDimensions: vi.fn(() => ({ width: 800, height: 600 })),
     getCanvasColorSpace: vi.fn(() => undefined),
-    getImageCanvasRect: vi.fn(
-      () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect,
-    ),
+    getImageCanvasRect: vi.fn(() => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect),
     isViewerContentElement: vi.fn(() => true),
     drawWithTransform: vi.fn(),
     getLastRenderedImage: vi.fn(() => null),
@@ -97,15 +95,7 @@ describe('PixelSamplingManager', () => {
     const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
 
     it('PSM-020: with probeEnabled=true and valid pixels, calls pixelProbe.updateFromHDRValues', () => {
-      manager.handlePixelProbeData(
-        pixels,
-        position,
-        1,
-        1,
-        true,
-        false,
-        mockEvent,
-      );
+      manager.handlePixelProbeData(pixels, position, 1, 1, true, false, mockEvent);
 
       expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledTimes(1);
       const args = mockPixelProbe.updateFromHDRValues.mock.calls[0];
@@ -124,15 +114,7 @@ describe('PixelSamplingManager', () => {
       const callback = vi.fn();
       manager.onCursorColorChange(callback);
 
-      manager.handlePixelProbeData(
-        pixels,
-        position,
-        1,
-        1,
-        false,
-        true,
-        mockEvent,
-      );
+      manager.handlePixelProbeData(pixels, position, 1, 1, false, true, mockEvent);
 
       expect(callback).toHaveBeenCalledWith(
         {
@@ -148,44 +130,20 @@ describe('PixelSamplingManager', () => {
       const callback = vi.fn();
       manager.onCursorColorChange(callback);
 
-      manager.handlePixelProbeData(
-        null,
-        position,
-        1,
-        1,
-        false,
-        true,
-        mockEvent,
-      );
+      manager.handlePixelProbeData(null, position, 1, 1, false, true, mockEvent);
 
       expect(callback).toHaveBeenCalledWith(null, null);
     });
 
     it('PSM-023: with probeEnabled=false, does not call pixelProbe.updateFromHDRValues', () => {
-      manager.handlePixelProbeData(
-        pixels,
-        position,
-        1,
-        1,
-        false,
-        false,
-        mockEvent,
-      );
+      manager.handlePixelProbeData(pixels, position, 1, 1, false, false, mockEvent);
 
       expect(mockPixelProbe.updateFromHDRValues).not.toHaveBeenCalled();
       expect(mockPixelProbe.setOverlayPosition).not.toHaveBeenCalled();
     });
 
     it('PSM-024: with probeEnabled=true but null pixels, still calls setOverlayPosition', () => {
-      manager.handlePixelProbeData(
-        null,
-        position,
-        1,
-        1,
-        true,
-        false,
-        mockEvent,
-      );
+      manager.handlePixelProbeData(null, position, 1, 1, true, false, mockEvent);
 
       expect(mockPixelProbe.updateFromHDRValues).not.toHaveBeenCalled();
       expect(mockPixelProbe.setOverlayPosition).toHaveBeenCalledWith(100, 100);
@@ -195,15 +153,7 @@ describe('PixelSamplingManager', () => {
       const callback = vi.fn();
       manager.onCursorColorChange(callback);
 
-      manager.handlePixelProbeData(
-        pixels,
-        position,
-        1,
-        1,
-        true,
-        true,
-        mockEvent,
-      );
+      manager.handlePixelProbeData(pixels, position, 1, 1, true, true, mockEvent);
 
       // Both probe and cursor color consumers should have been served
       expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledOnce();
@@ -214,10 +164,22 @@ describe('PixelSamplingManager', () => {
     it('PSM-026: multi-pixel block is averaged correctly', () => {
       // 2x2 block of pixels: test that averaging math works for real multi-pixel data
       const multiPixels = new Float32Array([
-        0.2, 0.4, 0.6, 1.0,  // pixel (0,0)
-        0.4, 0.6, 0.8, 1.0,  // pixel (1,0)
-        0.6, 0.8, 1.0, 1.0,  // pixel (0,1)
-        0.8, 1.0, 0.2, 1.0,  // pixel (1,1)
+        0.2,
+        0.4,
+        0.6,
+        1.0, // pixel (0,0)
+        0.4,
+        0.6,
+        0.8,
+        1.0, // pixel (1,0)
+        0.6,
+        0.8,
+        1.0,
+        1.0, // pixel (0,1)
+        0.8,
+        1.0,
+        0.2,
+        1.0, // pixel (1,1)
       ]);
       // Expected averages: r=(0.2+0.4+0.6+0.8)/4=0.5, g=(0.4+0.6+0.8+1.0)/4=0.7,
       //                    b=(0.6+0.8+1.0+0.2)/4=0.65, a=1.0
@@ -225,32 +187,59 @@ describe('PixelSamplingManager', () => {
       manager.handlePixelProbeData(
         multiPixels,
         position,
-        2,   // rw
-        2,   // rh
+        2, // rw
+        2, // rh
         true,
         false,
         mockEvent,
       );
 
       const args = mockPixelProbe.updateFromHDRValues.mock.calls[0];
-      expect(args[2]).toBeCloseTo(0.5, 5);   // avg r
-      expect(args[3]).toBeCloseTo(0.7, 5);   // avg g
-      expect(args[4]).toBeCloseTo(0.65, 5);  // avg b
-      expect(args[5]).toBeCloseTo(1.0, 5);   // avg a
+      expect(args[2]).toBeCloseTo(0.5, 5); // avg r
+      expect(args[3]).toBeCloseTo(0.7, 5); // avg g
+      expect(args[4]).toBeCloseTo(0.65, 5); // avg b
+      expect(args[5]).toBeCloseTo(1.0, 5); // avg a
     });
 
     it('PSM-027: cursor color reads center pixel from multi-pixel block, not average', () => {
       // 3x3 block: cursor color should read the center pixel, not average
       const block3x3 = new Float32Array([
-        0.0, 0.0, 0.0, 1.0,  // (0,0)
-        0.0, 0.0, 0.0, 1.0,  // (1,0)
-        0.0, 0.0, 0.0, 1.0,  // (2,0)
-        0.0, 0.0, 0.0, 1.0,  // (0,1)
-        0.5, 0.3, 0.1, 1.0,  // (1,1) CENTER
-        0.0, 0.0, 0.0, 1.0,  // (2,1)
-        0.0, 0.0, 0.0, 1.0,  // (0,2)
-        0.0, 0.0, 0.0, 1.0,  // (1,2)
-        0.0, 0.0, 0.0, 1.0,  // (2,2)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (0,0)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (1,0)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (2,0)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (0,1)
+        0.5,
+        0.3,
+        0.1,
+        1.0, // (1,1) CENTER
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (2,1)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (0,2)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (1,2)
+        0.0,
+        0.0,
+        0.0,
+        1.0, // (2,2)
       ]);
 
       const callback = vi.fn();
@@ -259,8 +248,8 @@ describe('PixelSamplingManager', () => {
       manager.handlePixelProbeData(
         block3x3,
         position,
-        3,   // rw
-        3,   // rh
+        3, // rw
+        3, // rh
         false,
         true,
         mockEvent,
@@ -385,16 +374,7 @@ describe('PixelSamplingManager', () => {
       webglManager.onMouseMoveForPixelSampling(event);
 
       expect(readPixelFloat).not.toHaveBeenCalled();
-      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(
-        200,
-        150,
-        0.5,
-        0.25,
-        0.75,
-        1.0,
-        800,
-        600,
-      );
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(200, 150, 0.5, 0.25, 0.75, 1.0, 800, 600);
       expect(callback).toHaveBeenCalledWith(
         { r: Math.round(0.5 * 255), g: Math.round(0.25 * 255), b: Math.round(0.75 * 255) },
         { x: 200, y: 150 },
@@ -534,7 +514,7 @@ describe('PixelSamplingManager', () => {
     it('PSM-053: returns float data when WebGL rendering is active', () => {
       const floatData = new Float32Array(4 * 4 * 4); // 4x4 pixels
       for (let i = 0; i < floatData.length; i++) {
-        floatData[i] = (i % 4 === 3) ? 1.0 : 0.5; // RGBA with 0.5 color, 1.0 alpha
+        floatData[i] = i % 4 === 3 ? 1.0 : 0.5; // RGBA with 0.5 color, 1.0 alpha
       }
 
       const mockImage = {} as any; // Mock IPImage
@@ -563,7 +543,10 @@ describe('PixelSamplingManager', () => {
 
     it('PSM-054: converts float data to ImageData for SDR fallback', () => {
       const floatData = new Float32Array([
-        0.5, 0.3, 0.1, 1.0, // single pixel
+        0.5,
+        0.3,
+        0.1,
+        1.0, // single pixel
       ]);
 
       const mockImage = {} as any;

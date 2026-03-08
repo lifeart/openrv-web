@@ -387,9 +387,7 @@ describe('DisplayProfileControl', () => {
       control.setState({ transferFunction: 'rec709' });
       expect(localStorageMock.setItem).toHaveBeenCalled();
       const calls = localStorageMock.setItem.mock.calls;
-      const profileCall = calls.find(
-        (call: [string, string]) => call[0] === 'openrv-display-profile',
-      );
+      const profileCall = calls.find((call: [string, string]) => call[0] === 'openrv-display-profile');
       expect(profileCall).toBeDefined();
       const stored = JSON.parse(profileCall![1]);
       expect(stored.transferFunction).toBe('rec709');
@@ -399,9 +397,7 @@ describe('DisplayProfileControl', () => {
       control = new DisplayProfileControl();
       control.setTransferFunction('linear');
       const calls = localStorageMock.setItem.mock.calls;
-      const profileCall = calls.find(
-        (call: [string, string]) => call[0] === 'openrv-display-profile',
-      );
+      const profileCall = calls.find((call: [string, string]) => call[0] === 'openrv-display-profile');
       expect(profileCall).toBeDefined();
       const stored = JSON.parse(profileCall![1]);
       expect(stored.transferFunction).toBe('linear');
@@ -444,9 +440,7 @@ describe('DisplayProfileControl', () => {
       control.resetToDefaults();
       expect(localStorageMock.setItem).toHaveBeenCalled();
       const calls = localStorageMock.setItem.mock.calls;
-      const profileCall = calls.find(
-        (call: [string, string]) => call[0] === 'openrv-display-profile',
-      );
+      const profileCall = calls.find((call: [string, string]) => call[0] === 'openrv-display-profile');
       expect(profileCall).toBeDefined();
       const stored = JSON.parse(profileCall![1]);
       expect(stored.transferFunction).toBe('srgb');
@@ -462,24 +456,30 @@ describe('DisplayProfileControl', () => {
     });
 
     it('DPC-071: non-sRGB transfer function is active', () => {
-      expect(isDisplayStateActive({
-        ...DEFAULT_DISPLAY_COLOR_STATE,
-        transferFunction: 'linear',
-      })).toBe(true);
+      expect(
+        isDisplayStateActive({
+          ...DEFAULT_DISPLAY_COLOR_STATE,
+          transferFunction: 'linear',
+        }),
+      ).toBe(true);
     });
 
     it('DPC-072: non-default gamma is active', () => {
-      expect(isDisplayStateActive({
-        ...DEFAULT_DISPLAY_COLOR_STATE,
-        displayGamma: 2.0,
-      })).toBe(true);
+      expect(
+        isDisplayStateActive({
+          ...DEFAULT_DISPLAY_COLOR_STATE,
+          displayGamma: 2.0,
+        }),
+      ).toBe(true);
     });
 
     it('DPC-073: non-default brightness is active', () => {
-      expect(isDisplayStateActive({
-        ...DEFAULT_DISPLAY_COLOR_STATE,
-        displayBrightness: 0.5,
-      })).toBe(true);
+      expect(
+        isDisplayStateActive({
+          ...DEFAULT_DISPLAY_COLOR_STATE,
+          displayBrightness: 0.5,
+        }),
+      ).toBe(true);
     });
 
     it('DPC-074: button has transparent background when state is default', () => {

@@ -5,9 +5,9 @@
  * Shows different controls based on which tab is active
  */
 
-import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
-import { TabId } from './TabBar';
-import { getIconSvg, IconName } from '../shared/Icons';
+import { EventEmitter, type EventMap } from '../../../utils/EventEmitter';
+import { type TabId } from './TabBar';
+import { getIconSvg, type IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton } from '../shared/Button';
 
 export interface ContextToolbarEvents extends EventMap {
@@ -201,7 +201,8 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     if (focusInPrevTab) {
       const newContent = this.tabContents.get(tabId);
       if (newContent) {
-        const focusTarget = newContent.querySelector<HTMLElement>('[tabindex="0"]') ||
+        const focusTarget =
+          newContent.querySelector<HTMLElement>('[tabindex="0"]') ||
           newContent.querySelector<HTMLElement>('button:not([disabled])');
         if (focusTarget) {
           focusTarget.focus();
@@ -239,7 +240,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       active?: boolean;
       minWidth?: string;
       icon?: IconName;
-    } = {}
+    } = {},
   ): HTMLButtonElement {
     const iconSvg = options.icon ? getIconSvg(options.icon, 'sm') : undefined;
     return sharedCreateButton(text, onClick, {
@@ -263,7 +264,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       title?: string;
       active?: boolean;
       size?: 'sm' | 'md';
-    } = {}
+    } = {},
   ): HTMLButtonElement {
     const iconSize = options.size === 'md' ? 'md' : 'sm';
     const btnSize = options.size === 'md' ? 'lg' : 'md';
@@ -290,7 +291,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       width?: string;
       onChange?: (value: number) => void;
       onDoubleClick?: () => void;
-    } = {}
+    } = {},
   ): HTMLElement {
     const container = document.createElement('div');
     container.style.cssText = `

@@ -148,7 +148,7 @@ malformed_line_no_frames
   // Additional edge cases
 
   it('handles Windows-style line endings (CRLF)', () => {
-    const text = "/path/to/source1.exr 1 100\r\n/path/to/source2.mov 50 200\r\n";
+    const text = '/path/to/source1.exr 1 100\r\n/path/to/source2.mov 50 200\r\n';
 
     const entries = parseRVEDL(text);
 

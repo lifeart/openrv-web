@@ -83,7 +83,7 @@ describe('LUTPrecision', () => {
       const result = comparePrecision(reference, actual);
 
       expect(result.maxError).toBeCloseTo(0.1, 5);
-      expect(result.meanAbsoluteError).toBeCloseTo(0.1 * 2 / 3, 5); // Two channels off by 0.1
+      expect(result.meanAbsoluteError).toBeCloseTo((0.1 * 2) / 3, 5); // Two channels off by 0.1
       expect(result.sampleCount).toBe(1);
     });
 
@@ -127,14 +127,8 @@ describe('LUTPrecision', () => {
     });
 
     it('PREC-007: handles multiple pixels', () => {
-      const reference = new Float32Array([
-        0.5, 0.5, 0.5, 1.0,
-        0.3, 0.3, 0.3, 1.0,
-      ]);
-      const actual = new Float32Array([
-        0.6, 0.5, 0.5, 1.0,
-        0.3, 0.4, 0.3, 1.0,
-      ]);
+      const reference = new Float32Array([0.5, 0.5, 0.5, 1.0, 0.3, 0.3, 0.3, 1.0]);
+      const actual = new Float32Array([0.6, 0.5, 0.5, 1.0, 0.3, 0.4, 0.3, 1.0]);
 
       const result = comparePrecision(reference, actual);
 

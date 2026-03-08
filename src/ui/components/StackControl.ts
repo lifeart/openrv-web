@@ -1,5 +1,5 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/BlendModes';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/BlendModes';
 import { getIconSvg } from './shared/Icons';
 import { OPACITY } from './shared/theme';
 import type { StencilBox } from '../../core/types/wipe';
@@ -152,8 +152,12 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       font-size: 11px;
     `;
     addBtn.addEventListener('click', () => this.addLayerFromCurrentSource());
-    addBtn.addEventListener('pointerenter', () => { addBtn.style.background = 'var(--accent-hover)'; });
-    addBtn.addEventListener('pointerleave', () => { addBtn.style.background = 'var(--accent-primary)'; });
+    addBtn.addEventListener('pointerenter', () => {
+      addBtn.style.background = 'var(--accent-hover)';
+    });
+    addBtn.addEventListener('pointerleave', () => {
+      addBtn.style.background = 'var(--accent-primary)';
+    });
 
     header.appendChild(title);
     header.appendChild(addBtn);
@@ -433,7 +437,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       sourceLabel.textContent = 'Source:';
 
       // Check if current source is valid (exists in available sources)
-      const isSourceValid = this.availableSources.some(s => s.index === layer.sourceIndex);
+      const isSourceValid = this.availableSources.some((s) => s.index === layer.sourceIndex);
 
       const sourceSelect = document.createElement('select');
       sourceSelect.setAttribute('data-testid', `stack-layer-source-${layer.id}`);
@@ -480,7 +484,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
         this.emit('layerSourceChanged', { layerId: layer.id, sourceIndex: newSourceIndex });
         this.emit('layerChanged', { ...layer });
         // Update visual state to remove warning styling if source is now valid
-        const nowValid = this.availableSources.some(s => s.index === newSourceIndex);
+        const nowValid = this.availableSources.some((s) => s.index === newSourceIndex);
         if (nowValid) {
           sourceSelect.style.background = 'var(--border-primary)';
           sourceSelect.style.border = '1px solid var(--border-secondary)';
@@ -641,7 +645,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   removeLayer(layerId: string): void {
-    const index = this.layers.findIndex(l => l.id === layerId);
+    const index = this.layers.findIndex((l) => l.id === layerId);
     if (index === -1) return;
 
     this.layers.splice(index, 1);
@@ -662,7 +666,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   getActiveLayer(): StackLayer | null {
-    return this.layers.find(l => l.id === this.activeLayerId) ?? null;
+    return this.layers.find((l) => l.id === this.activeLayerId) ?? null;
   }
 
   setActiveLayer(layerId: string | null): void {
@@ -672,7 +676,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   updateLayerName(layerId: string, name: string): void {
-    const layer = this.layers.find(l => l.id === layerId);
+    const layer = this.layers.find((l) => l.id === layerId);
     if (layer) {
       layer.name = name;
       this.updateLayerList();
@@ -680,7 +684,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   updateLayerSource(layerId: string, sourceIndex: number): void {
-    const layer = this.layers.find(l => l.id === layerId);
+    const layer = this.layers.find((l) => l.id === layerId);
     if (layer) {
       layer.sourceIndex = sourceIndex;
     }

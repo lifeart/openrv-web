@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource } from './SessionTypes';
@@ -127,35 +127,75 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   // --- Backward-compatible accessors for timing state fields ---
   // Tests access these via `(session as any).lastFrameTime` etc.
 
-  get lastFrameTime(): number { return this._ts.lastFrameTime; }
-  set lastFrameTime(v: number) { this._ts.lastFrameTime = v; }
+  get lastFrameTime(): number {
+    return this._ts.lastFrameTime;
+  }
+  set lastFrameTime(v: number) {
+    this._ts.lastFrameTime = v;
+  }
 
-  get frameAccumulator(): number { return this._ts.frameAccumulator; }
-  set frameAccumulator(v: number) { this._ts.frameAccumulator = v; }
+  get frameAccumulator(): number {
+    return this._ts.frameAccumulator;
+  }
+  set frameAccumulator(v: number) {
+    this._ts.frameAccumulator = v;
+  }
 
-  get _bufferingCount(): number { return this._ts.bufferingCount; }
-  set _bufferingCount(v: number) { this._ts.bufferingCount = v; }
+  get _bufferingCount(): number {
+    return this._ts.bufferingCount;
+  }
+  set _bufferingCount(v: number) {
+    this._ts.bufferingCount = v;
+  }
 
-  get _isBuffering(): boolean { return this._ts.isBuffering; }
-  set _isBuffering(v: boolean) { this._ts.isBuffering = v; }
+  get _isBuffering(): boolean {
+    return this._ts.isBuffering;
+  }
+  set _isBuffering(v: boolean) {
+    this._ts.isBuffering = v;
+  }
 
-  get _starvationStartTime(): number { return this._ts.starvationStartTime; }
-  set _starvationStartTime(v: number) { this._ts.starvationStartTime = v; }
+  get _starvationStartTime(): number {
+    return this._ts.starvationStartTime;
+  }
+  set _starvationStartTime(v: number) {
+    this._ts.starvationStartTime = v;
+  }
 
-  get _consecutiveStarvationSkips(): number { return this._ts.consecutiveStarvationSkips; }
-  set _consecutiveStarvationSkips(v: number) { this._ts.consecutiveStarvationSkips = v; }
+  get _consecutiveStarvationSkips(): number {
+    return this._ts.consecutiveStarvationSkips;
+  }
+  set _consecutiveStarvationSkips(v: number) {
+    this._ts.consecutiveStarvationSkips = v;
+  }
 
-  get fpsFrameCount(): number { return this._ts.fpsFrameCount; }
-  set fpsFrameCount(v: number) { this._ts.fpsFrameCount = v; }
+  get fpsFrameCount(): number {
+    return this._ts.fpsFrameCount;
+  }
+  set fpsFrameCount(v: number) {
+    this._ts.fpsFrameCount = v;
+  }
 
-  get fpsLastTime(): number { return this._ts.fpsLastTime; }
-  set fpsLastTime(v: number) { this._ts.fpsLastTime = v; }
+  get fpsLastTime(): number {
+    return this._ts.fpsLastTime;
+  }
+  set fpsLastTime(v: number) {
+    this._ts.fpsLastTime = v;
+  }
 
-  get _effectiveFps(): number { return this._ts.effectiveFps; }
-  set _effectiveFps(v: number) { this._ts.effectiveFps = v; }
+  get _effectiveFps(): number {
+    return this._ts.effectiveFps;
+  }
+  set _effectiveFps(v: number) {
+    this._ts.effectiveFps = v;
+  }
 
-  get _subFramePosition(): SubFramePosition | null { return this._ts.subFramePosition; }
-  set _subFramePosition(v: SubFramePosition | null) { this._ts.subFramePosition = v; }
+  get _subFramePosition(): SubFramePosition | null {
+    return this._ts.subFramePosition;
+  }
+  set _subFramePosition(v: SubFramePosition | null) {
+    this._ts.subFramePosition = v;
+  }
 
   // Host reference
   private _host: PlaybackEngineHost | null = null;
@@ -294,7 +334,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
         this.playbackSpeed = nextSpeed;
       }
     } else if (currentIndex === -1) {
-      const nextPreset = PLAYBACK_SPEED_PRESETS.find(p => p > this._playbackSpeed);
+      const nextPreset = PLAYBACK_SPEED_PRESETS.find((p) => p > this._playbackSpeed);
       if (nextPreset !== undefined) {
         this.playbackSpeed = nextPreset;
       }
@@ -309,7 +349,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
         this.playbackSpeed = prevSpeed;
       }
     } else if (currentIndex === -1) {
-      const prevPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find(p => p < this._playbackSpeed);
+      const prevPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find((p) => p < this._playbackSpeed);
       if (prevPreset !== undefined) {
         this.playbackSpeed = prevPreset;
       }
@@ -714,14 +754,15 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     const tc = this._timingController;
     const videoSourceNode = source.videoSourceNode!;
 
-    const { frameDuration } = tc.accumulateDelta(
-      this._ts, this._fps, this._playbackSpeed, this._playDirection,
-    );
+    const { frameDuration } = tc.accumulateDelta(this._ts, this._fps, this._playbackSpeed, this._playDirection);
 
     while (tc.hasAccumulatedFrame(this._ts, frameDuration)) {
       const nextFrame = tc.computeNextFrame(
-        this._currentFrame, this._playDirection,
-        this._inPoint, this._outPoint, this._loopMode,
+        this._currentFrame,
+        this._playDirection,
+        this._inPoint,
+        this._outPoint,
+        this._loopMode,
       );
 
       if (videoSourceNode.hasFrameCached(nextFrame)) {
@@ -750,9 +791,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
         tc.capAccumulator(this._ts, frameDuration);
         tc.beginStarvation(this._ts);
 
-        const starvation = tc.checkStarvation(
-          this._ts, nextFrame, this._inPoint, this._outPoint, this._playDirection,
-        );
+        const starvation = tc.checkStarvation(this._ts, nextFrame, this._inPoint, this._outPoint, this._playDirection);
 
         if (starvation.timedOut) {
           // In play-all-frames mode, wait indefinitely (with absolute timeout safety net)
@@ -763,7 +802,9 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
             if (waitElapsed > PLAY_ALL_FRAMES_ABSOLUTE_TIMEOUT_MS) {
               // Safety net: after 60 seconds, the frame is likely undecodable.
               // Skip it, emit a warning, and continue.
-              log.warn(`Frame ${nextFrame} play-all-frames absolute timeout (${Math.round(waitElapsed)}ms) - skipping frame`);
+              log.warn(
+                `Frame ${nextFrame} play-all-frames absolute timeout (${Math.round(waitElapsed)}ms) - skipping frame`,
+              );
               this._playAllFramesWaitStart = null;
               if (this._playAllFramesBuffering) {
                 this._playAllFramesBuffering = false;
@@ -793,7 +834,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           if (starvation.shouldPause) {
             log.warn(
               `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
-              `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`
+                `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`,
             );
             if (source.element instanceof HTMLVideoElement) {
               source.element.pause();
@@ -826,7 +867,9 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
             }
           }
 
-          log.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
+          log.warn(
+            `Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`,
+          );
           tc.trackDroppedFrame(this._ts);
           tc.resetStarvation(this._ts);
           this._pendingFetchFrame = null;
@@ -842,16 +885,19 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
             this.emit('buffering', true);
           }
 
-          videoSourceNode.getFrameAsync(nextFrame).then(() => {
-            source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
-            this.updateSourceBPlaybackBuffer(nextFrame);
-            this.decrementBufferingCount();
-          }).catch(err => {
-            if (err?.name !== 'AbortError') {
-              log.warn('Frame fetch error:', err);
-            }
-            this.decrementBufferingCount();
-          });
+          videoSourceNode
+            .getFrameAsync(nextFrame)
+            .then(() => {
+              source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
+              this.updateSourceBPlaybackBuffer(nextFrame);
+              this.decrementBufferingCount();
+            })
+            .catch((err) => {
+              if (err?.name !== 'AbortError') {
+                log.warn('Frame fetch error:', err);
+              }
+              this.decrementBufferingCount();
+            });
         }
         break;
       }
@@ -908,7 +954,10 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     const tc = this._timingController;
 
     const { framesToAdvance, frameDuration } = tc.accumulateFrames(
-      this._ts, this._fps, this._playbackSpeed, this._playDirection,
+      this._ts,
+      this._fps,
+      this._playbackSpeed,
+      this._playDirection,
       this._playbackMode,
     );
 
@@ -974,9 +1023,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     // Emit fpsUpdated when the measurement changes (every ~500ms window)
     if (this._ts.effectiveFps !== prevFps && this._ts.effectiveFps > 0) {
       const effectiveTargetFps = this._fps * this._playbackSpeed;
-      const ratio = effectiveTargetFps > 0
-        ? Math.min(1, this._ts.effectiveFps / effectiveTargetFps)
-        : 0;
+      const ratio = effectiveTargetFps > 0 ? Math.min(1, this._ts.effectiveFps / effectiveTargetFps) : 0;
       this.emit('fpsUpdated', {
         targetFps: this._fps,
         effectiveTargetFps,
@@ -1028,7 +1075,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     const source = this._host?.getCurrentSource();
     if (source?.type === 'video') {
       if (source.videoSourceNode?.isUsingMediabunny()) {
-        source.videoSourceNode.preloadFrames(this._currentFrame).catch(err => {
+        source.videoSourceNode.preloadFrames(this._currentFrame).catch((err) => {
           log.warn('Frame preload error:', err);
         });
       }
@@ -1045,14 +1092,14 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   private triggerInitialBufferLoad(
     videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
     startFrame: number,
-    direction: number
+    direction: number,
   ): void {
     const duration = this._outPoint - this._inPoint + 1;
     const bufferSize = Math.min(this.MIN_PLAYBACK_BUFFER, duration);
 
     const framesToBuffer: number[] = [];
     for (let i = 0; i < bufferSize; i++) {
-      const frame = startFrame + (i * direction);
+      const frame = startFrame + i * direction;
       if (frame >= this._inPoint && frame <= this._outPoint) {
         framesToBuffer.push(frame);
       }
@@ -1072,7 +1119,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           this._timingController.resetTiming(this._ts);
           this.decrementBufferingCount();
         }
-      })().catch(err => {
+      })().catch((err) => {
         if (err?.name !== 'AbortError') {
           log.warn('HDR buffer preload failed:', err);
         }
@@ -1084,9 +1131,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       return;
     }
 
-    Promise.allSettled(
-      framesToBuffer.map(frame => videoSourceNode.getFrameAsync(frame))
-    ).then(results => {
+    Promise.allSettled(framesToBuffer.map((frame) => videoSourceNode.getFrameAsync(frame))).then((results) => {
       for (const result of results) {
         if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
           log.debug('Initial buffer preload error:', result.reason);
@@ -1098,7 +1143,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   private triggerStarvationRecoveryPreload(
     videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
     fromFrame: number,
-    direction: number
+    direction: number,
   ): void {
     const RECOVERY_BUFFER_SIZE = 10;
     const duration = this._outPoint - this._inPoint + 1;
@@ -1106,7 +1151,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
     const framesToBuffer: number[] = [];
     for (let i = 0; i < bufferSize; i++) {
-      const frame = fromFrame + (i * direction);
+      const frame = fromFrame + i * direction;
       if (frame >= this._inPoint && frame <= this._outPoint) {
         framesToBuffer.push(frame);
       }
@@ -1114,9 +1159,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
     if (framesToBuffer.length === 0) return;
 
-    Promise.allSettled(
-      framesToBuffer.map(frame => videoSourceNode.getFrameAsync(frame))
-    ).then(results => {
+    Promise.allSettled(framesToBuffer.map((frame) => videoSourceNode.getFrameAsync(frame))).then((results) => {
       for (const result of results) {
         if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
           log.debug('Starvation recovery preload error:', result.reason);

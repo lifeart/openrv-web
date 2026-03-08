@@ -357,11 +357,7 @@ describe('FrameExporter', () => {
         await canvasToBlob(canvas, format);
 
         const expectedMime = `image/${format}`;
-        expect(toBlobSpy).toHaveBeenCalledWith(
-          expect.any(Function),
-          expectedMime,
-          format === 'png' ? undefined : 0.92
-        );
+        expect(toBlobSpy).toHaveBeenCalledWith(expect.any(Function), expectedMime, format === 'png' ? undefined : 0.92);
 
         toBlobSpy.mockRestore();
       });

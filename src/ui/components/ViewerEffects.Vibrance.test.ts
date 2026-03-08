@@ -92,25 +92,27 @@ describe('applyVibrance', () => {
   it('VIB-005: skin protection reduces effect on skin-tone hue (20-50 degrees)', () => {
     // Skin-tone pixel: hue ~30 degrees, moderate saturation, mid lightness
     // RGB for hue ~30: warm orange-ish
-    const r = 200, g = 160, b = 130;
+    const r = 200,
+      g = 160,
+      b = 130;
     const imgNoProtect = createImageData1px(r, g, b);
     applyVibrance(imgNoProtect, { vibrance: 80, skinProtection: false });
-    const diffNoProtect = Math.abs(imgNoProtect.data[0]! - r) +
-      Math.abs(imgNoProtect.data[1]! - g) +
-      Math.abs(imgNoProtect.data[2]! - b);
+    const diffNoProtect =
+      Math.abs(imgNoProtect.data[0]! - r) + Math.abs(imgNoProtect.data[1]! - g) + Math.abs(imgNoProtect.data[2]! - b);
 
     const imgProtect = createImageData1px(r, g, b);
     applyVibrance(imgProtect, { vibrance: 80, skinProtection: true });
-    const diffProtect = Math.abs(imgProtect.data[0]! - r) +
-      Math.abs(imgProtect.data[1]! - g) +
-      Math.abs(imgProtect.data[2]! - b);
+    const diffProtect =
+      Math.abs(imgProtect.data[0]! - r) + Math.abs(imgProtect.data[1]! - g) + Math.abs(imgProtect.data[2]! - b);
 
     // With skin protection, effect should be less
     expect(diffProtect).toBeLessThan(diffNoProtect);
   });
 
   it('VIB-006: skin protection has no effect on non-skin hue (e.g. blue)', () => {
-    const r = 50, g = 80, b = 200;
+    const r = 50,
+      g = 80,
+      b = 200;
     const imgNoProtect = createImageData1px(r, g, b);
     applyVibrance(imgNoProtect, { vibrance: 80, skinProtection: false });
 
@@ -146,9 +148,7 @@ describe('applyVibrance', () => {
     const img = createImageData1px(128, 128, 128);
     applyVibrance(img, { vibrance: 100, skinProtection: false });
     // Values should change (gray gets colorized due to full saturation boost)
-    const totalChange = Math.abs(img.data[0]! - 128) +
-      Math.abs(img.data[1]! - 128) +
-      Math.abs(img.data[2]! - 128);
+    const totalChange = Math.abs(img.data[0]! - 128) + Math.abs(img.data[1]! - 128) + Math.abs(img.data[2]! - 128);
     expect(totalChange).toBeGreaterThan(0);
   });
 
@@ -192,11 +192,24 @@ describe('applyVibrance', () => {
   });
 
   it('VIB-015: multiple pixels in a row are all processed', () => {
-    const img = createImageDataFromArray([
-      200, 100, 50, 255,  // pixel 0: saturated orange
-      120, 120, 140, 255, // pixel 1: muted blue
-      50, 200, 50, 255,   // pixel 2: green
-    ], 3, 1);
+    const img = createImageDataFromArray(
+      [
+        200,
+        100,
+        50,
+        255, // pixel 0: saturated orange
+        120,
+        120,
+        140,
+        255, // pixel 1: muted blue
+        50,
+        200,
+        50,
+        255, // pixel 2: green
+      ],
+      3,
+      1,
+    );
 
     const sat0before = rgbSaturation(200, 100, 50);
     const sat1before = rgbSaturation(120, 120, 140);
@@ -249,7 +262,9 @@ describe('applyVibrance', () => {
   });
 
   it('VIB-020: skin protection with skinProtection=false has no skin protection', () => {
-    const r = 200, g = 160, b = 130;
+    const r = 200,
+      g = 160,
+      b = 130;
     const img1 = createImageData1px(r, g, b);
     applyVibrance(img1, { vibrance: 80, skinProtection: false });
 
@@ -270,7 +285,9 @@ describe('applyVibrance', () => {
   });
 
   it('VIB-022: vibrance effect is symmetric for positive and negative', () => {
-    const r = 180, g = 120, b = 80;
+    const r = 180,
+      g = 120,
+      b = 80;
     const satOriginal = rgbSaturation(r, g, b);
 
     const imgPos = createImageData1px(r, g, b);
@@ -286,12 +303,11 @@ describe('applyVibrance', () => {
   });
 
   it('VIB-023: 2x2 image processes all four pixels', () => {
-    const img = createImageDataFromArray([
-      200, 100, 50, 255,
-      50, 200, 100, 255,
-      100, 50, 200, 255,
-      150, 150, 100, 255,
-    ], 2, 2);
+    const img = createImageDataFromArray(
+      [200, 100, 50, 255, 50, 200, 100, 255, 100, 50, 200, 255, 150, 150, 100, 255],
+      2,
+      2,
+    );
 
     applyVibrance(img, { vibrance: 60, skinProtection: false });
 

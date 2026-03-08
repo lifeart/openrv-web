@@ -7,9 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StereoEyeTransformControl } from './StereoEyeTransformControl';
-import {
-  DEFAULT_EYE_TRANSFORM,
-} from '../../stereo/StereoEyeTransform';
+import { DEFAULT_EYE_TRANSFORM } from '../../stereo/StereoEyeTransform';
 
 describe('StereoEyeTransformControl', () => {
   let control: StereoEyeTransformControl;

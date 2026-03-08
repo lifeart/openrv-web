@@ -341,9 +341,7 @@ describe('Renderer Texture Filter Mode', () => {
       image.texture = (mockGL as any).createTexture();
       image.textureNeedsUpdate = false;
 
-      renderer.renderTiledImages([
-        { image, viewport: { x: 0, y: 0, width: 100, height: 100 } },
-      ]);
+      renderer.renderTiledImages([{ image, viewport: { x: 0, y: 0, width: 100, height: 100 } }]);
 
       const calls = (mockGL.texParameteri as any).mock.calls as Array<[number, number, number]>;
       const magFilterCalls = calls.filter((c: number[]) => c[1] === mockGL.TEXTURE_MAG_FILTER);

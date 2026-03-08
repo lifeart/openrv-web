@@ -34,13 +34,7 @@ export type ProResVariant =
   | 'prores_raw'
   | 'prores_raw_hq';
 
-export type DNxVariant =
-  | 'dnxhd'
-  | 'dnxhr_lb'
-  | 'dnxhr_sq'
-  | 'dnxhr_hq'
-  | 'dnxhr_hqx'
-  | 'dnxhr_444';
+export type DNxVariant = 'dnxhd' | 'dnxhr_lb' | 'dnxhr_sq' | 'dnxhr_hq' | 'dnxhr_hqx' | 'dnxhr_444';
 
 /**
  * Codec information structure
@@ -68,27 +62,12 @@ export interface CodecSupportStatus {
 /**
  * Codec strings from WebCodecs that indicate ProRes
  */
-const PRORES_CODEC_STRINGS = [
-  'prores',
-  'ap4h',
-  'ap4x',
-  'apch',
-  'apcn',
-  'apcs',
-  'apco',
-  'aprn',
-  'aprh',
-];
+const PRORES_CODEC_STRINGS = ['prores', 'ap4h', 'ap4x', 'apch', 'apcn', 'apcs', 'apco', 'aprn', 'aprh'];
 
 /**
  * Codec strings from WebCodecs that indicate DNxHD/DNxHR
  */
-const DNXHD_CODEC_STRINGS = [
-  'dnxhd',
-  'dnxhr',
-  'avdn',
-  'avdh',
-];
+const DNXHD_CODEC_STRINGS = ['dnxhd', 'dnxhr', 'avdn', 'avdh'];
 
 /**
  * Map FourCC to ProRes variant
@@ -163,7 +142,12 @@ export function detectCodecFamily(codecString: string | null): CodecFamily {
   }
 
   // Check for H.265/HEVC
-  if (lowerCodec.includes('hevc') || lowerCodec.includes('h265') || lowerCodec.includes('h.265') || lowerCodec.includes('hvc1')) {
+  if (
+    lowerCodec.includes('hevc') ||
+    lowerCodec.includes('h265') ||
+    lowerCodec.includes('h.265') ||
+    lowerCodec.includes('hvc1')
+  ) {
     return 'h265';
   }
 
@@ -183,7 +167,12 @@ export function detectCodecFamily(codecString: string | null): CodecFamily {
   }
 
   // Check for JPEG2000 (must come before MJPEG since mjp2 contains 'mjp')
-  if (lowerCodec.includes('jpeg2000') || lowerCodec.includes('jp2k') || lowerCodec.includes('j2k') || lowerCodec.includes('mjp2')) {
+  if (
+    lowerCodec.includes('jpeg2000') ||
+    lowerCodec.includes('jp2k') ||
+    lowerCodec.includes('j2k') ||
+    lowerCodec.includes('mjp2')
+  ) {
     return 'jpeg2000';
   }
 
@@ -353,8 +342,7 @@ export function getCodecSupportStatus(codecString: string | null): CodecSupportS
     fallbackAvailable: false,
     requiresTranscoding: true,
     message: `${info.displayName} (${info.family}) is not supported in this browser.`,
-    recommendation:
-      'Please transcode to H.264 (MP4), VP9 (WebM), or AV1 for web playback.',
+    recommendation: 'Please transcode to H.264 (MP4), VP9 (WebM), or AV1 for web playback.',
   };
 }
 
@@ -375,7 +363,7 @@ export function getTranscodingRecommendation(codecInfo: CodecInfo): string {
       '  ffmpeg -i input.mov -c:v libx264 -crf 23 -preset medium -c:a aac output.mp4',
       '',
       'For modern browsers (best quality/size):',
-      '  ffmpeg -i input.mov -c:v libsvtav1 -crf 30 -c:a libopus output.webm'
+      '  ffmpeg -i input.mov -c:v libsvtav1 -crf 30 -c:a libopus output.webm',
     );
   } else if (codecInfo.family === 'dnxhd') {
     recommendations.push(
@@ -385,7 +373,7 @@ export function getTranscodingRecommendation(codecInfo: CodecInfo): string {
       '  ffmpeg -i input.mxf -c:v libx264 -crf 18 -preset slow -c:a aac output.mp4',
       '',
       'For smaller file size:',
-      '  ffmpeg -i input.mxf -c:v libx264 -crf 23 -preset medium -c:a aac output.mp4'
+      '  ffmpeg -i input.mxf -c:v libx264 -crf 23 -preset medium -c:a aac output.mp4',
     );
   } else if (codecInfo.family === 'jpeg2000') {
     recommendations.push(
@@ -395,7 +383,7 @@ export function getTranscodingRecommendation(codecInfo: CodecInfo): string {
       '  ffmpeg -i input.mxf -c:v libx264 -crf 18 -preset slow -c:a aac output.mp4',
       '',
       'For DCP content:',
-      '  ffmpeg -i input.mxf -c:v libx264 -crf 20 -preset slow -c:a aac output.mp4'
+      '  ffmpeg -i input.mxf -c:v libx264 -crf 20 -preset slow -c:a aac output.mp4',
     );
   } else if (codecInfo.family === 'rawvideo') {
     recommendations.push(
@@ -405,13 +393,13 @@ export function getTranscodingRecommendation(codecInfo: CodecInfo): string {
       '  ffmpeg -i input -c:v libx264 -crf 18 -preset slow -c:a aac output.mp4',
       '',
       'Note: Raw video files can be very large. Consider using appropriate',
-      'input pixel format options (-pix_fmt) if the video appears incorrect.'
+      'input pixel format options (-pix_fmt) if the video appears incorrect.',
     );
   } else {
     recommendations.push(
       'Please transcode to H.264 (MP4) or VP9 (WebM) for web playback:',
       '',
-      '  ffmpeg -i input -c:v libx264 -crf 23 -c:a aac output.mp4'
+      '  ffmpeg -i input -c:v libx264 -crf 23 -c:a aac output.mp4',
     );
   }
 
@@ -432,10 +420,7 @@ export interface UnsupportedCodecError {
 /**
  * Create a structured error for unsupported codec
  */
-export function createUnsupportedCodecError(
-  codecString: string | null,
-  filename?: string
-): UnsupportedCodecError {
+export function createUnsupportedCodecError(codecString: string | null, filename?: string): UnsupportedCodecError {
   const codecInfo = parseCodecInfo(codecString);
   const status = getCodecSupportStatus(codecString);
 

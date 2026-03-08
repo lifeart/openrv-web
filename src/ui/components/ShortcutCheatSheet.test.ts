@@ -15,9 +15,17 @@ function createMockManager(): ShortcutEditorManager & {
 
   const actions = [
     { action: 'playback.toggle', description: 'Play/Pause', currentCombo: { code: 'Space' } as KeyCombination },
-    { action: 'playback.stepForward', description: 'Step Forward', currentCombo: { code: 'ArrowRight' } as KeyCombination },
+    {
+      action: 'playback.stepForward',
+      description: 'Step Forward',
+      currentCombo: { code: 'ArrowRight' } as KeyCombination,
+    },
     { action: 'view.fitToWindow', description: 'Fit to Window', currentCombo: { code: 'KeyF' } as KeyCombination },
-    { action: 'view.toggleFullscreen', description: 'Fullscreen', currentCombo: { code: 'KeyF', ctrl: true } as KeyCombination },
+    {
+      action: 'view.toggleFullscreen',
+      description: 'Fullscreen',
+      currentCombo: { code: 'KeyF', ctrl: true } as KeyCombination,
+    },
     { action: 'edit.undo', description: 'Undo', currentCombo: { code: 'KeyZ', ctrl: true } as KeyCombination },
     { action: 'panel.color', description: 'Color Panel', currentCombo: { code: 'KeyC' } as KeyCombination },
   ];
@@ -30,7 +38,7 @@ function createMockManager(): ShortcutEditorManager & {
     _actions: actions,
 
     getAvailableActions: vi.fn(() =>
-      actions.map(a => ({
+      actions.map((a) => ({
         ...a,
         currentCombo: customBindings.get(a.action) ?? a.currentCombo,
       })),
@@ -39,7 +47,7 @@ function createMockManager(): ShortcutEditorManager & {
     getEffectiveCombo: vi.fn((action: string) => {
       const custom = customBindings.get(action);
       if (custom) return custom;
-      return actions.find(a => a.action === action)?.currentCombo ?? { code: '' };
+      return actions.find((a) => a.action === action)?.currentCombo ?? { code: '' };
     }),
 
     setCustomBinding: vi.fn((action: string, combo: KeyCombination) => {
@@ -114,7 +122,7 @@ describe('ShortcutCheatSheet', () => {
     sheet.show();
 
     const groups = container.querySelectorAll('.cheatsheet-group');
-    const categories = [...groups].map(g => (g as HTMLElement).dataset.category);
+    const categories = [...groups].map((g) => (g as HTMLElement).dataset.category);
 
     // Mock manager has: playback, view, edit, panel
     expect(categories).toContain('playback');
@@ -125,7 +133,7 @@ describe('ShortcutCheatSheet', () => {
 
     // Check that headers are present
     const headers = container.querySelectorAll('.cheatsheet-group-header');
-    const headerTexts = [...headers].map(h => h.textContent);
+    const headerTexts = [...headers].map((h) => h.textContent);
     expect(headerTexts).toContain('Playback');
     expect(headerTexts).toContain('View');
     expect(headerTexts).toContain('Edit');
@@ -139,13 +147,15 @@ describe('ShortcutCheatSheet', () => {
     expect(rows.length).toBe(6);
 
     // Find playback.toggle row
-    const toggleRow = [...rows].find(r => (r as HTMLElement).dataset.action === 'playback.toggle') as HTMLElement;
+    const toggleRow = [...rows].find((r) => (r as HTMLElement).dataset.action === 'playback.toggle') as HTMLElement;
     expect(toggleRow).not.toBeNull();
     expect(toggleRow.querySelector('.cheatsheet-description')!.textContent).toBe('Play/Pause');
     expect(toggleRow.querySelector('.cheatsheet-combo')!.textContent).toBe('Space');
 
     // Find view.toggleFullscreen row (has Ctrl modifier)
-    const fullscreenRow = [...rows].find(r => (r as HTMLElement).dataset.action === 'view.toggleFullscreen') as HTMLElement;
+    const fullscreenRow = [...rows].find(
+      (r) => (r as HTMLElement).dataset.action === 'view.toggleFullscreen',
+    ) as HTMLElement;
     expect(fullscreenRow).not.toBeNull();
     expect(fullscreenRow.querySelector('.cheatsheet-combo')!.textContent).toBe('Ctrl+F');
   });
@@ -160,8 +170,9 @@ describe('ShortcutCheatSheet', () => {
     expect((customizedRows[0] as HTMLElement).dataset.action).toBe('playback.toggle');
 
     // Non-customized rows should NOT have the class
-    const normalRow = [...container.querySelectorAll('.cheatsheet-row')]
-      .find(r => (r as HTMLElement).dataset.action === 'playback.stepForward') as HTMLElement;
+    const normalRow = [...container.querySelectorAll('.cheatsheet-row')].find(
+      (r) => (r as HTMLElement).dataset.action === 'playback.stepForward',
+    ) as HTMLElement;
     expect(normalRow.classList.contains('cheatsheet-customized')).toBe(false);
   });
 

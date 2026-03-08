@@ -1,17 +1,33 @@
 export type {
-  ColorAdjustments, NumericAdjustmentKey, ChannelMode,
-  WheelValues, ColorWheelsState,
-  HSLRange, HSLCorrection, HSLQualifierState,
+  ColorAdjustments,
+  NumericAdjustmentKey,
+  ChannelMode,
+  WheelValues,
+  ColorWheelsState,
+  HSLRange,
+  HSLCorrection,
+  HSLQualifierState,
 } from './color';
 export {
-  DEFAULT_COLOR_ADJUSTMENTS, DEFAULT_WHEEL_VALUES, DEFAULT_COLOR_WHEELS_STATE,
-  DEFAULT_HSL_RANGE, DEFAULT_HSL_CORRECTION, DEFAULT_HSL_QUALIFIER_STATE,
+  DEFAULT_COLOR_ADJUSTMENTS,
+  DEFAULT_WHEEL_VALUES,
+  DEFAULT_COLOR_WHEELS_STATE,
+  DEFAULT_HSL_RANGE,
+  DEFAULT_HSL_CORRECTION,
+  DEFAULT_HSL_QUALIFIER_STATE,
 } from './color';
 
 export type {
-  ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo,
-  HDROutputMode, ZebraState,
-  HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState,
+  ToneMappingOperator,
+  ToneMappingState,
+  ToneMappingOperatorInfo,
+  HDROutputMode,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
 } from './effects';
 export { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS, DEFAULT_ZEBRA_STATE } from './effects';
 
@@ -28,8 +44,11 @@ export { DEFAULT_BACKGROUND_PATTERN_STATE, PATTERN_COLORS } from './background';
 
 export type { WipeMode, WipeSide, WipeState, StencilBox } from './wipe';
 export {
-  DEFAULT_WIPE_STATE, DEFAULT_STENCIL_BOX,
-  isStencilBoxActive, computeHorizontalWipeBoxes, computeVerticalWipeBoxes,
+  DEFAULT_WIPE_STATE,
+  DEFAULT_STENCIL_BOX,
+  isStencilBoxActive,
+  computeHorizontalWipeBoxes,
+  computeVerticalWipeBoxes,
 } from './wipe';
 
 export type { LoopMode, MediaType } from './session';
@@ -43,11 +62,19 @@ export { TRANSITION_TYPE_CODES, DEFAULT_TRANSITION_DURATION, isTransitionType } 
 export { withDefaults } from './defaults';
 
 export type {
-  RepresentationKind, RepresentationStatus, RepresentationResolution,
-  MediaRepresentation, RepresentationLoaderConfig, SerializedRepresentation,
-  AddRepresentationConfig, SwitchRepresentationOptions, RepresentationManagerEvents,
+  RepresentationKind,
+  RepresentationStatus,
+  RepresentationResolution,
+  MediaRepresentation,
+  RepresentationLoaderConfig,
+  SerializedRepresentation,
+  AddRepresentationConfig,
+  SwitchRepresentationOptions,
+  RepresentationManagerEvents,
 } from './representation';
 export {
-  generateRepresentationId, createRepresentation,
-  serializeRepresentation, deserializeRepresentation,
+  generateRepresentationId,
+  createRepresentation,
+  serializeRepresentation,
+  deserializeRepresentation,
 } from './representation';

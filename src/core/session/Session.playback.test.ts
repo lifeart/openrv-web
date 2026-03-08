@@ -1,33 +1,33 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Session, MediaSource } from './Session';
+import { Session, type MediaSource } from './Session';
 
 const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) => {
-    const video = document.createElement('video') as any;
-    video._currentTime = currentTimeSec;
-    Object.defineProperty(video, 'duration', {
-        get: () => durationSec,
-        configurable: true
-    });
-    Object.defineProperty(video, 'currentTime', {
-        get: () => video._currentTime,
-        set: (v) => video._currentTime = v,
-        configurable: true
-    });
-    Object.defineProperty(video, 'ended', {
-        get: () => video._currentTime >= durationSec,
-        configurable: true
-    });
-    video.play = vi.fn();
-    video.pause = vi.fn();
-    return video;
+  const video = document.createElement('video') as any;
+  video._currentTime = currentTimeSec;
+  Object.defineProperty(video, 'duration', {
+    get: () => durationSec,
+    configurable: true,
+  });
+  Object.defineProperty(video, 'currentTime', {
+    get: () => video._currentTime,
+    set: (v) => (video._currentTime = v),
+    configurable: true,
+  });
+  Object.defineProperty(video, 'ended', {
+    get: () => video._currentTime >= durationSec,
+    configurable: true,
+  });
+  video.play = vi.fn();
+  video.pause = vi.fn();
+  return video;
 };
 
 class TestSession extends Session {
   public setSources(s: MediaSource[]) {
     (this as any)._media.resetSourcesInternal();
-    s.forEach(src => {
-        this.addSource(src);
-        (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
+    s.forEach((src) => {
+      this.addSource(src);
+      (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
     });
   }
 }
@@ -94,10 +94,18 @@ describe('Session', () => {
       video.play = vi.fn().mockResolvedValue(undefined);
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video', name: 'v', url: 'v.mp4',
-        width: 100, height: 100, duration: 100, fps: 24, element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
       // First play
       session.play();
@@ -123,13 +131,26 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       // Use a deferred promise so safeVideoPlay is still pending when pause() is called
       let resolvePlay!: () => void;
-      video.play = vi.fn().mockImplementation(() => new Promise<void>((r) => { resolvePlay = r; }));
+      video.play = vi.fn().mockImplementation(
+        () =>
+          new Promise<void>((r) => {
+            resolvePlay = r;
+          }),
+      );
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video', name: 'v', url: 'v.mp4',
-        width: 100, height: 100, duration: 100, fps: 24, element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
       // Start playing — safeVideoPlay sets _pendingPlayPromise
       session.play();
@@ -154,10 +175,18 @@ describe('Session', () => {
       video.play = vi.fn().mockResolvedValue(undefined);
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video', name: 'v', url: 'v.mp4',
-        width: 100, height: 100, duration: 100, fps: 24, element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
       // Rapid cycle: play/pause/play/pause/play
       session.play();
@@ -227,11 +256,14 @@ describe('Session', () => {
 
   describe('update() with playDirection', () => {
     // Helper to access private members for testing
-    const setPrivateState = (s: Session, overrides: {
-      currentFrame?: number;
-      inPoint?: number;
-      outPoint?: number;
-    }) => {
+    const setPrivateState = (
+      s: Session,
+      overrides: {
+        currentFrame?: number;
+        inPoint?: number;
+        outPoint?: number;
+      },
+    ) => {
       const internal = s as unknown as {
         _currentFrame: number;
         _inPoint: number;
@@ -452,66 +484,71 @@ describe('Session', () => {
   });
 
   describe('update logic overrides', () => {
-
     it('updates video frame in forward playback', () => {
-        const video = createMockVideo(100, 1.0);
-        session.setSources([{
-            type: 'video',
-            name: 'v',
-            url: 'v.mp4',
-            width: 100,
-            height: 100,
-            duration: 100,
-            fps: 24,
-            element: video
-        }]);
-        session.setOutPoint(100);
-        session.play();
-        (session as any)._playDirection = 1;
+      const video = createMockVideo(100, 1.0);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
+      session.setOutPoint(100);
+      session.play();
+      (session as any)._playDirection = 1;
 
-        session.update();
-        expect(session.currentFrame).toBe(25); // 1.0 * 24 + 1
+      session.update();
+      expect(session.currentFrame).toBe(25); // 1.0 * 24 + 1
     });
 
     it('handles video loop', () => {
-        const video = createMockVideo(100, 4.0);
-        session.setSources([{
-            type: 'video',
-            name: 'v',
-            url: 'v.mp4',
-            width: 100,
-            height: 100,
-            duration: 100,
-            fps: 24,
-            element: video
-        }]);
-        session.loopMode = 'loop';
-        session.setOutPoint(50);
-        session.play();
+      const video = createMockVideo(100, 4.0);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
+      session.loopMode = 'loop';
+      session.setOutPoint(50);
+      session.play();
 
-        session.update(); // frame will be 4*24+1 = 97 > 50
-        expect(video.currentTime).toBe(0);
-        expect(video.play).toHaveBeenCalled();
+      session.update(); // frame will be 4*24+1 = 97 > 50
+      expect(video.currentTime).toBe(0);
+      expect(video.play).toHaveBeenCalled();
     });
 
     it('handles video loop mode once', () => {
-        const video = createMockVideo(100, 4.0);
-        session.setSources([{
-            type: 'video',
-            name: 'v',
-            url: 'v.mp4',
-            width: 100,
-            height: 100,
-            duration: 100,
-            fps: 24,
-            element: video
-        }]);
-        session.loopMode = 'once';
-        session.setOutPoint(50);
-        session.play();
+      const video = createMockVideo(100, 4.0);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
+      session.loopMode = 'once';
+      session.setOutPoint(50);
+      session.play();
 
-        session.update();
-        expect(session.isPlaying).toBe(false);
+      session.update();
+      expect(session.isPlaying).toBe(false);
     });
   });
 
@@ -523,9 +560,17 @@ describe('Session', () => {
 
     it('SES-039: effectiveFps resets when play() is called', () => {
       // Set up a source
-      session.setSources([{
-        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
-      }]);
+      session.setSources([
+        {
+          type: 'image',
+          name: 'i',
+          url: 'i.jpg',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       // Access internal state
@@ -543,9 +588,17 @@ describe('Session', () => {
     });
 
     it('SES-040: effectiveFps is calculated during frame advancement', () => {
-      session.setSources([{
-        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
-      }]);
+      session.setSources([
+        {
+          type: 'image',
+          name: 'i',
+          url: 'i.jpg',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -576,9 +629,17 @@ describe('Session', () => {
     });
 
     it('SES-041: effectiveFps updates every 500ms', () => {
-      session.setSources([{
-        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
-      }]);
+      session.setSources([
+        {
+          type: 'image',
+          name: 'i',
+          url: 'i.jpg',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -611,9 +672,17 @@ describe('Session', () => {
     });
 
     it('SES-042: effectiveFps returns 0 after pause', () => {
-      session.setSources([{
-        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
-      }]);
+      session.setSources([
+        {
+          type: 'image',
+          name: 'i',
+          url: 'i.jpg',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -650,17 +719,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -691,17 +762,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -733,17 +806,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -779,17 +854,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
       session.loopMode = 'loop';
 
@@ -824,17 +901,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
       session.loopMode = 'loop';
 
@@ -1149,17 +1228,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -1174,17 +1255,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -1217,17 +1300,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -1243,17 +1328,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -1289,17 +1376,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'sdr.mp4',
-        url: 'sdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'sdr.mp4',
+          url: 'sdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -1316,17 +1405,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1353,17 +1444,19 @@ describe('Session', () => {
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       const internal = session as any;
@@ -1379,29 +1472,32 @@ describe('Session', () => {
     });
 
     it('SES-HDR-008: pause during HDR buffering stops the buffer loop', async () => {
-      let resolvers: Array<() => void> = [];
+      const resolvers: Array<() => void> = [];
       const mockVideoNode = createHDRMockVideoSourceNode();
       // Make getFrameAsync block until manually resolved
-      mockVideoNode.getFrameAsync.mockImplementation(() =>
-        new Promise<null>(resolve => {
-          resolvers.push(() => resolve(null));
-        })
+      mockVideoNode.getFrameAsync.mockImplementation(
+        () =>
+          new Promise<null>((resolve) => {
+            resolvers.push(() => resolve(null));
+          }),
       );
 
       const mockVideo = createMockVideo(100, 0);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'hdr.mp4',
-        url: 'hdr.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 30,
-        element: mockVideo,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'hdr.mp4',
+          url: 'hdr.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 30,
+          element: mockVideo,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1415,7 +1511,7 @@ describe('Session', () => {
       session.pause();
 
       // Resolve all pending frames
-      resolvers.forEach(r => r());
+      resolvers.forEach((r) => r());
       await Promise.resolve();
 
       // getFrameAsync should not have been called for all 10 frames
@@ -1462,16 +1558,18 @@ describe('Session', () => {
 
     it('SES-PITCH-006: applies to video element when set', () => {
       const video = createMockVideo();
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'blob:test',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'blob:test',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
       // Default should be true
       session.preservesPitch = false;
@@ -1569,16 +1667,18 @@ describe('Session', () => {
     it('SES-PPP-001: play() then pause() allows play() to be called again', () => {
       const video = createMockVideo(100, 0);
       video.play = vi.fn().mockResolvedValue(undefined);
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1599,16 +1699,18 @@ describe('Session', () => {
     it('SES-PPP-002: pause() clears _pendingPlayPromise', () => {
       const video = createMockVideo(100, 0);
       video.play = vi.fn().mockResolvedValue(undefined);
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1623,16 +1725,18 @@ describe('Session', () => {
     it('SES-PPP-003: multiple play/pause cycles work correctly', () => {
       const video = createMockVideo(100, 0);
       video.play = vi.fn().mockResolvedValue(undefined);
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       for (let i = 0; i < 5; i++) {
@@ -1647,16 +1751,18 @@ describe('Session', () => {
     it('SES-PPP-004: play() does not overwrite safeVideoPlay internal promise management', () => {
       const video = createMockVideo(100, 0);
       video.play = vi.fn().mockResolvedValue(undefined);
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1675,22 +1781,24 @@ describe('Session', () => {
       const video = createMockVideo(100, 0);
       // First call rejects with a generic error
       video.play = vi.fn().mockRejectedValueOnce(new DOMException('test error', 'UnknownError'));
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
       // safeVideoPlay will fail asynchronously and call pause()
       // Wait for the promise to settle
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Session should be paused (safeVideoPlay error handler calls pause)
       expect(session.isPlaying).toBe(false);
@@ -1706,20 +1814,22 @@ describe('Session', () => {
     it('SES-PPP-006: togglePlayback works after video play error', async () => {
       const video = createMockVideo(100, 0);
       video.play = vi.fn().mockRejectedValueOnce(new DOMException('test error', 'UnknownError'));
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.togglePlayback(); // play
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Should be paused due to error
       expect(session.isPlaying).toBe(false);
@@ -1735,16 +1845,18 @@ describe('Session', () => {
       // tab hidden → pause(), tab visible → play()
       const video = createMockVideo(100, 0);
       video.play = vi.fn().mockResolvedValue(undefined);
-      session.setSources([{
-        type: 'video',
-        name: 'v',
-        url: 'v.mp4',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-        element: video,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
       session.setOutPoint(100);
 
       // Initial play
@@ -1835,17 +1947,19 @@ describe('Session', () => {
       const video = createMockVideo(100 / 24, 0);
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.loopMode = 'loop';
       session.goToFrame(99); // Near end
@@ -1871,17 +1985,19 @@ describe('Session', () => {
       const video = createMockVideo(100 / 24, (98 - 1) / 24);
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.loopMode = 'loop';
       session.goToFrame(98);
@@ -1907,17 +2023,19 @@ describe('Session', () => {
       const video = createMockVideo(100 / 24, 0);
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.loopMode = 'once';
       session.goToFrame(99);
@@ -1944,17 +2062,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(50); // Mid-sequence (not near end)
       session.play();
@@ -1977,22 +2097,24 @@ describe('Session', () => {
 
     it('SES-EOV-005: _consecutiveStarvationSkips resets to 0 after a successful frame render', () => {
       // Setup: video source with one frame cached (to allow successful render)
-      let nextFrameToCheck = 51;
+      const nextFrameToCheck = 51;
       const mockVideoNode = createMockVideoSourceNode((frame) => frame === nextFrameToCheck);
       const video = createMockVideo(100 / 24, 0);
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(50);
       session.play();
@@ -2017,17 +2139,19 @@ describe('Session', () => {
       const video = createMockVideo(100 / 24, 0);
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       // Test reverse + loop mode: should wrap to outPoint
       session.loopMode = 'loop';
@@ -2083,17 +2207,19 @@ describe('Session', () => {
       // Simulate an actively playing video so drift correction path is tested
       Object.defineProperty(video, 'paused', { get: () => false, configurable: true });
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode,
+        },
+      ]);
 
       session.fps = 24;
       session.goToFrame(24);
@@ -2112,7 +2238,7 @@ describe('Session', () => {
 
       // Set up for single frame advance
       internal.lastFrameTime = performance.now();
-      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+      internal.frameAccumulator = 1000 / 24; // Exactly one frame worth
 
       session.update();
 
@@ -2126,7 +2252,7 @@ describe('Session', () => {
       // Set video time to 2.041667s, so drift after advance = |2.041667 - 1.041667| = 1.0s exactly
       video._currentTime = 2.041667;
       internal.lastFrameTime = performance.now();
-      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+      internal.frameAccumulator = 1000 / 24; // Exactly one frame worth
 
       session.update();
 
@@ -2156,17 +2282,19 @@ describe('Session', () => {
       // Simulate an actively playing video (not paused, not ended)
       Object.defineProperty(video, 'paused', { get: () => false, configurable: true });
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode,
+        },
+      ]);
 
       session.fps = 24;
       session.goToFrame(24);
@@ -2188,7 +2316,7 @@ describe('Session', () => {
 
       // Set up for single frame advance
       internal.lastFrameTime = performance.now();
-      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+      internal.frameAccumulator = 1000 / 24; // Exactly one frame worth
 
       session.update();
 
@@ -2224,17 +2352,19 @@ describe('Session', () => {
       video.play = vi.fn().mockResolvedValue(undefined);
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.loopMode = 'loop';
       session.goToFrame(99); // Near end (within 2 of outPoint 100)
@@ -2266,17 +2396,19 @@ describe('Session', () => {
       video.play = vi.fn().mockResolvedValue(undefined);
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.loopMode = 'loop';
       session.goToFrame(2); // Near inPoint for reverse
@@ -2306,17 +2438,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.play = vi.fn().mockResolvedValue(undefined);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.loopMode = 'loop';
       session.goToFrame(99);
@@ -2354,17 +2488,19 @@ describe('Session', () => {
         configurable: true,
       });
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(50);
       session.play();
@@ -2395,17 +2531,19 @@ describe('Session', () => {
         configurable: true,
       });
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(50);
       session.play();
@@ -2447,17 +2585,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.play = vi.fn().mockResolvedValue(undefined);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(10);
       session.play();
@@ -2484,17 +2624,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.play = vi.fn().mockResolvedValue(undefined);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(10);
       session.play();
@@ -2519,17 +2661,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.play = vi.fn().mockResolvedValue(undefined);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(10);
       session.play();
@@ -2560,17 +2704,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.play = vi.fn().mockResolvedValue(undefined);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(10);
       session.play();
@@ -2593,17 +2739,19 @@ describe('Session', () => {
       Object.setPrototypeOf(video, HTMLVideoElement.prototype);
       video.play = vi.fn().mockResolvedValue(undefined);
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(10);
       session.play();
@@ -2629,17 +2777,19 @@ describe('Session', () => {
       video.play = vi.fn().mockResolvedValue(undefined);
       video.pause = vi.fn();
 
-      session.setSources([{
-        type: 'video',
-        name: 'test.mp4',
-        url: 'test.mp4',
-        width: 1920,
-        height: 1080,
-        duration: 100,
-        fps: 24,
-        element: video,
-        videoSourceNode: mockVideoNode as any,
-      }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          element: video,
+          videoSourceNode: mockVideoNode as any,
+        },
+      ]);
 
       session.goToFrame(50);
       session.play();
@@ -2715,11 +2865,14 @@ describe('Session', () => {
 
   describe('PlaybackEngine edge cases (IMP-039)', () => {
     // Helper to access private members for testing
-    const setPrivateState = (s: Session, overrides: {
-      currentFrame?: number;
-      inPoint?: number;
-      outPoint?: number;
-    }) => {
+    const setPrivateState = (
+      s: Session,
+      overrides: {
+        currentFrame?: number;
+        inPoint?: number;
+        outPoint?: number;
+      },
+    ) => {
       const internal = s as unknown as {
         _currentFrame: number;
         _inPoint: number;
@@ -2900,11 +3053,13 @@ describe('Session', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-        targetFps: 24,
-        actualFps: 23.5,
-        ratio: 0.979,
-      }));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetFps: 24,
+          actualFps: 23.5,
+          ratio: 0.979,
+        }),
+      );
     });
 
     it('SES-FPS-003: fpsUpdated event includes effectiveTargetFps for non-1x speed', () => {
@@ -3018,29 +3173,33 @@ describe('Session', () => {
       session.playbackMode = 'playAllFrames';
 
       // Simulate source change by adding a new source
-      session.setSources([{
-        type: 'image',
-        name: 'test.jpg',
-        url: 'test.jpg',
-        width: 100,
-        height: 100,
-        duration: 1,
-        fps: 24,
-      }]);
+      session.setSources([
+        {
+          type: 'image',
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+        },
+      ]);
 
       expect(session.playbackMode).toBe('playAllFrames');
     });
 
     it('SES-PAF-009: playAllFrames mode caps frame advancement for images/sequences', () => {
-      session.setSources([{
-        type: 'image',
-        name: 'test.jpg',
-        url: 'test.jpg',
-        width: 100,
-        height: 100,
-        duration: 100,
-        fps: 24,
-      }]);
+      session.setSources([
+        {
+          type: 'image',
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
 
       session.playbackMode = 'playAllFrames';
       session.play();
@@ -3079,5 +3238,4 @@ describe('Session', () => {
       expect(session.playbackMode).toBe('playAllFrames');
     });
   });
-
 });

@@ -95,7 +95,6 @@ function u32(value: number): Uint8Array {
   return buf;
 }
 
-
 // ---------------------------------------------------------------------------
 // AVCC helpers (H.264 Annex B → AVCC conversion)
 // ---------------------------------------------------------------------------
@@ -130,7 +129,11 @@ function extractNALUnits(data: Uint8Array): NALUnit[] {
     // Find next start code or end
     let nalEnd = data.length;
     for (let j = nalStart + 1; j < data.length - 2; j++) {
-      if (data[j] === 0 && data[j + 1] === 0 && (data[j + 2] === 1 || (data[j + 2] === 0 && j + 3 < data.length && data[j + 3] === 1))) {
+      if (
+        data[j] === 0 &&
+        data[j + 1] === 0 &&
+        (data[j + 2] === 1 || (data[j + 2] === 0 && j + 3 < data.length && data[j + 3] === 1))
+      ) {
         nalEnd = j;
         break;
       }
@@ -191,7 +194,7 @@ function extractNALUnitsAVCC(data: Uint8Array, nalLengthSize: number = 4): NALUn
 function annexBToAVCC(data: Uint8Array): Uint8Array {
   const nals = extractNALUnits(data);
   // Filter out SPS/PPS from stream data (they go in the decoder config)
-  const streamNals = nals.filter(n => n.type !== 7 && n.type !== 8);
+  const streamNals = nals.filter((n) => n.type !== 7 && n.type !== 8);
 
   let totalSize = 0;
   for (const nal of streamNals) totalSize += 4 + nal.data.length;
@@ -223,8 +226,8 @@ function extractSPSPPS(chunks: EncodedChunk[]): { sps: Uint8Array; pps: Uint8Arr
       nals = extractNALUnits(chunk.data);
     }
 
-    const sps = nals.find(n => n.type === 7);
-    const pps = nals.find(n => n.type === 8);
+    const sps = nals.find((n) => n.type === 7);
+    const pps = nals.find((n) => n.type === 8);
     if (sps && pps) {
       return { sps: sps.data, pps: pps.data };
     }
@@ -244,12 +247,12 @@ export function buildAVCDecoderConfig(sps: Uint8Array, pps: Uint8Array): Uint8Ar
   const view = new DataView(config.buffer);
   let offset = 0;
 
-  config[offset++] = 1;                      // configurationVersion
-  config[offset++] = sps[1]!;                // AVCProfileIndication
-  config[offset++] = sps[2]!;                // profile_compatibility
-  config[offset++] = sps[3]!;                // AVCLevelIndication
-  config[offset++] = 0xff;                   // lengthSizeMinusOne = 3 (4 bytes)
-  config[offset++] = 0xe1;                   // numOfSequenceParameterSets = 1
+  config[offset++] = 1; // configurationVersion
+  config[offset++] = sps[1]!; // AVCProfileIndication
+  config[offset++] = sps[2]!; // profile_compatibility
+  config[offset++] = sps[3]!; // AVCLevelIndication
+  config[offset++] = 0xff; // lengthSizeMinusOne = 3 (4 bytes)
+  config[offset++] = 0xe1; // numOfSequenceParameterSets = 1
 
   // SPS
   writeU16(view, offset, sps.length);
@@ -258,7 +261,7 @@ export function buildAVCDecoderConfig(sps: Uint8Array, pps: Uint8Array): Uint8Ar
   offset += sps.length;
 
   // PPS
-  config[offset++] = 1;                      // numOfPictureParameterSets = 1
+  config[offset++] = 1; // numOfPictureParameterSets = 1
   writeU16(view, offset, pps.length);
   offset += 2;
   config.set(pps, offset);
@@ -333,25 +336,25 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
   // stts — decoding time to sample (constant duration)
   const sttsPayload = new Uint8Array(12);
   const sttsView = new DataView(sttsPayload.buffer);
-  writeU32(sttsView, 0, 1);                // entry_count
-  writeU32(sttsView, 4, chunks.length);     // sample_count
-  writeU32(sttsView, 8, sampleDuration);    // sample_delta
+  writeU32(sttsView, 0, 1); // entry_count
+  writeU32(sttsView, 4, chunks.length); // sample_count
+  writeU32(sttsView, 8, sampleDuration); // sample_delta
   const sttsBox = fullbox('stts', 0, 0, sttsPayload);
 
   // stsc — sample to chunk (all in one chunk)
   const stscPayload = new Uint8Array(16);
   const stscView = new DataView(stscPayload.buffer);
-  writeU32(stscView, 0, 1);                // entry_count
-  writeU32(stscView, 4, 1);                // first_chunk
-  writeU32(stscView, 8, chunks.length);     // samples_per_chunk
-  writeU32(stscView, 12, 1);               // sample_description_index
+  writeU32(stscView, 0, 1); // entry_count
+  writeU32(stscView, 4, 1); // first_chunk
+  writeU32(stscView, 8, chunks.length); // samples_per_chunk
+  writeU32(stscView, 12, 1); // sample_description_index
   const stscBox = fullbox('stsc', 0, 0, stscPayload);
 
   // stsz — sample sizes
   const stszPayload = new Uint8Array(8 + chunks.length * 4);
   const stszView = new DataView(stszPayload.buffer);
-  writeU32(stszView, 0, 0);                // sample_size = 0 (variable)
-  writeU32(stszView, 4, chunks.length);     // sample_count
+  writeU32(stszView, 0, 0); // sample_size = 0 (variable)
+  writeU32(stszView, 4, chunks.length); // sample_count
   for (let i = 0; i < sampleSizes.length; i++) {
     writeU32(stszView, 8 + i * 4, sampleSizes[i]!);
   }
@@ -361,8 +364,8 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
   // We track the stco payload so we can patch the chunk_offset after computing moov size
   const stcoPayload = new Uint8Array(8);
   const stcoPayloadView = new DataView(stcoPayload.buffer);
-  writeU32(stcoPayloadView, 0, 1);                // entry_count
-  writeU32(stcoPayloadView, 4, 0);                // chunk_offset (placeholder — patched below)
+  writeU32(stcoPayloadView, 0, 1); // entry_count
+  writeU32(stcoPayloadView, 4, 0); // chunk_offset (placeholder — patched below)
   const stcoBox = fullbox('stco', 0, 0, stcoPayload);
 
   // stss — sync samples (keyframes)
@@ -396,20 +399,20 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
   const totalDuration = chunks.length * sampleDuration;
   const mdhdPayload = new Uint8Array(20);
   const mdhdView = new DataView(mdhdPayload.buffer);
-  writeU32(mdhdView, 0, 0);                // creation_time
-  writeU32(mdhdView, 4, 0);                // modification_time
-  writeU32(mdhdView, 8, timescale);         // timescale
-  writeU32(mdhdView, 12, totalDuration);    // duration
-  writeU16(mdhdView, 16, 0x55c4);          // language (undetermined)
-  writeU16(mdhdView, 18, 0);               // pre_defined
+  writeU32(mdhdView, 0, 0); // creation_time
+  writeU32(mdhdView, 4, 0); // modification_time
+  writeU32(mdhdView, 8, timescale); // timescale
+  writeU32(mdhdView, 12, totalDuration); // duration
+  writeU16(mdhdView, 16, 0x55c4); // language (undetermined)
+  writeU16(mdhdView, 18, 0); // pre_defined
   const mdhdBox = fullbox('mdhd', 0, 0, mdhdPayload);
 
   // hdlr
   const hdlrPayload = concat(
-    new Uint8Array(4),                      // pre_defined
-    strBytes('vide'),                       // handler_type
-    new Uint8Array(12),                     // reserved
-    strBytes('VideoHandler\0'),             // name
+    new Uint8Array(4), // pre_defined
+    strBytes('vide'), // handler_type
+    new Uint8Array(12), // reserved
+    strBytes('VideoHandler\0'), // name
   );
   const hdlrBox = fullbox('hdlr', 0, 0, hdlrPayload);
 
@@ -419,13 +422,13 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
   // tkhd
   const tkhdPayload = new Uint8Array(80);
   const tkhdView = new DataView(tkhdPayload.buffer);
-  writeU32(tkhdView, 0, 0);                // creation_time
-  writeU32(tkhdView, 4, 0);                // modification_time
-  writeU32(tkhdView, 8, 1);                // track_ID
-  writeU32(tkhdView, 12, 0);               // reserved
+  writeU32(tkhdView, 0, 0); // creation_time
+  writeU32(tkhdView, 4, 0); // modification_time
+  writeU32(tkhdView, 8, 1); // track_ID
+  writeU32(tkhdView, 12, 0); // reserved
   const mvTimescale = 1000;
   const mvDuration = Math.round((chunks.length / fps) * mvTimescale);
-  writeU32(tkhdView, 16, mvDuration);       // duration (in movie timescale)
+  writeU32(tkhdView, 16, mvDuration); // duration (in movie timescale)
   // bytes 20-27: reserved
   // bytes 28-29: layer
   // bytes 30-31: alternate_group
@@ -433,7 +436,7 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
   // bytes 34-35: reserved
   // bytes 36-71: matrix (identity)
   const matrixOffset = 36;
-  writeU32(tkhdView, matrixOffset, 0x00010000);      // a = 1.0
+  writeU32(tkhdView, matrixOffset, 0x00010000); // a = 1.0
   writeU32(tkhdView, matrixOffset + 16, 0x00010000); // d = 1.0
   writeU32(tkhdView, matrixOffset + 32, 0x40000000); // w = 1.0
   // bytes 72-75: width (16.16 fixed-point)
@@ -448,19 +451,19 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
   // mvhd
   const mvhdPayload = new Uint8Array(96);
   const mvhdViewData = new DataView(mvhdPayload.buffer);
-  writeU32(mvhdViewData, 0, 0);             // creation_time
-  writeU32(mvhdViewData, 4, 0);             // modification_time
-  writeU32(mvhdViewData, 8, mvTimescale);    // timescale
-  writeU32(mvhdViewData, 12, mvDuration);    // duration
-  writeU32(mvhdViewData, 16, 0x00010000);    // rate = 1.0
-  writeU16(mvhdViewData, 20, 0x0100);        // volume = 1.0
+  writeU32(mvhdViewData, 0, 0); // creation_time
+  writeU32(mvhdViewData, 4, 0); // modification_time
+  writeU32(mvhdViewData, 8, mvTimescale); // timescale
+  writeU32(mvhdViewData, 12, mvDuration); // duration
+  writeU32(mvhdViewData, 16, 0x00010000); // rate = 1.0
+  writeU16(mvhdViewData, 20, 0x0100); // volume = 1.0
   // reserved: 10 bytes at offset 22
   // matrix: 36 bytes at offset 32
-  writeU32(mvhdViewData, 32, 0x00010000);    // a = 1.0
-  writeU32(mvhdViewData, 48, 0x00010000);    // d = 1.0
-  writeU32(mvhdViewData, 64, 0x40000000);    // w = 1.0
+  writeU32(mvhdViewData, 32, 0x00010000); // a = 1.0
+  writeU32(mvhdViewData, 48, 0x00010000); // d = 1.0
+  writeU32(mvhdViewData, 64, 0x40000000); // w = 1.0
   // pre_defined: 24 bytes at offset 68
-  writeU32(mvhdViewData, 92, 2);             // next_track_ID
+  writeU32(mvhdViewData, 92, 2); // next_track_ID
   const mvhdBox = fullbox('mvhd', 0, 0, mvhdPayload);
 
   // moov
@@ -468,9 +471,9 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
 
   // ftyp
   const ftypPayload = concat(
-    strBytes('isom'),                       // major_brand
-    u32(0x200),                             // minor_version
-    strBytes('isomiso2'),                   // compatible_brands
+    strBytes('isom'), // major_brand
+    u32(0x200), // minor_version
+    strBytes('isomiso2'), // compatible_brands
     isH264 ? strBytes('avc1mp41') : new Uint8Array(0),
   );
   const ftypBox = box('ftyp', ftypPayload);
@@ -501,8 +504,8 @@ export function muxToMP4Blob(chunks: EncodedChunk[], config: MuxerConfig): Blob 
   const data = muxToMP4(chunks, config);
   const buffer: ArrayBuffer =
     typeof SharedArrayBuffer !== 'undefined' && data.buffer instanceof SharedArrayBuffer
-      ? data.slice().buffer as ArrayBuffer
-      : data.buffer as ArrayBuffer;
+      ? (data.slice().buffer as ArrayBuffer)
+      : (data.buffer as ArrayBuffer);
   return new Blob([buffer], { type: 'video/mp4' });
 }
 
@@ -523,20 +526,20 @@ function buildVisualSampleEntry(
   const entry = new Uint8Array(entrySize);
   const view = new DataView(entry.buffer);
 
-  writeU32(view, 0, entrySize);            // size
-  writeType(entry, 4, codecType);           // type
+  writeU32(view, 0, entrySize); // size
+  writeType(entry, 4, codecType); // type
   // 6 bytes reserved (8-13)
-  writeU16(view, 14, 1);                   // data_reference_index
+  writeU16(view, 14, 1); // data_reference_index
   // 16 bytes pre_defined + reserved (16-31)
-  writeU16(view, 32, width);               // width
-  writeU16(view, 34, height);              // height
-  writeU32(view, 36, 0x00480000);          // horizresolution = 72 dpi
-  writeU32(view, 40, 0x00480000);          // vertresolution = 72 dpi
+  writeU16(view, 32, width); // width
+  writeU16(view, 34, height); // height
+  writeU32(view, 36, 0x00480000); // horizresolution = 72 dpi
+  writeU32(view, 40, 0x00480000); // vertresolution = 72 dpi
   // 4 bytes reserved (44-47)
-  writeU16(view, 48, 1);                   // frame_count
+  writeU16(view, 48, 1); // frame_count
   // 32 bytes compressorname (50-81) — zero-filled
-  writeU16(view, 82, 0x0018);             // depth = 24
-  writeU16(view, 84, 0xffff);             // pre_defined = -1
+  writeU16(view, 82, 0x0018); // depth = 24
+  writeU16(view, 84, 0xffff); // pre_defined = -1
 
   let offset = 86;
   for (const ext of extensions) {
@@ -578,10 +581,10 @@ function patchStcoOffset(moovData: Uint8Array, stcoBox: Uint8Array, offset: numb
       moovData[i + 1] === stcoBox[1] &&
       moovData[i + 2] === stcoBox[2] &&
       moovData[i + 3] === stcoBox[3] &&
-      moovData[i + 4] === stcoBox[4] &&  // 's'
-      moovData[i + 5] === stcoBox[5] &&  // 't'
-      moovData[i + 6] === stcoBox[6] &&  // 'c'
-      moovData[i + 7] === stcoBox[7]     // 'o'
+      moovData[i + 4] === stcoBox[4] && // 's'
+      moovData[i + 5] === stcoBox[5] && // 't'
+      moovData[i + 6] === stcoBox[6] && // 'c'
+      moovData[i + 7] === stcoBox[7] // 'o'
     ) {
       // Patch the chunk_offset at position i + 16
       const view = new DataView(moovData.buffer, moovData.byteOffset + i + 16, 4);

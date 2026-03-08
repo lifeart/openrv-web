@@ -53,7 +53,11 @@ export class KeyboardManager {
    */
   register(key: string | KeyCombination, handler: () => void, description?: string): void;
   register(binding: KeyCombination & { description: string }, handler: () => void): void;
-  register(keyOrBinding: string | KeyCombination | (KeyCombination & { description: string }), handler: () => void, description?: string): void {
+  register(
+    keyOrBinding: string | KeyCombination | (KeyCombination & { description: string }),
+    handler: () => void,
+    description?: string,
+  ): void {
     let combo: KeyCombination;
     let desc: string | undefined;
 
@@ -74,7 +78,7 @@ export class KeyboardManager {
       combo,
       handler,
       description: desc,
-      enabled: true
+      enabled: true,
     });
   }
 
@@ -182,7 +186,7 @@ export class KeyboardManager {
       ctrl: e.ctrlKey || e.metaKey, // Treat meta as ctrl for cross-platform
       shift: e.shiftKey,
       alt: e.altKey,
-      meta: e.metaKey && !e.ctrlKey // Only set meta if ctrl is not pressed
+      meta: e.metaKey && !e.ctrlKey, // Only set meta if ctrl is not pressed
     };
 
     if (this.contextualResolver) {
@@ -212,11 +216,15 @@ export class KeyboardManager {
     // Check if target is a text input or textarea FIRST
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
       const input = target as HTMLInputElement;
-      const isTextInput = input.type === 'text' || input.type === 'search' ||
-                          input.type === 'password' || input.type === 'email' ||
-                          input.type === 'url' || input.type === 'tel' ||
-                          input.type === 'number' ||
-                          target instanceof HTMLTextAreaElement;
+      const isTextInput =
+        input.type === 'text' ||
+        input.type === 'search' ||
+        input.type === 'password' ||
+        input.type === 'email' ||
+        input.type === 'url' ||
+        input.type === 'tel' ||
+        input.type === 'number' ||
+        target instanceof HTMLTextAreaElement;
 
       if (isTextInput) {
         // When in text input, skip ALL keys to let the input handle them
@@ -256,8 +264,8 @@ export class KeyboardManager {
     if (!keyStr.trim()) {
       throw new Error('Invalid key string');
     }
-    
-    const parts = keyStr.split('+').map(p => p.trim());
+
+    const parts = keyStr.split('+').map((p) => p.trim());
     if (parts.length === 0) {
       throw new Error('Invalid key string');
     }
@@ -313,20 +321,34 @@ export class KeyboardManager {
   private keyToCode(key: string): string {
     // Handle special keys
     switch (key) {
-      case ' ': return 'Space';
-      case 'ArrowUp': return 'ArrowUp';
-      case 'ArrowDown': return 'ArrowDown';
-      case 'ArrowLeft': return 'ArrowLeft';
-      case 'ArrowRight': return 'ArrowRight';
-      case 'Home': return 'Home';
-      case 'End': return 'End';
-      case 'Escape': return 'Escape';
-      case '[': return 'BracketLeft';
-      case ']': return 'BracketRight';
-      case ',': return 'Comma';
-      case '.': return 'Period';
-      case '`': return 'Backquote';
-      case '~': return 'Backquote'; // Shift+Backquote
+      case ' ':
+        return 'Space';
+      case 'ArrowUp':
+        return 'ArrowUp';
+      case 'ArrowDown':
+        return 'ArrowDown';
+      case 'ArrowLeft':
+        return 'ArrowLeft';
+      case 'ArrowRight':
+        return 'ArrowRight';
+      case 'Home':
+        return 'Home';
+      case 'End':
+        return 'End';
+      case 'Escape':
+        return 'Escape';
+      case '[':
+        return 'BracketLeft';
+      case ']':
+        return 'BracketRight';
+      case ',':
+        return 'Comma';
+      case '.':
+        return 'Period';
+      case '`':
+        return 'Backquote';
+      case '~':
+        return 'Backquote'; // Shift+Backquote
       default:
         // For letters and digits, convert to KeyX or DigitX format
         if (key.length === 1) {

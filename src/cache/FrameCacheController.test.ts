@@ -6,7 +6,9 @@ import { MB, GB } from '../config/CacheConfig';
 /**
  * Helper to create a mock source with a simple in-memory frame set.
  */
-function createMockSource(overrides?: Partial<CacheSourceInfo>): CacheSourceInfo & { _cachedFrames: Set<number>; _evictedFrames: number[] } {
+function createMockSource(
+  overrides?: Partial<CacheSourceInfo>,
+): CacheSourceInfo & { _cachedFrames: Set<number>; _evictedFrames: number[] } {
   const cachedFrames = new Set<number>();
   const evictedFrames: number[] = [];
 
@@ -49,12 +51,15 @@ describe('FrameCacheController', () => {
       auditIntervalMs: 0,
     });
 
-    controller = new FrameCacheController({
-      mode: 'lookahead',
-      memoryBudgetBytes: 512 * MB,
-      minPrerollFrames: 4,
-      minEvictionGuard: 2,
-    }, budgetManager);
+    controller = new FrameCacheController(
+      {
+        mode: 'lookahead',
+        memoryBudgetBytes: 512 * MB,
+        minPrerollFrames: 4,
+        minEvictionGuard: 2,
+      },
+      budgetManager,
+    );
   });
 
   afterEach(() => {
@@ -336,7 +341,10 @@ describe('FrameCacheController', () => {
       const source = createMockSource();
       controller.registerSource(source);
       controller.onPlaybackStateChange({
-        currentFrame: 50, speed: 1, inPoint: 1, outPoint: 300,
+        currentFrame: 50,
+        speed: 1,
+        inPoint: 1,
+        outPoint: 300,
       });
 
       // Frames within guard radius (2 at 1x speed)
@@ -355,7 +363,9 @@ describe('FrameCacheController', () => {
       controller.registerSource(source);
       controller.setMode('off');
       controller.onPlaybackStateChange({
-        currentFrame: 50, inPoint: 1, outPoint: 300,
+        currentFrame: 50,
+        inPoint: 1,
+        outPoint: 300,
       });
 
       // Add many frames
@@ -372,7 +382,9 @@ describe('FrameCacheController', () => {
       controller.registerSource(source);
       controller.setMode('off'); // small region
       controller.onPlaybackStateChange({
-        currentFrame: 50, inPoint: 1, outPoint: 300,
+        currentFrame: 50,
+        inPoint: 1,
+        outPoint: 300,
       });
 
       // Add 100 cached frames

@@ -53,7 +53,7 @@ function createMockDTO(config: {
     }),
   });
 
-  const createMockObject = (obj: typeof objects[0]) => ({
+  const createMockObject = (obj: (typeof objects)[0]) => ({
     name: obj.name,
     protocol: obj.protocol,
     component: (name: string) => createMockComponent(obj.components?.[name]),
@@ -428,9 +428,7 @@ describe('GTOGraphLoader', () => {
     it('GTO-006: skips unknown protocols silently', () => {
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
-        objects: [
-          { name: 'unknownNode', protocol: 'UnknownProtocol', components: {} },
-        ],
+        objects: [{ name: 'unknownNode', protocol: 'UnknownProtocol', components: {} }],
       });
 
       const result = loadGTOGraph(dto as never);
@@ -452,9 +450,7 @@ describe('GTOGraphLoader', () => {
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test', viewNode: 'viewNode' }],
-        objects: [
-          { name: 'viewNode', protocol: 'RVSequenceGroup', components: {} },
-        ],
+        objects: [{ name: 'viewNode', protocol: 'RVSequenceGroup', components: {} }],
       });
 
       const result = loadGTOGraph(dto as never);
@@ -464,7 +460,9 @@ describe('GTOGraphLoader', () => {
 
     it('GTO-010: throws error for invalid GTO', () => {
       const badDTO = {
-        byProtocol: () => { throw new Error('Invalid GTO structure'); },
+        byProtocol: () => {
+          throw new Error('Invalid GTO structure');
+        },
         objects: () => [],
       };
 
@@ -656,13 +654,15 @@ describe('GTOGraphLoader', () => {
 
     it('parses session root component (displayName and comment)', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          root: {
-            name: 'My Session Name',
-            comment: 'This is a test session',
+        sessions: [
+          {
+            name: 'Test',
+            root: {
+              name: 'My Session Name',
+              comment: 'This is a test session',
+            },
           },
-        }],
+        ],
         objects: [],
       });
 
@@ -674,16 +674,18 @@ describe('GTOGraphLoader', () => {
 
     it('parses session matte settings', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          matte: {
-            show: 1,
-            aspect: 2.35,
-            opacity: 0.8,
-            heightVisible: 0.9,
-            centerPoint: [0.1, 0.2],
+        sessions: [
+          {
+            name: 'Test',
+            matte: {
+              show: 1,
+              aspect: 2.35,
+              opacity: 0.8,
+              heightVisible: 0.9,
+              centerPoint: [0.1, 0.2],
+            },
           },
-        }],
+        ],
         objects: [],
       });
 
@@ -699,15 +701,17 @@ describe('GTOGraphLoader', () => {
 
     it('parses session paintEffects settings', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          paintEffects: {
-            hold: 1,
-            ghost: 1,
-            ghostBefore: 3,
-            ghostAfter: 7,
+        sessions: [
+          {
+            name: 'Test',
+            paintEffects: {
+              hold: 1,
+              ghost: 1,
+              ghostBefore: 3,
+              ghostAfter: 7,
+            },
           },
-        }],
+        ],
         objects: [],
       });
 
@@ -722,10 +726,12 @@ describe('GTOGraphLoader', () => {
 
     it('parses session clipboard property', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          clipboard: 42,
-        }],
+        sessions: [
+          {
+            name: 'Test',
+            clipboard: 42,
+          },
+        ],
         objects: [],
       });
 
@@ -736,12 +742,14 @@ describe('GTOGraphLoader', () => {
 
     it('parses session internal creationContext', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          internal: {
-            creationContext: 1,
+        sessions: [
+          {
+            name: 'Test',
+            internal: {
+              creationContext: 1,
+            },
           },
-        }],
+        ],
         objects: [],
       });
 
@@ -752,12 +760,14 @@ describe('GTOGraphLoader', () => {
 
     it('parses session node origin', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          node: {
-            origin: 'OpenRV 2.0',
+        sessions: [
+          {
+            name: 'Test',
+            node: {
+              origin: 'OpenRV 2.0',
+            },
           },
-        }],
+        ],
         objects: [],
       });
 
@@ -768,19 +778,25 @@ describe('GTOGraphLoader', () => {
 
     it('parses session membership contains', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'Test',
-          membership: {
-            contains: ['sourceGroup000000', 'sourceGroup000001', 'defaultSequence'],
+        sessions: [
+          {
+            name: 'Test',
+            membership: {
+              contains: ['sourceGroup000000', 'sourceGroup000001', 'defaultSequence'],
+            },
           },
-        }],
+        ],
         objects: [],
       });
 
       const result = loadGTOGraph(dto as never);
 
       expect(result.sessionInfo.membershipContains).toBeDefined();
-      expect(result.sessionInfo.membershipContains).toEqual(['sourceGroup000000', 'sourceGroup000001', 'defaultSequence']);
+      expect(result.sessionInfo.membershipContains).toEqual([
+        'sourceGroup000000',
+        'sourceGroup000001',
+        'defaultSequence',
+      ]);
     });
 
     it('creates RVImageSource nodes correctly', () => {
@@ -858,9 +874,21 @@ describe('GTOGraphLoader', () => {
         name: 'sourceNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['url', 'sourceFps', 'sourceVolume', 'sourceAudioOffset', 'sourceBalance',
-             'sourceCrossover', 'sourceNoMovieAudio', 'sourceRangeOffset', 'sourceRangeStart',
-             'sourceCutIn', 'sourceCutOut', 'sourceReadAllChannels'].includes(key)),
+            [
+              'url',
+              'sourceFps',
+              'sourceVolume',
+              'sourceAudioOffset',
+              'sourceBalance',
+              'sourceCrossover',
+              'sourceNoMovieAudio',
+              'sourceRangeOffset',
+              'sourceRangeStart',
+              'sourceCutIn',
+              'sourceCutOut',
+              'sourceReadAllChannels',
+            ].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -922,8 +950,18 @@ describe('GTOGraphLoader', () => {
         name: 'sourceNode',
         properties: {
           has: vi.fn((key: string) =>
-            ['width', 'height', 'proxyPath', 'proxyScale', 'proxyDepth',
-             'proxyChannels', 'proxyFloatingPoint', 'proxyScanline', 'proxyPlanar'].includes(key)),
+            [
+              'width',
+              'height',
+              'proxyPath',
+              'proxyScale',
+              'proxyDepth',
+              'proxyChannels',
+              'proxyFloatingPoint',
+              'proxyScanline',
+              'proxyPlanar',
+            ].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -975,10 +1013,25 @@ describe('GTOGraphLoader', () => {
         name: 'imageSource',
         properties: {
           has: vi.fn((key: string) =>
-            ['url', 'imageWidth', 'imageHeight', 'imageUncropWidth', 'imageUncropHeight',
-             'imageUncropX', 'imageUncropY', 'imagePixelAspect', 'imageFps', 'imageStart',
-             'imageEnd', 'imageInc', 'imageEncoding', 'imageChannels', 'imageBitsPerChannel',
-             'imageIsFloat'].includes(key)),
+            [
+              'url',
+              'imageWidth',
+              'imageHeight',
+              'imageUncropWidth',
+              'imageUncropHeight',
+              'imageUncropX',
+              'imageUncropY',
+              'imagePixelAspect',
+              'imageFps',
+              'imageStart',
+              'imageEnd',
+              'imageInc',
+              'imageEncoding',
+              'imageChannels',
+              'imageBitsPerChannel',
+              'imageIsFloat',
+            ].includes(key),
+          ),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -1136,9 +1189,7 @@ describe('GTOGraphLoader', () => {
     it('skips RVSession protocol in objects iteration', () => {
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
-        objects: [
-          { name: 'session', protocol: 'RVSession', components: {} },
-        ],
+        objects: [{ name: 'session', protocol: 'RVSession', components: {} }],
       });
 
       const result = loadGTOGraph(dto as never);
@@ -1626,7 +1677,7 @@ describe('GTOGraphLoader', () => {
 
       expect(result.nodes.size).toBe(1);
       expect(warnSpy).toHaveBeenCalledWith(
-        'connections object has malformed evaluation: missing or invalid lhs/rhs arrays'
+        'connections object has malformed evaluation: missing or invalid lhs/rhs arrays',
       );
 
       warnSpy.mockRestore();
@@ -1855,9 +1906,7 @@ describe('GTOGraphLoader', () => {
       expect(sequenceNode.connectInput).toHaveBeenCalledWith(source1);
       expect(sequenceNode.connectInput).toHaveBeenCalledTimes(1);
       // Verify warning about mismatched lengths was emitted
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('mismatched lhs/rhs lengths')
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('mismatched lhs/rhs lengths'));
 
       warnSpy.mockRestore();
     });
@@ -1901,10 +1950,12 @@ describe('GTOGraphLoader', () => {
   describe('bgColor parsing', () => {
     it('parses bgColor from session component', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'BgColorSession',
-          bgColor: [0.5, 0.5, 0.5, 1.0],
-        }],
+        sessions: [
+          {
+            name: 'BgColorSession',
+            bgColor: [0.5, 0.5, 0.5, 1.0],
+          },
+        ],
         objects: [],
       });
 
@@ -1915,9 +1966,11 @@ describe('GTOGraphLoader', () => {
 
     it('returns undefined bgColor when not present in session', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'NoBgColorSession',
-        }],
+        sessions: [
+          {
+            name: 'NoBgColorSession',
+          },
+        ],
         objects: [],
       });
 
@@ -1928,10 +1981,12 @@ describe('GTOGraphLoader', () => {
 
     it('ignores bgColor with fewer than 4 components', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'ShortBgColorSession',
-          bgColor: [0.5, 0.5],
-        }],
+        sessions: [
+          {
+            name: 'ShortBgColorSession',
+            bgColor: [0.5, 0.5],
+          },
+        ],
         objects: [],
       });
 
@@ -1942,10 +1997,12 @@ describe('GTOGraphLoader', () => {
 
     it('parses bgColor with custom RGBA values', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'CustomBgSession',
-          bgColor: [0.1, 0.2, 0.3, 0.8],
-        }],
+        sessions: [
+          {
+            name: 'CustomBgSession',
+            bgColor: [0.1, 0.2, 0.3, 0.8],
+          },
+        ],
         objects: [],
       });
 
@@ -1956,10 +2013,12 @@ describe('GTOGraphLoader', () => {
 
     it('rejects bgColor containing NaN values', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'NaNBgColorSession',
-          bgColor: [NaN, 0.5, 0.5, 1.0],
-        }],
+        sessions: [
+          {
+            name: 'NaNBgColorSession',
+            bgColor: [NaN, 0.5, 0.5, 1.0],
+          },
+        ],
         objects: [],
       });
 
@@ -1970,10 +2029,12 @@ describe('GTOGraphLoader', () => {
 
     it('preserves bgColor values outside 0-1 range (HDR scene-referred)', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'HDRBgColorSession',
-          bgColor: [1.5, -0.1, 0.5, 1.0],
-        }],
+        sessions: [
+          {
+            name: 'HDRBgColorSession',
+            bgColor: [1.5, -0.1, 0.5, 1.0],
+          },
+        ],
         objects: [],
       });
 
@@ -1984,10 +2045,12 @@ describe('GTOGraphLoader', () => {
 
     it('uses first 4 elements when bgColor array has more than 4', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'LongBgColorSession',
-          bgColor: [0.5, 0.5, 0.5, 1.0, 0.5],
-        }],
+        sessions: [
+          {
+            name: 'LongBgColorSession',
+            bgColor: [0.5, 0.5, 0.5, 1.0, 0.5],
+          },
+        ],
         objects: [],
       });
 
@@ -1998,10 +2061,12 @@ describe('GTOGraphLoader', () => {
 
     it('returns undefined bgColor when property value is null', () => {
       const dto = createMockDTO({
-        sessions: [{
-          name: 'NullBgColorSession',
-          bgColor: null as unknown as number[],
-        }],
+        sessions: [
+          {
+            name: 'NullBgColorSession',
+            bgColor: null as unknown as number[],
+          },
+        ],
         objects: [],
       });
 

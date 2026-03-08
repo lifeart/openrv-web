@@ -40,7 +40,15 @@ interface TestableViewer {
     updateCropCursor(handle: CropDragHandle): void;
     handleCropPointerMove(e: PointerEvent): void;
     constrainToAspectRatio(region: CropRegion, handle: CropDragHandle): CropRegion;
-    drawUncropBackground(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
+    drawUncropBackground(
+      imageCtx: CanvasRenderingContext2D,
+      displayWidth: number,
+      displayHeight: number,
+      uncropOffsetX: number,
+      uncropOffsetY: number,
+      imageDisplayW: number,
+      imageDisplayH: number,
+    ): void;
     clearOutsideCropRegion(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number): void;
   };
 
@@ -62,7 +70,9 @@ interface TestableViewer {
   pixelProbe: PixelProbe;
   pixelSamplingManager: {
     lastMouseMoveUpdate: number;
-    cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null;
+    cursorColorCallback:
+      | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+      | null;
     getImageData(): ImageData | null;
     getSourceImageData(): ImageData | null;
   };
@@ -915,7 +925,7 @@ describe('Viewer', () => {
 
       // Mock a prerenderBuffer with a cached frame
       const mockCanvas = document.createElement('canvas');
-      mockCanvas.width = 300;  // Larger to account for uncrop
+      mockCanvas.width = 300; // Larger to account for uncrop
       mockCanvas.height = 300;
       tv.prerenderBuffer = {
         getFrame: vi.fn().mockReturnValue({
@@ -1422,5 +1432,4 @@ describe('Viewer', () => {
       localStorage.removeItem('openrv.missingFrameMode');
     });
   });
-
 });

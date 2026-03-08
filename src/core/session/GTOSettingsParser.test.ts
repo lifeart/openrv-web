@@ -25,10 +25,7 @@ import type { GTODTO } from 'gto-js';
  * The `colorProps` object maps property names to their raw values as they
  * would come from the GTO parser (scalar, array, or nested array).
  */
-function createMockDTO(
-  colorProps?: Record<string, unknown>,
-  displayColorProps?: Record<string, unknown>,
-): GTODTO {
+function createMockDTO(colorProps?: Record<string, unknown>, displayColorProps?: Record<string, unknown>): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -331,10 +328,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
      * Enhanced mock that supports both 'color' and 'luminanceLUT' components
      * on the same RVColor node.
      */
-    function createMockDTOWithLUT(
-      colorProps?: Record<string, unknown>,
-      lumLutProps?: Record<string, unknown>,
-    ): GTODTO {
+    function createMockDTOWithLUT(colorProps?: Record<string, unknown>, lumLutProps?: Record<string, unknown>): GTODTO {
       const mockComponent = (props: Record<string, unknown> | undefined) => ({
         exists: () => props !== undefined,
         property: (name: string) => ({
@@ -343,7 +337,10 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
         }),
       });
 
-      const mockNode = (colorData: Record<string, unknown> | undefined, lumLutData: Record<string, unknown> | undefined) => ({
+      const mockNode = (
+        colorData: Record<string, unknown> | undefined,
+        lumLutData: Record<string, unknown> | undefined,
+      ) => ({
         component: (name: string) => {
           if (name === 'color') return mockComponent(colorData);
           if (name === 'luminanceLUT') return mockComponent(lumLutData);
@@ -371,10 +368,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
     it('parses 768-element float array as 3-channel LUT with 256 entries/channel', () => {
       // 768 = 256 * 3, so channels = 3
       const lutData = new Array(768).fill(0).map((_, i) => i / 768);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -388,10 +382,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
       // Wait: 256 % 3 = 1, not 0. So this should be 1-channel.
       // But actually 256 IS NOT divisible by 3 (256/3 = 85.33), so channels=1.
       const lutData = new Array(256).fill(0).map((_, i) => i / 256);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -415,10 +406,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
     it('treats LUT length not divisible by 3 (e.g. 770) as 1-channel', () => {
       // 770 % 3 = 2, so channels = 1
       const lutData = new Array(770).fill(0).map((_, i) => i / 770);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -429,10 +417,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
 
     it('returns undefined inlineLUT when luminanceLUT active=0', () => {
       const lutData = new Array(768).fill(0);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 0, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 0, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -440,10 +425,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
     });
 
     it('returns undefined inlineLUT when lut array is empty', () => {
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: [] },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: [] });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -467,10 +449,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
 
     it('round-trip: 768-element LUT Float32Array values match input within float32 precision', () => {
       const lutData = new Array(768).fill(0).map((_, i) => i / 768);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -485,10 +464,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
 
     it('spot-check: 768-element LUT has correct first/last values', () => {
       const lutData = new Array(768).fill(0).map((_, i) => i / 768);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -498,10 +474,7 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
 
     it('spot-check: 256-element LUT has correct first/last values', () => {
       const lutData = new Array(256).fill(0).map((_, i) => i / 256);
-      const dto = createMockDTOWithLUT(
-        { saturation: 1.0 },
-        { active: 1, lut: lutData },
-      );
+      const dto = createMockDTOWithLUT({ saturation: 1.0 }, { active: 1, lut: lutData });
 
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
@@ -682,10 +655,7 @@ describe('GTOSettingsParser.parseNoiseReduction', () => {
  * The `colorProps` object maps property names to their raw values.
  * The optional `nodeProps` maps node-level properties (e.g. `active`).
  */
-function createLinearizeMockDTO(
-  colorProps?: Record<string, unknown>,
-  nodeProps?: Record<string, unknown>,
-): GTODTO {
+function createLinearizeMockDTO(colorProps?: Record<string, unknown>, nodeProps?: Record<string, unknown>): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -933,10 +903,7 @@ describe('GTOSettingsParser.parseLinearize', () => {
  * Helper to create a mock GTODTO with an RVFormat node that supports
  * both 'crop' and 'uncrop' components.
  */
-function createUncropMockDTO(
-  uncropProps?: Record<string, unknown>,
-  cropProps?: Record<string, unknown>,
-): GTODTO {
+function createUncropMockDTO(uncropProps?: Record<string, unknown>, cropProps?: Record<string, unknown>): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -1158,9 +1125,7 @@ describe('GTOSettingsParser.parseUncrop', () => {
 /**
  * Helper to create a mock GTODTO with an RVDisplayColor node for outOfRange tests.
  */
-function createOutOfRangeMockDTO(
-  displayColorProps?: Record<string, unknown>,
-): GTODTO {
+function createOutOfRangeMockDTO(displayColorProps?: Record<string, unknown>): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -1239,10 +1204,7 @@ describe('GTOSettingsParser.parseOutOfRange', () => {
  * Helper to create a mock GTODTO with an RVLensWarp node.
  * Supports both 'warp' and 'node' components.
  */
-function createLensWarpMockDTO(
-  warpProps?: Record<string, unknown>,
-  nodeProps?: Record<string, unknown>,
-): GTODTO {
+function createLensWarpMockDTO(warpProps?: Record<string, unknown>, nodeProps?: Record<string, unknown>): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -1251,10 +1213,7 @@ function createLensWarpMockDTO(
     }),
   });
 
-  const mockNode = (
-    warpData: Record<string, unknown> | undefined,
-    nodeData: Record<string, unknown> | undefined,
-  ) => ({
+  const mockNode = (warpData: Record<string, unknown> | undefined, nodeData: Record<string, unknown> | undefined) => ({
     component: (name: string) => {
       if (name === 'warp') return mockComponent(warpData);
       if (name === 'node') return mockComponent(nodeData);
@@ -1315,10 +1274,24 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
     const dto = createLensWarpMockDTO({
       k1: 0,
       model: '3de4_anamorphic_degree_6',
-      cx02: 0.01, cx22: 0.02, cx04: 0.03, cx24: 0.04, cx44: 0.05,
-      cx06: 0.06, cx26: 0.07, cx46: 0.08, cx66: 0.09,
-      cy02: 0.11, cy22: 0.12, cy04: 0.13, cy24: 0.14, cy44: 0.15,
-      cy06: 0.16, cy26: 0.17, cy46: 0.18, cy66: 0.19,
+      cx02: 0.01,
+      cx22: 0.02,
+      cx04: 0.03,
+      cx24: 0.04,
+      cx44: 0.05,
+      cx06: 0.06,
+      cx26: 0.07,
+      cx46: 0.08,
+      cx66: 0.09,
+      cy02: 0.11,
+      cy22: 0.12,
+      cy04: 0.13,
+      cy24: 0.14,
+      cy44: 0.15,
+      cy06: 0.16,
+      cy26: 0.17,
+      cy46: 0.18,
+      cy66: 0.19,
     });
 
     const result = parseLens(dto);
@@ -1348,7 +1321,7 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
     const dto = createLensWarpMockDTO({
       k1: 0.1,
       model: 'brown',
-      cx02: 0.05,  // This should NOT be parsed for brown model
+      cx02: 0.05, // This should NOT be parsed for brown model
     });
 
     const result = parseLens(dto);
@@ -1359,10 +1332,7 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
   });
 
   it('returns null when node is inactive', () => {
-    const dto = createLensWarpMockDTO(
-      { k1: 0, model: '3de4_anamorphic_degree_6', cx02: 0.1 },
-      { active: 0 },
-    );
+    const dto = createLensWarpMockDTO({ k1: 0, model: '3de4_anamorphic_degree_6', cx02: 0.1 }, { active: 0 });
 
     const result = parseLens(dto);
     expect(result).toBeNull();
@@ -1398,10 +1368,7 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
 /**
  * Helper to create a mock GTODTO with an RVChannelMap node.
  */
-function createChannelMapMockDTO(
-  formatProps?: Record<string, unknown>,
-  nodeProps?: Record<string, unknown>,
-): GTODTO {
+function createChannelMapMockDTO(formatProps?: Record<string, unknown>, nodeProps?: Record<string, unknown>): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -1524,10 +1491,7 @@ describe('GTOSettingsParser.parseChannelSwizzle', () => {
   // =================================================================
 
   it('returns null when node active=0', () => {
-    const dto = createChannelMapMockDTO(
-      { channels: ['B', 'G', 'R', 'A'] },
-      { active: 0 },
-    );
+    const dto = createChannelMapMockDTO({ channels: ['B', 'G', 'R', 'A'] }, { active: 0 });
     const result = parseChannelSwizzle(dto);
     expect(result).toBeNull();
   });

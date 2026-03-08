@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  clampLuminance,
-  estimateSceneKey,
-  computeExposureFromKey,
-  computeSceneLuminance,
-} from './SceneAnalysis';
+import { clampLuminance, estimateSceneKey, computeExposureFromKey, computeSceneLuminance } from './SceneAnalysis';
 
 describe('SceneAnalysis', () => {
   describe('clampLuminance', () => {

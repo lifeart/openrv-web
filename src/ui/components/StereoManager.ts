@@ -9,13 +9,13 @@
  */
 
 import {
-  StereoState,
+  type StereoState,
   DEFAULT_STEREO_STATE,
   isDefaultStereoState,
   applyStereoMode as applyStereoModeUtil,
   applyStereoModeWithEyeTransforms as applyStereoModeWithEyeTransformsUtil,
-  StereoEyeTransformState,
-  StereoAlignMode,
+  type StereoEyeTransformState,
+  type StereoAlignMode,
   DEFAULT_STEREO_EYE_TRANSFORM_STATE,
   DEFAULT_STEREO_ALIGN_MODE,
   isDefaultStereoEyeTransformState,

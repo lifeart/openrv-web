@@ -414,14 +414,9 @@ export interface NetworkSyncConfig {
  * hard-coded. For production deployments you should supply proper
  * TURN credentials via the environment or a configuration object.
  */
-export function createDefaultIceServers(config?: {
-  turnUsername?: string;
-  turnCredential?: string;
-}): RTCIceServer[] {
-  const turnUsername =
-    config?.turnUsername ?? (import.meta.env.VITE_TURN_USERNAME || '');
-  const turnCredential =
-    config?.turnCredential ?? (import.meta.env.VITE_TURN_CREDENTIAL || '');
+export function createDefaultIceServers(config?: { turnUsername?: string; turnCredential?: string }): RTCIceServer[] {
+  const turnUsername = config?.turnUsername ?? (import.meta.env.VITE_TURN_USERNAME || '');
+  const turnCredential = config?.turnCredential ?? (import.meta.env.VITE_TURN_CREDENTIAL || '');
 
   const servers: RTCIceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },

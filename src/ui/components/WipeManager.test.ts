@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { WipeManager } from './WipeManager';
-import { DEFAULT_WIPE_STATE, WipeState } from './WipeControl';
+import { DEFAULT_WIPE_STATE, type WipeState } from './WipeControl';
 
 describe('WipeManager', () => {
   let mgr: WipeManager;

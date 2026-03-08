@@ -42,76 +42,98 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   viewContent.appendChild(registry.stereoAlignControl.render());
 
   // Convergence measurement button (stereo QC)
-  const convergenceButton = ContextToolbar.createIconButton('crosshair', () => {
-    registry.convergenceMeasure.setEnabled(!registry.convergenceMeasure.isEnabled());
-  }, { title: 'Toggle convergence measurement' });
+  const convergenceButton = ContextToolbar.createIconButton(
+    'crosshair',
+    () => {
+      registry.convergenceMeasure.setEnabled(!registry.convergenceMeasure.isEnabled());
+    },
+    { title: 'Toggle convergence measurement' },
+  );
   convergenceButton.dataset.testid = 'convergence-measure-btn';
   viewContent.appendChild(convergenceButton);
 
-  addUnsubscriber(registry.convergenceMeasure.on('stateChanged', (state) => {
-    setButtonActive(convergenceButton, state.enabled, 'icon');
-  }));
+  addUnsubscriber(
+    registry.convergenceMeasure.on('stateChanged', (state) => {
+      setButtonActive(convergenceButton, state.enabled, 'icon');
+    }),
+  );
 
   // Floating window violation detection button (stereo QC)
-  const floatingWindowButton = ContextToolbar.createIconButton('maximize', () => {
-    const pair = viewer.getStereoPair();
-    if (pair) {
-      const result = registry.floatingWindowControl.detect(pair.left, pair.right);
-      floatingWindowButton.title = registry.floatingWindowControl.formatResult(result);
-    }
-  }, { title: 'Detect floating window violations' });
+  const floatingWindowButton = ContextToolbar.createIconButton(
+    'maximize',
+    () => {
+      const pair = viewer.getStereoPair();
+      if (pair) {
+        const result = registry.floatingWindowControl.detect(pair.left, pair.right);
+        floatingWindowButton.title = registry.floatingWindowControl.formatResult(result);
+      }
+    },
+    { title: 'Detect floating window violations' },
+  );
   floatingWindowButton.dataset.testid = 'floating-window-detect-btn';
   viewContent.appendChild(floatingWindowButton);
 
-  addUnsubscriber(registry.floatingWindowControl.on('stateChanged', (state) => {
-    const hasViolation = state.lastResult?.hasViolation ?? false;
-    setButtonActive(floatingWindowButton, hasViolation, 'icon');
-  }));
+  addUnsubscriber(
+    registry.floatingWindowControl.on('stateChanged', (state) => {
+      const hasViolation = state.lastResult?.hasViolation ?? false;
+      setButtonActive(floatingWindowButton, hasViolation, 'icon');
+    }),
+  );
 
   viewContent.appendChild(registry.ghostFrameControl.render());
 
   // Reference capture/toggle buttons
-  const captureRefButton = ContextToolbar.createIconButton('camera', () => {
-    const imageData = viewer.getImageData();
-    if (imageData) {
-      registry.referenceManager.captureReference({
-        width: imageData.width,
-        height: imageData.height,
-        data: imageData.data,
-        channels: 4,
-      });
-      registry.referenceManager.enable();
-    }
-  }, { title: 'Capture reference frame (Alt+Shift+R)' });
+  const captureRefButton = ContextToolbar.createIconButton(
+    'camera',
+    () => {
+      const imageData = viewer.getImageData();
+      if (imageData) {
+        registry.referenceManager.captureReference({
+          width: imageData.width,
+          height: imageData.height,
+          data: imageData.data,
+          channels: 4,
+        });
+        registry.referenceManager.enable();
+      }
+    },
+    { title: 'Capture reference frame (Alt+Shift+R)' },
+  );
   captureRefButton.dataset.testid = 'capture-reference-btn';
   viewContent.appendChild(captureRefButton);
 
-  const toggleRefButton = ContextToolbar.createIconButton('layers', () => {
-    registry.referenceManager.toggle();
-  }, { title: 'Toggle reference comparison (Ctrl+Shift+R)' });
+  const toggleRefButton = ContextToolbar.createIconButton(
+    'layers',
+    () => {
+      registry.referenceManager.toggle();
+    },
+    { title: 'Toggle reference comparison (Ctrl+Shift+R)' },
+  );
   toggleRefButton.dataset.testid = 'toggle-reference-btn';
   viewContent.appendChild(toggleRefButton);
 
-  addUnsubscriber(registry.referenceManager.on('stateChanged', (state) => {
-    setButtonActive(toggleRefButton, state.enabled, 'icon');
+  addUnsubscriber(
+    registry.referenceManager.on('stateChanged', (state) => {
+      setButtonActive(toggleRefButton, state.enabled, 'icon');
 
-    if (state.enabled && state.referenceImage) {
-      const ref = state.referenceImage;
-      let refImageData: ImageData;
-      if (ref.data instanceof Uint8ClampedArray) {
-        refImageData = new ImageData(new Uint8ClampedArray(ref.data), ref.width, ref.height);
-      } else {
-        const u8 = new Uint8ClampedArray(ref.width * ref.height * 4);
-        for (let i = 0; i < ref.data.length; i++) {
-          u8[i] = Math.round(Math.max(0, Math.min(1, ref.data[i]!)) * 255);
+      if (state.enabled && state.referenceImage) {
+        const ref = state.referenceImage;
+        let refImageData: ImageData;
+        if (ref.data instanceof Uint8ClampedArray) {
+          refImageData = new ImageData(new Uint8ClampedArray(ref.data), ref.width, ref.height);
+        } else {
+          const u8 = new Uint8ClampedArray(ref.width * ref.height * 4);
+          for (let i = 0; i < ref.data.length; i++) {
+            u8[i] = Math.round(Math.max(0, Math.min(1, ref.data[i]!)) * 255);
+          }
+          refImageData = new ImageData(u8, ref.width, ref.height);
         }
-        refImageData = new ImageData(u8, ref.width, ref.height);
+        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity);
+      } else {
+        viewer.setReferenceImage(null, 'off', 0);
       }
-      viewer.setReferenceImage(refImageData, state.viewMode, state.opacity);
-    } else {
-      viewer.setReferenceImage(null, 'off', 0);
-    }
-  }));
+    }),
+  );
 
   viewContent.appendChild(ContextToolbar.createDivider());
 
@@ -136,15 +158,19 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   viewer.setSphericalProjectionRef(registry.sphericalProjection, updateSphericalUniforms);
 
-  const sphericalButton = ContextToolbar.createIconButton('aperture', () => {
-    if (registry.sphericalProjection.enabled) {
-      registry.sphericalProjection.disable();
-    } else {
-      registry.sphericalProjection.enable();
-    }
-    updateSphericalUniforms();
-    setButtonActive(sphericalButton, registry.sphericalProjection.enabled, 'icon');
-  }, { title: '360 View' });
+  const sphericalButton = ContextToolbar.createIconButton(
+    'aperture',
+    () => {
+      if (registry.sphericalProjection.enabled) {
+        registry.sphericalProjection.disable();
+      } else {
+        registry.sphericalProjection.enable();
+      }
+      updateSphericalUniforms();
+      setButtonActive(sphericalButton, registry.sphericalProjection.enabled, 'icon');
+    },
+    { title: '360 View' },
+  );
   sphericalButton.dataset.testid = 'spherical-projection-btn';
   viewContent.appendChild(sphericalButton);
 
@@ -188,7 +214,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   `;
 
   const updateMissingLabel = () => {
-    const current = missingModes.find(m => m.value === currentMissingMode);
+    const current = missingModes.find((m) => m.value === currentMissingMode);
     missingButton.innerHTML = `${getIconSvg('image', 'sm')}<span style="margin-left: 4px;">Missing: ${current?.label ?? 'Off'}</span><span style="margin-left: 4px; font-size: 8px;">&#9660;</span>`;
   };
   updateMissingLabel();
@@ -209,7 +235,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   `;
 
   const updateMissingOptionStyles = () => {
-    missingDropdown.querySelectorAll<HTMLButtonElement>('button').forEach(opt => {
+    missingDropdown.querySelectorAll<HTMLButtonElement>('button').forEach((opt) => {
       if (opt.dataset.value === currentMissingMode) {
         opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
         opt.style.color = 'var(--accent-primary)';
@@ -324,56 +350,84 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   viewContent.appendChild(missingFrameContainer);
 
   // Timeline editor toggle button
-  const timelineEditorButton = ContextToolbar.createIconButton('edit', () => {
-    timelineEditorPanel.toggle(timelineEditorButton);
-    setButtonActive(timelineEditorButton, timelineEditorPanel.isVisible(), 'icon');
-  }, { title: 'Toggle visual timeline editor' });
+  const timelineEditorButton = ContextToolbar.createIconButton(
+    'edit',
+    () => {
+      timelineEditorPanel.toggle(timelineEditorButton);
+      setButtonActive(timelineEditorButton, timelineEditorPanel.isVisible(), 'icon');
+    },
+    { title: 'Toggle visual timeline editor' },
+  );
   timelineEditorButton.dataset.testid = 'timeline-editor-toggle-button';
   viewContent.appendChild(timelineEditorButton);
 
   // Spotlight Tool toggle button
-  const spotlightButton = ContextToolbar.createIconButton('sun', () => {
-    viewer.getSpotlightOverlay().toggle();
-  }, { title: 'Spotlight (Shift+Q)' });
+  const spotlightButton = ContextToolbar.createIconButton(
+    'sun',
+    () => {
+      viewer.getSpotlightOverlay().toggle();
+    },
+    { title: 'Spotlight (Shift+Q)' },
+  );
   spotlightButton.dataset.testid = 'spotlight-toggle-btn';
   viewContent.appendChild(spotlightButton);
 
-  addUnsubscriber(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
-    setButtonActive(spotlightButton, state.enabled, 'icon');
-  }));
+  addUnsubscriber(
+    viewer.getSpotlightOverlay().on('stateChanged', (state) => {
+      setButtonActive(spotlightButton, state.enabled, 'icon');
+    }),
+  );
 
   // EXR Window Overlay toggle button
-  const exrWindowButton = ContextToolbar.createIconButton('grid', () => {
-    viewer.getEXRWindowOverlay().toggle();
-  }, { title: 'Toggle EXR window overlay' });
+  const exrWindowButton = ContextToolbar.createIconButton(
+    'grid',
+    () => {
+      viewer.getEXRWindowOverlay().toggle();
+    },
+    { title: 'Toggle EXR window overlay' },
+  );
   exrWindowButton.dataset.testid = 'exr-window-overlay-toggle-btn';
   viewContent.appendChild(exrWindowButton);
 
-  addUnsubscriber(viewer.getEXRWindowOverlay().on('stateChanged', (state) => {
-    setButtonActive(exrWindowButton, state.enabled, 'icon');
-  }));
+  addUnsubscriber(
+    viewer.getEXRWindowOverlay().on('stateChanged', (state) => {
+      setButtonActive(exrWindowButton, state.enabled, 'icon');
+    }),
+  );
 
   // Info Strip overlay toggle button
-  const infoStripButton = ContextToolbar.createIconButton('info', () => {
-    viewer.getInfoStripOverlay().toggle();
-  }, { title: 'Toggle info strip overlay (F7)' });
+  const infoStripButton = ContextToolbar.createIconButton(
+    'info',
+    () => {
+      viewer.getInfoStripOverlay().toggle();
+    },
+    { title: 'Toggle info strip overlay (F7)' },
+  );
   infoStripButton.dataset.testid = 'info-strip-toggle-btn';
   viewContent.appendChild(infoStripButton);
 
-  addUnsubscriber(viewer.getInfoStripOverlay().on('stateChanged', (state) => {
-    setButtonActive(infoStripButton, state.enabled, 'icon');
-  }));
+  addUnsubscriber(
+    viewer.getInfoStripOverlay().on('stateChanged', (state) => {
+      setButtonActive(infoStripButton, state.enabled, 'icon');
+    }),
+  );
 
   // FPS Indicator toggle button
-  const fpsIndicatorButton = ContextToolbar.createIconButton('activity', () => {
-    viewer.getFPSIndicator().toggle();
-  }, { title: 'Toggle FPS indicator (Ctrl+Shift+F)' });
+  const fpsIndicatorButton = ContextToolbar.createIconButton(
+    'activity',
+    () => {
+      viewer.getFPSIndicator().toggle();
+    },
+    { title: 'Toggle FPS indicator (Ctrl+Shift+F)' },
+  );
   fpsIndicatorButton.dataset.testid = 'fps-indicator-toggle-btn';
   viewContent.appendChild(fpsIndicatorButton);
 
-  addUnsubscriber(viewer.getFPSIndicator().on('stateChanged', (state) => {
-    setButtonActive(fpsIndicatorButton, state.enabled, 'icon');
-  }));
+  addUnsubscriber(
+    viewer.getFPSIndicator().on('stateChanged', (state) => {
+      setButtonActive(fpsIndicatorButton, state.enabled, 'icon');
+    }),
+  );
 
   return { element: viewContent, convergenceButton, floatingWindowButton };
 }

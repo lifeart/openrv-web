@@ -5,12 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  ToneMappingControl,
-  DEFAULT_TONE_MAPPING_STATE,
-  TONE_MAPPING_OPERATORS,
-} from './ToneMappingControl';
-
+import { ToneMappingControl, DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from './ToneMappingControl';
 
 describe('ToneMappingControl', () => {
   let control: ToneMappingControl;
@@ -276,9 +271,11 @@ describe('ToneMappingControl', () => {
 
       control.setOperator('aces');
 
-      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-        operator: 'aces',
-      }));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operator: 'aces',
+        }),
+      );
     });
 
     it('TONE-U052: setOperator with same value does not emit', () => {
@@ -304,9 +301,11 @@ describe('ToneMappingControl', () => {
 
       control.setEnabled(true);
 
-      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-        enabled: true,
-      }));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled: true,
+        }),
+      );
     });
 
     it('TONE-U062: setEnabled with same value does not emit', () => {
@@ -392,9 +391,11 @@ describe('ToneMappingControl', () => {
 
       control.setState({ dragoBias: 0.75 });
 
-      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-        dragoBias: 0.75,
-      }));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dragoBias: 0.75,
+        }),
+      );
     });
   });
 
@@ -472,9 +473,11 @@ describe('ToneMappingControl', () => {
       biasSlider.value = '0.9';
       biasSlider.dispatchEvent(new Event('input'));
 
-      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-        dragoBias: 0.9,
-      }));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dragoBias: 0.9,
+        }),
+      );
     });
 
     it('TONE-U174b: drago brightness slider emits stateChanged on input', () => {
@@ -489,9 +492,11 @@ describe('ToneMappingControl', () => {
       brightnessSlider.value = '3.0';
       brightnessSlider.dispatchEvent(new Event('input'));
 
-      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-        dragoBrightness: 3.0,
-      }));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dragoBrightness: 3.0,
+        }),
+      );
     });
 
     it('TONE-U175: aces hides parameter section', () => {
@@ -522,7 +527,7 @@ describe('ToneMappingControl', () => {
       const params = getParams();
       // The value display should show "0.85" (2 decimals), not "0.9" (1 decimal)
       const spans = params.querySelectorAll('span');
-      const valueSpan = Array.from(spans).find(s => s.textContent === '0.85');
+      const valueSpan = Array.from(spans).find((s) => s.textContent === '0.85');
       expect(valueSpan).not.toBeNull();
     });
 
@@ -538,7 +543,7 @@ describe('ToneMappingControl', () => {
       expect(biasSlider.value).toBe('0.75');
       // Value display should show 0.75
       const spans = params.querySelectorAll('span');
-      const valueSpan = Array.from(spans).find(s => s.textContent === '0.75');
+      const valueSpan = Array.from(spans).find((s) => s.textContent === '0.75');
       expect(valueSpan).not.toBeNull();
     });
 
@@ -565,7 +570,7 @@ describe('ToneMappingControl', () => {
 
       // Value display should show "0.90"
       const spans = params.querySelectorAll('span');
-      const valueSpan = Array.from(spans).find(s => s.textContent === '0.90');
+      const valueSpan = Array.from(spans).find((s) => s.textContent === '0.90');
       expect(valueSpan).not.toBeNull();
     });
 
@@ -574,7 +579,7 @@ describe('ToneMappingControl', () => {
       const params = getParams();
       // Default white point is 4.0, should display "4.0" (1 decimal)
       const spans = params.querySelectorAll('span');
-      const valueSpan = Array.from(spans).find(s => s.textContent === '4.0');
+      const valueSpan = Array.from(spans).find((s) => s.textContent === '4.0');
       expect(valueSpan).not.toBeNull();
     });
   });
@@ -626,22 +631,22 @@ describe('ToneMappingControl', () => {
 
     it('TONE-U102: operators include off', () => {
       const operators = control.getOperators();
-      expect(operators.some(op => op.key === 'off')).toBe(true);
+      expect(operators.some((op) => op.key === 'off')).toBe(true);
     });
 
     it('TONE-U103: operators include reinhard', () => {
       const operators = control.getOperators();
-      expect(operators.some(op => op.key === 'reinhard')).toBe(true);
+      expect(operators.some((op) => op.key === 'reinhard')).toBe(true);
     });
 
     it('TONE-U104: operators include filmic', () => {
       const operators = control.getOperators();
-      expect(operators.some(op => op.key === 'filmic')).toBe(true);
+      expect(operators.some((op) => op.key === 'filmic')).toBe(true);
     });
 
     it('TONE-U105: operators include aces', () => {
       const operators = control.getOperators();
-      expect(operators.some(op => op.key === 'aces')).toBe(true);
+      expect(operators.some((op) => op.key === 'aces')).toBe(true);
     });
   });
 
@@ -677,9 +682,7 @@ describe('ToneMappingControl', () => {
 
       control = new ToneMappingControl();
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(0);
       addSpy.mockRestore();
     });
@@ -692,9 +695,7 @@ describe('ToneMappingControl', () => {
       addSpy.mockClear();
       button.click(); // open
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       addSpy.mockRestore();
     });
@@ -708,9 +709,7 @@ describe('ToneMappingControl', () => {
       removeSpy.mockClear();
       button.click(); // close
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });
@@ -724,9 +723,7 @@ describe('ToneMappingControl', () => {
       removeSpy.mockClear();
       control.dispose();
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });

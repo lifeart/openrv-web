@@ -18,12 +18,7 @@ import { DEFAULT_CDL } from '../color/CDL';
 // ---------------------------------------------------------------------------
 
 /** Create a tiny 2x2 ImageData filled with a single RGBA colour. */
-function createTestImageData(
-  r: number,
-  g: number,
-  b: number,
-  a = 255
-): ImageData {
+function createTestImageData(r: number, g: number, b: number, a = 255): ImageData {
   const data = new Uint8ClampedArray(4 * 4); // 2x2
   for (let i = 0; i < 16; i += 4) {
     data[i] = r;
@@ -52,9 +47,7 @@ describe('EffectRegistry', () => {
 
   it('throws on duplicate registration', () => {
     registry.register(colorInversionEffect);
-    expect(() => registry.register(colorInversionEffect)).toThrow(
-      /already registered/
-    );
+    expect(() => registry.register(colorInversionEffect)).toThrow(/already registered/);
   });
 
   it('returns undefined for unknown effect', () => {
@@ -83,10 +76,7 @@ describe('EffectRegistry', () => {
   it('getAll returns all effects in registration order', () => {
     registry.register(highlightsShadowsEffect);
     registry.register(colorInversionEffect);
-    expect(registry.getAll().map((e) => e.name)).toEqual([
-      'highlightsShadows',
-      'colorInversion',
-    ]);
+    expect(registry.getAll().map((e) => e.name)).toEqual(['highlightsShadows', 'colorInversion']);
   });
 
   it('names() lists all registered effect names', () => {
@@ -246,7 +236,7 @@ describe('highlightsShadowsEffect adapter', () => {
         shadows: 0,
         whites: 0,
         blacks: 0,
-      })
+      }),
     ).toBe(false);
   });
 
@@ -277,7 +267,7 @@ describe('toneMappingEffect adapter', () => {
       toneMappingEffect.isActive({
         toneMappingEnabled: false,
         toneMappingOperator: 'reinhard',
-      })
+      }),
     ).toBe(false);
   });
 
@@ -286,7 +276,7 @@ describe('toneMappingEffect adapter', () => {
       toneMappingEffect.isActive({
         toneMappingEnabled: true,
         toneMappingOperator: 'off',
-      })
+      }),
     ).toBe(false);
   });
 
@@ -295,7 +285,7 @@ describe('toneMappingEffect adapter', () => {
       toneMappingEffect.isActive({
         toneMappingEnabled: true,
         toneMappingOperator: 'aces',
-      })
+      }),
     ).toBe(true);
   });
 
@@ -327,7 +317,7 @@ describe('deinterlaceEffect adapter', () => {
       deinterlaceEffect.isActive({
         deinterlaceEnabled: true,
         deinterlaceMethod: 'weave',
-      })
+      }),
     ).toBe(false);
   });
 
@@ -336,7 +326,7 @@ describe('deinterlaceEffect adapter', () => {
       deinterlaceEffect.isActive({
         deinterlaceEnabled: true,
         deinterlaceMethod: 'bob',
-      })
+      }),
     ).toBe(true);
   });
 
@@ -345,7 +335,7 @@ describe('deinterlaceEffect adapter', () => {
       deinterlaceEffect.isActive({
         deinterlaceEnabled: true,
         deinterlaceMethod: 'blend',
-      })
+      }),
     ).toBe(true);
   });
 
@@ -419,7 +409,7 @@ describe('filmEmulationEffect adapter', () => {
       filmEmulationEffect.isActive({
         filmEmulationEnabled: true,
         filmEmulationIntensity: 0,
-      })
+      }),
     ).toBe(false);
   });
 
@@ -427,7 +417,7 @@ describe('filmEmulationEffect adapter', () => {
     expect(
       filmEmulationEffect.isActive({
         filmEmulationEnabled: true,
-      })
+      }),
     ).toBe(true);
   });
 
@@ -479,7 +469,11 @@ describe('filmEmulationEffect adapter', () => {
 
     let isDifferent = false;
     for (let i = 0; i < img1.data.length; i += 4) {
-      if (img1.data[i] !== img2.data[i] || img1.data[i + 1] !== img2.data[i + 1] || img1.data[i + 2] !== img2.data[i + 2]) {
+      if (
+        img1.data[i] !== img2.data[i] ||
+        img1.data[i + 1] !== img2.data[i + 1] ||
+        img1.data[i + 2] !== img2.data[i + 2]
+      ) {
         isDifferent = true;
         break;
       }
@@ -592,11 +586,23 @@ describe('EffectRegistry pipeline with new effects', () => {
     // Create 2x2 interlaced pattern
     const data = new Uint8ClampedArray(2 * 2 * 4);
     // Line 0: white
-    data[0] = 255; data[1] = 255; data[2] = 255; data[3] = 255;
-    data[4] = 255; data[5] = 255; data[6] = 255; data[7] = 255;
+    data[0] = 255;
+    data[1] = 255;
+    data[2] = 255;
+    data[3] = 255;
+    data[4] = 255;
+    data[5] = 255;
+    data[6] = 255;
+    data[7] = 255;
     // Line 1: black
-    data[8] = 0; data[9] = 0; data[10] = 0; data[11] = 255;
-    data[12] = 0; data[13] = 0; data[14] = 0; data[15] = 255;
+    data[8] = 0;
+    data[9] = 0;
+    data[10] = 0;
+    data[11] = 255;
+    data[12] = 0;
+    data[13] = 0;
+    data[14] = 0;
+    data[15] = 255;
     const img = new ImageData(data, 2, 2);
 
     registry.applyAll(img, {
@@ -632,10 +638,22 @@ describe('EffectRegistry pipeline with new effects', () => {
     registry.register(filmEmulationEffect); // color
 
     const data = new Uint8ClampedArray(2 * 2 * 4);
-    data[0] = 255; data[1] = 255; data[2] = 255; data[3] = 255;
-    data[4] = 255; data[5] = 255; data[6] = 255; data[7] = 255;
-    data[8] = 0; data[9] = 0; data[10] = 0; data[11] = 255;
-    data[12] = 0; data[13] = 0; data[14] = 0; data[15] = 255;
+    data[0] = 255;
+    data[1] = 255;
+    data[2] = 255;
+    data[3] = 255;
+    data[4] = 255;
+    data[5] = 255;
+    data[6] = 255;
+    data[7] = 255;
+    data[8] = 0;
+    data[9] = 0;
+    data[10] = 0;
+    data[11] = 255;
+    data[12] = 0;
+    data[13] = 0;
+    data[14] = 0;
+    data[15] = 255;
     const img = new ImageData(data, 2, 2);
 
     registry.applyByCategory('spatial', img, {
@@ -656,10 +674,22 @@ describe('EffectRegistry pipeline with new effects', () => {
     registry.register(filmEmulationEffect);
 
     const data = new Uint8ClampedArray(2 * 2 * 4);
-    data[0] = 255; data[1] = 255; data[2] = 255; data[3] = 255;
-    data[4] = 255; data[5] = 255; data[6] = 255; data[7] = 255;
-    data[8] = 0; data[9] = 0; data[10] = 0; data[11] = 255;
-    data[12] = 0; data[13] = 0; data[14] = 0; data[15] = 255;
+    data[0] = 255;
+    data[1] = 255;
+    data[2] = 255;
+    data[3] = 255;
+    data[4] = 255;
+    data[5] = 255;
+    data[6] = 255;
+    data[7] = 255;
+    data[8] = 0;
+    data[9] = 0;
+    data[10] = 0;
+    data[11] = 255;
+    data[12] = 0;
+    data[13] = 0;
+    data[14] = 0;
+    data[15] = 255;
     const img = new ImageData(data, 2, 2);
 
     registry.applyAll(img, {

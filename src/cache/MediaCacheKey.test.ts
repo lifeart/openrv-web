@@ -3,15 +3,11 @@ import { computeCacheKey, setSubtleCrypto } from './MediaCacheKey';
 
 // jsdom does not provide crypto.subtle. Dynamically import Node's webcrypto.
 // @ts-expect-error -- Node built-in module not in browser tsconfig
-const nodeCryptoModule = await import('node:crypto') as { webcrypto: Crypto };
+const nodeCryptoModule = (await import('node:crypto')) as { webcrypto: Crypto };
 const nodeSubtle = nodeCryptoModule.webcrypto.subtle;
 
 /** Helper to create a File with specific content. */
-function makeFile(
-  name: string,
-  content: string,
-  options?: { lastModified?: number },
-): File {
+function makeFile(name: string, content: string, options?: { lastModified?: number }): File {
   return new File([content], name, {
     type: 'application/octet-stream',
     lastModified: options?.lastModified ?? Date.now(),
@@ -87,7 +83,9 @@ describe('computeCacheKey', () => {
       // We can't just set null because the Node process may have its own
       // globalThis.crypto.subtle that bleeds through.
       const brokenSubtle = {
-        digest() { throw new Error('subtle unavailable (test)'); },
+        digest() {
+          throw new Error('subtle unavailable (test)');
+        },
       } as unknown as SubtleCrypto;
       setSubtleCrypto(brokenSubtle);
     });

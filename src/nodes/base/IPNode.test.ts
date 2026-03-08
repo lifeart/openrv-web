@@ -29,10 +29,7 @@ describe('IPNode', () => {
       // Verify the forwarding works before dispose
       prop.value = 0.5;
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith(
-        { name: 'opacity', value: 0.5 },
-        { name: 'opacity', value: 0.5 },
-      );
+      expect(listener).toHaveBeenCalledWith({ name: 'opacity', value: 0.5 }, { name: 'opacity', value: 0.5 });
 
       // Dispose the node
       node.dispose();

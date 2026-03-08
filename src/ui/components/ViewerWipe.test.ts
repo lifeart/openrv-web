@@ -7,11 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  createWipeUIElements,
-  updateWipeLinePosition,
-  WipeUIElements,
-} from './ViewerWipe';
+import { createWipeUIElements, updateWipeLinePosition, type WipeUIElements } from './ViewerWipe';
 import type { WipeState } from './WipeControl';
 
 // Helper to create mock DOMRect

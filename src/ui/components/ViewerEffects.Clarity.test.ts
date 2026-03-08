@@ -123,9 +123,8 @@ describe('applyClarity', () => {
   it('CLR-007: edge pixels do not cause out-of-bounds access', () => {
     // 3x3 image with varying values
     const pixels = [
-      255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255,
-      128, 128, 0, 255, 64, 64, 64, 255, 200, 100, 50, 255,
-      0, 0, 0, 255, 255, 255, 255, 255, 128, 128, 128, 255,
+      255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 128, 128, 0, 255, 64, 64, 64, 255, 200, 100, 50, 255, 0, 0, 0,
+      255, 255, 255, 255, 255, 128, 128, 128, 255,
     ];
     const img = createImageData(pixels, 3, 3);
     // Should not throw
@@ -152,9 +151,8 @@ describe('applyClarity', () => {
   it('CLR-009: 3x3 image center pixel is affected by clarity', () => {
     // Edge: dark, center: bright midtone
     const pixels = [
-      40, 40, 40, 255, 40, 40, 40, 255, 40, 40, 40, 255,
-      40, 40, 40, 255, 160, 160, 160, 255, 40, 40, 40, 255,
-      40, 40, 40, 255, 40, 40, 40, 255, 40, 40, 40, 255,
+      40, 40, 40, 255, 40, 40, 40, 255, 40, 40, 40, 255, 40, 40, 40, 255, 160, 160, 160, 255, 40, 40, 40, 255, 40, 40,
+      40, 255, 40, 40, 40, 255, 40, 40, 40, 255,
     ];
     const img = createImageData(pixels, 3, 3);
     applyClarity(img, 100);
@@ -182,9 +180,8 @@ describe('applyClarity', () => {
 
   it('CLR-011: alpha channel remains unchanged', () => {
     const pixels = [
-      128, 128, 128, 200, 128, 128, 128, 100, 128, 128, 128, 50,
-      128, 128, 128, 0, 128, 128, 128, 255, 128, 128, 128, 128,
-      128, 128, 128, 64, 128, 128, 128, 32, 128, 128, 128, 16,
+      128, 128, 128, 200, 128, 128, 128, 100, 128, 128, 128, 50, 128, 128, 128, 0, 128, 128, 128, 255, 128, 128, 128,
+      128, 128, 128, 128, 64, 128, 128, 128, 32, 128, 128, 128, 16,
     ];
     const img = createImageData(pixels, 3, 3);
     const alphas = [200, 100, 50, 0, 255, 128, 64, 32, 16];
@@ -233,7 +230,8 @@ describe('applyClarity', () => {
     applyClarity(imgHigh, 90);
 
     // Higher clarity should produce bigger changes
-    let diffLow = 0, diffHigh = 0;
+    let diffLow = 0,
+      diffHigh = 0;
     for (let i = 0; i < original.length; i += 4) {
       diffLow += Math.abs(imgLow.data[i]! - original[i]!);
       diffHigh += Math.abs(imgHigh.data[i]! - original[i]!);
@@ -247,7 +245,7 @@ describe('applyClarity', () => {
       const pixels: number[] = [];
       for (let y = 0; y < 5; y++) {
         for (let x = 0; x < 5; x++) {
-          const v = (x === 2 && y === 2) ? centerVal : 60;
+          const v = x === 2 && y === 2 ? centerVal : 60;
           pixels.push(v, v, v, 255);
         }
       }
@@ -273,12 +271,7 @@ describe('applyClarity', () => {
   });
 
   it('CLR-016: 2x2 image processes without error', () => {
-    const img = createImageData([
-      100, 100, 100, 255,
-      200, 200, 200, 255,
-      50, 50, 50, 255,
-      150, 150, 150, 255,
-    ], 2, 2);
+    const img = createImageData([100, 100, 100, 255, 200, 200, 200, 255, 50, 50, 50, 255, 150, 150, 150, 255], 2, 2);
     expect(() => applyClarity(img, 50)).not.toThrow();
   });
 
@@ -287,12 +280,7 @@ describe('applyClarity', () => {
     const pixels: number[] = [];
     for (let y = 0; y < 5; y++) {
       for (let x = 0; x < 5; x++) {
-        pixels.push(
-          (x === 2 && y === 2) ? 200 : 80,
-          (x === 2 && y === 2) ? 150 : 60,
-          (x === 2 && y === 2) ? 100 : 40,
-          255,
-        );
+        pixels.push(x === 2 && y === 2 ? 200 : 80, x === 2 && y === 2 ? 150 : 60, x === 2 && y === 2 ? 100 : 40, 255);
       }
     }
     const img = createImageData(pixels, 5, 5);
@@ -315,7 +303,7 @@ describe('applyClarity', () => {
       const pixels: number[] = [];
       for (let y = 0; y < 5; y++) {
         for (let x = 0; x < 5; x++) {
-          const v = (x === 2 && y === 2) ? 140 : 80;
+          const v = x === 2 && y === 2 ? 140 : 80;
           pixels.push(v, v, v, 255);
         }
       }
@@ -341,7 +329,7 @@ describe('applyClarity', () => {
       const pixels: number[] = [];
       for (let y = 0; y < 5; y++) {
         for (let x = 0; x < 5; x++) {
-          const v = (x === 2 && y === 2) ? 160 : 80;
+          const v = x === 2 && y === 2 ? 160 : 80;
           pixels.push(v, v, v, 255);
         }
       }

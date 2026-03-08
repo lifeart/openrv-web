@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  VersionManager,
-  parseShotVersion,
-  type VersionGroup,
-} from './VersionManager';
+import { VersionManager, parseShotVersion, type VersionGroup } from './VersionManager';
 
 describe('VersionManager', () => {
   let manager: VersionManager;
@@ -111,7 +107,7 @@ describe('VersionManager', () => {
       ];
       const groups = manager.autoDetectGroups(sources);
       expect(groups).toHaveLength(2);
-      const shotNames = groups.map(g => g.shotName).sort();
+      const shotNames = groups.map((g) => g.shotName).sort();
       expect(shotNames).toEqual(['comp', 'shot']);
     });
 

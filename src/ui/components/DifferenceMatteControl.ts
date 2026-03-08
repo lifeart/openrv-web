@@ -8,7 +8,7 @@
  * - Gain control (1x to 10x) to amplify small differences
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 
 export interface DifferenceMatteState {
   enabled: boolean;
@@ -178,12 +178,7 @@ export class DifferenceMatteControl extends EventEmitter<DifferenceMatteEvents> 
  * Apply difference matte effect to image data
  * Computes |A - B| per channel with gain and optional heatmap
  */
-export function applyDifferenceMatte(
-  dataA: ImageData,
-  dataB: ImageData,
-  gain: number,
-  heatmap: boolean
-): ImageData {
+export function applyDifferenceMatte(dataA: ImageData, dataB: ImageData, gain: number, heatmap: boolean): ImageData {
   const width = dataA.width;
   const height = dataA.height;
   const result = new ImageData(width, height);

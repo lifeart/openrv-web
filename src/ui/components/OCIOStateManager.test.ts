@@ -15,9 +15,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: vi.fn((key: string) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
   };
 })();
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true });
@@ -199,7 +205,7 @@ describe('OCIOStateManager', () => {
       // Pre-populate localStorage with per-source mappings
       localStorageMock.setItem(
         'openrv-ocio-per-source',
-        JSON.stringify({ 'video.mov': 'Rec.709', 'scan.dpx': 'ACEScct' })
+        JSON.stringify({ 'video.mov': 'Rec.709', 'scan.dpx': 'ACEScct' }),
       );
 
       const newManager = new OCIOStateManager();
@@ -275,7 +281,7 @@ describe('OCIOStateManager', () => {
           invalid: 42,
           alsoInvalid: true,
           nullVal: null,
-        })
+        }),
       );
 
       const newManager = new OCIOStateManager();

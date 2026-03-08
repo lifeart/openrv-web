@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { InfoPanel, InfoPanelPosition } from './InfoPanel';
+import { InfoPanel, type InfoPanelPosition } from './InfoPanel';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 describe('InfoPanel', () => {
@@ -234,7 +234,6 @@ describe('InfoPanel', () => {
       // Content should not be updated since panel is disabled
       expect(panel.getElement().textContent).not.toContain('hidden.exr');
     });
-
   });
 
   describe('getState', () => {
@@ -341,7 +340,7 @@ describe('InfoPanel', () => {
   describe('all positions', () => {
     const positions: InfoPanelPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
-    positions.forEach(position => {
+    positions.forEach((position) => {
       it(`INFO-U110-${position}: ${position} position is valid`, () => {
         panel.setPosition(position);
         expect(panel.getPosition()).toBe(position);
@@ -418,7 +417,7 @@ describe('InfoPanel', () => {
       const el = panel.getElement();
       // The injected string must NOT appear as an actual attribute on any element
       const allElements = el.querySelectorAll('*');
-      allElements.forEach(child => {
+      allElements.forEach((child) => {
         expect(child.getAttribute('onmouseover')).toBeNull();
       });
       // The literal text should still be present in textContent

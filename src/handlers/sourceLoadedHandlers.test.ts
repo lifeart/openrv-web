@@ -15,12 +15,14 @@ import {
 import * as WebGLScopes from '../scopes/WebGLScopes';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
-function createMockContext(overrides: {
-  currentSource?: Record<string, unknown> | null;
-  gtoData?: unknown;
-  allSources?: Array<{ name: string }>;
-  currentSourceIndex?: number;
-} = {}): SessionBridgeContext {
+function createMockContext(
+  overrides: {
+    currentSource?: Record<string, unknown> | null;
+    gtoData?: unknown;
+    allSources?: Array<{ name: string }>;
+    currentSourceIndex?: number;
+  } = {},
+): SessionBridgeContext {
   const cropControl = { setSourceDimensions: vi.fn() };
   const ocioProcessor = {
     setActiveSource: vi.fn(),
@@ -36,7 +38,13 @@ function createMockContext(overrides: {
   const toneMappingControl = {
     setState: vi.fn((state: { enabled?: boolean; operator?: string }) => {
       if (state.enabled !== undefined) toneMappingState.enabled = state.enabled;
-      if (state.operator === 'off' || state.operator === 'aces' || state.operator === 'filmic' || state.operator === 'reinhard' || state.operator === 'drago') {
+      if (
+        state.operator === 'off' ||
+        state.operator === 'aces' ||
+        state.operator === 'filmic' ||
+        state.operator === 'reinhard' ||
+        state.operator === 'drago'
+      ) {
         toneMappingState.operator = state.operator;
       }
     }),
@@ -51,7 +59,13 @@ function createMockContext(overrides: {
   };
   const persistenceManager = { setGTOStore: vi.fn(), syncGTOStore: vi.fn() };
   const exrWindowOverlay = { setWindows: vi.fn(), clearWindows: vi.fn() };
-  const viewer = { initPrerenderBuffer: vi.fn(), refresh: vi.fn(), getGLRenderer: vi.fn(() => null), isDisplayHDRCapable: vi.fn(() => false), getEXRWindowOverlay: vi.fn(() => exrWindowOverlay) };
+  const viewer = {
+    initPrerenderBuffer: vi.fn(),
+    refresh: vi.fn(),
+    getGLRenderer: vi.fn(() => null),
+    isDisplayHDRCapable: vi.fn(() => false),
+    getEXRWindowOverlay: vi.fn(() => exrWindowOverlay),
+  };
   const stackControl = { setAvailableSources: vi.fn() };
   const channelSelect = { clearEXRLayers: vi.fn(), setEXRLayers: vi.fn() };
   const infoPanel = { update: vi.fn() };
@@ -103,7 +117,15 @@ describe('handleSourceLoaded', () => {
 
   it('SLH-U001: calls updateInfoPanel', () => {
     const context = createMockContext();
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(updateInfoPanel).toHaveBeenCalled();
   });
@@ -112,14 +134,30 @@ describe('handleSourceLoaded', () => {
     const context = createMockContext({
       currentSource: { name: 'test.exr', width: 1920, height: 1080 },
     });
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getCropControl().setSourceDimensions).toHaveBeenCalledWith(1920, 1080);
   });
 
   it('SLH-U003: does not set crop dimensions when no source', () => {
     const context = createMockContext({ currentSource: null });
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getCropControl().setSourceDimensions).not.toHaveBeenCalled();
   });
@@ -128,7 +166,15 @@ describe('handleSourceLoaded', () => {
     const context = createMockContext({
       currentSource: { name: 'test.exr', width: 100, height: 100 },
     });
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     const processor = context.getOCIOControl().getProcessor();
     expect(processor.setActiveSource).toHaveBeenCalledWith('test.exr');
@@ -141,7 +187,15 @@ describe('handleSourceLoaded', () => {
     const processor = context.getOCIOControl().getProcessor();
     (processor.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('scene_linear');
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(processor.detectColorSpaceFromExtension).toHaveBeenCalledWith('.exr');
     expect(processor.setSourceInputColorSpace).toHaveBeenCalledWith('test.exr', 'scene_linear');
@@ -154,7 +208,15 @@ describe('handleSourceLoaded', () => {
     const processor = context.getOCIOControl().getProcessor();
     (processor.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue(null);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(processor.setSourceInputColorSpace).not.toHaveBeenCalled();
   });
@@ -167,7 +229,15 @@ describe('handleSourceLoaded', () => {
     // Simulate a persisted color space mapping already loaded into the processor
     (processor.getSourceInputColorSpace as ReturnType<typeof vi.fn>).mockReturnValue('ACEScg');
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     // Should not call detectColorSpaceFromExtension or setSourceInputColorSpace
     expect(processor.detectColorSpaceFromExtension).not.toHaveBeenCalled();
@@ -184,7 +254,15 @@ describe('handleSourceLoaded', () => {
     (processor.getSourceInputColorSpace as ReturnType<typeof vi.fn>).mockReturnValue(null);
     (processor.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('ACEScct');
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(processor.detectColorSpaceFromExtension).toHaveBeenCalledWith('.dpx');
     expect(processor.setSourceInputColorSpace).toHaveBeenCalledWith('test.dpx', 'ACEScct');
@@ -200,7 +278,15 @@ describe('handleSourceLoaded', () => {
       },
     });
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
@@ -216,7 +302,15 @@ describe('handleSourceLoaded', () => {
       },
     });
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
   });
@@ -231,7 +325,15 @@ describe('handleSourceLoaded', () => {
       },
     });
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
   });
@@ -247,7 +349,15 @@ describe('handleSourceLoaded', () => {
     });
 
     // First load: HDR on SDR display -> auto ACES + gamma 2.2
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
 
@@ -258,7 +368,15 @@ describe('handleSourceLoaded', () => {
       height: 100,
       fileSourceNode: { isHDR: () => false },
     };
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenLastCalledWith({ enabled: false, operator: 'off' });
     expect(context.getColorControls().setAdjustments).toHaveBeenLastCalledWith({ gamma: 1 });
@@ -275,7 +393,15 @@ describe('handleSourceLoaded', () => {
     });
 
     // Auto HDR config first
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     // User overrides after auto config
     context.getToneMappingControl().setState({ enabled: true, operator: 'filmic' });
@@ -291,50 +417,110 @@ describe('handleSourceLoaded', () => {
       height: 100,
       fileSourceNode: { isHDR: () => false },
     };
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
-    expect((context.getToneMappingControl().setState as ReturnType<typeof vi.fn>).mock.calls.length).toBe(tmCallsBefore);
-    expect((context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mock.calls.length).toBe(gammaCallsBefore);
+    expect((context.getToneMappingControl().setState as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      tmCallsBefore,
+    );
+    expect((context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      gammaCallsBefore,
+    );
   });
 
   it('SLH-U010: clears GTO store when session has no GTO data', () => {
     const context = createMockContext({ gtoData: null });
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getPersistenceManager().setGTOStore).toHaveBeenCalledWith(null);
   });
 
   it('SLH-U011: does not clear GTO store when session has GTO data', () => {
     const context = createMockContext({ gtoData: { some: 'data' } });
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getPersistenceManager().setGTOStore).not.toHaveBeenCalled();
   });
 
   it('SLH-U012: calls updateStackControlSources', () => {
     const context = createMockContext();
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(updateStackCtrl).toHaveBeenCalled();
   });
 
   it('SLH-U013: initializes prerender buffer', () => {
     const context = createMockContext();
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getViewer().initPrerenderBuffer).toHaveBeenCalled();
   });
 
   it('SLH-U014: calls updateEXRLayers', () => {
     const context = createMockContext();
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(updateEXR).toHaveBeenCalled();
   });
 
   it('SLH-U015: updates scopes after double requestAnimationFrame', () => {
     const context = createMockContext();
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(updateHistogram).not.toHaveBeenCalled();
     expect(updateWaveform).not.toHaveBeenCalled();
@@ -360,7 +546,15 @@ describe('handleSourceLoaded', () => {
     });
     // Default mock: isDisplayHDRCapable returns false (SDR display)
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     // SDR display: tone mapping enabled to compress HDR for display
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
@@ -379,7 +573,15 @@ describe('handleSourceLoaded', () => {
       },
     });
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
     // No tone mapping for SDR content
@@ -398,7 +600,15 @@ describe('handleSourceLoaded', () => {
     // Simulate HDR display
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     // HDR file on HDR display: tone mapping enabled to compress linear float range
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
@@ -419,7 +629,15 @@ describe('handleSourceLoaded', () => {
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
@@ -438,7 +656,15 @@ describe('handleSourceLoaded', () => {
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
     (context.getViewer() as any).getGLRenderer = vi.fn(() => mockGlRenderer);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     const headroom = (context.getHistogram().setHDRMode as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(headroom).toBe(8.0);
@@ -455,7 +681,15 @@ describe('handleSourceLoaded', () => {
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
@@ -473,7 +707,15 @@ describe('handleSourceLoaded', () => {
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
@@ -494,7 +736,15 @@ describe('handleSourceLoaded', () => {
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
@@ -512,7 +762,15 @@ describe('handleSourceLoaded', () => {
       },
     });
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(spy).toHaveBeenCalledWith(false);
     expect(autoFitSpy).toHaveBeenCalledWith(false);
@@ -533,7 +791,15 @@ describe('handleSourceLoaded', () => {
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(spy).toHaveBeenCalledWith(true, expect.any(Number));
     expect(autoFitSpy).toHaveBeenCalledWith(true);
@@ -556,7 +822,15 @@ describe('handleSourceLoaded', () => {
     });
     // Default: SDR display (isDisplayHDRCapable returns false)
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     // HDR scope mode is enabled even on SDR displays so scopes can analyze source HDR values
     expect(spy).toHaveBeenCalledWith(true, 4.0);
@@ -579,7 +853,15 @@ describe('handleSourceLoaded', () => {
     });
     (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     // setScopesHDRMode should be called (deferred creation pattern)
     expect(spy).toHaveBeenCalled();
@@ -597,7 +879,15 @@ describe('handleSourceLoaded', () => {
     });
     // Default: SDR display (isDisplayHDRCapable returns false)
 
-    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
     expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });

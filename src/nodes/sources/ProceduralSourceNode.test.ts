@@ -27,12 +27,7 @@ import {
 // Helper: read a pixel from a Float32Array (RGBA, 4 channels)
 // ---------------------------------------------------------------------------
 
-function getPixel(
-  data: Float32Array,
-  width: number,
-  x: number,
-  y: number,
-): [number, number, number, number] {
+function getPixel(data: Float32Array, width: number, x: number, y: number): [number, number, number, number] {
   const idx = (y * width + x) * 4;
   return [data[idx]!, data[idx + 1]!, data[idx + 2]!, data[idx + 3]!];
 }
@@ -164,12 +159,12 @@ describe('generateSMPTEBars', () => {
     // Each bar is 100px wide in a 700px image
     const expectedColors: [number, number, number][] = [
       [0.75, 0.75, 0.75], // White
-      [0.75, 0.75, 0.0],  // Yellow
-      [0.0, 0.75, 0.75],  // Cyan
-      [0.0, 0.75, 0.0],   // Green
-      [0.75, 0.0, 0.75],  // Magenta
-      [0.75, 0.0, 0.0],   // Red
-      [0.0, 0.0, 0.75],   // Blue
+      [0.75, 0.75, 0.0], // Yellow
+      [0.0, 0.75, 0.75], // Cyan
+      [0.0, 0.75, 0.0], // Green
+      [0.75, 0.0, 0.75], // Magenta
+      [0.75, 0.0, 0.0], // Red
+      [0.0, 0.0, 0.75], // Blue
     ];
 
     for (let bar = 0; bar < 7; bar++) {
@@ -206,14 +201,14 @@ describe('generateEBUBars', () => {
     expect(result.height).toBe(100);
 
     const expectedColors: [number, number, number][] = [
-      [1.0, 1.0, 1.0],  // White
-      [1.0, 1.0, 0.0],  // Yellow
-      [0.0, 1.0, 1.0],  // Cyan
-      [0.0, 1.0, 0.0],  // Green
-      [1.0, 0.0, 1.0],  // Magenta
-      [1.0, 0.0, 0.0],  // Red
-      [0.0, 0.0, 1.0],  // Blue
-      [0.0, 0.0, 0.0],  // Black
+      [1.0, 1.0, 1.0], // White
+      [1.0, 1.0, 0.0], // Yellow
+      [0.0, 1.0, 1.0], // Cyan
+      [0.0, 1.0, 0.0], // Green
+      [1.0, 0.0, 1.0], // Magenta
+      [1.0, 0.0, 0.0], // Red
+      [0.0, 0.0, 1.0], // Blue
+      [0.0, 0.0, 0.0], // Black
     ];
 
     for (let bar = 0; bar < 8; bar++) {
@@ -254,7 +249,13 @@ describe('generateSolid', () => {
     expect(result.height).toBe(100);
 
     // Check corners and center
-    for (const [x, y] of [[0, 0], [99, 0], [0, 99], [99, 99], [50, 50]] as const) {
+    for (const [x, y] of [
+      [0, 0],
+      [99, 0],
+      [0, 99],
+      [99, 99],
+      [50, 50],
+    ] as const) {
       const [r, g, b, a] = getPixel(result.data, result.width, x, y);
       expect(r).toBe(1.0);
       expect(g).toBe(0.0);
@@ -396,7 +397,7 @@ describe('generateColorChart', () => {
 
   it('has 24 distinct patches in 6x4 grid', () => {
     const result = generateColorChart(600, 400);
-    const patchWidth = 100;  // 600 / 6
+    const patchWidth = 100; // 600 / 6
     const patchHeight = 100; // 400 / 4
 
     const colors = new Set<string>();
@@ -669,9 +670,7 @@ describe('parseMovieProc', () => {
   });
 
   it('PROC-042: unknown pattern throws error', () => {
-    expect(() => parseMovieProc('unknown_pattern.movieproc')).toThrow(
-      'Unknown movieproc pattern: "unknown_pattern"',
-    );
+    expect(() => parseMovieProc('unknown_pattern.movieproc')).toThrow('Unknown movieproc pattern: "unknown_pattern"');
   });
 
   it('parses gradient with direction', () => {
@@ -706,9 +705,7 @@ describe('parseMovieProc', () => {
   });
 
   it('handles multiple parameters in one URL', () => {
-    const params = parseMovieProc(
-      'solid,color=0 1 0 0.5,width=100,height=200,fps=30.movieproc',
-    );
+    const params = parseMovieProc('solid,color=0 1 0 0.5,width=100,height=200,fps=30.movieproc');
     expect(params.pattern).toBe('solid');
     expect(params.color).toEqual([0, 1, 0, 0.5]);
     expect(params.width).toBe(100);
@@ -950,9 +947,7 @@ describe('ProceduralSourceNode', () => {
 
   it('loadFromMovieProc throws on unknown pattern', () => {
     const node = new ProceduralSourceNode();
-    expect(() => node.loadFromMovieProc('noise.movieproc')).toThrow(
-      'Unknown movieproc pattern: "noise"',
-    );
+    expect(() => node.loadFromMovieProc('noise.movieproc')).toThrow('Unknown movieproc pattern: "noise"');
   });
 
   it('loadFromMovieProc with alias resolves correctly', () => {

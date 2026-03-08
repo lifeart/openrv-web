@@ -20,42 +20,44 @@ import { parseHeadroomFromXMPText, readBox, findBox } from './AVIFGainmapDecoder
  * Build a minimal valid ISOBMFF HEIC buffer with gainmap aux image for testing.
  * Structure: ftyp + meta(pitm, iinf, iprp/ipco/auxC+[hvcC]+[colr], ipma, iloc) + mdat
  */
-function createTestHEICGainmapBuffer(options: {
-  brand?: string;
-  compatibleBrands?: string[];
-  includeGainmapAuxC?: boolean;
-  auxCUrn?: string;
-  includeXMP?: boolean;
-  xmpHeadroom?: number;
-  primaryDataSize?: number;
-  gainmapDataSize?: number;
-  /** If true, include a colr(nclx) box with specified transfer/primaries */
-  includeNclx?: boolean;
-  nclxTransfer?: number;
-  nclxPrimaries?: number;
-  /** If provided, include a tmap box in ipco with ISO 21496-1 structure.
-   *  Specify alternateHdrHeadroomN/D for headroom, or gainMapMaxN/D for fallback. */
-  tmapData?: {
-    channelCount?: 1 | 3;
-    gainMapMaxN?: number[];
-    gainMapMaxD?: number[];
-    alternateHdrHeadroomN?: number;
-    alternateHdrHeadroomD?: number;
-  };
-  /** @deprecated Use tmapData instead. Raw float values for legacy tmap format. */
-  tmapFloatValues?: number[];
-  /** If true, include a fake hvcC box in ipco associated with gainmap item */
-  includeHvcC?: boolean;
-  hvcCData?: number[];
-  /** If true, skip pitm box */
-  skipPitm?: boolean;
-  /** If true, skip meta box entirely (only ftyp + mdat) */
-  skipMeta?: boolean;
-  /** Include non-gainmap auxC (e.g. depth, alpha) */
-  nonGainmapAuxC?: string;
-  /** Extra items beyond primary and gainmap */
-  extraItemCount?: number;
-} = {}): ArrayBuffer {
+function createTestHEICGainmapBuffer(
+  options: {
+    brand?: string;
+    compatibleBrands?: string[];
+    includeGainmapAuxC?: boolean;
+    auxCUrn?: string;
+    includeXMP?: boolean;
+    xmpHeadroom?: number;
+    primaryDataSize?: number;
+    gainmapDataSize?: number;
+    /** If true, include a colr(nclx) box with specified transfer/primaries */
+    includeNclx?: boolean;
+    nclxTransfer?: number;
+    nclxPrimaries?: number;
+    /** If provided, include a tmap box in ipco with ISO 21496-1 structure.
+     *  Specify alternateHdrHeadroomN/D for headroom, or gainMapMaxN/D for fallback. */
+    tmapData?: {
+      channelCount?: 1 | 3;
+      gainMapMaxN?: number[];
+      gainMapMaxD?: number[];
+      alternateHdrHeadroomN?: number;
+      alternateHdrHeadroomD?: number;
+    };
+    /** @deprecated Use tmapData instead. Raw float values for legacy tmap format. */
+    tmapFloatValues?: number[];
+    /** If true, include a fake hvcC box in ipco associated with gainmap item */
+    includeHvcC?: boolean;
+    hvcCData?: number[];
+    /** If true, skip pitm box */
+    skipPitm?: boolean;
+    /** If true, skip meta box entirely (only ftyp + mdat) */
+    skipMeta?: boolean;
+    /** Include non-gainmap auxC (e.g. depth, alpha) */
+    nonGainmapAuxC?: string;
+    /** Extra items beyond primary and gainmap */
+    extraItemCount?: number;
+  } = {},
+): ArrayBuffer {
   const {
     brand = 'heic',
     compatibleBrands,
@@ -81,7 +83,7 @@ function createTestHEICGainmapBuffer(options: {
   const parts: number[] = [];
 
   function pushUint32BE(value: number): void {
-    parts.push((value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+    parts.push((value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
   }
 
   function pushString(str: string): void {
@@ -108,8 +110,8 @@ function createTestHEICGainmapBuffer(options: {
     const mdatTotalSize = 8 + primaryDataSize + gainmapDataSize;
     pushUint32BE(mdatTotalSize);
     pushString('mdat');
-    for (let i = 0; i < primaryDataSize; i++) parts.push(0xAA);
-    for (let i = 0; i < gainmapDataSize; i++) parts.push(0xBB);
+    for (let i = 0; i < primaryDataSize; i++) parts.push(0xaa);
+    for (let i = 0; i < gainmapDataSize; i++) parts.push(0xbb);
 
     return toArrayBuffer(parts);
   }
@@ -246,7 +248,8 @@ function createTestHEICGainmapBuffer(options: {
     for (let i = 0; i < cc; i++) pushU32(1);
 
     // baseHdrHeadroom N/D
-    pushU32(0); pushU32(1);
+    pushU32(0);
+    pushU32(1);
 
     // alternateHdrHeadroom N/D
     pushU32(tmapData.alternateHdrHeadroomN ?? 0);
@@ -316,7 +319,7 @@ function createTestHEICGainmapBuffer(options: {
   const ilocSize = 4 + 4 + 4 + 2 + 2 + ilocItemCount * ilocPerItem;
 
   // Build XMP data if needed
-  let xmpData: number[] = [];
+  const xmpData: number[] = [];
   if (includeXMP) {
     const xmpStr = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" xmlns:apple="http://ns.apple.com/"><rdf:Description apple:hdrgainmapheadroom="${xmpHeadroom}"/></x:xmpmeta><?xpacket end="w"?>`;
     for (let i = 0; i < xmpStr.length; i++) xmpData.push(xmpStr.charCodeAt(i));
@@ -380,8 +383,8 @@ function createTestHEICGainmapBuffer(options: {
   pushUint32BE(mdatTotalSize);
   pushString('mdat');
 
-  for (let i = 0; i < primaryDataSize; i++) parts.push(0xAA);
-  for (let i = 0; i < gainmapDataSize; i++) parts.push(0xBB);
+  for (let i = 0; i < primaryDataSize; i++) parts.push(0xaa);
+  for (let i = 0; i < gainmapDataSize; i++) parts.push(0xbb);
   parts.push(...xmpData);
 
   return toArrayBuffer(parts);
@@ -389,11 +392,11 @@ function createTestHEICGainmapBuffer(options: {
 
 // Utility helpers
 function uint32BE(value: number): number[] {
-  return [(value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF];
+  return [(value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
 function uint16BE(value: number): number[] {
-  return [(value >> 8) & 0xFF, value & 0xFF];
+  return [(value >> 8) & 0xff, value & 0xff];
 }
 
 function strBytes(str: string): number[] {
@@ -407,7 +410,10 @@ function buildInfe(itemId: number, itemType: string): number[] {
   return [
     ...uint32BE(size),
     ...strBytes('infe'),
-    0x02, 0x00, 0x00, 0x00,
+    0x02,
+    0x00,
+    0x00,
+    0x00,
     ...uint16BE(itemId),
     ...uint16BE(0),
     ...strBytes(itemType),
@@ -765,21 +771,15 @@ describe('HEICGainmapDecoder', () => {
 
   describe('parseHeadroomFromXMPText (shared with AVIF)', () => {
     it('parses apple:hdrgainmapheadroom', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description apple:hdrgainmapheadroom="4.5"/>'
-      )).toBeCloseTo(4.5);
+      expect(parseHeadroomFromXMPText('<rdf:Description apple:hdrgainmapheadroom="4.5"/>')).toBeCloseTo(4.5);
     });
 
     it('parses hdrgm:GainMapMax', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description hdrgm:GainMapMax="6.0"/>'
-      )).toBeCloseTo(6.0);
+      expect(parseHeadroomFromXMPText('<rdf:Description hdrgm:GainMapMax="6.0"/>')).toBeCloseTo(6.0);
     });
 
     it('parses HDRGainMapHeadroom', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description HDRGainMapHeadroom="2.5"/>'
-      )).toBeCloseTo(2.5);
+      expect(parseHeadroomFromXMPText('<rdf:Description HDRGainMapHeadroom="2.5"/>')).toBeCloseTo(2.5);
     });
 
     it('returns null for no headroom info', () => {
@@ -787,33 +787,25 @@ describe('HEICGainmapDecoder', () => {
     });
 
     it('returns null for zero headroom', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description apple:hdrgainmapheadroom="0"/>'
-      )).toBeNull();
+      expect(parseHeadroomFromXMPText('<rdf:Description apple:hdrgainmapheadroom="0"/>')).toBeNull();
     });
 
     it('returns null for negative headroom', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description apple:hdrgainmapheadroom="-1.5"/>'
-      )).toBeNull();
+      expect(parseHeadroomFromXMPText('<rdf:Description apple:hdrgainmapheadroom="-1.5"/>')).toBeNull();
     });
 
     it('returns null for NaN headroom', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description apple:hdrgainmapheadroom="abc"/>'
-      )).toBeNull();
+      expect(parseHeadroomFromXMPText('<rdf:Description apple:hdrgainmapheadroom="abc"/>')).toBeNull();
     });
 
     it('parses integer headroom', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description apple:hdrgainmapheadroom="8"/>'
-      )).toBeCloseTo(8.0);
+      expect(parseHeadroomFromXMPText('<rdf:Description apple:hdrgainmapheadroom="8"/>')).toBeCloseTo(8.0);
     });
 
     it('apple field takes priority over hdrgm', () => {
-      expect(parseHeadroomFromXMPText(
-        '<rdf:Description apple:hdrgainmapheadroom="3.5" hdrgm:GainMapMax="7.0"/>'
-      )).toBeCloseTo(3.5);
+      expect(
+        parseHeadroomFromXMPText('<rdf:Description apple:hdrgainmapheadroom="3.5" hdrgm:GainMapMax="7.0"/>'),
+      ).toBeCloseTo(3.5);
     });
   });
 
@@ -992,7 +984,7 @@ describe('HEICGainmapDecoder', () => {
     });
 
     it('HEIC-HVCC-003: hvcC box contains correct data bytes', () => {
-      const testData = [0xDE, 0xAD, 0xBE, 0xEF];
+      const testData = [0xde, 0xad, 0xbe, 0xef];
       const buf = createTestHEICGainmapBuffer({
         includeHvcC: true,
         hvcCData: testData,
@@ -1030,9 +1022,7 @@ describe('HEICGainmapDecoder', () => {
 
       const view = new DataView(result);
       // Check ftyp box
-      const ftypType = String.fromCharCode(
-        view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-      );
+      const ftypType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
       expect(ftypType).toBe('ftyp');
     });
 
@@ -1042,9 +1032,7 @@ describe('HEICGainmapDecoder', () => {
       const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const view = new DataView(result);
 
-      const brand = String.fromCharCode(
-        view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)
-      );
+      const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
       expect(brand).toBe('heic');
     });
 
@@ -1055,9 +1043,7 @@ describe('HEICGainmapDecoder', () => {
       const view = new DataView(result);
 
       // meta box at offset 24 (ftyp is 24 bytes with compatible brands)
-      const metaType = String.fromCharCode(
-        view.getUint8(28), view.getUint8(29), view.getUint8(30), view.getUint8(31)
-      );
+      const metaType = String.fromCharCode(view.getUint8(28), view.getUint8(29), view.getUint8(30), view.getUint8(31));
       expect(metaType).toBe('meta');
     });
 
@@ -1070,8 +1056,7 @@ describe('HEICGainmapDecoder', () => {
       // Find 'infe' box
       let infePos = -1;
       for (let i = 0; i < bytes.length - 4; i++) {
-        if (bytes[i] === 0x69 && bytes[i + 1] === 0x6E &&
-            bytes[i + 2] === 0x66 && bytes[i + 3] === 0x65) {
+        if (bytes[i] === 0x69 && bytes[i + 1] === 0x6e && bytes[i + 2] === 0x66 && bytes[i + 3] === 0x65) {
           infePos = i;
           break;
         }
@@ -1081,7 +1066,10 @@ describe('HEICGainmapDecoder', () => {
       // Item type is at infePos + 4(ver+flags) + 2(item_id) + 2(protection_index) = infePos+12
       // (infePos points to 'infe' type field, then +4 for ver+flags, +2 item_id, +2 prot_idx)
       const itemType = String.fromCharCode(
-        bytes[infePos + 12]!, bytes[infePos + 13]!, bytes[infePos + 14]!, bytes[infePos + 15]!
+        bytes[infePos + 12]!,
+        bytes[infePos + 13]!,
+        bytes[infePos + 14]!,
+        bytes[infePos + 15]!,
       );
       expect(itemType).toBe('hvc1');
     });
@@ -1089,15 +1077,14 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-005: hvcC is included in ipco', () => {
       const hvcCData = new Uint8Array([0x01, 0x02, 0x03]);
       const hvcCBox = createHvcCBox(hvcCData);
-      const testData = new Uint8Array([0xAA]);
+      const testData = new Uint8Array([0xaa]);
       const result = buildStandaloneHEIC(testData, hvcCBox, 640, 480);
       const bytes = new Uint8Array(result);
 
       // Find 'hvcC' in the output
       let hvcCPos = -1;
       for (let i = 0; i < bytes.length - 4; i++) {
-        if (bytes[i] === 0x68 && bytes[i + 1] === 0x76 &&
-            bytes[i + 2] === 0x63 && bytes[i + 3] === 0x43) {
+        if (bytes[i] === 0x68 && bytes[i + 1] === 0x76 && bytes[i + 2] === 0x63 && bytes[i + 3] === 0x43) {
           hvcCPos = i;
           break;
         }
@@ -1106,7 +1093,7 @@ describe('HEICGainmapDecoder', () => {
     });
 
     it('HEIC-BUILD-006: mdat contains coded data', () => {
-      const testData = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF]);
+      const testData = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
       const hvcC = createMinimalHvcCBox();
       const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const bytes = new Uint8Array(result);
@@ -1114,8 +1101,7 @@ describe('HEICGainmapDecoder', () => {
       // Find mdat
       let mdatPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x6D && bytes[i + 5] === 0x64 &&
-            bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
+        if (bytes[i + 4] === 0x6d && bytes[i + 5] === 0x64 && bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
           mdatPos = i;
           break;
         }
@@ -1139,8 +1125,7 @@ describe('HEICGainmapDecoder', () => {
 
       let mdatPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x6D && bytes[i + 5] === 0x64 &&
-            bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
+        if (bytes[i + 4] === 0x6d && bytes[i + 5] === 0x64 && bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
           mdatPos = i;
           break;
         }
@@ -1161,10 +1146,12 @@ describe('HEICGainmapDecoder', () => {
       let ilocPos = -1;
       let mdatPos = -1;
       for (let i = 0; i < bytes.length - 8; i++) {
-        if (bytes[i + 4] === 0x69 && bytes[i + 5] === 0x6C &&
-            bytes[i + 6] === 0x6F && bytes[i + 7] === 0x63) ilocPos = i;
-        if (bytes[i + 4] === 0x6D && bytes[i + 5] === 0x64 &&
-            bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) mdatPos = i;
+        if (bytes[i + 4] === 0x69 && bytes[i + 5] === 0x6c && bytes[i + 6] === 0x6f && bytes[i + 7] === 0x63) {
+          ilocPos = i;
+        }
+        if (bytes[i + 4] === 0x6d && bytes[i + 5] === 0x64 && bytes[i + 6] === 0x61 && bytes[i + 7] === 0x74) {
+          mdatPos = i;
+        }
       }
       expect(ilocPos).toBeGreaterThan(0);
       expect(mdatPos).toBeGreaterThan(0);
@@ -1187,15 +1174,13 @@ describe('HEICGainmapDecoder', () => {
       const view = new DataView(result);
 
       expect(result.byteLength).toBeGreaterThan(0);
-      const ftypType = String.fromCharCode(
-        view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
-      );
+      const ftypType = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
       expect(ftypType).toBe('ftyp');
     });
 
     it('HEIC-BUILD-010: large coded data produces valid structure', () => {
       const testData = new Uint8Array(100000);
-      for (let i = 0; i < testData.length; i++) testData[i] = i & 0xFF;
+      for (let i = 0; i < testData.length; i++) testData[i] = i & 0xff;
       const hvcC = createMinimalHvcCBox();
       const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       expect(result.byteLength).toBeGreaterThan(100000);
@@ -1235,8 +1220,10 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-EDGE-003: isGainmapHEIC returns false for AVIF with gainmap', () => {
       // An AVIF file with auxC gainmap should NOT be detected as HEIC gainmap
       const parts: number[] = [];
-      const pushU32 = (v: number) => parts.push((v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
-      const pushStr = (s: string) => { for (let i = 0; i < s.length; i++) parts.push(s.charCodeAt(i)); };
+      const pushU32 = (v: number) => parts.push((v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
+      const pushStr = (s: string) => {
+        for (let i = 0; i < s.length; i++) parts.push(s.charCodeAt(i));
+      };
 
       // ftyp with avif brand
       pushU32(16);
@@ -1309,7 +1296,7 @@ function createHvcCBox(data: Uint8Array): Uint8Array {
 
 describe('buildStandaloneHEIC irot/imir support', () => {
   // Shared test data
-  const codedData = new Uint8Array([0xCA, 0xFE, 0xBA, 0xBE]);
+  const codedData = new Uint8Array([0xca, 0xfe, 0xba, 0xbe]);
   const hvcC = createMinimalHvcCBox();
 
   /**

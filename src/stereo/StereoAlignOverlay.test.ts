@@ -17,7 +17,7 @@ import {
 function createTestImageData(
   width: number,
   height: number,
-  fill?: (x: number, y: number) => [number, number, number, number]
+  fill?: (x: number, y: number) => [number, number, number, number],
 ): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
@@ -152,9 +152,9 @@ describe('StereoAlignOverlay', () => {
       const result = renderDifference(left, right);
 
       const pixel = getPixel(result, 0, 0);
-      expect(pixel[0]).toBe(50);  // |50-100|
+      expect(pixel[0]).toBe(50); // |50-100|
       expect(pixel[1]).toBe(150); // |200-50|
-      expect(pixel[2]).toBe(60);  // |30-90|
+      expect(pixel[2]).toBe(60); // |30-90|
     });
 
     it('SAL-U013: Result alpha is always 255', () => {
@@ -170,9 +170,7 @@ describe('StereoAlignOverlay', () => {
   describe('edges', () => {
     it('SAL-U020: Edge detection produces output', () => {
       // Create image with a sharp edge
-      const left = createTestImageData(20, 20, (x) =>
-        x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]
-      );
+      const left = createTestImageData(20, 20, (x) => (x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
       const right = createTestImageData(20, 20, () => [100, 100, 100, 255]);
       const result = renderEdgeOverlay(left, right);
 
@@ -182,9 +180,7 @@ describe('StereoAlignOverlay', () => {
 
     it('SAL-U021: Left eye edges shown in cyan', () => {
       // Strong vertical edge on left side
-      const left = createTestImageData(20, 20, (x) =>
-        x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]
-      );
+      const left = createTestImageData(20, 20, (x) => (x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
       const right = createTestImageData(20, 20, () => [100, 100, 100, 255]); // Uniform = no edges
       const result = renderEdgeOverlay(left, right);
 
@@ -202,9 +198,7 @@ describe('StereoAlignOverlay', () => {
 
     it('SAL-U022: Right eye edges shown in red', () => {
       const left = createTestImageData(20, 20, () => [100, 100, 100, 255]); // Uniform = no edges
-      const right = createTestImageData(20, 20, (x) =>
-        x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]
-      );
+      const right = createTestImageData(20, 20, (x) => (x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
       const result = renderEdgeOverlay(left, right);
 
       let foundRed = false;
@@ -220,12 +214,8 @@ describe('StereoAlignOverlay', () => {
 
     it('SAL-U023: Overlapping edges shown in white', () => {
       // Both eyes have an edge at the same position
-      const left = createTestImageData(20, 20, (x) =>
-        x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]
-      );
-      const right = createTestImageData(20, 20, (x) =>
-        x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]
-      );
+      const left = createTestImageData(20, 20, (x) => (x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
+      const right = createTestImageData(20, 20, (x) => (x < 10 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
       const result = renderEdgeOverlay(left, right);
 
       let foundWhite = false;

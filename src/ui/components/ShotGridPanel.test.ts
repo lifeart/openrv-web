@@ -60,10 +60,7 @@ describe('ShotGridPanel', () => {
 
   it('SG-PNL-002: renders version list', () => {
     panel.setConnected(true);
-    panel.setVersions([
-      makeVersion({ id: 101, code: 'v001' }),
-      makeVersion({ id: 102, code: 'v002' }),
-    ]);
+    panel.setVersions([makeVersion({ id: 101, code: 'v001' }), makeVersion({ id: 102, code: 'v002' })]);
     panel.show();
 
     const rows = document.body.querySelectorAll('[data-testid="shotgrid-version-row"]');
@@ -75,9 +72,7 @@ describe('ShotGridPanel', () => {
 
   it('SG-PNL-003: XSS prevention - version code uses textContent', () => {
     panel.setConnected(true);
-    panel.setVersions([
-      makeVersion({ code: '<img src=x onerror=alert(1)>' }),
-    ]);
+    panel.setVersions([makeVersion({ code: '<img src=x onerror=alert(1)>' })]);
     panel.show();
 
     const codeEl = document.body.querySelector('[data-testid="shotgrid-version-code"]')!;
@@ -235,11 +230,13 @@ describe('ShotGridPanel', () => {
 
   it('SG-PNL-017: shows "No media" for versions without playable URL', () => {
     panel.setConnected(true);
-    panel.setVersions([makeVersion({
-      sg_uploaded_movie: null,
-      sg_path_to_movie: '/local/path.mov',
-      sg_path_to_frames: '',
-    })]);
+    panel.setVersions([
+      makeVersion({
+        sg_uploaded_movie: null,
+        sg_path_to_movie: '/local/path.mov',
+        sg_path_to_frames: '',
+      }),
+    ]);
     panel.show();
 
     const noMedia = document.body.querySelector('[data-testid="shotgrid-no-media"]');

@@ -9,16 +9,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   PixelProbe,
-  PixelProbeState,
+  type PixelProbeState,
   DEFAULT_PIXEL_PROBE_STATE,
   calculateAreaAverage,
-  SampleSize,
-  SourceMode,
+  type SampleSize,
+  type SourceMode,
 } from './PixelProbe';
 
-
 // Helper to create test ImageData
-function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+function createTestImageData(
+  width: number,
+  height: number,
+  fill?: { r: number; g: number; b: number; a: number },
+): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   if (fill) {
     for (let i = 0; i < data.length; i += 4) {
@@ -37,7 +40,7 @@ function createImageWithPixelAt(
   height: number,
   x: number,
   y: number,
-  pixel: { r: number; g: number; b: number; a: number }
+  pixel: { r: number; g: number; b: number; a: number },
 ): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   // Fill with black
@@ -133,9 +136,7 @@ describe('PixelProbe', () => {
       pixelProbe.enable();
 
       expect(pixelProbe.isEnabled()).toBe(true);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('PROBE-011: disable turns off pixel probe', () => {
@@ -146,9 +147,7 @@ describe('PixelProbe', () => {
       pixelProbe.disable();
 
       expect(pixelProbe.isEnabled()).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('PROBE-012: toggle enables/disables', () => {
@@ -214,7 +213,7 @@ describe('PixelProbe', () => {
 
       const state = pixelProbe.getState();
       expect(state.x).toBe(99); // Clamped to width - 1
-      expect(state.y).toBe(0);  // Clamped to 0
+      expect(state.y).toBe(0); // Clamped to 0
     });
 
     it('PROBE-022: reads correct pixel from ImageData', () => {
@@ -436,9 +435,7 @@ describe('PixelProbe', () => {
 
       pixelProbe.toggleLock();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ locked: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ locked: true }));
     });
   });
 
@@ -454,9 +451,7 @@ describe('PixelProbe', () => {
 
       pixelProbe.setFormat('hex');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'hex' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ format: 'hex' }));
     });
 
     it('PROBE-062: supports all format types', () => {
@@ -505,9 +500,7 @@ describe('PixelProbe', () => {
 
       pixelProbe.setSampleSize(5);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ sampleSize: 5 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ sampleSize: 5 }));
     });
 
     it('PROBE-112: supports all sample sizes', () => {
@@ -592,9 +585,7 @@ describe('PixelProbe', () => {
 
       pixelProbe.setSourceMode('source');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ sourceMode: 'source' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ sourceMode: 'source' }));
     });
 
     it('PROBE-122: supports all source modes', () => {
@@ -1172,7 +1163,7 @@ describe('PixelProbe edge cases', () => {
         const px = 5 + dx;
         const py = 5 + dy;
         const idx = (py * 10 + px) * 4;
-        data[idx] = 200;     // r
+        data[idx] = 200; // r
         data[idx + 1] = 150; // g
         data[idx + 2] = 100; // b
       }

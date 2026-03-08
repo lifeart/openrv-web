@@ -12,12 +12,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html'],
       include: ['src/**/*.ts'],
-      exclude: [
-        'src/**/*.{test,spec}.ts',
-        'src/main.ts',
-        'src/**/*.d.ts',
-        'src/workers/*.worker.ts',
-      ],
+      exclude: ['src/**/*.{test,spec}.ts', 'src/main.ts', 'src/**/*.d.ts', 'src/workers/*.worker.ts'],
     },
     setupFiles: ['./test/setup.ts'],
   },

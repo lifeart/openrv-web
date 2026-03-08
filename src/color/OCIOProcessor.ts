@@ -5,9 +5,9 @@
  * Integrates with existing LUT infrastructure for GPU-accelerated processing.
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import {
-  OCIOState,
+  type OCIOState,
   DEFAULT_OCIO_STATE,
   getBuiltinConfig,
   getInputColorSpaces,
@@ -17,8 +17,8 @@ import {
   getLooks,
   isDefaultOCIOState,
 } from './OCIOConfig';
-import { OCIOTransform, RGB } from './OCIOTransform';
-import { LUT3D } from './LUTLoader';
+import { OCIOTransform, type RGB } from './OCIOTransform';
+import { type LUT3D } from './LUTLoader';
 import type { OCIOWasmPipeline, OCIOPipelineResult } from './wasm/OCIOWasmPipeline';
 
 /** Processing mode: 'js' uses the built-in JS transforms, 'wasm' uses the WASM OCIO pipeline */
@@ -423,7 +423,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
       this.state.display,
       this.state.view,
       this.state.look,
-      this.state.lookDirection
+      this.state.lookDirection,
     );
 
     this.lutDirty = true;
@@ -439,19 +439,14 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
    */
   detectColorSpace(metadata: MediaMetadata): string | null {
     // Check for ARRI cameras
-    if (
-      metadata.manufacturer?.toLowerCase().includes('arri') ||
-      metadata.camera?.toLowerCase().includes('alexa')
-    ) {
+    if (metadata.manufacturer?.toLowerCase().includes('arri') || metadata.camera?.toLowerCase().includes('alexa')) {
       if (metadata.gammaProfile?.toLowerCase().includes('logc4')) {
         return 'ARRI LogC4';
       }
       if (metadata.gammaProfile?.toLowerCase().includes('logc')) {
         return 'ARRI LogC3 (EI 800)';
       }
-      if (
-        metadata.transferCharacteristics?.toLowerCase().includes('log')
-      ) {
+      if (metadata.transferCharacteristics?.toLowerCase().includes('log')) {
         return 'ARRI LogC3 (EI 800)';
       }
     }
@@ -517,11 +512,18 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
    * Matches chromaticity values against known color space primaries
    * with a tolerance to account for floating point precision.
    */
-  private detectColorSpaceFromChromaticities(chromaticities: NonNullable<MediaMetadata['chromaticities']>): string | null {
+  private detectColorSpaceFromChromaticities(
+    chromaticities: NonNullable<MediaMetadata['chromaticities']>,
+  ): string | null {
     const { redX, redY, greenX, greenY, blueX, blueY } = chromaticities;
-    if (redX === undefined || redY === undefined ||
-        greenX === undefined || greenY === undefined ||
-        blueX === undefined || blueY === undefined) {
+    if (
+      redX === undefined ||
+      redY === undefined ||
+      greenX === undefined ||
+      greenY === undefined ||
+      blueX === undefined ||
+      blueY === undefined
+    ) {
       return null;
     }
 
@@ -529,37 +531,62 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     const match = (a: number, b: number) => Math.abs(a - b) < tolerance;
 
     // sRGB / BT.709 primaries
-    if (match(redX, 0.64) && match(redY, 0.33) &&
-        match(greenX, 0.30) && match(greenY, 0.60) &&
-        match(blueX, 0.15) && match(blueY, 0.06)) {
+    if (
+      match(redX, 0.64) &&
+      match(redY, 0.33) &&
+      match(greenX, 0.3) &&
+      match(greenY, 0.6) &&
+      match(blueX, 0.15) &&
+      match(blueY, 0.06)
+    ) {
       return 'Linear sRGB';
     }
 
     // ACES AP0 (ACES2065-1)
-    if (match(redX, 0.7347) && match(redY, 0.2653) &&
-        match(greenX, 0.0) && match(greenY, 1.0) &&
-        match(blueX, 0.0001) && match(blueY, -0.077)) {
+    if (
+      match(redX, 0.7347) &&
+      match(redY, 0.2653) &&
+      match(greenX, 0.0) &&
+      match(greenY, 1.0) &&
+      match(blueX, 0.0001) &&
+      match(blueY, -0.077)
+    ) {
       return 'ACES2065-1';
     }
 
     // ACES AP1 (ACEScg)
-    if (match(redX, 0.713) && match(redY, 0.293) &&
-        match(greenX, 0.165) && match(greenY, 0.83) &&
-        match(blueX, 0.128) && match(blueY, 0.044)) {
+    if (
+      match(redX, 0.713) &&
+      match(redY, 0.293) &&
+      match(greenX, 0.165) &&
+      match(greenY, 0.83) &&
+      match(blueX, 0.128) &&
+      match(blueY, 0.044)
+    ) {
       return 'ACEScg';
     }
 
     // DCI-P3
-    if (match(redX, 0.68) && match(redY, 0.32) &&
-        match(greenX, 0.265) && match(greenY, 0.69) &&
-        match(blueX, 0.15) && match(blueY, 0.06)) {
+    if (
+      match(redX, 0.68) &&
+      match(redY, 0.32) &&
+      match(greenX, 0.265) &&
+      match(greenY, 0.69) &&
+      match(blueX, 0.15) &&
+      match(blueY, 0.06)
+    ) {
       return 'DCI-P3';
     }
 
     // Rec.2020
-    if (match(redX, 0.708) && match(redY, 0.292) &&
-        match(greenX, 0.170) && match(greenY, 0.797) &&
-        match(blueX, 0.131) && match(blueY, 0.046)) {
+    if (
+      match(redX, 0.708) &&
+      match(redY, 0.292) &&
+      match(greenX, 0.17) &&
+      match(greenY, 0.797) &&
+      match(blueX, 0.131) &&
+      match(blueY, 0.046)
+    ) {
       return 'Rec.2020';
     }
 

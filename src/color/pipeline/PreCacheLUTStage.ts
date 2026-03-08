@@ -61,11 +61,7 @@ export class PreCacheLUTStage extends LUTStage {
     const outMatrix = this.getOutMatrix();
 
     // Create a copy so we don't modify the original
-    const output = new ImageData(
-      new Uint8ClampedArray(imageData.data),
-      imageData.width,
-      imageData.height
-    );
+    const output = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
 
     if (intensity >= 1.0) {
       // Full intensity - apply directly with matrices
@@ -74,11 +70,7 @@ export class PreCacheLUTStage extends LUTStage {
       if (outMatrix) applyMatrixToImageData(output, outMatrix);
     } else if (intensity > 0) {
       // Partial intensity - blend original with LUT result
-      const lutResult = new ImageData(
-        new Uint8ClampedArray(imageData.data),
-        imageData.width,
-        imageData.height
-      );
+      const lutResult = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
       if (inMatrix) applyMatrixToImageData(lutResult, inMatrix);
       applyLUTToImageData(lutResult, lut);
       if (outMatrix) applyMatrixToImageData(lutResult, outMatrix);

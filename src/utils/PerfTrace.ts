@@ -95,16 +95,12 @@ class PerfTraceImpl {
 
     for (const [name, s] of this.stages) {
       const avg = s.total / s.count;
-      lines.push(
-        `  ${name.padEnd(24)} ${avg.toFixed(1)}ms avg (${s.min.toFixed(1)}–${s.max.toFixed(1)}) ×${s.count}`
-      );
+      lines.push(`  ${name.padEnd(24)} ${avg.toFixed(1)}ms avg (${s.min.toFixed(1)}–${s.max.toFixed(1)}) ×${s.count}`);
     }
 
     for (const [name, value] of this.counts) {
       const avg = value / this.frameCount;
-      lines.push(
-        `  ${name.padEnd(24)} ${avg.toFixed(1)} avg (total: ${value})`
-      );
+      lines.push(`  ${name.padEnd(24)} ${avg.toFixed(1)} avg (total: ${value})`);
     }
 
     console.log(lines.join('\n'));

@@ -3,7 +3,7 @@
  * Export multiple frames as individual image files
  */
 
-import { ExportFormat } from './FrameExporter';
+import { type ExportFormat } from './FrameExporter';
 
 export interface SequenceExportOptions {
   format: ExportFormat;
@@ -11,8 +11,8 @@ export interface SequenceExportOptions {
   startFrame: number;
   endFrame: number;
   includeAnnotations: boolean;
-  filenamePattern: string;  // e.g., "frame_####" where # is replaced with frame number
-  padLength: number;        // Number of digits for frame padding (default 4)
+  filenamePattern: string; // e.g., "frame_####" where # is replaced with frame number
+  padLength: number; // Number of digits for frame padding (default 4)
 }
 
 export interface SequenceExportProgress {
@@ -28,12 +28,7 @@ export type RenderFrameCallback = (frame: number) => Promise<HTMLCanvasElement>;
 /**
  * Generate filename for a specific frame
  */
-export function generateFilename(
-  pattern: string,
-  frame: number,
-  padLength: number,
-  format: ExportFormat
-): string {
+export function generateFilename(pattern: string, frame: number, padLength: number, format: ExportFormat): string {
   const paddedFrame = String(frame).padStart(padLength, '0');
 
   // Replace # characters with frame number
@@ -50,21 +45,14 @@ export function generateFilename(
 /**
  * Export a single frame to a downloadable file
  */
-function downloadCanvas(
-  canvas: HTMLCanvasElement,
-  filename: string,
-  format: ExportFormat,
-  quality: number
-): void {
+function downloadCanvas(canvas: HTMLCanvasElement, filename: string, format: ExportFormat, quality: number): void {
   const mimeTypes: Record<ExportFormat, string> = {
     png: 'image/png',
     jpeg: 'image/jpeg',
     webp: 'image/webp',
   };
 
-  const dataUrl = format === 'png'
-    ? canvas.toDataURL(mimeTypes[format])
-    : canvas.toDataURL(mimeTypes[format], quality);
+  const dataUrl = format === 'png' ? canvas.toDataURL(mimeTypes[format]) : canvas.toDataURL(mimeTypes[format], quality);
 
   const link = document.createElement('a');
   link.href = dataUrl;
@@ -83,7 +71,7 @@ export async function exportSequence(
   options: SequenceExportOptions,
   renderFrame: RenderFrameCallback,
   onProgress?: ProgressCallback,
-  cancellationToken?: { cancelled: boolean }
+  cancellationToken?: { cancelled: boolean },
 ): Promise<{ success: boolean; exportedFrames: number; error?: string }> {
   const { format, quality, startFrame, endFrame, filenamePattern, padLength } = options;
   const totalFrames = endFrame - startFrame + 1;
@@ -122,8 +110,7 @@ export async function exportSequence(
       }
 
       // Small delay to prevent browser from being overwhelmed
-      await new Promise(resolve => setTimeout(resolve, 100));
-
+      await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (err) {
       console.error(`Failed to export frame ${frame}:`, err);
       return {
@@ -148,7 +135,7 @@ export async function exportSequenceAsZip(
   options: SequenceExportOptions,
   renderFrame: RenderFrameCallback,
   onProgress?: ProgressCallback,
-  cancellationToken?: { cancelled: boolean }
+  cancellationToken?: { cancelled: boolean },
 ): Promise<{ success: boolean; exportedFrames: number; error?: string }> {
   // Check if JSZip is available
   const JSZip = (window as unknown as { JSZip?: unknown }).JSZip;
@@ -165,17 +152,12 @@ export async function exportSequenceAsZip(
 /**
  * Calculate estimated export size
  */
-export function estimateExportSize(
-  width: number,
-  height: number,
-  frameCount: number,
-  format: ExportFormat
-): string {
+export function estimateExportSize(width: number, height: number, frameCount: number, format: ExportFormat): string {
   // Rough estimates based on format
   const bytesPerPixel: Record<ExportFormat, number> = {
-    png: 3,      // PNG with compression
-    jpeg: 0.5,   // JPEG compressed
-    webp: 0.4,   // WebP compressed
+    png: 3, // PNG with compression
+    jpeg: 0.5, // JPEG compressed
+    webp: 0.4, // WebP compressed
   };
 
   const pixelCount = width * height;

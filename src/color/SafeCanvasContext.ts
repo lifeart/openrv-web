@@ -30,7 +30,9 @@ export function safeCanvasContext2D(
       // rec2100-hlg is not in PredefinedColorSpace yet; cast needed for HDR color spaces
       const ctx = canvas.getContext('2d', { ...baseOptions, colorSpace } as CanvasRenderingContext2DSettings);
       if (ctx) return ctx;
-    } catch { /* fall through to sRGB fallback */ }
+    } catch {
+      /* fall through to sRGB fallback */
+    }
   }
   const ctx = canvas.getContext('2d', baseOptions);
   if (!ctx) throw new Error('Failed to create 2D canvas context');
@@ -64,7 +66,9 @@ export function createViewerCanvas(
         pixelFormat: 'float16',
       } as unknown as CanvasRenderingContext2DSettings);
       if (ctx) return { canvas, ctx };
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   // Try P3 (if supported)
@@ -75,7 +79,9 @@ export function createViewerCanvas(
         colorSpace: 'display-p3',
       });
       if (ctx) return { canvas, ctx };
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   // Final fallback: standard sRGB

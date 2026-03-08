@@ -25,10 +25,7 @@ import { RegisterNode } from '../base/NodeFactory';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import type { BlendMode } from '../../composite/BlendModes';
-import {
-  compositeImageData,
-  stackCompositeToBlendMode,
-} from '../../composite/BlendModes';
+import { compositeImageData, stackCompositeToBlendMode } from '../../composite/BlendModes';
 import type { StencilBox } from '../../core/types/wipe';
 import { DEFAULT_STENCIL_BOX } from '../../core/types/wipe';
 
@@ -60,15 +57,15 @@ export interface LayerCompositeSettings {
  * The 'layer' type is deprecated: OpenRV StackIPNode converts 'layer' to 'topmost' on init.
  */
 export type StackCompositeType =
-  | 'replace'       // Top replaces bottom (OpenRV: IPImage::Replace)
-  | 'over'          // Porter-Duff over (OpenRV: premultiplied alpha)
-  | 'add'           // Additive (OpenRV: IPImage::Add)
-  | 'difference'    // Absolute difference (OpenRV: IPImage::Difference)
-  | '-difference'   // Reverse difference (OpenRV: IPImage::ReverseDifference)
-  | 'dissolve'      // Cross-dissolve (OpenRV: per-pixel noise, InlineDissolve2.glsl)
-  | 'minus'         // Subtractive (web extension, maps to ReverseDifference behavior)
-  | 'topmost'       // Show topmost non-transparent (OpenRV: Replace + topmostOnly)
-  | string;         // Allow custom types
+  | 'replace' // Top replaces bottom (OpenRV: IPImage::Replace)
+  | 'over' // Porter-Duff over (OpenRV: premultiplied alpha)
+  | 'add' // Additive (OpenRV: IPImage::Add)
+  | 'difference' // Absolute difference (OpenRV: IPImage::Difference)
+  | '-difference' // Reverse difference (OpenRV: IPImage::ReverseDifference)
+  | 'dissolve' // Cross-dissolve (OpenRV: per-pixel noise, InlineDissolve2.glsl)
+  | 'minus' // Subtractive (web extension, maps to ReverseDifference behavior)
+  | 'topmost' // Show topmost non-transparent (OpenRV: Replace + topmostOnly)
+  | string; // Allow custom types
 
 @RegisterNode('RVStackGroup')
 export class StackGroupNode extends BaseGroupNode {
@@ -164,7 +161,10 @@ export class StackGroupNode extends BaseGroupNode {
    * Set opacities for all layers from an array
    */
   setLayerOpacities(opacities: number[]): void {
-    this.properties.setValue('layerOpacities', opacities.map(o => Math.max(0, Math.min(1, o))));
+    this.properties.setValue(
+      'layerOpacities',
+      opacities.map((o) => Math.max(0, Math.min(1, o))),
+    );
     this.markDirty();
   }
 
@@ -283,9 +283,7 @@ export class StackGroupNode extends BaseGroupNode {
       const layerData = StackGroupNode.ipImageToImageData(entry.image, width, height);
 
       // Use per-layer blend mode if set, otherwise fall back to global
-      const blendMode: BlendMode = layerSettings.blendMode !== 'normal'
-        ? layerSettings.blendMode
-        : globalBlendMode;
+      const blendMode: BlendMode = layerSettings.blendMode !== 'normal' ? layerSettings.blendMode : globalBlendMode;
 
       result = compositeImageData(result, layerData, blendMode, layerSettings.opacity);
     }

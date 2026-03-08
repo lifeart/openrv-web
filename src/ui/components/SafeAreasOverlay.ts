@@ -28,15 +28,7 @@ export interface SafeAreasState {
   guideOpacity: number;
 }
 
-export type AspectRatioGuide =
-  | '16:9'
-  | '4:3'
-  | '1:1'
-  | '2.39:1'
-  | '2.35:1'
-  | '1.85:1'
-  | '9:16'
-  | 'custom';
+export type AspectRatioGuide = '16:9' | '4:3' | '1:1' | '2.39:1' | '2.35:1' | '1.85:1' | '9:16' | 'custom';
 
 export interface AspectRatioDefinition {
   label: string;
@@ -212,12 +204,7 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   /**
    * Draw a safe area rectangle
    */
-  private drawSafeArea(
-    percentage: number,
-    color: string,
-    alpha: number,
-    type: 'title' | 'action'
-  ): void {
+  private drawSafeArea(percentage: number, color: string, alpha: number, type: 'title' | 'action'): void {
     const { ctx } = this;
     const { offsetX, offsetY, displayWidth, displayHeight } = this;
 
@@ -255,9 +242,7 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
 
     const targetRatio =
-      this.state.aspectRatio === 'custom'
-        ? this.customAspectRatio
-        : ASPECT_RATIOS[this.state.aspectRatio!].ratio;
+      this.state.aspectRatio === 'custom' ? this.customAspectRatio : ASPECT_RATIOS[this.state.aspectRatio!].ratio;
 
     const currentRatio = displayWidth / displayHeight;
 

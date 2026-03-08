@@ -34,12 +34,15 @@ export interface MagnifierSession {
   readonly currentSource: {
     readonly duration?: number;
   } | null;
-  readonly marks: ReadonlyMap<number, {
-    frame: number;
-    color?: string;
-    endFrame?: number;
-    note?: string;
-  }>;
+  readonly marks: ReadonlyMap<
+    number,
+    {
+      frame: number;
+      color?: string;
+      endFrame?: number;
+      note?: string;
+    }
+  >;
   goToFrame(frame: number): void;
   setInPoint(frame?: number): void;
   setOutPoint(frame?: number): void;
@@ -176,13 +179,23 @@ export class TimelineMagnifier {
 
   // ── Getters for state (useful for testing) ──
 
-  get centerFrame(): number { return this._centerFrame; }
-  get visibleFrames(): number { return this._visibleFrames; }
-  get followPlayhead(): boolean { return this._followPlayhead; }
-  get isVisible(): boolean { return this._isVisible; }
+  get centerFrame(): number {
+    return this._centerFrame;
+  }
+  get visibleFrames(): number {
+    return this._visibleFrames;
+  }
+  get followPlayhead(): boolean {
+    return this._followPlayhead;
+  }
+  get isVisible(): boolean {
+    return this._isVisible;
+  }
 
   /** The height delta this component adds to the bottom panel. */
-  get heightDelta(): number { return MAGNIFIER_HEIGHT_DELTA; }
+  get heightDelta(): number {
+    return MAGNIFIER_HEIGHT_DELTA;
+  }
 
   // ── Colors ──
 
@@ -257,19 +270,17 @@ export class TimelineMagnifier {
     inLabel.style.cssText = 'color: var(--text-muted); font-size: 10px;';
     toolbar.appendChild(inLabel);
 
-    this.inNudgeLeftBtn = createIconButton(
-      getIconSvg('chevron-left', 'sm'),
-      () => this.nudgeInPoint(-1),
-      { size: 'xs', title: 'Nudge in point left' },
-    );
+    this.inNudgeLeftBtn = createIconButton(getIconSvg('chevron-left', 'sm'), () => this.nudgeInPoint(-1), {
+      size: 'xs',
+      title: 'Nudge in point left',
+    });
     this.inNudgeLeftBtn.dataset.testid = 'magnifier-in-nudge-left';
     toolbar.appendChild(this.inNudgeLeftBtn);
 
-    this.inNudgeRightBtn = createIconButton(
-      getIconSvg('chevron-right', 'sm'),
-      () => this.nudgeInPoint(1),
-      { size: 'xs', title: 'Nudge in point right' },
-    );
+    this.inNudgeRightBtn = createIconButton(getIconSvg('chevron-right', 'sm'), () => this.nudgeInPoint(1), {
+      size: 'xs',
+      title: 'Nudge in point right',
+    });
     this.inNudgeRightBtn.dataset.testid = 'magnifier-in-nudge-right';
     toolbar.appendChild(this.inNudgeRightBtn);
 
@@ -279,38 +290,34 @@ export class TimelineMagnifier {
     outLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; margin-left: 4px;';
     toolbar.appendChild(outLabel);
 
-    this.outNudgeLeftBtn = createIconButton(
-      getIconSvg('chevron-left', 'sm'),
-      () => this.nudgeOutPoint(-1),
-      { size: 'xs', title: 'Nudge out point left' },
-    );
+    this.outNudgeLeftBtn = createIconButton(getIconSvg('chevron-left', 'sm'), () => this.nudgeOutPoint(-1), {
+      size: 'xs',
+      title: 'Nudge out point left',
+    });
     this.outNudgeLeftBtn.dataset.testid = 'magnifier-out-nudge-left';
     toolbar.appendChild(this.outNudgeLeftBtn);
 
-    this.outNudgeRightBtn = createIconButton(
-      getIconSvg('chevron-right', 'sm'),
-      () => this.nudgeOutPoint(1),
-      { size: 'xs', title: 'Nudge out point right' },
-    );
+    this.outNudgeRightBtn = createIconButton(getIconSvg('chevron-right', 'sm'), () => this.nudgeOutPoint(1), {
+      size: 'xs',
+      title: 'Nudge out point right',
+    });
     this.outNudgeRightBtn.dataset.testid = 'magnifier-out-nudge-right';
     toolbar.appendChild(this.outNudgeRightBtn);
 
     // Follow toggle button
-    this.followBtn = createIconButton(
-      getIconSvg('crosshair', 'sm'),
-      () => this.toggleFollow(),
-      { size: 'xs', title: 'Toggle follow playhead' },
-    );
+    this.followBtn = createIconButton(getIconSvg('crosshair', 'sm'), () => this.toggleFollow(), {
+      size: 'xs',
+      title: 'Toggle follow playhead',
+    });
     this.followBtn.dataset.testid = 'magnifier-follow-btn';
     this.followBtn.style.marginLeft = '4px';
     toolbar.appendChild(this.followBtn);
 
     // Close button
-    this.closeBtn = createIconButton(
-      getIconSvg('x', 'sm'),
-      () => this.hide(),
-      { size: 'xs', title: 'Close magnifier' },
-    );
+    this.closeBtn = createIconButton(getIconSvg('x', 'sm'), () => this.hide(), {
+      size: 'xs',
+      title: 'Close magnifier',
+    });
     this.closeBtn.dataset.testid = 'magnifier-close-btn';
     toolbar.appendChild(this.closeBtn);
 
@@ -418,33 +425,43 @@ export class TimelineMagnifier {
     this.zoomSlider.addEventListener('input', this.onZoomSliderInput);
 
     // Session events
-    this.subs.add(this.session.on('frameChanged', () => {
-      if (this._followPlayhead) {
-        this._centerFrame = this.session.currentFrame;
-      }
-      this.scheduleDraw();
-    }));
-    this.subs.add(this.session.on('inOutChanged', () => {
-      this.updateNudgeButtons();
-      this.scheduleDraw();
-    }));
-    this.subs.add(this.session.on('durationChanged', () => {
-      this.clampState();
-      this.updateZoomSlider();
-      this.scheduleDraw();
-    }));
-    this.subs.add(this.session.on('sourceLoaded', () => {
-      this.resetState();
-      this.scheduleDraw();
-    }));
+    this.subs.add(
+      this.session.on('frameChanged', () => {
+        if (this._followPlayhead) {
+          this._centerFrame = this.session.currentFrame;
+        }
+        this.scheduleDraw();
+      }),
+    );
+    this.subs.add(
+      this.session.on('inOutChanged', () => {
+        this.updateNudgeButtons();
+        this.scheduleDraw();
+      }),
+    );
+    this.subs.add(
+      this.session.on('durationChanged', () => {
+        this.clampState();
+        this.updateZoomSlider();
+        this.scheduleDraw();
+      }),
+    );
+    this.subs.add(
+      this.session.on('sourceLoaded', () => {
+        this.resetState();
+        this.scheduleDraw();
+      }),
+    );
     this.subs.add(this.session.on('marksChanged', () => this.scheduleDraw()));
     this.subs.add(this.session.on('playbackChanged', () => this.scheduleDraw()));
 
     // Theme
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      this.cachedColors = null;
-      this.scheduleDraw();
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        this.cachedColors = null;
+        this.scheduleDraw();
+      }),
+    );
 
     // Paint engine
     this.subscribeToPaintEngine();
@@ -533,9 +550,7 @@ export class TimelineMagnifier {
     const frameAtMouse = startFrame + ((mouseX - PADDING) / trackWidth) * this._visibleFrames;
 
     // Adjust visible frames
-    const newVisibleFrames = Math.round(
-      Math.max(MIN_VISIBLE_FRAMES, Math.min(maxFrames, this._visibleFrames * delta))
-    );
+    const newVisibleFrames = Math.round(Math.max(MIN_VISIBLE_FRAMES, Math.min(maxFrames, this._visibleFrames * delta)));
     if (newVisibleFrames === this._visibleFrames) return;
 
     // Recalculate center so frame under cursor stays fixed

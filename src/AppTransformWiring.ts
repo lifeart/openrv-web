@@ -31,53 +31,62 @@ export function wireTransformControls(ctx: AppWiringContext): StatefulWiringResu
     transformHistoryPrevious: null,
   };
 
-  subs.add(controls.transformControl.on('transformChanged', (transform) => {
-    const previousTransform = state.transformHistoryPrevious ?? DEFAULT_TRANSFORM;
-    const currentTransform = { ...transform };
+  subs.add(
+    controls.transformControl.on('transformChanged', (transform) => {
+      const previousTransform = state.transformHistoryPrevious ?? DEFAULT_TRANSFORM;
+      const currentTransform = { ...transform };
 
-    viewer.setTransform(transform);
-    persistenceManager.syncGTOStore();
+      viewer.setTransform(transform);
+      persistenceManager.syncGTOStore();
 
-    // Record history for transform changes (discrete actions, no debounce needed)
-    const changes: string[] = [];
-    if (previousTransform.rotation !== currentTransform.rotation) {
-      changes.push(`rotation to ${currentTransform.rotation}\u00B0`);
-    }
-    if (previousTransform.flipH !== currentTransform.flipH) {
-      changes.push(currentTransform.flipH ? 'flip horizontal' : 'unflip horizontal');
-    }
-    if (previousTransform.flipV !== currentTransform.flipV) {
-      changes.push(currentTransform.flipV ? 'flip vertical' : 'unflip vertical');
-    }
-    if (previousTransform.scale.x !== currentTransform.scale.x || previousTransform.scale.y !== currentTransform.scale.y) {
-      changes.push(`scale to ${currentTransform.scale.x.toFixed(2)}x${currentTransform.scale.y.toFixed(2)}`);
-    }
-    if (previousTransform.translate.x !== currentTransform.translate.x || previousTransform.translate.y !== currentTransform.translate.y) {
-      changes.push(`translate to (${currentTransform.translate.x.toFixed(1)}, ${currentTransform.translate.y.toFixed(1)})`);
-    }
+      // Record history for transform changes (discrete actions, no debounce needed)
+      const changes: string[] = [];
+      if (previousTransform.rotation !== currentTransform.rotation) {
+        changes.push(`rotation to ${currentTransform.rotation}\u00B0`);
+      }
+      if (previousTransform.flipH !== currentTransform.flipH) {
+        changes.push(currentTransform.flipH ? 'flip horizontal' : 'unflip horizontal');
+      }
+      if (previousTransform.flipV !== currentTransform.flipV) {
+        changes.push(currentTransform.flipV ? 'flip vertical' : 'unflip vertical');
+      }
+      if (
+        previousTransform.scale.x !== currentTransform.scale.x ||
+        previousTransform.scale.y !== currentTransform.scale.y
+      ) {
+        changes.push(`scale to ${currentTransform.scale.x.toFixed(2)}x${currentTransform.scale.y.toFixed(2)}`);
+      }
+      if (
+        previousTransform.translate.x !== currentTransform.translate.x ||
+        previousTransform.translate.y !== currentTransform.translate.y
+      ) {
+        changes.push(
+          `translate to (${currentTransform.translate.x.toFixed(1)}, ${currentTransform.translate.y.toFixed(1)})`,
+        );
+      }
 
-    if (changes.length > 0) {
-      const description = changes.length === 1
-        ? changes[0]!.charAt(0).toUpperCase() + changes[0]!.slice(1)
-        : 'Transform image';
+      if (changes.length > 0) {
+        const description =
+          changes.length === 1 ? changes[0]!.charAt(0).toUpperCase() + changes[0]!.slice(1) : 'Transform image';
 
-      const historyManager = getGlobalHistoryManager();
-      historyManager.recordAction(
-        description,
-        'transform',
-        () => {
-          controls.transformControl.setTransform(previousTransform);
-          viewer.setTransform(previousTransform);
-        },
-        () => {
-          controls.transformControl.setTransform(currentTransform);
-          viewer.setTransform(currentTransform);
-        }
-      );
-    }
+        const historyManager = getGlobalHistoryManager();
+        historyManager.recordAction(
+          description,
+          'transform',
+          () => {
+            controls.transformControl.setTransform(previousTransform);
+            viewer.setTransform(previousTransform);
+          },
+          () => {
+            controls.transformControl.setTransform(currentTransform);
+            viewer.setTransform(currentTransform);
+          },
+        );
+      }
 
-    state.transformHistoryPrevious = currentTransform;
-  }));
+      state.transformHistoryPrevious = currentTransform;
+    }),
+  );
 
   return { subscriptions: subs, state };
 }

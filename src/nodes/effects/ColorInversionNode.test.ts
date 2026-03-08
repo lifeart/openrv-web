@@ -16,12 +16,7 @@ class TestSourceNode extends IPNode {
   }
 }
 
-function createTestImage(
-  width = 4,
-  height = 4,
-  channels = 4,
-  dataType: 'uint8' | 'float32' = 'uint8',
-): IPImage {
+function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {
   const image = IPImage.createEmpty(width, height, channels, dataType);
   const data = image.getTypedArray();
   for (let i = 0; i < data.length; i++) {
@@ -143,7 +138,7 @@ describe('ColorInversionNode', () => {
     // Also verify the inversion formula directly for RGB channels
     const srcData = source.getTypedArray();
     for (let i = 0; i < srcData.length; i += 4) {
-      expect(resultData[i]).toBe(255 - srcData[i]!);     // R
+      expect(resultData[i]).toBe(255 - srcData[i]!); // R
       expect(resultData[i + 1]).toBe(255 - srcData[i + 1]!); // G
       expect(resultData[i + 2]).toBe(255 - srcData[i + 2]!); // B
     }

@@ -143,7 +143,7 @@ interface CanvasRenderingContext2DSettings {
  * Used when creating HDR float16 canvases for VideoFrame resize.
  */
 interface HDRCanvasContextSettings {
-  colorSpace?: string;  // 'srgb' | 'display-p3' | 'rec2100-hlg' | 'rec2100-pq'
+  colorSpace?: string; // 'srgb' | 'display-p3' | 'rec2100-hlg' | 'rec2100-pq'
   colorType?: 'unorm8' | 'float16';
   pixelFormat?: 'uint8' | 'float16';
   willReadFrequently?: boolean;

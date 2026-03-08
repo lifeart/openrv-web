@@ -9,7 +9,7 @@
  * up pointer/wheel event handlers that mutate the transform state.
  */
 
-import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
+import { type Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { interpolateZoom } from './ViewerInteraction';
 import type { ManagerBase } from '../../core/ManagerBase';
 
@@ -289,12 +289,7 @@ export class TransformManager implements ManagerBase {
    * @param targetPanX - Target pan X position (default: current panX)
    * @param targetPanY - Target pan Y position (default: current panY)
    */
-  smoothZoomTo(
-    targetZoom: number,
-    duration: number = 200,
-    targetPanX?: number,
-    targetPanY?: number
-  ): void {
+  smoothZoomTo(targetZoom: number, duration: number = 200, targetPanX?: number, targetPanY?: number): void {
     // Cancel any in-progress zoom animation
     this.cancelZoomAnimation();
 
@@ -340,21 +335,9 @@ export class TransformManager implements ManagerBase {
       const elapsed = now - this._zoomAnimationStartTime;
       const progress = Math.min(1, elapsed / this._zoomAnimationDuration);
 
-      this._zoom = interpolateZoom(
-        this._zoomAnimationStartZoom,
-        this._zoomAnimationTargetZoom,
-        progress
-      );
-      this._panX = interpolateZoom(
-        this._zoomAnimationStartPanX,
-        this._zoomAnimationTargetPanX,
-        progress
-      );
-      this._panY = interpolateZoom(
-        this._zoomAnimationStartPanY,
-        this._zoomAnimationTargetPanY,
-        progress
-      );
+      this._zoom = interpolateZoom(this._zoomAnimationStartZoom, this._zoomAnimationTargetZoom, progress);
+      this._panX = interpolateZoom(this._zoomAnimationStartPanX, this._zoomAnimationTargetPanX, progress);
+      this._panY = interpolateZoom(this._zoomAnimationStartPanY, this._zoomAnimationTargetPanY, progress);
 
       this.requestRender();
 

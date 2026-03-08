@@ -80,11 +80,7 @@ function nominalRate(fps: number): number {
  * @param fps - Frames per second (default 24)
  * @param dropFrame - Use drop-frame timecode (default false, only valid for 29.97/59.94)
  */
-export function framesToTimecode(
-  frame: number,
-  fps: number = 24,
-  dropFrame: boolean = false,
-): string {
+export function framesToTimecode(frame: number, fps: number = 24, dropFrame: boolean = false): string {
   // Clamp negative/NaN/Infinity to 0
   if (!Number.isFinite(frame) || frame < 0) frame = 0;
   // Guard invalid fps
@@ -182,11 +178,7 @@ export function framesToTimecode(
  * @param dropFrame - Use drop-frame timecode (default false)
  * @returns Frame number, or 0 for invalid input
  */
-export function timecodeToFrames(
-  timecode: string,
-  fps: number = 24,
-  dropFrame: boolean = false,
-): number {
+export function timecodeToFrames(timecode: string, fps: number = 24, dropFrame: boolean = false): number {
   // Guard invalid fps
   if (!Number.isFinite(fps) || fps <= 0) fps = 24;
 
@@ -197,7 +189,7 @@ export function timecodeToFrames(
   // Normalize separator: replace semicolons with colons for parsing
   const normalized = timecode.replace(/;/g, ':');
   const parts = normalized.split(':').map(Number);
-  if (parts.length !== 4 || parts.some(p => isNaN(p))) return 0;
+  if (parts.length !== 4 || parts.some((p) => isNaN(p))) return 0;
 
   const hh = parts[0]!;
   const mm = parts[1]!;
@@ -214,10 +206,7 @@ export function timecodeToFrames(
     const nonDropFrames = hh * 3600 * nom + mm * 60 * nom + ss * nom + ff;
 
     // Subtract the dropped frames that were "added" in display
-    return (
-      nonDropFrames -
-      dropFrames * (totalMinutes - Math.floor(totalMinutes / 10))
-    );
+    return nonDropFrames - dropFrames * (totalMinutes - Math.floor(totalMinutes / 10));
   }
 
   // Non-drop: simple calculation
@@ -259,10 +248,7 @@ export function formatReelName(name: string): string {
  * @param config - Export configuration
  * @returns CMX3600-format EDL string
  */
-export function generateEDL(
-  clips: EDLClip[],
-  config?: EDLExportConfig,
-): string {
+export function generateEDL(clips: EDLClip[], config?: EDLExportConfig): string {
   const title = config?.title ?? 'Untitled';
   const fps = config?.fps ?? 24;
   const dropFrame = config?.dropFrame ?? false;
@@ -272,11 +258,7 @@ export function generateEDL(
   // Sanitize title: strip newlines
   const safeTitle = title.replace(/[\r\n]+/g, ' ');
 
-  const lines: string[] = [
-    'TITLE: ' + safeTitle,
-    'FCM: ' + (useDropFrame ? 'DROP FRAME' : 'NON-DROP FRAME'),
-    '',
-  ];
+  const lines: string[] = ['TITLE: ' + safeTitle, 'FCM: ' + (useDropFrame ? 'DROP FRAME' : 'NON-DROP FRAME'), ''];
 
   let editNum = 1;
   for (const clip of clips) {
@@ -333,11 +315,7 @@ export function createEDLBlob(edlText: string): Blob {
  * @param filename - Download filename (default: 'export.edl')
  * @param config - Export configuration
  */
-export function downloadEDL(
-  clips: EDLClip[],
-  filename: string = 'export.edl',
-  config?: EDLExportConfig,
-): void {
+export function downloadEDL(clips: EDLClip[], filename: string = 'export.edl', config?: EDLExportConfig): void {
   const edlText = generateEDL(clips, config);
   const blob = createEDLBlob(edlText);
   const url = URL.createObjectURL(blob);

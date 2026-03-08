@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MarkerListPanel, MarkerExportData } from './MarkerListPanel';
+import { MarkerListPanel, type MarkerExportData } from './MarkerListPanel';
 import { Session, MARKER_COLORS } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import * as Modal from './shared/Modal';
@@ -464,7 +464,9 @@ describe('MarkerListPanel', () => {
       const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
       editBtn.click();
 
-      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      const endFrameInput = panel
+        .getElement()
+        .querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
       expect(endFrameInput).not.toBeNull();
       expect(endFrameInput.value).toBe('25');
     });
@@ -476,7 +478,9 @@ describe('MarkerListPanel', () => {
       const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
       editBtn.click();
 
-      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      const endFrameInput = panel
+        .getElement()
+        .querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
       expect(endFrameInput).not.toBeNull();
       expect(endFrameInput.value).toBe('');
     });
@@ -488,7 +492,9 @@ describe('MarkerListPanel', () => {
       const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
       editBtn.click();
 
-      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      const endFrameInput = panel
+        .getElement()
+        .querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
       endFrameInput.value = '30';
 
       const saveBtn = panel.getElement().querySelector('[data-testid="marker-save-10"]') as HTMLElement;
@@ -505,7 +511,9 @@ describe('MarkerListPanel', () => {
       const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
       editBtn.click();
 
-      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      const endFrameInput = panel
+        .getElement()
+        .querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
       endFrameInput.value = '';
 
       const saveBtn = panel.getElement().querySelector('[data-testid="marker-save-10"]') as HTMLElement;
@@ -654,7 +662,7 @@ describe('MarkerListPanel', () => {
     async function applyImport(
       panel: MarkerListPanel,
       data: unknown,
-      mode: 'replace' | 'merge' = 'merge'
+      mode: 'replace' | 'merge' = 'merge',
     ): Promise<void> {
       // Access private method via type assertion for testing
       await (panel as any).applyImportedMarkers(data, mode);
@@ -713,9 +721,7 @@ describe('MarkerListPanel', () => {
         version: 1,
         exportedAt: new Date().toISOString(),
         fps: 24,
-        markers: [
-          { frame: 50, note: 'Replaced', color: '#ff4444' },
-        ],
+        markers: [{ frame: 50, note: 'Replaced', color: '#ff4444' }],
       };
 
       await applyImport(panel, importData, 'replace');
@@ -794,9 +800,7 @@ describe('MarkerListPanel', () => {
         version: 1,
         exportedAt: new Date().toISOString(),
         fps: 24,
-        markers: [
-          { frame: 10, note: 'Range', color: '#ff4444', endFrame: 25 },
-        ],
+        markers: [{ frame: 10, note: 'Range', color: '#ff4444', endFrame: 25 }],
       };
 
       await applyImport(panel, importData);

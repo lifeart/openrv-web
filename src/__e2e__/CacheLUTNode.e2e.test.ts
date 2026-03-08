@@ -59,10 +59,10 @@ function createTestImage(width: number, height: number): IPImage {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
-      data[idx] = x / Math.max(width - 1, 1);     // R: horizontal ramp
+      data[idx] = x / Math.max(width - 1, 1); // R: horizontal ramp
       data[idx + 1] = y / Math.max(height - 1, 1); // G: vertical ramp
-      data[idx + 2] = 0.5;                          // B: constant mid
-      data[idx + 3] = 1.0;                          // A: opaque
+      data[idx + 2] = 0.5; // B: constant mid
+      data[idx + 3] = 1.0; // A: opaque
     }
   }
   return img;
@@ -455,7 +455,7 @@ describe('CacheLUTNode E2E Integration', () => {
         temperature: 0.3,
       };
 
-      const lutSmall = generateLUT3D(3, params);  // Very coarse: only 3^3 = 27 entries
+      const lutSmall = generateLUT3D(3, params); // Very coarse: only 3^3 = 27 entries
       const lutLarge = generateLUT3D(65, params);
 
       // Average error across multiple sample points

@@ -276,14 +276,29 @@ function createMockColorControls() {
       whites: 0,
       blacks: 0,
     },
-    getAdjustments: vi.fn(function(this: any) { return { ...this._adjustments }; }),
-    setAdjustments: vi.fn(function(this: any, adj: any) { this._adjustments = { ...adj }; }),
-    reset: vi.fn(function(this: any) {
+    getAdjustments: vi.fn(function (this: any) {
+      return { ...this._adjustments };
+    }),
+    setAdjustments: vi.fn(function (this: any, adj: any) {
+      this._adjustments = { ...adj };
+    }),
+    reset: vi.fn(function (this: any) {
       this._adjustments = {
-        exposure: 0, gamma: 1, saturation: 1, vibrance: 0,
-        vibranceSkinProtection: true, contrast: 1, clarity: 0,
-        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
-        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+        exposure: 0,
+        gamma: 1,
+        saturation: 1,
+        vibrance: 0,
+        vibranceSkinProtection: true,
+        contrast: 1,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
       };
     }),
   };
@@ -298,8 +313,12 @@ function createMockCDLControl() {
       power: { r: 1.0, g: 1.0, b: 1.0 },
       saturation: 1.0,
     },
-    getCDL: vi.fn(function(this: any) { return JSON.parse(JSON.stringify(this._cdl)); }),
-    setCDL: vi.fn(function(this: any, cdl: any) { this._cdl = JSON.parse(JSON.stringify(cdl)); }),
+    getCDL: vi.fn(function (this: any) {
+      return JSON.parse(JSON.stringify(this._cdl));
+    }),
+    setCDL: vi.fn(function (this: any, cdl: any) {
+      this._cdl = JSON.parse(JSON.stringify(cdl));
+    }),
   };
   return cdlControl;
 }
@@ -313,16 +332,44 @@ function createMockCurvesControl() {
   });
 
   const defaultCurves = {
-    master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-    red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-    green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-    blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+    master: {
+      enabled: true,
+      points: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+    },
+    red: {
+      enabled: true,
+      points: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+    },
+    green: {
+      enabled: true,
+      points: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+    },
+    blue: {
+      enabled: true,
+      points: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+    },
   };
 
   const curvesControl = {
     _curves: cloneCurves(defaultCurves),
-    getCurves: vi.fn(function(this: any) { return cloneCurves(this._curves); }),
-    setCurves: vi.fn(function(this: any, curves: any) { this._curves = cloneCurves(curves); }),
+    getCurves: vi.fn(function (this: any) {
+      return cloneCurves(this._curves);
+    }),
+    setCurves: vi.fn(function (this: any, curves: any) {
+      this._curves = cloneCurves(curves);
+    }),
   };
   return curvesControl;
 }
@@ -1075,20 +1122,28 @@ describe('ColorAPI', () => {
 
     expect(curvesControl.setCurves).toHaveBeenCalled();
     const setArg = curvesControl.setCurves.mock.calls[0][0];
-    expect(setArg.red.points).toEqual([{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }]);
+    expect(setArg.red.points).toEqual([
+      { x: 0, y: 0.1 },
+      { x: 1, y: 0.9 },
+    ]);
     expect(setArg.blue.enabled).toBe(false);
-    expect(setArg.green.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+    expect(setArg.green.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ]);
   });
 
   it('API-U069j: setCurves() validates channel point ranges', () => {
-    expect(() => color.setCurves({
-      red: {
-        points: [
-          { x: -0.1, y: 0 },
-          { x: 1, y: 1 },
-        ],
-      },
-    } as any)).toThrow(/x\/y must be in \[0, 1\]/);
+    expect(() =>
+      color.setCurves({
+        red: {
+          points: [
+            { x: -0.1, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+      } as any),
+    ).toThrow(/x\/y must be in \[0, 1\]/);
   });
 
   it('API-U069k: getCurves() returns a defensive copy', () => {
@@ -1114,10 +1169,22 @@ describe('ColorAPI', () => {
 
     expect(curvesControl.setCurves).toHaveBeenCalledTimes(1);
     const resetArg = curvesControl.setCurves.mock.calls[0][0];
-    expect(resetArg.master.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
-    expect(resetArg.red.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
-    expect(resetArg.green.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
-    expect(resetArg.blue.points).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+    expect(resetArg.master.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ]);
+    expect(resetArg.red.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ]);
+    expect(resetArg.green.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ]);
+    expect(resetArg.blue.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ]);
   });
 });
 
@@ -1507,7 +1574,9 @@ describe('EventsAPI', () => {
 
   it('API-U067: listener errors are caught and do not propagate', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const errorHandler = vi.fn(() => { throw new Error('boom'); });
+    const errorHandler = vi.fn(() => {
+      throw new Error('boom');
+    });
     const normalHandler = vi.fn();
 
     events.on('frameChange', errorHandler);

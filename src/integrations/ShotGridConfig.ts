@@ -70,7 +70,12 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
     this.container.style.cssText = 'display: flex; flex-direction: column; gap: 10px; padding: 12px;';
 
     // --- Server URL ---
-    this.serverUrlInput = this.createInput('Server URL', 'url', 'https://studio.shotgrid.autodesk.com', 'shotgrid-server-url');
+    this.serverUrlInput = this.createInput(
+      'Server URL',
+      'url',
+      'https://studio.shotgrid.autodesk.com',
+      'shotgrid-server-url',
+    );
 
     // --- Script Name ---
     this.scriptNameInput = this.createInput('Script Name', 'text', 'my-script', 'shotgrid-script-name');
@@ -84,7 +89,8 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
 
     // --- Remember API Key checkbox ---
     const rememberRow = document.createElement('div');
-    rememberRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted);';
+    rememberRow.style.cssText =
+      'display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted);';
 
     this.rememberKeyCheckbox = document.createElement('input');
     this.rememberKeyCheckbox.type = 'checkbox';
@@ -311,17 +317,23 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-    } catch { /* localStorage unavailable */ }
+    } catch {
+      /* localStorage unavailable */
+    }
 
     // Only store API key in sessionStorage when opted in
     if (this.rememberKeyCheckbox.checked) {
       try {
         sessionStorage.setItem(`${STORAGE_KEY}-key`, config.apiKey);
-      } catch { /* sessionStorage unavailable */ }
+      } catch {
+        /* sessionStorage unavailable */
+      }
     } else {
       try {
         sessionStorage.removeItem(`${STORAGE_KEY}-key`);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -350,6 +362,8 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
           projectId: saved.projectId,
         });
       }
-    } catch { /* corrupted data */ }
+    } catch {
+      /* corrupted data */
+    }
   }
 }

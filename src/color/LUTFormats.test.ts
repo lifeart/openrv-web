@@ -69,11 +69,17 @@ function createIdentityCSP(size: number): string {
     'END METADATA',
     '',
     // Identity pre-LUT for R
-    '2', '0.0 1.0', '0.0 1.0',
+    '2',
+    '0.0 1.0',
+    '0.0 1.0',
     // Identity pre-LUT for G
-    '2', '0.0 1.0', '0.0 1.0',
+    '2',
+    '0.0 1.0',
+    '0.0 1.0',
     // Identity pre-LUT for B
-    '2', '0.0 1.0', '0.0 1.0',
+    '2',
+    '0.0 1.0',
+    '0.0 1.0',
     '',
     `${size} ${size} ${size}`,
   ];
@@ -93,11 +99,7 @@ function createIdentityCSP(size: number): string {
 
 /** Generate identity ITX LUT */
 function createIdentityITX(size: number): string {
-  const lines: string[] = [
-    '# IRIDAS text LUT',
-    `LUT_3D_SIZE ${size}`,
-    'LUT_3D_INPUT_RANGE 0.0 1.0',
-  ];
+  const lines: string[] = ['# IRIDAS text LUT', `LUT_3D_SIZE ${size}`, 'LUT_3D_INPUT_RANGE 0.0 1.0'];
   for (let b = 0; b < size; b++) {
     for (let g = 0; g < size; g++) {
       for (let r = 0; r < size; r++) {
@@ -237,13 +239,7 @@ ${dataLines.join('\n')}
 /** Generate identity MGA LUT */
 function createIdentityMGA(size: number): string {
   const maxOut = 4095;
-  const lines: string[] = [
-    'MGA',
-    'LUT_TYPE 3D',
-    `LUT_SIZE ${size}`,
-    'LUT_IN_BITDEPTH 10',
-    'LUT_OUT_BITDEPTH 12',
-  ];
+  const lines: string[] = ['MGA', 'LUT_TYPE 3D', `LUT_SIZE ${size}`, 'LUT_IN_BITDEPTH 10', 'LUT_OUT_BITDEPTH 12'];
   for (let b = 0; b < size; b++) {
     for (let g = 0; g < size; g++) {
       for (let r = 0; r < size; r++) {
@@ -259,13 +255,7 @@ function createIdentityMGA(size: number): string {
 
 /** Generate identity RV3DLUT */
 function createIdentityRV3D(size: number): string {
-  const lines: string[] = [
-    'RV3DLUT',
-    `size ${size}`,
-    'domain_min 0.0 0.0 0.0',
-    'domain_max 1.0 1.0 1.0',
-    'data:',
-  ];
+  const lines: string[] = ['RV3DLUT', `size ${size}`, 'domain_min 0.0 0.0 0.0', 'domain_max 1.0 1.0 1.0', 'data:'];
   // B-fastest order (same as internal format)
   for (let r = 0; r < size; r++) {
     for (let g = 0; g < size; g++) {
@@ -512,9 +502,15 @@ describe('Rising Sun .csp Parser', () => {
       'CSPLUTV100',
       '1D',
       '',
-      '4', '0.0 0.333 0.666 1.0', '0.0 0.333 0.666 1.0',
-      '4', '0.0 0.333 0.666 1.0', '0.0 0.333 0.666 1.0',
-      '4', '0.0 0.333 0.666 1.0', '0.0 0.333 0.666 1.0',
+      '4',
+      '0.0 0.333 0.666 1.0',
+      '0.0 0.333 0.666 1.0',
+      '4',
+      '0.0 0.333 0.666 1.0',
+      '0.0 0.333 0.666 1.0',
+      '4',
+      '0.0 0.333 0.666 1.0',
+      '0.0 0.333 0.666 1.0',
     ].join('\n');
 
     const lut = parseCSPLUT(content);
@@ -527,9 +523,15 @@ describe('Rising Sun .csp Parser', () => {
       'CSPLUTV100',
       '3D',
       '',
-      '2', '0.0 1.0', '0.0 1.0',
-      '2', '0.0 1.0', '0.0 1.0',
-      '2', '0.0 1.0', '0.0 1.0',
+      '2',
+      '0.0 1.0',
+      '0.0 1.0',
+      '2',
+      '0.0 1.0',
+      '0.0 1.0',
+      '2',
+      '0.0 1.0',
+      '0.0 1.0',
       '',
       '2 2 2',
       '0.0 0.0 0.0',
@@ -553,10 +555,7 @@ describe('IRIDAS .itx Parser', () => {
   });
 
   it('LITX-002: parses LUT_3D_INPUT_RANGE into domain', () => {
-    const content = createIdentityITX(2).replace(
-      'LUT_3D_INPUT_RANGE 0.0 1.0',
-      'LUT_3D_INPUT_RANGE 0.1 0.9'
-    );
+    const content = createIdentityITX(2).replace('LUT_3D_INPUT_RANGE 0.0 1.0', 'LUT_3D_INPUT_RANGE 0.1 0.9');
     const lut = parseITXLUT(content);
 
     expect(lut.domainMin).toEqual([0.1, 0.1, 0.1]);
@@ -652,10 +651,7 @@ describe('Houdini .lut Parser', () => {
   });
 
   it('LHDN-003: parses From/To range into domain', () => {
-    const content = createIdentityHoudini1D(16).replace(
-      'From\t\t0.000000 1.000000',
-      'From\t\t0.100000 0.900000'
-    );
+    const content = createIdentityHoudini1D(16).replace('From\t\t0.000000 1.000000', 'From\t\t0.100000 0.900000');
     const lut = parseHoudiniLUT(content);
 
     expect(lut.domainMin[0]).toBeCloseTo(0.1);
@@ -755,11 +751,7 @@ describe('Nuke .nk Parser', () => {
   });
 
   it('LNUK-004: extracts input_min / input_max from comments', () => {
-    const lines = [
-      '# cube_size 2',
-      '# input_min 0.1 0.2 0.3',
-      '# input_max 0.9 0.8 0.7',
-    ];
+    const lines = ['# cube_size 2', '# input_min 0.1 0.2 0.3', '# input_max 0.9 0.8 0.7'];
     // Add 8 data lines for size 2
     for (let i = 0; i < 8; i++) {
       lines.push('0.5 0.5 0.5');
@@ -861,13 +853,7 @@ describe('Pandora .mga Parser', () => {
   it('LMGA-008: handles 10-bit output depth', () => {
     const size = 2;
     const maxOut = 1023;
-    const lines: string[] = [
-      'MGA',
-      'LUT_TYPE 3D',
-      `LUT_SIZE ${size}`,
-      'LUT_IN_BITDEPTH 10',
-      'LUT_OUT_BITDEPTH 10',
-    ];
+    const lines: string[] = ['MGA', 'LUT_TYPE 3D', `LUT_SIZE ${size}`, 'LUT_IN_BITDEPTH 10', 'LUT_OUT_BITDEPTH 10'];
     for (let b = 0; b < size; b++) {
       for (let g = 0; g < size; g++) {
         for (let r = 0; r < size; r++) {
@@ -1073,9 +1059,9 @@ describe('RV Channel LUT Parser', () => {
     const lut = parseRVChannelLUT(lines.join('\n'));
 
     // Verify that the data has different values per channel at index 1
-    expect(lut.data[3]).toBeCloseTo(0.5);   // R at index 1
-    expect(lut.data[4]).toBeCloseTo(0.25);  // G at index 1
-    expect(lut.data[5]).toBeCloseTo(0.75);  // B at index 1
+    expect(lut.data[3]).toBeCloseTo(0.5); // R at index 1
+    expect(lut.data[4]).toBeCloseTo(0.25); // G at index 1
+    expect(lut.data[5]).toBeCloseTo(0.75); // B at index 1
   });
 
   it('LRVC-010: throws on wrong data count', () => {

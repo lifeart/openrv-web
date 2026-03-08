@@ -90,10 +90,10 @@ const SG_TO_LOCAL: Record<string, ShotStatus> = {
   pnd: 'pending',
   omt: 'omit',
   fin: 'approved', // 'final' maps to approved
-  ip: 'pending',   // 'in progress' maps to pending
-  hld: 'pending',  // 'on hold' maps to pending
-  wtg: 'pending',  // 'waiting to start' maps to pending
-  na: 'omit',      // 'not applicable' maps to omit
+  ip: 'pending', // 'in progress' maps to pending
+  hld: 'pending', // 'on hold' maps to pending
+  wtg: 'pending', // 'waiting to start' maps to pending
+  na: 'omit', // 'not applicable' maps to omit
   vwd: 'approved', // 'viewed' maps to approved
 };
 
@@ -118,7 +118,8 @@ export function mapStatusFromShotGrid(sgStatus: string): ShotStatus {
 /** Maximum number of retries after the initial request for 429 rate limiting */
 const MAX_RATE_LIMIT_RETRIES = 3;
 
-const VERSION_FIELDS = 'code,entity,sg_status_list,sg_path_to_movie,sg_path_to_frames,sg_uploaded_movie,image,frame_range,description,sg_first_frame,sg_last_frame,created_at,user';
+const VERSION_FIELDS =
+  'code,entity,sg_status_list,sg_path_to_movie,sg_path_to_frames,sg_uploaded_movie,image,frame_range,description,sg_first_frame,sg_last_frame,created_at,user';
 
 /** Default maximum number of pages to follow for paginated results */
 const DEFAULT_MAX_PAGES = 10;
@@ -204,7 +205,8 @@ export class ShotGridBridge {
    */
   async getVersionsForPlaylist(playlistId: number): Promise<ShotGridVersion[]> {
     // Step 1: Get PlaylistVersionConnection entries (ordered by sg_sort_order)
-    const connectionsUrl = `${this.serverUrl}/api/v1/entity/playlist_version_connections` +
+    const connectionsUrl =
+      `${this.serverUrl}/api/v1/entity/playlist_version_connections` +
       `?filter[playlist]=${playlistId}` +
       `&fields=version,sg_sort_order` +
       `&sort=sg_sort_order`;
@@ -213,11 +215,11 @@ export class ShotGridBridge {
     if (connections.length === 0) return [];
 
     // Step 2: Batch-fetch versions by ID (chunked to avoid URL length limits)
-    const versionIds = connections.map(c => c.version.id);
+    const versionIds = connections.map((c) => c.version.id);
     const versions = await this.fetchVersionsByIds(versionIds);
 
     // Re-sort to match playlist order
-    const versionMap = new Map(versions.map(v => [v.id, v]));
+    const versionMap = new Map(versions.map((v) => [v.id, v]));
     const ordered: ShotGridVersion[] = [];
     for (const id of versionIds) {
       const v = versionMap.get(id);
@@ -230,7 +232,8 @@ export class ShotGridBridge {
    * Get versions linked to a specific Shot, scoped by project.
    */
   async getVersionsForShot(shotId: number): Promise<ShotGridVersion[]> {
-    const url = `${this.serverUrl}/api/v1/entity/versions` +
+    const url =
+      `${this.serverUrl}/api/v1/entity/versions` +
       `?filter[entity]=${shotId}` +
       `&filter[project]=${this.projectId}` +
       `&fields=${VERSION_FIELDS}`;
@@ -242,7 +245,8 @@ export class ShotGridBridge {
    * Get notes linked to a specific Version.
    */
   async getNotesForVersion(versionId: number): Promise<ShotGridNote[]> {
-    const url = `${this.serverUrl}/api/v1/entity/notes` +
+    const url =
+      `${this.serverUrl}/api/v1/entity/notes` +
       `?filter[note_links]=[{"type":"Version","id":${versionId}}]` +
       `&filter[project]=${this.projectId}` +
       `&fields=subject,content,note_links,created_at,user`;
@@ -352,8 +356,9 @@ export class ShotGridBridge {
     const results: ShotGridVersion[] = [];
     for (let i = 0; i < ids.length; i += VERSION_ID_BATCH_SIZE) {
       const chunk = ids.slice(i, i + VERSION_ID_BATCH_SIZE);
-      const idsFilter = chunk.map(id => `filter[id]=${id}`).join('&');
-      const url = `${this.serverUrl}/api/v1/entity/versions` +
+      const idsFilter = chunk.map((id) => `filter[id]=${id}`).join('&');
+      const url =
+        `${this.serverUrl}/api/v1/entity/versions` +
         `?${idsFilter}` +
         `&filter[project]=${this.projectId}` +
         `&fields=${VERSION_FIELDS}`;
@@ -389,10 +394,11 @@ export class ShotGridBridge {
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
     };
 
-    const doFetch = () => this.fetchFn(url, {
-      ...init,
-      headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
-    });
+    const doFetch = () =>
+      this.fetchFn(url, {
+        ...init,
+        headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
+      });
 
     let response = await doFetch();
 
@@ -441,7 +447,7 @@ export class ShotGridAPIError extends Error {
 // ---------------------------------------------------------------------------
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

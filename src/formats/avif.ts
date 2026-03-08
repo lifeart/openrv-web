@@ -17,20 +17,10 @@ export function isAvifFile(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 12) return false;
   const view = new DataView(buffer);
   // Box type at offset 4..7 must be 'ftyp'
-  const type = String.fromCharCode(
-    view.getUint8(4),
-    view.getUint8(5),
-    view.getUint8(6),
-    view.getUint8(7)
-  );
+  const type = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
   if (type !== 'ftyp') return false;
   // Major brand at offset 8..11
-  const brand = String.fromCharCode(
-    view.getUint8(8),
-    view.getUint8(9),
-    view.getUint8(10),
-    view.getUint8(11)
-  );
+  const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
   return brand === 'avif' || brand === 'avis' || brand === 'mif1';
 }
 
@@ -50,14 +40,15 @@ export async function decodeAvif(buffer: ArrayBuffer): Promise<{
   const width = bitmap.width;
   const height = bitmap.height;
 
-  const canvas = typeof OffscreenCanvas !== 'undefined'
-    ? new OffscreenCanvas(width, height)
-    : (() => {
-        const c = document.createElement('canvas');
-        c.width = width;
-        c.height = height;
-        return c;
-      })();
+  const canvas =
+    typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(width, height)
+      : (() => {
+          const c = document.createElement('canvas');
+          c.width = width;
+          c.height = height;
+          return c;
+        })();
 
   const ctx = canvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   ctx.drawImage(bitmap, 0, 0);

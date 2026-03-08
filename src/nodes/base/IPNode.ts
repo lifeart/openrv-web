@@ -1,6 +1,6 @@
 import { PropertyContainer } from '../../core/graph/Property';
 import { Signal } from '../../core/graph/Signal';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import type { NodeProcessor } from './NodeProcessor';
 

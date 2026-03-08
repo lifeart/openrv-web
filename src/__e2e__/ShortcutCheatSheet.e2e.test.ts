@@ -18,9 +18,7 @@ import type { KeyCombination } from '../utils/input/KeyboardManager';
 // Mock manager that satisfies ShortcutEditorManager
 // ---------------------------------------------------------------------------
 
-function createMockManager(
-  overrides: Partial<ShortcutEditorManager> = {},
-): ShortcutEditorManager {
+function createMockManager(overrides: Partial<ShortcutEditorManager> = {}): ShortcutEditorManager {
   const actions = [
     {
       action: 'playback.toggle',
@@ -52,7 +50,7 @@ function createMockManager(
   return {
     getAvailableActions: () => actions,
     getEffectiveCombo: (action: string) => {
-      const found = actions.find(a => a.action === action);
+      const found = actions.find((a) => a.action === action);
       return found?.currentCombo ?? { code: '' };
     },
     setCustomBinding: () => {},
@@ -279,9 +277,7 @@ describe('ShortcutCheatSheet E2E Integration', () => {
       // "Toggle play/pause" matches "play"
       expect(rows.length).toBeGreaterThanOrEqual(1);
 
-      const descriptions = Array.from(rows).map(
-        r => r.querySelector('.cheatsheet-description')?.textContent,
-      );
+      const descriptions = Array.from(rows).map((r) => r.querySelector('.cheatsheet-description')?.textContent);
       for (const desc of descriptions) {
         expect(desc?.toLowerCase()).toContain('play');
       }
@@ -389,7 +385,7 @@ describe('ShortcutCheatSheet E2E Integration', () => {
   describe('key binding wiring (help.toggleCheatSheet)', () => {
     it('the mock manager includes help.toggleCheatSheet action', () => {
       const actions = manager.getAvailableActions();
-      const helpAction = actions.find(a => a.action === 'help.toggleCheatSheet');
+      const helpAction = actions.find((a) => a.action === 'help.toggleCheatSheet');
       expect(helpAction).toBeDefined();
       expect(helpAction!.description).toBe('Toggle keyboard shortcuts cheat sheet');
       expect(helpAction!.currentCombo.code).toBe('Slash');
@@ -436,9 +432,7 @@ describe('ShortcutCheatSheet E2E Integration', () => {
       const rows = container.querySelectorAll('.cheatsheet-row');
       // Only "Step forward one frame" in playback category
       expect(rows.length).toBe(1);
-      expect(
-        rows[0]!.querySelector('.cheatsheet-description')!.textContent,
-      ).toContain('Step forward');
+      expect(rows[0]!.querySelector('.cheatsheet-description')!.textContent).toContain('Step forward');
     });
 
     it('rapid toggle does not corrupt state', () => {

@@ -3,7 +3,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DecoderRegistry, decoderRegistry, decodeAs, type FormatDecoder, type DecoderOptionsMap } from './DecoderRegistry';
+import {
+  DecoderRegistry,
+  decoderRegistry,
+  decodeAs,
+  type FormatDecoder,
+  type DecoderOptionsMap,
+} from './DecoderRegistry';
 
 // Magic numbers
 const EXR_MAGIC = 0x01312f76;
@@ -101,17 +107,21 @@ function createJXLContainerMagic(): ArrayBuffer {
   const view = new DataView(buffer);
   view.setUint32(0, 12, false); // box size
   // 'ftyp'
-  view.setUint8(4, 0x66); view.setUint8(5, 0x74);
-  view.setUint8(6, 0x79); view.setUint8(7, 0x70);
+  view.setUint8(4, 0x66);
+  view.setUint8(5, 0x74);
+  view.setUint8(6, 0x79);
+  view.setUint8(7, 0x70);
   // 'jxl '
-  view.setUint8(8, 0x6a); view.setUint8(9, 0x78);
-  view.setUint8(10, 0x6c); view.setUint8(11, 0x20);
+  view.setUint8(8, 0x6a);
+  view.setUint8(9, 0x78);
+  view.setUint8(10, 0x6c);
+  view.setUint8(11, 0x20);
   return buffer;
 }
 
 function createHDRMagic(): ArrayBuffer {
   const header = '#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 2\n';
-  const headerBytes = Array.from(header).map(c => c.charCodeAt(0));
+  const headerBytes = Array.from(header).map((c) => c.charCodeAt(0));
   // Add 4 pixels of uncompressed RGBE data (2x2 image)
   const pixelBytes = [128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128];
   const buffer = new ArrayBuffer(headerBytes.length + pixelBytes.length);
@@ -393,7 +403,7 @@ describe('DecoderRegistry', () => {
           height: 20,
           data: new Float32Array(10 * 20 * 4),
           channels: 4,
-          colorSpace: options?.colorSpace as string ?? 'linear',
+          colorSpace: (options?.colorSpace as string) ?? 'linear',
           metadata: { custom: true },
         }),
       };
@@ -493,8 +503,12 @@ describe('DecoderRegistry', () => {
         formatName: 'unreg-test',
         canDecode: () => true,
         decode: async () => ({
-          width: 1, height: 1, data: new Float32Array(4),
-          channels: 4, colorSpace: 'linear', metadata: {},
+          width: 1,
+          height: 1,
+          data: new Float32Array(4),
+          channels: 4,
+          colorSpace: 'linear',
+          metadata: {},
         }),
       };
       reg.registerDecoder(customDecoder);
@@ -530,8 +544,12 @@ describe('DecoderRegistry', () => {
         formatName: 'my-custom',
         canDecode: () => false,
         decode: async () => ({
-          width: 1, height: 1, data: new Float32Array(4),
-          channels: 4, colorSpace: 'linear', metadata: {},
+          width: 1,
+          height: 1,
+          data: new Float32Array(4),
+          channels: 4,
+          colorSpace: 'linear',
+          metadata: {},
         }),
       };
       registry.registerDecoder(customDecoder);
@@ -546,8 +564,12 @@ describe('DecoderRegistry', () => {
         formatName: 'temp-format',
         canDecode: () => false,
         decode: async () => ({
-          width: 1, height: 1, data: new Float32Array(4),
-          channels: 4, colorSpace: 'linear', metadata: {},
+          width: 1,
+          height: 1,
+          data: new Float32Array(4),
+          channels: 4,
+          colorSpace: 'linear',
+          metadata: {},
         }),
       };
       registry.registerDecoder(customDecoder);
@@ -562,7 +584,7 @@ describe('DecoderRegistry', () => {
       const registry = new DecoderRegistry();
       // Unregister all built-ins won't help; use a name that doesn't exist
       await expect(
-        decodeAs(registry, 'nonexistent-fmt' as keyof DecoderOptionsMap, new ArrayBuffer(4))
+        decodeAs(registry, 'nonexistent-fmt' as keyof DecoderOptionsMap, new ArrayBuffer(4)),
       ).rejects.toThrow('No decoder registered for format: nonexistent-fmt');
     });
 
@@ -572,17 +594,17 @@ describe('DecoderRegistry', () => {
         formatName: 'decodeAs-test',
         canDecode: () => false,
         decode: async () => ({
-          width: 5, height: 10, data: new Float32Array(200),
-          channels: 4, colorSpace: 'linear', metadata: { source: 'test' },
+          width: 5,
+          height: 10,
+          data: new Float32Array(200),
+          channels: 4,
+          colorSpace: 'linear',
+          metadata: { source: 'test' },
         }),
       };
       registry.registerDecoder(customDecoder);
 
-      const result = await decodeAs(
-        registry,
-        'decodeAs-test' as keyof DecoderOptionsMap,
-        new ArrayBuffer(4)
-      );
+      const result = await decodeAs(registry, 'decodeAs-test' as keyof DecoderOptionsMap, new ArrayBuffer(4));
       expect(result.formatName).toBe('decodeAs-test');
       expect(result.width).toBe(5);
       expect(result.height).toBe(10);
@@ -600,8 +622,11 @@ describe('DecoderRegistry', () => {
           return new DataView(buffer).getUint32(0, false) === 0x12345678;
         },
         decode: async (buffer: ArrayBuffer) => ({
-          width: 8, height: 8, data: new Float32Array(256),
-          channels: 4, colorSpace: 'srgb',
+          width: 8,
+          height: 8,
+          data: new Float32Array(256),
+          channels: 4,
+          colorSpace: 'srgb',
           metadata: { size: buffer.byteLength },
         }),
       };
@@ -610,11 +635,7 @@ describe('DecoderRegistry', () => {
       const buffer = new ArrayBuffer(16);
       new DataView(buffer).setUint32(0, 0x12345678, false);
 
-      const result = await decodeAs(
-        registry,
-        'e2e-format' as keyof DecoderOptionsMap,
-        buffer
-      );
+      const result = await decodeAs(registry, 'e2e-format' as keyof DecoderOptionsMap, buffer);
       expect(result.formatName).toBe('e2e-format');
       expect(result.width).toBe(8);
       expect(result.height).toBe(8);
@@ -631,19 +652,21 @@ describe('DecoderRegistry', () => {
         decode: async (_buffer: ArrayBuffer, options?: Record<string, unknown>) => {
           receivedOptions = options;
           return {
-            width: 1, height: 1, data: new Float32Array(4),
-            channels: 4, colorSpace: 'linear', metadata: {},
+            width: 1,
+            height: 1,
+            data: new Float32Array(4),
+            channels: 4,
+            colorSpace: 'linear',
+            metadata: {},
           };
         },
       };
       registry.registerDecoder(customDecoder);
 
-      await decodeAs(
-        registry,
-        'opts-pass-test' as keyof DecoderOptionsMap,
-        new ArrayBuffer(4),
-        { quality: 90, progressive: true } as unknown as DecoderOptionsMap[keyof DecoderOptionsMap]
-      );
+      await decodeAs(registry, 'opts-pass-test' as keyof DecoderOptionsMap, new ArrayBuffer(4), {
+        quality: 90,
+        progressive: true,
+      } as unknown as DecoderOptionsMap[keyof DecoderOptionsMap]);
       expect(receivedOptions).toEqual({ quality: 90, progressive: true });
     });
   });
@@ -667,8 +690,11 @@ describe('DecoderRegistry', () => {
           return new DataView(buffer).getUint32(0, false) === 0xaabbccdd;
         },
         decode: async (_buffer: ArrayBuffer, options?: { quality: number }) => ({
-          width: 2, height: 2, data: new Float32Array(16),
-          channels: 4, colorSpace: 'linear',
+          width: 2,
+          height: 2,
+          data: new Float32Array(16),
+          channels: 4,
+          colorSpace: 'linear',
           metadata: { quality: options?.quality ?? 75 },
         }),
       };
@@ -687,8 +713,11 @@ describe('DecoderRegistry', () => {
           return new DataView(buffer).getUint32(0, false) === 0x11223344;
         },
         decode: async (_buffer: ArrayBuffer, options?: { quality: number }) => ({
-          width: 4, height: 4, data: new Float32Array(64),
-          channels: 4, colorSpace: 'linear',
+          width: 4,
+          height: 4,
+          data: new Float32Array(64),
+          channels: 4,
+          colorSpace: 'linear',
           metadata: { appliedQuality: options?.quality ?? 50 },
         }),
       };

@@ -5,11 +5,8 @@
  * color spaces and a scatter plot of pixel chromaticity coordinates.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import {
-  createDraggableContainer,
-  DraggableContainer,
-} from './shared/DraggableContainer';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { createDraggableContainer, type DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
@@ -91,13 +88,15 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
     // Defer horseshoe computation until first show() — the diagram starts hidden
     // and the computation is expensive (~300K pixels at 2x DPR).
 
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      // Horseshoe cache is theme-independent (transparent bg), no invalidation needed.
-      // Only redraw graticule/triangles which use themed colors.
-      if (this.visible) {
-        this.drawFull();
-      }
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        // Horseshoe cache is theme-independent (transparent bg), no invalidation needed.
+        // Only redraw graticule/triangles which use themed colors.
+        if (this.visible) {
+          this.drawFull();
+        }
+      }),
+    );
   }
 
   // ===========================================================================
@@ -166,11 +165,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
     const pixels = imageData.data;
 
     // XYZ to sRGB matrix (hardcoded inverse for performance)
-    const m = [
-      3.2404542, -1.5371385, -0.4985314,
-      -0.9692660, 1.8760108, 0.0415560,
-      0.0556434, -0.2040259, 1.0572252,
-    ];
+    const m = [3.2404542, -1.5371385, -0.4985314, -0.969266, 1.8760108, 0.041556, 0.0556434, -0.2040259, 1.0572252];
 
     for (let py = 0; py < physH; py++) {
       for (let px = 0; px < physW; px++) {
@@ -232,9 +227,11 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
     let inside = false;
     const n = locus.length;
     for (let i = 0, j = n - 1; i < n; j = i++) {
-      const xi = locus[i]!.x, yi = locus[i]!.y;
-      const xj = locus[j]!.x, yj = locus[j]!.y;
-      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      const xi = locus[i]!.x,
+        yi = locus[i]!.y;
+      const xj = locus[j]!.x,
+        yj = locus[j]!.y;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
         inside = !inside;
       }
     }
@@ -325,11 +322,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
     }
   }
 
-  private drawGamutTriangle(
-    primaries: ColorSpacePrimaries,
-    color: string,
-    dashPattern: number[]
-  ): void {
+  private drawGamutTriangle(primaries: ColorSpacePrimaries, color: string, dashPattern: number[]): void {
     const { ctx } = this;
 
     ctx.strokeStyle = color;
@@ -348,13 +341,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
     // White point marker
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(
-      this.xToCanvas(primaries.white.x),
-      this.yToCanvas(primaries.white.y),
-      3,
-      0,
-      Math.PI * 2
-    );
+    ctx.arc(this.xToCanvas(primaries.white.x), this.yToCanvas(primaries.white.y), 3, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -364,7 +351,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
    */
   private drawPixelScatter(imageData: ImageData): void {
     const { data, width, height } = imageData;
-    const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 8000)));
+    const sampleStep = Math.max(1, Math.floor(Math.sqrt((width * height) / 8000)));
 
     // Scatter operates in physical pixel coordinates via getImageData/putImageData
     // which bypass the DPR canvas transform. Logical coords are multiplied by dpr.
@@ -416,7 +403,7 @@ export class GamutDiagram extends EventEmitter<GamutDiagramEvents> {
    * Uses the display matrix matching the current display color space.
    */
   private drawPixelScatterFloat(data: Float32Array, width: number, height: number): void {
-    const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 8000)));
+    const sampleStep = Math.max(1, Math.floor(Math.sqrt((width * height) / 8000)));
 
     const physW = this.canvas.width;
     const physH = this.canvas.height;

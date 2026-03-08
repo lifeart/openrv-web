@@ -8,8 +8,8 @@
  * - Manual cache clear option
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { Session } from '../../core/session/Session';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type Session } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';

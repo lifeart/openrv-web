@@ -108,8 +108,14 @@ export class SessionGTOStore {
     }
   }
 
-  private updateCDL(values: { slope: { r: number; g: number; b: number }; offset: { r: number; g: number; b: number }; power: { r: number; g: number; b: number }; saturation: number }): void {
-    const target = this.findObject('RVColor')?.obj ?? this.findObject('RVLinearize')?.obj ?? this.ensureObject('RVColor', 'rvColor');
+  private updateCDL(values: {
+    slope: { r: number; g: number; b: number };
+    offset: { r: number; g: number; b: number };
+    power: { r: number; g: number; b: number };
+    saturation: number;
+  }): void {
+    const target =
+      this.findObject('RVColor')?.obj ?? this.findObject('RVLinearize')?.obj ?? this.ensureObject('RVColor', 'rvColor');
     const cdlComponent = this.ensureComponent(target, 'CDL');
 
     this.setProperty(cdlComponent, 'active', 'int', 1, 1);
@@ -195,8 +201,24 @@ export class SessionGTOStore {
 
     // 3DE4 Anamorphic Degree 6 coefficients
     const coeffNames = [
-      'cx02', 'cx22', 'cx04', 'cx24', 'cx44', 'cx06', 'cx26', 'cx46', 'cx66',
-      'cy02', 'cy22', 'cy04', 'cy24', 'cy44', 'cy06', 'cy26', 'cy46', 'cy66',
+      'cx02',
+      'cx22',
+      'cx04',
+      'cx24',
+      'cx44',
+      'cx06',
+      'cx26',
+      'cx46',
+      'cx66',
+      'cy02',
+      'cy22',
+      'cy04',
+      'cy24',
+      'cy44',
+      'cy06',
+      'cy26',
+      'cy46',
+      'cy66',
     ] as const;
     for (const name of coeffNames) {
       if (params[name] !== undefined) {
@@ -214,7 +236,10 @@ export class SessionGTOStore {
     }
   }
 
-  private updateCrop(session: Session, crop: { enabled: boolean; region: { x: number; y: number; width: number; height: number } }): void {
+  private updateCrop(
+    session: Session,
+    crop: { enabled: boolean; region: { x: number; y: number; width: number; height: number } },
+  ): void {
     const target = this.ensureObject('RVFormat', 'rvFormat');
     const component = this.ensureComponent(target, 'crop');
 
@@ -435,7 +460,14 @@ export class SessionGTOStore {
     return object.components[name];
   }
 
-  private setProperty(component: ComponentData, name: string, type: string, width: number, data: unknown, interpretation = ''): void {
+  private setProperty(
+    component: ComponentData,
+    name: string,
+    type: string,
+    width: number,
+    data: unknown,
+    interpretation = '',
+  ): void {
     component.properties[name] = this.createProperty(type, width, data, interpretation);
   }
 
@@ -469,7 +501,11 @@ export class SessionGTOStore {
     return [data];
   }
 
-  private getStringProperty(object: ObjectData | undefined, componentName: string, propertyName: string): string | null {
+  private getStringProperty(
+    object: ObjectData | undefined,
+    componentName: string,
+    propertyName: string,
+  ): string | null {
     if (!object) return null;
     const component = object.components[componentName];
     const property = component?.properties[propertyName];

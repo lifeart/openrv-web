@@ -9,14 +9,10 @@
  * - Draggable overlay display
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
-import {
-  createDraggableContainer,
-  createControlButton,
-  DraggableContainer,
-} from './shared/DraggableContainer';
+import { createDraggableContainer, createControlButton, type DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -33,8 +29,8 @@ export interface HistogramData {
   pixelCount: number;
   // Clipping statistics
   clipping: {
-    shadows: number;      // Pixels at 0 (black)
-    highlights: number;   // Pixels at 255 (white)
+    shadows: number; // Pixels at 0 (black)
+    highlights: number; // Pixels at 255 (white)
     shadowsPercent: number;
     highlightsPercent: number;
   };
@@ -111,12 +107,14 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     this.createFooter();
 
     // Listen for theme changes to redraw with new colors
-    this.subs.add(getThemeManager().on('themeChanged', () => {
-      if (this.data) {
-        this.draw();
-        this.updateClippingDisplay();
-      }
-    }));
+    this.subs.add(
+      getThemeManager().on('themeChanged', () => {
+        if (this.data) {
+          this.draw();
+          this.updateClippingDisplay();
+        }
+      }),
+    );
   }
 
   private createControls(): void {
@@ -268,7 +266,8 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       shadowPercent.textContent = `${clipping.shadowsPercent.toFixed(1)}%`;
     }
     // Highlight if significant clipping (>1%)
-    this.shadowIndicator.style.color = clipping.shadowsPercent > 1 ? getCSSColor('--error', '#ff6666') : getCSSColor('--info', '#6699ff');
+    this.shadowIndicator.style.color =
+      clipping.shadowsPercent > 1 ? getCSSColor('--error', '#ff6666') : getCSSColor('--info', '#6699ff');
 
     // Update highlight indicator
     const highlightPercent = this.highlightIndicator.querySelector('.highlight-percent');
@@ -276,7 +275,8 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       highlightPercent.textContent = `${clipping.highlightsPercent.toFixed(1)}%`;
     }
     // Highlight if significant clipping (>1%)
-    this.highlightIndicator.style.color = clipping.highlightsPercent > 1 ? getCSSColor('--error', '#ff6666') : getCSSColor('--warning', '#ff9966');
+    this.highlightIndicator.style.color =
+      clipping.highlightsPercent > 1 ? getCSSColor('--error', '#ff6666') : getCSSColor('--warning', '#ff9966');
   }
 
   /**
@@ -458,9 +458,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     const pixelCount = len / 4;
     const configuredMax = this.getMaxValue();
     const measuredPeak = this.hdrAutoFit ? this.measureHDRSignalPeak(floatData) : configuredMax;
-    const maxVal = this.hdrAutoFit
-      ? Math.min(configuredMax, Math.max(1.0, measuredPeak))
-      : configuredMax;
+    const maxVal = this.hdrAutoFit ? Math.min(configuredMax, Math.max(1.0, measuredPeak)) : configuredMax;
     this.hdrEffectiveMax = this.hdrAutoFit ? maxVal : null;
     const binScale = (HISTOGRAM_BINS - 1) / maxVal;
 
@@ -479,9 +477,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       blue[bBin]!++;
 
       // Calculate luminance using Rec.709 coefficients
-      const luma = LUMINANCE_COEFFICIENTS.r * r +
-        LUMINANCE_COEFFICIENTS.g * g +
-        LUMINANCE_COEFFICIENTS.b * b;
+      const luma = LUMINANCE_COEFFICIENTS.r * r + LUMINANCE_COEFFICIENTS.g * g + LUMINANCE_COEFFICIENTS.b * b;
       const lumaBin = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.round(luma * binScale)));
       luminance[lumaBin]!++;
     }
@@ -857,11 +853,7 @@ export function calculateHistogram(imageData: ImageData): HistogramData {
     green[g]!++;
     blue[b]!++;
 
-    const luma = Math.round(
-      LUMINANCE_COEFFICIENTS.r * r +
-      LUMINANCE_COEFFICIENTS.g * g +
-      LUMINANCE_COEFFICIENTS.b * b
-    );
+    const luma = Math.round(LUMINANCE_COEFFICIENTS.r * r + LUMINANCE_COEFFICIENTS.g * g + LUMINANCE_COEFFICIENTS.b * b);
     luminance[Math.min(255, luma)]!++;
   }
 

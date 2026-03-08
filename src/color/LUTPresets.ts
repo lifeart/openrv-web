@@ -16,13 +16,33 @@ export interface LUTPreset {
 }
 
 export const LUT_PRESETS: LUTPreset[] = [
-  { id: 'warm-film', name: 'Warm Film', category: 'Film', description: 'Warm golden tones reminiscent of Kodak film stocks' },
+  {
+    id: 'warm-film',
+    name: 'Warm Film',
+    category: 'Film',
+    description: 'Warm golden tones reminiscent of Kodak film stocks',
+  },
   { id: 'cool-chrome', name: 'Cool Chrome', category: 'Film', description: 'Cool silver tones with blue shadows' },
   { id: 'bleach-bypass', name: 'Bleach Bypass', category: 'Film', description: 'Desaturated with increased contrast' },
-  { id: 'cross-process', name: 'Cross Process', category: 'Creative', description: 'Shifted colors from cross-processing' },
+  {
+    id: 'cross-process',
+    name: 'Cross Process',
+    category: 'Creative',
+    description: 'Shifted colors from cross-processing',
+  },
   { id: 'monochrome', name: 'Monochrome', category: 'B&W', description: 'Classic black and white conversion' },
-  { id: 'cinematic-teal-orange', name: 'Teal & Orange', category: 'Creative', description: 'Hollywood teal shadows, orange highlights' },
-  { id: 'vintage-fade', name: 'Vintage Fade', category: 'Creative', description: 'Lifted blacks with faded pastel tones' },
+  {
+    id: 'cinematic-teal-orange',
+    name: 'Teal & Orange',
+    category: 'Creative',
+    description: 'Hollywood teal shadows, orange highlights',
+  },
+  {
+    id: 'vintage-fade',
+    name: 'Vintage Fade',
+    category: 'Creative',
+    description: 'Lifted blacks with faded pastel tones',
+  },
   { id: 'high-contrast', name: 'High Contrast', category: 'Technical', description: 'S-curve contrast enhancement' },
   { id: 'low-contrast', name: 'Low Contrast', category: 'Technical', description: 'Reduced contrast for flat look' },
   { id: 'identity', name: 'Identity (Bypass)', category: 'Technical', description: 'No color change - for testing' },
@@ -34,7 +54,7 @@ const LUT_SIZE = 17;
  * Generate a 3D LUT from a preset
  */
 export function generatePresetLUT(presetId: string): LUT3D | null {
-  const preset = LUT_PRESETS.find(p => p.id === presetId);
+  const preset = LUT_PRESETS.find((p) => p.id === presetId);
   if (!preset) return null;
 
   const size = LUT_SIZE;
@@ -135,7 +155,7 @@ function applyPresetTransform(presetId: string, r: number, g: number, b: number)
       // Lift blacks, fade highlights, pastel shift
       const fadeR = r * 0.85 + 0.08;
       const fadeG = g * 0.85 + 0.06;
-      const fadeB = b * 0.80 + 0.10;
+      const fadeB = b * 0.8 + 0.1;
       // Compress highlights
       return [clamp01(fadeR * 0.95 + 0.03), clamp01(fadeG * 0.95 + 0.02), clamp01(fadeB * 0.95 + 0.04)];
     }

@@ -9,7 +9,7 @@
  *   reverse direction support, and crossfade in continuous mode
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import { clamp } from '../utils/math';
 import type { ManagerBase } from '../core/ManagerBase';
 
@@ -62,9 +62,9 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   private _smoothedScrubFps = 0;
 
   // Scrub constants
-  static readonly SCRUB_SNIPPET_DURATION_MIN = 0.045;  // 45ms - fast scrub
+  static readonly SCRUB_SNIPPET_DURATION_MIN = 0.045; // 45ms - fast scrub
   static readonly SCRUB_SNIPPET_DURATION_DEFAULT = 0.08; // 80ms - single step
-  static readonly SCRUB_SNIPPET_DURATION_MAX = 0.12;  // 120ms - slow scrub
+  static readonly SCRUB_SNIPPET_DURATION_MAX = 0.12; // 120ms - slow scrub
   static readonly SCRUB_DEBOUNCE_MS = 16; // ~1 frame at 60Hz
   static readonly SCRUB_FADE_DURATION = 0.005; // 5ms fade in/out
   static readonly SCRUB_CROSSFADE_DURATION = 0.004; // 4ms crossfade overlap
@@ -74,14 +74,14 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
   static readonly hannFadeIn: Float32Array = (() => {
     const curve = new Float32Array(AudioPlaybackManager.HANN_WINDOW_SIZE);
     for (let i = 0; i < curve.length; i++) {
-      curve[i] = 0.5 * (1 - Math.cos(Math.PI * i / (curve.length - 1)));
+      curve[i] = 0.5 * (1 - Math.cos((Math.PI * i) / (curve.length - 1)));
     }
     return curve;
   })();
   static readonly hannFadeOut: Float32Array = (() => {
     const curve = new Float32Array(AudioPlaybackManager.HANN_WINDOW_SIZE);
     for (let i = 0; i < curve.length; i++) {
-      curve[i] = 0.5 * (1 + Math.cos(Math.PI * i / (curve.length - 1)));
+      curve[i] = 0.5 * (1 + Math.cos((Math.PI * i) / (curve.length - 1)));
     }
     return curve;
   })();
@@ -138,7 +138,9 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     if (this.audioContext) return;
 
     try {
-      this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      this.audioContext = new (
+        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      )();
 
       // Create gain node for volume control
       this.gainNode = this.audioContext.createGain();
@@ -212,7 +214,6 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         this.useVideoFallback = false;
         this.setState('ready');
         return true;
-
       } catch (fetchError) {
         clearTimeout(timeoutId);
 
@@ -223,7 +224,6 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
         this.setState('ready');
         return true;
       }
-
     } catch (error) {
       clearTimeout(timeoutId);
       // Decode error - fall back to video element
@@ -254,7 +254,6 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       this.useVideoFallback = false;
       this.setState('ready');
       return true;
-
     } catch (error) {
       this.handleError('decode', 'Failed to decode audio', error as Error);
       return false;
@@ -309,7 +308,6 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       this._isPlaying = true;
       this.setState('playing');
       return true;
-
     } catch (error) {
       this.handleError('unknown', 'Failed to start playback', error as Error);
       return false;
@@ -334,7 +332,6 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       this._isPlaying = true;
       this.setState('playing');
       return true;
-
     } catch (error) {
       const err = error as Error;
 
@@ -549,8 +546,10 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     const t = clamp((this._smoothedScrubFps - 5) / 25, 0, 1);
     const eased = t * t; // quadratic ease-in
     // lerp(max, min, eased)
-    return AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX +
-      (AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MIN - AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX) * eased;
+    return (
+      AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX +
+      (AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MIN - AudioPlaybackManager.SCRUB_SNIPPET_DURATION_MAX) * eased
+    );
   }
 
   /**
@@ -595,9 +594,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     // Hann window fade-in
     envelopeGain.gain.setValueAtTime(0, now);
     try {
-      envelopeGain.gain.setValueCurveAtTime(
-        AudioPlaybackManager.hannFadeIn, now, fadeDuration
-      );
+      envelopeGain.gain.setValueCurveAtTime(AudioPlaybackManager.hannFadeIn, now, fadeDuration);
     } catch {
       // Fallback for browsers that don't support setValueCurveAtTime well
       envelopeGain.gain.linearRampToValueAtTime(1, now + fadeDuration);
@@ -607,9 +604,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     const fadeOutStart = now + effectiveDuration - fadeDuration;
     if (fadeOutStart > now + fadeDuration) {
       try {
-        envelopeGain.gain.setValueCurveAtTime(
-          AudioPlaybackManager.hannFadeOut, fadeOutStart, fadeDuration
-        );
+        envelopeGain.gain.setValueCurveAtTime(AudioPlaybackManager.hannFadeOut, fadeOutStart, fadeDuration);
       } catch {
         // Fallback
         envelopeGain.gain.setValueAtTime(1, fadeOutStart);
@@ -629,7 +624,11 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     snippetNode.onended = () => {
       if (this.scrubSourceNode === snippetNode) {
         this.scrubSourceNode = null;
-        try { envelopeGain.disconnect(); } catch { /* already disconnected */ }
+        try {
+          envelopeGain.disconnect();
+        } catch {
+          /* already disconnected */
+        }
         this.scrubEnvelopeNode = null;
       }
     };
@@ -647,22 +646,28 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
       const fadeOut = AudioPlaybackManager.SCRUB_CROSSFADE_DURATION;
       try {
         this.scrubEnvelopeNode.gain.cancelScheduledValues(now);
-        this.scrubEnvelopeNode.gain.setValueAtTime(
-          this.scrubEnvelopeNode.gain.value, now
-        );
+        this.scrubEnvelopeNode.gain.setValueAtTime(this.scrubEnvelopeNode.gain.value, now);
         this.scrubEnvelopeNode.gain.linearRampToValueAtTime(0, now + fadeOut);
         // Schedule stop after fade completes
         this.scrubSourceNode.stop(now + fadeOut);
       } catch {
         // If scheduling fails, just stop immediately
-        try { this.scrubSourceNode.stop(); } catch { /* ignore */ }
+        try {
+          this.scrubSourceNode.stop();
+        } catch {
+          /* ignore */
+        }
       }
 
       // Move outgoing references to allow GC after stop
       const outgoing = this.scrubSourceNode;
       const outgoingEnvelope = this.scrubEnvelopeNode;
       outgoing.onended = () => {
-        try { outgoingEnvelope.disconnect(); } catch { /* ignore */ }
+        try {
+          outgoingEnvelope.disconnect();
+        } catch {
+          /* ignore */
+        }
       };
     }
 
@@ -754,7 +759,9 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> impl
     }
 
     if (this.audioContext) {
-      this.audioContext.close().catch((err) => { console.warn('AudioPlaybackManager: Audio context close failed:', err); });
+      this.audioContext.close().catch((err) => {
+        console.warn('AudioPlaybackManager: Audio context close failed:', err);
+      });
       this.audioContext = null;
     }
 

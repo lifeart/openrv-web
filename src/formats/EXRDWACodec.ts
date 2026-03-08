@@ -19,14 +19,9 @@ import { DecoderError } from '../core/errors';
 
 /** Standard JPEG zigzag scan order for 8x8 blocks */
 export const ZIGZAG_ORDER: readonly number[] = [
-  0,  1,  8, 16,  9,  2,  3, 10,
-  17, 24, 32, 25, 18, 11,  4,  5,
-  12, 19, 26, 33, 40, 48, 41, 34,
-  27, 20, 13,  6,  7, 14, 21, 28,
-  35, 42, 49, 56, 57, 50, 43, 36,
-  29, 22, 15, 23, 30, 37, 44, 51,
-  58, 59, 52, 45, 38, 31, 39, 46,
-  53, 60, 61, 54, 47, 55, 62, 63,
+  0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28,
+  35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47,
+  55, 62, 63,
 ];
 
 // Huffman constants (from OpenEXR ImfHuf.cpp)
@@ -144,7 +139,7 @@ export function floatToHalf(value: number): number {
   const f = int32[0]!;
 
   const sign = (f >> 16) & 0x8000;
-  let exponent = ((f >> 23) & 0xff) - 127 + 15;
+  const exponent = ((f >> 23) & 0xff) - 127 + 15;
   let mantissa = (f >> 13) & 0x3ff;
 
   if (exponent <= 0) {
@@ -163,19 +158,15 @@ export function floatToHalf(value: number): number {
 // ---------------------------------------------------------------------------
 
 interface HufDecEntry {
-  len: number;  // code length (0 = not in fast table)
-  sym: number;  // decoded symbol
+  len: number; // code length (0 = not in fast table)
+  sym: number; // decoded symbol
 }
 
 /**
  * Unpack the Huffman encoding table from packed 6-bit entries.
  * Returns code lengths for symbols im..iM.
  */
-function hufUnpackEncTable(
-  tableData: Uint8Array,
-  im: number,
-  iM: number,
-): number[] {
+function hufUnpackEncTable(tableData: Uint8Array, im: number, iM: number): number[] {
   const lengths = new Array(HUF_ENCSIZE).fill(0);
   const reader = new BitReader(tableData);
 
@@ -277,12 +268,7 @@ function hufBuildDecTable(
 /**
  * Decode Huffman-coded data using OpenEXR Huf format.
  */
-export function hufDecode(
-  data: Uint8Array,
-  offset: number,
-  compressedSize: number,
-  nRaw: number,
-): Uint16Array {
+export function hufDecode(data: Uint8Array, offset: number, compressedSize: number, nRaw: number): Uint16Array {
   if (compressedSize < 20 || nRaw === 0) {
     return new Uint16Array(nRaw);
   }
@@ -291,10 +277,14 @@ export function hufDecode(
   let pos = 0;
 
   // Read header (big-endian int32)
-  const im = view.getInt32(pos, false); pos += 4;
-  const iM = view.getInt32(pos, false); pos += 4;
-  const tableSize = view.getInt32(pos, false); pos += 4;
-  const nBits = view.getInt32(pos, false); pos += 4;
+  const im = view.getInt32(pos, false);
+  pos += 4;
+  const iM = view.getInt32(pos, false);
+  pos += 4;
+  const tableSize = view.getInt32(pos, false);
+  pos += 4;
+  const nBits = view.getInt32(pos, false);
+  pos += 4;
 
   if (im < 0 || im >= HUF_ENCSIZE || iM < 0 || iM >= HUF_ENCSIZE || im > iM) {
     throw new DecoderError('EXR', 'Invalid DWA Huffman table bounds');
@@ -485,17 +475,28 @@ export function parseDWABlockHeader(data: Uint8Array): {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   let off = 0;
 
-  const version = readBEInt64(view, off); off += 8;
-  const unknownUncompressedSize = readBEInt64(view, off); off += 8;
-  const unknownCompressedSize = readBEInt64(view, off); off += 8;
-  const acCompressedSize = readBEInt64(view, off); off += 8;
-  const dcCompressedSize = readBEInt64(view, off); off += 8;
-  const rleCompressedSize = readBEInt64(view, off); off += 8;
-  const rleUncompressedSize = readBEInt64(view, off); off += 8;
-  const rleRawSize = readBEInt64(view, off); off += 8;
-  const totalAcUncompressedCount = readBEInt64(view, off); off += 8;
-  const totalDcUncompressedCount = readBEInt64(view, off); off += 8;
-  const acCompression = readBEInt64(view, off); off += 8;
+  const version = readBEInt64(view, off);
+  off += 8;
+  const unknownUncompressedSize = readBEInt64(view, off);
+  off += 8;
+  const unknownCompressedSize = readBEInt64(view, off);
+  off += 8;
+  const acCompressedSize = readBEInt64(view, off);
+  off += 8;
+  const dcCompressedSize = readBEInt64(view, off);
+  off += 8;
+  const rleCompressedSize = readBEInt64(view, off);
+  off += 8;
+  const rleUncompressedSize = readBEInt64(view, off);
+  off += 8;
+  const rleRawSize = readBEInt64(view, off);
+  off += 8;
+  const totalAcUncompressedCount = readBEInt64(view, off);
+  off += 8;
+  const totalDcUncompressedCount = readBEInt64(view, off);
+  off += 8;
+  const acCompression = readBEInt64(view, off);
+  off += 8;
 
   const header: DWABlockHeader = {
     version,
@@ -563,7 +564,7 @@ async function zlibDecompress(data: Uint8Array): Promise<Uint8Array> {
 function reconstructPredictor(data: Uint8Array): Uint8Array {
   const result = new Uint8Array(data.length);
   for (let i = 0; i < data.length; i++) {
-    result[i] = i === 0 ? data[i]! : ((data[i]! + result[i - 1]!) & 0xff);
+    result[i] = i === 0 ? data[i]! : (data[i]! + result[i - 1]!) & 0xff;
   }
 
   const half = Math.floor(result.length / 2);
@@ -610,8 +611,8 @@ export async function decompressDWA(
   let pos = dataOffset;
 
   // 2. Validate sub-block sizes fit within compressed data
-  const totalSubBlockSize = header.unknownCompressedSize + header.acCompressedSize +
-    header.dcCompressedSize + header.rleCompressedSize;
+  const totalSubBlockSize =
+    header.unknownCompressedSize + header.acCompressedSize + header.dcCompressedSize + header.rleCompressedSize;
   if (pos + totalSubBlockSize > compressedData.length) {
     throw new DecoderError('EXR', 'DWA sub-block sizes exceed compressed data');
   }
@@ -635,8 +636,7 @@ export async function decompressDWA(
     if (header.acCompression === AC_DEFLATE) {
       // AC data is zlib compressed
       const inflated = await zlibDecompress(acData);
-      acValues = new Uint16Array(inflated.buffer, inflated.byteOffset,
-        Math.floor(inflated.byteLength / 2));
+      acValues = new Uint16Array(inflated.buffer, inflated.byteOffset, Math.floor(inflated.byteLength / 2));
     } else {
       // AC data is Huffman encoded (STATIC_HUFFMAN or other)
       acValues = hufDecode(acData, 0, acData.length, header.totalAcUncompressedCount);
@@ -758,12 +758,8 @@ export async function decompressDWA(
       } else {
         // Copy from RLE decompressed data
         const byteCount = chBytes * width;
-        if (rleByteOffset + byteCount <= rleBytes.length &&
-            channelByteOffset + byteCount <= output.length) {
-          output.set(
-            rleBytes.subarray(rleByteOffset, rleByteOffset + byteCount),
-            channelByteOffset,
-          );
+        if (rleByteOffset + byteCount <= rleBytes.length && channelByteOffset + byteCount <= output.length) {
+          output.set(rleBytes.subarray(rleByteOffset, rleByteOffset + byteCount), channelByteOffset);
         }
         rleByteOffset += byteCount;
         channelByteOffset += byteCount;

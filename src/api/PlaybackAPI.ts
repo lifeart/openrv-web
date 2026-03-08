@@ -117,7 +117,7 @@ export class PlaybackAPI {
 
       if (this.session.loopMode === 'loop') {
         // Wrap around using modular arithmetic
-        targetFrame = ((targetFrame - 1) % totalFrames + totalFrames) % totalFrames + 1;
+        targetFrame = ((((targetFrame - 1) % totalFrames) + totalFrames) % totalFrames) + 1;
       } else {
         // Clamp to valid range [1, totalFrames]
         targetFrame = Math.max(1, Math.min(totalFrames, targetFrame));

@@ -9,12 +9,7 @@
  * YAML used in OCIO config files.
  */
 
-import type {
-  OCIOConfigDefinition,
-  ColorSpaceDefinition,
-  DisplayDefinition,
-  LookDefinition,
-} from './OCIOConfig';
+import type { OCIOConfigDefinition, ColorSpaceDefinition, DisplayDefinition, LookDefinition } from './OCIOConfig';
 
 /**
  * Validation result from config parsing
@@ -103,33 +98,25 @@ export function validateOCIOConfig(configText: string): OCIOConfigValidation {
   const lines = trimmed.split('\n');
 
   // Check for ocio_profile_version (required)
-  const hasVersion = lines.some((line) =>
-    line.trim().startsWith('ocio_profile_version')
-  );
+  const hasVersion = lines.some((line) => line.trim().startsWith('ocio_profile_version'));
   if (!hasVersion) {
     errors.push('Missing required field: ocio_profile_version');
   }
 
   // Check for colorspaces section (required)
-  const hasColorSpaces = lines.some((line) =>
-    line.trim().startsWith('colorspaces:')
-  );
+  const hasColorSpaces = lines.some((line) => line.trim().startsWith('colorspaces:'));
   if (!hasColorSpaces) {
     errors.push('Missing required section: colorspaces');
   }
 
   // Check for displays section (optional but warn)
-  const hasDisplays = lines.some((line) =>
-    line.trim().startsWith('displays:')
-  );
+  const hasDisplays = lines.some((line) => line.trim().startsWith('displays:'));
   if (!hasDisplays) {
     warnings.push('Missing displays section - no display transforms will be available');
   }
 
   // Check for roles section (optional but warn)
-  const hasRoles = lines.some((line) =>
-    line.trim().startsWith('roles:')
-  );
+  const hasRoles = lines.some((line) => line.trim().startsWith('roles:'));
   if (!hasRoles) {
     warnings.push('Missing roles section - defaults will be used');
   }
@@ -150,8 +137,7 @@ function extractTopLevelValue(lines: string[], key: string): string | null {
     if (trimmed.startsWith(`${key}:`)) {
       let value = trimmed.substring(key.length + 1).trim();
       // Remove quotes if present
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
       return value || null;
@@ -217,8 +203,7 @@ function parseRolesSection(lines: string[]): Record<string, string> {
       const key = trimmed.substring(0, colonIdx).trim();
       let value = trimmed.substring(colonIdx + 1).trim();
       // Remove quotes
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
       roles[key] = value;
@@ -279,8 +264,10 @@ function parseDisplaysSection(lines: string[]): DisplayDefinition[] {
         // Simple format: just the view name
         let viewName = viewEntry;
         // Remove quotes
-        if ((viewName.startsWith('"') && viewName.endsWith('"')) ||
-            (viewName.startsWith("'") && viewName.endsWith("'"))) {
+        if (
+          (viewName.startsWith('"') && viewName.endsWith('"')) ||
+          (viewName.startsWith("'") && viewName.endsWith("'"))
+        ) {
           viewName = viewName.slice(1, -1);
         }
         if (viewName) {
@@ -349,8 +336,7 @@ function parseColorSpacesSection(lines: string[]): ColorSpaceDefinition[] {
         const key = trimmed.substring(0, colonIdx).trim();
         let value = trimmed.substring(colonIdx + 1).trim();
         // Remove quotes
-        if ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))) {
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
         }
 
@@ -434,8 +420,7 @@ function parseLooksSection(lines: string[]): LookDefinition[] {
         const key = trimmed.substring(0, colonIdx).trim();
         let value = trimmed.substring(colonIdx + 1).trim();
         // Remove quotes
-        if ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))) {
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
         }
 
@@ -466,8 +451,7 @@ function extractInlineValue(text: string): string | null {
   const colonIdx = text.indexOf(':');
   if (colonIdx < 0) return null;
   let value = text.substring(colonIdx + 1).trim();
-  if ((value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))) {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
     value = value.slice(1, -1);
   }
   return value || null;
@@ -500,7 +484,8 @@ function normalizeEncoding(encoding: string): ColorSpaceDefinition['encoding'] {
 function buildColorSpaceDefinition(partial: Partial<ColorSpaceDefinition>): ColorSpaceDefinition {
   const encoding = partial.encoding ?? 'sdr-video';
   const isWorkingSpace = encoding === 'scene-linear';
-  const isDisplaySpace = encoding === 'sdr-video' &&
+  const isDisplaySpace =
+    encoding === 'sdr-video' &&
     (partial.family?.toLowerCase() === 'display' || partial.family?.toLowerCase() === 'output');
 
   return {

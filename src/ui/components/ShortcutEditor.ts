@@ -112,7 +112,7 @@ export function buildActionGroups(manager: ShortcutEditorManager): ActionGroup[]
     return a.localeCompare(b);
   });
 
-  return sortedCategories.map(category => ({
+  return sortedCategories.map((category) => ({
     category,
     label: CATEGORY_LABELS[category] ?? category,
     actions: groups.get(category)!,
@@ -125,8 +125,14 @@ export function buildActionGroups(manager: ShortcutEditorManager): ActionGroup[]
 
 /** Modifier-only codes that should not be captured as standalone keys. */
 const MODIFIER_CODES = new Set([
-  'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
-  'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight',
+  'ShiftLeft',
+  'ShiftRight',
+  'ControlLeft',
+  'ControlRight',
+  'AltLeft',
+  'AltRight',
+  'MetaLeft',
+  'MetaRight',
 ]);
 
 /**
@@ -166,7 +172,7 @@ export function checkConflict(
   if (!conflicting) return null;
 
   const actions = manager.getAvailableActions();
-  const found = actions.find(a => a.action === conflicting);
+  const found = actions.find((a) => a.action === conflicting);
   return {
     existingAction: conflicting,
     existingDescription: found?.description ?? conflicting,
@@ -187,7 +193,7 @@ export interface ExportedBindings {
  * Export all custom bindings as a JSON string.
  */
 export function exportBindings(manager: ShortcutEditorManager): string {
-  const bindings = manager.getCustomBindings().map(b => ({
+  const bindings = manager.getCustomBindings().map((b) => ({
     action: b.action,
     combo: b.customCombo,
   }));
@@ -295,7 +301,6 @@ export class ShortcutEditor {
 
       this.listContainer.appendChild(section);
     }
-
   }
 
   private createToolbar(): HTMLElement {
@@ -336,7 +341,7 @@ export class ShortcutEditor {
 
     // Update UI to show listening state
     const rows = this.listContainer.querySelectorAll('.shortcut-row');
-    const row = [...rows].find(r => (r as HTMLElement).dataset.action === action);
+    const row = [...rows].find((r) => (r as HTMLElement).dataset.action === action);
     const comboBtn = row?.querySelector('.shortcut-combo');
     if (comboBtn) {
       comboBtn.textContent = 'Press key...';

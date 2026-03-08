@@ -168,9 +168,8 @@ describe('applySharpenCPU', () => {
 
   it('SHP-007: 3x3 image only center pixel is affected', () => {
     const pixels = [
-      50, 50, 50, 255, 50, 50, 50, 255, 50, 50, 50, 255,
-      50, 50, 50, 255, 200, 200, 200, 255, 50, 50, 50, 255,
-      50, 50, 50, 255, 50, 50, 50, 255, 50, 50, 50, 255,
+      50, 50, 50, 255, 50, 50, 50, 255, 50, 50, 50, 255, 50, 50, 50, 255, 200, 200, 200, 255, 50, 50, 50, 255, 50, 50,
+      50, 255, 50, 50, 50, 255, 50, 50, 50, 255,
     ];
     const img = createImageData(pixels, 3, 3);
     const original = new Uint8ClampedArray(img.data);
@@ -193,12 +192,7 @@ describe('applySharpenCPU', () => {
   });
 
   it('SHP-008: 2x2 image all pixels are border, all unchanged', () => {
-    const pixels = [
-      100, 100, 100, 255,
-      200, 200, 200, 255,
-      50, 50, 50, 255,
-      150, 150, 150, 255,
-    ];
+    const pixels = [100, 100, 100, 255, 200, 200, 200, 255, 50, 50, 50, 255, 150, 150, 150, 255];
     const img = createImageData(pixels, 2, 2);
     const original = new Uint8ClampedArray(img.data);
     applySharpenCPU(img, 1.0);
@@ -219,7 +213,7 @@ describe('applySharpenCPU', () => {
       const pixels: number[] = [];
       for (let y = 0; y < 5; y++) {
         for (let x = 0; x < 5; x++) {
-          const v = (x === 2 && y === 2) ? 200 : 100;
+          const v = x === 2 && y === 2 ? 200 : 100;
           pixels.push(v, v, v, 255);
         }
       }
@@ -281,7 +275,7 @@ describe('applySharpenCPU', () => {
       const pixels: number[] = [];
       for (let y = 0; y < 3; y++) {
         for (let x = 0; x < 3; x++) {
-          const v = (x === 1 && y === 1) ? 200 : 80;
+          const v = x === 1 && y === 1 ? 200 : 80;
           pixels.push(v, v, v, 255);
         }
       }

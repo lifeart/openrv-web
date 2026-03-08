@@ -3,7 +3,7 @@
  * Handles pointer/touch events, coordinate conversion, and zoom calculations.
  */
 
-import { StrokePoint } from '../../paint/types';
+import { type StrokePoint } from '../../paint/types';
 
 export interface PointerState {
   pointerId: number;
@@ -21,7 +21,7 @@ export function getCanvasPoint(
   canvasRect: DOMRect,
   displayWidth: number,
   displayHeight: number,
-  pressure: number = 0.5
+  pressure: number = 0.5,
 ): StrokePoint | null {
   if (displayWidth === 0 || displayHeight === 0) return null;
   if (canvasRect.width === 0 || canvasRect.height === 0) return null;
@@ -52,7 +52,7 @@ export function calculateWheelZoom(
   deltaY: number,
   currentZoom: number,
   minZoom: number = 0.1,
-  maxZoom: number = 10
+  maxZoom: number = 10,
 ): number | null {
   const zoomFactor = deltaY > 0 ? 0.9 : 1.1;
   const newZoom = Math.max(minZoom, Math.min(maxZoom, currentZoom * zoomFactor));
@@ -76,7 +76,7 @@ export function calculateZoomPan(
   currentPanY: number,
   oldZoom: number,
   newZoom: number,
-  fitMode: 'all' | 'width' | 'height' = 'all'
+  fitMode: 'all' | 'width' | 'height' = 'all',
 ): { panX: number; panY: number } {
   // Guard against zero dimensions
   if (sourceWidth <= 0 || sourceHeight <= 0) {
@@ -94,11 +94,7 @@ export function calculateZoomPan(
       break;
     case 'all':
     default:
-      fitScale = Math.min(
-        containerWidth / sourceWidth,
-        containerHeight / sourceHeight,
-        1
-      );
+      fitScale = Math.min(containerWidth / sourceWidth, containerHeight / sourceHeight, 1);
       break;
   }
 
@@ -150,7 +146,7 @@ export function calculatePinchZoom(
   currentDistance: number,
   initialZoom: number,
   minZoom: number = 0.1,
-  maxZoom: number = 10
+  maxZoom: number = 10,
 ): number | null {
   if (initialDistance <= 0 || currentDistance <= 0) return null;
 
@@ -172,7 +168,7 @@ export function isViewerContentElement(
   paintCanvas: HTMLCanvasElement,
   cropOverlay: HTMLCanvasElement | null,
   wipeLine: HTMLElement | null,
-  splitLine: HTMLElement | null = null
+  splitLine: HTMLElement | null = null,
 ): boolean {
   return (
     element === container ||
@@ -195,7 +191,7 @@ export function getPixelCoordinates(
   clientY: number,
   canvasRect: DOMRect,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): { x: number; y: number } | null {
   const x = clientX - canvasRect.left;
   const y = clientY - canvasRect.top;
@@ -218,11 +214,7 @@ export function getPixelCoordinates(
  * Get pixel color from ImageData at given coordinates.
  * Returns null if coordinates are out of bounds.
  */
-export function getPixelColor(
-  imageData: ImageData,
-  x: number,
-  y: number
-): { r: number; g: number; b: number } | null {
+export function getPixelColor(imageData: ImageData, x: number, y: number): { r: number; g: number; b: number } | null {
   const pixelIndex = (y * imageData.width + x) * 4;
 
   if (pixelIndex < 0 || pixelIndex + 2 >= imageData.data.length) {
@@ -255,7 +247,7 @@ export function interpolateZoom(
   startZoom: number,
   targetZoom: number,
   progress: number,
-  easingFn: (t: number) => number = easeOutCubic
+  easingFn: (t: number) => number = easeOutCubic,
 ): number {
   const easedProgress = easingFn(Math.max(0, Math.min(1, progress)));
   return startZoom + (targetZoom - startZoom) * easedProgress;

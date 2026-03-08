@@ -4,12 +4,8 @@
  * Provides controls for loading image, position presets, scale, opacity, and margin.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import {
-  WatermarkOverlay,
-  WatermarkState,
-  WatermarkPosition,
-} from './WatermarkOverlay';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { WatermarkOverlay, type WatermarkState, type WatermarkPosition } from './WatermarkOverlay';
 import { getIconSvg } from './shared/Icons';
 
 export interface WatermarkControlEvents extends EventMap {
@@ -24,12 +20,12 @@ const POSITION_LABELS: Record<WatermarkPosition, string> = {
   'top-center': 'TC',
   'top-right': 'TR',
   'center-left': 'CL',
-  'center': 'C',
+  center: 'C',
   'center-right': 'CR',
   'bottom-left': 'BL',
   'bottom-center': 'BC',
   'bottom-right': 'BR',
-  'custom': 'Custom',
+  custom: 'Custom',
 };
 
 export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
@@ -245,7 +241,7 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
         this.overlay.setScale(value / 100);
         this.scaleValue.textContent = `${Math.round(value)}%`;
       },
-      '%'
+      '%',
     );
     this.scaleSlider = scaleRow.slider;
     this.scaleValue = scaleRow.value;
@@ -262,7 +258,7 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
         this.overlay.setOpacity(value / 100);
         this.opacityValue.textContent = `${Math.round(value)}%`;
       },
-      '%'
+      '%',
     );
     this.opacitySlider = opacityRow.slider;
     this.opacityValue = opacityRow.value;
@@ -279,7 +275,7 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
         this.overlay.setMargin(value);
         this.marginValue.textContent = `${Math.round(value)}px`;
       },
-      'px'
+      'px',
     );
     this.marginSlider = marginRow.slider;
     this.marginValue = marginRow.value;
@@ -295,7 +291,7 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
     max: number,
     initial: number,
     onChange: (value: number) => void,
-    suffix = ''
+    suffix = '',
   ): { row: HTMLElement; slider: HTMLInputElement; value: HTMLSpanElement } {
     const row = document.createElement('div');
     row.style.cssText = `
@@ -358,7 +354,7 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
 
     try {
       await this.overlay.loadImage(file);
-    } catch (err) {
+    } catch (_err) {
       // Error is already emitted by the overlay via 'error' event
       // which we forward in setupOverlayListeners
     }

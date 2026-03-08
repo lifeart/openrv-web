@@ -9,7 +9,7 @@
  * This is a state manager only — actual UI hiding is done by external wiring code.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 
 /** Source that triggered the client mode state change */
 export type ClientModeSource = 'url' | 'api';
@@ -110,9 +110,7 @@ export class ClientMode extends EventEmitter<ClientModeEvents> {
     this.urlParamName = config.urlParamName ?? 'clientMode';
     if (config.allowedCategories) {
       // Convert category names to prefix patterns (e.g. 'playback' -> 'playback.')
-      this.allowedActions = config.allowedCategories.map((cat) =>
-        cat.endsWith('.') ? cat : cat + '.'
-      );
+      this.allowedActions = config.allowedCategories.map((cat) => (cat.endsWith('.') ? cat : cat + '.'));
     } else {
       this.allowedActions = [...DEFAULT_ALLOWED_ACTIONS];
     }

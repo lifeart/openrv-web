@@ -54,11 +54,7 @@ export class AutoExposureController {
       return;
     }
 
-    this._currentExposure = this.smoother.smooth(
-      EXPOSURE_SMOOTH_KEY,
-      clampedTarget,
-      config.adaptationSpeed,
-    );
+    this._currentExposure = this.smoother.smooth(EXPOSURE_SMOOTH_KEY, clampedTarget, config.adaptationSpeed);
   }
 
   /**
@@ -69,10 +65,7 @@ export class AutoExposureController {
    * @param config - Auto-exposure configuration
    * @returns Map of frame number → smoothed exposure value
    */
-  computeBatch(
-    luminances: Map<number, number>,
-    config: AutoExposureState,
-  ): Map<number, number> {
+  computeBatch(luminances: Map<number, number>, config: AutoExposureState): Map<number, number> {
     const result = new Map<number, number>();
     if (!config.enabled) return result;
 

@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  encodeSessionState,
-  decodeSessionState,
-  buildShareURL,
-  type SessionURLState,
-} from './SessionURLManager';
+import { encodeSessionState, decodeSessionState, buildShareURL, type SessionURLState } from './SessionURLManager';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -8,28 +8,31 @@ import type { ConnectionState, SyncUser } from './types';
 import { encodeWebRTCURLSignal } from './WebRTCURLSignaling';
 
 // Mock WebSocket (same as in WebSocketClient tests)
-vi.stubGlobal('WebSocket', class {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+vi.stubGlobal(
+  'WebSocket',
+  class {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
 
-  readyState = 0;
-  onopen: (() => void) | null = null;
-  onclose: ((e: { code: number; reason: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onmessage: ((e: { data: string }) => void) | null = null;
+    readyState = 0;
+    onopen: (() => void) | null = null;
+    onclose: ((e: { code: number; reason: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onmessage: ((e: { data: string }) => void) | null = null;
 
-  constructor(_url: string) {
-    // Don't auto-connect in these tests
-  }
+    constructor(_url: string) {
+      // Don't auto-connect in these tests
+    }
 
-  send(_data: string): void {}
-  close(_code?: number, _reason?: string): void {
-    this.readyState = 3;
-    this.onclose?.({ code: _code ?? 1000, reason: _reason ?? '' });
-  }
-});
+    send(_data: string): void {}
+    close(_code?: number, _reason?: string): void {
+      this.readyState = 3;
+      this.onclose?.({ code: _code ?? 1000, reason: _reason ?? '' });
+    }
+  },
+);
 
 describe('NetworkSyncManager', () => {
   let manager: NetworkSyncManager;
@@ -144,9 +147,7 @@ describe('NetworkSyncManager', () => {
       expect(manager.connectionState).toBe('connected');
       expect(manager.isHost).toBe(true);
       expect(manager.roomInfo).not.toBeNull();
-      expect(errorHandler).not.toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
-      );
+      expect(errorHandler).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'RECONNECT_FAILED' }));
     });
 
     it('NSM-011c: joinRoom does not auto-fallback on reconnect failure (wss)', () => {
@@ -162,9 +163,7 @@ describe('NetworkSyncManager', () => {
 
       expect(manager.connectionState).toBe('error');
       expect(manager.roomInfo).toBeNull();
-      expect(errorHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
-      );
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ code: 'RECONNECT_FAILED' }));
     });
 
     it('NSM-011d: createRoom over ws:// does not auto-fallback', () => {
@@ -180,9 +179,7 @@ describe('NetworkSyncManager', () => {
 
       expect(manager.connectionState).toBe('error');
       expect(manager.roomInfo).toBeNull();
-      expect(errorHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
-      );
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ code: 'RECONNECT_FAILED' }));
     });
 
     it('NSM-011e: joinRoom over ws:// does not auto-fallback', () => {
@@ -198,9 +195,7 @@ describe('NetworkSyncManager', () => {
 
       expect(manager.connectionState).toBe('error');
       expect(manager.roomInfo).toBeNull();
-      expect(errorHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
-      );
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ code: 'RECONNECT_FAILED' }));
     });
 
     it('NSM-011f: applyServerlessResponseLink returns false when no pending invite exists', async () => {
@@ -461,14 +456,16 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-083: sendPlaybackSync is suppressed when not connected', () => {
-      expect(() => manager.sendPlaybackSync({
-        isPlaying: true,
-        currentFrame: 10,
-        playbackSpeed: 1,
-        playDirection: 1,
-        loopMode: 'loop',
-        timestamp: Date.now(),
-      })).not.toThrow();
+      expect(() =>
+        manager.sendPlaybackSync({
+          isPlaying: true,
+          currentFrame: 10,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        }),
+      ).not.toThrow();
     });
 
     it('NSM-084: sendFrameSync is suppressed when playback sync disabled', () => {
@@ -562,7 +559,7 @@ describe('NetworkSyncManager', () => {
       }
 
       // All users should have colors assigned
-      users.forEach(u => {
+      users.forEach((u) => {
         expect(u.color).toBeTruthy();
       });
     });
@@ -644,7 +641,11 @@ describe('NetworkSyncManager', () => {
     it('NSM-110: annotation strokes have user overridden with sender ID', () => {
       manager._applyLocalRoomCreation();
       manager.setSyncSettings({
-        playback: true, view: true, color: true, annotations: true, cursor: true,
+        playback: true,
+        view: true,
+        color: true,
+        annotations: true,
+        cursor: true,
       });
 
       const handler = vi.fn();
@@ -662,7 +663,22 @@ describe('NetworkSyncManager', () => {
         payload: {
           frame: 1,
           strokes: [
-            { type: 'pen', id: 's1', frame: 1, user: 'spoofed-user', color: [1, 0, 0, 1], width: 2, brush: 0, points: [{ x: 0, y: 0 }], join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0 },
+            {
+              type: 'pen',
+              id: 's1',
+              frame: 1,
+              user: 'spoofed-user',
+              color: [1, 0, 0, 1],
+              width: 2,
+              brush: 0,
+              points: [{ x: 0, y: 0 }],
+              join: 3,
+              cap: 2,
+              splat: false,
+              mode: 0,
+              startFrame: 1,
+              duration: 0,
+            },
           ],
           action: 'add',
           annotationId: 's1',
@@ -679,7 +695,11 @@ describe('NetworkSyncManager', () => {
     it('NSM-111: note has author overridden with sender ID', () => {
       manager._applyLocalRoomCreation();
       manager.setSyncSettings({
-        playback: true, view: true, color: true, annotations: true, cursor: true,
+        playback: true,
+        view: true,
+        color: true,
+        annotations: true,
+        cursor: true,
       });
 
       const handler = vi.fn();
@@ -697,10 +717,17 @@ describe('NetworkSyncManager', () => {
         payload: {
           action: 'add',
           note: {
-            id: 'n1', text: 'Test', author: 'spoofed-author',
-            sourceIndex: 0, frameStart: 1, frameEnd: 5,
-            createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
-            status: 'open', parentId: null, color: '#ff0000',
+            id: 'n1',
+            text: 'Test',
+            author: 'spoofed-author',
+            sourceIndex: 0,
+            frameStart: 1,
+            frameEnd: 5,
+            createdAt: new Date().toISOString(),
+            modifiedAt: new Date().toISOString(),
+            status: 'open',
+            parentId: null,
+            color: '#ff0000',
           },
           timestamp: Date.now(),
         },
@@ -753,9 +780,7 @@ describe('NetworkSyncManager', () => {
       vi.advanceTimersByTime(3000); // retry 2
       vi.advanceTimersByTime(3000); // timeout after max
 
-      expect(toastHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'warning' }),
-      );
+      expect(toastHandler).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
     });
 
     it('NSM-122: handleStateResponse clears pending request', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CropManager, CropManagerContext } from './CropManager';
+import { CropManager, type CropManagerContext } from './CropManager';
 
 interface TestableCropManager {
   _isDraggingCrop: boolean;

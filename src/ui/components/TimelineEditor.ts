@@ -13,7 +13,7 @@
  * - Snap-to-cut-boundary during drag
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { formatTimecode } from '../../utils/media/Timecode';
 import { Z_INDEX, OPACITY } from './shared/theme';
 import type { Session } from '../../core/session/Session';
@@ -236,9 +236,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       this.emit('selectionCleared', undefined);
     }
 
-    this.totalFrames = this.cuts.length > 0
-      ? maxEndFrame
-      : Math.max(1, this.totalFrames);
+    this.totalFrames = this.cuts.length > 0 ? maxEndFrame : Math.max(1, this.totalFrames);
 
     this.render();
   }
@@ -707,14 +705,10 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
           e.preventDefault();
           if (e.shiftKey) {
             // Previous cut
-            this.selectedCutIndex = this.selectedCutIndex <= 0
-              ? this.cuts.length - 1
-              : this.selectedCutIndex - 1;
+            this.selectedCutIndex = this.selectedCutIndex <= 0 ? this.cuts.length - 1 : this.selectedCutIndex - 1;
           } else {
             // Next cut
-            this.selectedCutIndex = this.selectedCutIndex >= this.cuts.length - 1
-              ? 0
-              : this.selectedCutIndex + 1;
+            this.selectedCutIndex = this.selectedCutIndex >= this.cuts.length - 1 ? 0 : this.selectedCutIndex + 1;
           }
           this.emit('cutSelected', { cutIndex: this.selectedCutIndex });
           this.render();
@@ -925,9 +919,10 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     const handle = document.createElement('div');
     handle.className = 'trim-handle';
 
-    const gripBorder = side === 'left'
-      ? 'border-left: 2px dotted rgba(255,255,255,0.4);'
-      : 'border-right: 2px dotted rgba(255,255,255,0.4);';
+    const gripBorder =
+      side === 'left'
+        ? 'border-left: 2px dotted rgba(255,255,255,0.4);'
+        : 'border-right: 2px dotted rgba(255,255,255,0.4);';
 
     handle.style.cssText = `
       position: absolute;
@@ -965,14 +960,19 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
         side === 'left' ? 'trim-in' : 'trim-out',
         cutIndex,
         e.clientX,
-        side === 'left' ? cut.inPoint : cut.outPoint
+        side === 'left' ? cut.inPoint : cut.outPoint,
       );
     });
 
     return handle;
   }
 
-  private startDrag(type: 'move' | 'trim-in' | 'trim-out', cutIndex: number, clientX: number, startFrame: number): void {
+  private startDrag(
+    type: 'move' | 'trim-in' | 'trim-out',
+    cutIndex: number,
+    clientX: number,
+    startFrame: number,
+  ): void {
     this.isDragging = true;
     this.dragType = type;
     this.selectedCutIndex = cutIndex;

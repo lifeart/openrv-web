@@ -1,13 +1,9 @@
 import { RegisterNode } from '../base/NodeFactory';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
-import {
-  applyNoiseReduction,
-  isNoiseReductionActive,
-  type NoiseReductionParams,
-} from '../../filters/NoiseReduction';
+import { applyNoiseReduction, isNoiseReductionActive, type NoiseReductionParams } from '../../filters/NoiseReduction';
 import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**

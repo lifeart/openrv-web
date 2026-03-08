@@ -133,7 +133,10 @@ export interface SphericalMetadata {
  */
 export function mat4Identity(): Mat4 {
   const m = new Float32Array(16);
-  m[0] = 1; m[5] = 1; m[10] = 1; m[15] = 1;
+  m[0] = 1;
+  m[5] = 1;
+  m[10] = 1;
+  m[15] = 1;
   return m;
 }
 
@@ -211,10 +214,22 @@ export function mat4Multiply(a: Mat4, b: Mat4): Mat4 {
 export function mat4Invert(m: Mat4): Mat4 | null {
   const out = new Float32Array(16);
 
-  const a00 = m[0]!, a01 = m[1]!, a02 = m[2]!, a03 = m[3]!;
-  const a10 = m[4]!, a11 = m[5]!, a12 = m[6]!, a13 = m[7]!;
-  const a20 = m[8]!, a21 = m[9]!, a22 = m[10]!, a23 = m[11]!;
-  const a30 = m[12]!, a31 = m[13]!, a32 = m[14]!, a33 = m[15]!;
+  const a00 = m[0]!,
+    a01 = m[1]!,
+    a02 = m[2]!,
+    a03 = m[3]!;
+  const a10 = m[4]!,
+    a11 = m[5]!,
+    a12 = m[6]!,
+    a13 = m[7]!;
+  const a20 = m[8]!,
+    a21 = m[9]!,
+    a22 = m[10]!,
+    a23 = m[11]!;
+  const a30 = m[12]!,
+    a31 = m[13]!,
+    a32 = m[14]!,
+    a33 = m[15]!;
 
   const b00 = a00 * a11 - a01 * a10;
   const b01 = a00 * a12 - a02 * a10;
@@ -291,7 +306,7 @@ export function directionToEquirectUV(dir: Vec3): { u: number; v: number } {
  */
 export function equirectUVToDirection(u: number, v: number): Vec3 {
   const theta = (u - 0.5) * 2 * Math.PI; // longitude
-  const phi = (0.5 - v) * Math.PI;       // latitude
+  const phi = (0.5 - v) * Math.PI; // latitude
 
   const cosPhi = Math.cos(phi);
   return {
@@ -341,8 +356,8 @@ export function detect360Content(metadata: SphericalMetadata, width: number, hei
  */
 export class SphericalProjection {
   private _enabled = false;
-  private _yaw = 0;   // radians
-  private _pitch = 0;  // radians
+  private _yaw = 0; // radians
+  private _pitch = 0; // radians
   private _fov = DEFAULT_FOV; // degrees
 
   // Drag state
@@ -462,11 +477,7 @@ export class SphericalProjection {
     // Dragging right (positive dx) should look right (increase yaw)
     this._yaw = this._dragStartYaw + dx * sensitivity;
     // Dragging down (positive dy) should look down (decrease pitch)
-    this._pitch = clamp(
-      this._dragStartPitch - dy * sensitivity,
-      -Math.PI / 2,
-      Math.PI / 2,
-    );
+    this._pitch = clamp(this._dragStartPitch - dy * sensitivity, -Math.PI / 2, Math.PI / 2);
   }
 
   /**
@@ -527,7 +538,12 @@ export class SphericalProjection {
    * @param canvasHeight - Canvas height
    * @returns Equirectangular UV coordinates
    */
-  screenToEquirectUV(screenU: number, screenV: number, canvasWidth: number, canvasHeight: number): { u: number; v: number } {
+  screenToEquirectUV(
+    screenU: number,
+    screenV: number,
+    canvasWidth: number,
+    canvasHeight: number,
+  ): { u: number; v: number } {
     const aspect = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
     const fovRad = this._fov * DEG2RAD;
     const tanHalfFov = Math.tan(fovRad / 2);

@@ -122,4 +122,3 @@ export function getPreferencesManager(): PreferencesManager {
 export function resetPreferencesManagerForTests(): void {
   sharedPreferencesManager = null;
 }
-

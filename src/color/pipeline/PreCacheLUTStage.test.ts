@@ -17,8 +17,8 @@ function createInvertLUT1D(): LUT1D {
 function createTestImageData(width: number, height: number): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < width * height; i++) {
-    data[i * 4] = 128;     // R
-    data[i * 4 + 1] = 64;  // G
+    data[i * 4] = 128; // R
+    data[i * 4 + 1] = 64; // G
     data[i * 4 + 2] = 192; // B
     data[i * 4 + 3] = 255; // A
   }

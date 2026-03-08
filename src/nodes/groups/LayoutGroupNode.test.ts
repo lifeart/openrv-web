@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { LayoutGroupNode, computeTileViewports } from './LayoutGroupNode';
 import type { EvalContext } from '../../core/graph/Graph';
 import { IPNode } from '../base/IPNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 
 class MockNode extends IPNode {
   constructor(name: string) {
@@ -19,7 +19,7 @@ describe('LayoutGroupNode', () => {
     frame: 1,
     width: 1920,
     height: 1080,
-    quality: 'full'
+    quality: 'full',
   };
 
   it('LGN-001: initializes with grid properties', () => {
@@ -32,7 +32,7 @@ describe('LayoutGroupNode', () => {
     const node = new LayoutGroupNode();
     node.connectInput(new MockNode('1'));
     node.connectInput(new MockNode('2'));
-    
+
     const dims = node.getGridDimensions();
     expect(dims.columns).toBe(2);
     expect(dims.rows).toBe(1);
@@ -44,7 +44,7 @@ describe('LayoutGroupNode', () => {
     node.connectInput(new MockNode('1'));
     node.connectInput(new MockNode('2'));
     node.connectInput(new MockNode('3'));
-    
+
     const dims = node.getGridDimensions();
     expect(dims.columns).toBe(1);
     expect(dims.rows).toBe(3);
@@ -55,7 +55,7 @@ describe('LayoutGroupNode', () => {
     node.properties.setValue('mode', 'grid');
     node.properties.setValue('columns', 3);
     node.properties.setValue('rows', 4);
-    
+
     const dims = node.getGridDimensions();
     expect(dims.columns).toBe(3);
     expect(dims.rows).toBe(4);
@@ -66,13 +66,13 @@ describe('LayoutGroupNode', () => {
     node.properties.setValue('mode', 'grid');
     node.properties.setValue('columns', 0); // Trigger auto
     node.properties.setValue('rows', 0);
-    
+
     // 4 inputs -> 2x2 grid
     node.connectInput(new MockNode('1'));
     node.connectInput(new MockNode('2'));
     node.connectInput(new MockNode('3'));
     node.connectInput(new MockNode('4'));
-    
+
     let dims = node.getGridDimensions();
     expect(dims.columns).toBe(2);
     expect(dims.rows).toBe(2);

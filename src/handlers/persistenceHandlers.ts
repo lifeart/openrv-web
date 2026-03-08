@@ -3,8 +3,7 @@
  * matte settings, metadata, settings restoration, and GTO sync.
  */
 
-import type { Session } from '../core/session/Session';
-import type { SessionEvents } from '../core/session/Session';
+import type { Session, SessionEvents } from '../core/session/Session';
 import { SessionGTOStore } from '../core/session/SessionGTOStore';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
@@ -15,15 +14,11 @@ import type { SessionBridgeContext } from '../AppSessionBridge';
 export function bindPersistenceHandlers(
   context: SessionBridgeContext,
   session: Session,
-  on: <K extends keyof SessionEvents>(
-    session: Session,
-    event: K,
-    handler: (data: SessionEvents[K]) => void
-  ) => void,
+  on: <K extends keyof SessionEvents>(session: Session, event: K, handler: (data: SessionEvents[K]) => void) => void,
   updateHistogram: () => void,
   updateWaveform: () => void,
   updateVectorscope: () => void,
-  updateGamutDiagram?: () => void
+  updateGamutDiagram?: () => void,
 ): void {
   // Load annotations from GTO files
   on(session, 'annotationsLoaded', ({ annotations, effects }) => {
@@ -46,11 +41,7 @@ export function bindPersistenceHandlers(
   // Apply paint effects from GTO session to PaintEngine
   on(session, 'paintEffectsLoaded', (effects) => {
     if (effects.ghost !== undefined) {
-      context.getPaintEngine().setGhostMode(
-        effects.ghost,
-        effects.ghostBefore ?? 3,
-        effects.ghostAfter ?? 3
-      );
+      context.getPaintEngine().setGhostMode(effects.ghost, effects.ghostBefore ?? 3, effects.ghostAfter ?? 3);
     }
     if (effects.hold !== undefined) {
       context.getPaintEngine().setHoldMode(effects.hold);
@@ -83,7 +74,7 @@ function handleSettingsLoaded(
   updateHistogram: () => void,
   updateWaveform: () => void,
   updateVectorscope: () => void,
-  updateGamutDiagram?: () => void
+  updateGamutDiagram?: () => void,
 ): void {
   if (settings.colorAdjustments) {
     context.getColorControls().setAdjustments(settings.colorAdjustments);

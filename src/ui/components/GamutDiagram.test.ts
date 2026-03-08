@@ -368,7 +368,7 @@ describe('GamutDiagram', () => {
       diagram.show();
 
       // Get the theme callback registered via on('themeChanged', ...)
-      const themeCall = vi.mocked(themeManager.on).mock.calls.find(c => c[0] === 'themeChanged');
+      const themeCall = vi.mocked(themeManager.on).mock.calls.find((c) => c[0] === 'themeChanged');
       const themeCallback = themeCall?.[1] as (() => void) | undefined;
       expect(themeCallback).toBeDefined();
 
@@ -378,7 +378,7 @@ describe('GamutDiagram', () => {
 
     it('GD-U081: theme change does not redraw when hidden', () => {
       // Diagram starts hidden, get the callback
-      const themeCall = vi.mocked(themeManager.on).mock.calls.find(c => c[0] === 'themeChanged');
+      const themeCall = vi.mocked(themeManager.on).mock.calls.find((c) => c[0] === 'themeChanged');
       const themeCallback = themeCall?.[1] as (() => void) | undefined;
       expect(themeCallback).toBeDefined();
 

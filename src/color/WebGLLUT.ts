@@ -5,7 +5,7 @@
  * Supports float texture precision when available (float32 > float16 > uint8 fallback).
  */
 
-import { LUT3D, createLUTTexture } from './LUTLoader';
+import { type LUT3D, createLUTTexture } from './LUTLoader';
 import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from './LUTUtils';
 import { ShaderProgram } from '../render/ShaderProgram';
 
@@ -20,24 +20,36 @@ function convertToFloat16Array(data: Float32Array): Uint16Array {
 
   for (let i = 0; i < data.length; i++) {
     const val = data[i]!;
-    if (val === 0) { output[i] = 0; continue; }
+    if (val === 0) {
+      output[i] = 0;
+      continue;
+    }
     if (!isFinite(val)) {
-      output[i] = val !== val ? 0x7E00 : (val > 0 ? 0x7C00 : 0xFC00);
+      output[i] = val !== val ? 0x7e00 : val > 0 ? 0x7c00 : 0xfc00;
       continue;
     }
 
     view.setFloat32(0, val, true);
     const bits = view.getUint32(0, true);
     const sign = (bits >> 31) & 1;
-    const exp = (bits >> 23) & 0xFF;
-    const mantissa = bits & 0x7FFFFF;
+    const exp = (bits >> 23) & 0xff;
+    const mantissa = bits & 0x7fffff;
 
-    if (exp === 0) { output[i] = sign << 15; continue; }
+    if (exp === 0) {
+      output[i] = sign << 15;
+      continue;
+    }
 
     const newExp = exp - 127 + 15;
-    if (newExp >= 0x1F) { output[i] = (sign << 15) | 0x7C00; continue; }
+    if (newExp >= 0x1f) {
+      output[i] = (sign << 15) | 0x7c00;
+      continue;
+    }
     if (newExp <= 0) {
-      if (newExp < -10) { output[i] = sign << 15; continue; }
+      if (newExp < -10) {
+        output[i] = sign << 15;
+        continue;
+      }
       output[i] = (sign << 15) | ((mantissa | 0x800000) >> (14 - newExp));
       continue;
     }
@@ -204,11 +216,7 @@ export function detectFloatPrecision(gl: WebGL2RenderingContext): FloatPrecision
 /**
  * Test if a specific internal format can be used as a framebuffer color attachment.
  */
-function testFramebufferCompleteness(
-  gl: WebGL2RenderingContext,
-  internalFormat: number,
-  type: number
-): boolean {
+function testFramebufferCompleteness(gl: WebGL2RenderingContext, internalFormat: number, type: number): boolean {
   const tex = gl.createTexture();
   const fbo = gl.createFramebuffer();
 
@@ -395,22 +403,12 @@ export class WebGLLUTProcessor {
     // Create position buffer (fullscreen quad)
     this.positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-       1,  1,
-    ]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
     // Create texture coordinate buffer
     this.texCoordBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      0, 0,
-      1, 0,
-      0, 1,
-      1, 1,
-    ]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
 
     // Create image texture
     this.imageTexture = gl.createTexture();
@@ -573,7 +571,11 @@ export class WebGLLUTProcessor {
     gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
     // Only set texture params when dimensions or filter mode change (params are sticky on the texture object)
-    if (this.imageTextureWidth !== width || this.imageTextureHeight !== height || this.imageTextureFilter !== gl.LINEAR) {
+    if (
+      this.imageTextureWidth !== width ||
+      this.imageTextureHeight !== height ||
+      this.imageTextureFilter !== gl.LINEAR
+    ) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -619,12 +621,7 @@ export class WebGLLUTProcessor {
    * @param intensity - LUT intensity (0-1)
    * @returns New Float32Array with LUT applied, or original if no LUT loaded
    */
-  applyFloat(
-    data: Float32Array,
-    width: number,
-    height: number,
-    intensity: number = 1.0
-  ): Float32Array {
+  applyFloat(data: Float32Array, width: number, height: number, intensity: number = 1.0): Float32Array {
     if (!this.isReady() || !this.currentLUT || !this.lutTexture) {
       return data;
     }
@@ -660,13 +657,22 @@ export class WebGLLUTProcessor {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
     gl.texImage2D(
-      gl.TEXTURE_2D, 0, this._activeInternalFormat,
-      width, height, 0,
-      gl.RGBA, this._activeType,
-      this._activeType === gl.HALF_FLOAT ? convertToFloat16Array(data) : data
+      gl.TEXTURE_2D,
+      0,
+      this._activeInternalFormat,
+      width,
+      height,
+      0,
+      gl.RGBA,
+      this._activeType,
+      this._activeType === gl.HALF_FLOAT ? convertToFloat16Array(data) : data,
     );
     // Only set texture params when dimensions or filter mode change (params are sticky on the texture object)
-    if (this.imageTextureWidth !== width || this.imageTextureHeight !== height || this.imageTextureFilter !== gl.NEAREST) {
+    if (
+      this.imageTextureWidth !== width ||
+      this.imageTextureHeight !== height ||
+      this.imageTextureFilter !== gl.NEAREST
+    ) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -727,11 +733,7 @@ export class WebGLLUTProcessor {
       if (this.floatOutputTexture) gl.deleteTexture(this.floatOutputTexture);
       this.floatOutputTexture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.floatOutputTexture);
-      gl.texImage2D(
-        gl.TEXTURE_2D, 0, this._activeInternalFormat,
-        width, height, 0,
-        gl.RGBA, this._activeType, null
-      );
+      gl.texImage2D(gl.TEXTURE_2D, 0, this._activeInternalFormat, width, height, 0, gl.RGBA, this._activeType, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -746,10 +748,7 @@ export class WebGLLUTProcessor {
         }
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.floatFBO);
-      gl.framebufferTexture2D(
-        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
-        gl.TEXTURE_2D, this.floatOutputTexture, 0
-      );
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.floatOutputTexture, 0);
 
       const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
       if (status !== gl.FRAMEBUFFER_COMPLETE) {

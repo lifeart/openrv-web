@@ -14,44 +14,45 @@
  * Handles top-level lifecycle (init, mount, dispose) and the render loop.
  */
 
+import { wireColorControls, updateOCIOPipeline } from './AppColorWiring';
+import { AppControlRegistry } from './AppControlRegistry';
+import { wireDCCBridge } from './AppDCCWiring';
+import { wireEffectsControls } from './AppEffectsWiring';
+import { AppKeyboardHandler } from './AppKeyboardHandler';
+import { AppNetworkBridge } from './AppNetworkBridge';
+import { AppPersistenceManager } from './AppPersistenceManager';
+import { wirePlaybackControls } from './AppPlaybackWiring';
+import { AppSessionBridge } from './AppSessionBridge';
+import { detectDisplayCapabilities, type DisplayCapabilities } from './color/DisplayCapabilities';
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
 import { TimelineMagnifier } from './ui/components/TimelineMagnifier';
 import { HeaderBar } from './ui/components/layout/HeaderBar';
-import { TabBar, TabId } from './ui/components/layout/TabBar';
+import type { TabId } from './ui/components/layout/TabBar';
+import { TabBar } from './ui/components/layout/TabBar';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { PaintEngine } from './paint/PaintEngine';
-import { detectDisplayCapabilities, type DisplayCapabilities } from './color/DisplayCapabilities';
 import { KeyboardManager } from './utils/input/KeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { Logger } from './utils/Logger';
 import { getThemeManager } from './utils/ui/ThemeManager';
 import { getCorePreferencesManager } from './core/PreferencesManager';
 import type { OpenRVAPIConfig } from './api/OpenRVAPI';
-import { AppKeyboardHandler } from './AppKeyboardHandler';
-import { AppNetworkBridge } from './AppNetworkBridge';
-import { AppPersistenceManager } from './AppPersistenceManager';
-import { AppSessionBridge } from './AppSessionBridge';
-import { AppControlRegistry } from './AppControlRegistry';
 import { RenderLoopService } from './services/RenderLoopService';
 import { FrameNavigationService } from './services/FrameNavigationService';
 import { SessionURLService } from './services/SessionURLService';
 import { TimelineEditorService } from './services/TimelineEditorService';
 import { buildActionHandlers } from './services/KeyboardActionMap';
 import { LayoutOrchestrator } from './services/LayoutOrchestrator';
-import type { AppWiringContext } from './AppWiringContext';
+import type { ColorWiringState } from './AppColorWiring';
+import type { AppWiringContext, StatefulWiringResult } from './AppWiringContext';
 
 // Wiring modules
-import { wireColorControls, updateOCIOPipeline } from './AppColorWiring';
-import type { StatefulWiringResult } from './AppWiringContext';
-import type { ColorWiringState } from './AppColorWiring';
 import { wireViewControls } from './AppViewWiring';
-import { wireEffectsControls } from './AppEffectsWiring';
 import { wireTransformControls } from './AppTransformWiring';
-import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
-import { wireDCCBridge } from './AppDCCWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
 import { GotoFrameOverlay } from './ui/components/GotoFrameOverlay';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
@@ -62,7 +63,6 @@ import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManag
 import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
-import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { VirtualSliderController } from './ui/components/VirtualSliderController';
 import { getCurrentSourceStartFrame } from './utils/media/SourceUIState';
@@ -142,16 +142,16 @@ export class App {
     this.session = new Session();
     this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
     this.paintEngine = new PaintEngine();
-    this.viewer = new Viewer({ session: this.session, paintEngine: this.paintEngine, capabilities: this.displayCapabilities });
+    this.viewer = new Viewer({
+      session: this.session,
+      paintEngine: this.paintEngine,
+      capabilities: this.displayCapabilities,
+    });
     this.renderLoop = new RenderLoopService({ session: this.session, viewer: this.viewer });
     this.timeline = new Timeline(this.session, this.paintEngine);
 
     // Create timeline magnifier (zoomed-in timeline sub-view)
-    this.timelineMagnifier = new TimelineMagnifier(
-      this.session,
-      this.timeline.getWaveformRenderer(),
-      this.paintEngine,
-    );
+    this.timelineMagnifier = new TimelineMagnifier(this.session, this.timeline.getWaveformRenderer(), this.paintEngine);
 
     // Wire magnifier toggle button on main timeline
     this.timeline.setMagnifierToggle(() => this.timelineMagnifier.toggle());
@@ -180,7 +180,9 @@ export class App {
     this.syncCurrentSourceTimecodeOffsets();
     this.wiringSubscriptions.add(this.session.on('sourceLoaded', () => this.syncCurrentSourceTimecodeOffsets()));
     this.wiringSubscriptions.add(this.session.on('durationChanged', () => this.syncCurrentSourceTimecodeOffsets()));
-    this.wiringSubscriptions.add(this.session.on('representationChanged', () => this.syncCurrentSourceTimecodeOffsets()));
+    this.wiringSubscriptions.add(
+      this.session.on('representationChanged', () => this.syncCurrentSourceTimecodeOffsets()),
+    );
 
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
@@ -193,12 +195,19 @@ export class App {
       this.layoutStore.getPresets().map(({ id, label }) => ({ id, label })),
       (presetId) => this.layoutStore.applyPreset(presetId),
     );
-    this.wiringSubscriptions.add(this.tabBar.on('tabChanged', (tabId: TabId) => {
-      this.contextToolbar.setActiveTab(tabId);
-      // Update active context for key binding scoping
-      const contextMap: Record<string, BindingContext> = { annotate: 'paint', transform: 'transform', view: 'viewer', qc: 'viewer' };
-      this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
-    }));
+    this.wiringSubscriptions.add(
+      this.tabBar.on('tabChanged', (tabId: TabId) => {
+        this.contextToolbar.setActiveTab(tabId);
+        // Update active context for key binding scoping
+        const contextMap: Record<string, BindingContext> = {
+          annotate: 'paint',
+          transform: 'transform',
+          view: 'viewer',
+          qc: 'viewer',
+        };
+        this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
+      }),
+    );
 
     // Initialize keyboard manager
     this.keyboardManager = new KeyboardManager();
@@ -212,14 +221,10 @@ export class App {
     });
 
     // Initialize keyboard handler (manages shortcuts, dialogs)
-    this.keyboardHandler = new AppKeyboardHandler(
-      this.keyboardManager,
-      this.customKeyBindingsManager,
-      {
-        getActionHandlers: () => this.getActionHandlers(),
-        getContainer: () => this.container!,
-      }
-    );
+    this.keyboardHandler = new AppKeyboardHandler(this.keyboardManager, this.customKeyBindingsManager, {
+      getActionHandlers: () => this.getActionHandlers(),
+      getContainer: () => this.container!,
+    });
     this.keyboardHandler.setup();
 
     // Apply any stored custom bindings to the keyboard shortcuts
@@ -444,31 +449,39 @@ export class App {
     this.externalPresentation.initialize();
 
     // Wire HeaderBar external presentation button
-    this.wiringSubscriptions.add(this.headerBar.on('externalPresentation', () => this.externalPresentation.openWindow()));
+    this.wiringSubscriptions.add(
+      this.headerBar.on('externalPresentation', () => this.externalPresentation.openWindow()),
+    );
 
     // Wire session events to external presentation
-    this.wiringSubscriptions.add(this.session.on('frameChanged', () => {
-      if (this.externalPresentation.hasOpenWindows) {
-        this.externalPresentation.syncFrame(this.session.currentFrame, this.session.frameCount);
-      }
-    }));
-    this.wiringSubscriptions.add(this.session.on('playbackChanged', (playing: boolean) => {
-      if (this.externalPresentation.hasOpenWindows) {
-        this.externalPresentation.syncPlayback(playing, this.session.playbackSpeed, this.session.currentFrame);
-      }
-    }));
+    this.wiringSubscriptions.add(
+      this.session.on('frameChanged', () => {
+        if (this.externalPresentation.hasOpenWindows) {
+          this.externalPresentation.syncFrame(this.session.currentFrame, this.session.frameCount);
+        }
+      }),
+    );
+    this.wiringSubscriptions.add(
+      this.session.on('playbackChanged', (playing: boolean) => {
+        if (this.externalPresentation.hasOpenWindows) {
+          this.externalPresentation.syncPlayback(playing, this.session.playbackSpeed, this.session.currentFrame);
+        }
+      }),
+    );
 
     // Wire color adjustment changes to external presentation windows
-    this.wiringSubscriptions.add(this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
-      if (this.externalPresentation.hasOpenWindows) {
-        this.externalPresentation.syncColor({
-          exposure: adjustments.exposure,
-          gamma: adjustments.gamma,
-          temperature: adjustments.temperature,
-          tint: adjustments.tint,
-        });
-      }
-    }));
+    this.wiringSubscriptions.add(
+      this.controls.colorControls.on('adjustmentsChanged', (adjustments) => {
+        if (this.externalPresentation.hasOpenWindows) {
+          this.externalPresentation.syncColor({
+            exposure: adjustments.exposure,
+            gamma: adjustments.gamma,
+            temperature: adjustments.temperature,
+            tint: adjustments.tint,
+          });
+        }
+      }),
+    );
 
     // Audio orchestrator (manages AudioMixer lifecycle and session wiring)
     this.audioOrchestrator = new AudioOrchestrator({ session: this.session });
@@ -604,14 +617,16 @@ export class App {
         sessionBridge: this.sessionBridge,
         persistenceManager: this.persistenceManager,
       },
-      this.controls.ocioControl.getState()
+      this.controls.ocioControl.getState(),
     );
 
     // Initialize display profile from persisted state
     this.viewer.setDisplayColorState(this.controls.displayProfileControl.getState());
 
     // Initialize OPFS media cache (fire-and-forget; no-op if unavailable)
-    this.cacheManager.initialize().catch((err) => { log.debug('OPFS cache unavailable:', err); });
+    this.cacheManager.initialize().catch((err) => {
+      log.debug('OPFS cache unavailable:', err);
+    });
 
     // Initialize persistence (auto-save and snapshots)
     await this.persistenceManager.init();
@@ -623,9 +638,15 @@ export class App {
   }
 
   /** Convenience accessors for layout-owned sub-objects */
-  private get fullscreenManager() { return this.layoutOrchestrator?.fullscreenManager ?? null; }
-  private get focusManager() { return this.layoutOrchestrator?.focusManager ?? null; }
-  private get shortcutCheatSheet() { return this.layoutOrchestrator?.shortcutCheatSheet ?? null; }
+  private get fullscreenManager() {
+    return this.layoutOrchestrator?.fullscreenManager ?? null;
+  }
+  private get focusManager() {
+    return this.layoutOrchestrator?.focusManager ?? null;
+  }
+  private get shortcutCheatSheet() {
+    return this.layoutOrchestrator?.shortcutCheatSheet ?? null;
+  }
 
   /**
    * Handle page visibility changes.
@@ -672,22 +693,29 @@ export class App {
     // Initialize keyboard shortcuts
     this.keyboardManager.attach();
 
-    this.wiringSubscriptions.add(this.paintEngine.on('annotationsChanged', () => this.persistenceManager.syncGTOStore()));
+    this.wiringSubscriptions.add(
+      this.paintEngine.on('annotationsChanged', () => this.persistenceManager.syncGTOStore()),
+    );
     this.wiringSubscriptions.add(this.paintEngine.on('effectsChanged', () => this.persistenceManager.syncGTOStore()));
 
     // Record paint actions in history
-    this.wiringSubscriptions.add(this.paintEngine.on('strokeAdded', (annotation) => {
-      const historyManager = getGlobalHistoryManager();
-      const annotationType = annotation.type === 'pen' ? 'stroke' :
-                             annotation.type === 'shape' ? (annotation as { shapeType?: string }).shapeType || 'shape' :
-                             annotation.type;
-      historyManager.recordAction(
-        `Add ${annotationType}`,
-        'paint',
-        () => this.paintEngine.undo(),
-        () => this.paintEngine.redo()
-      );
-    }));
+    this.wiringSubscriptions.add(
+      this.paintEngine.on('strokeAdded', (annotation) => {
+        const historyManager = getGlobalHistoryManager();
+        const annotationType =
+          annotation.type === 'pen'
+            ? 'stroke'
+            : annotation.type === 'shape'
+              ? (annotation as { shapeType?: string }).shapeType || 'shape'
+              : annotation.type;
+        historyManager.recordAction(
+          `Add ${annotationType}`,
+          'paint',
+          () => this.paintEngine.undo(),
+          () => this.paintEngine.redo(),
+        );
+      }),
+    );
   }
 
   /**
@@ -701,7 +729,10 @@ export class App {
       viewer: this.viewer,
       paintEngine: this.paintEngine,
       tabBar: this.tabBar,
-      controls: Object.assign(this.controls, { timelineMagnifier: this.timelineMagnifier, gotoFrameOverlay: this.gotoFrameOverlay }),
+      controls: Object.assign(this.controls, {
+        timelineMagnifier: this.timelineMagnifier,
+        gotoFrameOverlay: this.gotoFrameOverlay,
+      }),
       activeContextManager: this.activeContextManager,
       fullscreenManager: this.fullscreenManager,
       focusManager: this.focusManager,

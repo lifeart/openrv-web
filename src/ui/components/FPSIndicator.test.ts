@@ -23,7 +23,11 @@ describe('FPSIndicator', () => {
 
   beforeEach(() => {
     // Clear persisted FPS indicator prefs so each test starts fresh
-    try { localStorage.removeItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator);
+    } catch {
+      /* noop */
+    }
     session = new Session();
     preferences = new PreferencesManager();
     indicator = new FPSIndicator(session, preferences);
@@ -31,7 +35,11 @@ describe('FPSIndicator', () => {
 
   afterEach(() => {
     indicator.dispose();
-    try { localStorage.removeItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator);
+    } catch {
+      /* noop */
+    }
   });
 
   // =================================================================
@@ -120,7 +128,7 @@ describe('FPSIndicator', () => {
 
     it('FPS-021: returns yellow when ratio between critical and warning', () => {
       expect(getFPSColor(0.96, 0.97, 0.85)).toBe('#facc15');
-      expect(getFPSColor(0.90, 0.97, 0.85)).toBe('#facc15');
+      expect(getFPSColor(0.9, 0.97, 0.85)).toBe('#facc15');
       expect(getFPSColor(0.85, 0.97, 0.85)).toBe('#facc15');
     });
 
@@ -410,9 +418,9 @@ describe('FPSIndicator', () => {
 
   describe('setState', () => {
     it('FPS-100: setState merges partial state', () => {
-      indicator.setState({ warningThreshold: 0.90 });
+      indicator.setState({ warningThreshold: 0.9 });
       const state = indicator.getState();
-      expect(state.warningThreshold).toBe(0.90);
+      expect(state.warningThreshold).toBe(0.9);
       expect(state.criticalThreshold).toBe(0.85); // unchanged
     });
 

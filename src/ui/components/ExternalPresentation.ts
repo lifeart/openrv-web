@@ -12,7 +12,7 @@
  * - Window lifecycle management (detect external close)
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { ManagerBase } from '../../core/ManagerBase';
 
 // ---------------------------------------------------------------------------
@@ -121,7 +121,8 @@ export interface ExternalPresentationEvents extends EventMap {
 
 const CHANNEL_NAME = 'openrv-presentation';
 const WINDOW_CHECK_INTERVAL = 2000; // ms
-const DEFAULT_WINDOW_FEATURES = 'width=1280,height=720,resizable=yes,scrollbars=no,menubar=no,toolbar=no,location=no,status=no';
+const DEFAULT_WINDOW_FEATURES =
+  'width=1280,height=720,resizable=yes,scrollbars=no,menubar=no,toolbar=no,location=no,status=no';
 
 // ---------------------------------------------------------------------------
 // Presentation HTML template
@@ -138,7 +139,12 @@ function escapeJSString(s: string): string {
 
 /** Escape a string for safe inclusion in HTML content. */
 function escapeHTML(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function generatePresentationHTML(windowId: string, channelName: string, sessionId: string): string {
@@ -249,9 +255,10 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
     this.instanceId = `main-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     // Unique session ID prevents cross-tab interference when multiple
     // OpenRV instances share the same BroadcastChannel name
-    this.sessionId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    this.sessionId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   // ---------------------------------------------------------------------------

@@ -81,7 +81,9 @@ function makeFakeApp(overrides: Record<string, unknown> = {}): App {
         canUndo: () => false,
         canRedo: () => false,
       }),
-      getMatteOverlay: () => ({ getSettings: () => ({ show: false, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] }) }),
+      getMatteOverlay: () => ({
+        getSettings: () => ({ show: false, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] }),
+      }),
       getLuminanceVisualization: () => ({ getState: () => ({ mode: 'off' }) }),
     },
     paintEngine: {
@@ -106,7 +108,10 @@ function makeFakeApp(overrides: Record<string, unknown> = {}): App {
       channelSelect: { getEXRLayerState: () => ({ availableLayers: [], selectedLayer: null }) },
       colorControls: { getAdjustments: () => ({ exposure: 0 }), getLUT: () => null, getLUTIntensity: () => 1 },
       toneMappingControl: { getState: () => ({ enabled: false, operator: 'off' }) },
-      historyPanel: { getState: () => ({ visible: false, entryCount: 0, currentIndex: -1 }), historyManager: { getState: () => ({ canUndo: false, canRedo: false }) } },
+      historyPanel: {
+        getState: () => ({ visible: false, entryCount: 0, currentIndex: -1 }),
+        historyManager: { getState: () => ({ canUndo: false, canRedo: false }) },
+      },
       infoPanel: { getState: () => ({ enabled: false, position: 'top-left' }) },
       transformControl: { getTransform: () => ({ rotation: 0, flipH: false, flipV: false }) },
       cacheIndicator: { getState: () => ({ visible: false, cachedCount: 0, pendingCount: 0, totalFrames: 0 }) },
@@ -165,7 +170,11 @@ describe('test-helper adapter', () => {
         getZoom: () => 2.5,
         getPan: () => ({ x: 12, y: -4 }),
         getWipeState: () => ({ mode: 'vertical', position: 0.33 }),
-        getCropState: () => ({ enabled: true, region: { x: 0.1, y: 0.2, width: 0.6, height: 0.5 }, aspectRatio: '16:9' }),
+        getCropState: () => ({
+          enabled: true,
+          region: { x: 0.1, y: 0.2, width: 0.6, height: 0.5 },
+          aspectRatio: '16:9',
+        }),
         getChannelMode: () => 'luminance',
         getStereoState: () => ({ mode: 'anaglyph', eyeSwap: true, offset: 5 }),
         getStereoEyeTransforms: () => ({
@@ -176,7 +185,15 @@ describe('test-helper adapter', () => {
         getStereoAlignMode: () => 'difference',
         getDifferenceMatteState: () => ({ enabled: true, gain: 3.5, heatmap: true }),
         getClippingOverlay: () => ({ isEnabled: () => true }),
-        getUncropState: () => ({ enabled: true, paddingMode: 'per-side', padding: 0, paddingTop: 10, paddingRight: 20, paddingBottom: 30, paddingLeft: 40 }),
+        getUncropState: () => ({
+          enabled: true,
+          paddingMode: 'per-side',
+          padding: 0,
+          paddingTop: 10,
+          paddingRight: 20,
+          paddingBottom: 30,
+          paddingLeft: 40,
+        }),
         getPARState: () => ({ enabled: true, par: 1.5, preset: 'anamorphic' }),
         getBackgroundPatternState: () => ({ pattern: 'checker', checkerSize: 'large', customColor: '#222222' }),
         getColorInversion: () => true,
@@ -200,7 +217,9 @@ describe('test-helper adapter', () => {
           canUndo: () => false,
           canRedo: () => false,
         }),
-        getMatteOverlay: () => ({ getSettings: () => ({ show: false, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] }) }),
+        getMatteOverlay: () => ({
+          getSettings: () => ({ show: false, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] }),
+        }),
         getLuminanceVisualization: () => ({ getState: () => ({ mode: 'off' }) }),
       },
       // Contradictory stale fields should not drive output
@@ -245,4 +264,3 @@ describe('test-helper adapter', () => {
     expect(() => window.__OPENRV_TEST__!.getToneMappingState()).toThrow(/Missing component/);
   });
 });
-

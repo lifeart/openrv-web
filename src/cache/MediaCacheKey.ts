@@ -95,16 +95,12 @@ export async function computeCacheKey(file: File): Promise<string> {
     contentBytes.set(new Uint8Array(rawPrefix));
 
     // Hash the content prefix
-    const contentHash = bufferToHex(
-      await subtle.digest('SHA-256', contentBytes),
-    );
+    const contentHash = bufferToHex(await subtle.digest('SHA-256', contentBytes));
 
     // Build the composite string and hash it
     const composite = `${file.name}|${file.size}|${file.lastModified}|${contentHash}`;
     const encoder = new TextEncoder();
-    const compositeHash = bufferToHex(
-      await subtle.digest('SHA-256', encoder.encode(composite)),
-    );
+    const compositeHash = bufferToHex(await subtle.digest('SHA-256', encoder.encode(composite)));
 
     key = compositeHash;
   } catch (_err) {

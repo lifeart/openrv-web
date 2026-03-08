@@ -6,8 +6,8 @@
  * the KeyboardManager with the new shortcuts.
  */
 
-import { KeyCombination } from './KeyboardManager';
-import { DEFAULT_KEY_BINDINGS, KeyBindingKeys } from './KeyBindings';
+import { type KeyCombination } from './KeyboardManager';
+import { DEFAULT_KEY_BINDINGS, type KeyBindingKeys } from './KeyBindings';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
 export interface CustomKeyBinding {
@@ -84,7 +84,7 @@ export class CustomKeyBindingsManager {
     const binding: CustomKeyBinding = {
       action,
       originalCombo: originalCombo as KeyCombination,
-      customCombo
+      customCombo,
     };
 
     this.customBindings.set(action, binding);
@@ -211,7 +211,7 @@ export class CustomKeyBindingsManager {
     return {
       action: obj.action,
       originalCombo,
-      customCombo
+      customCombo,
     };
   }
 
@@ -249,19 +249,32 @@ export class CustomKeyBindingsManager {
    */
   private keyToCode(key: string): string {
     switch (key) {
-      case ' ': return 'Space';
-      case 'ArrowUp': return 'ArrowUp';
-      case 'ArrowDown': return 'ArrowDown';
-      case 'ArrowLeft': return 'ArrowLeft';
-      case 'ArrowRight': return 'ArrowRight';
-      case 'Home': return 'Home';
-      case 'End': return 'End';
-      case 'Escape': return 'Escape';
-      case '[': return 'BracketLeft';
-      case ']': return 'BracketRight';
-      case ',': return 'Comma';
-      case '.': return 'Period';
-      case '`': return 'Backquote';
+      case ' ':
+        return 'Space';
+      case 'ArrowUp':
+        return 'ArrowUp';
+      case 'ArrowDown':
+        return 'ArrowDown';
+      case 'ArrowLeft':
+        return 'ArrowLeft';
+      case 'ArrowRight':
+        return 'ArrowRight';
+      case 'Home':
+        return 'Home';
+      case 'End':
+        return 'End';
+      case 'Escape':
+        return 'Escape';
+      case '[':
+        return 'BracketLeft';
+      case ']':
+        return 'BracketRight';
+      case ',':
+        return 'Comma';
+      case '.':
+        return 'Period';
+      case '`':
+        return 'Backquote';
       default:
         if (key.length === 1) {
           if (/[a-zA-Z]/.test(key)) {
@@ -299,7 +312,7 @@ export class CustomKeyBindingsManager {
     return Object.entries(DEFAULT_KEY_BINDINGS).map(([action, binding]) => ({
       action,
       description: binding.description || action,
-      currentCombo: this.getEffectiveCombo(action)
+      currentCombo: this.getEffectiveCombo(action),
     }));
   }
 }

@@ -102,10 +102,10 @@ export class Property<T> {
     }
 
     // Remove existing keyframe at the same frame
-    this._keyframes = this._keyframes.filter(kf => kf.frame !== keyframe.frame);
+    this._keyframes = this._keyframes.filter((kf) => kf.frame !== keyframe.frame);
 
     // Insert in sorted order by frame
-    const insertIdx = this._keyframes.findIndex(kf => kf.frame > keyframe.frame);
+    const insertIdx = this._keyframes.findIndex((kf) => kf.frame > keyframe.frame);
     if (insertIdx === -1) {
       this._keyframes.push(keyframe);
     } else {
@@ -119,7 +119,7 @@ export class Property<T> {
    */
   removeKeyframe(frame: number): boolean {
     const len = this._keyframes.length;
-    this._keyframes = this._keyframes.filter(kf => kf.frame !== frame);
+    this._keyframes = this._keyframes.filter((kf) => kf.frame !== frame);
     return this._keyframes.length < len;
   }
 

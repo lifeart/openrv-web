@@ -151,11 +151,7 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
    * Store data under `cacheKey`. Triggers LRU eviction if needed.
    * Returns `true` on success.
    */
-  async put(
-    cacheKey: string,
-    data: ArrayBuffer,
-    meta: CacheEntryMeta,
-  ): Promise<boolean> {
+  async put(cacheKey: string, data: ArrayBuffer, meta: CacheEntryMeta): Promise<boolean> {
     if (!this.initialized || !this.mediaDir || !this.db) return false;
 
     this.pendingWrites.add(cacheKey);
@@ -285,9 +281,7 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
   async cleanOrphans(): Promise<number> {
     if (!this.initialized || !this.mediaDir || !this.db) return 0;
 
-    const manifestKeys = new Set(
-      (await this.getAllManifestEntries()).map((e) => e.key),
-    );
+    const manifestKeys = new Set((await this.getAllManifestEntries()).map((e) => e.key));
 
     let removed = 0;
 
@@ -341,8 +335,13 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
       const fileHandle = await this.mediaDir!.getFileHandle(`${key}.bin`, { create: true });
 
       // Use createWritable when available (standard OPFS API)
-      if ('createWritable' in fileHandle && typeof (fileHandle as unknown as Record<string, unknown>).createWritable === 'function') {
-        const writable = await (fileHandle as unknown as { createWritable(): Promise<WritableStream> }).createWritable();
+      if (
+        'createWritable' in fileHandle &&
+        typeof (fileHandle as unknown as Record<string, unknown>).createWritable === 'function'
+      ) {
+        const writable = await (
+          fileHandle as unknown as { createWritable(): Promise<WritableStream> }
+        ).createWritable();
         const writer = writable.getWriter();
         await writer.write(data);
         await writer.close();

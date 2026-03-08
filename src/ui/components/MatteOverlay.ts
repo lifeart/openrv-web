@@ -18,9 +18,9 @@ export interface MatteOverlayEvents extends EventMap {
 
 export const DEFAULT_MATTE_SETTINGS: MatteSettings = {
   show: false,
-  aspect: 1.78,       // 16:9
+  aspect: 1.78, // 16:9
   opacity: 0.66,
-  heightVisible: -1,  // auto
+  heightVisible: -1, // auto
   centerPoint: [0, 0],
 };
 
@@ -42,7 +42,7 @@ export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
     offsetX: number,
     offsetY: number,
     displayWidth: number,
-    displayHeight: number
+    displayHeight: number,
   ): void {
     // Calculate source aspect from display dimensions
     if (displayWidth > 0 && displayHeight > 0) {
@@ -172,12 +172,7 @@ export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
     // Bottom bar
     const bottomBarHeight = Math.max(0, barHeight + offsetAdjust);
     if (bottomBarHeight > 0) {
-      ctx.fillRect(
-        offsetX,
-        offsetY + displayHeight - bottomBarHeight,
-        displayWidth,
-        bottomBarHeight
-      );
+      ctx.fillRect(offsetX, offsetY + displayHeight - bottomBarHeight, displayWidth, bottomBarHeight);
     }
   }
 
@@ -202,12 +197,7 @@ export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
     // Right bar
     const rightBarWidth = Math.max(0, barWidth + offsetAdjust);
     if (rightBarWidth > 0) {
-      ctx.fillRect(
-        offsetX + displayWidth - rightBarWidth,
-        offsetY,
-        rightBarWidth,
-        displayHeight
-      );
+      ctx.fillRect(offsetX + displayWidth - rightBarWidth, offsetY, rightBarWidth, displayHeight);
     }
   }
 

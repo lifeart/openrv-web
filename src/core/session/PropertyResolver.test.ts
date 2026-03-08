@@ -41,9 +41,7 @@ class TestNode extends IPNode {
   }
 }
 
-function createGraphWithNodes(
-  nodes: Array<{ type: string; name?: string; props?: Record<string, unknown> }>,
-): Graph {
+function createGraphWithNodes(nodes: Array<{ type: string; name?: string; props?: Record<string, unknown> }>): Graph {
   const graph = new Graph();
   for (const spec of nodes) {
     const node = new TestNode(spec.type, spec.name);
@@ -170,9 +168,7 @@ describe('parseAtAddress', () => {
 
 describe('resolveByHash', () => {
   it('resolves #RVColor.color.exposure correctly', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5 } }]);
 
     const results = resolveByHash(graph, '#RVColor.color.exposure');
     expect(results).toHaveLength(1);
@@ -183,18 +179,14 @@ describe('resolveByHash', () => {
   });
 
   it('returns empty array for missing protocol', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5 } }]);
 
     const results = resolveByHash(graph, '#RVNonExistent.color.exposure');
     expect(results).toHaveLength(0);
   });
 
   it('returns node with null value for missing property', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5 } }]);
 
     const results = resolveByHash(graph, '#RVColor.color.nonexistent');
     expect(results).toHaveLength(1);
@@ -216,18 +208,14 @@ describe('resolveByHash', () => {
   });
 
   it('returns empty array for invalid address', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5 } }]);
 
     expect(resolveByHash(graph, 'invalid')).toHaveLength(0);
     expect(resolveByHash(graph, '')).toHaveLength(0);
   });
 
   it('resolves component.property key as fallback', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { 'color.exposure': 3.0 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { 'color.exposure': 3.0 } }]);
 
     const results = resolveByHash(graph, '#RVColor.color.exposure');
     expect(results).toHaveLength(1);
@@ -235,9 +223,7 @@ describe('resolveByHash', () => {
   });
 
   it('prefers bare property name over component.property key', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5, 'color.exposure': 3.0 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5, 'color.exposure': 3.0 } }]);
 
     const results = resolveByHash(graph, '#RVColor.color.exposure');
     expect(results).toHaveLength(1);
@@ -269,18 +255,14 @@ describe('resolveByAt', () => {
   });
 
   it('returns empty array for missing protocol', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', name: 'color1' },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', name: 'color1' }]);
 
     const results = resolveByAt(graph, '@RVNonExistent');
     expect(results).toHaveLength(0);
   });
 
   it('returns empty array for invalid address', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor' },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor' }]);
 
     expect(resolveByAt(graph, 'invalid')).toHaveLength(0);
     expect(resolveByAt(graph, '')).toHaveLength(0);
@@ -437,18 +419,14 @@ describe('resolveGTOByAt', () => {
   });
 
   it('returns empty array for missing protocol', () => {
-    const data = createGTOData([
-      { name: 'rvColor', protocol: 'RVColor' },
-    ]);
+    const data = createGTOData([{ name: 'rvColor', protocol: 'RVColor' }]);
 
     const results = resolveGTOByAt(data, '@NoSuchProtocol');
     expect(results).toHaveLength(0);
   });
 
   it('returns empty array for invalid address', () => {
-    const data = createGTOData([
-      { name: 'rvColor', protocol: 'RVColor' },
-    ]);
+    const data = createGTOData([{ name: 'rvColor', protocol: 'RVColor' }]);
 
     expect(resolveGTOByAt(data, 'invalid')).toHaveLength(0);
     expect(resolveGTOByAt(data, '')).toHaveLength(0);
@@ -459,9 +437,7 @@ describe('resolveGTOByAt', () => {
 
 describe('resolveProperty', () => {
   it('dispatches hash addresses to resolveByHash', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5 } }]);
 
     const results = resolveProperty(graph, '#RVColor.color.exposure');
     expect(results).not.toBeNull();
@@ -469,9 +445,7 @@ describe('resolveProperty', () => {
   });
 
   it('dispatches at addresses to resolveByAt', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVDisplayColor' },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVDisplayColor' }]);
 
     const results = resolveProperty(graph, '@RVDisplayColor');
     expect(results).not.toBeNull();
@@ -479,9 +453,7 @@ describe('resolveProperty', () => {
   });
 
   it('returns null for unrecognized address format', () => {
-    const graph = createGraphWithNodes([
-      { type: 'RVColor', props: { exposure: 1.5 } },
-    ]);
+    const graph = createGraphWithNodes([{ type: 'RVColor', props: { exposure: 1.5 } }]);
 
     expect(resolveProperty(graph, 'plain.string')).toBeNull();
     expect(resolveProperty(graph, '')).toBeNull();

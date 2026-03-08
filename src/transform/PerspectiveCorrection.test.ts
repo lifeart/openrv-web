@@ -11,7 +11,7 @@ import {
   computeInverseHomographyFloat32,
   applyPerspectiveCorrection,
   generatePerspectiveGrid,
-  PerspectiveCorrectionParams,
+  type PerspectiveCorrectionParams,
 } from './PerspectiveCorrection';
 import { createTestImageData } from '../../test/utils';
 
@@ -190,7 +190,8 @@ describe('PerspectiveCorrection', () => {
       };
       const result = applyPerspectiveCorrection(imageData, params);
       // Center pixel (10, 10) should be close to original color
-      const cx = 10, cy = 10;
+      const cx = 10,
+        cy = 10;
       const idx = (cy * result.width + cx) * 4;
       expect(result.data[idx]!).toBeCloseTo(200, -1);
       expect(result.data[idx + 1]!).toBeCloseTo(100, -1);
@@ -326,7 +327,8 @@ describe('PerspectiveCorrection', () => {
 
       // Center of output (10, 10) → source position ~(0.75, 0.5)
       // Source gradient R at x_norm=0.75 → R ≈ 191
-      const cx = 10, cy = 10;
+      const cx = 10,
+        cy = 10;
       const idx = (cy * result.width + cx) * 4;
       const rValue = result.data[idx]!;
 

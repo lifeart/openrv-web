@@ -11,8 +11,8 @@
  * - Add new note at current frame
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { Session } from '../../core/session/Session';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type Session } from '../../core/session/Session';
 import { type Note, type NoteStatus } from '../../core/session/NoteManager';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
@@ -65,7 +65,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.announcer = new AriaAnnouncer();
 
     // Bind handlers
-    this.boundOnNotesChanged = () => { this.render(); this.updateBadge(); };
+    this.boundOnNotesChanged = () => {
+      this.render();
+      this.updateBadge();
+    };
     this.boundOnFrameChanged = () => this.updateHighlight();
     this.boundOnKeyDown = (e: KeyboardEvent) => this.handleKeyDown(e);
 
@@ -223,7 +226,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.session.on('frameChanged', this.boundOnFrameChanged);
 
     // Update source dropdown when sources change
-    this.boundOnSourceLoaded = () => { this.buildFilterBar(); this.updateBadge(); };
+    this.boundOnSourceLoaded = () => {
+      this.buildFilterBar();
+      this.updateBadge();
+    };
     this.session.on('sourceLoaded', this.boundOnSourceLoaded);
 
     // Keyboard navigation
@@ -309,7 +315,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
     const sourceIndex = this.session.currentSourceIndex;
     const notes = this.session.noteManager.getNotesForSource(sourceIndex);
-    const openCount = notes.filter(n => n.parentId === null && n.status === 'open').length;
+    const openCount = notes.filter((n) => n.parentId === null && n.status === 'open').length;
 
     if (openCount > 0) {
       this.badgeElement.textContent = String(openCount);
@@ -327,9 +333,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   addNoteAtCurrentFrame(): void {
     const frame = this.session.currentFrame;
     const sourceIndex = this.session.currentSourceIndex;
-    const note = this.session.noteManager.addNote(
-      sourceIndex, frame, frame, '', this.getAuthorName(),
-    );
+    const note = this.session.noteManager.addNote(sourceIndex, frame, frame, '', this.getAuthorName());
     this.announcer.announce(`Note added at frame ${frame}`);
     // Set editing state – the addNote above already triggered notesChanged → render(),
     // but that render ran with editingNoteId=null. We must re-render with editing mode.
@@ -422,23 +426,23 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
     const allNotes = this.session.noteManager.getNotes();
     // Get only top-level notes (no parentId)
-    let topLevel = allNotes.filter(n => n.parentId === null);
+    let topLevel = allNotes.filter((n) => n.parentId === null);
 
     // Apply source filter
     if (this.sourceFilter !== 'all') {
-      topLevel = topLevel.filter(n => n.sourceIndex === this.sourceFilter);
+      topLevel = topLevel.filter((n) => n.sourceIndex === this.sourceFilter);
     }
 
     // Apply status filter
     if (this.statusFilter !== 'all') {
-      topLevel = topLevel.filter(n => n.status === this.statusFilter);
+      topLevel = topLevel.filter((n) => n.status === this.statusFilter);
     }
 
     // Sort by frameStart ascending, then by createdAt
     topLevel.sort((a, b) => a.frameStart - b.frameStart || a.createdAt.localeCompare(b.createdAt));
 
     // Update note count display
-    const totalTopLevel = allNotes.filter(n => n.parentId === null).length;
+    const totalTopLevel = allNotes.filter((n) => n.parentId === null).length;
     this.noteCountEl.textContent = totalTopLevel > 0 ? `(${totalTopLevel})` : '';
 
     this.entriesContainer.innerHTML = '';
@@ -531,9 +535,8 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     // Frame info
     const frameInfo = document.createElement('span');
     frameInfo.style.cssText = 'font-size: 11px; color: var(--text-muted); flex-shrink: 0;';
-    frameInfo.textContent = note.frameStart === note.frameEnd
-      ? `F${note.frameStart}`
-      : `F${note.frameStart}-${note.frameEnd}`;
+    frameInfo.textContent =
+      note.frameStart === note.frameEnd ? `F${note.frameStart}` : `F${note.frameStart}-${note.frameEnd}`;
     frameInfo.addEventListener('click', (e) => {
       e.stopPropagation();
       this.goToNote(note);
@@ -955,8 +958,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     try {
       const d = new Date(iso);
       return d.toLocaleString(undefined, {
-        month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       });
     } catch {
       return iso;

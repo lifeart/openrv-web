@@ -204,7 +204,8 @@ export const TransformSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVDispTransform2D', 1);
-    obj.component('transform')
+    obj
+      .component('transform')
       .int('active', settings.active !== false ? 1 : 0)
       .float('translate', [settings.translateX ?? 0, settings.translateY ?? 0])
       .float('scale', [settings.scaleX ?? 1, settings.scaleY ?? 1])
@@ -224,7 +225,8 @@ export const TransformSerializer = {
     const obj = builder.object(name, 'RVTransform2D', 1);
 
     // Transform component
-    obj.component('transform')
+    obj
+      .component('transform')
       .float('rotate', settings.rotate ?? 0)
       .int('flip', settings.flip ? 1 : 0)
       .int('flop', settings.flop ? 1 : 0)
@@ -235,7 +237,8 @@ export const TransformSerializer = {
     // VisibleBox component (if provided)
     if (settings.visibleBox) {
       const vb = settings.visibleBox;
-      obj.component('visibleBox')
+      obj
+        .component('visibleBox')
         .int('active', vb.active ? 1 : 0)
         .float('minX', vb.minX ?? 0)
         .float('minY', vb.minY ?? 0)
@@ -277,7 +280,8 @@ export const TransformSerializer = {
     const obj = builder.object(name, 'RVLensWarp', 1);
 
     // Node component (active state)
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .end();
 
@@ -332,7 +336,8 @@ export const TransformSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVRotateCanvas', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .float('degrees', settings.degrees ?? 0.0)
       .int('flipH', settings.flipH ? 1 : 0)
@@ -350,7 +355,8 @@ export const TransformSerializer = {
     const builder = new GTOBuilder();
 
     const obj = builder.object(name, 'RVResize', 1);
-    obj.component('node')
+    obj
+      .component('node')
       .int('active', settings.active !== false ? 1 : 0)
       .int('width', settings.width ?? 0)
       .int('height', settings.height ?? 0)
@@ -398,10 +404,7 @@ export const TransformSerializer = {
 
     // Format component (channel mapping)
     if (settings.channels && settings.channels.length > 0) {
-      formatObject
-        .component('format')
-        .string('channels', settings.channels)
-        .end();
+      formatObject.component('format').string('channels', settings.channels).end();
     }
 
     formatObject.end();

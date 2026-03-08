@@ -23,12 +23,8 @@ import type { FrameInterpolator } from '../../utils/media/FrameInterpolator';
 import { compositeImageData, type BlendMode } from '../../composite/BlendModes';
 import { isStencilBoxActive } from '../../core/types/wipe';
 import { applyDifferenceMatte } from './DifferenceMatteControl';
-import {
-  drawWithTransform as drawWithTransformUtil,
-} from './ViewerRenderingUtils';
-import {
-  renderSourceToImageData as renderSourceToImageDataUtil,
-} from './ViewerExport';
+import { drawWithTransform as drawWithTransformUtil } from './ViewerRenderingUtils';
+import { renderSourceToImageData as renderSourceToImageDataUtil } from './ViewerExport';
 import { Logger } from '../../utils/Logger';
 
 const log = new Logger('ViewerImageRenderer');
@@ -83,7 +79,7 @@ export function renderWithWipe(
   ctx: ImageRendererContext,
   element: CanvasImageSource,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): void {
   const imageCtx = ctx.getImageCtx();
   const wipeManager = ctx.getWipeManager();
@@ -104,7 +100,7 @@ export function renderWithWipe(
     Math.floor(displayWidth * boxA[0]),
     Math.floor(displayHeight * boxA[2]),
     Math.ceil(displayWidth * (boxA[1] - boxA[0])),
-    Math.ceil(displayHeight * (boxA[3] - boxA[2]))
+    Math.ceil(displayHeight * (boxA[3] - boxA[2])),
   );
   imageCtx.clip();
   imageCtx.filter = 'none';
@@ -118,7 +114,7 @@ export function renderWithWipe(
     Math.floor(displayWidth * boxB[0]),
     Math.floor(displayHeight * boxB[2]),
     Math.ceil(displayWidth * (boxB[1] - boxB[0])),
-    Math.ceil(displayHeight * (boxB[3] - boxB[2]))
+    Math.ceil(displayHeight * (boxB[3] - boxB[2])),
   );
   imageCtx.clip();
   imageCtx.filter = ctx.getCanvasFilterString();
@@ -136,7 +132,7 @@ function drawSourceToContext(
   canvasCtx: CanvasRenderingContext2D,
   element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
   width: number,
-  height: number
+  height: number,
 ): void {
   drawWithTransformUtil(canvasCtx, element, width, height, ctx.getTransform(), ctx.getTextureFilterMode() === 'linear');
 }
@@ -154,7 +150,7 @@ export function drawClippedSource(
   clipWidth: number,
   clipHeight: number,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): void {
   canvasCtx.save();
   canvasCtx.beginPath();
@@ -169,11 +165,7 @@ export function drawClippedSource(
  * Render split screen A/B comparison.
  * Shows source A on one side and source B on the other, using canvas clipping.
  */
-export function renderSplitScreen(
-  ctx: ImageRendererContext,
-  displayWidth: number,
-  displayHeight: number
-): void {
+export function renderSplitScreen(ctx: ImageRendererContext, displayWidth: number, displayHeight: number): void {
   const session = ctx.getSession();
   const sourceA = session.sourceA;
   const sourceB = session.sourceB;
@@ -194,7 +186,8 @@ export function renderSplitScreen(
   const frameFetchTracker = ctx.getFrameFetchTracker();
 
   // Determine the element to use for source A
-  let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceA.element;
+  let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap =
+    sourceA.element;
   if (sourceA.type === 'video' && sourceA.videoSourceNode?.isUsingMediabunny()) {
     const frameCanvas = sourceA.videoSourceNode.getCachedFrameCanvas(currentFrame);
     if (frameCanvas) {
@@ -203,7 +196,8 @@ export function renderSplitScreen(
   }
 
   // Determine the element to use for source B
-  let elementB: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceB.element;
+  let elementB: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap =
+    sourceB.element;
   if (sourceB.type === 'video' && session.isSourceBUsingMediabunny()) {
     const frameCanvas = session.getSourceBFrameCanvas(currentFrame);
     if (frameCanvas) {
@@ -218,7 +212,8 @@ export function renderSplitScreen(
         frameFetchTracker.pendingSourceBFrameNumber = currentFrame;
         const frameToFetch = currentFrame;
 
-        frameFetchTracker.pendingSourceBFrameFetch = session.fetchSourceBVideoFrame(frameToFetch)
+        frameFetchTracker.pendingSourceBFrameFetch = session
+          .fetchSourceBVideoFrame(frameToFetch)
           .then(() => {
             if (frameFetchTracker.pendingSourceBFrameNumber === frameToFetch) {
               frameFetchTracker.pendingSourceBFrameFetch = null;
@@ -253,11 +248,29 @@ export function renderSplitScreen(
   if (wipeManager.mode === 'splitscreen-h') {
     const splitX = Math.floor(displayWidth * pos);
     ctx.drawClippedSource(imageCtx, elementA, 0, 0, splitX, displayHeight, displayWidth, displayHeight);
-    ctx.drawClippedSource(imageCtx, elementB, splitX, 0, displayWidth - splitX, displayHeight, displayWidth, displayHeight);
+    ctx.drawClippedSource(
+      imageCtx,
+      elementB,
+      splitX,
+      0,
+      displayWidth - splitX,
+      displayHeight,
+      displayWidth,
+      displayHeight,
+    );
   } else if (wipeManager.mode === 'splitscreen-v') {
     const splitY = Math.floor(displayHeight * pos);
     ctx.drawClippedSource(imageCtx, elementA, 0, 0, displayWidth, splitY, displayWidth, displayHeight);
-    ctx.drawClippedSource(imageCtx, elementB, 0, splitY, displayWidth, displayHeight - splitY, displayWidth, displayHeight);
+    ctx.drawClippedSource(
+      imageCtx,
+      elementB,
+      0,
+      splitY,
+      displayWidth,
+      displayHeight - splitY,
+      displayWidth,
+      displayHeight,
+    );
   }
 
   imageCtx.restore();
@@ -267,11 +280,7 @@ export function renderSplitScreen(
  * Render ghost frames (onion skin overlay) behind the main frame.
  * Shows semi-transparent previous/next frames for animation review.
  */
-export function renderGhostFrames(
-  ctx: ImageRendererContext,
-  displayWidth: number,
-  displayHeight: number
-): void {
+export function renderGhostFrames(ctx: ImageRendererContext, displayWidth: number, displayHeight: number): void {
   const gfm = ctx.getGhostFrameManager();
   const gfs = gfm.state;
   if (!gfs.enabled) return;
@@ -312,8 +321,7 @@ export function renderGhostFrames(
   // Render ghost frames
   let poolIndex = 0;
   for (const { frame, distance, isBefore } of framesToRender) {
-    const opacity = gfs.opacityBase *
-      Math.pow(gfs.opacityFalloff, distance - 1);
+    const opacity = gfs.opacityBase * Math.pow(gfs.opacityFalloff, distance - 1);
 
     let frameCanvas: HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null = null;
 
@@ -373,25 +381,15 @@ export function renderSourceToImageData(
   ctx: ImageRendererContext,
   sourceIndex: number,
   width: number,
-  height: number
+  height: number,
 ): ImageData | null {
-  return renderSourceToImageDataUtil(
-    ctx.getSession(),
-    sourceIndex,
-    width,
-    height,
-    ctx.getTransform()
-  );
+  return renderSourceToImageDataUtil(ctx.getSession(), sourceIndex, width, height, ctx.getTransform());
 }
 
 /**
  * Render A/B blend modes (onion skin, flicker, blend ratio).
  */
-export function renderBlendMode(
-  ctx: ImageRendererContext,
-  width: number,
-  height: number
-): ImageData | null {
+export function renderBlendMode(ctx: ImageRendererContext, width: number, height: number): ImageData | null {
   const session = ctx.getSession();
   const sourceA = session.sourceA;
   const sourceB = session.sourceB;
@@ -421,11 +419,7 @@ export function renderBlendMode(
  * Render difference matte between A and B sources.
  * Shows absolute pixel difference, optionally as heatmap.
  */
-export function renderDifferenceMatte(
-  ctx: ImageRendererContext,
-  width: number,
-  height: number
-): ImageData | null {
+export function renderDifferenceMatte(ctx: ImageRendererContext, width: number, height: number): ImageData | null {
   const session = ctx.getSession();
   const sourceA = session.sourceA;
   const sourceB = session.sourceB;
@@ -438,23 +432,14 @@ export function renderDifferenceMatte(
   if (!dataA || !dataB) return null;
 
   const differenceMatteState = ctx.getDifferenceMatteState();
-  return applyDifferenceMatte(
-    dataA,
-    dataB,
-    differenceMatteState.gain,
-    differenceMatteState.heatmap
-  );
+  return applyDifferenceMatte(dataA, dataB, differenceMatteState.gain, differenceMatteState.heatmap);
 }
 
 /**
  * Composite multiple stack layers together.
  * Applies per-layer stencilBox clipping when present.
  */
-export function compositeStackLayers(
-  ctx: ImageRendererContext,
-  width: number,
-  height: number
-): ImageData | null {
+export function compositeStackLayers(ctx: ImageRendererContext, width: number, height: number): ImageData | null {
   const stackLayers = ctx.getStackLayers();
   if (stackLayers.length === 0) return null;
 

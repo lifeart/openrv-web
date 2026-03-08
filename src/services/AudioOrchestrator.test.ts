@@ -267,9 +267,7 @@ describe('AudioOrchestrator', () => {
     (deps.audioMixer.getTrack as ReturnType<typeof vi.fn>).mockReturnValue({ id: 'source-test.mp4' });
 
     // We need to mock fetch to prevent actual network calls
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(null, { status: 404 }),
-    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
     const source: AudioOrchestratorSource = {
       type: 'video',

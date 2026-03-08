@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ViewerInputHandler, ViewerInputContext } from './ViewerInputHandler';
+import { ViewerInputHandler, type ViewerInputContext } from './ViewerInputHandler';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { DodgeTool, BurnTool } from '../../paint/AdvancedPaintTools';
 import type { PaintRenderer } from '../../paint/PaintRenderer';
@@ -296,9 +296,7 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
       expect(overlay).not.toBeNull();
 
       overlay.value = 'Hello World';
-      overlay.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
-      );
+      overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
 
       expect(addTextSpy).toHaveBeenCalledTimes(1);
       expect(addTextSpy).toHaveBeenCalledWith(
@@ -319,16 +317,10 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
 
       const overlay = container.querySelector('[data-testid="text-input-overlay"]') as HTMLTextAreaElement;
       overlay.value = 'Mac text';
-      overlay.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }),
-      );
+      overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }));
 
       expect(addTextSpy).toHaveBeenCalledTimes(1);
-      expect(addTextSpy).toHaveBeenCalledWith(
-        expect.any(Number),
-        expect.any(Object),
-        'Mac text',
-      );
+      expect(addTextSpy).toHaveBeenCalledWith(expect.any(Number), expect.any(Object), 'Mac text');
     });
 
     it('should create annotation on blur', async () => {
@@ -348,11 +340,7 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
       await new Promise<void>((resolve) => queueMicrotask(resolve));
 
       expect(addTextSpy).toHaveBeenCalledTimes(1);
-      expect(addTextSpy).toHaveBeenCalledWith(
-        expect.any(Number),
-        expect.any(Object),
-        'Blur commit',
-      );
+      expect(addTextSpy).toHaveBeenCalledWith(expect.any(Number), expect.any(Object), 'Blur commit');
       // Overlay should be removed
       expect(container.querySelector('[data-testid="text-input-overlay"]')).toBeNull();
     });
@@ -368,9 +356,7 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
 
     const overlay = container.querySelector('[data-testid="text-input-overlay"]') as HTMLTextAreaElement;
     overlay.value = '';
-    overlay.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
-    );
+    overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
 
     expect(addTextSpy).not.toHaveBeenCalled();
   });
@@ -405,9 +391,7 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
     const addTextSpy = vi.spyOn(paintEngine, 'addText');
 
     overlay.value = 'Line 1';
-    overlay.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
-    );
+    overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     // Should not commit on plain Enter
     expect(addTextSpy).not.toHaveBeenCalled();
@@ -424,15 +408,9 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
 
     const overlay = container.querySelector('[data-testid="text-input-overlay"]') as HTMLTextAreaElement;
     overlay.value = 'Line 1\nLine 2\nLine 3';
-    overlay.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
-    );
+    overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
 
-    expect(addTextSpy).toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.any(Object),
-      'Line 1\nLine 2\nLine 3',
-    );
+    expect(addTextSpy).toHaveBeenCalledWith(expect.any(Number), expect.any(Object), 'Line 1\nLine 2\nLine 3');
   });
 
   // Additional: unbindEvents cleans up active overlay
@@ -466,11 +444,7 @@ describe('ViewerInputHandler – Text Input Overlay (H-04)', () => {
     container.dispatchEvent(createPointerEvent('pointerdown', 500, 400));
 
     expect(addTextSpy).toHaveBeenCalledTimes(1);
-    expect(addTextSpy).toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.any(Object),
-      'First',
-    );
+    expect(addTextSpy).toHaveBeenCalledWith(expect.any(Number), expect.any(Object), 'First');
 
     // Should have a new overlay
     const overlays = container.querySelectorAll('[data-testid="text-input-overlay"]');
@@ -604,7 +578,7 @@ describe('ViewerInputHandler – HDR Pixel Extraction', () => {
     const h = 4;
     const hdrPixels = new Float32Array(w * h * 4);
     for (let i = 0; i < hdrPixels.length; i += 4) {
-      hdrPixels[i] = 2.5;     // R > 1.0 (HDR)
+      hdrPixels[i] = 2.5; // R > 1.0 (HDR)
       hdrPixels[i + 1] = 1.8; // G > 1.0 (HDR)
       hdrPixels[i + 2] = 0.3; // B
       hdrPixels[i + 3] = 1.0; // A
@@ -613,7 +587,7 @@ describe('ViewerInputHandler – HDR Pixel Extraction', () => {
     const mockGLContext = {
       drawingBufferWidth: w,
       drawingBufferHeight: h,
-      TEXTURE_2D: 0x0DE1,
+      TEXTURE_2D: 0x0de1,
       RGBA32F: 0x8814,
       RGBA: 0x1908,
       FLOAT: 0x1406,
@@ -675,16 +649,16 @@ describe('ViewerInputHandler – HDR Pixel Extraction', () => {
     // Create HDR pixels with values > 1.0 in bottom-to-top order (GL convention)
     const glPixels = new Float32Array(w * h * 4);
     for (let i = 0; i < glPixels.length; i += 4) {
-      glPixels[i] = 3.0;      // R (HDR)
-      glPixels[i + 1] = 2.5;  // G (HDR)
-      glPixels[i + 2] = 1.8;  // B (HDR)
-      glPixels[i + 3] = 1.0;  // A
+      glPixels[i] = 3.0; // R (HDR)
+      glPixels[i + 1] = 2.5; // G (HDR)
+      glPixels[i + 2] = 1.8; // B (HDR)
+      glPixels[i + 3] = 1.0; // A
     }
 
     const mockGLContext = {
       drawingBufferWidth: w,
       drawingBufferHeight: h,
-      TEXTURE_2D: 0x0DE1,
+      TEXTURE_2D: 0x0de1,
       RGBA32F: 0x8814,
       RGBA: 0x1908,
       FLOAT: 0x1406,
@@ -812,7 +786,13 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
   let ctx: ViewerInputContext;
   let handler: ViewerInputHandler;
   let dropOverlay: HTMLElement;
-  let mockTransformData: { rotation: number; flipH: boolean; flipV: boolean; scale: { x: number; y: number }; translate: { x: number; y: number } };
+  let mockTransformData: {
+    rotation: number;
+    flipH: boolean;
+    flipV: boolean;
+    scale: { x: number; y: number };
+    translate: { x: number; y: number };
+  };
 
   beforeEach(() => {
     mockTransformData = {
@@ -831,7 +811,11 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
       initialZoom: 1,
       cancelZoomAnimation: vi.fn(),
       transform: mockTransformData,
-      getTransform: vi.fn(() => ({ ...mockTransformData, scale: { ...mockTransformData.scale }, translate: { ...mockTransformData.translate } })),
+      getTransform: vi.fn(() => ({
+        ...mockTransformData,
+        scale: { ...mockTransformData.scale },
+        translate: { ...mockTransformData.translate },
+      })),
       setTransform: vi.fn((t: typeof mockTransformData) => {
         mockTransformData.rotation = t.rotation;
         mockTransformData.flipH = t.flipH;
@@ -862,10 +846,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
 
   it('RSCRUB-001: Ctrl+Shift+pointerdown activates rotation scrubbing', () => {
     const container = ctx.getContainer();
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     // Cursor should be ew-resize (rotation scrub)
     expect(container.style.cursor).toBe('ew-resize');
@@ -882,10 +868,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
     const tm = ctx.getTransformManager();
 
     // Start rotation scrub at x=400
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     // Move 100px to the right: 100 * 0.5 = 50 degrees
     container.dispatchEvent(createPointerEvent('pointermove', 500, 300));
@@ -907,10 +895,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
     const tm = ctx.getTransformManager();
 
     // Start rotation scrub at x=400
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     // Move 100px to the left: -100 * 0.5 = -50 degrees => (360 - 50) = 310
     container.dispatchEvent(createPointerEvent('pointermove', 300, 300));
@@ -925,10 +915,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
     const container = ctx.getContainer();
 
     // Start rotation scrub
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     expect(handler.isInteracting()).toBe(true);
 
@@ -948,10 +940,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
     mockTransformData.rotation = 90;
 
     // Start rotation scrub at x=400
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     // Move 40px right: 40 * 0.5 = 20 degrees added to 90 = 110
     container.dispatchEvent(createPointerEvent('pointermove', 440, 300));
@@ -979,10 +973,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
     const tm = ctx.getTransformManager();
 
     // Start scrub
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     // Rapid large movement: 720px right = 360 degrees = wraps to 0
     container.dispatchEvent(createPointerEvent('pointermove', 1120, 300));
@@ -996,10 +992,12 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
   it('RSCRUB-008: Pointer capture is set during rotation scrub', () => {
     const container = ctx.getContainer();
 
-    container.dispatchEvent(createPointerEvent('pointerdown', 400, 300, {
-      ctrlKey: true,
-      shiftKey: true,
-    } as any));
+    container.dispatchEvent(
+      createPointerEvent('pointerdown', 400, 300, {
+        ctrlKey: true,
+        shiftKey: true,
+      } as any),
+    );
 
     // setPointerCapture should have been called (as it is for all pointerdown events)
     expect(container.setPointerCapture).toHaveBeenCalled();

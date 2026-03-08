@@ -63,10 +63,10 @@ export class ShaderPipeline {
     'linearize',
     'primaryGrade',
     'secondaryGrade',
-    'spatialEffects',       // clarity (pre-tone-mapping, phase 5e)
+    'spatialEffects', // clarity (pre-tone-mapping, phase 5e)
     'colorPipeline',
     'sceneAnalysis',
-    'spatialEffectsPost',   // sharpen (post-tone-mapping, phase 7b)
+    'spatialEffectsPost', // sharpen (post-tone-mapping, phase 7b)
     'displayOutput',
     'diagnostics',
     'compositing',
@@ -99,7 +99,7 @@ export class ShaderPipeline {
    * defined by stageOrder, regardless of registration order.
    */
   registerStage(descriptor: ShaderStageDescriptor): void {
-    const existingIdx = this.stages.findIndex(s => s.id === descriptor.id);
+    const existingIdx = this.stages.findIndex((s) => s.id === descriptor.id);
     if (existingIdx !== -1) {
       this.stages[existingIdx] = descriptor;
     } else {
@@ -130,7 +130,7 @@ export class ShaderPipeline {
    * are allowed and preserved).
    */
   setStageOrder(newOrder: StageId[]): boolean {
-    const registeredIds = new Set(this.stages.map(s => s.id));
+    const registeredIds = new Set(this.stages.map((s) => s.id));
     const newIds = new Set(newOrder);
 
     // Validate: no duplicates in the new order
@@ -185,7 +185,7 @@ export class ShaderPipeline {
     isHDR: boolean = false,
   ): void {
     // 1. Determine active stages
-    const activeStages = this.stages.filter(s => !s.isIdentity(state));
+    const activeStages = this.stages.filter((s) => !s.isIdentity(state));
 
     if (activeStages.length === 0) {
       // Passthrough: just blit source to target
@@ -434,9 +434,7 @@ void main() {
     isHDR: boolean = false,
   ): boolean {
     // Filter to only per-layer active stages
-    const activeStages = this.stages.filter(
-      s => ShaderPipeline.PER_LAYER_STAGES.has(s.id) && !s.isIdentity(state),
-    );
+    const activeStages = this.stages.filter((s) => ShaderPipeline.PER_LAYER_STAGES.has(s.id) && !s.isIdentity(state));
 
     if (activeStages.length === 0) {
       // No active per-layer stages: just passthrough-blit source to the target FBO
@@ -531,9 +529,7 @@ void main() {
     isHDR: boolean = false,
   ): void {
     // Filter to only display output active stages
-    const activeStages = this.stages.filter(
-      s => ShaderPipeline.DISPLAY_STAGES.has(s.id) && !s.isIdentity(state),
-    );
+    const activeStages = this.stages.filter((s) => ShaderPipeline.DISPLAY_STAGES.has(s.id) && !s.isIdentity(state));
 
     if (activeStages.length === 0) {
       // No active display stages: passthrough blit
@@ -614,7 +610,9 @@ void main() {
 
   private sortStages(): void {
     const orderMap = new Map(this.stageOrder.map((id, i) => [id, i]));
-    this.stages.sort((a, b) => (orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+    this.stages.sort(
+      (a, b) => (orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+    );
   }
 
   dispose(gl: WebGL2RenderingContext): void {

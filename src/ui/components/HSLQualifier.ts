@@ -10,7 +10,7 @@
  * - Invert selection option
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 import { rgbToHsl, hslToRgb } from '../../utils/color';
 
@@ -86,7 +86,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
     l: number,
     hueRange: HSLRange,
     satRange: HSLRange,
-    lumRange: HSLRange
+    lumRange: HSLRange,
   ): number {
     // Calculate hue match (with wrap-around for red)
     const hueMatch = this.calculateHueMatch(h, hueRange);
@@ -155,7 +155,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
     s: number,
     l: number,
     correction: HSLCorrection,
-    matte: number
+    matte: number,
   ): { h: number; s: number; l: number } {
     // Apply hue shift
     let newH = h + correction.hueShift * matte;
@@ -327,11 +327,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
    */
   hasCorrections(): boolean {
     const { correction } = this.state;
-    return (
-      correction.hueShift !== 0 ||
-      correction.saturationScale !== 1 ||
-      correction.luminanceScale !== 1
-    );
+    return correction.hueShift !== 0 || correction.saturationScale !== 1 || correction.luminanceScale !== 1;
   }
 
   /**

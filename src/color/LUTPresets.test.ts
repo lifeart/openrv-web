@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  LUT_PRESETS,
-  generatePresetLUT,
-  getPresets,
-  getPresetsByCategory,
-} from './LUTPresets';
+import { LUT_PRESETS, generatePresetLUT, getPresets, getPresetsByCategory } from './LUTPresets';
 import { isLUT3D } from './LUTLoader';
 
 const LUT_SIZE = 17;

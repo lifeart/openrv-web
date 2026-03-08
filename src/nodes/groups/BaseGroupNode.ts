@@ -5,7 +5,7 @@
  */
 
 import { IPNode } from '../base/IPNode';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 
 export abstract class BaseGroupNode extends IPNode {

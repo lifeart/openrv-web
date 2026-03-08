@@ -19,19 +19,19 @@ import { clamp } from '../utils/math';
 const ICC_SIGNATURE = 0x61637370;
 
 /** Tag signatures */
-const TAG_RED_TRC = 0x72545243;   // 'rTRC'
+const TAG_RED_TRC = 0x72545243; // 'rTRC'
 const TAG_GREEN_TRC = 0x67545243; // 'gTRC'
-const TAG_BLUE_TRC = 0x62545243;  // 'bTRC'
-const TAG_RED_XYZ = 0x7258595A;   // 'rXYZ'
-const TAG_GREEN_XYZ = 0x6758595A; // 'gXYZ'
-const TAG_BLUE_XYZ = 0x6258595A;  // 'bXYZ'
-const TAG_WTPT = 0x77747074;      // 'wtpt'
-const TAG_CHAD = 0x63686164;      // 'chad'
+const TAG_BLUE_TRC = 0x62545243; // 'bTRC'
+const TAG_RED_XYZ = 0x7258595a; // 'rXYZ'
+const TAG_GREEN_XYZ = 0x6758595a; // 'gXYZ'
+const TAG_BLUE_XYZ = 0x6258595a; // 'bXYZ'
+const TAG_WTPT = 0x77747074; // 'wtpt'
+const TAG_CHAD = 0x63686164; // 'chad'
 
 /** Type signatures */
 const TYPE_CURV = 0x63757276; // 'curv'
 const TYPE_PARA = 0x70617261; // 'para'
-const TYPE_XYZ = 0x58595A20;  // 'XYZ '
+const TYPE_XYZ = 0x58595a20; // 'XYZ '
 const TYPE_SF32 = 0x73663332; // 'sf32'
 
 // ---------------------------------------------------------------------------
@@ -39,25 +39,34 @@ const TYPE_SF32 = 0x73663332; // 'sf32'
 // ---------------------------------------------------------------------------
 
 export type ProfileClass =
-  | 'input'    // 'scnr'
-  | 'display'  // 'mntr'
-  | 'output'   // 'prtr'
-  | 'link'     // 'link'
+  | 'input' // 'scnr'
+  | 'display' // 'mntr'
+  | 'output' // 'prtr'
+  | 'link' // 'link'
   | 'colorspace' // 'spac'
   | 'abstract' // 'abst'
-  | 'named'    // 'nmcl'
+  | 'named' // 'nmcl'
   | 'unknown';
 
 export type ColorSpaceType =
-  | 'XYZ' | 'Lab' | 'Luv' | 'YCbCr' | 'Yxy'
-  | 'RGB' | 'Gray' | 'HSV' | 'HLS' | 'CMYK'
-  | 'CMY' | 'unknown';
+  | 'XYZ'
+  | 'Lab'
+  | 'Luv'
+  | 'YCbCr'
+  | 'Yxy'
+  | 'RGB'
+  | 'Gray'
+  | 'HSV'
+  | 'HLS'
+  | 'CMYK'
+  | 'CMY'
+  | 'unknown';
 
 export type RenderingIntent =
-  | 'perceptual'        // 0
-  | 'relative'          // 1 (relative colorimetric)
-  | 'saturation'        // 2
-  | 'absolute';         // 3 (absolute colorimetric)
+  | 'perceptual' // 0
+  | 'relative' // 1 (relative colorimetric)
+  | 'saturation' // 2
+  | 'absolute'; // 3 (absolute colorimetric)
 
 /** Parsed ICC profile header */
 export interface ICCProfileHeader {
@@ -101,11 +110,7 @@ export interface ToneCurve {
 }
 
 /** 3x3 matrix stored row-major */
-export type Matrix3x3 = [
-  number, number, number,
-  number, number, number,
-  number, number, number,
-];
+export type Matrix3x3 = [number, number, number, number, number, number, number, number, number];
 
 /** XYZ tristimulus value */
 export interface XYZValue {
@@ -175,12 +180,7 @@ function readU8Fixed8(view: DataView, offset: number): number {
  * Decode a 4-byte tag signature to a string.
  */
 function sigToString(sig: number): string {
-  return String.fromCharCode(
-    (sig >> 24) & 0xFF,
-    (sig >> 16) & 0xFF,
-    (sig >> 8) & 0xFF,
-    sig & 0xFF,
-  );
+  return String.fromCharCode((sig >> 24) & 0xff, (sig >> 16) & 0xff, (sig >> 8) & 0xff, sig & 0xff);
 }
 
 /**
@@ -189,14 +189,22 @@ function sigToString(sig: number): string {
 function parseProfileClass(sig: number): ProfileClass {
   const s = sigToString(sig);
   switch (s) {
-    case 'scnr': return 'input';
-    case 'mntr': return 'display';
-    case 'prtr': return 'output';
-    case 'link': return 'link';
-    case 'spac': return 'colorspace';
-    case 'abst': return 'abstract';
-    case 'nmcl': return 'named';
-    default: return 'unknown';
+    case 'scnr':
+      return 'input';
+    case 'mntr':
+      return 'display';
+    case 'prtr':
+      return 'output';
+    case 'link':
+      return 'link';
+    case 'spac':
+      return 'colorspace';
+    case 'abst':
+      return 'abstract';
+    case 'nmcl':
+      return 'named';
+    default:
+      return 'unknown';
   }
 }
 
@@ -206,18 +214,30 @@ function parseProfileClass(sig: number): ProfileClass {
 function parseColorSpace(sig: number): ColorSpaceType {
   const s = sigToString(sig).trim();
   switch (s) {
-    case 'XYZ': return 'XYZ';
-    case 'Lab': return 'Lab';
-    case 'Luv': return 'Luv';
-    case 'YCbr': return 'YCbCr';
-    case 'Yxy': return 'Yxy';
-    case 'RGB': return 'RGB';
-    case 'GRAY': return 'Gray';
-    case 'HSV': return 'HSV';
-    case 'HLS': return 'HLS';
-    case 'CMYK': return 'CMYK';
-    case 'CMY': return 'CMY';
-    default: return 'unknown';
+    case 'XYZ':
+      return 'XYZ';
+    case 'Lab':
+      return 'Lab';
+    case 'Luv':
+      return 'Luv';
+    case 'YCbr':
+      return 'YCbCr';
+    case 'Yxy':
+      return 'Yxy';
+    case 'RGB':
+      return 'RGB';
+    case 'GRAY':
+      return 'Gray';
+    case 'HSV':
+      return 'HSV';
+    case 'HLS':
+      return 'HLS';
+    case 'CMYK':
+      return 'CMYK';
+    case 'CMY':
+      return 'CMY';
+    default:
+      return 'unknown';
   }
 }
 
@@ -226,11 +246,16 @@ function parseColorSpace(sig: number): ColorSpaceType {
  */
 function parseRenderingIntent(value: number): RenderingIntent {
   switch (value & 0x3) {
-    case 0: return 'perceptual';
-    case 1: return 'relative';
-    case 2: return 'saturation';
-    case 3: return 'absolute';
-    default: return 'perceptual';
+    case 0:
+      return 'perceptual';
+    case 1:
+      return 'relative';
+    case 2:
+      return 'saturation';
+    case 3:
+      return 'absolute';
+    default:
+      return 'perceptual';
   }
 }
 
@@ -363,8 +388,8 @@ export function parseICCProfile(buffer: ArrayBuffer): ICCProfileData | null {
   const size = readU32(view, 0);
   const preferredCMM = readU32(view, 4);
   const versionRaw = readU32(view, 8);
-  const versionMajor = (versionRaw >> 24) & 0xFF;
-  const versionMinor = ((versionRaw >> 20) & 0xF);
+  const versionMajor = (versionRaw >> 24) & 0xff;
+  const versionMinor = (versionRaw >> 20) & 0xf;
   const profileClassSig = readU32(view, 12);
   const colorSpaceSig = readU32(view, 16);
   const pcsSig = readU32(view, 20);
@@ -423,11 +448,7 @@ export function parseICCProfile(buffer: ArrayBuffer): ICCProfileData | null {
 
     if (rXYZ && gXYZ && bXYZ) {
       // Matrix rows: X = rX*R + gX*G + bX*B, etc.
-      rgbToXYZMatrix = [
-        rXYZ.X, gXYZ.X, bXYZ.X,
-        rXYZ.Y, gXYZ.Y, bXYZ.Y,
-        rXYZ.Z, gXYZ.Z, bXYZ.Z,
-      ];
+      rgbToXYZMatrix = [rXYZ.X, gXYZ.X, bXYZ.X, rXYZ.Y, gXYZ.Y, bXYZ.Y, rXYZ.Z, gXYZ.Z, bXYZ.Z];
     }
   }
 
@@ -437,9 +458,7 @@ export function parseICCProfile(buffer: ArrayBuffer): ICCProfileData | null {
 
   // Extract chromatic adaptation matrix
   const chadTag = tags.get(TAG_CHAD);
-  const chromaticAdaptationMatrix = chadTag
-    ? parseSF32Matrix(view, chadTag.offset, chadTag.size)
-    : null;
+  const chromaticAdaptationMatrix = chadTag ? parseSF32Matrix(view, chadTag.offset, chadTag.size) : null;
 
   return {
     header,
@@ -558,12 +577,7 @@ function applyParametricCurve(x: number, funcType: number, params: number[]): nu
  * @param matrix - 3x3 row-major matrix
  * @returns Transformed [X, Y, Z] values
  */
-export function applyMatrix3x3(
-  r: number,
-  g: number,
-  b: number,
-  matrix: Matrix3x3,
-): [number, number, number] {
+export function applyMatrix3x3(r: number, g: number, b: number, matrix: Matrix3x3): [number, number, number] {
   return [
     matrix[0] * r + matrix[1] * g + matrix[2] * b,
     matrix[3] * r + matrix[4] * g + matrix[5] * b,
@@ -609,12 +623,7 @@ export function invertMatrix3x3(m: Matrix3x3): Matrix3x3 | null {
  * @param profile - Parsed ICC profile
  * @returns XYZ tristimulus values, or null if profile lacks required data
  */
-export function applyProfileToXYZ(
-  r: number,
-  g: number,
-  b: number,
-  profile: ICCProfileData,
-): XYZValue | null {
+export function applyProfileToXYZ(r: number, g: number, b: number, profile: ICCProfileData): XYZValue | null {
   if (!profile.rgbToXYZMatrix) return null;
 
   // Step 1: Decode TRC (linearize device values)
@@ -641,12 +650,7 @@ export function applyProfileToXYZ(
  * @param profile - Parsed ICC profile
  * @returns Linearized RGB values
  */
-export function linearizeRGB(
-  r: number,
-  g: number,
-  b: number,
-  profile: ICCProfileData,
-): [number, number, number] {
+export function linearizeRGB(r: number, g: number, b: number, profile: ICCProfileData): [number, number, number] {
   const linearR = profile.redTRC ? applyTRC(r, profile.redTRC) : r;
   const linearG = profile.greenTRC ? applyTRC(g, profile.greenTRC) : g;
   const linearB = profile.blueTRC ? applyTRC(b, profile.blueTRC) : b;
@@ -686,13 +690,11 @@ export const SRGB_TRC: ToneCurve = {
 
 /** sRGB to XYZ matrix (D65 adapted) */
 export const SRGB_TO_XYZ_MATRIX: Matrix3x3 = [
-  0.4124564, 0.3575761, 0.1804375,
-  0.2126729, 0.7151522, 0.0721750,
-  0.0193339, 0.1191920, 0.9503041,
+  0.4124564, 0.3575761, 0.1804375, 0.2126729, 0.7151522, 0.072175, 0.0193339, 0.119192, 0.9503041,
 ];
 
 /** D50 white point (ICC PCS illuminant) */
-export const D50_WHITE: XYZValue = { X: 0.9642, Y: 1.0000, Z: 0.8249 };
+export const D50_WHITE: XYZValue = { X: 0.9642, Y: 1.0, Z: 0.8249 };
 
 /** D65 white point */
-export const D65_WHITE: XYZValue = { X: 0.95047, Y: 1.00000, Z: 1.08883 };
+export const D65_WHITE: XYZValue = { X: 0.95047, Y: 1.0, Z: 1.08883 };

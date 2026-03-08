@@ -12,10 +12,7 @@ import type { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import type { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { ProceduralSourceNode } from '../../nodes/sources/ProceduralSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
-import type {
-  Annotation,
-  PaintEffects,
-} from '../../paint/types';
+import type { Annotation, PaintEffects } from '../../paint/types';
 import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
@@ -68,7 +65,7 @@ export interface GTOViewSettings {
   linearize?: LinearizeState;
   noiseReduction?: NoiseReductionParams;
   uncrop?: UncropState;
-  outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
+  outOfRange?: number; // 0=off, 1=clamp-to-black, 2=highlight
   channelSwizzle?: ChannelSwizzle;
 }
 
@@ -77,8 +74,8 @@ export interface GTOViewSettings {
  */
 export interface MatteSettings {
   show: boolean;
-  aspect: number;        // Target aspect ratio (e.g., 2.35 for cinemascope)
-  opacity: number;       // Matte opacity (0-1)
+  aspect: number; // Target aspect ratio (e.g., 2.35 for cinemascope)
+  opacity: number; // Matte opacity (0-1)
   heightVisible: number; // Visible height fraction (-1 = auto)
   centerPoint: [number, number]; // Center offset
 }

@@ -66,12 +66,7 @@ describe('Per-Eye Annotations', () => {
 
     it('EYEANN-007: shape annotation inherits current annotationEye', () => {
       engine.annotationEye = 'left';
-      const shape = engine.addShape(
-        1,
-        ShapeType.Rectangle,
-        { x: 0.1, y: 0.1 },
-        { x: 0.5, y: 0.5 },
-      );
+      const shape = engine.addShape(1, ShapeType.Rectangle, { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 });
 
       expect(shape.eye).toBe('left');
     });
@@ -119,17 +114,17 @@ describe('Per-Eye Annotations', () => {
     it('EYEANN-011: left eye filter returns left + both annotations', () => {
       const leftAnns = engine.getAnnotationsForFrame(1, undefined, 'left');
       expect(leftAnns).toHaveLength(2);
-      expect(leftAnns.some(a => a.eye === 'left')).toBe(true);
-      expect(leftAnns.some(a => a.eye === 'both')).toBe(true);
-      expect(leftAnns.some(a => a.eye === 'right')).toBe(false);
+      expect(leftAnns.some((a) => a.eye === 'left')).toBe(true);
+      expect(leftAnns.some((a) => a.eye === 'both')).toBe(true);
+      expect(leftAnns.some((a) => a.eye === 'right')).toBe(false);
     });
 
     it('EYEANN-012: right eye filter returns right + both annotations', () => {
       const rightAnns = engine.getAnnotationsForFrame(1, undefined, 'right');
       expect(rightAnns).toHaveLength(2);
-      expect(rightAnns.some(a => a.eye === 'right')).toBe(true);
-      expect(rightAnns.some(a => a.eye === 'both')).toBe(true);
-      expect(rightAnns.some(a => a.eye === 'left')).toBe(false);
+      expect(rightAnns.some((a) => a.eye === 'right')).toBe(true);
+      expect(rightAnns.some((a) => a.eye === 'both')).toBe(true);
+      expect(rightAnns.some((a) => a.eye === 'left')).toBe(false);
     });
 
     it('EYEANN-013: annotations without eye field pass all eye filters', () => {
@@ -143,7 +138,10 @@ describe('Per-Eye Annotations', () => {
         color: [1, 0, 0, 1],
         width: 3,
         brush: 0,
-        points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }],
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.2, y: 0.2 },
+        ],
         join: 3,
         cap: 2,
         splat: false,
@@ -185,13 +183,13 @@ describe('Per-Eye Annotations', () => {
     it('EYEANN-020: getAnnotationsWithGhost respects eye filter on current frame', () => {
       const leftGhost = engine.getAnnotationsWithGhost(5, undefined, 'left');
       expect(leftGhost).toHaveLength(2); // left + both
-      expect(leftGhost.every(g => g.opacity === 1)).toBe(true);
+      expect(leftGhost.every((g) => g.opacity === 1)).toBe(true);
     });
 
     it('EYEANN-021: getAnnotationsWithGhost respects eye filter on ghost frames', () => {
       const leftGhost = engine.getAnnotationsWithGhost(6, undefined, 'left');
       expect(leftGhost).toHaveLength(2); // left + both, ghosted
-      expect(leftGhost.every(g => g.opacity < 1)).toBe(true);
+      expect(leftGhost.every((g) => g.opacity < 1)).toBe(true);
 
       const rightGhost = engine.getAnnotationsWithGhost(6, undefined, 'right');
       expect(rightGhost).toHaveLength(2); // right + both, ghosted
@@ -318,7 +316,10 @@ describe('Per-Eye Annotations', () => {
           color: [1, 0, 0, 1] as [number, number, number, number],
           width: 3,
           brush: 0,
-          points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }],
+          points: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.2, y: 0.2 },
+          ],
           join: 3,
           cap: 2,
           splat: false,

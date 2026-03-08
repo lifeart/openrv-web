@@ -33,21 +33,29 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   qcContent.appendChild(ContextToolbar.createDivider());
 
   // --- GROUP 3: Tools (Pixel Probe) ---
-  const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
-    viewer.getPixelProbe().toggle();
-  }, { title: 'Pixel Probe (Shift+I)' });
+  const pixelProbeButton = ContextToolbar.createIconButton(
+    'eyedropper',
+    () => {
+      viewer.getPixelProbe().toggle();
+    },
+    { title: 'Pixel Probe (Shift+I)' },
+  );
   pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
   qcContent.appendChild(pixelProbeButton);
 
   // Update pixel probe button state
-  addUnsubscriber(viewer.getPixelProbe().on('stateChanged', (state) => {
-    setButtonActive(pixelProbeButton, state.enabled, 'icon');
-  }));
+  addUnsubscriber(
+    viewer.getPixelProbe().on('stateChanged', (state) => {
+      setButtonActive(pixelProbeButton, state.enabled, 'icon');
+    }),
+  );
 
   // Trigger re-render when false color state changes
-  addUnsubscriber(viewer.getFalseColor().on('stateChanged', () => {
-    viewer.refresh();
-  }));
+  addUnsubscriber(
+    viewer.getFalseColor().on('stateChanged', () => {
+      viewer.refresh();
+    }),
+  );
 
   // Add luminance visualization badge to canvas overlay
   const lumVisBadge = registry.luminanceVisControl.createBadge();
@@ -96,27 +104,37 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   });
 
   // Sync scope visibility with ScopesControl
-  addUnsubscriber(registry.histogram.on('visibilityChanged', (visible) => {
-    registry.scopesControl.setScopeVisible('histogram', visible);
-  }));
-  addUnsubscriber(registry.waveform.on('visibilityChanged', (visible) => {
-    registry.scopesControl.setScopeVisible('waveform', visible);
-  }));
-  addUnsubscriber(registry.vectorscope.on('visibilityChanged', (visible) => {
-    registry.scopesControl.setScopeVisible('vectorscope', visible);
-  }));
-  addUnsubscriber(registry.gamutDiagram.on('visibilityChanged', (visible) => {
-    registry.scopesControl.setScopeVisible('gamutDiagram', visible);
-  }));
+  addUnsubscriber(
+    registry.histogram.on('visibilityChanged', (visible) => {
+      registry.scopesControl.setScopeVisible('histogram', visible);
+    }),
+  );
+  addUnsubscriber(
+    registry.waveform.on('visibilityChanged', (visible) => {
+      registry.scopesControl.setScopeVisible('waveform', visible);
+    }),
+  );
+  addUnsubscriber(
+    registry.vectorscope.on('visibilityChanged', (visible) => {
+      registry.scopesControl.setScopeVisible('vectorscope', visible);
+    }),
+  );
+  addUnsubscriber(
+    registry.gamutDiagram.on('visibilityChanged', (visible) => {
+      registry.scopesControl.setScopeVisible('gamutDiagram', visible);
+    }),
+  );
 
   // Sync histogram clipping overlay toggle with Viewer
-  addUnsubscriber(registry.histogram.on('clippingOverlayToggled', (enabled) => {
-    if (enabled) {
-      viewer.getClippingOverlay().enable();
-    } else {
-      viewer.getClippingOverlay().disable();
-    }
-  }));
+  addUnsubscriber(
+    registry.histogram.on('clippingOverlayToggled', (enabled) => {
+      if (enabled) {
+        viewer.getClippingOverlay().enable();
+      } else {
+        viewer.getClippingOverlay().disable();
+      }
+    }),
+  );
 
   return qcContent;
 }

@@ -5,7 +5,7 @@
  * and shows only the viewer canvas. Includes cursor auto-hide on inactivity.
  */
 
-import { EventEmitter, EventMap } from '../EventEmitter';
+import { EventEmitter, type EventMap } from '../EventEmitter';
 import { Logger } from '../Logger';
 import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 

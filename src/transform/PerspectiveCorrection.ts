@@ -13,10 +13,10 @@ export interface Point2D {
 
 export interface PerspectiveCorrectionParams {
   enabled: boolean;
-  topLeft: Point2D;      // default (0, 0)
-  topRight: Point2D;     // default (1, 0)
-  bottomRight: Point2D;  // default (1, 1)
-  bottomLeft: Point2D;   // default (0, 1)
+  topLeft: Point2D; // default (0, 0)
+  topRight: Point2D; // default (1, 0)
+  bottomRight: Point2D; // default (1, 1)
+  bottomLeft: Point2D; // default (0, 1)
   quality: 'bilinear' | 'bicubic';
 }
 
@@ -63,8 +63,10 @@ export function computeHomography(src: Point2D[], dst: Point2D[]): Float64Array 
   const b = new Float64Array(8);
 
   for (let i = 0; i < 4; i++) {
-    const sx = src[i]!.x, sy = src[i]!.y;
-    const dx = dst[i]!.x, dy = dst[i]!.y;
+    const sx = src[i]!.x,
+      sy = src[i]!.y;
+    const dx = dst[i]!.x,
+      dy = dst[i]!.y;
     const r1 = i * 2;
     const r2 = r1 + 1;
 
@@ -207,12 +209,7 @@ export function computeInverseHomographyFloat32(params: PerspectiveCorrectionPar
   ];
 
   // Destination is the user's quad (source positions in the original image)
-  const dst: Point2D[] = [
-    params.topLeft,
-    params.topRight,
-    params.bottomRight,
-    params.bottomLeft,
-  ];
+  const dst: Point2D[] = [params.topLeft, params.topRight, params.bottomRight, params.bottomLeft];
 
   // H maps output rect → source quad. This is exactly what the shader needs:
   // for each output pixel at position P, sample source at H(P).
@@ -242,7 +239,13 @@ function catmullRomWeight(t: number): number {
  * Sample a pixel from ImageData with bounds checking.
  * Returns [r, g, b, a] or [0, 0, 0, 0] if out of bounds.
  */
-function samplePixel(data: Uint8ClampedArray, width: number, height: number, x: number, y: number): [number, number, number, number] {
+function samplePixel(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): [number, number, number, number] {
   if (x < 0 || x >= width || y < 0 || y >= height) {
     return [0, 0, 0, 0];
   }
@@ -253,7 +256,13 @@ function samplePixel(data: Uint8ClampedArray, width: number, height: number, x: 
 /**
  * Bilinear interpolation at fractional coordinates.
  */
-function bilinearSample(data: Uint8ClampedArray, width: number, height: number, sx: number, sy: number): [number, number, number, number] {
+function bilinearSample(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  sx: number,
+  sy: number,
+): [number, number, number, number] {
   const x0 = Math.floor(sx);
   const y0 = Math.floor(sy);
   const fx = sx - x0;
@@ -272,10 +281,7 @@ function bilinearSample(data: Uint8ClampedArray, width: number, height: number, 
     const result: [number, number, number, number] = [0, 0, 0, 0];
     for (let c = 0; c < 4; c++) {
       result[c] = Math.round(
-        p00[c]! * (1 - fx) * (1 - fy) +
-        p10[c]! * fx * (1 - fy) +
-        p01[c]! * (1 - fx) * fy +
-        p11[c]! * fx * fy
+        p00[c]! * (1 - fx) * (1 - fy) + p10[c]! * fx * (1 - fy) + p01[c]! * (1 - fx) * fy + p11[c]! * fx * fy,
       );
     }
     return result;
@@ -302,7 +308,13 @@ function bilinearSample(data: Uint8ClampedArray, width: number, height: number, 
 /**
  * Bicubic (Catmull-Rom) interpolation at fractional coordinates.
  */
-function bicubicSample(data: Uint8ClampedArray, width: number, height: number, sx: number, sy: number): [number, number, number, number] {
+function bicubicSample(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  sx: number,
+  sy: number,
+): [number, number, number, number] {
   const x0 = Math.floor(sx);
   const y0 = Math.floor(sy);
   const fx = sx - x0;
@@ -337,10 +349,7 @@ function bicubicSample(data: Uint8ClampedArray, width: number, height: number, s
  * Apply perspective correction to an ImageData using CPU inverse mapping.
  * Returns a NEW ImageData.
  */
-export function applyPerspectiveCorrection(
-  sourceData: ImageData,
-  params: PerspectiveCorrectionParams
-): ImageData {
+export function applyPerspectiveCorrection(sourceData: ImageData, params: PerspectiveCorrectionParams): ImageData {
   if (!isPerspectiveActive(params)) {
     return sourceData;
   }
@@ -357,12 +366,7 @@ export function applyPerspectiveCorrection(
     { x: 1, y: 1 },
     { x: 0, y: 1 },
   ];
-  const quad: Point2D[] = [
-    params.topLeft,
-    params.topRight,
-    params.bottomRight,
-    params.bottomLeft,
-  ];
+  const quad: Point2D[] = [params.topLeft, params.topRight, params.bottomRight, params.bottomLeft];
 
   const H = computeHomography(unitSquare, quad);
 
@@ -409,9 +413,7 @@ export function applyPerspectiveCorrection(
       const sx = srcU * width - 0.5;
       const sy = srcV * height - 0.5;
 
-      const pixel = useBicubic
-        ? bicubicSample(src, width, height, sx, sy)
-        : bilinearSample(src, width, height, sx, sy);
+      const pixel = useBicubic ? bicubicSample(src, width, height, sx, sy) : bilinearSample(src, width, height, sx, sy);
 
       dst[dstIdx] = pixel[0];
       dst[dstIdx + 1] = pixel[1];
@@ -428,10 +430,7 @@ export function applyPerspectiveCorrection(
  * Uses forward homography to compute subdivision points.
  * Returns an array of rows, each row is an array of points.
  */
-export function generatePerspectiveGrid(
-  params: PerspectiveCorrectionParams,
-  subdivisions: number
-): Point2D[][] {
+export function generatePerspectiveGrid(params: PerspectiveCorrectionParams, subdivisions: number): Point2D[][] {
   // Compute forward homography (unit square → user quad)
   const unitSquare: Point2D[] = [
     { x: 0, y: 0 },
@@ -439,12 +438,7 @@ export function generatePerspectiveGrid(
     { x: 1, y: 1 },
     { x: 0, y: 1 },
   ];
-  const quad: Point2D[] = [
-    params.topLeft,
-    params.topRight,
-    params.bottomRight,
-    params.bottomLeft,
-  ];
+  const quad: Point2D[] = [params.topLeft, params.topRight, params.bottomRight, params.bottomLeft];
 
   const H = computeHomography(unitSquare, quad);
 

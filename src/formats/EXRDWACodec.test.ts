@@ -45,10 +45,17 @@ function createDWAHeader(overrides: Partial<DWABlockHeader> = {}): Uint8Array {
   };
   const h = { ...defaults, ...overrides };
   const fields = [
-    h.version, h.unknownUncompressedSize, h.unknownCompressedSize,
-    h.acCompressedSize, h.dcCompressedSize, h.rleCompressedSize,
-    h.rleUncompressedSize, h.rleRawSize, h.totalAcUncompressedCount,
-    h.totalDcUncompressedCount, h.acCompression,
+    h.version,
+    h.unknownUncompressedSize,
+    h.unknownCompressedSize,
+    h.acCompressedSize,
+    h.dcCompressedSize,
+    h.rleCompressedSize,
+    h.rleUncompressedSize,
+    h.rleRawSize,
+    h.totalAcUncompressedCount,
+    h.totalDcUncompressedCount,
+    h.acCompression,
   ];
   const result = new Uint8Array(88);
   for (let i = 0; i < 11; i++) {
@@ -343,13 +350,7 @@ describe('EXRDWACodec', () => {
       const channelSizes = [2]; // one HALF channel
       const uncompressedSize = width * numLines * 2; // 2 bytes per pixel
 
-      const result = await decompressDWA(
-        header,
-        uncompressedSize,
-        width,
-        numLines,
-        channelSizes,
-      );
+      const result = await decompressDWA(header, uncompressedSize, width, numLines, channelSizes);
 
       expect(result.length).toBe(uncompressedSize);
     });
@@ -360,8 +361,7 @@ describe('EXRDWACodec', () => {
         acCompressedSize: 9999, // exceeds actual data
       });
 
-      await expect(decompressDWA(header, 128, 8, 8, [2]))
-        .rejects.toThrow('sub-block sizes exceed');
+      await expect(decompressDWA(header, 128, 8, 8, [2])).rejects.toThrow('sub-block sizes exceed');
     });
 
     it('DWAB-006d: skips unknown data before AC sub-block', async () => {
@@ -378,7 +378,7 @@ describe('EXRDWACodec', () => {
       });
       const data = new Uint8Array(88 + 4);
       data.set(header);
-      data.set([0xDE, 0xAD, 0xBE, 0xEF], 88); // unknown data
+      data.set([0xde, 0xad, 0xbe, 0xef], 88); // unknown data
 
       const result = await decompressDWA(data, 128, 8, 8, [2]);
       expect(result.length).toBe(128);

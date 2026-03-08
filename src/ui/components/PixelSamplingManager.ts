@@ -12,15 +12,12 @@
  * - getImageData / getSourceImageData helper methods
  */
 
-import { PixelProbe } from './PixelProbe';
-import { Renderer } from '../../render/Renderer';
-import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
-import { Session } from '../../core/session/Session';
+import { type PixelProbe } from './PixelProbe';
+import { type Renderer } from '../../render/Renderer';
+import { type RenderWorkerProxy } from '../../render/RenderWorkerProxy';
+import { type Session } from '../../core/session/Session';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
-import {
-  getPixelCoordinates,
-  getPixelColor,
-} from './ViewerInteraction';
+import { getPixelCoordinates, getPixelColor } from './ViewerInteraction';
 import type { IPImage } from '../../core/image/Image';
 import { Logger } from '../../utils/Logger';
 import { floatRGBAToImageData } from '../../utils/math';
@@ -65,14 +62,21 @@ export interface PixelSamplingContext {
   getCanvasColorSpace(): 'display-p3' | undefined;
   getImageCanvasRect(): DOMRect;
   isViewerContentElement(element: HTMLElement): boolean;
-  drawWithTransform(ctx: CanvasRenderingContext2D, element: CanvasImageSource, displayWidth: number, displayHeight: number): void;
+  drawWithTransform(
+    ctx: CanvasRenderingContext2D,
+    element: CanvasImageSource,
+    displayWidth: number,
+    displayHeight: number,
+  ): void;
   getLastRenderedImage(): IPImage | null;
   isPlaying(): boolean;
 }
 
 export class PixelSamplingManager {
   // Cursor color callback for InfoPanel
-  private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
+  private cursorColorCallback:
+    | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+    | null = null;
 
   // Shared throttle timestamp for merged mousemove handler (probe + cursor color)
   private lastMouseMoveUpdate = 0;
@@ -114,13 +118,7 @@ export class PixelSamplingManager {
     const canvasRect = this.context.getImageCanvasRect();
 
     // Compute canvas-relative pixel coordinates once
-    const position = getPixelCoordinates(
-      e.clientX,
-      e.clientY,
-      canvasRect,
-      displayWidth,
-      displayHeight
-    );
+    const position = getPixelCoordinates(e.clientX, e.clientY, canvasRect, displayWidth, displayHeight);
 
     // Handle out-of-bounds
     if (!position) {
@@ -141,13 +139,7 @@ export class PixelSamplingManager {
       if (this.context.isHDRRenderActive()) {
         const blitFrame = this.context.getLastHDRBlitFrame?.() ?? null;
         if (blitFrame) {
-          const sampled = this.sampleFromHDRBlitFrame(
-            blitFrame,
-            position,
-            displayWidth,
-            displayHeight,
-            sampleSize,
-          );
+          const sampled = this.sampleFromHDRBlitFrame(blitFrame, position, displayWidth, displayHeight, sampleSize);
           this.handlePixelProbeData(
             sampled.pixels,
             position,
@@ -177,11 +169,14 @@ export class PixelSamplingManager {
       // Phase 4: Use async readback when worker renderer is active
       const renderWorkerProxy = this.context.getRenderWorkerProxy();
       if (this.context.isAsyncRenderer() && renderWorkerProxy) {
-        renderWorkerProxy.readPixelFloatAsync(rx, ry, rw, rh).then((pixels) => {
-          this.handlePixelProbeData(pixels, position, rw, rh, probeEnabled, cursorColorEnabled, e);
-        }).catch((err) => {
-          log.debug('Async pixel readback failed', err);
-        });
+        renderWorkerProxy
+          .readPixelFloatAsync(rx, ry, rw, rh)
+          .then((pixels) => {
+            this.handlePixelProbeData(pixels, position, rw, rh, probeEnabled, cursorColorEnabled, e);
+          })
+          .catch((err) => {
+            log.debug('Async pixel readback failed', err);
+          });
         if (probeEnabled) {
           this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
         }
@@ -207,10 +202,7 @@ export class PixelSamplingManager {
         this.context.pixelProbe.setSourceImageData(null);
       }
 
-      this.context.pixelProbe.updateFromCanvas(
-        position.x, position.y, imageData,
-        displayWidth, displayHeight
-      );
+      this.context.pixelProbe.updateFromCanvas(position.x, position.y, imageData, displayWidth, displayHeight);
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
     }
 
@@ -298,7 +290,10 @@ export class PixelSamplingManager {
     if (probeEnabled) {
       if (pixels && pixels.length >= 4) {
         const count = rw * rh;
-        let tr = 0, tg = 0, tb = 0, ta = 0;
+        let tr = 0,
+          tg = 0,
+          tb = 0,
+          ta = 0;
         for (let i = 0; i < count; i++) {
           tr += pixels[i * 4]!;
           tg += pixels[i * 4 + 1]!;
@@ -306,9 +301,14 @@ export class PixelSamplingManager {
           ta += pixels[i * 4 + 3]!;
         }
         this.context.pixelProbe.updateFromHDRValues(
-          position.x, position.y,
-          tr / count, tg / count, tb / count, ta / count,
-          displayWidth, displayHeight
+          position.x,
+          position.y,
+          tr / count,
+          tg / count,
+          tb / count,
+          ta / count,
+          displayWidth,
+          displayHeight,
         );
       }
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
@@ -474,13 +474,20 @@ export class PixelSamplingManager {
     if (!element) return null;
 
     // Reuse cached canvas or create new one if dimensions changed
-    if (!this.sourceImageCanvas || !this.sourceImageCtx ||
-        this.sourceImageCanvas.width !== displayWidth ||
-        this.sourceImageCanvas.height !== displayHeight) {
+    if (
+      !this.sourceImageCanvas ||
+      !this.sourceImageCtx ||
+      this.sourceImageCanvas.width !== displayWidth ||
+      this.sourceImageCanvas.height !== displayHeight
+    ) {
       this.sourceImageCanvas = document.createElement('canvas');
       this.sourceImageCanvas.width = displayWidth;
       this.sourceImageCanvas.height = displayHeight;
-      this.sourceImageCtx = safeCanvasContext2D(this.sourceImageCanvas, { willReadFrequently: true }, this.context.getCanvasColorSpace());
+      this.sourceImageCtx = safeCanvasContext2D(
+        this.sourceImageCanvas,
+        { willReadFrequently: true },
+        this.context.getCanvasColorSpace(),
+      );
     }
 
     if (!this.sourceImageCtx) return null;
@@ -506,7 +513,11 @@ export class PixelSamplingManager {
    * When the mouse leaves the canvas or is outside bounds, null values are passed.
    * @param callback The callback function, or null to unregister
    */
-  onCursorColorChange(callback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null): void {
+  onCursorColorChange(
+    callback:
+      | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+      | null,
+  ): void {
     this.cursorColorCallback = callback;
   }
 

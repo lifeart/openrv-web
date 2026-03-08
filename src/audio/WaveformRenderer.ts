@@ -11,9 +11,9 @@ import { Input, BlobSource, ALL_FORMATS, AudioBufferSink } from 'mediabunny';
 import type { InputAudioTrack } from 'mediabunny';
 
 export interface WaveformData {
-  peaks: Float32Array;  // Normalized peak values (-1 to 1)
-  duration: number;     // Audio duration in seconds
-  sampleRate: number;   // Original sample rate
+  peaks: Float32Array; // Normalized peak values (-1 to 1)
+  duration: number; // Audio duration in seconds
+  sampleRate: number; // Original sample rate
 }
 
 export interface WaveformRenderOptions {
@@ -106,7 +106,7 @@ export interface AudioExtractionError {
  */
 export async function extractAudioFromVideo(
   videoElement: HTMLVideoElement,
-  options: { timeout?: number; onError?: (error: AudioExtractionError) => void } = {}
+  options: { timeout?: number; onError?: (error: AudioExtractionError) => void } = {},
 ): Promise<WaveformData | null> {
   const { timeout = 30000, onError } = options;
 
@@ -183,7 +183,9 @@ export async function extractAudioFromVideo(
     const arrayBuffer = await response.arrayBuffer();
 
     // Create audio context
-    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const audioContext = new (
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    )();
 
     let audioBuffer: AudioBuffer;
     try {
@@ -229,7 +231,7 @@ export async function extractAudioFromVideo(
  */
 export async function extractAudioFromBlob(
   blob: Blob,
-  options: { onError?: (error: AudioExtractionError) => void } = {}
+  options: { onError?: (error: AudioExtractionError) => void } = {},
 ): Promise<WaveformData | null> {
   const { onError } = options;
 
@@ -242,7 +244,9 @@ export async function extractAudioFromBlob(
   try {
     const arrayBuffer = await blob.arrayBuffer();
 
-    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const audioContext = new (
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    )();
 
     let audioBuffer: AudioBuffer;
     try {
@@ -288,7 +292,7 @@ export async function extractAudioFromBlob(
  */
 export async function extractAudioWithMediabunny(
   file: File | Blob,
-  options: { onError?: (error: AudioExtractionError) => void; onProgress?: (progress: number) => void } = {}
+  options: { onError?: (error: AudioExtractionError) => void; onProgress?: (progress: number) => void } = {},
 ): Promise<WaveformData | null> {
   const { onError, onProgress } = options;
 
@@ -318,7 +322,7 @@ export async function extractAudioWithMediabunny(
     }
 
     // Get primary audio track
-    const audioTrack = await input.getPrimaryAudioTrack() as InputAudioTrack | null;
+    const audioTrack = (await input.getPrimaryAudioTrack()) as InputAudioTrack | null;
     if (!audioTrack) {
       return handleError({
         type: 'decode',
@@ -438,7 +442,11 @@ export async function extractAudioWithMediabunny(
 export async function extractAudioWithFallback(
   videoElement: HTMLVideoElement,
   file?: File | Blob,
-  options: { timeout?: number; onError?: (error: AudioExtractionError) => void; onProgress?: (progress: number) => void } = {}
+  options: {
+    timeout?: number;
+    onError?: (error: AudioExtractionError) => void;
+    onProgress?: (progress: number) => void;
+  } = {},
 ): Promise<WaveformData | null> {
   // Try native Web Audio API first
   const nativeResult = await extractAudioFromVideo(videoElement, options);
@@ -463,7 +471,7 @@ export function renderWaveform(
   data: WaveformData,
   options: Partial<WaveformRenderOptions> = {},
   startTime = 0,
-  endTime?: number
+  endTime?: number,
 ): void {
   const opts = { ...DEFAULT_RENDER_OPTIONS, ...options };
   const { width, height, color, backgroundColor, barWidth, barGap, centerLine } = opts;
@@ -540,7 +548,7 @@ export function renderWaveformRegion(
   height: number,
   startTime: number,
   endTime: number,
-  color = 'rgba(74, 158, 255, 0.5)'
+  color = 'rgba(74, 158, 255, 0.5)',
 ): void {
   if (data.peaks.length === 0 || width <= 0 || height <= 0) return;
 
@@ -643,7 +651,7 @@ export class WaveformRenderer {
     height: number,
     startTime: number,
     endTime: number,
-    color?: string
+    color?: string,
   ): void {
     if (!this.data) return;
     renderWaveformRegion(ctx, this.data, x, y, width, height, startTime, endTime, color);

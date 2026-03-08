@@ -143,17 +143,17 @@ export interface WorkerHSLQualifierState {
 export interface WorkerToneMappingState {
   enabled: boolean;
   operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces' | 'agx' | 'pbrNeutral' | 'gt' | 'acesHill' | 'drago'
-  reinhardWhitePoint?: number;    // Extended Reinhard white point (default 4.0)
-  filmicExposureBias?: number;    // Filmic exposure bias (default 2.0)
-  filmicWhitePoint?: number;      // Filmic white point (default 11.2)
-  dragoBias?: number;             // Drago bias (default 0.85)
-  dragoLwa?: number;              // Scene average luminance (from LuminanceAnalyzer)
-  dragoLmax?: number;             // Scene max luminance (from LuminanceAnalyzer)
-  dragoBrightness?: number;       // Post-Drago brightness multiplier (default 2.0)
+  reinhardWhitePoint?: number; // Extended Reinhard white point (default 4.0)
+  filmicExposureBias?: number; // Filmic exposure bias (default 2.0)
+  filmicWhitePoint?: number; // Filmic white point (default 11.2)
+  dragoBias?: number; // Drago bias (default 0.85)
+  dragoLwa?: number; // Scene average luminance (from LuminanceAnalyzer)
+  dragoLmax?: number; // Scene max luminance (from LuminanceAnalyzer)
+  dragoBrightness?: number; // Post-Drago brightness multiplier (default 2.0)
 }
 
 export interface WorkerDeinterlaceParams {
-  method: string;   // 'bob' | 'weave' | 'blend'
+  method: string; // 'bob' | 'weave' | 'blend'
   fieldOrder: string; // 'tff' | 'bff'
   enabled: boolean;
 }
@@ -161,8 +161,8 @@ export interface WorkerDeinterlaceParams {
 export interface WorkerFilmEmulationParams {
   enabled: boolean;
   stock: string;
-  intensity: number;       // 0-100
-  grainIntensity: number;  // 0-100
+  intensity: number; // 0-100
+  grainIntensity: number; // 0-100
   grainSeed: number;
 }
 
@@ -257,12 +257,12 @@ export function evaluateCurveAtPoint(points: WorkerCurvePoint[], x: number): num
   const t3 = t2 * t;
 
   // Catmull-Rom basis matrix coefficients
-  const y = 0.5 * (
-    (2 * p1.y) +
-    (-p0.y + p2.y) * t +
-    (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-    (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
-  );
+  const y =
+    0.5 *
+    (2 * p1.y +
+      (-p0.y + p2.y) * t +
+      (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+      (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
 
   // Clamp result to 0-1
   return clamp(y, 0, 1);
@@ -321,9 +321,15 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
   const dB = LUMA_B - oo;
 
   // P = rot * T: P[i][j] = r[i][j] + dj (row sums of rot = 1)
-  const p00 = r00 + dR, p01 = r01 + dG, p02 = r02 + dB;
-  const p10 = r10 + dR, p11 = r11 + dG, p12 = r12 + dB;
-  const p20 = r20 + dR, p21 = r21 + dG, p22 = r22 + dB;
+  const p00 = r00 + dR,
+    p01 = r01 + dG,
+    p02 = r02 + dB;
+  const p10 = r10 + dR,
+    p11 = r11 + dG,
+    p12 = r12 + dB;
+  const p20 = r20 + dR,
+    p21 = r21 + dG,
+    p22 = r22 + dB;
 
   // M = TInv * P: M[i][j] = P[i][j] - (dR*P[0][j] + dG*P[1][j] + dB*P[2][j])
   const col0 = dR * p00 + dG * p10 + dB * p20;
@@ -331,9 +337,15 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
   const col2 = dR * p02 + dG * p12 + dB * p22;
 
   return new Float32Array([
-    p00 - col0, p10 - col0, p20 - col0,
-    p01 - col1, p11 - col1, p21 - col1,
-    p02 - col2, p12 - col2, p22 - col2,
+    p00 - col0,
+    p10 - col0,
+    p20 - col0,
+    p01 - col1,
+    p11 - col1,
+    p21 - col1,
+    p02 - col2,
+    p12 - col2,
+    p22 - col2,
   ]);
 }
 
@@ -387,7 +399,7 @@ export function isIdentityHueRotation(degrees: number): boolean {
 export function tonemapReinhardChannel(value: number, whitePoint = 4.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
   const wp2 = whitePoint * whitePoint;
-  return value * (1.0 + value / wp2) / (1.0 + value);
+  return (value * (1.0 + value / wp2)) / (1.0 + value);
 }
 
 /**
@@ -396,12 +408,12 @@ export function tonemapReinhardChannel(value: number, whitePoint = 4.0): number 
  */
 export function filmicCurveShared(x: number): number {
   const A = 0.15; // Shoulder strength
-  const B = 0.50; // Linear strength
-  const C = 0.10; // Linear angle
-  const D = 0.20; // Toe strength
+  const B = 0.5; // Linear strength
+  const C = 0.1; // Linear angle
+  const D = 0.2; // Toe strength
   const E = 0.02; // Toe numerator
-  const F = 0.30; // Toe denominator
-  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+  const F = 0.3; // Toe denominator
+  return (x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F) - E / F;
 }
 
 /**
@@ -463,17 +475,16 @@ export function tonemapAgX(r: number, g: number, b: number): { r: number; g: num
   const sigmoid = (x: number): number => {
     const x2 = x * x;
     const x4 = x2 * x2;
-    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4
-           - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
   };
   ir = sigmoid(ir);
   ig = sigmoid(ig);
   ib = sigmoid(ib);
 
   // AgX outset matrix (row-major interpretation)
-  const or = 1.19687900512017 * ir + (-0.0980208811401368) * ig + (-0.0990297440797205) * ib;
-  const og = (-0.0528968517574562) * ir + 1.15190312990417 * ig + (-0.0989611768448433) * ib;
-  const ob = (-0.0529716355144438) * ir + (-0.0980434501171241) * ig + 1.15107367264116 * ib;
+  const or = 1.19687900512017 * ir + -0.0980208811401368 * ig + -0.0990297440797205 * ib;
+  const og = -0.0528968517574562 * ir + 1.15190312990417 * ig + -0.0989611768448433 * ib;
+  const ob = -0.0529716355144438 * ir + -0.0980434501171241 * ig + 1.15107367264116 * ib;
 
   return { r: clamp(or, 0, 1), g: clamp(og, 0, 1), b: clamp(ob, 0, 1) };
 }
@@ -501,7 +512,7 @@ export function tonemapPBRNeutral(r: number, g: number, b: number): { r: number;
   if (peak < startCompression) return { r, g, b };
 
   const d = 1.0 - startCompression;
-  const newPeak = 1.0 - d * d / (peak + d - startCompression);
+  const newPeak = 1.0 - (d * d) / (peak + d - startCompression);
   const scale = newPeak / peak;
   r *= scale;
   g *= scale;
@@ -522,12 +533,12 @@ export function tonemapPBRNeutral(r: number, g: number, b: number): { r: number;
 export function tonemapGTChannel(value: number): number {
   if (!Number.isFinite(value) || value < 0) return 0;
 
-  const P = 1.0;     // max display brightness
-  const a = 1.0;     // contrast
-  const m = 0.22;    // linear section start
-  const l = 0.4;     // linear section length
-  const c = 1.33;    // black tightness
-  const b = 0.0;     // pedestal
+  const P = 1.0; // max display brightness
+  const a = 1.0; // contrast
+  const m = 0.22; // linear section start
+  const l = 0.4; // linear section length
+  const c = 1.33; // black tightness
+  const b = 0.0; // pedestal
 
   const l0 = ((P - m) * l) / a;
   const S0 = m + l0;
@@ -558,18 +569,18 @@ export function tonemapACESHill(r: number, g: number, b: number): { r: number; g
 
   // ACES input matrix (sRGB → AP1, row-major interpretation)
   const ir = 0.59719 * r + 0.35458 * g + 0.04823 * b;
-  const ig = 0.07600 * r + 0.90834 * g + 0.01566 * b;
-  const ib = 0.02840 * r + 0.13383 * g + 0.83777 * b;
+  const ig = 0.076 * r + 0.90834 * g + 0.01566 * b;
+  const ib = 0.0284 * r + 0.13383 * g + 0.83777 * b;
 
   // RRT+ODT fit
-  const fitR = (ir * (ir + 0.0245786) - 0.000090537) / (ir * (0.983729 * ir + 0.4329510) + 0.238081);
-  const fitG = (ig * (ig + 0.0245786) - 0.000090537) / (ig * (0.983729 * ig + 0.4329510) + 0.238081);
-  const fitB = (ib * (ib + 0.0245786) - 0.000090537) / (ib * (0.983729 * ib + 0.4329510) + 0.238081);
+  const fitR = (ir * (ir + 0.0245786) - 0.000090537) / (ir * (0.983729 * ir + 0.432951) + 0.238081);
+  const fitG = (ig * (ig + 0.0245786) - 0.000090537) / (ig * (0.983729 * ig + 0.432951) + 0.238081);
+  const fitB = (ib * (ib + 0.0245786) - 0.000090537) / (ib * (0.983729 * ib + 0.432951) + 0.238081);
 
   // ACES output matrix (AP1 → sRGB, row-major interpretation)
-  const or = 1.60475 * fitR + (-0.53108) * fitG + (-0.07367) * fitB;
-  const og = (-0.10208) * fitR + 1.10813 * fitG + (-0.00605) * fitB;
-  const ob = (-0.00327) * fitR + (-0.07276) * fitG + 1.07602 * fitB;
+  const or = 1.60475 * fitR + -0.53108 * fitG + -0.07367 * fitB;
+  const og = -0.10208 * fitR + 1.10813 * fitG + -0.00605 * fitB;
+  const ob = -0.00327 * fitR + -0.07276 * fitG + 1.07602 * fitB;
 
   return { r: clamp(or, 0, 1), g: clamp(og, 0, 1), b: clamp(ob, 0, 1) };
 }
@@ -598,32 +609,16 @@ export function tonemapDragoChannel(value: number, bias = 0.85, Lwa = 0.2, Lmax 
 // Gamut conversion matrices (row-major for CPU matMul3: each group of 3 is one row)
 
 /** Rec.2020 → sRGB */
-const REC2020_TO_SRGB = [
-   1.6605, -0.5876, -0.0728,
-  -0.1246,  1.1329, -0.0083,
-  -0.0182, -0.1006,  1.1187,
-];
+const REC2020_TO_SRGB = [1.6605, -0.5876, -0.0728, -0.1246, 1.1329, -0.0083, -0.0182, -0.1006, 1.1187];
 
 /** Rec.2020 → Display-P3 (derived from ITU-R BT.2020 and DCI-P3 D65 chromaticity coordinates) */
-const REC2020_TO_P3 = [
-   1.3436, -0.2822, -0.0614,
-  -0.0653,  1.0758, -0.0105,
-   0.0028, -0.0196,  1.0168,
-];
+const REC2020_TO_P3 = [1.3436, -0.2822, -0.0614, -0.0653, 1.0758, -0.0105, 0.0028, -0.0196, 1.0168];
 
 /** Display-P3 → sRGB */
-const P3_TO_SRGB = [
-   1.2249, -0.2247, -0.0002,
-  -0.0420,  1.0419,  0.0001,
-  -0.0197, -0.0786,  1.0983,
-];
+const P3_TO_SRGB = [1.2249, -0.2247, -0.0002, -0.042, 1.0419, 0.0001, -0.0197, -0.0786, 1.0983];
 
 function matMul3(m: number[], r: number, g: number, b: number): [number, number, number] {
-  return [
-    m[0]! * r + m[1]! * g + m[2]! * b,
-    m[3]! * r + m[4]! * g + m[5]! * b,
-    m[6]! * r + m[7]! * g + m[8]! * b,
-  ];
+  return [m[0]! * r + m[1]! * g + m[2]! * b, m[3]! * r + m[4]! * g + m[5]! * b, m[6]! * r + m[7]! * g + m[8]! * b];
 }
 
 function softClipChannel(x: number): number {
@@ -644,16 +639,17 @@ function softClipChannel(x: number): number {
  * @returns Mapped [r, g, b] tuple
  */
 export function gamutMapRGB(
-  r: number, g: number, b: number,
-  sourceGamut: string, targetGamut: string,
+  r: number,
+  g: number,
+  b: number,
+  sourceGamut: string,
+  targetGamut: string,
   mode: 'clip' | 'compress',
 ): [number, number, number] {
   // Convert from source to target gamut
   let mapped: [number, number, number] = [r, g, b];
   if (sourceGamut === 'rec2020') {
-    mapped = targetGamut === 'display-p3'
-      ? matMul3(REC2020_TO_P3, r, g, b)
-      : matMul3(REC2020_TO_SRGB, r, g, b);
+    mapped = targetGamut === 'display-p3' ? matMul3(REC2020_TO_P3, r, g, b) : matMul3(REC2020_TO_SRGB, r, g, b);
   } else if (sourceGamut === 'display-p3' && targetGamut === 'srgb') {
     mapped = matMul3(P3_TO_SRGB, r, g, b);
   }
@@ -707,8 +703,11 @@ export function applyToneMappingToChannel(value: number, operator: string, param
  * cross-channel operators (agx, pbrNeutral, acesHill) that require all three channels.
  */
 export function applyToneMappingToRGB(
-  r: number, g: number, b: number,
-  operator: string, params?: ToneMappingParams
+  r: number,
+  g: number,
+  b: number,
+  operator: string,
+  params?: ToneMappingParams,
 ): { r: number; g: number; b: number } {
   switch (operator) {
     case 'reinhard':
@@ -796,7 +795,7 @@ export { HALF_RES_MIN_DIMENSION } from '../../config/RenderConfig';
 export function downsample2x(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
 ): { data: Uint8ClampedArray; width: number; height: number } {
   const halfW = Math.ceil(width / 2);
   const halfH = Math.ceil(height / 2);
@@ -822,10 +821,7 @@ export function downsample2x(
 
       // Average each channel
       for (let c = 0; c < 4; c++) {
-        result[dstIdx + c] = (
-          data[i00 + c]! + data[i10 + c]! +
-          data[i01 + c]! + data[i11 + c]!
-        ) >> 2; // Integer divide by 4
+        result[dstIdx + c] = (data[i00 + c]! + data[i10 + c]! + data[i01 + c]! + data[i11 + c]!) >> 2; // Integer divide by 4
       }
     }
   }
@@ -848,7 +844,7 @@ export function upsample2x(
   halfW: number,
   halfH: number,
   targetW: number,
-  targetH: number
+  targetH: number,
 ): Uint8ClampedArray {
   const result = new Uint8ClampedArray(targetW * targetH * 4);
 
@@ -885,10 +881,7 @@ export function upsample2x(
 
       for (let c = 0; c < 4; c++) {
         result[dstIdx + c] = Math.round(
-          halfData[i00 + c]! * w00 +
-          halfData[i10 + c]! * w10 +
-          halfData[i01 + c]! * w01 +
-          halfData[i11 + c]! * w11
+          halfData[i00 + c]! * w00 + halfData[i10 + c]! * w10 + halfData[i01 + c]! * w01 + halfData[i11 + c]! * w11,
         );
       }
     }
@@ -909,8 +902,7 @@ export function upsample2x(
  * stores bytes as [R, G, B, A] at byte offsets 0,1,2,3 which reads
  * as 0xAABBGGRR in the 32-bit integer.
  */
-export const IS_LITTLE_ENDIAN: boolean =
-  new Uint8Array(new Uint32Array([0x12345678]).buffer)[0] === 0x78;
+export const IS_LITTLE_ENDIAN: boolean = new Uint8Array(new Uint32Array([0x12345678]).buffer)[0] === 0x78;
 
 /**
  * XOR mask for color inversion (inverts R, G, B but preserves Alpha).
@@ -925,9 +917,7 @@ export const IS_LITTLE_ENDIAN: boolean =
  * Big-endian layout in Uint32: 0xRRGGBBAA
  * To invert RGB but keep A: XOR with 0xFFFFFF00
  */
-export const COLOR_INVERSION_XOR_MASK: number = IS_LITTLE_ENDIAN
-  ? 0x00FFFFFF
-  : 0xFFFFFF00;
+export const COLOR_INVERSION_XOR_MASK: number = IS_LITTLE_ENDIAN ? 0x00ffffff : 0xffffff00;
 
 /**
  * Channel isolation bitmasks for Uint32Array operations.
@@ -939,15 +929,15 @@ export const COLOR_INVERSION_XOR_MASK: number = IS_LITTLE_ENDIAN
 export const CHANNEL_MASKS = IS_LITTLE_ENDIAN
   ? {
       // Little-endian: 0xAABBGGRR
-      red:   0xFF0000FF,  // Keep R (byte 0) and A (byte 3)
-      green: 0xFF00FF00,  // Keep G (byte 1) and A (byte 3)
-      blue:  0xFFFF0000,  // Keep B (byte 2) and A (byte 3)
+      red: 0xff0000ff, // Keep R (byte 0) and A (byte 3)
+      green: 0xff00ff00, // Keep G (byte 1) and A (byte 3)
+      blue: 0xffff0000, // Keep B (byte 2) and A (byte 3)
     }
   : {
       // Big-endian: 0xRRGGBBAA
-      red:   0xFF0000FF,  // Keep R (byte 0) and A (byte 3)
-      green: 0x00FF00FF,  // Keep G (byte 1) and A (byte 3)
-      blue:  0x0000FFFF,  // Keep B (byte 2) and A (byte 3)
+      red: 0xff0000ff, // Keep R (byte 0) and A (byte 3)
+      green: 0x00ff00ff, // Keep G (byte 1) and A (byte 3)
+      blue: 0x0000ffff, // Keep B (byte 2) and A (byte 3)
     };
 
 /**
@@ -973,7 +963,7 @@ export function applyColorInversionSIMD(data: Uint8ClampedArray): void {
 export function applyColorInversionScalar(data: Uint8ClampedArray): void {
   const len = data.length;
   for (let i = 0; i < len; i += 4) {
-    data[i]     = 255 - data[i]!;
+    data[i] = 255 - data[i]!;
     data[i + 1] = 255 - data[i + 1]!;
     data[i + 2] = 255 - data[i + 2]!;
     // Alpha unchanged
@@ -992,10 +982,7 @@ export function applyColorInversionScalar(data: Uint8ClampedArray): void {
  * @param data - The pixel data buffer
  * @param channel - Which channel to isolate: 'red', 'green', or 'blue'
  */
-export function applyChannelIsolationSIMD(
-  data: Uint8ClampedArray,
-  channel: 'red' | 'green' | 'blue'
-): void {
+export function applyChannelIsolationSIMD(data: Uint8ClampedArray, channel: 'red' | 'green' | 'blue'): void {
   const u32 = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
   const mask = CHANNEL_MASKS[channel];
   const len = u32.length;
@@ -1014,10 +1001,7 @@ export function applyChannelIsolationSIMD(
  * @param data - The pixel data buffer
  * @param channel - Which channel to show as grayscale: 'red', 'green', or 'blue'
  */
-export function applyChannelIsolationGrayscale(
-  data: Uint8ClampedArray,
-  channel: 'red' | 'green' | 'blue'
-): void {
+export function applyChannelIsolationGrayscale(data: Uint8ClampedArray, channel: 'red' | 'green' | 'blue'): void {
   const len = data.length;
 
   // Channel byte offset within each RGBA quad
@@ -1056,18 +1040,14 @@ export function applyLuminanceIsolation(data: Uint8ClampedArray): void {
     const pixelCount = u32.length;
     for (let i = 0; i < pixelCount; i++) {
       const byteIdx = i * 4;
-      const luma = Math.round(
-        LUMA_R * data[byteIdx]! + LUMA_G * data[byteIdx + 1]! + LUMA_B * data[byteIdx + 2]!
-      );
+      const luma = Math.round(LUMA_R * data[byteIdx]! + LUMA_G * data[byteIdx + 1]! + LUMA_B * data[byteIdx + 2]!);
       const val = clamp(luma, 0, 255);
       u32[i] = val | (val << 8) | (val << 16) | (data[byteIdx + 3]! << 24);
     }
   } else {
     const len = data.length;
     for (let i = 0; i < len; i += 4) {
-      const luma = Math.round(
-        LUMA_R * data[i]! + LUMA_G * data[i + 1]! + LUMA_B * data[i + 2]!
-      );
+      const luma = Math.round(LUMA_R * data[i]! + LUMA_G * data[i + 1]! + LUMA_B * data[i + 2]!);
       const val = clamp(luma, 0, 255);
       data[i] = val;
       data[i + 1] = val;
@@ -1100,7 +1080,7 @@ export function buildBrightnessLUT(multiplier: number): Uint8Array {
 export function applyLUTToRGB(data: Uint8ClampedArray, lut: Uint8Array): void {
   const len = data.length;
   for (let i = 0; i < len; i += 4) {
-    data[i]     = lut[data[i]!]!;
+    data[i] = lut[data[i]!]!;
     data[i + 1] = lut[data[i + 1]!]!;
     data[i + 2] = lut[data[i + 2]!]!;
     // Alpha unchanged
@@ -1153,9 +1133,7 @@ export function applyDeinterlaceWorker(
     const original = new Uint8ClampedArray(data);
     for (let y = 0; y < height; y++) {
       const rowOffset = y * stride;
-      const neighborY = y % 2 === 0
-        ? Math.min(y + 1, height - 1)
-        : Math.max(y - 1, 0);
+      const neighborY = y % 2 === 0 ? Math.min(y + 1, height - 1) : Math.max(y - 1, 0);
       const neighborOffset = neighborY * stride;
       for (let i = 0; i < stride; i++) {
         data[rowOffset + i] = (original[rowOffset + i]! + original[neighborOffset + i]!) >> 1;
@@ -1194,7 +1172,7 @@ const WORKER_FILM_STOCKS: WorkerFilmStockProfile[] = [
     id: 'kodak-portra-400',
     toneCurve(r, g, b) {
       const cr = liftGammaWorker(r * 1.03 + 0.01, 0.03, 0.95);
-      const cg = liftGammaWorker(g * 1.00, 0.02, 0.97);
+      const cg = liftGammaWorker(g * 1.0, 0.02, 0.97);
       const cb = liftGammaWorker(b * 0.95, 0.01, 1.02);
       return [softSCurveWorker(cr), softSCurveWorker(cg), softSCurveWorker(cb)];
     },
@@ -1259,7 +1237,7 @@ const WORKER_FILM_STOCKS: WorkerFilmStockProfile[] = [
 ];
 
 function getWorkerFilmStock(id: string): WorkerFilmStockProfile | undefined {
-  return WORKER_FILM_STOCKS.find(s => s.id === id);
+  return WORKER_FILM_STOCKS.find((s) => s.id === id);
 }
 
 /**
@@ -1281,12 +1259,12 @@ export function applyFilmEmulationWorker(
   const grainStrength = (clamp(params.grainIntensity, 0, 100) / 100) * stock.grainAmount;
 
   // Deterministic PRNG (xorshift32) for grain
-  let rngState = (params.grainSeed | 0) || 1;
+  let rngState = params.grainSeed | 0 || 1;
   function nextRng(): number {
     rngState ^= rngState << 13;
     rngState ^= rngState >> 17;
     rngState ^= rngState << 5;
-    return ((rngState & 0xffff) / 0x8000) - 1;
+    return (rngState & 0xffff) / 0x8000 - 1;
   }
 
   const totalPixels = width * height;
@@ -1321,9 +1299,9 @@ export function applyFilmEmulationWorker(
     }
 
     // Blend with original
-    r = origR / 255 * (1 - intensity) + clamp(r, 0, 1) * intensity;
-    g = origG / 255 * (1 - intensity) + clamp(g, 0, 1) * intensity;
-    b = origB / 255 * (1 - intensity) + clamp(b, 0, 1) * intensity;
+    r = (origR / 255) * (1 - intensity) + clamp(r, 0, 1) * intensity;
+    g = (origG / 255) * (1 - intensity) + clamp(g, 0, 1) * intensity;
+    b = (origB / 255) * (1 - intensity) + clamp(b, 0, 1) * intensity;
 
     data[i] = Math.round(clamp(r, 0, 1) * 255);
     data[i + 1] = Math.round(clamp(g, 0, 1) * 255);

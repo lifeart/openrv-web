@@ -10,8 +10,8 @@
  * Rec. 709 luminance coefficients: R=0.2126, G=0.7152, B=0.0722
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { FalseColor } from './FalseColor';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type FalseColor } from './FalseColor';
 import { clamp } from '../../utils/math';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
@@ -20,9 +20,9 @@ export type LuminanceVisMode = 'off' | 'false-color' | 'hsv' | 'random-color' | 
 export interface LuminanceVisState {
   mode: LuminanceVisMode;
   falseColorPreset: 'standard' | 'arri' | 'red' | 'custom';
-  randomBandCount: number;    // 4-64, default 16
-  randomSeed: number;         // default 42
-  contourLevels: number;      // 2-50, default 10
+  randomBandCount: number; // 4-64, default 16
+  randomSeed: number; // default 42
+  contourLevels: number; // 2-50, default 10
   contourDesaturate: boolean; // default true
   contourLineColor: [number, number, number]; // RGB, default [255, 255, 255]
 }
@@ -59,12 +59,31 @@ export function hsvToRgb(h: number, s: number, v: number): [number, number, numb
   const m = v - c;
 
   let r: number, g: number, b: number;
-  if (hSector < 1) { r = c; g = x; b = 0; }
-  else if (hSector < 2) { r = x; g = c; b = 0; }
-  else if (hSector < 3) { r = 0; g = c; b = x; }
-  else if (hSector < 4) { r = 0; g = x; b = c; }
-  else if (hSector < 5) { r = x; g = 0; b = c; }
-  else { r = c; g = 0; b = x; }
+  if (hSector < 1) {
+    r = c;
+    g = x;
+    b = 0;
+  } else if (hSector < 2) {
+    r = x;
+    g = c;
+    b = 0;
+  } else if (hSector < 3) {
+    r = 0;
+    g = c;
+    b = x;
+  } else if (hSector < 4) {
+    r = 0;
+    g = x;
+    b = c;
+  } else if (hSector < 5) {
+    r = x;
+    g = 0;
+    b = c;
+  } else {
+    r = c;
+    g = 0;
+    b = x;
+  }
 
   return [r + m, g + m, b + m];
 }
@@ -96,7 +115,7 @@ export function buildRandomPalette(bandCount: number, seed: number): Uint8Array 
   let s = seed | 0;
 
   function rand(): number {
-    s = (s + 0x6D2B79F5) | 0;
+    s = (s + 0x6d2b79f5) | 0;
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -128,10 +147,14 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
   }
 
   /** Get the pre-computed HSV LUT (256*3 Uint8Array) for GPU upload. */
-  getHsvLUT(): Uint8Array { return this.hsvLUT; }
+  getHsvLUT(): Uint8Array {
+    return this.hsvLUT;
+  }
 
   /** Get the pre-computed random palette (bandCount*3 Uint8Array) for GPU upload. */
-  getRandomLUT(): Uint8Array { return this.randomLUT; }
+  getRandomLUT(): Uint8Array {
+    return this.randomLUT;
+  }
 
   /**
    * Expand the random palette to a 256-entry LUT for GPU upload.

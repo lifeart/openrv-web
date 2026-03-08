@@ -51,13 +51,9 @@ async function deriveKey(pinCode: string, salt: Uint8Array): Promise<CryptoKey> 
   }
 
   const encoder = new TextEncoder();
-  const keyMaterial = await subtle.importKey(
-    'raw',
-    encoder.encode(normalizedPin),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveKey']
-  );
+  const keyMaterial = await subtle.importKey('raw', encoder.encode(normalizedPin), { name: 'PBKDF2' }, false, [
+    'deriveKey',
+  ]);
 
   return subtle.deriveKey(
     {
@@ -69,13 +65,13 @@ async function deriveKey(pinCode: string, salt: Uint8Array): Promise<CryptoKey> 
     keyMaterial,
     { name: 'AES-GCM', length: AES_KEY_LENGTH },
     false,
-    ['encrypt', 'decrypt']
+    ['encrypt', 'decrypt'],
   );
 }
 
 export async function encryptSessionStateWithPin(
   plainState: string,
-  pinCode: string
+  pinCode: string,
 ): Promise<EncryptedSessionStatePayload> {
   const subtle = requireCryptoSubtle();
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
@@ -86,7 +82,7 @@ export async function encryptSessionStateWithPin(
   const ciphertextBuffer = await subtle.encrypt(
     { name: 'AES-GCM', iv: iv as unknown as BufferSource },
     key,
-    encoder.encode(plainState) as unknown as BufferSource
+    encoder.encode(plainState) as unknown as BufferSource,
   );
 
   return {
@@ -100,7 +96,7 @@ export async function encryptSessionStateWithPin(
 
 export async function decryptSessionStateWithPin(
   encryptedPayload: EncryptedSessionStatePayload,
-  pinCode: string
+  pinCode: string,
 ): Promise<string> {
   const subtle = requireCryptoSubtle();
   if (encryptedPayload.algorithm !== 'AES-GCM' || encryptedPayload.version !== 1) {
@@ -117,7 +113,7 @@ export async function decryptSessionStateWithPin(
     plainBuffer = await subtle.decrypt(
       { name: 'AES-GCM', iv: iv as unknown as BufferSource },
       key,
-      ciphertext as unknown as BufferSource
+      ciphertext as unknown as BufferSource,
     );
   } catch {
     throw new Error('Failed to decrypt state payload. PIN may be incorrect.');

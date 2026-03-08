@@ -27,8 +27,8 @@ import {
  * The line of purples connects the first and last points.
  */
 export const CIE_1931_XY_LOCUS: Array<{ x: number; y: number }> = [
-  { x: 0.1741, y: 0.0050 }, // 380nm
-  { x: 0.1740, y: 0.0050 }, // 385nm
+  { x: 0.1741, y: 0.005 }, // 380nm
+  { x: 0.174, y: 0.005 }, // 385nm
   { x: 0.1738, y: 0.0049 }, // 390nm
   { x: 0.1736, y: 0.0049 }, // 395nm
   { x: 0.1733, y: 0.0048 }, // 400nm
@@ -37,16 +37,16 @@ export const CIE_1931_XY_LOCUS: Array<{ x: number; y: number }> = [
   { x: 0.1689, y: 0.0069 }, // 415nm
   { x: 0.1644, y: 0.0109 }, // 420nm
   { x: 0.1566, y: 0.0177 }, // 425nm
-  { x: 0.1440, y: 0.0297 }, // 430nm
+  { x: 0.144, y: 0.0297 }, // 430nm
   { x: 0.1241, y: 0.0578 }, // 435nm
   { x: 0.0913, y: 0.1327 }, // 440nm
   { x: 0.0687, y: 0.2007 }, // 445nm
-  { x: 0.0454, y: 0.2950 }, // 450nm
+  { x: 0.0454, y: 0.295 }, // 450nm
   { x: 0.0235, y: 0.4127 }, // 455nm
   { x: 0.0082, y: 0.5384 }, // 460nm
   { x: 0.0039, y: 0.6548 }, // 465nm
   { x: 0.0139, y: 0.7502 }, // 470nm
-  { x: 0.0389, y: 0.8120 }, // 475nm
+  { x: 0.0389, y: 0.812 }, // 475nm
   { x: 0.0743, y: 0.8338 }, // 480nm
   { x: 0.1142, y: 0.8262 }, // 485nm
   { x: 0.1547, y: 0.8059 }, // 490nm
@@ -63,24 +63,24 @@ export const CIE_1931_XY_LOCUS: Array<{ x: number; y: number }> = [
   { x: 0.5448, y: 0.4544 }, // 545nm
   { x: 0.5752, y: 0.4242 }, // 550nm
   { x: 0.6029, y: 0.3965 }, // 555nm
-  { x: 0.6270, y: 0.3725 }, // 560nm
+  { x: 0.627, y: 0.3725 }, // 560nm
   { x: 0.6482, y: 0.3514 }, // 565nm
-  { x: 0.6658, y: 0.3340 }, // 570nm
+  { x: 0.6658, y: 0.334 }, // 570nm
   { x: 0.6801, y: 0.3197 }, // 575nm
   { x: 0.6915, y: 0.3083 }, // 580nm
   { x: 0.7006, y: 0.2993 }, // 585nm
-  { x: 0.7079, y: 0.2920 }, // 590nm
-  { x: 0.7140, y: 0.2859 }, // 595nm
-  { x: 0.7190, y: 0.2809 }, // 600nm
-  { x: 0.7230, y: 0.2770 }, // 605nm
-  { x: 0.7260, y: 0.2740 }, // 610nm
+  { x: 0.7079, y: 0.292 }, // 590nm
+  { x: 0.714, y: 0.2859 }, // 595nm
+  { x: 0.719, y: 0.2809 }, // 600nm
+  { x: 0.723, y: 0.277 }, // 605nm
+  { x: 0.726, y: 0.274 }, // 610nm
   { x: 0.7283, y: 0.2717 }, // 615nm
-  { x: 0.7300, y: 0.2700 }, // 620nm
+  { x: 0.73, y: 0.27 }, // 620nm
   { x: 0.7311, y: 0.2689 }, // 625nm
-  { x: 0.7320, y: 0.2680 }, // 630nm
+  { x: 0.732, y: 0.268 }, // 630nm
   { x: 0.7327, y: 0.2673 }, // 635nm
   { x: 0.7334, y: 0.2666 }, // 640nm
-  { x: 0.7340, y: 0.2660 }, // 645nm
+  { x: 0.734, y: 0.266 }, // 645nm
   { x: 0.7344, y: 0.2656 }, // 650nm
   { x: 0.7346, y: 0.2654 }, // 655nm
   { x: 0.7347, y: 0.2653 }, // 660nm
@@ -154,9 +154,9 @@ function derivePrimaries(name: string, m: Matrix3x3): ColorSpacePrimaries {
 // =============================================================================
 
 const COLOR_SPACE_MATRICES: Record<string, Matrix3x3> = {
-  'sRGB': SRGB_TO_XYZ,
+  sRGB: SRGB_TO_XYZ,
   'Rec.709': SRGB_TO_XYZ,
-  'ACEScg': ACESCG_TO_XYZ,
+  ACEScg: ACESCG_TO_XYZ,
   'ACES2065-1': ACES2065_TO_XYZ,
   'DCI-P3': DCIP3_TO_XYZ,
   'Rec.2020': REC2020_TO_XYZ,
@@ -168,7 +168,7 @@ const COLOR_SPACE_MATRICES: Record<string, Matrix3x3> = {
  * All known color space primaries, derived from matrices in OCIOTransform.ts
  */
 export const COLOR_SPACE_PRIMARIES: Record<string, ColorSpacePrimaries> = Object.fromEntries(
-  Object.entries(COLOR_SPACE_MATRICES).map(([name, matrix]) => [name, derivePrimaries(name, matrix)])
+  Object.entries(COLOR_SPACE_MATRICES).map(([name, matrix]) => [name, derivePrimaries(name, matrix)]),
 );
 
 /**

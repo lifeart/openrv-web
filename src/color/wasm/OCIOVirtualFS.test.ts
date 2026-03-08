@@ -57,11 +57,11 @@ describe('OCIOVirtualFS', () => {
       vfs.writeFile('b.spi3d', makeData('22'));
       const files = vfs.listFiles();
       expect(files).toHaveLength(2);
-      expect(files.map(f => f.path).sort()).toEqual(['a.cube', 'b.spi3d']);
+      expect(files.map((f) => f.path).sort()).toEqual(['a.cube', 'b.spi3d']);
     });
 
     it('VFS-007: getTotalSize sums bytes', () => {
-      vfs.writeFile('a', makeData('abc'));   // 3 bytes
+      vfs.writeFile('a', makeData('abc')); // 3 bytes
       vfs.writeFile('b', makeData('defgh')); // 5 bytes
       expect(vfs.getTotalSize()).toBe(8);
     });
@@ -148,7 +148,7 @@ describe('OCIOVirtualFS', () => {
       await expect(
         vfs.loadFromURL('luts/test.cube', 'https://example.com/missing.cube', {
           fetchFn: mockFetch as unknown as typeof fetch,
-        })
+        }),
       ).rejects.toThrow('Failed to load');
     });
   });
@@ -221,15 +221,12 @@ describe('OCIOVirtualFS', () => {
         arrayBuffer: () => Promise.resolve(makeData('x').buffer),
       });
 
-      await vfs.preloadBatch(
-        [{ virtualPath: 'lut.cube', url: 'lut.cube' }],
-        { baseUrl: 'https://cdn.example.com/luts', fetchFn: mockFetch as unknown as typeof fetch },
-      );
+      await vfs.preloadBatch([{ virtualPath: 'lut.cube', url: 'lut.cube' }], {
+        baseUrl: 'https://cdn.example.com/luts',
+        fetchFn: mockFetch as unknown as typeof fetch,
+      });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://cdn.example.com/luts/lut.cube',
-        expect.anything(),
-      );
+      expect(mockFetch).toHaveBeenCalledWith('https://cdn.example.com/luts/lut.cube', expect.anything());
     });
   });
 
@@ -309,9 +306,7 @@ colorspaces:
 
     it('VFS-DISP-002: loadFromURL throws after dispose', async () => {
       vfs.dispose();
-      await expect(
-        vfs.loadFromURL('x', 'https://example.com/x')
-      ).rejects.toThrow('disposed');
+      await expect(vfs.loadFromURL('x', 'https://example.com/x')).rejects.toThrow('disposed');
     });
 
     it('VFS-DISP-003: readFile throws after dispose', () => {

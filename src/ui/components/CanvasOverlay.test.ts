@@ -32,13 +32,27 @@ class TestOverlay extends CanvasOverlay {
   }
 
   // Expose protected members for testing
-  getCanvasWidth(): number { return this.canvasWidth; }
-  getCanvasHeight(): number { return this.canvasHeight; }
-  getDisplayWidth(): number { return this.displayWidth; }
-  getDisplayHeight(): number { return this.displayHeight; }
-  getOffsetX(): number { return this.offsetX; }
-  getOffsetY(): number { return this.offsetY; }
-  getCtx(): CanvasRenderingContext2D { return this.ctx; }
+  getCanvasWidth(): number {
+    return this.canvasWidth;
+  }
+  getCanvasHeight(): number {
+    return this.canvasHeight;
+  }
+  getDisplayWidth(): number {
+    return this.displayWidth;
+  }
+  getDisplayHeight(): number {
+    return this.displayHeight;
+  }
+  getOffsetX(): number {
+    return this.offsetX;
+  }
+  getOffsetY(): number {
+    return this.offsetY;
+  }
+  getCtx(): CanvasRenderingContext2D {
+    return this.ctx;
+  }
 }
 
 /** Subclass that throws on render to test error handling */

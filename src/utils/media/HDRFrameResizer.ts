@@ -47,10 +47,7 @@ export type HDRResizeTier = 'rec2100' | 'display-p3-float16' | 'none';
  * Float16 context options to try, in order.
  * Chrome <133 uses pixelFormat, Chrome 133+ uses colorType.
  */
-const FLOAT16_OPTIONS: ReadonlyArray<Record<string, string>> = [
-  { colorType: 'float16' },
-  { pixelFormat: 'float16' },
-];
+const FLOAT16_OPTIONS: ReadonlyArray<Record<string, string>> = [{ colorType: 'float16' }, { pixelFormat: 'float16' }];
 
 export class HDRFrameResizer {
   private canvas: OffscreenCanvas | null = null;
@@ -89,10 +86,7 @@ export class HDRFrameResizer {
     const srcH = videoFrame.displayHeight;
 
     // Skip if tier is none or target is not smaller than source
-    if (
-      this.tier === 'none' ||
-      (targetSize.w >= srcW && targetSize.h >= srcH)
-    ) {
+    if (this.tier === 'none' || (targetSize.w >= srcW && targetSize.h >= srcH)) {
       return { videoFrame, resized: false, width: srcW, height: srcH };
     }
 
@@ -113,9 +107,10 @@ export class HDRFrameResizer {
       // Release original — caller owns the resized frame
       videoFrame.close();
 
-      const metadataOverrides = this.tier === 'display-p3-float16'
-        ? { transferFunction: 'srgb' as TransferFunction, colorPrimaries: 'bt709' as ColorPrimaries }
-        : undefined;
+      const metadataOverrides =
+        this.tier === 'display-p3-float16'
+          ? { transferFunction: 'srgb' as TransferFunction, colorPrimaries: 'bt709' as ColorPrimaries }
+          : undefined;
 
       return {
         videoFrame: resized,
@@ -141,13 +136,7 @@ export class HDRFrameResizer {
   ): void {
     const colorSpace = this.resolveCanvasColorSpace(sourceColorSpace);
 
-    if (
-      this.canvas &&
-      this.canvasW === w &&
-      this.canvasH === h &&
-      this.canvasColorSpace === colorSpace &&
-      this.ctx
-    ) {
+    if (this.canvas && this.canvasW === w && this.canvasH === h && this.canvasColorSpace === colorSpace && this.ctx) {
       return; // reuse existing
     }
 
@@ -177,7 +166,9 @@ export class HDRFrameResizer {
           this.float16Opt = opt; // remember which worked
           break;
         }
-      } catch { /* try next */ }
+      } catch {
+        /* try next */
+      }
     }
 
     if (!this.ctx && !this.validated) {
@@ -189,9 +180,7 @@ export class HDRFrameResizer {
   /**
    * Determine the canvas color space based on tier and source color space.
    */
-  private resolveCanvasColorSpace(
-    sourceColorSpace?: { transfer?: string | null; primaries?: string | null },
-  ): string {
+  private resolveCanvasColorSpace(sourceColorSpace?: { transfer?: string | null; primaries?: string | null }): string {
     if (this.tier === 'rec2100') {
       // Match the source transfer function for zero-conversion resize
       const transfer = sourceColorSpace?.transfer;

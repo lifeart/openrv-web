@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ScopesControl, ScopeType } from './ScopesControl';
+import { ScopesControl, type ScopeType } from './ScopesControl';
 
 describe('ScopesControl', () => {
   let control: ScopesControl;

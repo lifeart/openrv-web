@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.hoisted runs before vi.mock hoisting, so these are available in mock factories
 const { disposeMocks, createMockClass } = vi.hoisted(() => {
-  const disposeMocks: Record<string, ReturnType<typeof import('vitest')['vi']['fn']>> = {};
+  const disposeMocks: Record<string, ReturnType<(typeof import('vitest'))['vi']['fn']>> = {};
 
   function createMockClass(name: string) {
     const disposeFn = vi.fn();
@@ -42,11 +42,15 @@ vi.mock('./ui/components/CacheIndicator', () => ({ CacheIndicator: createMockCla
 vi.mock('./ui/layout/panels/RightPanelContent', () => ({ RightPanelContent: createMockClass('RightPanelContent') }));
 // PaintToolbar / TextFormattingToolbar need a real PaintEngine with .on(), .brush, .color, etc.:
 vi.mock('./ui/components/PaintToolbar', () => ({ PaintToolbar: createMockClass('PaintToolbar') }));
-vi.mock('./ui/components/TextFormattingToolbar', () => ({ TextFormattingToolbar: createMockClass('TextFormattingToolbar') }));
+vi.mock('./ui/components/TextFormattingToolbar', () => ({
+  TextFormattingToolbar: createMockClass('TextFormattingToolbar'),
+}));
 // These controls call .on() / .isVisible() / .isEnabled() on their overlay arg during construction:
 vi.mock('./ui/components/SafeAreasControl', () => ({ SafeAreasControl: createMockClass('SafeAreasControl') }));
 vi.mock('./ui/components/FalseColorControl', () => ({ FalseColorControl: createMockClass('FalseColorControl') }));
-vi.mock('./ui/components/LuminanceVisualizationControl', () => ({ LuminanceVisualizationControl: createMockClass('LuminanceVisualizationControl') }));
+vi.mock('./ui/components/LuminanceVisualizationControl', () => ({
+  LuminanceVisualizationControl: createMockClass('LuminanceVisualizationControl'),
+}));
 vi.mock('./ui/components/ZebraControl', () => ({ ZebraControl: createMockClass('ZebraControl') }));
 vi.mock('./ui/components/HSLQualifierControl', () => ({ HSLQualifierControl: createMockClass('HSLQualifierControl') }));
 // MarkerListPanel calls session.on() and session.marks in constructor:
@@ -425,7 +429,13 @@ describe('AppControlRegistry', () => {
 
       registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
 
-      const expectedTestIds = ['info-panel-toggle', 'snapshot-panel-toggle', 'playlist-panel-toggle', 'conform-panel-toggle', 'shotgrid-panel-toggle'];
+      const expectedTestIds = [
+        'info-panel-toggle',
+        'snapshot-panel-toggle',
+        'playlist-panel-toggle',
+        'conform-panel-toggle',
+        'shotgrid-panel-toggle',
+      ];
       for (const testid of expectedTestIds) {
         const btn = panelsSlot.querySelector(`[data-testid="${testid}"]`);
         expect(btn, `button with data-testid="${testid}" should exist`).not.toBeNull();

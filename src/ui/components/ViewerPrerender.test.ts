@@ -1,19 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-  createFrameLoader,
-  buildEffectsState,
-  getPrerenderStats,
-  EFFECTS_DEBOUNCE_MS,
-} from './ViewerPrerender';
-import { Session, MediaSource } from '../../core/session/Session';
-import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
-import { ColorAdjustments } from './ColorControls';
-import { FilterSettings } from './FilterControl';
+import { createFrameLoader, buildEffectsState, getPrerenderStats, EFFECTS_DEBOUNCE_MS } from './ViewerPrerender';
+import { type Session, type MediaSource } from '../../core/session/Session';
+import { type PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
+import { type ColorAdjustments } from './ColorControls';
+import { type FilterSettings } from './FilterControl';
 import { type CDLValues, type ColorCurvesData } from '../../color/ColorProcessingFacade';
-import { ChannelMode } from './ChannelSelect';
-import { ColorWheels } from './ColorWheels';
-import { HSLQualifier } from './HSLQualifier';
-import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
+import { type ChannelMode } from './ChannelSelect';
+import { type ColorWheels } from './ColorWheels';
+import { type HSLQualifier } from './HSLQualifier';
+import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 
 // Mock image element
 function createMockImage(): HTMLImageElement {
@@ -32,9 +27,7 @@ function createMockVideo(): HTMLVideoElement {
 }
 
 // Create mock media source
-function createMockMediaSource(
-  type: 'image' | 'video' | 'sequence'
-): MediaSource {
+function createMockMediaSource(type: 'image' | 'video' | 'sequence'): MediaSource {
   return {
     name: 'test-source',
     type,
@@ -44,17 +37,20 @@ function createMockMediaSource(
     height: 1080,
     duration: type === 'video' ? 100 : 1,
     fps: 24,
-    sequenceInfo: type === 'sequence' ? {
-      name: 'test-sequence',
-      pattern: 'frame_####.png',
-      frames: [],
-      startFrame: 1,
-      endFrame: 100,
-      width: 1920,
-      height: 1080,
-      fps: 24,
-      missingFrames: [],
-    } : undefined,
+    sequenceInfo:
+      type === 'sequence'
+        ? {
+            name: 'test-sequence',
+            pattern: 'frame_####.png',
+            frames: [],
+            startFrame: 1,
+            endFrame: 100,
+            width: 1920,
+            height: 1080,
+            fps: 24,
+            missingFrames: [],
+          }
+        : undefined,
   };
 }
 
@@ -62,9 +58,15 @@ function createMockMediaSource(
 function createMockSession(source: MediaSource | null = null): Session {
   let currentFrame = 1;
   return {
-    get currentSource() { return source; },
-    get currentFrame() { return currentFrame; },
-    set currentFrame(f: number) { currentFrame = f; },
+    get currentSource() {
+      return source;
+    },
+    get currentFrame() {
+      return currentFrame;
+    },
+    set currentFrame(f: number) {
+      currentFrame = f;
+    },
     getSequenceFrameSync: vi.fn().mockReturnValue(createMockImage()),
     isUsingMediabunny: vi.fn().mockReturnValue(false),
     getVideoFrameCanvas: vi.fn().mockReturnValue(null),
@@ -106,7 +108,10 @@ function createDefaultCDLValues(): CDLValues {
 function createDefaultCurvesData(): ColorCurvesData {
   const defaultCurve = {
     enabled: false,
-    points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+    points: [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ],
   };
   return {
     master: { ...defaultCurve, points: [...defaultCurve.points] },
@@ -153,14 +158,16 @@ function createDefaultToneMappingState(): ToneMappingState {
 }
 
 // Create mock PrerenderBufferManager
-function createMockPrerenderBuffer(stats: {
-  cacheSize?: number;
-  pendingRequests?: number;
-  activeRequests?: number;
-  cacheHits?: number;
-  cacheMisses?: number;
-  hitRate?: number;
-} = {}): PrerenderBufferManager {
+function createMockPrerenderBuffer(
+  stats: {
+    cacheSize?: number;
+    pendingRequests?: number;
+    activeRequests?: number;
+    cacheHits?: number;
+    cacheMisses?: number;
+    hitRate?: number;
+  } = {},
+): PrerenderBufferManager {
   return {
     getStats: vi.fn().mockReturnValue({
       cacheSize: stats.cacheSize ?? 10,
@@ -205,7 +212,9 @@ describe('ViewerPrerender', () => {
       const originalFrame = session.currentFrame;
       Object.defineProperty(session, 'currentFrame', {
         get: () => originalFrame,
-        set: () => { setterCalled = true; },
+        set: () => {
+          setterCalled = true;
+        },
         configurable: true,
       });
 
@@ -337,7 +346,7 @@ describe('ViewerPrerender', () => {
         channelMode,
         colorWheels,
         hslQualifier,
-        toneMappingState
+        toneMappingState,
       );
 
       expect(result.colorAdjustments).toEqual(colorAdjustments);
@@ -361,7 +370,7 @@ describe('ViewerPrerender', () => {
         'rgb',
         createMockColorWheels(),
         createMockHSLQualifier(),
-        createDefaultToneMappingState()
+        createDefaultToneMappingState(),
       );
 
       // Modify original - should not affect result
@@ -381,7 +390,7 @@ describe('ViewerPrerender', () => {
         'rgb',
         createMockColorWheels(),
         createMockHSLQualifier(),
-        createDefaultToneMappingState()
+        createDefaultToneMappingState(),
       );
 
       // Modify original - should not affect result
@@ -401,7 +410,7 @@ describe('ViewerPrerender', () => {
         'rgb',
         createMockColorWheels(),
         createMockHSLQualifier(),
-        createDefaultToneMappingState()
+        createDefaultToneMappingState(),
       );
 
       // Modify original - should not affect result
@@ -421,7 +430,7 @@ describe('ViewerPrerender', () => {
           mode,
           createMockColorWheels(),
           createMockHSLQualifier(),
-          createDefaultToneMappingState()
+          createDefaultToneMappingState(),
         );
 
         expect(result.channelMode).toBe(mode);
@@ -439,7 +448,7 @@ describe('ViewerPrerender', () => {
         'rgb',
         createMockColorWheels(),
         createMockHSLQualifier(),
-        toneMappingState
+        toneMappingState,
       );
 
       // Modify original - should not affect result

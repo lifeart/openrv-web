@@ -12,7 +12,7 @@
  * - Outbound events: frameChanged, colorChanged, annotationAdded
  */
 
-import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../utils/EventEmitter';
 import type { ManagerBase } from '../core/ManagerBase';
 
 // ---------------------------------------------------------------------------

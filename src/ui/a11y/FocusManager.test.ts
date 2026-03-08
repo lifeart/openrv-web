@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { FocusManager, FocusZone } from './FocusManager';
+import { FocusManager, type FocusZone } from './FocusManager';
 
 function createButtons(count: number): HTMLButtonElement[] {
   const buttons: HTMLButtonElement[] = [];
@@ -12,7 +12,11 @@ function createButtons(count: number): HTMLButtonElement[] {
   return buttons;
 }
 
-function createZone(name: string, buttons: HTMLButtonElement[], orientation: 'horizontal' | 'vertical' = 'horizontal'): FocusZone {
+function createZone(
+  name: string,
+  buttons: HTMLButtonElement[],
+  orientation: 'horizontal' | 'vertical' = 'horizontal',
+): FocusZone {
   const container = document.createElement('div');
   for (const btn of buttons) {
     container.appendChild(btn);

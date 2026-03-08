@@ -210,11 +210,14 @@ describe('ShotGridConfigUI', () => {
 
   it('SG-CFG-012: restoreConfig emits configLoaded with saved data', () => {
     // Pre-populate localStorage
-    localStorage.setItem('openrv-sg-config', JSON.stringify({
-      serverUrl: 'https://saved.shotgrid.autodesk.com',
-      scriptName: 'saved-script',
-      projectId: 77,
-    }));
+    localStorage.setItem(
+      'openrv-sg-config',
+      JSON.stringify({
+        serverUrl: 'https://saved.shotgrid.autodesk.com',
+        scriptName: 'saved-script',
+        projectId: 77,
+      }),
+    );
 
     configUI.render();
 
@@ -241,11 +244,14 @@ describe('ShotGridConfigUI', () => {
   });
 
   it('SG-CFG-013: restoreConfig restores API key from sessionStorage', () => {
-    localStorage.setItem('openrv-sg-config', JSON.stringify({
-      serverUrl: 'https://studio.shotgrid.autodesk.com',
-      scriptName: 'test',
-      projectId: 42,
-    }));
+    localStorage.setItem(
+      'openrv-sg-config',
+      JSON.stringify({
+        serverUrl: 'https://studio.shotgrid.autodesk.com',
+        scriptName: 'test',
+        projectId: 42,
+      }),
+    );
     sessionStorage.setItem('openrv-sg-config-key', 'restored-secret');
 
     configUI.render();

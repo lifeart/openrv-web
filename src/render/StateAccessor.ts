@@ -13,8 +13,23 @@
 
 import type { ShaderProgram } from './ShaderProgram';
 import type { ColorPrimaries } from '../core/image/Image';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  HSLQualifierState,
+  LinearizeState,
+} from '../core/types/color';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
+  GamutMappingState,
+} from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
@@ -102,13 +117,31 @@ export interface StateAccessor {
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
 
   /** Set File LUT (per-source, applied after EOTF, before input primaries). */
-  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+  setFileLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void;
 
   /** Set Look LUT (per-source, creative grade -- renamed from setLUT). */
-  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+  setLookLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void;
 
   /** Set Display LUT (session-wide, applied after output primaries, before display transfer). */
-  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+  setDisplayLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void;
 
   /** Get the current display color management state. */
   getDisplayColorState(): DisplayColorConfig;
@@ -138,13 +171,23 @@ export interface StateAccessor {
   getGamutMapping(): GamutMappingState;
 
   /** Set automatic color primaries conversion (source→BT.709 input, BT.709→display output). */
-  setColorPrimaries(inputPrimaries: ColorPrimaries | undefined, outputColorSpace: 'srgb' | 'display-p3' | 'rec2020'): void;
+  setColorPrimaries(
+    inputPrimaries: ColorPrimaries | undefined,
+    outputColorSpace: 'srgb' | 'display-p3' | 'rec2020',
+  ): void;
 
   /** Set deinterlace state for GPU shader. */
   setDeinterlace(state: { enabled: boolean; method: number; fieldOrder: number }): void;
 
   /** Set film emulation state for GPU shader. */
-  setFilmEmulation(state: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null }): void;
+  setFilmEmulation(state: {
+    enabled: boolean;
+    intensity: number;
+    saturation: number;
+    grainIntensity: number;
+    grainSeed: number;
+    lutData: Uint8Array | null;
+  }): void;
 
   /** Set perspective correction state for GPU shader. */
   setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void;
@@ -227,5 +270,14 @@ export interface StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty' | 'fileLUT3DDirty' | 'displayLUT3DDirty'): void;
+  clearTextureDirtyFlag(
+    flag:
+      | 'curvesLUTDirty'
+      | 'falseColorLUTDirty'
+      | 'lut3DDirty'
+      | 'filmLUTDirty'
+      | 'inlineLUTDirty'
+      | 'fileLUT3DDirty'
+      | 'displayLUT3DDirty',
+  ): void;
 }

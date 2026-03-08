@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  WipeControl,
-  DEFAULT_WIPE_STATE,
-} from './WipeControl';
+import { WipeControl, DEFAULT_WIPE_STATE } from './WipeControl';
 
 describe('WipeControl', () => {
   let control: WipeControl;
@@ -76,9 +73,7 @@ describe('WipeControl', () => {
 
       control.setMode('horizontal');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ mode: 'horizontal' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ mode: 'horizontal' }));
     });
 
     it('WPE-011: setMode does not emit if mode unchanged', () => {
@@ -196,9 +191,7 @@ describe('WipeControl', () => {
 
       control.setPosition(0.7);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ position: 0.7 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ position: 0.7 }));
     });
 
     it('WPE-026: setPosition does not emit if position unchanged', () => {
@@ -353,9 +346,7 @@ describe('WipeControl', () => {
       expect(modeHandler).toHaveBeenCalledTimes(1);
       expect(modeHandler).toHaveBeenCalledWith('horizontal');
       expect(stateHandler).toHaveBeenCalledTimes(1);
-      expect(stateHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ mode: 'horizontal' })
-      );
+      expect(stateHandler).toHaveBeenCalledWith(expect.objectContaining({ mode: 'horizontal' }));
     });
 
     it('WPE-046: ComparisonManager wipePositionChanged event forwards as WipeControl positionChanged', () => {
@@ -369,9 +360,7 @@ describe('WipeControl', () => {
       expect(posHandler).toHaveBeenCalledTimes(1);
       expect(posHandler).toHaveBeenCalledWith(0.75);
       expect(stateHandler).toHaveBeenCalledTimes(1);
-      expect(stateHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ position: 0.75 })
-      );
+      expect(stateHandler).toHaveBeenCalledWith(expect.objectContaining({ position: 0.75 }));
     });
 
     it('WPE-047: no duplicate events when setting same mode', () => {
@@ -459,7 +448,7 @@ describe('WipeControl', () => {
         expect.objectContaining({
           mode: 'vertical',
           position: 0.3,
-        })
+        }),
       );
     });
 
@@ -475,7 +464,7 @@ describe('WipeControl', () => {
         expect.objectContaining({
           mode: 'horizontal',
           position: 0.9,
-        })
+        }),
       );
     });
   });

@@ -241,10 +241,7 @@ describe('VideoSourceNode', () => {
       mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
 
       // Fire two concurrent fetches for the same frame
-      const [result1, result2] = await Promise.all([
-        testNode.fetchHDRFrame(1),
-        testNode.fetchHDRFrame(1),
-      ]);
+      const [result1, result2] = await Promise.all([testNode.fetchHDRFrame(1), testNode.fetchHDRFrame(1)]);
 
       // Both should return the same IPImage, but only one extraction
       expect(result1).toBe(result2);
@@ -457,11 +454,7 @@ describe('VideoSourceNode', () => {
 
     it('IMP-039-VSN-004: concurrent getFrameAsync calls return null without mediabunny', async () => {
       // Concurrent calls should all return null gracefully
-      const results = await Promise.all([
-        node.getFrameAsync(1),
-        node.getFrameAsync(2),
-        node.getFrameAsync(3),
-      ]);
+      const results = await Promise.all([node.getFrameAsync(1), node.getFrameAsync(2), node.getFrameAsync(3)]);
       expect(results).toEqual([null, null, null]);
     });
 

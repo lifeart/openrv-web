@@ -42,10 +42,10 @@ export class SequenceGroupNode extends BaseGroupNode {
     this.properties.add({ name: 'durations', defaultValue: [] });
 
     // EDL properties for explicit frame mapping
-    this.properties.add({ name: 'edlFrames', defaultValue: [] });   // int[] - global frame starts
-    this.properties.add({ name: 'edlSources', defaultValue: [] });  // int[] - source indices
-    this.properties.add({ name: 'edlIn', defaultValue: [] });       // int[] - source in points
-    this.properties.add({ name: 'edlOut', defaultValue: [] });      // int[] - source out points
+    this.properties.add({ name: 'edlFrames', defaultValue: [] }); // int[] - global frame starts
+    this.properties.add({ name: 'edlSources', defaultValue: [] }); // int[] - source indices
+    this.properties.add({ name: 'edlIn', defaultValue: [] }); // int[] - source in points
+    this.properties.add({ name: 'edlOut', defaultValue: [] }); // int[] - source out points
 
     // Auto EDL mode (generate EDL from durations)
     this.properties.add({ name: 'autoEDL', defaultValue: true });

@@ -420,8 +420,8 @@ describe('PropertyContainer animation helpers', () => {
 
       const animatable = container.getAnimatableProperties();
       expect(animatable).toHaveLength(2);
-      expect(animatable.map(p => p.name)).toContain('animated1');
-      expect(animatable.map(p => p.name)).toContain('animated2');
+      expect(animatable.map((p) => p.name)).toContain('animated1');
+      expect(animatable.map((p) => p.name)).toContain('animated2');
     });
 
     it('PCA-011: returns empty array when no animatable properties', () => {

@@ -11,7 +11,7 @@
  * to access media sources, emit cross-domain events, etc.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource, AudioPlaybackError } from './SessionTypes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
@@ -107,63 +107,135 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
 
   // ---- PlaybackEngine public accessors (delegation) ----
 
-  get currentFrame(): number { return this._playbackEngine.currentFrame; }
-  set currentFrame(frame: number) { this._playbackEngine.currentFrame = frame; }
+  get currentFrame(): number {
+    return this._playbackEngine.currentFrame;
+  }
+  set currentFrame(frame: number) {
+    this._playbackEngine.currentFrame = frame;
+  }
 
-  get inPoint(): number { return this._playbackEngine.inPoint; }
-  get outPoint(): number { return this._playbackEngine.outPoint; }
+  get inPoint(): number {
+    return this._playbackEngine.inPoint;
+  }
+  get outPoint(): number {
+    return this._playbackEngine.outPoint;
+  }
 
-  get fps(): number { return this._playbackEngine.fps; }
-  set fps(value: number) { this._playbackEngine.fps = value; }
+  get fps(): number {
+    return this._playbackEngine.fps;
+  }
+  set fps(value: number) {
+    this._playbackEngine.fps = value;
+  }
 
-  get frameIncrement(): number { return this._playbackEngine.frameIncrement; }
-  set frameIncrement(value: number) { this._playbackEngine.frameIncrement = value; }
+  get frameIncrement(): number {
+    return this._playbackEngine.frameIncrement;
+  }
+  set frameIncrement(value: number) {
+    this._playbackEngine.frameIncrement = value;
+  }
 
-  get playbackSpeed(): number { return this._playbackEngine.playbackSpeed; }
-  set playbackSpeed(value: number) { this._playbackEngine.playbackSpeed = value; }
+  get playbackSpeed(): number {
+    return this._playbackEngine.playbackSpeed;
+  }
+  set playbackSpeed(value: number) {
+    this._playbackEngine.playbackSpeed = value;
+  }
 
-  get isPlaying(): boolean { return this._playbackEngine.isPlaying; }
-  get isBuffering(): boolean { return this._playbackEngine.isBuffering; }
+  get isPlaying(): boolean {
+    return this._playbackEngine.isPlaying;
+  }
+  get isBuffering(): boolean {
+    return this._playbackEngine.isBuffering;
+  }
 
-  get loopMode(): LoopMode { return this._playbackEngine.loopMode; }
-  set loopMode(mode: LoopMode) { this._playbackEngine.loopMode = mode; }
+  get loopMode(): LoopMode {
+    return this._playbackEngine.loopMode;
+  }
+  set loopMode(mode: LoopMode) {
+    this._playbackEngine.loopMode = mode;
+  }
 
-  get playDirection(): number { return this._playbackEngine.playDirection; }
-  get effectiveFps(): number { return this._playbackEngine.effectiveFps; }
-  get frameCount(): number { return this._playbackEngine.frameCount; }
+  get playDirection(): number {
+    return this._playbackEngine.playDirection;
+  }
+  get effectiveFps(): number {
+    return this._playbackEngine.effectiveFps;
+  }
+  get frameCount(): number {
+    return this._playbackEngine.frameCount;
+  }
 
-  get playbackMode(): PlaybackMode { return this._playbackEngine.playbackMode; }
-  set playbackMode(mode: PlaybackMode) { this._playbackEngine.playbackMode = mode; }
-  togglePlaybackMode(): void { this._playbackEngine.togglePlaybackMode(); }
+  get playbackMode(): PlaybackMode {
+    return this._playbackEngine.playbackMode;
+  }
+  set playbackMode(mode: PlaybackMode) {
+    this._playbackEngine.playbackMode = mode;
+  }
+  togglePlaybackMode(): void {
+    this._playbackEngine.togglePlaybackMode();
+  }
 
-  get droppedFrameCount(): number { return this._playbackEngine.droppedFrameCount; }
+  get droppedFrameCount(): number {
+    return this._playbackEngine.droppedFrameCount;
+  }
 
-  get interpolationEnabled(): boolean { return this._playbackEngine.interpolationEnabled; }
-  set interpolationEnabled(value: boolean) { this._playbackEngine.interpolationEnabled = value; }
+  get interpolationEnabled(): boolean {
+    return this._playbackEngine.interpolationEnabled;
+  }
+  set interpolationEnabled(value: boolean) {
+    this._playbackEngine.interpolationEnabled = value;
+  }
 
-  get subFramePosition(): SubFramePosition | null { return this._playbackEngine.subFramePosition; }
+  get subFramePosition(): SubFramePosition | null {
+    return this._playbackEngine.subFramePosition;
+  }
 
   // ---- Volume/mute public accessors (delegation) ----
 
-  get volume(): number { return this._volumeManager.volume; }
-  set volume(value: number) { this._volumeManager.volume = value; }
+  get volume(): number {
+    return this._volumeManager.volume;
+  }
+  set volume(value: number) {
+    this._volumeManager.volume = value;
+  }
 
-  get muted(): boolean { return this._volumeManager.muted; }
-  set muted(value: boolean) { this._volumeManager.muted = value; }
+  get muted(): boolean {
+    return this._volumeManager.muted;
+  }
+  set muted(value: boolean) {
+    this._volumeManager.muted = value;
+  }
 
-  toggleMute(): void { this._volumeManager.toggleMute(); }
+  toggleMute(): void {
+    this._volumeManager.toggleMute();
+  }
 
-  get preservesPitch(): boolean { return this._volumeManager.preservesPitch; }
-  set preservesPitch(value: boolean) { this._volumeManager.preservesPitch = value; }
+  get preservesPitch(): boolean {
+    return this._volumeManager.preservesPitch;
+  }
+  set preservesPitch(value: boolean) {
+    this._volumeManager.preservesPitch = value;
+  }
 
-  get audioScrubEnabled(): boolean { return this._volumeManager.audioScrubEnabled; }
-  set audioScrubEnabled(value: boolean) { this._volumeManager.audioScrubEnabled = value; }
+  get audioScrubEnabled(): boolean {
+    return this._volumeManager.audioScrubEnabled;
+  }
+  set audioScrubEnabled(value: boolean) {
+    this._volumeManager.audioScrubEnabled = value;
+  }
 
   // ---- A/B Compare public accessors (delegation) ----
 
-  get currentAB(): 'A' | 'B' { return this._abCompareManager.currentAB; }
-  get sourceAIndex(): number { return this._abCompareManager.sourceAIndex; }
-  get sourceBIndex(): number { return this._abCompareManager.sourceBIndex; }
+  get currentAB(): 'A' | 'B' {
+    return this._abCompareManager.currentAB;
+  }
+  get sourceAIndex(): number {
+    return this._abCompareManager.sourceAIndex;
+  }
+  get sourceBIndex(): number {
+    return this._abCompareManager.sourceBIndex;
+  }
 
   get sourceA(): MediaSource | null {
     const sources = this._host?.getSources() ?? [];
@@ -181,39 +253,83 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     return this._abCompareManager.isAvailable(this._host?.getSourceCount() ?? 0);
   }
 
-  get syncPlayhead(): boolean { return this._abCompareManager.syncPlayhead; }
-  set syncPlayhead(value: boolean) { this._abCompareManager.syncPlayhead = value; }
+  get syncPlayhead(): boolean {
+    return this._abCompareManager.syncPlayhead;
+  }
+  set syncPlayhead(value: boolean) {
+    this._abCompareManager.syncPlayhead = value;
+  }
 
   // ---- Playback control methods ----
 
-  play(): void { this._playbackEngine.play(); }
-  pause(): void { this._playbackEngine.pause(); }
-  togglePlayback(): void { this._playbackEngine.togglePlayback(); }
-  togglePlayDirection(): void { this._playbackEngine.togglePlayDirection(); }
+  play(): void {
+    this._playbackEngine.play();
+  }
+  pause(): void {
+    this._playbackEngine.pause();
+  }
+  togglePlayback(): void {
+    this._playbackEngine.togglePlayback();
+  }
+  togglePlayDirection(): void {
+    this._playbackEngine.togglePlayDirection();
+  }
 
-  stepForward(): void { this._playbackEngine.stepForward(); }
-  stepBackward(): void { this._playbackEngine.stepBackward(); }
+  stepForward(): void {
+    this._playbackEngine.stepForward();
+  }
+  stepBackward(): void {
+    this._playbackEngine.stepBackward();
+  }
 
-  goToFrame(frame: number): void { this._playbackEngine.goToFrame(frame); }
-  goToStart(): void { this._playbackEngine.goToStart(); }
-  goToEnd(): void { this._playbackEngine.goToEnd(); }
+  goToFrame(frame: number): void {
+    this._playbackEngine.goToFrame(frame);
+  }
+  goToStart(): void {
+    this._playbackEngine.goToStart();
+  }
+  goToEnd(): void {
+    this._playbackEngine.goToEnd();
+  }
 
-  setInPoint(frame?: number): void { this._playbackEngine.setInPoint(frame); }
-  setOutPoint(frame?: number): void { this._playbackEngine.setOutPoint(frame); }
-  resetInOutPoints(): void { this._playbackEngine.resetInOutPoints(); }
-  setInOutRange(inPoint: number, outPoint: number): void { this._playbackEngine.setInOutRange(inPoint, outPoint); }
+  setInPoint(frame?: number): void {
+    this._playbackEngine.setInPoint(frame);
+  }
+  setOutPoint(frame?: number): void {
+    this._playbackEngine.setOutPoint(frame);
+  }
+  resetInOutPoints(): void {
+    this._playbackEngine.resetInOutPoints();
+  }
+  setInOutRange(inPoint: number, outPoint: number): void {
+    this._playbackEngine.setInOutRange(inPoint, outPoint);
+  }
 
-  update(): void { this._playbackEngine.update(); }
-  advanceFrame(direction: number): void { this._playbackEngine.advanceFrame(direction); }
+  update(): void {
+    this._playbackEngine.update();
+  }
+  advanceFrame(direction: number): void {
+    this._playbackEngine.advanceFrame(direction);
+  }
 
   /** Signal that a continuous scrub (timeline drag) has started. */
-  onScrubStart(): void { this._audioCoordinator.onScrubStart(); }
+  onScrubStart(): void {
+    this._audioCoordinator.onScrubStart();
+  }
   /** Signal that a continuous scrub (timeline drag) has ended. */
-  onScrubEnd(): void { this._audioCoordinator.onScrubEnd(); }
+  onScrubEnd(): void {
+    this._audioCoordinator.onScrubEnd();
+  }
 
-  increaseSpeed(): void { this._playbackEngine.increaseSpeed(); }
-  decreaseSpeed(): void { this._playbackEngine.decreaseSpeed(); }
-  resetSpeed(): void { this._playbackEngine.resetSpeed(); }
+  increaseSpeed(): void {
+    this._playbackEngine.increaseSpeed();
+  }
+  decreaseSpeed(): void {
+    this._playbackEngine.decreaseSpeed();
+  }
+  resetSpeed(): void {
+    this._playbackEngine.resetSpeed();
+  }
 
   // ---- A/B Compare methods ----
 
@@ -368,7 +484,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     const source = this._host?.getCurrentSource() ?? null;
     if (source?.type === 'video') {
       if (source.videoSourceNode?.isUsingMediabunny()) {
-        source.videoSourceNode.preloadFrames(this._playbackEngine.currentFrame).catch(err => {
+        source.videoSourceNode.preloadFrames(this._playbackEngine.currentFrame).catch((err) => {
           log.warn('Frame preload error:', err);
         });
       }
@@ -414,7 +530,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
       safeVideoPlay: (video) => this.safeVideoPlay(video),
       initVideoPreservesPitch: (video) => this.initVideoPreservesPitch(video),
       getAudioSyncEnabled: () => this._volumeManager.audioSyncEnabled,
-      setAudioSyncEnabled: (enabled) => { this._volumeManager.audioSyncEnabled = enabled; },
+      setAudioSyncEnabled: (enabled) => {
+        this._volumeManager.audioSyncEnabled = enabled;
+      },
     });
   }
 

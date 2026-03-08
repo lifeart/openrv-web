@@ -8,7 +8,7 @@
  * - Optional color tinting (red for before, green for after)
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
@@ -29,11 +29,11 @@ const OPACITY_FALLOFF_MAX_PCT = OPACITY_FALLOFF_MAX * 100;
 
 export interface GhostFrameState {
   enabled: boolean;
-  framesBefore: number;     // FRAMES_MIN-FRAMES_MAX
-  framesAfter: number;      // FRAMES_MIN-FRAMES_MAX
-  opacityBase: number;      // OPACITY_BASE_MIN-OPACITY_BASE_MAX, opacity of nearest ghost frame
-  opacityFalloff: number;   // OPACITY_FALLOFF_MIN-OPACITY_FALLOFF_MAX, how quickly opacity decreases per frame
-  colorTint: boolean;       // Red for before, green for after
+  framesBefore: number; // FRAMES_MIN-FRAMES_MAX
+  framesAfter: number; // FRAMES_MIN-FRAMES_MAX
+  opacityBase: number; // OPACITY_BASE_MIN-OPACITY_BASE_MAX, opacity of nearest ghost frame
+  opacityFalloff: number; // OPACITY_FALLOFF_MIN-OPACITY_FALLOFF_MAX, how quickly opacity decreases per frame
+  colorTint: boolean; // Red for before, green for after
 }
 
 export const DEFAULT_GHOST_FRAME_STATE: GhostFrameState = {
@@ -205,7 +205,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
         this.emitStateChanged();
       },
       undefined,
-      'ghost-frames-before'
+      'ghost-frames-before',
     );
     this.dropdown.appendChild(beforeRow);
 
@@ -221,7 +221,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
         this.emitStateChanged();
       },
       undefined,
-      'ghost-frames-after'
+      'ghost-frames-after',
     );
     this.dropdown.appendChild(afterRow);
 
@@ -237,7 +237,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
         this.emitStateChanged();
       },
       (v) => `${Math.round(v)}%`,
-      'ghost-base-opacity'
+      'ghost-base-opacity',
     );
     this.dropdown.appendChild(opacityRow);
 
@@ -253,7 +253,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
         this.emitStateChanged();
       },
       (v) => `${Math.round(v)}%`,
-      'ghost-opacity-falloff'
+      'ghost-opacity-falloff',
     );
     this.dropdown.appendChild(falloffRow);
 
@@ -273,7 +273,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     initialValue: number,
     onChange: (value: number) => void,
     formatValue?: (value: number) => string,
-    ariaId?: string
+    ariaId?: string,
   ): HTMLElement {
     const row = document.createElement('div');
     row.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
@@ -358,11 +358,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
   }
 
   private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isOpen &&
-      !this.button.contains(e.target as Node) &&
-      !this.dropdown.contains(e.target as Node)
-    ) {
+    if (this.isOpen && !this.button.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       this.closeDropdown();
     }
   }
@@ -438,10 +434,18 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
 
   setState(state: Partial<GhostFrameState>): void {
     if (state.enabled !== undefined) this.state.enabled = state.enabled;
-    if (state.framesBefore !== undefined) this.state.framesBefore = Math.max(FRAMES_MIN, Math.min(FRAMES_MAX, state.framesBefore));
-    if (state.framesAfter !== undefined) this.state.framesAfter = Math.max(FRAMES_MIN, Math.min(FRAMES_MAX, state.framesAfter));
-    if (state.opacityBase !== undefined) this.state.opacityBase = Math.max(OPACITY_BASE_MIN, Math.min(OPACITY_BASE_MAX, state.opacityBase));
-    if (state.opacityFalloff !== undefined) this.state.opacityFalloff = Math.max(OPACITY_FALLOFF_MIN, Math.min(OPACITY_FALLOFF_MAX, state.opacityFalloff));
+    if (state.framesBefore !== undefined) {
+      this.state.framesBefore = Math.max(FRAMES_MIN, Math.min(FRAMES_MAX, state.framesBefore));
+    }
+    if (state.framesAfter !== undefined) {
+      this.state.framesAfter = Math.max(FRAMES_MIN, Math.min(FRAMES_MAX, state.framesAfter));
+    }
+    if (state.opacityBase !== undefined) {
+      this.state.opacityBase = Math.max(OPACITY_BASE_MIN, Math.min(OPACITY_BASE_MAX, state.opacityBase));
+    }
+    if (state.opacityFalloff !== undefined) {
+      this.state.opacityFalloff = Math.max(OPACITY_FALLOFF_MIN, Math.min(OPACITY_FALLOFF_MAX, state.opacityFalloff));
+    }
     if (state.colorTint !== undefined) this.state.colorTint = state.colorTint;
     this.updateButtonLabel();
     this.populateDropdown();

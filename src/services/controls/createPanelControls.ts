@@ -12,7 +12,13 @@ import { SnapshotPanel } from '../../ui/components/SnapshotPanel';
 import { PlaylistPanel } from '../../ui/components/PlaylistPanel';
 import { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
 import { ShotGridPanel } from '../../ui/components/ShotGridPanel';
-import { ConformPanel, type ConformPanelManager, type ConformSource, type UnresolvedClip, type ConformStatus } from '../../ui/components/ConformPanel';
+import {
+  ConformPanel,
+  type ConformPanelManager,
+  type ConformSource,
+  type UnresolvedClip,
+  type ConformStatus,
+} from '../../ui/components/ConformPanel';
 import { createPanel, createPanelHeader } from '../../ui/components/shared/Panel';
 import { getGlobalHistoryManager } from '../../utils/HistoryManager';
 import type { PanelControlGroup } from './ControlGroups';
@@ -84,7 +90,7 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
 
   const conformManager: ConformPanelManager = {
     getUnresolvedClips: (): UnresolvedClip[] =>
-      playlistManager.unresolvedClips.map(c => ({
+      playlistManager.unresolvedClips.map((c) => ({
         id: c.id,
         name: c.name,
         originalUrl: c.sourceUrl,

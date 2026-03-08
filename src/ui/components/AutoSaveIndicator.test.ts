@@ -334,7 +334,9 @@ describe('AutoSaveIndicator', () => {
   });
 
   describe('settings popover', () => {
-    function createMockManager(configOverrides: Partial<{ enabled: boolean; interval: number; maxVersions: number }> = {}) {
+    function createMockManager(
+      configOverrides: Partial<{ enabled: boolean; interval: number; maxVersions: number }> = {},
+    ) {
       const config = { enabled: true, interval: 5, maxVersions: 10, ...configOverrides };
       return {
         on: vi.fn(),
@@ -494,11 +496,14 @@ describe('AutoSaveIndicator', () => {
     });
 
     it('AUTOSAVE-U040: settings restored from localStorage on connect', () => {
-      localStorage.setItem('openrv-autosave-config', JSON.stringify({
-        interval: 15,
-        enabled: false,
-        maxVersions: 25,
-      }));
+      localStorage.setItem(
+        'openrv-autosave-config',
+        JSON.stringify({
+          interval: 15,
+          enabled: false,
+          maxVersions: 25,
+        }),
+      );
 
       const manager = createMockManager();
       indicator.connect(manager as any);

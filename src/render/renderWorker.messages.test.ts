@@ -15,7 +15,9 @@ if (typeof globalThis.OffscreenCanvas === 'undefined') {
       this.width = width;
       this.height = height;
     }
-    getContext() { return null; }
+    getContext() {
+      return null;
+    }
     addEventListener() {}
     removeEventListener() {}
   };
@@ -229,7 +231,10 @@ describe('renderWorker.messages', () => {
         { type: 'setFalseColor', state: { enabled: false, lut: null } },
         { type: 'setZebraStripes', state: {} as any },
         { type: 'setLUT', lutData: null, lutSize: 0, intensity: 0 },
-        { type: 'setDisplayColorState', state: { transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2 } },
+        {
+          type: 'setDisplayColorState',
+          state: { transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2 },
+        },
         { type: 'setBackgroundPattern', state: {} as any },
         { type: 'setHDROutputMode', mode: 'sdr', capabilities: {} as any },
         { type: 'readPixel', id: 1, x: 0, y: 0, width: 1, height: 1 },

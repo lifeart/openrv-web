@@ -5,14 +5,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   EffectProcessor,
-  AllEffectsState,
+  type AllEffectsState,
   createDefaultEffectsState,
   computeEffectsHash,
   hasActiveEffects,
   yieldToMain,
 } from './EffectProcessor';
 import { createTestImageData, createGradientImageData, isGrayscale } from '../../../test/utils';
-import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../../ui/components/ColorControls';
+import { type ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../../ui/components/ColorControls';
 import { DEFAULT_FILTER_SETTINGS } from '../../ui/components/FilterControl';
 import {
   IS_LITTLE_ENDIAN,
@@ -220,9 +220,20 @@ describe('EffectProcessor', () => {
       }[keyof ColorAdjustments];
 
       const props: NumericColorKey[] = [
-        'exposure', 'gamma', 'saturation', 'vibrance', 'contrast',
-        'clarity', 'hueRotation', 'temperature', 'tint', 'brightness',
-        'highlights', 'shadows', 'whites', 'blacks',
+        'exposure',
+        'gamma',
+        'saturation',
+        'vibrance',
+        'contrast',
+        'clarity',
+        'hueRotation',
+        'temperature',
+        'tint',
+        'brightness',
+        'highlights',
+        'shadows',
+        'whites',
+        'blacks',
       ];
 
       for (const prop of props) {
@@ -653,9 +664,9 @@ describe('EffectProcessor', () => {
       it('EP-039: vibrance handles edge case colors correctly', () => {
         // Test with colors that are exactly on the boundary
         const testCases = [
-          { r: 255, g: 0, b: 0 },   // Pure red
-          { r: 0, g: 255, b: 0 },   // Pure green
-          { r: 0, g: 0, b: 255 },   // Pure blue
+          { r: 255, g: 0, b: 0 }, // Pure red
+          { r: 0, g: 255, b: 0 }, // Pure green
+          { r: 0, g: 0, b: 255 }, // Pure blue
           { r: 255, g: 255, b: 0 }, // Yellow
           { r: 0, g: 255, b: 255 }, // Cyan
           { r: 255, g: 0, b: 255 }, // Magenta
@@ -1074,31 +1085,100 @@ describe('EffectProcessor', () => {
         const brightPixel = { r: 220, g: 200, b: 200 }; // luminance > 0.5 for highlights
         const darkPixel = { r: 40, g: 30, b: 30 }; // luminance < 0.5 for shadows
 
-        const testEffects: Array<{ name: string; pixel?: { r: number; g: number; b: number }; setup: (s: AllEffectsState) => void }> = [
-          { name: 'highlights', pixel: brightPixel, setup: (s) => { s.colorAdjustments.highlights = 80; } },
-          { name: 'shadows', pixel: darkPixel, setup: (s) => { s.colorAdjustments.shadows = 80; } },
-          { name: 'whites', setup: (s) => { s.colorAdjustments.whites = 50; } },
-          { name: 'blacks', setup: (s) => { s.colorAdjustments.blacks = 50; } },
-          { name: 'vibrance', setup: (s) => { s.colorAdjustments.vibrance = 50; } },
-          { name: 'hueRotation', setup: (s) => { s.colorAdjustments.hueRotation = 90; } },
-          { name: 'colorWheels', setup: (s) => { s.colorWheelsState.master = { r: 0.5, g: 0, b: 0, y: 0 }; } },
-          { name: 'cdl', setup: (s) => { s.cdlValues.slope = { r: 2, g: 1, b: 1 }; } },
-          { name: 'curves', setup: (s) => {
-            s.curvesData.master.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }];
-          }},
-          { name: 'hslQualifier', setup: (s) => {
-            s.hslQualifierState.enabled = true;
-            s.hslQualifierState.hue = { center: 0, width: 60, softness: 20 };
-            s.hslQualifierState.saturation = { center: 100, width: 100, softness: 20 };
-            s.hslQualifierState.luminance = { center: 50, width: 100, softness: 20 };
-            s.hslQualifierState.correction = { hueShift: 120, saturationScale: 1, luminanceScale: 1 };
-          }},
-          { name: 'toneMapping', setup: (s) => {
-            s.toneMappingState.enabled = true;
-            s.toneMappingState.operator = 'aces';
-          }},
-          { name: 'colorInversion', setup: (s) => { s.colorInversionEnabled = true; } },
-          { name: 'channelIsolation', setup: (s) => { s.channelMode = 'red'; } },
+        const testEffects: Array<{
+          name: string;
+          pixel?: { r: number; g: number; b: number };
+          setup: (s: AllEffectsState) => void;
+        }> = [
+          {
+            name: 'highlights',
+            pixel: brightPixel,
+            setup: (s) => {
+              s.colorAdjustments.highlights = 80;
+            },
+          },
+          {
+            name: 'shadows',
+            pixel: darkPixel,
+            setup: (s) => {
+              s.colorAdjustments.shadows = 80;
+            },
+          },
+          {
+            name: 'whites',
+            setup: (s) => {
+              s.colorAdjustments.whites = 50;
+            },
+          },
+          {
+            name: 'blacks',
+            setup: (s) => {
+              s.colorAdjustments.blacks = 50;
+            },
+          },
+          {
+            name: 'vibrance',
+            setup: (s) => {
+              s.colorAdjustments.vibrance = 50;
+            },
+          },
+          {
+            name: 'hueRotation',
+            setup: (s) => {
+              s.colorAdjustments.hueRotation = 90;
+            },
+          },
+          {
+            name: 'colorWheels',
+            setup: (s) => {
+              s.colorWheelsState.master = { r: 0.5, g: 0, b: 0, y: 0 };
+            },
+          },
+          {
+            name: 'cdl',
+            setup: (s) => {
+              s.cdlValues.slope = { r: 2, g: 1, b: 1 };
+            },
+          },
+          {
+            name: 'curves',
+            setup: (s) => {
+              s.curvesData.master.points = [
+                { x: 0, y: 0 },
+                { x: 0.5, y: 0.7 },
+                { x: 1, y: 1 },
+              ];
+            },
+          },
+          {
+            name: 'hslQualifier',
+            setup: (s) => {
+              s.hslQualifierState.enabled = true;
+              s.hslQualifierState.hue = { center: 0, width: 60, softness: 20 };
+              s.hslQualifierState.saturation = { center: 100, width: 100, softness: 20 };
+              s.hslQualifierState.luminance = { center: 50, width: 100, softness: 20 };
+              s.hslQualifierState.correction = { hueShift: 120, saturationScale: 1, luminanceScale: 1 };
+            },
+          },
+          {
+            name: 'toneMapping',
+            setup: (s) => {
+              s.toneMappingState.enabled = true;
+              s.toneMappingState.operator = 'aces';
+            },
+          },
+          {
+            name: 'colorInversion',
+            setup: (s) => {
+              s.colorInversionEnabled = true;
+            },
+          },
+          {
+            name: 'channelIsolation',
+            setup: (s) => {
+              s.channelMode = 'red';
+            },
+          },
         ];
 
         for (const effect of testEffects) {
@@ -1403,8 +1483,8 @@ describe('EffectProcessor', () => {
           applyChannelIsolationSIMD(img.data, 'red');
 
           expect(img.data[0]).toBe(100); // R preserved
-          expect(img.data[1]).toBe(0);   // G zeroed
-          expect(img.data[2]).toBe(0);   // B zeroed
+          expect(img.data[1]).toBe(0); // G zeroed
+          expect(img.data[2]).toBe(0); // B zeroed
           expect(img.data[3]).toBe(255); // A preserved
         });
 
@@ -1412,9 +1492,9 @@ describe('EffectProcessor', () => {
           const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 255 });
           applyChannelIsolationSIMD(img.data, 'green');
 
-          expect(img.data[0]).toBe(0);   // R zeroed
+          expect(img.data[0]).toBe(0); // R zeroed
           expect(img.data[1]).toBe(150); // G preserved
-          expect(img.data[2]).toBe(0);   // B zeroed
+          expect(img.data[2]).toBe(0); // B zeroed
           expect(img.data[3]).toBe(255); // A preserved
         });
 
@@ -1422,8 +1502,8 @@ describe('EffectProcessor', () => {
           const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 255 });
           applyChannelIsolationSIMD(img.data, 'blue');
 
-          expect(img.data[0]).toBe(0);   // R zeroed
-          expect(img.data[1]).toBe(0);   // G zeroed
+          expect(img.data[0]).toBe(0); // R zeroed
+          expect(img.data[1]).toBe(0); // G zeroed
           expect(img.data[2]).toBe(200); // B preserved
           expect(img.data[3]).toBe(255); // A preserved
         });
@@ -1494,17 +1574,17 @@ describe('EffectProcessor', () => {
 
         it('COLOR_INVERSION_XOR_MASK is correct for detected endianness', () => {
           if (IS_LITTLE_ENDIAN) {
-            expect(COLOR_INVERSION_XOR_MASK).toBe(0x00FFFFFF);
+            expect(COLOR_INVERSION_XOR_MASK).toBe(0x00ffffff);
           } else {
-            expect(COLOR_INVERSION_XOR_MASK).toBe(0xFFFFFF00);
+            expect(COLOR_INVERSION_XOR_MASK).toBe(0xffffff00);
           }
         });
 
         it('CHANNEL_MASKS are correct for detected endianness', () => {
           if (IS_LITTLE_ENDIAN) {
-            expect(CHANNEL_MASKS.red).toBe(0xFF0000FF);
-            expect(CHANNEL_MASKS.green).toBe(0xFF00FF00);
-            expect(CHANNEL_MASKS.blue).toBe(0xFFFF0000);
+            expect(CHANNEL_MASKS.red).toBe(0xff0000ff);
+            expect(CHANNEL_MASKS.green).toBe(0xff00ff00);
+            expect(CHANNEL_MASKS.blue).toBe(0xffff0000);
           }
           // Verify masks isolate correct channel by applying to a known pixel
           const img = createTestImageData(1, 1, { r: 100, g: 150, b: 200, a: 255 });
@@ -1516,8 +1596,8 @@ describe('EffectProcessor', () => {
           const redBytes = new Uint8Array(new Uint32Array([redResult]).buffer);
           if (IS_LITTLE_ENDIAN) {
             expect(redBytes[0]).toBe(100); // R
-            expect(redBytes[1]).toBe(0);   // G zeroed
-            expect(redBytes[2]).toBe(0);   // B zeroed
+            expect(redBytes[1]).toBe(0); // G zeroed
+            expect(redBytes[2]).toBe(0); // B zeroed
             expect(redBytes[3]).toBe(255); // A
           }
         });
@@ -1564,10 +1644,10 @@ describe('EffectProcessor', () => {
           const img = createTestImageData(1, 1, { r: 42, g: 137, b: 233, a: 99 });
 
           applyColorInversionSIMD(img.data);
-          expect(img.data[0]).toBe(213);  // 255 - 42
-          expect(img.data[1]).toBe(118);  // 255 - 137
-          expect(img.data[2]).toBe(22);   // 255 - 233
-          expect(img.data[3]).toBe(99);   // Alpha preserved
+          expect(img.data[0]).toBe(213); // 255 - 42
+          expect(img.data[1]).toBe(118); // 255 - 137
+          expect(img.data[2]).toBe(22); // 255 - 233
+          expect(img.data[3]).toBe(99); // Alpha preserved
         });
 
         it('handles single pixel channel isolation', () => {
@@ -1635,10 +1715,10 @@ describe('EffectProcessor', () => {
 
         it('brightness LUT produces correct values', () => {
           const lut = buildBrightnessLUT(2.0);
-          expect(lut[0]).toBe(0);      // 0 * 2 = 0
-          expect(lut[64]).toBe(128);   // 64 * 2 = 128
-          expect(lut[128]).toBe(255);  // 128 * 2 = 256 -> clamped to 255
-          expect(lut[255]).toBe(255);  // 255 * 2 = 510 -> clamped to 255
+          expect(lut[0]).toBe(0); // 0 * 2 = 0
+          expect(lut[64]).toBe(128); // 64 * 2 = 128
+          expect(lut[128]).toBe(255); // 128 * 2 = 256 -> clamped to 255
+          expect(lut[255]).toBe(255); // 255 * 2 = 510 -> clamped to 255
 
           const lutDim = buildBrightnessLUT(0.5);
           expect(lutDim[0]).toBe(0);
@@ -1653,10 +1733,10 @@ describe('EffectProcessor', () => {
 
           applyLUTToRGB(img.data, lut);
 
-          expect(img.data[0]).toBe(50);   // 100 * 0.5
-          expect(img.data[1]).toBe(75);   // 150 * 0.5
-          expect(img.data[2]).toBe(100);  // 200 * 0.5
-          expect(img.data[3]).toBe(128);  // Alpha preserved
+          expect(img.data[0]).toBe(50); // 100 * 0.5
+          expect(img.data[1]).toBe(75); // 150 * 0.5
+          expect(img.data[2]).toBe(100); // 200 * 0.5
+          expect(img.data[3]).toBe(128); // Alpha preserved
         });
       });
     });
@@ -2066,7 +2146,10 @@ describe('EffectProcessor', () => {
       state.cdlValues.offset = { r: 0.5, g: 0.5, b: 0.5 };
       // Add curves with non-identity mapping
       state.curvesData.master.enabled = true;
-      state.curvesData.master.points = [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }];
+      state.curvesData.master.points = [
+        { x: 0, y: 0.1 },
+        { x: 1, y: 0.9 },
+      ];
 
       // Should not throw even with values > 1.0 from CDL going into curves LUT
       expect(() => {

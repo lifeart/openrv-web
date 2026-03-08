@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Session, MediaSource } from './Session';
+import { Session, type MediaSource } from './Session';
 import { Graph } from '../graph/Graph';
 import { IPNode } from '../../nodes/base/IPNode';
 import type { IPImage } from '../image/Image';
@@ -11,11 +11,11 @@ const createMockDTO = (protocols: any) => {
     exists: () => data !== undefined,
     property: (name: string) => ({
       value: () => data?.[name],
-      exists: () => data && name in data
+      exists: () => data && name in data,
     }),
     component: (name: string) => mockObj(data?.[name]),
     name: 'mock',
-    components: () => Object.entries(data || {}).map(([name, val]) => ({ name, ...mockObj(val) }))
+    components: () => Object.entries(data || {}).map(([name, val]) => ({ name, ...mockObj(val) })),
   });
 
   return {
@@ -24,37 +24,37 @@ const createMockDTO = (protocols: any) => {
       const results = list.map(mockObj);
       (results as any).first = () => results[0] || mockObj(undefined);
       return results;
-    }
+    },
   } as any;
 };
 
 const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) => {
-    const video = document.createElement('video') as any;
-    video._currentTime = currentTimeSec;
-    Object.defineProperty(video, 'duration', {
-        get: () => durationSec,
-        configurable: true
-    });
-    Object.defineProperty(video, 'currentTime', {
-        get: () => video._currentTime,
-        set: (v) => video._currentTime = v,
-        configurable: true
-    });
-    Object.defineProperty(video, 'ended', {
-        get: () => video._currentTime >= durationSec,
-        configurable: true
-    });
-    video.play = vi.fn();
-    video.pause = vi.fn();
-    return video;
+  const video = document.createElement('video') as any;
+  video._currentTime = currentTimeSec;
+  Object.defineProperty(video, 'duration', {
+    get: () => durationSec,
+    configurable: true,
+  });
+  Object.defineProperty(video, 'currentTime', {
+    get: () => video._currentTime,
+    set: (v) => (video._currentTime = v),
+    configurable: true,
+  });
+  Object.defineProperty(video, 'ended', {
+    get: () => video._currentTime >= durationSec,
+    configurable: true,
+  });
+  video.play = vi.fn();
+  video.pause = vi.fn();
+  return video;
 };
 
 class TestSession extends Session {
   public setSources(s: MediaSource[]) {
     (this as any)._media.resetSourcesInternal();
-    s.forEach(src => {
-        this.addSource(src);
-        (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
+    s.forEach((src) => {
+      this.addSource(src);
+      (this as any)._outPoint = Math.max((this as any)._outPoint, src.duration);
     });
   }
 }
@@ -104,9 +104,7 @@ describe('Session', () => {
       session.setDisplayName('  My Session  ');
 
       expect(session.metadata.displayName).toBe('My Session');
-      expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ displayName: 'My Session' })
-      );
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({ displayName: 'My Session' }));
     });
 
     it('SES-META-003: setDisplayName does not emit when normalized value is unchanged', () => {
@@ -632,7 +630,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionInternal = session as unknown as { sources: MediaSource[], addSource: (s: MediaSource) => void };
+      const sessionInternal = session as unknown as { sources: MediaSource[]; addSource: (s: MediaSource) => void };
 
       // Add first source using addSource
       sessionInternal.addSource(source1);
@@ -721,558 +719,684 @@ describe('Session', () => {
 
   describe('volume and sync', () => {
     it('applyVolumeToVideo updates video element', () => {
-        const video = document.createElement('video');
-        Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      const video = document.createElement('video');
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-        let volume = 1.0;
-        let muted = false;
-        Object.defineProperty(video, 'volume', { get: () => volume, set: (v) => volume = v, configurable: true });
-        Object.defineProperty(video, 'muted', { get: () => muted, set: (v) => muted = v, configurable: true });
+      let volume = 1.0;
+      let muted = false;
+      Object.defineProperty(video, 'volume', { get: () => volume, set: (v) => (volume = v), configurable: true });
+      Object.defineProperty(video, 'muted', { get: () => muted, set: (v) => (muted = v), configurable: true });
 
-        session.setSources([{
-            type: 'video', name: 'v', url: 'v.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video
-        }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
-        session.volume = 0.5;
-        expect(volume).toBe(0.5);
+      session.volume = 0.5;
+      expect(volume).toBe(0.5);
 
-        session.muted = true;
-        expect(volume).toBe(0);
-        expect(muted).toBe(true);
+      session.muted = true;
+      expect(volume).toBe(0);
+      expect(muted).toBe(true);
     });
 
     it('syncVideoToFrame respects threshold', () => {
-        const video = document.createElement('video');
-        Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      const video = document.createElement('video');
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
 
-        let currentTime = 1.0;
-        Object.defineProperty(video, 'currentTime', { get: () => currentTime, set: (v) => currentTime = v, configurable: true });
+      let currentTime = 1.0;
+      Object.defineProperty(video, 'currentTime', {
+        get: () => currentTime,
+        set: (v) => (currentTime = v),
+        configurable: true,
+      });
 
-        session.setSources([{
-            type: 'video', name: 'v', url: 'v.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video
-        }]);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
-        (session as any)._currentFrame = 25; // 1.0s + 1/24s
-        (session as any)._playback.syncVideoToFrame();
-        // threshold is 0.1, (25-1)/24 = 1.0. diff is 0.
-        expect(currentTime).toBe(1.0);
+      (session as any)._currentFrame = 25; // 1.0s + 1/24s
+      (session as any)._playback.syncVideoToFrame();
+      // threshold is 0.1, (25-1)/24 = 1.0. diff is 0.
+      expect(currentTime).toBe(1.0);
 
-        (session as any)._currentFrame = 50;
-        (session as any)._playback.syncVideoToFrame();
-        expect(currentTime).toBeCloseTo(49/24);
+      (session as any)._currentFrame = 50;
+      (session as any)._playback.syncVideoToFrame();
+      expect(currentTime).toBeCloseTo(49 / 24);
     });
   });
 
   describe('disposal', () => {
     it('dispose cleans up all sources', () => {
-        const seqSource: MediaSource = { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] };
-        session.setSources([seqSource]);
-        const disposeSpy = vi.spyOn((session as any)._media, 'disposeSequenceSource');
+      const seqSource: MediaSource = {
+        type: 'sequence',
+        name: 's',
+        url: '',
+        width: 1,
+        height: 1,
+        duration: 1,
+        fps: 1,
+        sequenceFrames: [],
+      };
+      session.setSources([seqSource]);
+      const disposeSpy = vi.spyOn((session as any)._media, 'disposeSequenceSource');
 
-        session.dispose();
-        expect(disposeSpy).toHaveBeenCalled();
-        expect((session as any).sources.length).toBe(0);
+      session.dispose();
+      expect(disposeSpy).toHaveBeenCalled();
+      expect((session as any).sources.length).toBe(0);
     });
   });
 
   describe('edge cases', () => {
     it('setCurrentSource pauses video', () => {
-        const video = document.createElement('video');
-        Object.setPrototypeOf(video, HTMLVideoElement.prototype);
-        video.pause = vi.fn();
+      const video = document.createElement('video');
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.pause = vi.fn();
 
-        session.setSources([
-            { type: 'video', name: 'v1', url: 'v1.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video },
-            { type: 'image', name: 'v2', url: 'v2.png', width: 100, height: 100, duration: 1, fps: 24 }
-        ]);
+      session.setSources([
+        { type: 'video', name: 'v1', url: 'v1.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video },
+        { type: 'image', name: 'v2', url: 'v2.png', width: 100, height: 100, duration: 1, fps: 24 },
+      ]);
 
-        session.setCurrentSource(1);
-        expect(video.pause).toHaveBeenCalled();
+      session.setCurrentSource(1);
+      expect(video.pause).toHaveBeenCalled();
     });
 
     it('toggleAB syncs frame with clamping', () => {
-        session.setSources([
-            { type: 'image', name: 'a', url: 'a.png', width: 100, height: 100, duration: 100, fps: 24 },
-            { type: 'image', name: 'b', url: 'b.png', width: 100, height: 100, duration: 50, fps: 24 }
-        ]);
-        session.setSourceB(1);
-        session.currentFrame = 80;
-        session.syncPlayhead = true;
+      session.setSources([
+        { type: 'image', name: 'a', url: 'a.png', width: 100, height: 100, duration: 100, fps: 24 },
+        { type: 'image', name: 'b', url: 'b.png', width: 100, height: 100, duration: 50, fps: 24 },
+      ]);
+      session.setSourceB(1);
+      session.currentFrame = 80;
+      session.syncPlayhead = true;
 
-        session.toggleAB(); // To B
-        expect(session.currentFrame).toBe(50); // Clamped to B duration
+      session.toggleAB(); // To B
+      expect(session.currentFrame).toBe(50); // Clamped to B duration
     });
 
     it('GTO detailed parsing extra paths', () => {
-        const s = session as any;
+      const s = session as any;
 
-        // Test nested position in text - needs length 2 to trigger unwrap
-        const textComp = {
-            position: [[10, 20]],
-            text: 'nested',
-        };
-        const text = s.parseTextAnnotation('text:1:1:user', 1, {
-            property: (name: string) => ({ value: () => (textComp as any)[name], exists: () => name in textComp })
-        } as any, 1);
-        expect(text.position.x).toBe(10.5);
+      // Test nested position in text - needs length 2 to trigger unwrap
+      const textComp = {
+        position: [[10, 20]],
+        text: 'nested',
+      };
+      const text = s.parseTextAnnotation(
+        'text:1:1:user',
+        1,
+        {
+          property: (name: string) => ({ value: () => (textComp as any)[name], exists: () => name in textComp }),
+        } as any,
+        1,
+      );
+      expect(text.position.x).toBe(10.5);
 
-        // Test nested points in pen
-        const penComp = {
-            points: [[0,0], [1,1]],
-            color: [1,1,1,1],
-            width: [0.1]
-        };
-        const pen = s.parsePenStroke('pen:1:1:user', 1, {
-            property: (name: string) => ({ value: () => (penComp as any)[name], exists: () => name in penComp })
-        } as any, 1);
-        expect(pen.points.length).toBe(2);
+      // Test nested points in pen
+      const penComp = {
+        points: [
+          [0, 0],
+          [1, 1],
+        ],
+        color: [1, 1, 1, 1],
+        width: [0.1],
+      };
+      const pen = s.parsePenStroke(
+        'pen:1:1:user',
+        1,
+        {
+          property: (name: string) => ({ value: () => (penComp as any)[name], exists: () => name in penComp }),
+        } as any,
+        1,
+      );
+      expect(pen.points.length).toBe(2);
     });
 
     it('parseColorAdjustments contrast edge case', () => {
-        const s = session as any;
-        const mockObj = (data: any): any => ({
-            exists: () => true,
-            component: () => mockObj(data),
-            property: (p: string) => ({ value: () => p === 'contrast' ? 0 : 1 })
-        });
+      const s = session as any;
+      const mockObj = (data: any): any => ({
+        exists: () => true,
+        component: () => mockObj(data),
+        property: (p: string) => ({ value: () => (p === 'contrast' ? 0 : 1) }),
+      });
 
-        const dto = {
-            byProtocol: (proto: string) => {
-                if (proto === 'RVColor') {
-                    const res = [mockObj({})];
-                    (res as any).first = () => res[0];
-                    return res;
-                }
-                return [];
-            }
-        } as any;
-        const adj = s.parseColorAdjustments(dto);
-        expect(adj.contrast).toBe(1);
+      const dto = {
+        byProtocol: (proto: string) => {
+          if (proto === 'RVColor') {
+            const res = [mockObj({})];
+            (res as any).first = () => res[0];
+            return res;
+          }
+          return [];
+        },
+      } as any;
+      const adj = s.parseColorAdjustments(dto);
+      expect(adj.contrast).toBe(1);
     });
 
     it('parseChannelMode and Stereo mapping coverage', () => {
-        const s = session as any;
-        const testChannel = (val: number, expected: string) => {
-            const node = { component: (c: string) => ({ exists: () => true, property: () => ({ value: () => c === 'parameters' ? val : 1 }) }) };
-            const results = [node];
-            const dto = { byProtocol: () => results } as any;
-            expect(s.parseChannelMode(dto)).toBe(expected);
+      const s = session as any;
+      const testChannel = (val: number, expected: string) => {
+        const node = {
+          component: (c: string) => ({
+            exists: () => true,
+            property: () => ({ value: () => (c === 'parameters' ? val : 1) }),
+          }),
         };
-        testChannel(1, 'green');
-        testChannel(5, 'luminance');
-        testChannel(99, 'rgb'); // default
+        const results = [node];
+        const dto = { byProtocol: () => results } as any;
+        expect(s.parseChannelMode(dto)).toBe(expected);
+      };
+      testChannel(1, 'green');
+      testChannel(5, 'luminance');
+      testChannel(99, 'rgb'); // default
 
-        const testStereo = (type: string, mode: string) => {
-            const node = { component: () => ({ exists: () => true, property: (p: string) => ({ value: () => p === 'type' ? type : 0 }) }) };
-            const results = [node];
-            (results as any).first = () => node;
-            const dto = { byProtocol: () => results } as any;
-            expect(s.parseStereo(dto).mode).toBe(mode);
+      const testStereo = (type: string, mode: string) => {
+        const node = {
+          component: () => ({
+            exists: () => true,
+            property: (p: string) => ({ value: () => (p === 'type' ? type : 0) }),
+          }),
         };
-        testStereo('vsqueezed', 'over-under');
-        testStereo('checker', 'checkerboard');
-        testStereo('unknown', 'off');
+        const results = [node];
+        (results as any).first = () => node;
+        const dto = { byProtocol: () => results } as any;
+        expect(s.parseStereo(dto).mode).toBe(mode);
+      };
+      testStereo('vsqueezed', 'over-under');
+      testStereo('checker', 'checkerboard');
+      testStereo('unknown', 'off');
     });
 
     it('parseCDL RVLinearize path', () => {
-        const s = session as any;
-        const mockObj = (data: any): any => ({
-            exists: () => data !== undefined,
-            property: (name: string) => ({
-                value: () => data?.[name],
-                exists: () => data && name in data
-            }),
-            component: (name: string) => mockObj(data?.[name])
-        });
+      const s = session as any;
+      const mockObj = (data: any): any => ({
+        exists: () => data !== undefined,
+        property: (name: string) => ({
+          value: () => data?.[name],
+          exists: () => data && name in data,
+        }),
+        component: (name: string) => mockObj(data?.[name]),
+      });
 
-        const dto = {
-            byProtocol: (proto: string) => {
-                if (proto === 'RVLinearize') return [mockObj({ CDL: { active: 1, slope: [2,2,2], offset: [0,0,0], power: [1,1,1], saturation: 1 } })];
-                return [];
-            }
-        } as any;
-        const cdl = s.parseCDL(dto);
-        expect(cdl.slope.r).toBe(2);
+      const dto = {
+        byProtocol: (proto: string) => {
+          if (proto === 'RVLinearize') {
+            return [
+              mockObj({ CDL: { active: 1, slope: [2, 2, 2], offset: [0, 0, 0], power: [1, 1, 1], saturation: 1 } }),
+            ];
+          }
+          return [];
+        },
+      } as any;
+      const cdl = s.parseCDL(dto);
+      expect(cdl.slope.r).toBe(2);
     });
 
     it('A/B switching and clearing coverage', () => {
-        session.setSources([
-            { type: 'image', name: 'a', url: 'a.png', width: 1, height: 1, duration: 1, fps: 24 },
-            { type: 'image', name: 'b', url: 'b.png', width: 1, height: 1, duration: 1, fps: 24 },
-            { type: 'image', name: 'c', url: 'c.png', width: 1, height: 1, duration: 1, fps: 24 }
-        ]);
-        session.setSourceB(1);
+      session.setSources([
+        { type: 'image', name: 'a', url: 'a.png', width: 1, height: 1, duration: 1, fps: 24 },
+        { type: 'image', name: 'b', url: 'b.png', width: 1, height: 1, duration: 1, fps: 24 },
+        { type: 'image', name: 'c', url: 'c.png', width: 1, height: 1, duration: 1, fps: 24 },
+      ]);
+      session.setSourceB(1);
 
-        // setSourceA while A is active
-        session.setCurrentAB('A');
-        session.setSourceA(2);
-        expect(session.currentSourceIndex).toBe(2);
+      // setSourceA while A is active
+      session.setCurrentAB('A');
+      session.setSourceA(2);
+      expect(session.currentSourceIndex).toBe(2);
 
-        // setSourceB while B is active
-        session.setCurrentAB('B');
-        session.setSourceB(0);
-        expect(session.currentSourceIndex).toBe(0);
+      // setSourceB while B is active
+      session.setCurrentAB('B');
+      session.setSourceB(0);
+      expect(session.currentSourceIndex).toBe(0);
 
-        // clearSourceB while B is active
-        session.setCurrentAB('B');
-        session.clearSourceB();
-        expect(session.currentAB).toBe('A');
-        expect(session.currentSourceIndex).toBe(2);
+      // clearSourceB while B is active
+      session.setCurrentAB('B');
+      session.clearSourceB();
+      expect(session.currentAB).toBe('A');
+      expect(session.currentSourceIndex).toBe(2);
     });
 
     it('parsePaintAnnotations with annotation component', () => {
-        const s = session as any;
-        const dto = createMockDTO({
-            RVPaint: [{
-                'frame:1': { order: [] },
-                annotation: { ghost: 1, active: 1 }
-            }]
-        });
-        const emitSpy = vi.spyOn(session, 'emit');
-        s.parsePaintAnnotations(dto, 1);
-        expect(emitSpy).toHaveBeenCalledWith('annotationsLoaded', expect.anything());
+      const s = session as any;
+      const dto = createMockDTO({
+        RVPaint: [
+          {
+            'frame:1': { order: [] },
+            annotation: { ghost: 1, active: 1 },
+          },
+        ],
+      });
+      const emitSpy = vi.spyOn(session, 'emit');
+      s.parsePaintAnnotations(dto, 1);
+      expect(emitSpy).toHaveBeenCalledWith('annotationsLoaded', expect.anything());
     });
 
     it('sequence frame negative paths', async () => {
-        session.setSources([{ type: 'image', name: 'i', url: '', width: 1, height: 1, duration: 1, fps: 1 }]);
-        expect(await session.getSequenceFrameImage(1)).toBeNull();
-        expect(session.getSequenceFrameSync(1)).toBeNull();
+      session.setSources([{ type: 'image', name: 'i', url: '', width: 1, height: 1, duration: 1, fps: 1 }]);
+      expect(await session.getSequenceFrameImage(1)).toBeNull();
+      expect(session.getSequenceFrameSync(1)).toBeNull();
 
-        session.setSources([{ type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] }]);
-        expect(await session.getSequenceFrameImage(10)).toBeNull();
+      session.setSources([
+        { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] },
+      ]);
+      expect(await session.getSequenceFrameImage(10)).toBeNull();
     });
 
     it('parsePenStroke edge cases', () => {
-        const s = session as any;
-        const testPen = (overrides: any) => {
-            const comp = {
-                points: [[0,0], [1,1]], color: [1,1,1,1], width: [0.1],
-                ...overrides
-            };
-            return s.parsePenStroke('pen:1:1:user', 1, {
-                property: (name: string) => ({ value: () => (comp as any)[name], exists: () => name in comp })
-            } as any, 1);
+      const s = session as any;
+      const testPen = (overrides: any) => {
+        const comp = {
+          points: [
+            [0, 0],
+            [1, 1],
+          ],
+          color: [1, 1, 1, 1],
+          width: [0.1],
+          ...overrides,
         };
+        return s.parsePenStroke(
+          'pen:1:1:user',
+          1,
+          {
+            property: (name: string) => ({ value: () => (comp as any)[name], exists: () => name in comp }),
+          } as any,
+          1,
+        );
+      };
 
-        expect(testPen({ join: 0 }).join).toBe(2); // Miter is internal 2
-        expect(testPen({ join: 2 }).join).toBe(1); // Bevel is internal 1
-        expect(testPen({ cap: 0 }).cap).toBe(0); // NoCap is internal 0
-        expect(testPen({ cap: 2 }).cap).toBe(1); // Square is internal 1
+      expect(testPen({ join: 0 }).join).toBe(2); // Miter is internal 2
+      expect(testPen({ join: 2 }).join).toBe(1); // Bevel is internal 1
+      expect(testPen({ cap: 0 }).cap).toBe(0); // NoCap is internal 0
+      expect(testPen({ cap: 2 }).cap).toBe(1); // Square is internal 1
 
-        // Empty points
-        const emptyPen = s.parsePenStroke('pen:1', 1, {
-            property: (_name: string) => ({ value: () => [], exists: () => true })
-        } as any, 1);
-        expect(emptyPen).toBeNull();
+      // Empty points
+      const emptyPen = s.parsePenStroke(
+        'pen:1',
+        1,
+        {
+          property: (_name: string) => ({ value: () => [], exists: () => true }),
+        } as any,
+        1,
+      );
+      expect(emptyPen).toBeNull();
     });
 
     it('video loop resets to inPoint', () => {
-        const video = createMockVideo(100, 0);
-        Object.setPrototypeOf(video, HTMLVideoElement.prototype);
-        const source: MediaSource = {
-            type: 'video', name: 'v', url: 'v.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video
-        };
-        session.setSources([source]);
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      const source: MediaSource = {
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      };
+      session.setSources([source]);
 
-        session.setOutPoint(20);
-        session.setInPoint(10);
-        session.loopMode = 'loop';
-        session.play();
+      session.setOutPoint(20);
+      session.setInPoint(10);
+      session.loopMode = 'loop';
+      session.play();
 
-        // Simulate video ended or reached outPoint
-        video.currentTime = 21/24;
-        session.update();
-        expect(video.currentTime).toBe(9/24); // (10-1)/24
+      // Simulate video ended or reached outPoint
+      video.currentTime = 21 / 24;
+      session.update();
+      expect(video.currentTime).toBe(9 / 24); // (10-1)/24
     });
 
     it('parseSession with session component details', async () => {
-        const dto = createMockDTO({
-            RVSession: [{
-                session: {
-                    frame: 15,
-                    range: [[5, 25]], // nested array path
-                    marks: [10, 20]
-                }
-            }]
-        });
-        (session as any)._sessionGraph.parseSession(dto);
-        expect(session.currentFrame).toBe(15);
-        expect(session.inPoint).toBe(5);
-        expect(session.outPoint).toBe(25);
-        expect(session.marks.has(10)).toBe(true);
+      const dto = createMockDTO({
+        RVSession: [
+          {
+            session: {
+              frame: 15,
+              range: [[5, 25]], // nested array path
+              marks: [10, 20],
+            },
+          },
+        ],
+      });
+      (session as any)._sessionGraph.parseSession(dto);
+      expect(session.currentFrame).toBe(15);
+      expect(session.inPoint).toBe(5);
+      expect(session.outPoint).toBe(25);
+      expect(session.marks.has(10)).toBe(true);
     });
 
     it('resolveRange extra paths', () => {
-        const s = session as any;
-        const testRange = (val: any) => {
-            const dto = createMockDTO({ RVSession: [{ session: { range: val } }] });
-            s._sessionGraph.parseSession(dto);
-            return [session.inPoint, session.outPoint];
-        };
+      const s = session as any;
+      const testRange = (val: any) => {
+        const dto = createMockDTO({ RVSession: [{ session: { range: val } }] });
+        s._sessionGraph.parseSession(dto);
+        return [session.inPoint, session.outPoint];
+      };
 
-        expect(testRange([10, 20])).toEqual([10, 20]);
-        expect(testRange(new Int32Array([30, 40]))).toEqual([30, 40]);
-        expect(testRange([[50, 60]])).toEqual([50, 60]);
-        expect(testRange([[100, 110], [120, 130]])).toEqual([100, 110]); // Line 634 path
-        expect(testRange([100])).toEqual([100, 110]); // invalid, should keep previous
+      expect(testRange([10, 20])).toEqual([10, 20]);
+      expect(testRange(new Int32Array([30, 40]))).toEqual([30, 40]);
+      expect(testRange([[50, 60]])).toEqual([50, 60]);
+      expect(
+        testRange([
+          [100, 110],
+          [120, 130],
+        ]),
+      ).toEqual([100, 110]); // Line 634 path
+      expect(testRange([100])).toEqual([100, 110]); // invalid, should keep previous
     });
 
     it('parseSession with file sources and settings', () => {
-        const dto = createMockDTO({
-            RVFileSource: [
-                {
-                    proxy: { size: [1920, 1080] },
-                    media: { movie: 'test.mov' }
-                }
-            ],
-            Histogram: [{ node: { active: 1 } }],
-            RVDisplayStereo: [{ stereo: { type: 'pair', swap: 1, relativeOffset: 0.1 } }]
-        });
-        const spy = vi.fn();
-        session.on('settingsLoaded', spy);
-        (session as any)._sessionGraph.parseSession(dto);
-        expect(spy).toHaveBeenCalled();
-        const settings = spy.mock.calls[0][0];
-        expect(settings.scopes.histogram).toBe(true);
+      const dto = createMockDTO({
+        RVFileSource: [
+          {
+            proxy: { size: [1920, 1080] },
+            media: { movie: 'test.mov' },
+          },
+        ],
+        Histogram: [{ node: { active: 1 } }],
+        RVDisplayStereo: [{ stereo: { type: 'pair', swap: 1, relativeOffset: 0.1 } }],
+      });
+      const spy = vi.fn();
+      session.on('settingsLoaded', spy);
+      (session as any)._sessionGraph.parseSession(dto);
+      expect(spy).toHaveBeenCalled();
+      const settings = spy.mock.calls[0][0];
+      expect(settings.scopes.histogram).toBe(true);
     });
 
     it('setPlaybackState coverage', () => {
-        session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 1000, fps: 24 }]);
-        session.setOutPoint(1000);
-        session.setPlaybackState({
-            outPoint: 100,
-            inPoint: 10,
-            currentFrame: 50,
-            loopMode: 'once',
-            volume: 0.5,
-            muted: true,
-            marks: [5, 15]
-        });
-        expect(session.currentFrame).toBe(50);
-        expect(session.loopMode).toBe('once');
-        expect(session.volume).toBe(0.5);
-        expect(session.muted).toBe(true);
-        expect(session.inPoint).toBe(10);
-        expect(session.outPoint).toBe(100);
-        expect(session.marks.has(5)).toBe(true);
+      session.setSources([
+        { type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 1000, fps: 24 },
+      ]);
+      session.setOutPoint(1000);
+      session.setPlaybackState({
+        outPoint: 100,
+        inPoint: 10,
+        currentFrame: 50,
+        loopMode: 'once',
+        volume: 0.5,
+        muted: true,
+        marks: [5, 15],
+      });
+      expect(session.currentFrame).toBe(50);
+      expect(session.loopMode).toBe('once');
+      expect(session.volume).toBe(0.5);
+      expect(session.muted).toBe(true);
+      expect(session.inPoint).toBe(10);
+      expect(session.outPoint).toBe(100);
+      expect(session.marks.has(5)).toBe(true);
     });
 
     it('currentFrame setter emits', () => {
-        const spy = vi.fn();
-        session.on('frameChanged', spy);
-        session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24 }]);
-        session.setOutPoint(100);
-        session.currentFrame = 33;
-        expect(session.currentFrame).toBe(33);
-        expect(spy).toHaveBeenCalledWith(33);
+      const spy = vi.fn();
+      session.on('frameChanged', spy);
+      session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24 }]);
+      session.setOutPoint(100);
+      session.currentFrame = 33;
+      expect(session.currentFrame).toBe(33);
+      expect(spy).toHaveBeenCalledWith(33);
     });
 
     it('syncVideoToFrame edge cases', () => {
-        const video = createMockVideo(100, 0);
-        Object.setPrototypeOf(video, HTMLVideoElement.prototype);
-        session.setSources([{
-            type: 'video', name: 'v', url: 'v.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video
-        }]);
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
 
-        // When diff < threshold (1/fps/2 = 1/48 = 0.0208), it should NOT sync
-        // frame 10 at 24fps -> target is (10-1)/24 = 0.375
-        video.currentTime = 0.375 + 0.01; // diff = 0.01 < 0.02
-        (session as any)._currentFrame = 10;
-        (session as any)._playback.syncVideoToFrame();
-        expect(video.currentTime).toBe(0.385); // No change
+      // When diff < threshold (1/fps/2 = 1/48 = 0.0208), it should NOT sync
+      // frame 10 at 24fps -> target is (10-1)/24 = 0.375
+      video.currentTime = 0.375 + 0.01; // diff = 0.01 < 0.02
+      (session as any)._currentFrame = 10;
+      (session as any)._playback.syncVideoToFrame();
+      expect(video.currentTime).toBe(0.385); // No change
 
-        // When diff > threshold, it should sync
-        video.currentTime = 0;
-        (session as any)._playback.syncVideoToFrame();
-        expect(video.currentTime).toBeCloseTo(0.375, 5);
+      // When diff > threshold, it should sync
+      video.currentTime = 0;
+      (session as any)._playback.syncVideoToFrame();
+      expect(video.currentTime).toBeCloseTo(0.375, 5);
     });
 
     it('loadFromGTO handles graph parse error gracefully', async () => {
-        const gtoJs = await import('gto-js');
-        vi.spyOn(gtoJs.SimpleReader.prototype, 'open').mockImplementation((_c, _n) => true);
-        (gtoJs.SimpleReader.prototype as any).result = {};
+      const gtoJs = await import('gto-js');
+      vi.spyOn(gtoJs.SimpleReader.prototype, 'open').mockImplementation((_c, _n) => true);
+      (gtoJs.SimpleReader.prototype as any).result = {};
 
-        const loader = await import('./GTOGraphLoader');
-        vi.spyOn(loader, 'loadGTOGraph').mockImplementation(() => { throw new Error('graph fail'); });
+      const loader = await import('./GTOGraphLoader');
+      vi.spyOn(loader, 'loadGTOGraph').mockImplementation(() => {
+        throw new Error('graph fail');
+      });
 
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        await session.loadFromGTO('GTOa 1.0');
-        expect(warnSpy).toHaveBeenCalledWith('[SessionGraph]', expect.stringContaining('Failed to load node graph'), 'graph fail');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await session.loadFromGTO('GTOa 1.0');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[SessionGraph]',
+        expect.stringContaining('Failed to load node graph'),
+        'graph fail',
+      );
     });
 
     it('loadFromGTO handles success with graph info', async () => {
-        const gtoJs = await import('gto-js');
-        vi.spyOn(gtoJs.SimpleReader.prototype, 'open').mockImplementation((_c, _n) => true);
-        (gtoJs.SimpleReader.prototype as any).result = {};
+      const gtoJs = await import('gto-js');
+      vi.spyOn(gtoJs.SimpleReader.prototype, 'open').mockImplementation((_c, _n) => true);
+      (gtoJs.SimpleReader.prototype as any).result = {};
 
-        const loader = await import('./GTOGraphLoader');
-        vi.spyOn(loader, 'loadGTOGraph').mockImplementation(() => ({
+      const loader = await import('./GTOGraphLoader');
+      vi.spyOn(loader, 'loadGTOGraph').mockImplementation(
+        () =>
+          ({
             graph: new Graph(),
             rootNode: { name: 'root' },
             nodes: new Map([['n', {}]]),
-            sessionInfo: { fps: 30, frame: 10, inPoint: 5, outPoint: 20, marks: [7, 8] }
-        }) as any);
+            sessionInfo: { fps: 30, frame: 10, inPoint: 5, outPoint: 20, marks: [7, 8] },
+          }) as any,
+      );
 
-        await session.loadFromGTO('GTOa 1.0');
-        expect(session.fps).toBe(30);
-        expect(session.currentFrame).toBe(10);
-        expect(session.inPoint).toBe(5);
-        expect(session.outPoint).toBe(20);
-        expect(session.marks.has(7)).toBe(true);
+      await session.loadFromGTO('GTOa 1.0');
+      expect(session.fps).toBe(30);
+      expect(session.currentFrame).toBe(10);
+      expect(session.inPoint).toBe(5);
+      expect(session.outPoint).toBe(20);
+      expect(session.marks.has(7)).toBe(true);
     });
 
     it('extra logic coverage', () => {
-        const s = session as any;
-        session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24 }]);
-        session.setOutPoint(100);
+      const s = session as any;
+      session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24 }]);
+      session.setOutPoint(100);
 
-        // gtoData
-        expect(session.gtoData).toBeNull();
+      // gtoData
+      expect(session.gtoData).toBeNull();
 
-        // Navigation
-        session.stepForward();
-        expect(session.currentFrame).toBe(2);
-        session.stepBackward();
-        expect(session.currentFrame).toBe(1);
-        session.goToFrame(10);
-        expect(session.currentFrame).toBe(10);
-        session.goToStart();
-        expect(session.currentFrame).toBe(session.inPoint);
-        session.goToEnd();
-        expect(session.currentFrame).toBe(session.outPoint);
+      // Navigation
+      session.stepForward();
+      expect(session.currentFrame).toBe(2);
+      session.stepBackward();
+      expect(session.currentFrame).toBe(1);
+      session.goToFrame(10);
+      expect(session.currentFrame).toBe(10);
+      session.goToStart();
+      expect(session.currentFrame).toBe(session.inPoint);
+      session.goToEnd();
+      expect(session.currentFrame).toBe(session.outPoint);
 
-        // play() in reverse
-        const video = createMockVideo(100, 0);
-        Object.setPrototypeOf(video, HTMLVideoElement.prototype);
-        session.setSources([{
-            type: 'video', name: 'v', url: 'v.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video
-        }]);
-        session.goToFrame(10);
-        s._playDirection = -1;
-        s.lastFrameTime = performance.now();
-        session.play();
-        expect(video.pause).toHaveBeenCalled();
-        session.update(); // trigger reverse seek logic
-        expect(video.currentTime).toBeCloseTo(0.375, 5); // (10-1)/24 = 0.375
+      // play() in reverse
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      session.setSources([
+        {
+          type: 'video',
+          name: 'v',
+          url: 'v.mp4',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+          element: video,
+        },
+      ]);
+      session.goToFrame(10);
+      s._playDirection = -1;
+      s.lastFrameTime = performance.now();
+      session.play();
+      expect(video.pause).toHaveBeenCalled();
+      session.update(); // trigger reverse seek logic
+      expect(video.currentTime).toBeCloseTo(0.375, 5); // (10-1)/24 = 0.375
 
-        // togglePlayDirection while playing with video
-        s._isPlaying = true;
-        s._playDirection = 1;
-        session.togglePlayDirection(); // switch to -1
-        expect(video.pause).toHaveBeenCalled();
-        session.togglePlayDirection(); // switch to 1
-        expect(video.play).toHaveBeenCalled();
+      // togglePlayDirection while playing with video
+      s._isPlaying = true;
+      s._playDirection = 1;
+      session.togglePlayDirection(); // switch to -1
+      expect(video.pause).toHaveBeenCalled();
+      session.togglePlayDirection(); // switch to 1
+      expect(video.play).toHaveBeenCalled();
 
-        // setOutPoint clamps currentFrame
-        session.currentFrame = 100;
-        session.setOutPoint(50);
-        expect(session.currentFrame).toBe(50);
+      // setOutPoint clamps currentFrame
+      session.currentFrame = 100;
+      session.setOutPoint(50);
+      expect(session.currentFrame).toBe(50);
 
-        // marks toggling
-        session.toggleMark(); // without args
-        expect(session.marks.has(50)).toBe(true);
-        session.toggleMark(10);
-        expect(session.marks.has(10)).toBe(true);
-        session.toggleMark(10);
-        expect(session.marks.has(10)).toBe(false);
+      // marks toggling
+      session.toggleMark(); // without args
+      expect(session.marks.has(50)).toBe(true);
+      session.toggleMark(10);
+      expect(session.marks.has(10)).toBe(true);
+      session.toggleMark(10);
+      expect(session.marks.has(10)).toBe(false);
 
-        // parseChannelMode continue
-        const dto = createMockDTO({
-            ChannelSelect: [
-                { node: { active: 0 } },
-                { node: { active: 1 }, parameters: { channel: 4 } }
-            ]
-        });
-        expect(s.parseChannelMode(dto)).toBe('rgb');
+      // parseChannelMode continue
+      const dto = createMockDTO({
+        ChannelSelect: [{ node: { active: 0 } }, { node: { active: 1 }, parameters: { channel: 4 } }],
+      });
+      expect(s.parseChannelMode(dto)).toBe('rgb');
 
-        // getNumberArray edge cases
-        expect(s.getNumberArray('not an array')).toBeUndefined();
-        expect(s.getNumberArray([1, 'mix', 2])).toEqual([1, 2]);
+      // getNumberArray edge cases
+      expect(s.getNumberArray('not an array')).toBeUndefined();
+      expect(s.getNumberArray([1, 'mix', 2])).toEqual([1, 2]);
 
-        // setSources index clamp - this test needs to be revisited if _currentSourceIndex is not clamped in setSources
-        s._currentSourceIndex = 10;
-        session.setSources([]);
+      // setSources index clamp - this test needs to be revisited if _currentSourceIndex is not clamped in setSources
+      s._currentSourceIndex = 10;
+      session.setSources([]);
     });
 
     it('paint and CDL edge cases', () => {
-        const s = session as any;
+      const s = session as any;
 
-        // CDL failure and active=0 and RVLinearize path
-        const dtoCDL = createMockDTO({
-            RVLinearize: [{ CDL: { active: 1, slope: [1,1,1], offset: [0,0,0], power: [1,1,1], saturation: 1 } }]
-        });
-        expect(s.parseCDL(dtoCDL)).not.toBeNull();
+      // CDL failure and active=0 and RVLinearize path
+      const dtoCDL = createMockDTO({
+        RVLinearize: [{ CDL: { active: 1, slope: [1, 1, 1], offset: [0, 0, 0], power: [1, 1, 1], saturation: 1 } }],
+      });
+      expect(s.parseCDL(dtoCDL)).not.toBeNull();
 
-        // Paint tag effects JSON and error paths
-        const effects = s.parsePaintTagEffects('{"ghost": true, "ghostafter": 5, "unknown": 1}');
-        expect(effects.ghost).toBe(true);
-        expect(effects.ghostAfter).toBe(5);
-        expect(s.parsePaintTagEffects('not json or tags')).toBeNull();
-        expect(s.parsePaintTagEffects('{ invalid json }')).toBeNull(); // trigger catch
+      // Paint tag effects JSON and error paths
+      const effects = s.parsePaintTagEffects('{"ghost": true, "ghostafter": 5, "unknown": 1}');
+      expect(effects.ghost).toBe(true);
+      expect(effects.ghostAfter).toBe(5);
+      expect(s.parsePaintTagEffects('not json or tags')).toBeNull();
+      expect(s.parsePaintTagEffects('{ invalid json }')).toBeNull(); // trigger catch
 
-        // parsePenStroke flat points and numeric width
-        const penComp = {
-            points: [0,0, 1,1], color: [1,1,1,1], width: 0.5
-        };
-        const pen = s.parsePenStroke('pen:1', 1, {
-            property: (name: string) => ({ value: () => (penComp as any)[name], exists: () => name in penComp })
-        } as any, 1);
-        expect(pen.points.length).toBe(2);
-        expect(pen.width).toBe(0.5 * 500); // RV_PEN_WIDTH_SCALE=500
+      // parsePenStroke flat points and numeric width
+      const penComp = {
+        points: [0, 0, 1, 1],
+        color: [1, 1, 1, 1],
+        width: 0.5,
+      };
+      const pen = s.parsePenStroke(
+        'pen:1',
+        1,
+        {
+          property: (name: string) => ({ value: () => (penComp as any)[name], exists: () => name in penComp }),
+        } as any,
+        1,
+      );
+      expect(pen.points.length).toBe(2);
+      expect(pen.width).toBe(0.5 * 500); // RV_PEN_WIDTH_SCALE=500
 
-        // parsePaintAnnotations with frame component and tag effects
-        const dtoPaint = createMockDTO({
-            RVPaint: [{
-                'frame:15': { order: ['pen:1', 'text:1', 'unknown:1'] },
-                'pen:1': { points: [0,0, 1,1], color: [1,1,1,1], width: 0.5 },
-                'text:1': { position: [0,0], color: [1,1,1,1], text: 'hi' },
-                'tagEffects': { 'tag:default': 'exposure=2.5; ghost' },
-                'annotation': {} // extra component
-            }]
-        });
-        s.parsePaintAnnotations(dtoPaint, 1);
+      // parsePaintAnnotations with frame component and tag effects
+      const dtoPaint = createMockDTO({
+        RVPaint: [
+          {
+            'frame:15': { order: ['pen:1', 'text:1', 'unknown:1'] },
+            'pen:1': { points: [0, 0, 1, 1], color: [1, 1, 1, 1], width: 0.5 },
+            'text:1': { position: [0, 0], color: [1, 1, 1, 1], text: 'hi' },
+            tagEffects: { 'tag:default': 'exposure=2.5; ghost' },
+            annotation: {}, // extra component
+          },
+        ],
+      });
+      s.parsePaintAnnotations(dtoPaint, 1);
 
-        // parseCrop edge cases
-        const dtoCrop = createMockDTO({
-            RVFormat: [{ crop: { active: 0 } }]
-        });
-        expect(s.parseCrop(dtoCrop, { width: 100, height: 100 })).toBeNull();
+      // parseCrop edge cases
+      const dtoCrop = createMockDTO({
+        RVFormat: [{ crop: { active: 0 } }],
+      });
+      expect(s.parseCrop(dtoCrop, { width: 100, height: 100 })).toBeNull();
 
-        // getBooleanValue array of number
-        expect(s.getBooleanValue([1])).toBe(true);
-        expect(s.getBooleanValue([0])).toBe(false);
+      // getBooleanValue array of number
+      expect(s.getBooleanValue([1])).toBe(true);
+      expect(s.getBooleanValue([0])).toBe(false);
 
-        // parseChannelMode loop return null
-        const dtoChannel = createMockDTO({
-            ChannelSelect: [{ node: { active: 1 } }]
-        });
-        expect(s.parseChannelMode(dtoChannel)).toBeNull();
+      // parseChannelMode loop return null
+      const dtoChannel = createMockDTO({
+        ChannelSelect: [{ node: { active: 1 } }],
+      });
+      expect(s.parseChannelMode(dtoChannel)).toBeNull();
     });
 
     it('forward playback wrapping overrides', () => {
-        session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 20, fps: 24 }]);
-        session.setInPoint(10);
-        session.setOutPoint(15);
+      session.setSources([{ type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 20, fps: 24 }]);
+      session.setInPoint(10);
+      session.setOutPoint(15);
 
-        session.currentFrame = 15;
-        session.loopMode = 'once';
-        session.play();
-        (session as any).advanceFrame(1);
-        expect(session.isPlaying).toBe(false);
-        expect(session.currentFrame).toBe(15);
+      session.currentFrame = 15;
+      session.loopMode = 'once';
+      session.play();
+      (session as any).advanceFrame(1);
+      expect(session.isPlaying).toBe(false);
+      expect(session.currentFrame).toBe(15);
 
-        session.currentFrame = 15;
-        session.loopMode = 'loop';
-        session.play();
-        (session as any).advanceFrame(1);
-        expect(session.currentFrame).toBe(10);
+      session.currentFrame = 15;
+      session.loopMode = 'loop';
+      session.play();
+      (session as any).advanceFrame(1);
+      expect(session.currentFrame).toBe(10);
 
-        session.currentFrame = 15;
-        session.loopMode = 'pingpong';
-        session.play();
-        (session as any).advanceFrame(1);
-        expect(session.playDirection).toBe(-1);
-        expect(session.currentFrame).toBe(14);
+      session.currentFrame = 15;
+      session.loopMode = 'pingpong';
+      session.play();
+      (session as any).advanceFrame(1);
+      expect(session.playDirection).toBe(-1);
+      expect(session.currentFrame).toBe(14);
     });
   });
 
@@ -1282,34 +1406,64 @@ describe('Session', () => {
     });
 
     it('SES-IMG-002: returns true for image source', () => {
-      session.setSources([{
-        name: 'photo.png', url: 'blob:test', type: 'image',
-        duration: 1, fps: 24, width: 1920, height: 1080,
-      }]);
+      session.setSources([
+        {
+          name: 'photo.png',
+          url: 'blob:test',
+          type: 'image',
+          duration: 1,
+          fps: 24,
+          width: 1920,
+          height: 1080,
+        },
+      ]);
       expect(session.isSingleImage).toBe(true);
     });
 
     it('SES-IMG-003: returns false for video source', () => {
-      session.setSources([{
-        name: 'clip.mp4', url: 'blob:test', type: 'video',
-        duration: 100, fps: 24, width: 1920, height: 1080,
-        element: document.createElement('video'),
-      }]);
+      session.setSources([
+        {
+          name: 'clip.mp4',
+          url: 'blob:test',
+          type: 'video',
+          duration: 100,
+          fps: 24,
+          width: 1920,
+          height: 1080,
+          element: document.createElement('video'),
+        },
+      ]);
       expect(session.isSingleImage).toBe(false);
     });
 
     it('SES-IMG-004: returns false for sequence source', () => {
-      session.setSources([{
-        name: 'frame_001.exr', url: 'blob:test', type: 'sequence',
-        duration: 50, fps: 24, width: 1920, height: 1080,
-      }]);
+      session.setSources([
+        {
+          name: 'frame_001.exr',
+          url: 'blob:test',
+          type: 'sequence',
+          duration: 50,
+          fps: 24,
+          width: 1920,
+          height: 1080,
+        },
+      ]);
       expect(session.isSingleImage).toBe(false);
     });
 
     it('SES-IMG-005: updates when switching sources', () => {
       session.setSources([
         { name: 'photo.png', url: 'blob:a', type: 'image', duration: 1, fps: 24, width: 100, height: 100 },
-        { name: 'clip.mp4', url: 'blob:b', type: 'video', duration: 100, fps: 24, width: 100, height: 100, element: document.createElement('video') },
+        {
+          name: 'clip.mp4',
+          url: 'blob:b',
+          type: 'video',
+          duration: 100,
+          fps: 24,
+          width: 100,
+          height: 100,
+          element: document.createElement('video'),
+        },
       ]);
       session.setCurrentSource(0);
       expect(session.isSingleImage).toBe(true);
@@ -1320,47 +1474,82 @@ describe('Session', () => {
 
   describe('image mode edge cases', () => {
     it('EDGE-IMG-001: togglePlayback with image source does not throw', () => {
-      session.setSources([{
-        name: 'photo.png', url: 'blob:test', type: 'image',
-        duration: 1, fps: 24, width: 100, height: 100,
-      }]);
+      session.setSources([
+        {
+          name: 'photo.png',
+          url: 'blob:test',
+          type: 'image',
+          duration: 1,
+          fps: 24,
+          width: 100,
+          height: 100,
+        },
+      ]);
       expect(() => session.togglePlayback()).not.toThrow();
       // Session allows play toggle (no error), frame stays at 1
       expect(session.currentFrame).toBe(1);
     });
 
     it('EDGE-IMG-002: stepForward with image source is no-op', () => {
-      session.setSources([{
-        name: 'photo.png', url: 'blob:test', type: 'image',
-        duration: 1, fps: 24, width: 100, height: 100,
-      }]);
+      session.setSources([
+        {
+          name: 'photo.png',
+          url: 'blob:test',
+          type: 'image',
+          duration: 1,
+          fps: 24,
+          width: 100,
+          height: 100,
+        },
+      ]);
       session.stepForward();
       expect(session.currentFrame).toBe(1);
     });
 
     it('EDGE-IMG-003: stepBackward with image source is no-op', () => {
-      session.setSources([{
-        name: 'photo.png', url: 'blob:test', type: 'image',
-        duration: 1, fps: 24, width: 100, height: 100,
-      }]);
+      session.setSources([
+        {
+          name: 'photo.png',
+          url: 'blob:test',
+          type: 'image',
+          duration: 1,
+          fps: 24,
+          width: 100,
+          height: 100,
+        },
+      ]);
       session.stepBackward();
       expect(session.currentFrame).toBe(1);
     });
 
     it('EDGE-IMG-004: goToStart with image source stays at frame 1', () => {
-      session.setSources([{
-        name: 'photo.png', url: 'blob:test', type: 'image',
-        duration: 1, fps: 24, width: 100, height: 100,
-      }]);
+      session.setSources([
+        {
+          name: 'photo.png',
+          url: 'blob:test',
+          type: 'image',
+          duration: 1,
+          fps: 24,
+          width: 100,
+          height: 100,
+        },
+      ]);
       session.goToStart();
       expect(session.currentFrame).toBe(1);
     });
 
     it('EDGE-IMG-005: goToEnd with image source stays at frame 1', () => {
-      session.setSources([{
-        name: 'photo.png', url: 'blob:test', type: 'image',
-        duration: 1, fps: 24, width: 100, height: 100,
-      }]);
+      session.setSources([
+        {
+          name: 'photo.png',
+          url: 'blob:test',
+          type: 'image',
+          duration: 1,
+          fps: 24,
+          width: 100,
+          height: 100,
+        },
+      ]);
       session.goToEnd();
       expect(session.currentFrame).toBe(1);
     });
@@ -1381,9 +1570,7 @@ describe('Session', () => {
       }
     }
 
-    function createTestGraph(
-      nodes: Array<{ type: string; name?: string; props?: Record<string, unknown> }>,
-    ): Graph {
+    function createTestGraph(nodes: Array<{ type: string; name?: string; props?: Record<string, unknown> }>): Graph {
       const graph = new Graph();
       for (const spec of nodes) {
         const node = new ResolverTestNode(spec.type, spec.name);
@@ -1446,9 +1633,7 @@ describe('Session', () => {
     });
 
     it('RP-003: resolves hash address against the live graph', () => {
-      const graph = createTestGraph([
-        { type: 'RVColor', props: { exposure: 1.5 } },
-      ]);
+      const graph = createTestGraph([{ type: 'RVColor', props: { exposure: 1.5 } }]);
       (session as any)._sessionGraph._graph = graph;
 
       const results = session.resolveProperty('#RVColor.color.exposure');
@@ -1492,9 +1677,7 @@ describe('Session', () => {
     });
 
     it('RP-006: falls back to GTOData at resolution when no graph', () => {
-      const gtoData = createTestGTOData([
-        { name: 'rvDisplay', protocol: 'RVDisplayColor' },
-      ]);
+      const gtoData = createTestGTOData([{ name: 'rvDisplay', protocol: 'RVDisplayColor' }]);
       (session as any)._sessionGraph._gtoData = gtoData;
 
       const results = session.resolveProperty('@RVDisplayColor');
@@ -1504,9 +1687,7 @@ describe('Session', () => {
     });
 
     it('RP-007: prefers graph over GTOData when both are present', () => {
-      const graph = createTestGraph([
-        { type: 'RVColor', props: { exposure: 99.0 } },
-      ]);
+      const graph = createTestGraph([{ type: 'RVColor', props: { exposure: 99.0 } }]);
       const gtoData = createTestGTOData([
         {
           name: 'rvColor',
@@ -1529,18 +1710,14 @@ describe('Session', () => {
     });
 
     it('RP-008: returns null for invalid address with only gtoData', () => {
-      const gtoData = createTestGTOData([
-        { name: 'rvColor', protocol: 'RVColor' },
-      ]);
+      const gtoData = createTestGTOData([{ name: 'rvColor', protocol: 'RVColor' }]);
       (session as any)._sessionGraph._gtoData = gtoData;
 
       expect(session.resolveProperty('invalidFormat')).toBeNull();
     });
 
     it('RP-009: returns empty array for non-matching protocol in graph', () => {
-      const graph = createTestGraph([
-        { type: 'RVColor', props: { exposure: 1.5 } },
-      ]);
+      const graph = createTestGraph([{ type: 'RVColor', props: { exposure: 1.5 } }]);
       (session as any)._sessionGraph._graph = graph;
 
       const results = session.resolveProperty('#RVNonExistent.color.exposure');
@@ -1565,9 +1742,7 @@ describe('Session', () => {
       session.updateMetadata({ realtime: 30 });
 
       expect(session.metadata.realtime).toBe(30);
-      expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ realtime: 30 })
-      );
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({ realtime: 30 }));
     });
 
     it('META-RT-003: updateMetadata with same realtime does not emit', () => {
@@ -1591,9 +1766,7 @@ describe('Session', () => {
       session.updateMetadata({ bgColor: [0.5, 0.5, 0.5, 1.0] });
 
       expect(session.metadata.bgColor).toEqual([0.5, 0.5, 0.5, 1.0]);
-      expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ bgColor: [0.5, 0.5, 0.5, 1.0] })
-      );
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({ bgColor: [0.5, 0.5, 0.5, 1.0] }));
     });
 
     it('META-BG-003: updateMetadata with same bgColor does not emit', () => {
@@ -1675,9 +1848,17 @@ describe('Session', () => {
       const spy = vi.spyOn(coordinator, 'onFrameChanged');
 
       // Set up a source so frame changes are valid
-      session.setSources([{
-        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
-      }]);
+      session.setSources([
+        {
+          name: 'img.png',
+          type: 'image',
+          url: '',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.currentFrame = 10;
@@ -1689,9 +1870,17 @@ describe('Session', () => {
       const coordinator = (session as any)._playback._audioCoordinator;
       const startSpy = vi.spyOn(coordinator, 'onPlaybackStarted');
 
-      session.setSources([{
-        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
-      }]);
+      session.setSources([
+        {
+          name: 'img.png',
+          type: 'image',
+          url: '',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1708,9 +1897,17 @@ describe('Session', () => {
       const coordinator = (session as any)._playback._audioCoordinator;
       const stopSpy = vi.spyOn(coordinator, 'onPlaybackStopped');
 
-      session.setSources([{
-        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
-      }]);
+      session.setSources([
+        {
+          name: 'img.png',
+          type: 'image',
+          url: '',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.play();
@@ -1732,9 +1929,17 @@ describe('Session', () => {
       const coordinator = (session as any)._playback._audioCoordinator;
       const spy = vi.spyOn(coordinator, 'onDirectionChanged');
 
-      session.setSources([{
-        name: 'img.png', type: 'image', url: '', width: 100, height: 100, duration: 100, fps: 24,
-      }]);
+      session.setSources([
+        {
+          name: 'img.png',
+          type: 'image',
+          url: '',
+          width: 100,
+          height: 100,
+          duration: 100,
+          fps: 24,
+        },
+      ]);
       session.setOutPoint(100);
 
       session.togglePlayDirection();
@@ -1760,5 +1965,4 @@ describe('Session', () => {
       expect(spy).toHaveBeenCalledWith(false);
     });
   });
-
 });

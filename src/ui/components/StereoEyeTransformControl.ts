@@ -12,11 +12,11 @@
  * Panel is only visible when stereo mode is active (not "off").
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import {
-  StereoEyeTransformState,
+  type StereoEyeTransformState,
   DEFAULT_EYE_TRANSFORM,
   isDefaultStereoEyeTransformState,
   clampRotation,
@@ -278,7 +278,16 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     flipRow.appendChild(flipV);
 
     // Sliders
-    const rotationRow = this.createSliderRow(eye, 'rotation', 'Rotate', -180, 180, 0.1, 0, (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}\u00b0`);
+    const rotationRow = this.createSliderRow(
+      eye,
+      'rotation',
+      'Rotate',
+      -180,
+      180,
+      0.1,
+      0,
+      (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}\u00b0`,
+    );
     const scaleRow = this.createSliderRow(eye, 'scale', 'Scale', 0.5, 2.0, 0.01, 1.0, (v) => v.toFixed(2));
     const txRow = this.createSliderRow(eye, 'translate-x', 'X', -100, 100, 1, 0, (v) => `${v > 0 ? '+' : ''}${v}px`);
     const tyRow = this.createSliderRow(eye, 'translate-y', 'Y', -100, 100, 1, 0, (v) => `${v > 0 ? '+' : ''}${v}px`);
@@ -327,7 +336,7 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     max: number,
     step: number,
     defaultValue: number,
-    format: (v: number) => string
+    format: (v: number) => string,
   ): HTMLElement {
     const row = document.createElement('div');
     row.style.cssText = 'display: flex; align-items: center; gap: 4px; margin-bottom: 4px;';
@@ -397,11 +406,7 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
   }
 
   private handleOutsideClick(e: MouseEvent): void {
-    if (
-      this.isPanelOpen &&
-      !this.toggleButton.contains(e.target as Node) &&
-      !this.panel.contains(e.target as Node)
-    ) {
+    if (this.isPanelOpen && !this.toggleButton.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
       this.hidePanel();
     }
   }
@@ -464,7 +469,12 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     // Left eye
     this.updateFlipButtonStyle('left', 'h', this.state.left.flipH);
     this.updateFlipButtonStyle('left', 'v', this.state.left.flipV);
-    this.updateSliderUI('left', 'rotation', this.state.left.rotation, (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}\u00b0`);
+    this.updateSliderUI(
+      'left',
+      'rotation',
+      this.state.left.rotation,
+      (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}\u00b0`,
+    );
     this.updateSliderUI('left', 'scale', this.state.left.scale, (v) => v.toFixed(2));
     this.updateSliderUI('left', 'translate-x', this.state.left.translateX, (v) => `${v > 0 ? '+' : ''}${v}px`);
     this.updateSliderUI('left', 'translate-y', this.state.left.translateY, (v) => `${v > 0 ? '+' : ''}${v}px`);
@@ -472,7 +482,12 @@ export class StereoEyeTransformControl extends EventEmitter<StereoEyeTransformEv
     // Right eye
     this.updateFlipButtonStyle('right', 'h', this.state.right.flipH);
     this.updateFlipButtonStyle('right', 'v', this.state.right.flipV);
-    this.updateSliderUI('right', 'rotation', this.state.right.rotation, (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}\u00b0`);
+    this.updateSliderUI(
+      'right',
+      'rotation',
+      this.state.right.rotation,
+      (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}\u00b0`,
+    );
     this.updateSliderUI('right', 'scale', this.state.right.scale, (v) => v.toFixed(2));
     this.updateSliderUI('right', 'translate-x', this.state.right.translateX, (v) => `${v > 0 ? '+' : ''}${v}px`);
     this.updateSliderUI('right', 'translate-y', this.state.right.translateY, (v) => `${v > 0 ? '+' : ''}${v}px`);

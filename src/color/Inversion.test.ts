@@ -38,7 +38,7 @@ describe('Color Inversion', () => {
     it('INV-U004: inverts pure red correctly', () => {
       const imageData = createTestImageData(1, 1, { r: 255, g: 0, b: 0, a: 255 });
       applyColorInversion(imageData);
-      expect(imageData.data[0]).toBe(0);   // R -> 0 (cyan)
+      expect(imageData.data[0]).toBe(0); // R -> 0 (cyan)
       expect(imageData.data[1]).toBe(255); // G -> 255
       expect(imageData.data[2]).toBe(255); // B -> 255
       expect(imageData.data[3]).toBe(255);
@@ -48,7 +48,7 @@ describe('Color Inversion', () => {
       const imageData = createTestImageData(1, 1, { r: 0, g: 255, b: 0, a: 255 });
       applyColorInversion(imageData);
       expect(imageData.data[0]).toBe(255); // R -> 255 (magenta)
-      expect(imageData.data[1]).toBe(0);   // G -> 0
+      expect(imageData.data[1]).toBe(0); // G -> 0
       expect(imageData.data[2]).toBe(255); // B -> 255
       expect(imageData.data[3]).toBe(255);
     });
@@ -58,7 +58,7 @@ describe('Color Inversion', () => {
       applyColorInversion(imageData);
       expect(imageData.data[0]).toBe(255); // R -> 255 (yellow)
       expect(imageData.data[1]).toBe(255); // G -> 255
-      expect(imageData.data[2]).toBe(0);   // B -> 0
+      expect(imageData.data[2]).toBe(0); // B -> 0
       expect(imageData.data[3]).toBe(255);
     });
 

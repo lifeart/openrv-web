@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 
 export type { CropRegion, CropState } from '../../core/types/transform';
@@ -214,8 +214,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       line-height: 1;
     `;
     closeButton.addEventListener('click', () => this.hidePanel());
-    closeButton.addEventListener('pointerenter', () => { closeButton.style.color = 'var(--text-primary)'; });
-    closeButton.addEventListener('pointerleave', () => { closeButton.style.color = 'var(--text-secondary)'; });
+    closeButton.addEventListener('pointerenter', () => {
+      closeButton.style.color = 'var(--text-primary)';
+    });
+    closeButton.addEventListener('pointerleave', () => {
+      closeButton.style.color = 'var(--text-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(closeButton);
@@ -286,7 +290,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       cursor: pointer;
     `;
 
-    ASPECT_RATIOS.forEach(ar => {
+    ASPECT_RATIOS.forEach((ar) => {
       const option = document.createElement('option');
       option.value = ar.value || '';
       option.textContent = ar.label;
@@ -597,8 +601,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       font-size: 11px;
     `;
     resetUncropBtn.addEventListener('click', () => this.resetUncrop());
-    resetUncropBtn.addEventListener('pointerenter', () => { resetUncropBtn.style.background = 'var(--text-muted)'; });
-    resetUncropBtn.addEventListener('pointerleave', () => { resetUncropBtn.style.background = 'var(--border-secondary)'; });
+    resetUncropBtn.addEventListener('pointerenter', () => {
+      resetUncropBtn.style.background = 'var(--text-muted)';
+    });
+    resetUncropBtn.addEventListener('pointerleave', () => {
+      resetUncropBtn.style.background = 'var(--border-secondary)';
+    });
     this.panel.appendChild(resetUncropBtn);
 
     // Initial visibility sync
@@ -608,7 +616,9 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private syncUncropToggle(): void {
     if (this.uncropToggleSwitch) {
       this.uncropToggleSwitch.textContent = this.uncropState.enabled ? 'ON' : 'OFF';
-      this.uncropToggleSwitch.style.background = this.uncropState.enabled ? 'var(--accent-primary)' : 'var(--border-secondary)';
+      this.uncropToggleSwitch.style.background = this.uncropState.enabled
+        ? 'var(--accent-primary)'
+        : 'var(--border-secondary)';
       this.uncropToggleSwitch.setAttribute('aria-checked', String(this.uncropState.enabled));
     }
   }
@@ -684,8 +694,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   }
 
   setSourceDimensions(width: number, height: number): void {
-    this.sourceWidth = (Number.isFinite(width) && width > 0) ? width : 1;
-    this.sourceHeight = (Number.isFinite(height) && height > 0) ? height : 1;
+    this.sourceWidth = Number.isFinite(width) && width > 0 ? width : 1;
+    this.sourceHeight = Number.isFinite(height) && height > 0 ? height : 1;
     this.updateDimensionsLabel();
     this.updateUncropCanvasLabel();
   }
@@ -693,7 +703,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private applyAspectRatio(): void {
     if (!this.state.aspectRatio) return;
 
-    const ar = ASPECT_RATIOS.find(a => a.value === this.state.aspectRatio);
+    const ar = ASPECT_RATIOS.find((a) => a.value === this.state.aspectRatio);
     if (!ar || !ar.ratio) return;
 
     // Convert pixel aspect ratio to normalized coordinate ratio.
@@ -948,7 +958,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
   getAspectRatio(): number | null {
     if (!this.state.aspectRatio) return null;
-    const ar = ASPECT_RATIOS.find(a => a.value === this.state.aspectRatio);
+    const ar = ASPECT_RATIOS.find((a) => a.value === this.state.aspectRatio);
     return ar?.ratio || null;
   }
 

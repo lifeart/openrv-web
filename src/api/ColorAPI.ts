@@ -98,9 +98,18 @@ export class ColorAPI {
 
     // Only allow valid numeric keys - use hasOwnProperty to prevent prototype pollution
     const validKeys: Array<keyof PublicColorAdjustments> = [
-      'exposure', 'gamma', 'saturation', 'contrast',
-      'hueRotation', 'temperature', 'tint', 'brightness',
-      'highlights', 'shadows', 'whites', 'blacks',
+      'exposure',
+      'gamma',
+      'saturation',
+      'contrast',
+      'hueRotation',
+      'temperature',
+      'tint',
+      'brightness',
+      'highlights',
+      'shadows',
+      'whites',
+      'blacks',
     ];
 
     for (const key of validKeys) {
@@ -165,9 +174,12 @@ export class ColorAPI {
     }
     const record = obj as Record<string, unknown>;
     if (
-      typeof record.r !== 'number' || isNaN(record.r) ||
-      typeof record.g !== 'number' || isNaN(record.g) ||
-      typeof record.b !== 'number' || isNaN(record.b)
+      typeof record.r !== 'number' ||
+      isNaN(record.r) ||
+      typeof record.g !== 'number' ||
+      isNaN(record.g) ||
+      typeof record.b !== 'number' ||
+      isNaN(record.b)
     ) {
       throw new ValidationError(`setCDL() "${name}" must be an object with numeric r, g, b fields`);
     }
@@ -301,7 +313,7 @@ export class ColorAPI {
   private applyCurveChannelUpdate(
     channelState: CurveChannel,
     channelName: keyof ColorCurvesData,
-    update: PublicCurveChannelUpdate
+    update: PublicCurveChannelUpdate,
   ): void {
     if (Object.prototype.hasOwnProperty.call(update, 'enabled')) {
       if (typeof update.enabled !== 'boolean') {
@@ -323,11 +335,7 @@ export class ColorAPI {
     }
   }
 
-  private validateCurvePoint(
-    point: unknown,
-    channelName: keyof ColorCurvesData,
-    index: number
-  ): CurvePoint {
+  private validateCurvePoint(point: unknown, channelName: keyof ColorCurvesData, index: number): CurvePoint {
     if (typeof point !== 'object' || point === null || Array.isArray(point)) {
       throw new ValidationError(`setCurves() "${channelName}.points[${index}]" must be an object`);
     }
@@ -335,12 +343,7 @@ export class ColorAPI {
     const record = point as Record<string, unknown>;
     const x = record.x;
     const y = record.y;
-    if (
-      typeof x !== 'number' ||
-      !Number.isFinite(x) ||
-      typeof y !== 'number' ||
-      !Number.isFinite(y)
-    ) {
+    if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
       throw new ValidationError(`setCurves() "${channelName}.points[${index}]" must have finite numeric x/y`);
     }
     if (x < 0 || x > 1 || y < 0 || y > 1) {

@@ -24,14 +24,14 @@ import type { StackCompositeType } from '../nodes/groups/StackGroupNode';
 import { pluginRegistry } from '../plugin/PluginRegistry';
 
 export type BlendMode =
-  | 'normal'      // Standard alpha over
-  | 'add'         // Additive (Linear Dodge)
-  | 'minus'       // Subtractive: clamp(base - top, 0, 1)
-  | 'multiply'    // Multiply
-  | 'screen'      // Screen
-  | 'overlay'     // Overlay
-  | 'difference'  // Difference
-  | 'exclusion';  // Exclusion
+  | 'normal' // Standard alpha over
+  | 'add' // Additive (Linear Dodge)
+  | 'minus' // Subtractive: clamp(base - top, 0, 1)
+  | 'multiply' // Multiply
+  | 'screen' // Screen
+  | 'overlay' // Overlay
+  | 'difference' // Difference
+  | 'exclusion'; // Exclusion
 
 export const BLEND_MODES: BlendMode[] = [
   'normal',
@@ -82,9 +82,7 @@ function blendChannel(a: number, b: number, mode: BlendMode | (string & {})): nu
       result = 1 - (1 - an) * (1 - bn);
       break;
     case 'overlay':
-      result = an < 0.5
-        ? 2 * an * bn
-        : 1 - 2 * (1 - an) * (1 - bn);
+      result = an < 0.5 ? 2 * an * bn : 1 - 2 * (1 - an) * (1 - bn);
       break;
     case 'difference':
       result = Math.abs(an - bn);
@@ -124,7 +122,7 @@ export function compositeImageData(
   top: ImageData,
   mode: BlendMode = 'normal',
   opacity: number = 1,
-  premultiplied: boolean = false
+  premultiplied: boolean = false,
 ): ImageData {
   if (base.width !== top.width || base.height !== top.height) {
     throw new Error('ImageData dimensions must match for compositing');
@@ -242,7 +240,7 @@ export function compositeMultipleLayers(
   layers: CompositeLayer[],
   width: number,
   height: number,
-  premultiplied: boolean = false
+  premultiplied: boolean = false,
 ): ImageData {
   // Start with transparent black
   const result = new ImageData(width, height);

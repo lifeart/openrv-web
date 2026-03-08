@@ -17,7 +17,7 @@ import {
   isDisplayStateActive,
   saveDisplayProfile,
   loadDisplayProfile,
-  DisplayColorState,
+  type DisplayColorState,
 } from './DisplayTransfer';
 
 // Mock localStorage
@@ -218,7 +218,11 @@ describe('DisplayTransfer', () => {
     });
 
     it('DT-034: display brightness 0.5 halves all channels', () => {
-      const state: DisplayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE, transferFunction: 'linear', displayBrightness: 0.5 };
+      const state: DisplayColorState = {
+        ...DEFAULT_DISPLAY_COLOR_STATE,
+        transferFunction: 'linear',
+        displayBrightness: 0.5,
+      };
       const [r, g, b] = applyDisplayColorManagement(0.8, 0.6, 0.4, state);
       expect(r).toBeCloseTo(0.4, 4);
       expect(g).toBeCloseTo(0.3, 4);
@@ -392,10 +396,7 @@ describe('DisplayTransfer', () => {
     it('saveDisplayProfile stores to localStorage', () => {
       const state: DisplayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE, transferFunction: 'rec709' };
       saveDisplayProfile(state);
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'openrv-display-profile',
-        JSON.stringify(state),
-      );
+      expect(localStorageMock.setItem).toHaveBeenCalledWith('openrv-display-profile', JSON.stringify(state));
     });
 
     it('loadDisplayProfile returns null when nothing stored', () => {

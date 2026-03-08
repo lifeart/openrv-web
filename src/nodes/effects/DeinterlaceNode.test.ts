@@ -10,8 +10,13 @@ const context: EvalContext = { frame: 1, width: 4, height: 4, quality: 'full' };
 
 class TestSourceNode extends IPNode {
   private image: IPImage;
-  constructor(image: IPImage) { super('TestSource'); this.image = image; }
-  protected process(): IPImage | null { return this.image; }
+  constructor(image: IPImage) {
+    super('TestSource');
+    this.image = image;
+  }
+  protected process(): IPImage | null {
+    return this.image;
+  }
 }
 
 function createTestImage(width = 4, height = 4, channels = 4, dataType: 'uint8' | 'float32' = 'uint8'): IPImage {
@@ -71,7 +76,10 @@ describe('DeinterlaceNode', () => {
     const resData = result!.getTypedArray();
     let anyDifferent = false;
     for (let i = 0; i < srcData.length; i++) {
-      if (srcData[i] !== resData[i]) { anyDifferent = true; break; }
+      if (srcData[i] !== resData[i]) {
+        anyDifferent = true;
+        break;
+      }
     }
     expect(anyDifferent).toBe(true);
   });

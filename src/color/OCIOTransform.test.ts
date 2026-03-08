@@ -86,9 +86,7 @@ describe('OCIOTransform', () => {
   describe('multiplyMatrices', () => {
     it('OCIO-T004: multiplies identity correctly', () => {
       const identity: [number, number, number, number, number, number, number, number, number] = [
-        1, 0, 0,
-        0, 1, 0,
-        0, 0, 1,
+        1, 0, 0, 0, 1, 0, 0, 0, 1,
       ];
       const result = multiplyMatrices(SRGB_TO_XYZ, identity);
       for (let i = 0; i < 9; i++) {
@@ -315,22 +313,12 @@ describe('OCIOTransform', () => {
 
   describe('createDisplayTransform', () => {
     it('OCIO-T032: creates valid transform', () => {
-      const transform = OCIOTransform.createDisplayTransform(
-        'ACEScg',
-        'ACEScg',
-        'sRGB',
-        'ACES 1.0 SDR-video'
-      );
+      const transform = OCIOTransform.createDisplayTransform('ACEScg', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       expect(transform).toBeInstanceOf(OCIOTransform);
     });
 
     it('OCIO-T033: applies to colors correctly', () => {
-      const transform = OCIOTransform.createDisplayTransform(
-        'ACEScg',
-        'ACEScg',
-        'sRGB',
-        'ACES 1.0 SDR-video'
-      );
+      const transform = OCIOTransform.createDisplayTransform('ACEScg', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
       const result = transform.apply(0.18, 0.18, 0.18);
       expect(result[0]).toBeGreaterThan(0);
       expect(result[0]).toBeLessThan(1);
@@ -339,24 +327,12 @@ describe('OCIOTransform', () => {
 
   describe('createWithLook', () => {
     it('OCIO-T034: creates transform without look', () => {
-      const transform = OCIOTransform.createWithLook(
-        'ACEScg',
-        'sRGB',
-        'Standard',
-        'None',
-        'forward'
-      );
+      const transform = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'Standard', 'None', 'forward');
       expect(transform).toBeInstanceOf(OCIOTransform);
     });
 
     it('OCIO-T035: creates transform with look name', () => {
-      const transform = OCIOTransform.createWithLook(
-        'ACEScg',
-        'sRGB',
-        'Standard',
-        'Filmic',
-        'forward'
-      );
+      const transform = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'Standard', 'Filmic', 'forward');
       expect(transform).toBeInstanceOf(OCIOTransform);
     });
   });
@@ -636,9 +612,7 @@ describe('OCIOTransform', () => {
 
     it('OCIO-T075: multiplyMatrices with identity is idempotent', () => {
       const identity: [number, number, number, number, number, number, number, number, number] = [
-        1, 0, 0,
-        0, 1, 0,
-        0, 0, 1,
+        1, 0, 0, 0, 1, 0, 0, 0, 1,
       ];
       const result1 = multiplyMatrices(identity, identity);
       const result2 = multiplyMatrices(result1, identity);
@@ -668,12 +642,7 @@ describe('OCIOTransform', () => {
 
   describe('CIE XYZ Color Space Matrices (Feature 2)', () => {
     /** Helper: check matrix roundtrip for a color */
-    function expectRoundtrip(
-      toXYZ: Matrix3x3,
-      fromXYZ: Matrix3x3,
-      color: RGB,
-      tolerance: number = 5
-    ) {
+    function expectRoundtrip(toXYZ: Matrix3x3, fromXYZ: Matrix3x3, color: RGB, tolerance: number = 5) {
       const xyz = multiplyMatrixVector(toXYZ, color);
       const result = multiplyMatrixVector(fromXYZ, xyz);
       expect(result[0]).toBeCloseTo(color[0], tolerance);
@@ -943,9 +912,9 @@ describe('OCIOTransform', () => {
         const red: RGB = [1, 0, 0];
         const xyz = multiplyMatrixVector(REC2020_TO_XYZ, red);
         // Rec.2020 red primary
-        expect(xyz[0]).toBeCloseTo(0.6369580, 4);
+        expect(xyz[0]).toBeCloseTo(0.636958, 4);
         expect(xyz[1]).toBeCloseTo(0.2627002, 4);
-        expect(xyz[2]).toBeCloseTo(0.0000000, 4);
+        expect(xyz[2]).toBeCloseTo(0.0, 4);
       });
 
       it('Rec.2020 to sRGB transform produces reasonable values', () => {
@@ -982,9 +951,8 @@ describe('OCIOTransform', () => {
         const saturatedResult = fwd.apply(...saturated);
         // The Rec.2020 -> sRGB path (gamma decode -> matrix -> gamut clip -> sRGB encode)
         // should produce a substantially different result from identity
-        const totalDiff = Math.abs(saturatedResult[0] - 0.9) +
-                          Math.abs(saturatedResult[1] - 0.1) +
-                          Math.abs(saturatedResult[2] - 0.1);
+        const totalDiff =
+          Math.abs(saturatedResult[0] - 0.9) + Math.abs(saturatedResult[1] - 0.1) + Math.abs(saturatedResult[2] - 0.1);
         expect(totalDiff).toBeGreaterThan(0.05);
       });
     });
@@ -1136,7 +1104,13 @@ describe('OCIOTransform', () => {
 
     it('OCIO-V2-T006: unknown look name acts as passthrough', () => {
       const basic = new OCIOTransform('ACEScg', 'sRGB');
-      const withUnknown = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'UnknownLook', 'forward');
+      const withUnknown = OCIOTransform.createWithLook(
+        'ACEScg',
+        'sRGB',
+        'ACES 1.0 SDR-video',
+        'UnknownLook',
+        'forward',
+      );
 
       const basicResult = basic.apply(0.18, 0.18, 0.18);
       const unknownResult = withUnknown.apply(0.18, 0.18, 0.18);
@@ -1154,7 +1128,10 @@ describe('OCIOTransform', () => {
   describe('Display transform with working space', () => {
     it('OCIO-V2-T007: createDisplayTransform with working space produces valid output', () => {
       const transform = OCIOTransform.createDisplayTransform(
-        'ARRI LogC3 (EI 800)', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
+        'ARRI LogC3 (EI 800)',
+        'ACEScg',
+        'sRGB',
+        'ACES 1.0 SDR-video',
       );
 
       const result = transform.apply(0.41, 0.41, 0.41);
@@ -1165,10 +1142,18 @@ describe('OCIOTransform', () => {
 
     it('OCIO-V2-T008: createDisplayTransform with look and working space', () => {
       const withLook = OCIOTransform.createDisplayTransform(
-        'ARRI LogC3 (EI 800)', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic', 'forward'
+        'ARRI LogC3 (EI 800)',
+        'ACEScg',
+        'sRGB',
+        'ACES 1.0 SDR-video',
+        'Filmic',
+        'forward',
       );
       const withoutLook = OCIOTransform.createDisplayTransform(
-        'ARRI LogC3 (EI 800)', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
+        'ARRI LogC3 (EI 800)',
+        'ACEScg',
+        'sRGB',
+        'ACES 1.0 SDR-video',
       );
 
       const lookResult = withLook.apply(0.41, 0.41, 0.41);
@@ -1179,9 +1164,7 @@ describe('OCIOTransform', () => {
     });
 
     it('OCIO-V2-T009: identity when input equals display skips working space', () => {
-      const transform = OCIOTransform.createDisplayTransform(
-        'sRGB', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
-      );
+      const transform = OCIOTransform.createDisplayTransform('sRGB', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
       // sRGB -> sRGB should be identity
       const result = transform.apply(0.5, 0.3, 0.8);
@@ -1191,9 +1174,7 @@ describe('OCIOTransform', () => {
     });
 
     it('OCIO-V2-T010: createDisplayTransform handles black correctly', () => {
-      const transform = OCIOTransform.createDisplayTransform(
-        'ACEScg', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
-      );
+      const transform = OCIOTransform.createDisplayTransform('ACEScg', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video');
 
       const result = transform.apply(0, 0, 0);
       expect(result[0]).toBeCloseTo(0, 3);

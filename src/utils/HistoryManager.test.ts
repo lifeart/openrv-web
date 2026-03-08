@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  HistoryManager,
-  getGlobalHistoryManager,
-  resetGlobalHistoryManager,
-} from './HistoryManager';
+import { HistoryManager, getGlobalHistoryManager, resetGlobalHistoryManager } from './HistoryManager';
 
 describe('HistoryManager', () => {
   let manager: HistoryManager;
@@ -663,9 +659,7 @@ describe('HistoryManager', () => {
     it('HM-U160: getCategoryLabel returns same as getCategoryIcon', () => {
       const categories = ['color', 'paint', 'transform', 'view', 'session'] as const;
       for (const cat of categories) {
-        expect(HistoryManager.getCategoryLabel(cat)).toBe(
-          HistoryManager.getCategoryIcon(cat)
-        );
+        expect(HistoryManager.getCategoryLabel(cat)).toBe(HistoryManager.getCategoryIcon(cat));
       }
     });
   });
@@ -675,10 +669,28 @@ describe('HistoryManager', () => {
       let value = 0;
 
       value = 1;
-      manager.recordAction('set to 1', 'session', () => { value = 0; }, () => { value = 1; });
+      manager.recordAction(
+        'set to 1',
+        'session',
+        () => {
+          value = 0;
+        },
+        () => {
+          value = 1;
+        },
+      );
 
       value = 2;
-      manager.recordAction('set to 2', 'session', () => { value = 1; }, () => { value = 2; });
+      manager.recordAction(
+        'set to 2',
+        'session',
+        () => {
+          value = 1;
+        },
+        () => {
+          value = 2;
+        },
+      );
 
       manager.undo();
       expect(value).toBe(1);
@@ -691,10 +703,28 @@ describe('HistoryManager', () => {
       let value = 0;
 
       value = 1;
-      manager.recordAction('set to 1', 'session', () => { value = 0; }, () => { value = 1; });
+      manager.recordAction(
+        'set to 1',
+        'session',
+        () => {
+          value = 0;
+        },
+        () => {
+          value = 1;
+        },
+      );
 
       value = 2;
-      manager.recordAction('set to 2', 'session', () => { value = 1; }, () => { value = 2; });
+      manager.recordAction(
+        'set to 2',
+        'session',
+        () => {
+          value = 1;
+        },
+        () => {
+          value = 2;
+        },
+      );
 
       manager.undo();
       manager.undo();
@@ -708,7 +738,9 @@ describe('HistoryManager', () => {
       let value = 0;
 
       value = 1;
-      manager.recordAction('set to 1', 'session', () => { value = 0; });
+      manager.recordAction('set to 1', 'session', () => {
+        value = 0;
+      });
 
       manager.undo();
       expect(value).toBe(0);

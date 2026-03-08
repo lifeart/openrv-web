@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
 import { createCheckboxRow } from './shared/FormElements';
@@ -154,18 +154,27 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
     this.panel.appendChild(header);
 
     // Enabled checkbox
-    const enabledRow = createCheckboxRow('Enabled', this.params.enabled, (checked) => {
-      this.params.enabled = checked;
-      this.emitChange();
-    }, 'deinterlace-enabled-checkbox');
+    const enabledRow = createCheckboxRow(
+      'Enabled',
+      this.params.enabled,
+      (checked) => {
+        this.params.enabled = checked;
+        this.emitChange();
+      },
+      'deinterlace-enabled-checkbox',
+    );
     enabledRow.checkbox.dataset.testid = 'deinterlace-enabled-checkbox';
     this.enabledCheckbox = enabledRow.checkbox;
     this.panel.appendChild(enabledRow.container);
@@ -179,15 +188,25 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.panel.appendChild(methodRow.container);
 
     // Field order dropdown
-    const fieldOrderRow = this.createSelectRow('Field Order', Object.entries(FIELD_ORDER_LABELS), this.params.fieldOrder, (value) => {
-      this.params.fieldOrder = value as FieldOrder;
-      this.emitChange();
-    });
+    const fieldOrderRow = this.createSelectRow(
+      'Field Order',
+      Object.entries(FIELD_ORDER_LABELS),
+      this.params.fieldOrder,
+      (value) => {
+        this.params.fieldOrder = value as FieldOrder;
+        this.emitChange();
+      },
+    );
     this.fieldOrderSelect = fieldOrderRow.select;
     this.panel.appendChild(fieldOrderRow.container);
   }
 
-  private createSelectRow(label: string, options: [string, string][], initialValue: string, onChange: (value: string) => void): { container: HTMLElement; select: HTMLSelectElement } {
+  private createSelectRow(
+    label: string,
+    options: [string, string][],
+    initialValue: string,
+    onChange: (value: string) => void,
+  ): { container: HTMLElement; select: HTMLSelectElement } {
     const row = document.createElement('div');
     row.style.cssText = 'margin-bottom: 12px;';
 

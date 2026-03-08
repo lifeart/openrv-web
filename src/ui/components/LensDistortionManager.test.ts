@@ -7,10 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LensDistortionManager } from './LensDistortionManager';
-import {
-  DEFAULT_LENS_PARAMS,
-  LensDistortionParams,
-} from '../../transform/LensDistortion';
+import { DEFAULT_LENS_PARAMS, type LensDistortionParams } from '../../transform/LensDistortion';
 
 describe('LensDistortionManager', () => {
   let manager: LensDistortionManager;

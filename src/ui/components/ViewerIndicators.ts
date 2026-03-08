@@ -95,7 +95,7 @@ export function updateABIndicator(
   abIndicator: HTMLElement | null,
   session: Session,
   wipeManager: WipeManager,
-  current?: 'A' | 'B'
+  current?: 'A' | 'B',
 ): void {
   if (!abIndicator) return;
 
@@ -131,7 +131,7 @@ export function showFilterModeIndicator(
   container: HTMLElement,
   mode: TextureFilterMode,
   previousIndicator: HTMLElement | null,
-  previousTimeout: ReturnType<typeof setTimeout> | null
+  previousTimeout: ReturnType<typeof setTimeout> | null,
 ): { indicator: HTMLElement; timeout: ReturnType<typeof setTimeout> } {
   // Remove previous indicator
   if (previousIndicator?.parentNode) {

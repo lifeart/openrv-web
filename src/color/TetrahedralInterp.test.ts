@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  applyLUT3DTetrahedral,
-  applyLUT3DToBuffer,
-  compareInterpolationMethods,
-} from './TetrahedralInterp';
+import { applyLUT3DTetrahedral, applyLUT3DToBuffer, compareInterpolationMethods } from './TetrahedralInterp';
 import { applyLUT3D, parseCubeLUT } from './LUTLoader';
 import type { LUT3D } from './LUTLoader';
 import { createSampleCubeLUT } from '../../test/utils';
@@ -271,10 +267,7 @@ describe('TetrahedralInterp', () => {
   describe('applyLUT3DToBuffer', () => {
     it('TET-020: processes RGBA buffer with tetrahedral interpolation', () => {
       const lut = createIdentityLUT3D(4);
-      const input = new Float32Array([
-        0.2, 0.4, 0.6, 1.0,
-        0.8, 0.1, 0.3, 1.0,
-      ]);
+      const input = new Float32Array([0.2, 0.4, 0.6, 1.0, 0.8, 0.1, 0.3, 1.0]);
 
       const output = applyLUT3DToBuffer(input, 2, 1, lut, 'tetrahedral');
 
@@ -291,9 +284,7 @@ describe('TetrahedralInterp', () => {
 
     it('TET-021: processes RGBA buffer with trilinear interpolation', () => {
       const lut = createIdentityLUT3D(4);
-      const input = new Float32Array([
-        0.2, 0.4, 0.6, 1.0,
-      ]);
+      const input = new Float32Array([0.2, 0.4, 0.6, 1.0]);
 
       const output = applyLUT3DToBuffer(input, 1, 1, lut, 'trilinear');
 
@@ -305,10 +296,7 @@ describe('TetrahedralInterp', () => {
 
     it('TET-022: preserves alpha channel', () => {
       const lut = createIdentityLUT3D(4);
-      const input = new Float32Array([
-        0.5, 0.5, 0.5, 0.75,
-        0.5, 0.5, 0.5, 0.25,
-      ]);
+      const input = new Float32Array([0.5, 0.5, 0.5, 0.75, 0.5, 0.5, 0.5, 0.25]);
 
       const output = applyLUT3DToBuffer(input, 2, 1, lut, 'tetrahedral');
 
@@ -341,10 +329,7 @@ describe('TetrahedralInterp', () => {
       expect(comparison.maxDifference).toBeGreaterThanOrEqual(0);
 
       // Verify difference is calculated correctly
-      expect(comparison.difference[0]).toBeCloseTo(
-        Math.abs(comparison.trilinear[0] - comparison.tetrahedral[0]),
-        10
-      );
+      expect(comparison.difference[0]).toBeCloseTo(Math.abs(comparison.trilinear[0] - comparison.tetrahedral[0]), 10);
     });
 
     it('TET-031: difference is zero at lattice points', () => {

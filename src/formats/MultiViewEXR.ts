@@ -13,12 +13,7 @@
  * - Decode a specific view
  */
 
-import {
-  getEXRInfo,
-  decodeEXR,
-  type EXRDecodeOptions,
-  type EXRDecodeResult,
-} from './EXRDecoder';
+import { getEXRInfo, decodeEXR, type EXRDecodeOptions, type EXRDecodeResult } from './EXRDecoder';
 
 /**
  * Information about views in a multi-view EXR file
@@ -78,10 +73,7 @@ export function getEXRViews(buffer: ArrayBuffer): string[] {
  * @param views - The list of view names from the multiView attribute
  * @returns A record mapping view name to stripped channel names
  */
-export function mapChannelsToViews(
-  allChannels: string[],
-  views: string[],
-): Record<string, string[]> {
+export function mapChannelsToViews(allChannels: string[], views: string[]): Record<string, string[]> {
   const result: Record<string, string[]> = {};
   if (views.length === 0) {
     return result;
@@ -174,10 +166,7 @@ export function getEXRViewInfo(buffer: ArrayBuffer): EXRViewInfo | null {
  * @param viewName - The view to decode (must be present in multiView attribute)
  * @returns The decoded image data, or null if the view is not found
  */
-export async function decodeEXRView(
-  buffer: ArrayBuffer,
-  viewName: string,
-): Promise<EXRDecodeResult | null> {
+export async function decodeEXRView(buffer: ArrayBuffer, viewName: string): Promise<EXRDecodeResult | null> {
   const info = getEXRInfo(buffer);
   if (!info) {
     return null;
@@ -212,7 +201,7 @@ export async function decodeEXRView(
   let partIndex: number | undefined;
   let partChannels: string[] | undefined;
   if (info.parts && info.parts.length > 1) {
-    const viewPart = info.parts.find(p => p.view === viewName);
+    const viewPart = info.parts.find((p) => p.view === viewName);
     if (viewPart) {
       partIndex = viewPart.index;
       partChannels = viewPart.channels;

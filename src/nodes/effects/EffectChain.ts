@@ -107,7 +107,7 @@ export class EffectChain {
   /** Serialize the chain to a portable format. */
   toJSON(): { effects: Array<{ type: string; properties: Record<string, unknown> }> } {
     return {
-      effects: this.effects.map(e => ({
+      effects: this.effects.map((e) => ({
         type: e.type,
         properties: e.properties.toJSON(),
       })),

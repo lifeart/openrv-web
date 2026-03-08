@@ -16,15 +16,12 @@ import { DecoderError } from '../core/errors';
  */
 async function decodeHEICItemAtIndex(
   images: import('libheif-js').HeifImage[],
-  itemIndex: number
+  itemIndex: number,
 ): Promise<{ width: number; height: number; data: Uint8ClampedArray }> {
   if (itemIndex < 0 || itemIndex >= images.length) {
     // Free all images before throwing
     for (const img of images) img.free();
-    throw new DecoderError(
-      'HEIC',
-      `Item index ${itemIndex} out of range (file has ${images.length} images)`
-    );
+    throw new DecoderError('HEIC', `Item index ${itemIndex} out of range (file has ${images.length} images)`);
   }
 
   const image = images[itemIndex]!;
@@ -66,7 +63,7 @@ async function decodeHEICItemAtIndex(
  * Returns the primary image (via is_primary()), falling back to index 0.
  */
 export async function decodeHEICToImageData(
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
 ): Promise<{ width: number; height: number; data: Uint8ClampedArray }> {
   const libheif = await import('libheif-js');
   const decoder = new libheif.HeifDecoder();
@@ -79,7 +76,7 @@ export async function decodeHEICToImageData(
   // is_primary() may not be available in all libheif-js builds (WASM binding missing)
   let targetIndex = 0;
   try {
-    const primaryIndex = images.findIndex(img => img.is_primary());
+    const primaryIndex = images.findIndex((img) => img.is_primary());
     if (primaryIndex >= 0) targetIndex = primaryIndex;
   } catch {
     // is_primary() not supported — fall back to index 0
@@ -94,7 +91,7 @@ export async function decodeHEICToImageData(
  */
 export async function decodeHEICItemToImageData(
   buffer: ArrayBuffer,
-  itemIndex: number
+  itemIndex: number,
 ): Promise<{ width: number; height: number; data: Uint8ClampedArray }> {
   const libheif = await import('libheif-js');
   const decoder = new libheif.HeifDecoder();
@@ -113,7 +110,7 @@ export async function decodeHEICItemToImageData(
  * full container, and we pick the first one that isn't the primary.
  */
 export async function decodeHEICAuxImageData(
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
 ): Promise<{ width: number; height: number; data: Uint8ClampedArray }> {
   const libheif = await import('libheif-js');
   const decoder = new libheif.HeifDecoder();
@@ -127,7 +124,7 @@ export async function decodeHEICAuxImageData(
   // Find primary index
   let primaryIndex = 0;
   try {
-    const idx = images.findIndex(img => img.is_primary());
+    const idx = images.findIndex((img) => img.is_primary());
     if (idx >= 0) primaryIndex = idx;
   } catch {
     // is_primary() not available — assume index 0

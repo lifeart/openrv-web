@@ -288,7 +288,9 @@ describe('MediabunnyFrameExtractor', () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
 
       const extractor = new MediabunnyFrameExtractor();
-      await expect(extractor.loadUrl('https://example.com/notfound.mp4')).rejects.toThrow('Failed to fetch video: Not Found');
+      await expect(extractor.loadUrl('https://example.com/notfound.mp4')).rejects.toThrow(
+        'Failed to fetch video: Not Found',
+      );
     });
   });
 

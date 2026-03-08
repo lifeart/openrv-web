@@ -12,10 +12,12 @@ import { createMockSessionBridgeContext } from '../../test/mocks';
 
 type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 
-function createMockSession(overrides: {
-  abCompareAvailable?: boolean;
-  currentAB?: 'A' | 'B';
-} = {}): Session {
+function createMockSession(
+  overrides: {
+    abCompareAvailable?: boolean;
+    currentAB?: 'A' | 'B';
+  } = {},
+): Session {
   return {
     abCompareAvailable: overrides.abCompareAvailable ?? false,
     currentAB: overrides.currentAB ?? 'A',
@@ -23,18 +25,14 @@ function createMockSession(overrides: {
 }
 
 function createMockOn(): {
-  on: <K extends keyof SessionEvents>(
-    session: Session,
-    event: K,
-    handler: (data: SessionEvents[K]) => void
-  ) => void;
+  on: <K extends keyof SessionEvents>(session: Session, event: K, handler: (data: SessionEvents[K]) => void) => void;
   handlers: EventHandlers;
 } {
   const handlers: EventHandlers = {};
   const on = <K extends keyof SessionEvents>(
     _session: Session,
     event: K,
-    handler: (data: SessionEvents[K]) => void
+    handler: (data: SessionEvents[K]) => void,
   ): void => {
     handlers[event] = handler as (data: any) => void;
   };

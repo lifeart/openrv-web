@@ -10,8 +10,8 @@ import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
 import {
-  SequenceInfo,
-  SequenceFrame,
+  type SequenceInfo,
+  type SequenceFrame,
   createSequenceInfo,
   loadFrameImage,
   disposeSequence,
@@ -94,15 +94,15 @@ export class SequenceSourceNode extends BaseSourceNode {
         }
       }
       if (data && typeof data.close === 'function') {
-        try { data.close(); } catch (e) { log.debug('Resource close failed:', e); }
+        try {
+          data.close();
+        } catch (e) {
+          log.debug('Resource close failed:', e);
+        }
       }
     };
 
-    this.preloadManager = new FramePreloadManager<ImageBitmap>(
-      totalFrames,
-      loader,
-      disposer,
-    );
+    this.preloadManager = new FramePreloadManager<ImageBitmap>(totalFrames, loader, disposer);
   }
 
   isReady(): boolean {

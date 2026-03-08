@@ -77,8 +77,8 @@ export function assertPixelParity(
 
     throw new Error(
       `Pixel parity failed: RMSE=${rmse.toFixed(6)} exceeds threshold=${thresholdRMSE}. ` +
-      `Max error: ${maxError.toFixed(6)} at pixel ${pixelIndex} channel ${channel} ` +
-      `(actual=${actual[maxErrorIndex]}, expected=${expected[maxErrorIndex]})`
+        `Max error: ${maxError.toFixed(6)} at pixel ${pixelIndex} channel ${channel} ` +
+        `(actual=${actual[maxErrorIndex]}, expected=${expected[maxErrorIndex]})`,
     );
   }
 }

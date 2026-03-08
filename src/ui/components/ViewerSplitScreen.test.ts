@@ -11,8 +11,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createSplitScreenUIElements,
   updateSplitScreenPosition,
-  SplitScreenUIElements,
-  SplitScreenState,
+  type SplitScreenUIElements,
+  type SplitScreenState,
 } from './ViewerSplitScreen';
 
 // Helper to create mock DOMRect

@@ -361,9 +361,7 @@ describe('FalseColorControl', () => {
       falseColor = createMockFalseColor();
       control = new FalseColorControl(falseColor);
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(0);
       addSpy.mockRestore();
     });
@@ -376,9 +374,7 @@ describe('FalseColorControl', () => {
       addSpy.mockClear();
       button.click(); // open
 
-      const clickCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = addSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       addSpy.mockRestore();
     });
@@ -392,9 +388,7 @@ describe('FalseColorControl', () => {
       removeSpy.mockClear();
       button.click(); // close
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });
@@ -408,9 +402,7 @@ describe('FalseColorControl', () => {
       removeSpy.mockClear();
       control.dispose();
 
-      const clickCalls = removeSpy.mock.calls.filter(
-        ([event]) => event === 'click'
-      );
+      const clickCalls = removeSpy.mock.calls.filter(([event]) => event === 'click');
       expect(clickCalls.length).toBe(1);
       removeSpy.mockRestore();
     });

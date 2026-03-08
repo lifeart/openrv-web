@@ -90,7 +90,7 @@ function parseLine(line: string, lineNumber: number): RVEDLEntry | null {
   }
 
   // Split the remaining part into tokens
-  const tokens = rest.split(/\s+/).filter(t => t.length > 0);
+  const tokens = rest.split(/\s+/).filter((t) => t.length > 0);
 
   if (tokens.length < 2) {
     log.warn(`Line ${lineNumber}: missing frame numbers (need inFrame and outFrame), skipping`);

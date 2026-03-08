@@ -36,7 +36,12 @@
     "screenshots:update": "playwright test --project=screenshots --update-snapshots",
     "docs:ai-generate": "npx tsx docs/scripts/ai-generate.ts",
     "docs:fact-check": "npx tsx docs/scripts/fact-check.ts --all",
-    "docs:validate": "npx tsx docs/scripts/validate-output.ts --all"
+    "docs:validate": "npx tsx docs/scripts/validate-output.ts --all",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "format": "prettier --write \"src/**/*.ts\" \"*.{ts,mjs,json}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{ts,mjs,json}\"",
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@jsquash/jxl": "^1.3.0",
@@ -47,15 +52,24 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.40.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import-x": "^4.16.1",
     "fake-indexeddb": "^6.2.5",
+    "globals": "^17.4.0",
     "jsdom": "^28.1.0",
+    "lint-staged": "^16.3.2",
+    "prettier": "^3.8.1",
+    "simple-git-hooks": "^2.13.1",
     "tsx": "^4.21.0",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typedoc-vitepress-theme": "^1.1.2",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1",
     "vitepress": "^1.6.4",
     "vitest": "^4.0.18"
@@ -87,5 +101,14 @@
     "film-production",
     "aswf"
   ],
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ]
+  },
   "license": "MIT"
 }

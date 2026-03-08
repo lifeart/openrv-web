@@ -29,12 +29,14 @@ function makeSmallImage(channels = 4) {
   };
 }
 
-function createMockContext(overrides: {
-  currentSource?: Record<string, unknown> | null;
-  gtoData?: unknown;
-  allSources?: Array<{ name: string }>;
-  currentSourceIndex?: number;
-} = {}): SessionBridgeContext {
+function createMockContext(
+  overrides: {
+    currentSource?: Record<string, unknown> | null;
+    gtoData?: unknown;
+    allSources?: Array<{ name: string }>;
+    currentSourceIndex?: number;
+  } = {},
+): SessionBridgeContext {
   const cropControl = { setSourceDimensions: vi.fn() };
   const ocioProcessor = {
     setActiveSource: vi.fn(),
@@ -199,10 +201,7 @@ describe('EXR overlay receives window data on source load', () => {
       },
     });
 
-    handleSourceLoaded(
-      context,
-      vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn()
-    );
+    handleSourceLoaded(context, vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn());
 
     const overlay = context.getViewer().getEXRWindowOverlay();
     expect(overlay.setWindows).toHaveBeenCalledWith(dataWindow, displayWindow);
@@ -218,10 +217,7 @@ describe('EXR overlay receives window data on source load', () => {
       },
     });
 
-    handleSourceLoaded(
-      context,
-      vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn()
-    );
+    handleSourceLoaded(context, vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn());
 
     const overlay = context.getViewer().getEXRWindowOverlay();
     expect(overlay.clearWindows).toHaveBeenCalled();
@@ -247,10 +243,7 @@ describe('EXR overlay receives window data on source load', () => {
       },
     });
 
-    handleSourceLoaded(
-      context,
-      vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn()
-    );
+    handleSourceLoaded(context, vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn());
 
     const overlay = context.getViewer().getEXRWindowOverlay();
     expect(overlay.clearWindows).toHaveBeenCalled();
@@ -267,10 +260,7 @@ describe('EXR overlay receives window data on source load', () => {
       },
     });
 
-    handleSourceLoaded(
-      context,
-      vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn()
-    );
+    handleSourceLoaded(context, vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn());
 
     const overlay = context.getViewer().getEXRWindowOverlay();
     expect(overlay.clearWindows).toHaveBeenCalled();
@@ -285,10 +275,7 @@ describe('EXR overlay toggle button pattern', () => {
     expect(overlay.isVisible()).toBe(false);
 
     // isVisible() requires both enabled AND windows to be set
-    overlay.setWindows(
-      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
-      { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
-    );
+    overlay.setWindows({ xMin: 0, yMin: 0, xMax: 99, yMax: 99 }, { xMin: 0, yMin: 0, xMax: 199, yMax: 199 });
 
     overlay.toggle();
     expect(overlay.isVisible()).toBe(true);
@@ -306,9 +293,7 @@ describe('EXR overlay toggle button pattern', () => {
 
     overlay.toggle();
 
-    expect(handler).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true })
-    );
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
 
     overlay.dispose();
   });

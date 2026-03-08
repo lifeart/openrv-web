@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   PlaybackTimingController,
-  TimingState,
+  type TimingState,
   MAX_CONSECUTIVE_STARVATION_SKIPS,
   STARVATION_TIMEOUT_MS,
   MAX_REVERSE_SPEED,
@@ -186,7 +186,7 @@ describe('PlaybackTimingController', () => {
 
     it('PTC-U018: respects playback speed (2x makes frames advance twice as fast)', () => {
       const fps = 24;
-      const frameDurationAt2x = (1000 / fps) / 2;
+      const frameDurationAt2x = 1000 / fps / 2;
       state.lastFrameTime = 1000;
 
       // One normal frame duration at 2x speed should produce 2 frames
@@ -202,7 +202,7 @@ describe('PlaybackTimingController', () => {
 
       // Request speed 8 in reverse direction; should be capped to MAX_REVERSE_SPEED
       const result = controller.accumulateFrames(state, fps, 8, -1, undefined, 1000 + 1000);
-      const expectedFrameDuration = (1000 / fps) / MAX_REVERSE_SPEED;
+      const expectedFrameDuration = 1000 / fps / MAX_REVERSE_SPEED;
       expect(result.frameDuration).toBeCloseTo(expectedFrameDuration, 5);
     });
 
@@ -241,7 +241,7 @@ describe('PlaybackTimingController', () => {
       state.lastFrameTime = 1000;
       const result = controller.accumulateDelta(state, 30, 2, -1, 1500);
       // Speed 2 in reverse -> effective speed = min(2, MAX_REVERSE_SPEED) = 2
-      expect(result.frameDuration).toBeCloseTo((1000 / 30) / 2, 5);
+      expect(result.frameDuration).toBeCloseTo(1000 / 30 / 2, 5);
       expect(result.delta).toBeCloseTo(500, 5);
     });
   });
@@ -718,7 +718,15 @@ describe('PlaybackTimingController', () => {
     it('PTC-U082: returns null when clearing (interpolation disabled, was non-null)', () => {
       state.subFramePosition = { baseFrame: 10, nextFrame: 11, ratio: 0.5 };
       const result = controller.updateSubFramePosition(
-        state, false, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        false,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       );
       expect(result).toBeNull();
       expect(state.subFramePosition).toBeNull();
@@ -727,25 +735,29 @@ describe('PlaybackTimingController', () => {
     it('PTC-U083: returns undefined when interpolation disabled and already null', () => {
       state.subFramePosition = null;
       const result = controller.updateSubFramePosition(
-        state, false, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        false,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       );
       expect(result).toBeUndefined();
     });
 
     it('PTC-U084: returns null when clearing (speed >= 1, was non-null)', () => {
       state.subFramePosition = { baseFrame: 10, nextFrame: 11, ratio: 0.5 };
-      const result = controller.updateSubFramePosition(
-        state, true, 1, 10, 1, inPoint, outPoint, 'loop', frameDuration,
-      );
+      const result = controller.updateSubFramePosition(state, true, 1, 10, 1, inPoint, outPoint, 'loop', frameDuration);
       expect(result).toBeNull();
       expect(state.subFramePosition).toBeNull();
     });
 
     it('PTC-U085: returns undefined when speed >= 1 and already null', () => {
       state.subFramePosition = null;
-      const result = controller.updateSubFramePosition(
-        state, true, 2, 10, 1, inPoint, outPoint, 'loop', frameDuration,
-      );
+      const result = controller.updateSubFramePosition(state, true, 2, 10, 1, inPoint, outPoint, 'loop', frameDuration);
       expect(result).toBeUndefined();
     });
 
@@ -753,7 +765,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 0.5;
       state.subFramePosition = null;
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       );
       expect(result).not.toBeNull();
       expect(result).not.toBeUndefined();
@@ -767,7 +787,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 0.25;
       state.subFramePosition = null;
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       ) as SubFramePosition;
       expect(result.ratio).toBeCloseTo(0.25, 2);
     });
@@ -777,7 +805,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 2;
       state.subFramePosition = null;
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       ) as SubFramePosition;
       expect(result.ratio).toBe(1);
 
@@ -785,7 +821,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = -10;
       state.subFramePosition = null;
       const result2 = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       ) as SubFramePosition;
       expect(result2.ratio).toBe(0);
     });
@@ -794,7 +838,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 0.5;
       state.subFramePosition = { baseFrame: 10, nextFrame: 11, ratio: 0.5 };
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       );
       expect(result).toBeUndefined();
     });
@@ -804,7 +856,15 @@ describe('PlaybackTimingController', () => {
       // Set accumulator to produce ratio significantly different from 0.5
       state.frameAccumulator = frameDuration * 0.7;
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       );
       expect(result).not.toBeUndefined();
       expect(result).not.toBeNull();
@@ -815,7 +875,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 0.5;
       state.subFramePosition = { baseFrame: 9, nextFrame: 10, ratio: 0.5 };
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, 10, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        10,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       );
       expect(result).not.toBeUndefined();
       expect(result).not.toBeNull();
@@ -826,7 +894,15 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 0.5;
       state.subFramePosition = null;
       const result = controller.updateSubFramePosition(
-        state, true, 0.5, outPoint, 1, inPoint, outPoint, 'loop', frameDuration,
+        state,
+        true,
+        0.5,
+        outPoint,
+        1,
+        inPoint,
+        outPoint,
+        'loop',
+        frameDuration,
       ) as SubFramePosition;
       // At outPoint going forward with loop => nextFrame should be inPoint
       expect(result.baseFrame).toBe(outPoint);
@@ -837,9 +913,7 @@ describe('PlaybackTimingController', () => {
       state.frameAccumulator = frameDuration * 0.5;
       state.subFramePosition = null;
       // Speed exactly 1 should not produce sub-frame position
-      const result = controller.updateSubFramePosition(
-        state, true, 1, 10, 1, inPoint, outPoint, 'loop', frameDuration,
-      );
+      const result = controller.updateSubFramePosition(state, true, 1, 10, 1, inPoint, outPoint, 'loop', frameDuration);
       expect(result).toBeUndefined();
       expect(state.subFramePosition).toBeNull();
     });

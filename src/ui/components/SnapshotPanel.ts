@@ -8,8 +8,8 @@
  * - Distinct styling for auto-checkpoints vs manual snapshots
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { SnapshotManager, Snapshot, SnapshotPreview } from '../../core/session/SnapshotManager';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type SnapshotManager, type Snapshot, type SnapshotPreview } from '../../core/session/SnapshotManager';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
@@ -235,7 +235,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.listContainer.innerHTML = '';
 
     const searchTerm = this.searchInput.value.toLowerCase();
-    const filtered = this.snapshots.filter(snapshot => {
+    const filtered = this.snapshots.filter((snapshot) => {
       // Filter by type
       if (this.filterMode === 'manual' && snapshot.isAutoCheckpoint) return false;
       if (this.filterMode === 'auto' && !snapshot.isAutoCheckpoint) return false;
@@ -466,11 +466,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     return container;
   }
 
-  private createActionButton(
-    title: string,
-    icon: IconName,
-    onClick: () => void
-  ): HTMLButtonElement {
+  private createActionButton(title: string, icon: IconName, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.innerHTML = getIconSvg(icon, 'sm');
     btn.title = title;

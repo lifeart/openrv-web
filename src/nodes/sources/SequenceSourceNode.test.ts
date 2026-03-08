@@ -19,15 +19,11 @@ vi.mock('../../utils/media/SequenceLoader', async (importOriginal) => {
   };
 });
 
-import {
-  createSequenceInfo,
-  loadFrameImage,
-  disposeSequence,
-} from '../../utils/media/SequenceLoader';
+import { createSequenceInfo, loadFrameImage, disposeSequence } from '../../utils/media/SequenceLoader';
 
 /** Flush microtask queue so FramePreloadManager's async operations complete */
 function flushMicrotasks(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe('SequenceSourceNode', () => {
@@ -85,7 +81,7 @@ describe('SequenceSourceNode', () => {
 
   describe('loadFiles', () => {
     it('SSN-001: loads sequence from files', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 1920 });
       Object.defineProperty(mockImage, 'height', { value: 1080 });
 
@@ -120,7 +116,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-002: updates properties after load', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 1920 });
       Object.defineProperty(mockImage, 'height', { value: 1080 });
 
@@ -158,7 +154,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('accepts custom fps', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       const mockInfo = {
         name: 'test',
         pattern: 'frame_####.png',
@@ -181,7 +177,7 @@ describe('SequenceSourceNode', () => {
 
   describe('getFrameImage', () => {
     it('SSN-004: loads frame on demand via FramePreloadManager', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -212,7 +208,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-005: triggers preloading of adjacent frames', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -252,7 +248,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-006: distant frames are not all cached (LRU eviction via FramePreloadManager)', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -300,7 +296,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('returns null for out of range frame', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -328,7 +324,7 @@ describe('SequenceSourceNode', () => {
 
   describe('dispose', () => {
     it('SSN-007: disposes sequence and preload manager on cleanup', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -362,7 +358,7 @@ describe('SequenceSourceNode', () => {
 
   describe('toJSON', () => {
     it('serializes node state', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 1920 });
       Object.defineProperty(mockImage, 'height', { value: 1080 });
 
@@ -412,7 +408,7 @@ describe('SequenceSourceNode', () => {
 
   describe('getElement', () => {
     it('returns cached frame from preload manager', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -460,7 +456,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-LAZY-002: setPlaybackDirection and setPlaybackActive work after loadFiles', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -490,7 +486,7 @@ describe('SequenceSourceNode', () => {
     });
 
     it('SSN-LAZY-003: updatePlaybackBuffer triggers loading after loadFiles', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -533,7 +529,7 @@ describe('SequenceSourceNode', () => {
   describe('playback state regressions', () => {
     /** Helper: create and load a sequence of N frames */
     async function loadSequence(seqNode: SequenceSourceNode, frameCount: number) {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 
@@ -565,7 +561,7 @@ describe('SequenceSourceNode', () => {
 
     /** Extract 1-based frame numbers from loadFrameImage mock calls */
     function getLoadedFrameNumbers(): number[] {
-      return vi.mocked(loadFrameImage).mock.calls.map(c => c[0].frameNumber);
+      return vi.mocked(loadFrameImage).mock.calls.map((c) => c[0].frameNumber);
     }
 
     it('SSN-REG-001: setPlaybackDirection while paused keeps symmetric scrub preloading', async () => {
@@ -580,8 +576,8 @@ describe('SequenceSourceNode', () => {
       await flushMicrotasks();
 
       const loaded = getLoadedFrameNumbers();
-      const ahead = loaded.filter(f => f > 25).length;  // frames 26+
-      const behind = loaded.filter(f => f < 25).length;  // frames 1-24
+      const ahead = loaded.filter((f) => f > 25).length; // frames 26+
+      const behind = loaded.filter((f) => f < 25).length; // frames 1-24
 
       // Scrub mode (scrubWindow=10): symmetric ±10 around center
       // Both sides should have frames loaded
@@ -597,18 +593,18 @@ describe('SequenceSourceNode', () => {
       await loadSequence(node, 50);
 
       node.setPlaybackActive(true);
-      node.setPlaybackDirection(1);  // forward
+      node.setPlaybackDirection(1); // forward
       node.updatePlaybackBuffer(10);
       await flushMicrotasks();
 
       const loaded = getLoadedFrameNumbers();
-      const ahead = loaded.filter(f => f > 10).length;   // frames 11+
-      const behind = loaded.filter(f => f < 10).length;   // frames 1-9
+      const ahead = loaded.filter((f) => f > 10).length; // frames 11+
+      const behind = loaded.filter((f) => f < 10).length; // frames 1-9
 
       // Playback forward (preloadAhead=30, preloadBehind=5):
       // should load many more frames ahead than behind
       expect(ahead).toBeGreaterThan(behind);
-      expect(ahead).toBeGreaterThanOrEqual(20);  // at least 20 of 30 ahead
+      expect(ahead).toBeGreaterThanOrEqual(20); // at least 20 of 30 ahead
       expect(behind).toBeLessThanOrEqual(5);
     });
 
@@ -625,8 +621,8 @@ describe('SequenceSourceNode', () => {
       await flushMicrotasks();
 
       const loaded = getLoadedFrameNumbers();
-      const ahead = loaded.filter(f => f > 25).length;
-      const behind = loaded.filter(f => f < 25).length;
+      const ahead = loaded.filter((f) => f > 25).length;
+      const behind = loaded.filter((f) => f < 25).length;
 
       // Back to scrub mode: symmetric preloading
       expect(ahead).toBeGreaterThan(0);
@@ -639,13 +635,13 @@ describe('SequenceSourceNode', () => {
       await loadSequence(node, 50);
 
       node.setPlaybackActive(true);
-      node.setPlaybackDirection(-1);  // reverse
+      node.setPlaybackDirection(-1); // reverse
       node.updatePlaybackBuffer(40);
       await flushMicrotasks();
 
       const loaded = getLoadedFrameNumbers();
-      const ahead = loaded.filter(f => f < 40).length;   // reverse: frames before 40
-      const behind = loaded.filter(f => f > 40).length;   // reverse: frames after 40
+      const ahead = loaded.filter((f) => f < 40).length; // reverse: frames before 40
+      const behind = loaded.filter((f) => f > 40).length; // reverse: frames after 40
 
       // Reverse playback: more frames loaded in the reverse direction (< 40)
       expect(ahead).toBeGreaterThan(behind);
@@ -655,7 +651,7 @@ describe('SequenceSourceNode', () => {
       // Regression: getElement must only return frames from the preloadManager cache,
       // not from SequenceFrame.image set directly (e.g., by createSequenceInfo).
       // This ensures lazy loading: frames are only available after explicit load.
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       Object.defineProperty(mockImage, 'width', { value: 100 });
       Object.defineProperty(mockImage, 'height', { value: 100 });
 

@@ -378,10 +378,10 @@ export class LUTStageControl {
       this.callbacks.onLUTLoaded(lut, file.name);
     } catch (err) {
       console.error(`Failed to load LUT for ${this.config.stageId}:`, err);
-      showAlert(
-        `Failed to load LUT: ${err instanceof Error ? err.message : err}`,
-        { type: 'error', title: 'LUT Error' }
-      );
+      showAlert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`, {
+        type: 'error',
+        title: 'LUT Error',
+      });
     }
 
     input.value = '';

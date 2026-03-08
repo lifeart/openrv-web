@@ -41,9 +41,7 @@ describe('BackgroundPatternControl', () => {
 
       control.setPattern('checker');
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ pattern: 'checker' })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ pattern: 'checker' }));
     });
 
     it('BG-U005: should update state when setPattern is called', () => {
@@ -87,9 +85,7 @@ describe('BackgroundPatternControl', () => {
 
       control.setCheckerSize('small');
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ checkerSize: 'small' })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ checkerSize: 'small' }));
     });
   });
 
@@ -334,7 +330,7 @@ describe('drawBackgroundPattern', () => {
       drawBackgroundPattern(ctx, 100, 100, {
         pattern: 'checker',
         checkerSize: sizeName as 'small' | 'medium' | 'large',
-        customColor: ''
+        customColor: '',
       });
 
       // Verify fillRect was called with correct size

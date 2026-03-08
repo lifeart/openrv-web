@@ -43,12 +43,7 @@ export class TransitionRenderer {
   private setupQuad(gl: WebGL2RenderingContext): void {
     // Create fullscreen quad VAO/VBO
     // Vertices: position (x,y) + texcoord (u,v)
-    const vertices = new Float32Array([
-      -1, -1, 0, 0,
-       1, -1, 1, 0,
-      -1,  1, 0, 1,
-       1,  1, 1, 1,
-    ]);
+    const vertices = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
 
     this.quadVAO = gl.createVertexArray();
     gl.bindVertexArray(this.quadVAO);
@@ -182,10 +177,22 @@ export class TransitionRenderer {
   private disposeFBOs(): void {
     const gl = this.gl;
     if (!gl) return;
-    if (this.fboA) { gl.deleteFramebuffer(this.fboA); this.fboA = null; }
-    if (this.texA) { gl.deleteTexture(this.texA); this.texA = null; }
-    if (this.fboB) { gl.deleteFramebuffer(this.fboB); this.fboB = null; }
-    if (this.texB) { gl.deleteTexture(this.texB); this.texB = null; }
+    if (this.fboA) {
+      gl.deleteFramebuffer(this.fboA);
+      this.fboA = null;
+    }
+    if (this.texA) {
+      gl.deleteTexture(this.texA);
+      this.texA = null;
+    }
+    if (this.fboB) {
+      gl.deleteFramebuffer(this.fboB);
+      this.fboB = null;
+    }
+    if (this.texB) {
+      gl.deleteTexture(this.texB);
+      this.texB = null;
+    }
     this.fboWidth = 0;
     this.fboHeight = 0;
   }

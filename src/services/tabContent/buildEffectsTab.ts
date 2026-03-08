@@ -34,24 +34,36 @@ export function buildEffectsTab(deps: BuildEffectsTabDeps): HTMLElement {
   effectsContent.appendChild(registry.stabilizationControl.render());
   effectsContent.appendChild(ContextToolbar.createDivider());
 
-  const noiseReductionButton = ContextToolbar.createButton('Denoise', () => {
-    noiseReductionPanel.toggle(noiseReductionButton);
-    setButtonActive(noiseReductionButton, noiseReductionPanel.isVisible(), 'ghost');
-  }, { title: 'Toggle noise reduction panel', icon: 'filter' });
+  const noiseReductionButton = ContextToolbar.createButton(
+    'Denoise',
+    () => {
+      noiseReductionPanel.toggle(noiseReductionButton);
+      setButtonActive(noiseReductionButton, noiseReductionPanel.isVisible(), 'ghost');
+    },
+    { title: 'Toggle noise reduction panel', icon: 'filter' },
+  );
   noiseReductionButton.dataset.testid = 'noise-reduction-toggle-button';
   effectsContent.appendChild(noiseReductionButton);
 
-  const watermarkButton = ContextToolbar.createButton('Watermark', () => {
-    watermarkPanel.toggle(watermarkButton);
-    setButtonActive(watermarkButton, watermarkPanel.isVisible(), 'ghost');
-  }, { title: 'Toggle watermark panel', icon: 'image' });
+  const watermarkButton = ContextToolbar.createButton(
+    'Watermark',
+    () => {
+      watermarkPanel.toggle(watermarkButton);
+      setButtonActive(watermarkButton, watermarkPanel.isVisible(), 'ghost');
+    },
+    { title: 'Toggle watermark panel', icon: 'image' },
+  );
   watermarkButton.dataset.testid = 'watermark-toggle-button';
   effectsContent.appendChild(watermarkButton);
 
-  const slateButton = ContextToolbar.createButton('Slate', () => {
-    slateEditorPanel.toggle(slateButton);
-    setButtonActive(slateButton, slateEditorPanel.isVisible(), 'ghost');
-  }, { title: 'Toggle slate/leader editor', icon: 'film' });
+  const slateButton = ContextToolbar.createButton(
+    'Slate',
+    () => {
+      slateEditorPanel.toggle(slateButton);
+      setButtonActive(slateButton, slateEditorPanel.isVisible(), 'ghost');
+    },
+    { title: 'Toggle slate/leader editor', icon: 'film' },
+  );
   slateButton.dataset.testid = 'slate-editor-toggle-button';
   effectsContent.appendChild(slateButton);
 

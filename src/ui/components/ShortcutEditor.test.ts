@@ -22,9 +22,17 @@ function createMockManager(): ShortcutEditorManager & {
 
   const actions = [
     { action: 'playback.toggle', description: 'Play/Pause', currentCombo: { code: 'Space' } as KeyCombination },
-    { action: 'playback.stepForward', description: 'Step Forward', currentCombo: { code: 'ArrowRight' } as KeyCombination },
+    {
+      action: 'playback.stepForward',
+      description: 'Step Forward',
+      currentCombo: { code: 'ArrowRight' } as KeyCombination,
+    },
     { action: 'view.fitToWindow', description: 'Fit to Window', currentCombo: { code: 'KeyF' } as KeyCombination },
-    { action: 'view.toggleFullscreen', description: 'Fullscreen', currentCombo: { code: 'KeyF', ctrl: true } as KeyCombination },
+    {
+      action: 'view.toggleFullscreen',
+      description: 'Fullscreen',
+      currentCombo: { code: 'KeyF', ctrl: true } as KeyCombination,
+    },
     { action: 'edit.undo', description: 'Undo', currentCombo: { code: 'KeyZ', ctrl: true } as KeyCombination },
     { action: 'panel.color', description: 'Color Panel', currentCombo: { code: 'KeyC' } as KeyCombination },
   ];
@@ -33,16 +41,16 @@ function createMockManager(): ShortcutEditorManager & {
     _customBindings: customBindings,
 
     getAvailableActions: vi.fn(() =>
-      actions.map(a => ({
+      actions.map((a) => ({
         ...a,
         currentCombo: customBindings.get(a.action) ?? a.currentCombo,
-      }))
+      })),
     ),
 
     getEffectiveCombo: vi.fn((action: string) => {
       const custom = customBindings.get(action);
       if (custom) return custom;
-      return actions.find(a => a.action === action)?.currentCombo ?? { code: '' };
+      return actions.find((a) => a.action === action)?.currentCombo ?? { code: '' };
     }),
 
     setCustomBinding: vi.fn((action: string, combo: KeyCombination) => {
@@ -53,10 +61,12 @@ function createMockManager(): ShortcutEditorManager & {
       for (const a of actions) {
         if (a.action === excludeAction) continue;
         const effective = customBindings.get(a.action) ?? a.currentCombo;
-        if (effective.code === combo.code &&
-            !!effective.ctrl === !!combo.ctrl &&
-            !!effective.shift === !!combo.shift &&
-            !!effective.alt === !!combo.alt) {
+        if (
+          effective.code === combo.code &&
+          !!effective.ctrl === !!combo.ctrl &&
+          !!effective.shift === !!combo.shift &&
+          !!effective.alt === !!combo.alt
+        ) {
           return a.action;
         }
       }
@@ -74,7 +84,7 @@ function createMockManager(): ShortcutEditorManager & {
     }),
 
     getCustomBindings: vi.fn(() =>
-      [...customBindings.entries()].map(([action, customCombo]) => ({ action, customCombo }))
+      [...customBindings.entries()].map(([action, customCombo]) => ({ action, customCombo })),
     ),
   };
 
@@ -103,19 +113,19 @@ describe('ShortcutEditor', () => {
       const groups = buildActionGroups(manager);
 
       // Should have groups for playback, view, edit, panel
-      const categories = groups.map(g => g.category);
+      const categories = groups.map((g) => g.category);
       expect(categories).toContain('playback');
       expect(categories).toContain('view');
       expect(categories).toContain('edit');
       expect(categories).toContain('panel');
 
       // Playback group should have 2 actions
-      const playbackGroup = groups.find(g => g.category === 'playback')!;
+      const playbackGroup = groups.find((g) => g.category === 'playback')!;
       expect(playbackGroup.actions).toHaveLength(2);
       expect(playbackGroup.label).toBe('Playback');
 
       // View group should have 2 actions
-      const viewGroup = groups.find(g => g.category === 'view')!;
+      const viewGroup = groups.find((g) => g.category === 'view')!;
       expect(viewGroup.actions).toHaveLength(2);
     });
 
@@ -123,8 +133,8 @@ describe('ShortcutEditor', () => {
       const manager = createMockManager();
       const groups = buildActionGroups(manager);
 
-      const playbackGroup = groups.find(g => g.category === 'playback')!;
-      const toggleEntry = playbackGroup.actions.find(a => a.action === 'playback.toggle')!;
+      const playbackGroup = groups.find((g) => g.category === 'playback')!;
+      const toggleEntry = playbackGroup.actions.find((a) => a.action === 'playback.toggle')!;
       expect(toggleEntry.comboLabel).toBe('Space');
       expect(toggleEntry.description).toBe('Play/Pause');
     });
@@ -135,12 +145,12 @@ describe('ShortcutEditor', () => {
       manager._customBindings.set('playback.toggle', { code: 'KeyP' });
 
       const groups = buildActionGroups(manager);
-      const playbackGroup = groups.find(g => g.category === 'playback')!;
-      const toggleEntry = playbackGroup.actions.find(a => a.action === 'playback.toggle')!;
+      const playbackGroup = groups.find((g) => g.category === 'playback')!;
+      const toggleEntry = playbackGroup.actions.find((a) => a.action === 'playback.toggle')!;
 
       expect(toggleEntry.isCustomized).toBe(true);
       // Step forward should NOT be customized
-      const stepEntry = playbackGroup.actions.find(a => a.action === 'playback.stepForward')!;
+      const stepEntry = playbackGroup.actions.find((a) => a.action === 'playback.stepForward')!;
       expect(stepEntry.isCustomized).toBe(false);
     });
   });
@@ -231,18 +241,12 @@ describe('ShortcutEditor', () => {
       const manager = createMockManager();
       const json = JSON.stringify({
         version: 1,
-        bindings: [
-          { action: 'playback.toggle', combo: { code: 'KeyP', ctrl: 'yes', extra: 123 } },
-        ],
+        bindings: [{ action: 'playback.toggle', combo: { code: 'KeyP', ctrl: 'yes', extra: 123 } }],
       });
 
       importBindings(manager, json);
       // ctrl should be stripped (string "yes" !== true), extra should be stripped
-      expect(manager.setCustomBinding).toHaveBeenCalledWith(
-        'playback.toggle',
-        { code: 'KeyP' },
-        true,
-      );
+      expect(manager.setCustomBinding).toHaveBeenCalledWith('playback.toggle', { code: 'KeyP' }, true);
     });
   });
 
@@ -276,7 +280,7 @@ describe('ShortcutEditor', () => {
       const headers = container.querySelectorAll('.shortcut-group-header');
       expect(headers.length).toBeGreaterThan(0);
 
-      const texts = [...headers].map(h => h.textContent);
+      const texts = [...headers].map((h) => h.textContent);
       expect(texts).toContain('Playback');
       expect(texts).toContain('View');
     });
@@ -297,11 +301,7 @@ describe('ShortcutEditor', () => {
       // Simulate keydown
       document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP', bubbles: true }));
 
-      expect(manager.setCustomBinding).toHaveBeenCalledWith(
-        'playback.toggle',
-        { code: 'KeyP' },
-        true,
-      );
+      expect(manager.setCustomBinding).toHaveBeenCalledWith('playback.toggle', { code: 'KeyP' }, true);
       expect(editor.getListeningAction()).toBeNull();
     });
 

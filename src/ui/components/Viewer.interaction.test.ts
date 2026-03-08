@@ -38,7 +38,15 @@ interface TestableViewer {
     updateCropCursor(handle: CropDragHandle): void;
     handleCropPointerMove(e: PointerEvent): void;
     constrainToAspectRatio(region: CropRegion, handle: CropDragHandle): CropRegion;
-    drawUncropBackground(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
+    drawUncropBackground(
+      imageCtx: CanvasRenderingContext2D,
+      displayWidth: number,
+      displayHeight: number,
+      uncropOffsetX: number,
+      uncropOffsetY: number,
+      imageDisplayW: number,
+      imageDisplayH: number,
+    ): void;
     clearOutsideCropRegion(imageCtx: CanvasRenderingContext2D, displayWidth: number, displayHeight: number): void;
   };
 
@@ -62,7 +70,9 @@ interface TestableViewer {
   };
   pixelSamplingManager: {
     lastMouseMoveUpdate: number;
-    cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null;
+    cursorColorCallback:
+      | ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void)
+      | null;
     getImageData(): ImageData | null;
     getSourceImageData(): ImageData | null;
   };
@@ -351,9 +361,7 @@ describe('Viewer', () => {
 
       viewer2.dispose();
 
-      const mousemoveRemoves = removeSpy.mock.calls.filter(
-        (call) => call[0] === 'mousemove'
-      );
+      const mousemoveRemoves = removeSpy.mock.calls.filter((call) => call[0] === 'mousemove');
       expect(mousemoveRemoves.length).toBe(1);
 
       removeSpy.mockRestore();
@@ -374,11 +382,13 @@ describe('Viewer', () => {
       testable(viewer).invalidateLayoutCache();
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 50,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       // getBoundingClientRect on imageCanvas should be called at most once (cached)
       expect(rectSpy).toHaveBeenCalledTimes(1);
@@ -400,8 +410,14 @@ describe('Viewer', () => {
       // Mock the canvas rect so coordinates are in-bounds
       const imageCanvas = testable(viewer).imageCanvas as HTMLCanvasElement;
       vi.spyOn(imageCanvas, 'getBoundingClientRect').mockReturnValue({
-        left: 0, top: 0, width: 200, height: 200,
-        right: 200, bottom: 200, x: 0, y: 0,
+        left: 0,
+        top: 0,
+        width: 200,
+        height: 200,
+        right: 200,
+        bottom: 200,
+        x: 0,
+        y: 0,
         toJSON: () => ({}),
       } as DOMRect);
       // Set displayWidth/displayHeight so getPixelCoordinates produces valid position
@@ -410,11 +426,13 @@ describe('Viewer', () => {
       testable(viewer).invalidateLayoutCache();
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 50,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       // getImageData should be called at most once (shared between both consumers)
       expect(getImageDataSpy).toHaveBeenCalledTimes(1);
@@ -433,11 +451,13 @@ describe('Viewer', () => {
       testable(viewer).pixelSamplingManager.lastMouseMoveUpdate = 0;
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 50,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       // getImageData should not be called
       expect(getImageDataSpy).not.toHaveBeenCalled();
@@ -456,11 +476,13 @@ describe('Viewer', () => {
       const container = viewer.getContainer();
       // Should not throw
       expect(() => {
-        container.dispatchEvent(new MouseEvent('mousemove', {
-          clientX: 50,
-          clientY: 50,
-          bubbles: true,
-        }));
+        container.dispatchEvent(
+          new MouseEvent('mousemove', {
+            clientX: 50,
+            clientY: 50,
+            bubbles: true,
+          }),
+        );
       }).not.toThrow();
     });
 
@@ -475,11 +497,13 @@ describe('Viewer', () => {
       testable(viewer).pixelSamplingManager.lastMouseMoveUpdate = 0;
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 50,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       // Cursor color callback should be invoked (with null/null for out-of-bounds or color)
       expect(cursorCallback).toHaveBeenCalled();
@@ -497,20 +521,24 @@ describe('Viewer', () => {
       const container = viewer.getContainer();
 
       // First event should proceed
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 50,
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       const callCountAfterFirst = getImageDataSpy.mock.calls.length;
 
       // Immediately dispatch another event (within 16ms window)
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 60,
-        clientY: 60,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 60,
+          clientY: 60,
+          bubbles: true,
+        }),
+      );
 
       // Second event should be throttled
       expect(getImageDataSpy.mock.calls.length).toBe(callCountAfterFirst);
@@ -537,14 +565,10 @@ describe('Viewer', () => {
 
       viewer.dispose();
 
-      const mousemoveRemoves = removeSpy.mock.calls.filter(
-        (call) => call[0] === 'mousemove'
-      );
+      const mousemoveRemoves = removeSpy.mock.calls.filter((call) => call[0] === 'mousemove');
       expect(mousemoveRemoves.length).toBe(1);
 
-      const pointerleaveRemoves = removeSpy.mock.calls.filter(
-        (call) => call[0] === 'pointerleave'
-      );
+      const pointerleaveRemoves = removeSpy.mock.calls.filter((call) => call[0] === 'pointerleave');
       // 2 pointerleave removals: one from ViewerInputHandler.unbindEvents(), one from pixelSamplingManager
       expect(pointerleaveRemoves.length).toBe(2);
 
@@ -575,18 +599,26 @@ describe('Viewer', () => {
       // Mock canvas rect to a specific area
       const imageCanvas = testable(viewer).imageCanvas as HTMLCanvasElement;
       vi.spyOn(imageCanvas, 'getBoundingClientRect').mockReturnValue({
-        left: 100, top: 100, width: 200, height: 200,
-        right: 300, bottom: 300, x: 100, y: 100,
+        left: 100,
+        top: 100,
+        width: 200,
+        height: 200,
+        right: 300,
+        bottom: 300,
+        x: 100,
+        y: 100,
         toJSON: () => ({}),
       } as DOMRect);
       testable(viewer).invalidateLayoutCache();
 
       const container = viewer.getContainer();
-      container.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: 50,  // outside the canvas rect (left=100)
-        clientY: 50,
-        bubbles: true,
-      }));
+      container.dispatchEvent(
+        new MouseEvent('mousemove', {
+          clientX: 50, // outside the canvas rect (left=100)
+          clientY: 50,
+          bubbles: true,
+        }),
+      );
 
       expect(cursorCallback).toHaveBeenCalledWith(null, null);
     });
@@ -708,16 +740,12 @@ describe('Viewer', () => {
 
       // First call creates a canvas
       testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
-      const createCount1 = createSpy.mock.calls.filter(
-        (c) => c[0] === 'canvas'
-      ).length;
+      const createCount1 = createSpy.mock.calls.filter((c) => c[0] === 'canvas').length;
       expect(createCount1).toBe(1);
 
       // Second call with same index reuses -- no new createElement('canvas')
       testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
-      const createCount2 = createSpy.mock.calls.filter(
-        (c) => c[0] === 'canvas'
-      ).length;
+      const createCount2 = createSpy.mock.calls.filter((c) => c[0] === 'canvas').length;
       expect(createCount2).toBe(1); // still 1
 
       createSpy.mockRestore();
@@ -744,9 +772,7 @@ describe('Viewer', () => {
     it('VWR-312: getGhostFrameCanvas returns null when getContext fails', () => {
       const mockCanvas = document.createElement('canvas');
       vi.spyOn(mockCanvas, 'getContext').mockReturnValue(null);
-      const createSpy = vi.spyOn(document, 'createElement').mockReturnValue(
-        mockCanvas as unknown as HTMLElement
-      );
+      const createSpy = vi.spyOn(document, 'createElement').mockReturnValue(mockCanvas as unknown as HTMLElement);
 
       const result = testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       expect(result).toBeNull();
@@ -795,5 +821,4 @@ describe('Viewer', () => {
       ctxSpy.mockRestore();
     });
   });
-
 });

@@ -9,7 +9,12 @@ import { Renderer } from './Renderer';
 import { IPImage } from '../core/image/Image';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
-import { createMockRendererGL as createMockGL, initRendererWithMockGL, getLastUniform1i, getLastUniform1f } from '../../test/mocks';
+import {
+  createMockRendererGL as createMockGL,
+  initRendererWithMockGL,
+  getLastUniform1i,
+  getLastUniform1f,
+} from '../../test/mocks';
 
 /**
  * Create capabilities with specified HDR support.
@@ -117,7 +122,9 @@ describe('Renderer HDR Output Mode', () => {
     // Make drawingBufferColorSpace setter throw
     Object.defineProperty(throwingGL, 'drawingBufferColorSpace', {
       get: () => 'srgb',
-      set: () => { throw new Error('Not supported'); },
+      set: () => {
+        throw new Error('Not supported');
+      },
       configurable: true,
     });
 
@@ -800,7 +807,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
         uniform4iv: noop,
         uniformMatrix3fv: noop,
         uniformMatrix2fv: noop,
-      uniformMatrix4fv: noop,
+        uniformMatrix4fv: noop,
         activeTexture: noop,
         bindTexture: noop,
         pixelStorei: noop,
@@ -840,7 +847,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
         TEXTURE_MIN_FILTER: 0x2801,
         TEXTURE_MAG_FILTER: 0x2800,
         CLAMP_TO_EDGE: 0x812f,
-      REPEAT: 0x2901,
+        REPEAT: 0x2901,
         LINEAR: 0x2601,
         RGBA8: 0x8058,
         RGBA: 0x1908,
@@ -938,7 +945,14 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
  */
 describe('Renderer Sampler Unit Assignment (regression)', () => {
   /** The four sampler uniforms that must each have a unique texture unit. */
-  const SAMPLER_UNIFORMS = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT', 'u_lookLUT3D', 'u_fileLUT3D', 'u_displayLUT3D'] as const;
+  const SAMPLER_UNIFORMS = [
+    'u_texture',
+    'u_curvesLUT',
+    'u_falseColorLUT',
+    'u_lookLUT3D',
+    'u_fileLUT3D',
+    'u_displayLUT3D',
+  ] as const;
 
   /**
    * Create a mock GL context that tracks uniform1i calls with named locations.
@@ -1059,7 +1073,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     function getSamplerUnitAssignments(): Map<string, number> {
       const assignments = new Map<string, number>();
       for (const [name, value] of uniform1iCalls) {
-        if (SAMPLER_UNIFORMS.includes(name as typeof SAMPLER_UNIFORMS[number])) {
+        if (SAMPLER_UNIFORMS.includes(name as (typeof SAMPLER_UNIFORMS)[number])) {
           assignments.set(name, value);
         }
       }
@@ -1105,7 +1119,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     expect(
       uniqueUnits.size,
       `Expected ${units.length} unique texture units but found ${uniqueUnits.size}. ` +
-      `Assignments: ${JSON.stringify(Object.fromEntries(assignments))}`,
+        `Assignments: ${JSON.stringify(Object.fromEntries(assignments))}`,
     ).toBe(units.length);
   });
 
@@ -1150,14 +1164,11 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
       expect(lut3DUnit, `${lut3DName} must have a texture unit assigned`).not.toBeUndefined();
       for (const name of sampler2DUniforms) {
         const unit = assignments.get(name);
-        expect(
-          unit,
-          `${name} must have a texture unit assigned`,
-        ).not.toBeUndefined();
+        expect(unit, `${name} must have a texture unit assigned`).not.toBeUndefined();
         expect(
           unit,
           `${lut3DName} (sampler3D, unit ${lut3DUnit}) must not share a texture unit ` +
-          `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
+            `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
         ).not.toBe(lut3DUnit);
       }
     }
@@ -1595,7 +1606,9 @@ describe('Renderer HDR Headroom Uniform', () => {
     let currentColorSpace = 'srgb';
     Object.defineProperty(gl, 'drawingBufferColorSpace', {
       get: () => currentColorSpace,
-      set: (v: string) => { currentColorSpace = v; },
+      set: (v: string) => {
+        currentColorSpace = v;
+      },
       configurable: true,
       enumerable: true,
     });
@@ -1701,10 +1714,18 @@ describe('Renderer renderImageToFloat', () => {
 
     // readPixels for float data (fills with a pattern) - asserted on
     extendedGL.readPixels = vi.fn(
-      (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | Uint8Array) => {
+      (
+        _x: number,
+        _y: number,
+        _w: number,
+        _h: number,
+        _fmt: number,
+        _type: number,
+        pixels: Float32Array | Uint8Array,
+      ) => {
         if (pixels instanceof Float32Array) {
           for (let i = 0; i < pixels.length; i += 4) {
-            pixels[i] = 0.5;     // R
+            pixels[i] = 0.5; // R
             pixels[i + 1] = 1.5; // G (HDR value > 1.0)
             pixels[i + 2] = 0.3; // B
             pixels[i + 3] = 1.0; // A
@@ -1838,7 +1859,10 @@ describe('Renderer renderImageToFloat', () => {
     renderer.renderImageToFloat(image, 4, 4);
 
     expect(readPixels).toHaveBeenCalledWith(
-      0, 0, 4, 4,
+      0,
+      0,
+      4,
+      4,
       0x1908, // RGBA
       0x1406, // FLOAT
       expect.any(Float32Array),
@@ -1912,9 +1936,7 @@ describe('Renderer renderImageToFloat', () => {
     const getExtension = (mockGL as unknown as { getExtension: ReturnType<typeof vi.fn> }).getExtension;
 
     // Count calls BEFORE renderImageToFloat (initialize also calls getExtension)
-    const callsBefore = getExtension.mock.calls.filter(
-      (c: unknown[]) => c[0] === 'EXT_color_buffer_float'
-    ).length;
+    const callsBefore = getExtension.mock.calls.filter((c: unknown[]) => c[0] === 'EXT_color_buffer_float').length;
 
     const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
     renderer.renderImageToFloat(image, 4, 4);
@@ -1922,17 +1944,14 @@ describe('Renderer renderImageToFloat', () => {
 
     // renderImageToFloat should only add ONE getExtension('EXT_color_buffer_float') call
     // (cached after first check), regardless of how many calls initialize() made
-    const callsAfter = getExtension.mock.calls.filter(
-      (c: unknown[]) => c[0] === 'EXT_color_buffer_float'
-    ).length;
+    const callsAfter = getExtension.mock.calls.filter((c: unknown[]) => c[0] === 'EXT_color_buffer_float').length;
     expect(callsAfter - callsBefore).toBe(1);
   });
 
   it('REN-FBO-015: returns null when FBO creation fails', () => {
     const mockGL = initWithFBOCapableGL();
     // Make checkFramebufferStatus return incomplete
-    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
-      () => 0; // not FRAMEBUFFER_COMPLETE
+    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus = () => 0; // not FRAMEBUFFER_COMPLETE
 
     const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
     const result = renderer.renderImageToFloat(image, 4, 4);
@@ -2044,24 +2063,22 @@ describe('Renderer renderImageToFloatAsync', () => {
     });
     extendedGL.clientWaitSync = vi.fn();
     extendedGL.flush = vi.fn();
-    extendedGL.getBufferSubData = vi.fn(
-      (_target: number, _srcOffset: number, dst: Float32Array) => {
-        // Fill with recognizable PBO pattern
-        for (let i = 0; i < dst.length; i += 4) {
-          dst[i] = 0.7;     // R
-          dst[i + 1] = 2.0; // G (HDR)
-          dst[i + 2] = 0.1; // B
-          dst[i + 3] = 1.0; // A
-        }
-      },
-    );
+    extendedGL.getBufferSubData = vi.fn((_target: number, _srcOffset: number, dst: Float32Array) => {
+      // Fill with recognizable PBO pattern
+      for (let i = 0; i < dst.length; i += 4) {
+        dst[i] = 0.7; // R
+        dst[i + 1] = 2.0; // G (HDR)
+        dst[i + 2] = 0.1; // B
+        dst[i + 3] = 1.0; // A
+      }
+    });
 
     // readPixels fills Float32Array with FBO pattern (different from PBO pattern) - asserted on
     extendedGL.readPixels = vi.fn(
       (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | number) => {
         if (pixels instanceof Float32Array) {
           for (let i = 0; i < pixels.length; i += 4) {
-            pixels[i] = 0.5;     // R
+            pixels[i] = 0.5; // R
             pixels[i + 1] = 1.5; // G (HDR)
             pixels[i + 2] = 0.3; // B
             pixels[i + 3] = 1.0; // A
@@ -2254,9 +2271,7 @@ describe('Renderer renderImageToFloatAsync', () => {
     renderer.renderImageToFloatAsync(image, 4, 4);
 
     // Two PBOs created with PIXEL_PACK_BUFFER + DYNAMIC_READ
-    const pboAllocCalls = bufferData!.mock.calls.filter(
-      (c: unknown[]) => c[0] === 0x88eb && c[2] === 0x88e9
-    );
+    const pboAllocCalls = bufferData!.mock.calls.filter((c: unknown[]) => c[0] === 0x88eb && c[2] === 0x88e9);
     expect(pboAllocCalls.length).toBe(2);
   });
 
@@ -2383,8 +2398,7 @@ describe('Renderer renderImageToFloatAsync', () => {
 
   it('REN-PBO-018: returns null when FBO creation fails', () => {
     const mockGL = initWithPBOCapableGL();
-    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
-      () => 0; // not FRAMEBUFFER_COMPLETE
+    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus = () => 0; // not FRAMEBUFFER_COMPLETE
 
     // Force FBO re-creation
     renderer.dispose();
@@ -2496,18 +2510,18 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     const gl = createMockGL();
 
     // Override getUniformLocation to return name-tagged objects
-    (gl.getUniformLocation as ReturnType<typeof vi.fn>).mockImplementation(
-      (_program: unknown, name: string) => ({ __name: name })
-    );
+    (gl.getUniformLocation as ReturnType<typeof vi.fn>).mockImplementation((_program: unknown, name: string) => ({
+      __name: name,
+    }));
 
     // Track uniformMatrix2fv calls with their location name
-    gl.uniformMatrix2fv = vi.fn().mockImplementation(
-      (location: { __name: string } | null, _transpose: boolean, value: Float32Array) => {
+    gl.uniformMatrix2fv = vi
+      .fn()
+      .mockImplementation((location: { __name: string } | null, _transpose: boolean, value: Float32Array) => {
         if (location && '__name' in location) {
           matrixCalls.push({ name: location.__name, value: new Float32Array(value) });
         }
-      }
-    );
+      });
 
     return { gl, matrixCalls };
   }
@@ -2540,7 +2554,7 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     expectIdentityMatrix(rotationCalls[rotationCalls.length - 1]!.value);
   });
@@ -2551,12 +2565,15 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     renderer.resize(100, 100);
 
     const image = new IPImage({
-      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { attributes: { videoRotation: 90 } },
     });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     const mat = rotationCalls[rotationCalls.length - 1]!.value;
     // 90° CW: cos(-90°)=0, sin(-90°)=-1 → [0, -1, 1, 0]
@@ -2572,12 +2589,15 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     renderer.resize(100, 100);
 
     const image = new IPImage({
-      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { attributes: { videoRotation: 180 } },
     });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     const mat = rotationCalls[rotationCalls.length - 1]!.value;
     // 180°: cos(-180°)=-1, sin(-180°)=0 → [-1, 0, 0, -1]
@@ -2593,12 +2613,15 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     renderer.resize(100, 100);
 
     const image = new IPImage({
-      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { attributes: { videoRotation: 270 } },
     });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     const mat = rotationCalls[rotationCalls.length - 1]!.value;
     // 270° CW: cos(-270°)=0, sin(-270°)=1 → [0, 1, -1, 0]
@@ -2616,7 +2639,7 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     const sourceCanvas = document.createElement('canvas');
     renderer.renderSDRFrame(sourceCanvas);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     expectIdentityMatrix(rotationCalls[rotationCalls.length - 1]!.value);
   });
@@ -2627,12 +2650,15 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     renderer.resize(100, 100);
 
     const image = new IPImage({
-      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { attributes: { videoRotation: 360 } },
     });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     // 360° normalizes to 0° → identity matrix
     expectIdentityMatrix(rotationCalls[rotationCalls.length - 1]!.value);
@@ -2647,7 +2673,7 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
     const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     const mat = rotationCalls[rotationCalls.length - 1]!.value;
     // 45° CW: cos(-45°)=sqrt(2)/2, sin(-45°)=-sqrt(2)/2
@@ -2665,12 +2691,15 @@ describe('Renderer texture rotation (u_texRotationMatrix)', () => {
 
     renderer.setUserTransform(90, false, false);
     const image = new IPImage({
-      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { attributes: { videoRotation: 90 } },
     });
     renderer.renderImage(image);
 
-    const rotationCalls = matrixCalls.filter(c => c.name === 'u_texRotationMatrix');
+    const rotationCalls = matrixCalls.filter((c) => c.name === 'u_texRotationMatrix');
     expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
     const mat = rotationCalls[rotationCalls.length - 1]!.value;
     // 90 + 90 = 180° → [-1, 0, 0, -1]
@@ -2703,7 +2732,7 @@ describe('Renderer scope tone mapping neutralization', () => {
       _h: number,
       _format: number,
       _type: number,
-      pixels: Float32Array
+      pixels: Float32Array,
     ) => {
       if (pixels instanceof Float32Array) {
         pixels.fill(0.5);
@@ -2727,7 +2756,7 @@ describe('Renderer scope tone mapping neutralization', () => {
       {} as IPImage,
       2,
       2,
-      {} as WebGLFramebuffer
+      {} as WebGLFramebuffer,
     ) as Float32Array | null;
 
     expect(result).not.toBeNull();
@@ -2751,7 +2780,7 @@ describe('Renderer scope tone mapping neutralization', () => {
       {} as IPImage,
       2,
       2,
-      {} as WebGLFramebuffer
+      {} as WebGLFramebuffer,
     ) as Float32Array | null;
 
     expect(result).not.toBeNull();
@@ -2954,7 +2983,7 @@ describe('Renderer spherical 360 texture wrap', () => {
     (gl.texParameteri as ReturnType<typeof vi.fn>).mockImplementation(
       (target: number, pname: number, param: number) => {
         texParamCalls.push({ target, pname, param });
-      }
+      },
     );
 
     return { gl, texParamCalls };
@@ -2985,15 +3014,11 @@ describe('Renderer spherical 360 texture wrap', () => {
     renderer.renderImage(image);
 
     // Should have set REPEAT on WRAP_S during render
-    const repeatCalls = texParamCalls.filter(
-      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT
-    );
+    const repeatCalls = texParamCalls.filter((c) => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT);
     expect(repeatCalls.length).toBeGreaterThanOrEqual(1);
 
     // Should have restored CLAMP_TO_EDGE on WRAP_S after render
-    const restoreCalls = texParamCalls.filter(
-      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.CLAMP_TO_EDGE
-    );
+    const restoreCalls = texParamCalls.filter((c) => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.CLAMP_TO_EDGE);
     // The restore call comes after the REPEAT call
     const lastRepeatIdx = texParamCalls.lastIndexOf(repeatCalls[repeatCalls.length - 1]!);
     const lastRestoreIdx = texParamCalls.lastIndexOf(restoreCalls[restoreCalls.length - 1]!);
@@ -3011,9 +3036,7 @@ describe('Renderer spherical 360 texture wrap', () => {
     const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
     renderer.renderImage(image);
 
-    const repeatCalls = texParamCalls.filter(
-      c => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT
-    );
+    const repeatCalls = texParamCalls.filter((c) => c.pname === gl.TEXTURE_WRAP_S && c.param === gl.REPEAT);
     expect(repeatCalls.length).toBe(0);
   });
 });
@@ -3081,10 +3104,18 @@ describe('GC Pressure: RGB-to-RGBA buffer pooling', () => {
     const img = new IPImage({ width: 2, height: 2, channels: 3, dataType: 'float32' });
     const src = img.getTypedArray() as Float32Array;
     // Set test pixel values (12 values for 2x2 RGB)
-    src[0] = 0.1; src[1] = 0.2; src[2] = 0.3;
-    src[3] = 0.4; src[4] = 0.5; src[5] = 0.6;
-    src[6] = 0.7; src[7] = 0.8; src[8] = 0.9;
-    src[9] = 1.0; src[10] = 0.0; src[11] = 0.5;
+    src[0] = 0.1;
+    src[1] = 0.2;
+    src[2] = 0.3;
+    src[3] = 0.4;
+    src[4] = 0.5;
+    src[5] = 0.6;
+    src[6] = 0.7;
+    src[7] = 0.8;
+    src[8] = 0.9;
+    src[9] = 1.0;
+    src[10] = 0.0;
+    src[11] = 0.5;
     img.textureNeedsUpdate = true;
 
     renderer.renderImage(img);
@@ -3099,15 +3130,15 @@ describe('GC Pressure: RGB-to-RGBA buffer pooling', () => {
     expect(uploadedData.length).toBe(16);
     // Verify first pixel: RGB preserved, alpha padded to 1.0
     // Use toBeCloseTo because Float32Array has limited precision (~7 decimal digits)
-    expect(uploadedData[0]).toBeCloseTo(0.1, 5);  // R
-    expect(uploadedData[1]).toBeCloseTo(0.2, 5);  // G
-    expect(uploadedData[2]).toBeCloseTo(0.3, 5);  // B
-    expect(uploadedData[3]).toBe(1.0);              // A (padded, exact)
+    expect(uploadedData[0]).toBeCloseTo(0.1, 5); // R
+    expect(uploadedData[1]).toBeCloseTo(0.2, 5); // G
+    expect(uploadedData[2]).toBeCloseTo(0.3, 5); // B
+    expect(uploadedData[3]).toBe(1.0); // A (padded, exact)
     // Verify last pixel
-    expect(uploadedData[12]).toBe(1.0);             // R (exact)
-    expect(uploadedData[13]).toBe(0.0);             // G (exact)
-    expect(uploadedData[14]).toBeCloseTo(0.5, 5);  // B
-    expect(uploadedData[15]).toBe(1.0);             // A (padded, exact)
+    expect(uploadedData[12]).toBe(1.0); // R (exact)
+    expect(uploadedData[13]).toBe(0.0); // G (exact)
+    expect(uploadedData[14]).toBeCloseTo(0.5, 5); // B
+    expect(uploadedData[15]).toBe(1.0); // A (padded, exact)
   });
 
   it('REN-PAD-002: pooled buffer is reused for same-dimension images', () => {
@@ -3222,10 +3253,12 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     renderer.renderImage(img, 0.5, 0.5, 2.0, 2.0);
 
     // uniform2fv should have been called for u_offset and u_scale
-    const calls = (mockGL.uniform2fv as ReturnType<typeof vi.fn>).mock.calls as Array<[{ __uniformName?: string }, Float32Array]>;
+    const calls = (mockGL.uniform2fv as ReturnType<typeof vi.fn>).mock.calls as Array<
+      [{ __uniformName?: string }, Float32Array]
+    >;
 
-    const offsetCall = calls.find(c => c[0]?.__uniformName === 'u_offset');
-    const scaleCall = calls.find(c => c[0]?.__uniformName === 'u_scale');
+    const offsetCall = calls.find((c) => c[0]?.__uniformName === 'u_offset');
+    const scaleCall = calls.find((c) => c[0]?.__uniformName === 'u_scale');
 
     expect(offsetCall).toBeDefined();
     expect(offsetCall![1]).toBeInstanceOf(Float32Array);

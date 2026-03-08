@@ -6,10 +6,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import {
-  LayoutGroupNode,
-  computeTileViewports,
-} from './LayoutGroupNode';
+import { LayoutGroupNode, computeTileViewports } from './LayoutGroupNode';
 import type { EvalContext } from '../../core/graph/Graph';
 import { IPNode } from '../base/IPNode';
 import { IPImage } from '../../core/image/Image';
@@ -484,10 +481,7 @@ describe('Viewport geometry invariants', () => {
 
         // Check no overlap: either one is fully left/right/above/below the other
         const noOverlap =
-          a.x + a.width <= b.x ||
-          b.x + b.width <= a.x ||
-          a.y + a.height <= b.y ||
-          b.y + b.height <= a.y;
+          a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
 
         expect(noOverlap).toBe(true);
       }
@@ -503,10 +497,7 @@ describe('Viewport geometry invariants', () => {
         const b = viewports[j]!;
 
         const noOverlap =
-          a.x + a.width <= b.x ||
-          b.x + b.width <= a.x ||
-          a.y + a.height <= b.y ||
-          b.y + b.height <= a.y;
+          a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
 
         expect(noOverlap).toBe(true);
       }

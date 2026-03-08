@@ -36,8 +36,22 @@ describe('renderForScopes Y-flip logic', () => {
   it('RFS-001: Y-flip reverses row order for even height', () => {
     // 2x2 image: row0=[1,0,0,1, 2,0,0,1], row1=[3,0,0,1, 4,0,0,1]
     const input = new Float32Array([
-      1, 0, 0, 1,  2, 0, 0, 1,  // row 0 (bottom in GL)
-      3, 0, 0, 1,  4, 0, 0, 1,  // row 1 (top in GL)
+      1,
+      0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      1, // row 0 (bottom in GL)
+      3,
+      0,
+      0,
+      1,
+      4,
+      0,
+      0,
+      1, // row 1 (top in GL)
     ]);
     const flipped = yFlipFloat32(input, 2, 2);
     // After flip: row0 should be [3,0,0,1, 4,0,0,1], row1 should be [1,0,0,1, 2,0,0,1]
@@ -50,18 +64,27 @@ describe('renderForScopes Y-flip logic', () => {
   it('RFS-002: Y-flip reverses row order for odd height', () => {
     // 1x3 image: row0=[1,0,0,1], row1=[2,0,0,1], row2=[3,0,0,1]
     const input = new Float32Array([
-      1, 0, 0, 1,  // row 0
-      2, 0, 0, 1,  // row 1 (middle)
-      3, 0, 0, 1,  // row 2
+      1,
+      0,
+      0,
+      1, // row 0
+      2,
+      0,
+      0,
+      1, // row 1 (middle)
+      3,
+      0,
+      0,
+      1, // row 2
     ]);
     const flipped = yFlipFloat32(input, 1, 3);
-    expect(flipped[0]).toBe(3);  // row 2 -> row 0
-    expect(flipped[4]).toBe(2);  // row 1 stays (middle)
-    expect(flipped[8]).toBe(1);  // row 0 -> row 2
+    expect(flipped[0]).toBe(3); // row 2 -> row 0
+    expect(flipped[4]).toBe(2); // row 1 stays (middle)
+    expect(flipped[8]).toBe(1); // row 0 -> row 2
   });
 
   it('RFS-003: Y-flip is identity for 1-row image', () => {
-    const input = new Float32Array([1, 2, 3, 4,  5, 6, 7, 8]);
+    const input = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]);
     const flipped = yFlipFloat32(input, 2, 1);
     expect(Array.from(flipped)).toEqual(Array.from(input));
   });
@@ -74,11 +97,7 @@ describe('renderForScopes Y-flip logic', () => {
   });
 
   it('RFS-005: double Y-flip returns original data', () => {
-    const input = new Float32Array([
-      1, 0, 0, 1,  2, 0, 0, 1,
-      3, 0, 0, 1,  4, 0, 0, 1,
-      5, 0, 0, 1,  6, 0, 0, 1,
-    ]);
+    const input = new Float32Array([1, 0, 0, 1, 2, 0, 0, 1, 3, 0, 0, 1, 4, 0, 0, 1, 5, 0, 0, 1, 6, 0, 0, 1]);
     const flipped = yFlipFloat32(input, 2, 3);
     const doubleFlipped = yFlipFloat32(flipped, 2, 3);
     expect(Array.from(doubleFlipped)).toEqual(Array.from(input));
@@ -93,8 +112,14 @@ describe('renderForScopes Y-flip logic', () => {
   it('RFS-007: Y-flip preserves all RGBA channels', () => {
     // 1x2 with distinct RGBA values
     const input = new Float32Array([
-      0.1, 0.2, 0.3, 0.4,  // row 0
-      0.5, 0.6, 0.7, 0.8,  // row 1
+      0.1,
+      0.2,
+      0.3,
+      0.4, // row 0
+      0.5,
+      0.6,
+      0.7,
+      0.8, // row 1
     ]);
     const flipped = yFlipFloat32(input, 1, 2);
     expect(flipped[0]).toBeCloseTo(0.5);
@@ -146,7 +171,10 @@ describe('floatRGBAToImageData utility', () => {
  */
 describe('Scope rendering display state neutralization', () => {
   const SCOPE_DISPLAY_CONFIG: DisplayColorConfig = {
-    transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2,
+    transferFunction: 0,
+    displayGamma: 1,
+    displayBrightness: 1,
+    customGamma: 2.2,
   };
 
   let mgr: ShaderStateManager;
@@ -248,7 +276,10 @@ describe('Scope rendering display state neutralization', () => {
 describe('isHDRContent helper', () => {
   it('SFBO-010: uint8 + srgb + no videoFrame = SDR', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { transferFunction: 'srgb' },
     });
     expect(isHDRContent(image)).toBe(false);
@@ -256,14 +287,20 @@ describe('isHDRContent helper', () => {
 
   it('SFBO-011: uint8 + no metadata = SDR', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
     });
     expect(isHDRContent(image)).toBe(false);
   });
 
   it('SFBO-012: float32 = HDR regardless of metadata', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'float32',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'float32',
       metadata: { transferFunction: 'srgb' },
     });
     expect(isHDRContent(image)).toBe(true);
@@ -271,14 +308,20 @@ describe('isHDRContent helper', () => {
 
   it('SFBO-013: uint16 = HDR regardless of metadata', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint16',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint16',
     });
     expect(isHDRContent(image)).toBe(true);
   });
 
   it('SFBO-014: uint8 + hlg = HDR', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { transferFunction: 'hlg' },
     });
     expect(isHDRContent(image)).toBe(true);
@@ -286,7 +329,10 @@ describe('isHDRContent helper', () => {
 
   it('SFBO-015: uint8 + pq = HDR', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { transferFunction: 'pq' },
     });
     expect(isHDRContent(image)).toBe(true);
@@ -294,7 +340,10 @@ describe('isHDRContent helper', () => {
 
   it('SFBO-016: uint8 + smpte240m = HDR', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { transferFunction: 'smpte240m' },
     });
     expect(isHDRContent(image)).toBe(true);
@@ -302,9 +351,24 @@ describe('isHDRContent helper', () => {
 
   it('SFBO-017: uint8 + videoFrame = HDR', () => {
     ManagedVideoFrame.resetForTesting();
-    const mockFrame = { get format() { return 'RGBA'; }, close() {}, displayWidth: 2, displayHeight: 2, codedWidth: 2, codedHeight: 2, timestamp: 0, duration: null, colorSpace: {} } as unknown as VideoFrame;
+    const mockFrame = {
+      get format() {
+        return 'RGBA';
+      },
+      close() {},
+      displayWidth: 2,
+      displayHeight: 2,
+      codedWidth: 2,
+      codedHeight: 2,
+      timestamp: 0,
+      duration: null,
+      colorSpace: {},
+    } as unknown as VideoFrame;
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
       videoFrame: mockFrame,
     });
     expect(isHDRContent(image)).toBe(true);
@@ -313,7 +377,10 @@ describe('isHDRContent helper', () => {
 
   it('SFBO-018: uint8 + srgb + imageBitmap (no videoFrame) = SDR', () => {
     const image = new IPImage({
-      width: 2, height: 2, channels: 4, dataType: 'uint8',
+      width: 2,
+      height: 2,
+      channels: 4,
+      dataType: 'uint8',
       metadata: { transferFunction: 'srgb' },
       imageBitmap: {} as ImageBitmap,
     });

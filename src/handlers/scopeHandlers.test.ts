@@ -16,18 +16,18 @@ import {
 } from './scopeHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
-function createMockContext(overrides: {
-  histogramVisible?: boolean;
-  waveformVisible?: boolean;
-  vectorscopeVisible?: boolean;
-  gamutDiagramVisible?: boolean;
-  imageData?: ImageData | null;
-  floatData?: Float32Array | null;
-  hdrActive?: boolean;
-} = {}): SessionBridgeContext {
-  const imageData = overrides.imageData !== undefined
-    ? overrides.imageData
-    : new ImageData(2, 2);
+function createMockContext(
+  overrides: {
+    histogramVisible?: boolean;
+    waveformVisible?: boolean;
+    vectorscopeVisible?: boolean;
+    gamutDiagramVisible?: boolean;
+    imageData?: ImageData | null;
+    floatData?: Float32Array | null;
+    hdrActive?: boolean;
+  } = {},
+): SessionBridgeContext {
+  const imageData = overrides.imageData !== undefined ? overrides.imageData : new ImageData(2, 2);
 
   const scopeImageData = imageData
     ? {
@@ -55,7 +55,7 @@ function createMockContext(overrides: {
     updateHDR: vi.fn(),
     calculate: vi.fn(() => mockHistogramData),
     calculateHDR: vi.fn(() => mockHistogramData),
-    getData: vi.fn(() => (overrides.histogramVisible ?? false) ? mockHistogramData : null),
+    getData: vi.fn(() => ((overrides.histogramVisible ?? false) ? mockHistogramData : null)),
   };
   const waveform = {
     isVisible: vi.fn(() => overrides.waveformVisible ?? false),
@@ -530,10 +530,12 @@ describe('createScopeScheduler', () => {
     vi.advanceTimersByTime(32);
 
     expect(onHistogramData).toHaveBeenCalledTimes(1);
-    expect(onHistogramData).toHaveBeenCalledWith(expect.objectContaining({
-      red: expect.any(Uint32Array),
-      maxValue: expect.any(Number),
-    }));
+    expect(onHistogramData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        red: expect.any(Uint32Array),
+        maxValue: expect.any(Number),
+      }),
+    );
   });
 
   it('SCH-U039: onHistogramData callback fires even when full histogram is NOT visible', () => {

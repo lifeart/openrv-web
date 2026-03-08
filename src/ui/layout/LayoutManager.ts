@@ -10,8 +10,14 @@
  * and a content area with tabs.
  */
 
-import { LayoutStore, PanelId, COLLAPSED_RAIL_SIZE, LayoutPresetId, DEFAULT_PANEL_STATES } from './LayoutStore';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import {
+  type LayoutStore,
+  type PanelId,
+  COLLAPSED_RAIL_SIZE,
+  type LayoutPresetId,
+  DEFAULT_PANEL_STATES,
+} from './LayoutStore';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from '../components/shared/Icons';
 import { createIconButton } from '../components/shared/Button';
 
@@ -294,11 +300,11 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   }
 
   private createBottomCollapseButton(): HTMLButtonElement {
-    const btn = createIconButton(
-      getIconSvg('chevron-down', 'sm'),
-      () => this.store.togglePanelCollapsed('bottom'),
-      { variant: 'icon', size: 'sm', title: 'Toggle bottom panel' },
-    );
+    const btn = createIconButton(getIconSvg('chevron-down', 'sm'), () => this.store.togglePanelCollapsed('bottom'), {
+      variant: 'icon',
+      size: 'sm',
+      title: 'Toggle bottom panel',
+    });
     btn.dataset.testid = 'layout-collapse-bottom';
     btn.style.flexShrink = '0';
     return btn;

@@ -17,7 +17,16 @@
 
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
+  GamutMappingState,
+} from '../core/types/effects';
 import type { TextureFilterMode } from '../core/types/filter';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
@@ -180,13 +189,31 @@ export interface RendererHDR {
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
 
   /** Set File LUT (per-source, applied after EOTF, before input primaries). */
-  setFileLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+  setFileLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void;
 
   /** Set Look LUT (per-source creative grade). */
-  setLookLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+  setLookLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void;
 
   /** Set Display LUT (session-wide, after output primaries, before display transfer). */
-  setDisplayLUT(data: Float32Array | null, size: number, intensity: number, domainMin?: [number, number, number], domainMax?: [number, number, number]): void;
+  setDisplayLUT(
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,13 +230,7 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
   // --- Rendering ---
 
   /** Render an image with the given transform. */
-  renderImage(
-    image: IPImage,
-    offsetX?: number,
-    offsetY?: number,
-    scaleX?: number,
-    scaleY?: number,
-  ): void;
+  renderImage(image: IPImage, offsetX?: number, offsetY?: number, scaleX?: number, scaleY?: number): void;
 
   /**
    * Render multiple images in a tiled layout using viewport/scissor clipping.

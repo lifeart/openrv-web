@@ -9,7 +9,7 @@
  * The Display LUT is shared across all sources.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { LUT } from '../LUTLoader';
 import type {
   LUTStageState,
@@ -23,13 +23,7 @@ import type {
 } from './LUTPipelineState';
 
 // Re-export defaults and types for convenient imports
-export type {
-  LUTStageState,
-  PreCacheStageState,
-  SourceLUTConfig,
-  LUTPipelineState,
-  SerializableLUTPipelineState,
-};
+export type { LUTStageState, PreCacheStageState, SourceLUTConfig, LUTPipelineState, SerializableLUTPipelineState };
 
 /** Default state for a single LUT stage */
 export const DEFAULT_LUT_STAGE: LUTStageState = {

@@ -33,10 +33,7 @@ export function isDeinterlaceActive(params: DeinterlaceParams): boolean {
 /**
  * Apply deinterlacing to ImageData in-place.
  */
-export function applyDeinterlace(
-  imageData: ImageData,
-  params: DeinterlaceParams
-): void {
+export function applyDeinterlace(imageData: ImageData, params: DeinterlaceParams): void {
   if (!params.enabled) return;
   if (params.method === 'weave') return;
 
@@ -54,12 +51,7 @@ export function applyDeinterlace(
  * TFF keeps even lines (0,2,4...) and interpolates odd lines.
  * BFF keeps odd lines (1,3,5...) and interpolates even lines.
  */
-function applyBob(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  fieldOrder: FieldOrder
-): void {
+function applyBob(data: Uint8ClampedArray, width: number, height: number, fieldOrder: FieldOrder): void {
   const original = new Uint8ClampedArray(data);
   const stride = width * 4;
 
@@ -104,11 +96,7 @@ function applyBob(
  * Even lines average with the line below, odd lines with the line above.
  * Reduces combing but softens the image.
  */
-function applyBlend(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number
-): void {
+function applyBlend(data: Uint8ClampedArray, width: number, height: number): void {
   const original = new Uint8ClampedArray(data);
   const stride = width * 4;
 
@@ -116,9 +104,7 @@ function applyBlend(
     const rowOffset = y * stride;
 
     // Pick the neighbor to blend with
-    const neighborY = y % 2 === 0
-      ? Math.min(y + 1, height - 1)
-      : Math.max(y - 1, 0);
+    const neighborY = y % 2 === 0 ? Math.min(y + 1, height - 1) : Math.max(y - 1, 0);
     const neighborOffset = neighborY * stride;
 
     for (let i = 0; i < stride; i++) {

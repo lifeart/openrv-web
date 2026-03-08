@@ -49,19 +49,23 @@ describe('PluginRegistry Integration', () => {
       formatName: testFormatName,
       canDecode: (buffer: ArrayBuffer) => {
         const view = new DataView(buffer);
-        return buffer.byteLength >= 4 && view.getUint32(0) === 0xDEADBEEF;
+        return buffer.byteLength >= 4 && view.getUint32(0) === 0xdeadbeef;
       },
       decode: vi.fn().mockResolvedValue({
-        width: 10, height: 10,
+        width: 10,
+        height: 10,
         data: new Float32Array(400),
-        channels: 4, colorSpace: 'srgb',
+        channels: 4,
+        colorSpace: 'srgb',
         metadata: { formatName: testFormatName },
       }),
     };
 
     const plugin: Plugin = {
       manifest: createManifest({ id: 'integ.decoder', contributes: ['decoder'] }),
-      activate(ctx: PluginContext) { ctx.registerDecoder(decoder); },
+      activate(ctx: PluginContext) {
+        ctx.registerDecoder(decoder);
+      },
     };
 
     registry.register(plugin);
@@ -69,7 +73,7 @@ describe('PluginRegistry Integration', () => {
 
     // Verify decoder is live
     const testBuffer = new ArrayBuffer(4);
-    new DataView(testBuffer).setUint32(0, 0xDEADBEEF);
+    new DataView(testBuffer).setUint32(0, 0xdeadbeef);
     const foundDecoder = decoderRegistry.getDecoder(testBuffer);
     expect(foundDecoder).not.toBeNull();
     expect(foundDecoder!.formatName).toBe(testFormatName);
@@ -92,7 +96,10 @@ describe('PluginRegistry Integration', () => {
     const plugin: Plugin = {
       manifest: createManifest({ id: 'integ.node', contributes: ['node'] }),
       activate(ctx: PluginContext) {
-        ctx.registerNode(testNodeType, () => ({ type: testNodeType }) as unknown as import('../nodes/base/IPNode').IPNode);
+        ctx.registerNode(
+          testNodeType,
+          () => ({ type: testNodeType }) as unknown as import('../nodes/base/IPNode').IPNode,
+        );
       },
     };
 
@@ -113,12 +120,16 @@ describe('PluginRegistry Integration', () => {
 
     const pluginA: Plugin = {
       manifest: createManifest({ id: 'integ.a', name: 'A', contributes: ['decoder'] }),
-      activate() { order.push('activate-a'); },
+      activate() {
+        order.push('activate-a');
+      },
     };
 
     const pluginB: Plugin = {
       manifest: createManifest({ id: 'integ.b', name: 'B', contributes: ['decoder'], dependencies: ['integ.a'] }),
-      activate() { order.push('activate-b'); },
+      activate() {
+        order.push('activate-b');
+      },
     };
 
     registry.register(pluginA);
@@ -139,7 +150,10 @@ describe('PluginRegistry Integration', () => {
       manifest: createManifest({ id: 'integ.reactivate', contributes: ['node'] }),
       init: initFn,
       activate(ctx: PluginContext) {
-        ctx.registerNode(testNodeType, () => ({ type: testNodeType }) as unknown as import('../nodes/base/IPNode').IPNode);
+        ctx.registerNode(
+          testNodeType,
+          () => ({ type: testNodeType }) as unknown as import('../nodes/base/IPNode').IPNode,
+        );
       },
     };
 

@@ -137,7 +137,11 @@ function createMockCtx(overrides: Partial<PixelEffectsContext> = {}): PixelEffec
     getFilmEmulationParams: vi.fn(() => ({ enabled: false, intensity: 0, stock: 'none' })),
     getStabilizationParams: vi.fn(() => ({ enabled: false, cropAmount: 0 })),
     getNoiseReductionParams: vi.fn(() => ({ strength: 0 })),
-    getBackgroundPatternState: vi.fn(() => ({ pattern: 'black', checkerSize: 'medium' as const, customColor: '#000000' })),
+    getBackgroundPatternState: vi.fn(() => ({
+      pattern: 'black',
+      checkerSize: 'medium' as const,
+      customColor: '#000000',
+    })),
     getInteractionQuality: vi.fn(() => ({ cpuHalfRes: false })),
     getImageCtx: vi.fn(() => createMockCanvasCtx()),
     getCanvasColorSpace: vi.fn(() => undefined),
@@ -491,7 +495,11 @@ describe('ViewerPixelEffects', () => {
       const mockImageCtx = createMockCanvasCtx();
       const ctx = createMockCtx({
         getImageCtx: vi.fn(() => mockImageCtx) as any,
-        getBackgroundPatternState: vi.fn(() => ({ pattern: 'black', checkerSize: 'medium' as const, customColor: '#000000' })),
+        getBackgroundPatternState: vi.fn(() => ({
+          pattern: 'black',
+          checkerSize: 'medium' as const,
+          customColor: '#000000',
+        })),
       });
       const imageData = { data: new Uint8ClampedArray(4), width: 1, height: 1 } as unknown as ImageData;
 
@@ -513,7 +521,11 @@ describe('ViewerPixelEffects', () => {
 
       const ctx = createMockCtx({
         getImageCtx: vi.fn(() => mockImageCtx) as any,
-        getBackgroundPatternState: vi.fn(() => ({ pattern: 'checker', checkerSize: 'medium' as const, customColor: '#000000' })),
+        getBackgroundPatternState: vi.fn(() => ({
+          pattern: 'checker',
+          checkerSize: 'medium' as const,
+          customColor: '#000000',
+        })),
         getBgCompositeTempCanvas: vi.fn(() => null),
         getBgCompositeTempCtx: vi.fn(() => null),
       });
@@ -538,7 +550,11 @@ describe('ViewerPixelEffects', () => {
 
       const ctx = createMockCtx({
         getImageCtx: vi.fn(() => mockImageCtx) as any,
-        getBackgroundPatternState: vi.fn(() => ({ pattern: 'checker', checkerSize: 'medium' as const, customColor: '#000000' })),
+        getBackgroundPatternState: vi.fn(() => ({
+          pattern: 'checker',
+          checkerSize: 'medium' as const,
+          customColor: '#000000',
+        })),
         getBgCompositeTempCanvas: vi.fn(() => mockTempCanvas),
         getBgCompositeTempCtx: vi.fn(() => mockTempCtx),
       });
@@ -562,7 +578,11 @@ describe('ViewerPixelEffects', () => {
 
       const ctx = createMockCtx({
         getImageCtx: vi.fn(() => mockImageCtx) as any,
-        getBackgroundPatternState: vi.fn(() => ({ pattern: 'checker', checkerSize: 'medium' as const, customColor: '#000000' })),
+        getBackgroundPatternState: vi.fn(() => ({
+          pattern: 'checker',
+          checkerSize: 'medium' as const,
+          customColor: '#000000',
+        })),
         getBgCompositeTempCanvas: vi.fn(() => null),
         getBgCompositeTempCtx: vi.fn(() => null),
       });
@@ -580,17 +600,25 @@ describe('ViewerPixelEffects', () => {
       const widthSetter = vi.fn();
       const heightSetter = vi.fn();
       Object.defineProperty(mockTempCanvas, 'width', {
-        get() { return this._width; },
+        get() {
+          return this._width;
+        },
         set: widthSetter,
       });
       Object.defineProperty(mockTempCanvas, 'height', {
-        get() { return this._height; },
+        get() {
+          return this._height;
+        },
         set: heightSetter,
       });
 
       const ctx = createMockCtx({
         getImageCtx: vi.fn(() => mockImageCtx) as any,
-        getBackgroundPatternState: vi.fn(() => ({ pattern: 'checker', checkerSize: 'medium' as const, customColor: '#000000' })),
+        getBackgroundPatternState: vi.fn(() => ({
+          pattern: 'checker',
+          checkerSize: 'medium' as const,
+          customColor: '#000000',
+        })),
         getBgCompositeTempCanvas: vi.fn(() => mockTempCanvas),
         getBgCompositeTempCtx: vi.fn(() => mockTempCtx),
       });
@@ -1015,7 +1043,9 @@ describe('ViewerPixelEffects', () => {
 
     it('catches and logs errors', async () => {
       const canvasCtx = {
-        getImageData: vi.fn(() => { throw new Error('test error'); }),
+        getImageData: vi.fn(() => {
+          throw new Error('test error');
+        }),
         putImageData: vi.fn(),
       };
       const pipeline = createMockColorPipeline();

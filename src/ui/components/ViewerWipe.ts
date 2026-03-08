@@ -3,7 +3,7 @@
  * Handles wipe comparison UI elements and interaction logic.
  */
 
-import { WipeState } from './WipeControl';
+import { type WipeState } from './WipeControl';
 
 // Wipe label constants
 const DEFAULT_WIPE_LABEL_A = 'Original';
@@ -75,9 +75,12 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
 }
 
 // Base styles from createWipeUIElements (minus display, cursor, and mode-varying properties)
-const WIPE_LINE_BASE = 'position: absolute; background: var(--accent-primary); z-index: 50; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);';
-const WIPE_LABEL_A_BASE = 'position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
-const WIPE_LABEL_B_BASE = 'position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
+const WIPE_LINE_BASE =
+  'position: absolute; background: var(--accent-primary); z-index: 50; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);';
+const WIPE_LABEL_A_BASE =
+  'position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
+const WIPE_LABEL_B_BASE =
+  'position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
 
 /**
  * Batch-update wipe label styles (internal helper)
@@ -87,7 +90,7 @@ function batchWipeLabelStyle(
   baseStyles: string,
   shouldHide: boolean,
   left: number,
-  top: number
+  top: number,
 ): void {
   if (!label) return;
 
@@ -107,7 +110,7 @@ export function updateWipeLinePosition(
   containerRect: DOMRect,
   canvasRect: DOMRect,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): void {
   const { wipeLine, wipeLabelA, wipeLabelB } = elements;
 
@@ -133,14 +136,14 @@ export function updateWipeLinePosition(
       WIPE_LABEL_A_BASE,
       position < WIPE_LABEL_HIDE_THRESHOLD_LOW,
       canvasLeft + 10,
-      canvasTop + displayHeight - 30
+      canvasTop + displayHeight - 30,
     );
     batchWipeLabelStyle(
       wipeLabelB,
       WIPE_LABEL_B_BASE,
       position > WIPE_LABEL_HIDE_THRESHOLD_HIGH,
       x + 10,
-      canvasTop + displayHeight - 30
+      canvasTop + displayHeight - 30,
     );
   } else if (wipeState.mode === 'vertical') {
     // Horizontal line for vertical wipe
@@ -153,14 +156,14 @@ export function updateWipeLinePosition(
       WIPE_LABEL_A_BASE,
       position < WIPE_LABEL_HIDE_THRESHOLD_LOW,
       canvasLeft + 10,
-      canvasTop + 10
+      canvasTop + 10,
     );
     batchWipeLabelStyle(
       wipeLabelB,
       WIPE_LABEL_B_BASE,
       position > WIPE_LABEL_HIDE_THRESHOLD_HIGH,
       canvasLeft + 10,
-      y + 10
+      y + 10,
     );
   }
 }
@@ -172,7 +175,7 @@ export function isPointerOnWipeLine(
   e: PointerEvent,
   wipeState: WipeState,
   wipeLineRect: DOMRect,
-  tolerance: number = 10
+  tolerance: number = 10,
 ): boolean {
   if (wipeState.mode === 'off') return false;
 
@@ -193,7 +196,7 @@ export function calculateWipePosition(
   wipeState: WipeState,
   canvasRect: DOMRect,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
 ): number {
   if (wipeState.mode === 'horizontal') {
     const x = e.clientX - canvasRect.left;
@@ -208,11 +211,7 @@ export function calculateWipePosition(
 /**
  * Set wipe labels text
  */
-export function setWipeLabels(
-  elements: WipeUIElements,
-  labelA: string,
-  labelB: string
-): void {
+export function setWipeLabels(elements: WipeUIElements, labelA: string, labelB: string): void {
   elements.wipeLabelA.textContent = labelA;
   elements.wipeLabelB.textContent = labelB;
 }

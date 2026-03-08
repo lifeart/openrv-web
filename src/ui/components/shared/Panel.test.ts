@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createPanel, createPanelHeader, createSliderRow, Panel } from './Panel';
+import { createPanel, createPanelHeader, createSliderRow, type Panel } from './Panel';
 
 describe('createPanel', () => {
   let panel: Panel;

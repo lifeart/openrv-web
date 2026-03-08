@@ -93,16 +93,24 @@ describe('representation types', () => {
 
     it('should use default priorities for each kind', () => {
       const framesRep = createRepresentation({
-        kind: 'frames', resolution: { width: 100, height: 100 }, loaderConfig: {},
+        kind: 'frames',
+        resolution: { width: 100, height: 100 },
+        loaderConfig: {},
       });
       const movieRep = createRepresentation({
-        kind: 'movie', resolution: { width: 100, height: 100 }, loaderConfig: {},
+        kind: 'movie',
+        resolution: { width: 100, height: 100 },
+        loaderConfig: {},
       });
       const proxyRep = createRepresentation({
-        kind: 'proxy', resolution: { width: 100, height: 100 }, loaderConfig: {},
+        kind: 'proxy',
+        resolution: { width: 100, height: 100 },
+        loaderConfig: {},
       });
       const streamRep = createRepresentation({
-        kind: 'streaming', resolution: { width: 100, height: 100 }, loaderConfig: {},
+        kind: 'streaming',
+        resolution: { width: 100, height: 100 },
+        loaderConfig: {},
       });
 
       expect(framesRep.priority).toBe(0);

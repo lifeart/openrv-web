@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  wireColorControls,
-  resolveOCIOBakeSize,
-  ACES_OCIO_BAKE_SIZE,
-  DEFAULT_OCIO_BAKE_SIZE,
-} from './AppColorWiring';
+import { wireColorControls, resolveOCIOBakeSize, ACES_OCIO_BAKE_SIZE, DEFAULT_OCIO_BAKE_SIZE } from './AppColorWiring';
 import { EventEmitter } from './utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
@@ -19,8 +14,12 @@ import { EventEmitter } from './utils/EventEmitter';
 class StubColorInversionToggle extends EventEmitter {}
 class StubColorControls extends EventEmitter {
   private adjustments = { exposure: 0, contrast: 0, saturation: 1 };
-  getAdjustments() { return { ...this.adjustments }; }
-  setAdjustments(adj: Record<string, number>) { this.adjustments = { ...adj } as any; }
+  getAdjustments() {
+    return { ...this.adjustments };
+  }
+  setAdjustments(adj: Record<string, number>) {
+    this.adjustments = { ...adj } as any;
+  }
 }
 class StubCDLControl extends EventEmitter {}
 class StubCurvesControl extends EventEmitter {}
@@ -28,7 +27,9 @@ class StubOCIOControl extends EventEmitter {
   private _processor = {
     bakeTo3DLUT: vi.fn(() => new Float32Array(65 * 65 * 65 * 3)),
   };
-  getProcessor() { return this._processor; }
+  getProcessor() {
+    return this._processor;
+  }
 }
 class StubDisplayProfileControl extends EventEmitter {}
 class StubGamutMappingControl extends EventEmitter {}
@@ -218,10 +219,7 @@ describe('wireColorControls', () => {
     const processor = ctx._controls.ocioControl.getProcessor();
     expect(processor.bakeTo3DLUT).toHaveBeenCalledWith(ACES_OCIO_BAKE_SIZE);
     expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledTimes(1);
-    expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(
-      expect.any(Float32Array),
-      true,
-    );
+    expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(expect.any(Float32Array), true);
     expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
   });
@@ -263,11 +261,7 @@ describe('wireColorControls', () => {
     };
     ctx._controls.ocioControl.emit('stateChanged', ocioState);
 
-    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith(
-      'ACES - ACEScg',
-      'ACEScg',
-      'sRGB',
-    );
+    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith('ACES - ACEScg', 'ACEScg', 'sRGB');
   });
 
   it('CW-008c: ocioControl stateChanged resolves Auto input to detectedColorSpace', () => {
@@ -286,11 +280,7 @@ describe('wireColorControls', () => {
     };
     ctx._controls.ocioControl.emit('stateChanged', ocioState);
 
-    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith(
-      'Rec.2020',
-      'ACEScg',
-      'sRGB',
-    );
+    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith('Rec.2020', 'ACEScg', 'sRGB');
   });
 
   it('CW-008d: ocioControl stateChanged with Auto and no detected falls back to sRGB', () => {
@@ -309,11 +299,7 @@ describe('wireColorControls', () => {
     };
     ctx._controls.ocioControl.emit('stateChanged', ocioState);
 
-    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith(
-      'sRGB',
-      'ACEScg',
-      'sRGB',
-    );
+    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith('sRGB', 'ACEScg', 'sRGB');
   });
 
   it('CW-008e: ocioControl stateChanged uses 33^3 LUT for non-ACES workflow', () => {
@@ -415,32 +401,36 @@ describe('wireColorControls', () => {
 
 describe('resolveOCIOBakeSize', () => {
   it('CW-012: uses 65^3 for ACES config', () => {
-    expect(resolveOCIOBakeSize({
-      enabled: true,
-      configName: 'aces_1.2',
-      customConfigPath: null,
-      inputColorSpace: 'Auto',
-      detectedColorSpace: null,
-      workingColorSpace: 'ACEScg',
-      display: 'sRGB',
-      view: 'ACES 1.0 SDR-video',
-      look: 'None',
-      lookDirection: 'forward',
-    })).toBe(ACES_OCIO_BAKE_SIZE);
+    expect(
+      resolveOCIOBakeSize({
+        enabled: true,
+        configName: 'aces_1.2',
+        customConfigPath: null,
+        inputColorSpace: 'Auto',
+        detectedColorSpace: null,
+        workingColorSpace: 'ACEScg',
+        display: 'sRGB',
+        view: 'ACES 1.0 SDR-video',
+        look: 'None',
+        lookDirection: 'forward',
+      }),
+    ).toBe(ACES_OCIO_BAKE_SIZE);
   });
 
   it('CW-013: uses 33^3 for non-ACES workflows', () => {
-    expect(resolveOCIOBakeSize({
-      enabled: true,
-      configName: 'srgb',
-      customConfigPath: null,
-      inputColorSpace: 'sRGB',
-      detectedColorSpace: null,
-      workingColorSpace: 'Linear sRGB',
-      display: 'sRGB',
-      view: 'Standard',
-      look: 'None',
-      lookDirection: 'forward',
-    })).toBe(DEFAULT_OCIO_BAKE_SIZE);
+    expect(
+      resolveOCIOBakeSize({
+        enabled: true,
+        configName: 'srgb',
+        customConfigPath: null,
+        inputColorSpace: 'sRGB',
+        detectedColorSpace: null,
+        workingColorSpace: 'Linear sRGB',
+        display: 'sRGB',
+        view: 'Standard',
+        look: 'None',
+        lookDirection: 'forward',
+      }),
+    ).toBe(DEFAULT_OCIO_BAKE_SIZE);
   });
 });

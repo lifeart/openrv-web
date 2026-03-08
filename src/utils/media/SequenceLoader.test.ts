@@ -47,12 +47,12 @@ describe('SequenceLoader', () => {
       const result = filterImageFiles(files);
 
       expect(result).toHaveLength(2);
-      expect(result.map(f => f.name)).toEqual(['image.png', 'image.jpg']);
+      expect(result.map((f) => f.name)).toEqual(['image.png', 'image.jpg']);
     });
 
     it('SLD-002: supports all standard image extensions', () => {
       const extensions = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'exr'];
-      const files = extensions.map(ext => new File([''], `file.${ext}`));
+      const files = extensions.map((ext) => new File([''], `file.${ext}`));
 
       const result = filterImageFiles(files);
 
@@ -65,11 +65,7 @@ describe('SequenceLoader', () => {
     });
 
     it('SLD-004: case-insensitive extension matching', () => {
-      const files = [
-        new File([''], 'image.PNG'),
-        new File([''], 'image.JPG'),
-        new File([''], 'image.Jpeg'),
-      ];
+      const files = [new File([''], 'image.PNG'), new File([''], 'image.JPG'), new File([''], 'image.Jpeg')];
 
       const result = filterImageFiles(files);
 
@@ -160,11 +156,7 @@ describe('SequenceLoader', () => {
 
   describe('sortByFrameNumber', () => {
     it('SLD-016: sorts files by frame number', () => {
-      const files = [
-        new File([''], 'frame_003.png'),
-        new File([''], 'frame_001.png'),
-        new File([''], 'frame_002.png'),
-      ];
+      const files = [new File([''], 'frame_003.png'), new File([''], 'frame_001.png'), new File([''], 'frame_002.png')];
 
       const result = sortByFrameNumber(files);
 
@@ -175,10 +167,7 @@ describe('SequenceLoader', () => {
     });
 
     it('SLD-017: assigns sequential indices', () => {
-      const files = [
-        new File([''], 'frame_005.png'),
-        new File([''], 'frame_003.png'),
-      ];
+      const files = [new File([''], 'frame_005.png'), new File([''], 'frame_003.png')];
 
       const result = sortByFrameNumber(files);
 
@@ -187,11 +176,7 @@ describe('SequenceLoader', () => {
     });
 
     it('SLD-018: filters out non-numbered files', () => {
-      const files = [
-        new File([''], 'frame_001.png'),
-        new File([''], 'readme.txt'),
-        new File([''], 'frame_002.png'),
-      ];
+      const files = [new File([''], 'frame_001.png'), new File([''], 'readme.txt'), new File([''], 'frame_002.png')];
 
       const result = sortByFrameNumber(files);
 
@@ -208,7 +193,7 @@ describe('SequenceLoader', () => {
 
   describe('loadFrameImage', () => {
     it('SLD-020: returns cached image if already loaded', async () => {
-      const mockImage = ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap);
+      const mockImage = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
       const frame: SequenceFrame = {
         index: 0,
         frameNumber: 1,
@@ -263,7 +248,7 @@ describe('SequenceLoader', () => {
           frameNumber: i + 1,
           file: new File([''], `frame_${i}.png`),
           url: `blob:frame-${i}`,
-          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap),
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
         });
       }
 
@@ -286,7 +271,7 @@ describe('SequenceLoader', () => {
           frameNumber: 1,
           file: new File([''], 'frame_1.png'),
           url: 'blob:test-url',
-          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap),
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
         },
       ];
 
@@ -301,7 +286,7 @@ describe('SequenceLoader', () => {
           index: 0,
           frameNumber: 1,
           file: new File([''], 'frame_1.png'),
-          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap),
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
         },
       ];
 
@@ -324,15 +309,33 @@ describe('SequenceLoader', () => {
 
     it('SLD-025: disposes all frames', () => {
       const frames: SequenceFrame[] = [
-        { index: 0, frameNumber: 1, file: new File([''], 'f1.png'), url: 'blob:1', image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
-        { index: 1, frameNumber: 2, file: new File([''], 'f2.png'), url: 'blob:2', image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
-        { index: 2, frameNumber: 3, file: new File([''], 'f3.png'), url: 'blob:3', image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
+        {
+          index: 0,
+          frameNumber: 1,
+          file: new File([''], 'f1.png'),
+          url: 'blob:1',
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
+        },
+        {
+          index: 1,
+          frameNumber: 2,
+          file: new File([''], 'f2.png'),
+          url: 'blob:2',
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
+        },
+        {
+          index: 2,
+          frameNumber: 3,
+          file: new File([''], 'f3.png'),
+          url: 'blob:3',
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
+        },
       ];
 
       disposeSequence(frames);
 
       expect(revokeObjectURLSpy).toHaveBeenCalledTimes(3);
-      frames.forEach(frame => {
+      frames.forEach((frame) => {
         expect(frame.url).toBeUndefined();
         expect(frame.image).toBeUndefined();
       });
@@ -345,9 +348,7 @@ describe('SequenceLoader', () => {
     });
 
     it('SLD-027: handles frames without URLs', () => {
-      const frames: SequenceFrame[] = [
-        { index: 0, frameNumber: 1, file: new File([''], 'f1.png') },
-      ];
+      const frames: SequenceFrame[] = [{ index: 0, frameNumber: 1, file: new File([''], 'f1.png') }];
 
       // Should not throw
       disposeSequence(frames);
@@ -364,7 +365,7 @@ describe('SequenceLoader', () => {
           index: i,
           frameNumber: i + 1,
           file: new File([''], `frame_${i}.png`),
-          image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap), // Already loaded
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap, // Already loaded
         });
       }
 
@@ -379,8 +380,18 @@ describe('SequenceLoader', () => {
 
     it('SLD-029: respects array bounds', async () => {
       const frames: SequenceFrame[] = [
-        { index: 0, frameNumber: 1, file: new File([''], 'f1.png'), image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
-        { index: 1, frameNumber: 2, file: new File([''], 'f2.png'), image: ({ close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap) },
+        {
+          index: 0,
+          frameNumber: 1,
+          file: new File([''], 'f1.png'),
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
+        },
+        {
+          index: 1,
+          frameNumber: 2,
+          file: new File([''], 'f2.png'),
+          image: { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap,
+        },
       ];
 
       // Should not throw when window extends beyond array
@@ -447,9 +458,7 @@ describe('SequenceLoader', () => {
     });
 
     it('MF-004: returns empty array for single frame', () => {
-      const frames: SequenceFrame[] = [
-        { index: 0, frameNumber: 100, file: new File([''], 'f100.png') },
-      ];
+      const frames: SequenceFrame[] = [{ index: 0, frameNumber: 100, file: new File([''], 'f100.png') }];
 
       const missing = detectMissingFrames(frames);
 
@@ -819,11 +828,7 @@ describe('SequenceLoader', () => {
       const result = findMatchingFiles(files, pattern);
 
       expect(result).toHaveLength(3);
-      expect(result.map(f => f.name)).toEqual([
-        'frame_0001.png',
-        'frame_0002.png',
-        'frame_0003.png',
-      ]);
+      expect(result.map((f) => f.name)).toEqual(['frame_0001.png', 'frame_0002.png', 'frame_0003.png']);
     });
 
     it('SLD-069: sorts files by frame number', () => {
@@ -843,11 +848,7 @@ describe('SequenceLoader', () => {
 
       const result = findMatchingFiles(files, pattern);
 
-      expect(result.map(f => f.name)).toEqual([
-        'frame_0001.png',
-        'frame_0002.png',
-        'frame_0003.png',
-      ]);
+      expect(result.map((f) => f.name)).toEqual(['frame_0001.png', 'frame_0002.png', 'frame_0003.png']);
     });
   });
 
@@ -895,10 +896,7 @@ describe('SequenceLoader', () => {
     });
 
     it('SLD-073: requires at least 2 files for sequence', () => {
-      const files = [
-        new File([''], 'frame_0001.png'),
-        new File([''], 'other_file.png'),
-      ];
+      const files = [new File([''], 'frame_0001.png'), new File([''], 'other_file.png')];
 
       const sequences = discoverSequences(files);
 
@@ -916,13 +914,13 @@ describe('SequenceLoader', () => {
         new File([''], 'shot_003.exr'),
       ];
 
-      const target = files.find(f => f.name === 'frame_0002.png')!;
+      const target = files.find((f) => f.name === 'frame_0002.png')!;
       const result = getBestSequence(files, target);
 
       expect(result).not.toBeNull();
       expect(result).toHaveLength(2);
-      expect(result!.some(f => f.name === 'frame_0001.png')).toBe(true);
-      expect(result!.some(f => f.name === 'frame_0002.png')).toBe(true);
+      expect(result!.some((f) => f.name === 'frame_0001.png')).toBe(true);
+      expect(result!.some((f) => f.name === 'frame_0002.png')).toBe(true);
     });
 
     it('SLD-075: returns longest sequence without target', () => {
@@ -941,10 +939,7 @@ describe('SequenceLoader', () => {
     });
 
     it('SLD-076: returns null when no sequences found', () => {
-      const files = [
-        new File([''], 'image.png'),
-        new File([''], 'photo.jpg'),
-      ];
+      const files = [new File([''], 'image.png'), new File([''], 'photo.jpg')];
 
       const result = getBestSequence(files);
 
@@ -1171,12 +1166,12 @@ describe('SequenceLoader', () => {
           new File([''], 'long_004.exr'),
         ];
 
-        const target = files.find(f => f.name === 'short_01.png')!;
+        const target = files.find((f) => f.name === 'short_01.png')!;
         const result = getBestSequence(files, target);
 
         expect(result).not.toBeNull();
         expect(result).toHaveLength(2);
-        expect(result!.some(f => f.name === 'short_01.png')).toBe(true);
+        expect(result!.some((f) => f.name === 'short_01.png')).toBe(true);
       });
     });
 
@@ -1215,11 +1210,7 @@ describe('SequenceLoader', () => {
     it('SLD-R001: Promise.allSettled handles partial failure (conceptual)', async () => {
       // This validates that Promise.allSettled (used in the fix) gracefully
       // handles partial failures, unlike Promise.all which rejects on first failure
-      const tasks = [
-        Promise.resolve('ok-1'),
-        Promise.reject(new Error('frame corrupt')),
-        Promise.resolve('ok-3'),
-      ];
+      const tasks = [Promise.resolve('ok-1'), Promise.reject(new Error('frame corrupt')), Promise.resolve('ok-3')];
 
       await expect(Promise.all(tasks)).rejects.toThrow('frame corrupt');
 

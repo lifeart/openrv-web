@@ -7,11 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkSyncManager } from './NetworkSyncManager';
-import type {
-  CursorSyncPayload,
-  AnnotationSyncPayload,
-  ParticipantPermission,
-} from './types';
+import type { CursorSyncPayload, AnnotationSyncPayload, ParticipantPermission } from './types';
 import {
   createCursorSyncMessage,
   createPermissionMessage,
@@ -23,26 +19,29 @@ import {
 } from './MessageProtocol';
 
 // Mock WebSocket
-vi.stubGlobal('WebSocket', class {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+vi.stubGlobal(
+  'WebSocket',
+  class {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
 
-  readyState = 0;
-  onopen: (() => void) | null = null;
-  onclose: ((e: { code: number; reason: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onmessage: ((e: { data: string }) => void) | null = null;
+    readyState = 0;
+    onopen: (() => void) | null = null;
+    onclose: ((e: { code: number; reason: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onmessage: ((e: { data: string }) => void) | null = null;
 
-  constructor(_url: string) {}
+    constructor(_url: string) {}
 
-  send(_data: string): void {}
-  close(_code?: number, _reason?: string): void {
-    this.readyState = 3;
-    this.onclose?.({ code: _code ?? 1000, reason: _reason ?? '' });
-  }
-});
+    send(_data: string): void {}
+    close(_code?: number, _reason?: string): void {
+      this.readyState = 3;
+      this.onclose?.({ code: _code ?? 1000, reason: _reason ?? '' });
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // validateCursorPayload tests
@@ -122,57 +121,69 @@ describe('validateAnnotationPayload', () => {
   });
 
   it('COLLAB-007: accepts update action with annotationId', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'update',
-      annotationId: 'ann-1',
-      timestamp: 1,
-    })).toBe(true);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'update',
+        annotationId: 'ann-1',
+        timestamp: 1,
+      }),
+    ).toBe(true);
   });
 
   it('rejects update action without annotationId', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'update',
-      timestamp: 1,
-    })).toBe(false);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'update',
+        timestamp: 1,
+      }),
+    ).toBe(false);
   });
 
   it('rejects remove action without annotationId', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'remove',
-      timestamp: 1,
-    })).toBe(false);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'remove',
+        timestamp: 1,
+      }),
+    ).toBe(false);
   });
 
   it('rejects invalid action', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'unknown',
-      timestamp: 1,
-    })).toBe(false);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'unknown',
+        timestamp: 1,
+      }),
+    ).toBe(false);
   });
 
   it('rejects non-finite frame', () => {
-    expect(validateAnnotationPayload({
-      frame: NaN,
-      strokes: [],
-      action: 'add',
-      timestamp: 1,
-    })).toBe(false);
+    expect(
+      validateAnnotationPayload({
+        frame: NaN,
+        strokes: [],
+        action: 'add',
+        timestamp: 1,
+      }),
+    ).toBe(false);
   });
 
   it('rejects missing strokes array', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      action: 'add',
-      timestamp: 1,
-    })).toBe(false);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        action: 'add',
+        timestamp: 1,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -316,16 +327,26 @@ describe('NetworkSyncManager cursor sync', () => {
 
     const handle = (manager as unknown as { handleMessage(m: unknown): void }).handleMessage.bind(manager);
 
-    handle(createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
-      userId: alice.id, x: 0.1, y: 0.2, timestamp: 1000,
-    }));
+    handle(
+      createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
+        userId: alice.id,
+        x: 0.1,
+        y: 0.2,
+        timestamp: 1000,
+      }),
+    );
     expect(manager.remoteCursors.length).toBe(1);
     expect(manager.remoteCursors[0]!.x).toBe(0.1);
 
     // Second update from same user should overwrite
-    handle(createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
-      userId: alice.id, x: 0.8, y: 0.9, timestamp: 2000,
-    }));
+    handle(
+      createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
+        userId: alice.id,
+        x: 0.8,
+        y: 0.9,
+        timestamp: 2000,
+      }),
+    );
     expect(manager.remoteCursors.length).toBe(1);
     expect(manager.remoteCursors[0]!.x).toBe(0.8);
     expect(manager.remoteCursors[0]!.y).toBe(0.9);
@@ -338,9 +359,14 @@ describe('NetworkSyncManager cursor sync', () => {
     const handle = (manager as unknown as { handleMessage(m: unknown): void }).handleMessage.bind(manager);
 
     // Send cursor with spoofed userId
-    handle(createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
-      userId: 'spoofed-id', x: 0.5, y: 0.5, timestamp: 1000,
-    }));
+    handle(
+      createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
+        userId: 'spoofed-id',
+        x: 0.5,
+        y: 0.5,
+        timestamp: 1000,
+      }),
+    );
 
     // Should be stored under alice.id, not 'spoofed-id'
     const cursors = manager.remoteCursors;
@@ -374,23 +400,27 @@ describe('NetworkSyncManager annotation sync', () => {
       cursor: true,
     });
 
-    expect(() => manager.sendAnnotationSync({
-      frame: 1,
-      strokes: [{ id: 's1' }],
-      action: 'add',
-      timestamp: Date.now(),
-    })).not.toThrow();
+    expect(() =>
+      manager.sendAnnotationSync({
+        frame: 1,
+        strokes: [{ id: 's1' }],
+        action: 'add',
+        timestamp: Date.now(),
+      }),
+    ).not.toThrow();
   });
 
   it('COLLAB-016: sendAnnotationSync suppressed when annotations disabled', () => {
     manager._applyLocalRoomCreation();
     // annotations is false by default
-    expect(() => manager.sendAnnotationSync({
-      frame: 1,
-      strokes: [],
-      action: 'add',
-      timestamp: Date.now(),
-    })).not.toThrow();
+    expect(() =>
+      manager.sendAnnotationSync({
+        frame: 1,
+        strokes: [],
+        action: 'add',
+        timestamp: Date.now(),
+      }),
+    ).not.toThrow();
   });
 
   it('COLLAB-017: sendAnnotationSync blocked for viewer role', () => {
@@ -409,12 +439,14 @@ describe('NetworkSyncManager annotation sync', () => {
     // Should be suppressed — viewer cannot send annotations
     // We can't directly verify send was suppressed without spying on wsClient,
     // but we ensure it doesn't throw
-    expect(() => manager.sendAnnotationSync({
-      frame: 1,
-      strokes: [],
-      action: 'add',
-      timestamp: Date.now(),
-    })).not.toThrow();
+    expect(() =>
+      manager.sendAnnotationSync({
+        frame: 1,
+        strokes: [],
+        action: 'add',
+        timestamp: Date.now(),
+      }),
+    ).not.toThrow();
   });
 
   it('COLLAB-018: syncAnnotation event emitted for remote annotations', () => {
@@ -581,8 +613,10 @@ describe('NetworkSyncManager participant permissions', () => {
     manager.on('participantPermissionChanged', handler);
 
     // Call the private handler directly to bypass self-filter
-    (manager as unknown as { handlePermissionChange(p: unknown, s: string): void })
-      .handlePermissionChange(msg.payload, manager.userId);
+    (manager as unknown as { handlePermissionChange(p: unknown, s: string): void }).handlePermissionChange(
+      msg.payload,
+      manager.userId,
+    );
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(manager.getParticipantPermission(alice.id)).toBe('viewer');
@@ -615,8 +649,8 @@ describe('NetworkSyncManager participant permissions', () => {
 
     const perms = manager.participantPermissions;
     expect(perms.length).toBe(2); // host + alice
-    expect(perms.find(p => p.userId === manager.userId)?.role).toBe('host');
-    expect(perms.find(p => p.userId === alice.id)?.role).toBe('reviewer');
+    expect(perms.find((p) => p.userId === manager.userId)?.role).toBe('host');
+    expect(perms.find((p) => p.userId === alice.id)?.role).toBe('reviewer');
   });
 
   it('canUserSync returns false for viewers', () => {
@@ -701,32 +735,38 @@ describe('NetworkSyncManager cursor settings', () => {
 
 describe('AnnotationSyncPayload update action', () => {
   it('COLLAB-027: update action accepted by validator', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'update',
-      annotationId: 'ann-123',
-      timestamp: Date.now(),
-    })).toBe(true);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'update',
+        annotationId: 'ann-123',
+        timestamp: Date.now(),
+      }),
+    ).toBe(true);
   });
 
   it('clear action still accepted', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'clear',
-      timestamp: 1,
-    })).toBe(true);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'clear',
+        timestamp: 1,
+      }),
+    ).toBe(true);
   });
 
   it('remove action accepted with annotationId', () => {
-    expect(validateAnnotationPayload({
-      frame: 1,
-      strokes: [],
-      action: 'remove',
-      annotationId: 'ann-456',
-      timestamp: 1,
-    })).toBe(true);
+    expect(
+      validateAnnotationPayload({
+        frame: 1,
+        strokes: [],
+        action: 'remove',
+        annotationId: 'ann-456',
+        timestamp: 1,
+      }),
+    ).toBe(true);
   });
 });
 
@@ -769,26 +809,32 @@ describe('collaboration edge cases', () => {
       targetUserId: 'user1',
       role: 'superadmin', // invalid role
     });
-    (manager as unknown as { handlePermissionChange(p: unknown, s: string): void })
-      .handlePermissionChange(msg.payload, manager.userId);
+    (manager as unknown as { handlePermissionChange(p: unknown, s: string): void }).handlePermissionChange(
+      msg.payload,
+      manager.userId,
+    );
 
     expect(handler).not.toHaveBeenCalled();
   });
 
   it('COLLAB-030: cursor position at boundary values', () => {
-    expect(validateCursorPayload({
-      userId: 'u1',
-      x: 0,
-      y: 0,
-      timestamp: 0,
-    })).toBe(true);
+    expect(
+      validateCursorPayload({
+        userId: 'u1',
+        x: 0,
+        y: 0,
+        timestamp: 0,
+      }),
+    ).toBe(true);
 
-    expect(validateCursorPayload({
-      userId: 'u1',
-      x: 1,
-      y: 1,
-      timestamp: Number.MAX_SAFE_INTEGER,
-    })).toBe(true);
+    expect(
+      validateCursorPayload({
+        userId: 'u1',
+        x: 1,
+        y: 1,
+        timestamp: Number.MAX_SAFE_INTEGER,
+      }),
+    ).toBe(true);
   });
 
   it('invalid annotation payload not emitted', () => {
@@ -837,8 +883,8 @@ describe('collaboration edge cases', () => {
     const cursors = manager.remoteCursors;
     expect(cursors.length).toBe(2);
 
-    const aliceCursor = cursors.find(c => c.userId === alice.id);
-    const bobCursor = cursors.find(c => c.userId === bob.id);
+    const aliceCursor = cursors.find((c) => c.userId === alice.id);
+    const bobCursor = cursors.find((c) => c.userId === bob.id);
 
     expect(aliceCursor!.x).toBe(0.1);
     expect(bobCursor!.x).toBe(0.8);

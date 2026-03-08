@@ -7,10 +7,7 @@ import type { IPNode } from './IPNode';
  *
  * Must be called in the constructor AFTER super().
  */
-export function defineNodeProperty<
-  TNode extends IPNode,
-  K extends string & keyof TNode,
->(
+export function defineNodeProperty<TNode extends IPNode, K extends string & keyof TNode>(
   node: TNode,
   name: K,
   info: Omit<PropertyInfo<TNode[K]>, 'name'>,

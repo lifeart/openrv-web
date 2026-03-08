@@ -195,10 +195,21 @@ describe('assignColorAdjustments', () => {
 
   it('SST-CA-003: copies all known properties', () => {
     const src = makeAdjustments({
-      exposure: 1, gamma: 2, saturation: 3, vibrance: 4,
-      vibranceSkinProtection: false, contrast: 5, clarity: 6,
-      hueRotation: 7, temperature: 8, tint: 9, brightness: 10,
-      highlights: 11, shadows: 12, whites: 13, blacks: 14,
+      exposure: 1,
+      gamma: 2,
+      saturation: 3,
+      vibrance: 4,
+      vibranceSkinProtection: false,
+      contrast: 5,
+      clarity: 6,
+      hueRotation: 7,
+      temperature: 8,
+      tint: 9,
+      brightness: 10,
+      highlights: 11,
+      shadows: 12,
+      whites: 13,
+      blacks: 14,
     });
     const dst = makeAdjustments();
     assignColorAdjustments(dst, src);
@@ -260,10 +271,15 @@ describe('assignToneMappingState', () => {
 
   it('SST-TM-001: copies all tone mapping properties', () => {
     const src = makeTM({
-      enabled: true, operator: 'aces',
-      reinhardWhitePoint: 5.0, filmicExposureBias: 3.0,
-      filmicWhitePoint: 12.0, dragoBias: 0.9,
-      dragoLwa: 0.3, dragoLmax: 2.0, dragoBrightness: 3.0,
+      enabled: true,
+      operator: 'aces',
+      reinhardWhitePoint: 5.0,
+      filmicExposureBias: 3.0,
+      filmicWhitePoint: 12.0,
+      dragoBias: 0.9,
+      dragoLwa: 0.3,
+      dragoLmax: 2.0,
+      dragoBrightness: 3.0,
     });
     const dst = makeTM();
     assignToneMappingState(dst, src);

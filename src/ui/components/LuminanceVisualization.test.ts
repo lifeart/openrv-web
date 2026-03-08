@@ -12,17 +12,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  LuminanceVisualization,
-  DEFAULT_LUMINANCE_VIS_STATE,
-} from './LuminanceVisualization';
+import { LuminanceVisualization, DEFAULT_LUMINANCE_VIS_STATE } from './LuminanceVisualization';
 import { FalseColor } from './FalseColor';
 
 // Helper to create test ImageData
 function createTestImageData(
   width: number,
   height: number,
-  fill?: { r: number; g: number; b: number; a: number }
+  fill?: { r: number; g: number; b: number; a: number },
 ): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   if (fill) {
@@ -120,9 +117,7 @@ describe('LuminanceVisualization', () => {
 
       lumVis.setMode('hsv');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ mode: 'hsv' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ mode: 'hsv' }));
     });
 
     it('LV-U012: setMode emits modeChanged', () => {
@@ -260,9 +255,11 @@ describe('LuminanceVisualization', () => {
 
       let differences = 0;
       for (let i = 0; i < img1.data.length; i += 4) {
-        if (img1.data[i] !== img2.data[i] ||
-            img1.data[i + 1] !== img2.data[i + 1] ||
-            img1.data[i + 2] !== img2.data[i + 2]) {
+        if (
+          img1.data[i] !== img2.data[i] ||
+          img1.data[i + 1] !== img2.data[i + 1] ||
+          img1.data[i + 2] !== img2.data[i + 2]
+        ) {
           differences++;
         }
       }
@@ -449,9 +446,7 @@ describe('LuminanceVisualization', () => {
 
       lumVis.setRandomBandCount(32);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ randomBandCount: 32 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ randomBandCount: 32 }));
     });
 
     it('LV-U062: setContourLevels emits stateChanged', () => {
@@ -460,9 +455,7 @@ describe('LuminanceVisualization', () => {
 
       lumVis.setContourLevels(20);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ contourLevels: 20 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ contourLevels: 20 }));
     });
 
     it('LV-U063: setContourDesaturate emits stateChanged', () => {
@@ -471,9 +464,7 @@ describe('LuminanceVisualization', () => {
 
       lumVis.setContourDesaturate(false);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ contourDesaturate: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ contourDesaturate: false }));
     });
 
     it('LV-U064: setContourLineColor emits stateChanged', () => {
@@ -482,9 +473,7 @@ describe('LuminanceVisualization', () => {
 
       lumVis.setContourLineColor([255, 0, 0]);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ contourLineColor: [255, 0, 0] })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ contourLineColor: [255, 0, 0] }));
     });
 
     it('LV-U065: settings preserved across mode switches', () => {
@@ -572,13 +561,19 @@ describe('LuminanceVisualization', () => {
         const lut = lumVis.getHsvLUT();
         // Check that colors change across the LUT range
         let distinctColors = 0;
-        let prevR = lut[0], prevG = lut[1], prevB = lut[2];
+        let prevR = lut[0],
+          prevG = lut[1],
+          prevB = lut[2];
         for (let i = 1; i < 256; i++) {
-          const r = lut[i * 3], g = lut[i * 3 + 1], b = lut[i * 3 + 2];
+          const r = lut[i * 3],
+            g = lut[i * 3 + 1],
+            b = lut[i * 3 + 2];
           if (r !== prevR || g !== prevG || b !== prevB) {
             distinctColors++;
           }
-          prevR = r; prevG = g; prevB = b;
+          prevR = r;
+          prevG = g;
+          prevB = b;
         }
         expect(distinctColors).toBeGreaterThan(100);
       });

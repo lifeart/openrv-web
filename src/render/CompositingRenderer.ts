@@ -132,12 +132,7 @@ export class CompositingRenderer {
    * Ensure the layer FBO pool has enough FBOs for the given layer count.
    * @returns true if all FBOs are available.
    */
-  ensureLayerFBOs(
-    count: number,
-    width: number,
-    height: number,
-    format: 'rgba16f' | 'rgba8' = 'rgba8',
-  ): boolean {
+  ensureLayerFBOs(count: number, width: number, height: number, format: 'rgba16f' | 'rgba8' = 'rgba8'): boolean {
     if (!this.gl) return false;
     return this.layerPool.ensure(this.gl, count, width, height, format);
   }
@@ -192,7 +187,7 @@ export class CompositingRenderer {
     if (!gl || layers.length === 0) return null;
 
     // Filter to visible layers with nonzero opacity
-    const visibleLayers = layers.filter(l => l.visible && l.opacity > 0);
+    const visibleLayers = layers.filter((l) => l.visible && l.opacity > 0);
     if (visibleLayers.length === 0) return null;
 
     // Single layer: just blit it to the target
@@ -203,7 +198,7 @@ export class CompositingRenderer {
     }
 
     // Check if all layers can use the GL blend state path
-    const allGLBlendable = visibleLayers.every(l => isGLBlendStateMode(l.blendMode));
+    const allGLBlendable = visibleLayers.every((l) => isGLBlendStateMode(l.blendMode));
 
     if (allGLBlendable) {
       return this.compositeWithGLBlend(gl, visibleLayers, width, height, targetFBO);
@@ -259,10 +254,7 @@ export class CompositingRenderer {
         if (this.premultiplied) {
           gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         } else {
-          gl.blendFuncSeparate(
-            gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA,
-            gl.ONE, gl.ONE_MINUS_SRC_ALPHA,
-          );
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         }
       }
 

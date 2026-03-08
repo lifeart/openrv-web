@@ -1,7 +1,7 @@
-import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
+import { type PaintEngine, type PaintTool } from '../../paint/PaintEngine';
 import { BrushType, type AnnotationVersion } from '../../paint/types';
 import { showConfirm } from './shared/Modal';
-import { getIconSvg, IconName } from './shared/Icons';
+import { getIconSvg, type IconName } from './shared/Icons';
 import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
 export class PaintToolbar {
@@ -62,9 +62,7 @@ export class PaintToolbar {
 
     // Brush settings group: brush type, color, width
     this.brushButton = this.createIconButton('circle', 'Toggle soft/hard brush (B)', () => {
-      this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
-        ? BrushType.Gaussian
-        : BrushType.Circle;
+      this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle ? BrushType.Gaussian : BrushType.Circle;
     });
 
     // Color picker
@@ -119,7 +117,8 @@ export class PaintToolbar {
     this.opacityLabel = document.createElement('span');
     this.opacityLabel.dataset.testid = 'paint-opacity-label';
     this.opacityLabel.textContent = '100%';
-    this.opacityLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 28px; text-align: right; margin-left: 8px;';
+    this.opacityLabel.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; min-width: 28px; text-align: right; margin-left: 8px;';
     this.container.appendChild(this.opacityLabel);
 
     this.opacitySlider = document.createElement('input');
@@ -146,7 +145,8 @@ export class PaintToolbar {
     // Width slider
     this.widthLabel = document.createElement('span');
     this.widthLabel.textContent = `${this.paintEngine.width}`;
-    this.widthLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 20px; text-align: right; margin-left: 8px;';
+    this.widthLabel.style.cssText =
+      'color: var(--text-secondary); font-size: 10px; min-width: 20px; text-align: right; margin-left: 8px;';
     this.container.appendChild(this.widthLabel);
 
     this.widthSlider = document.createElement('input');
@@ -195,7 +195,11 @@ export class PaintToolbar {
       cursor: pointer;
       height: 24px;
     `;
-    for (const [value, label] of [['all', 'All'], ['A', 'A'], ['B', 'B']] as const) {
+    for (const [value, label] of [
+      ['all', 'All'],
+      ['A', 'A'],
+      ['B', 'B'],
+    ] as const) {
       const opt = document.createElement('option');
       opt.value = value;
       opt.textContent = label;
@@ -213,7 +217,7 @@ export class PaintToolbar {
       const confirmed = await showConfirm('Clear all annotations on this frame?', {
         title: 'Clear Annotations',
         confirmText: 'Clear',
-        confirmVariant: 'danger'
+        confirmVariant: 'danger',
       });
       if (confirmed) {
         this.container.dispatchEvent(new CustomEvent('clearFrame'));
@@ -270,27 +274,21 @@ export class PaintToolbar {
   private updateBrushButton(): void {
     const isGaussian = this.paintEngine.brush === BrushType.Gaussian;
     this.brushButton.innerHTML = getIconSvg(isGaussian ? 'blur' : 'circle', 'sm');
-    this.brushButton.title = isGaussian
-      ? 'Soft brush (click for hard) (B)'
-      : 'Hard brush (click for soft) (B)';
+    this.brushButton.title = isGaussian ? 'Soft brush (click for hard) (B)' : 'Hard brush (click for soft) (B)';
   }
 
   private updateGhostButton(): void {
     const effects = this.paintEngine.effects;
     this.ghostButton.style.opacity = effects.ghost ? '1' : '0.5';
     this.ghostButton.style.color = effects.ghost ? 'var(--accent-primary)' : 'var(--text-muted)';
-    this.ghostButton.title = effects.ghost
-      ? 'Ghost mode ON (G)'
-      : 'Ghost mode OFF (G)';
+    this.ghostButton.title = effects.ghost ? 'Ghost mode ON (G)' : 'Ghost mode OFF (G)';
   }
 
   private updateHoldButton(): void {
     const effects = this.paintEngine.effects;
     this.holdButton.style.opacity = effects.hold ? '1' : '0.5';
     this.holdButton.style.color = effects.hold ? 'var(--accent-primary)' : 'var(--text-muted)';
-    this.holdButton.title = effects.hold
-      ? 'Hold mode ON (X)'
-      : 'Hold mode OFF (X)';
+    this.holdButton.title = effects.hold ? 'Hold mode ON (X)' : 'Hold mode OFF (X)';
   }
 
   /**
@@ -307,9 +305,15 @@ export class PaintToolbar {
   }
 
   private rgbaToHex(rgba: [number, number, number, number]): string {
-    const r = Math.round(rgba[0] * 255).toString(16).padStart(2, '0');
-    const g = Math.round(rgba[1] * 255).toString(16).padStart(2, '0');
-    const b = Math.round(rgba[2] * 255).toString(16).padStart(2, '0');
+    const r = Math.round(rgba[0] * 255)
+      .toString(16)
+      .padStart(2, '0');
+    const g = Math.round(rgba[1] * 255)
+      .toString(16)
+      .padStart(2, '0');
+    const b = Math.round(rgba[2] * 255)
+      .toString(16)
+      .padStart(2, '0');
     return `#${r}${g}${b}`;
   }
 
@@ -366,9 +370,7 @@ export class PaintToolbar {
         this.paintEngine.tool = 'smudge';
         return true;
       case 'b':
-        this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
-          ? BrushType.Gaussian
-          : BrushType.Circle;
+        this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle ? BrushType.Gaussian : BrushType.Circle;
         return true;
       case 'g': {
         const effects = this.paintEngine.effects;

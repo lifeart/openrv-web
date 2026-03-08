@@ -9,10 +9,12 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { handlePlaybackChanged } from './playbackHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 
-function createMockContext(overrides: {
-  playDirection?: number;
-  currentSource?: { videoSourceNode?: { stopPlaybackPreload: Mock<() => void> } } | null;
-} = {}): SessionBridgeContext {
+function createMockContext(
+  overrides: {
+    playDirection?: number;
+    currentSource?: { videoSourceNode?: { stopPlaybackPreload: Mock<() => void> } } | null;
+  } = {},
+): SessionBridgeContext {
   const histogram = { setPlaybackMode: vi.fn() };
   const waveform = { setPlaybackMode: vi.fn() };
   const vectorscope = { setPlaybackMode: vi.fn() };

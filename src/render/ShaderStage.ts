@@ -11,17 +11,17 @@ import type { InternalShaderState, TextureCallbacks } from './ShaderStateManager
 
 /** Identifies a shader pipeline stage (11 stages total). */
 export type StageId =
-  | 'inputDecode'        // Phases 0a-0b2: deinterlace, perspective, spherical, swizzle, unpremultiply
-  | 'linearize'          // Phases 0c-0e: log-to-linear, EOTF, input primaries
-  | 'primaryGrade'       // Phases 1-5: exposure, scale/offset, inline LUT, temp/tint, brightness, contrast, saturation
-  | 'secondaryGrade'     // Phases 5b-5d: highlights/shadows/whites/blacks, vibrance, hue rotation
-  | 'spatialEffects'     // Phase 5e: clarity only (pre-tone-mapping, samples neighboring pixels)
-  | 'colorPipeline'      // Phases 6a-6f: color wheels, CDL, curves, 3D LUT, HSL qualifier, film emulation
-  | 'sceneAnalysis'      // Phases 6g-7a: out-of-range, tone mapping, gamut mapping
+  | 'inputDecode' // Phases 0a-0b2: deinterlace, perspective, spherical, swizzle, unpremultiply
+  | 'linearize' // Phases 0c-0e: log-to-linear, EOTF, input primaries
+  | 'primaryGrade' // Phases 1-5: exposure, scale/offset, inline LUT, temp/tint, brightness, contrast, saturation
+  | 'secondaryGrade' // Phases 5b-5d: highlights/shadows/whites/blacks, vibrance, hue rotation
+  | 'spatialEffects' // Phase 5e: clarity only (pre-tone-mapping, samples neighboring pixels)
+  | 'colorPipeline' // Phases 6a-6f: color wheels, CDL, curves, 3D LUT, HSL qualifier, film emulation
+  | 'sceneAnalysis' // Phases 6g-7a: out-of-range, tone mapping, gamut mapping
   | 'spatialEffectsPost' // Phase 7b: sharpen only (post-tone-mapping, samples neighboring pixels)
-  | 'displayOutput'      // Phases 7c-9: output primaries, display transfer/gamma/brightness, inversion
-  | 'diagnostics'        // Phases 10-12c: channel isolation, false color, zebra, dither/quantize
-  | 'compositing';       // Phases SDR-13: SDR clamp, premultiply, background blend
+  | 'displayOutput' // Phases 7c-9: output primaries, display transfer/gamma/brightness, inversion
+  | 'diagnostics' // Phases 10-12c: channel isolation, false color, zebra, dither/quantize
+  | 'compositing'; // Phases SDR-13: SDR clamp, premultiply, background blend
 
 /** Metadata for a single shader pipeline stage. */
 export interface ShaderStageDescriptor {
@@ -44,11 +44,7 @@ export interface ShaderStageDescriptor {
    * Upload only this stage's uniforms to the given shader program.
    * Called only when the stage is NOT skipped.
    */
-  applyUniforms: (
-    shader: ShaderProgram,
-    state: Readonly<InternalShaderState>,
-    texCb: TextureCallbacks,
-  ) => void;
+  applyUniforms: (shader: ShaderProgram, state: Readonly<InternalShaderState>, texCb: TextureCallbacks) => void;
 
   /**
    * Dirty flags that this stage depends on.

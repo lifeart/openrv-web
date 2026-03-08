@@ -7,9 +7,9 @@
  * Integrates with the LUTPipeline orchestrator for state management.
  */
 
-import { LUTPipeline, type LUT } from '../../color/ColorProcessingFacade';
+import { type LUTPipeline, type LUT } from '../../color/ColorProcessingFacade';
 import { LUTStageControl } from './LUTStageControl';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { Z_INDEX } from './shared/theme';
 
 export interface LUTPipelinePanelEvents extends EventMap {
@@ -151,7 +151,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         onLUTCleared: () => this.onStageLUTCleared('precache'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('precache', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('precache', intensity),
-      }
+      },
     );
     this.panel.appendChild(this.precacheControl.render());
 
@@ -168,7 +168,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         onLUTCleared: () => this.onStageLUTCleared('file'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('file', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('file', intensity),
-      }
+      },
     );
     this.panel.appendChild(this.fileControl.render());
 
@@ -200,7 +200,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         onLUTCleared: () => this.onStageLUTCleared('look'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('look', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('look', intensity),
-      }
+      },
     );
     this.panel.appendChild(this.lookControl.render());
 
@@ -218,7 +218,7 @@ export class LUTPipelinePanel extends EventEmitter<LUTPipelinePanelEvents> {
         onLUTCleared: () => this.onStageLUTCleared('display'),
         onEnabledChanged: (enabled) => this.onStageEnabledChanged('display', enabled),
         onIntensityChanged: (intensity) => this.onStageIntensityChanged('display', intensity),
-      }
+      },
     );
     this.panel.appendChild(this.displayControl.render());
 

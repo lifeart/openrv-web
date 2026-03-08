@@ -142,9 +142,12 @@ let vibrance3DLUT: Float32Array | null = null;
 let vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null = null;
 
 function getVibrance3DLUT(vibrance: number, skinProtection: boolean): Float32Array {
-  if (vibrance3DLUT && vibrance3DLUTParams &&
-      vibrance3DLUTParams.vibrance === vibrance &&
-      vibrance3DLUTParams.skinProtection === skinProtection) {
+  if (
+    vibrance3DLUT &&
+    vibrance3DLUTParams &&
+    vibrance3DLUTParams.vibrance === vibrance &&
+    vibrance3DLUTParams.skinProtection === skinProtection
+  ) {
     return vibrance3DLUT;
   }
 
@@ -195,16 +198,18 @@ function getVibrance3DLUT(vibrance: number, skinProtection: boolean): Float32Arr
 
         let outR: number, outG: number, outB: number;
         if (Math.abs(newS - s) < 0.001) {
-          outR = r; outG = g; outB = b;
+          outR = r;
+          outG = g;
+          outB = b;
         } else if (newS === 0) {
           outR = outG = outB = l;
         } else {
           const q = l < 0.5 ? l * (1 + newS) : l + newS - l * newS;
           const p = 2 * l - q;
           const hNorm = h / 360;
-          outR = hueToRgb(p, q, hNorm + 1/3);
+          outR = hueToRgb(p, q, hNorm + 1 / 3);
           outG = hueToRgb(p, q, hNorm);
-          outB = hueToRgb(p, q, hNorm - 1/3);
+          outB = hueToRgb(p, q, hNorm - 1 / 3);
         }
 
         const idx = (ri * size * size + gi * size + bi) * 3;
@@ -244,11 +249,7 @@ function getHighlightShadowLUTs(): { highlightLUT: Float32Array; shadowLUT: Floa
 // Inter-pixel Effect Functions (cannot be merged)
 // ============================================================================
 
-function applyGaussianBlur5x5InPlace(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number
-): void {
+function applyGaussianBlur5x5InPlace(data: Uint8ClampedArray, width: number, height: number): void {
   const result = clarityBlurResultBuffer!;
   const temp = clarityBlurTempBuffer!;
   const kernel = [1, 4, 6, 4, 1];
@@ -290,12 +291,7 @@ function applyGaussianBlur5x5InPlace(
   }
 }
 
-function applyClarity(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  ca: ColorAdjustments
-): void {
+function applyClarity(data: Uint8ClampedArray, width: number, height: number, ca: ColorAdjustments): void {
   const clarity = ca.clarity / 100;
   const len = data.length;
 
@@ -324,12 +320,7 @@ function applyClarity(
   }
 }
 
-function applySharpen(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  amount: number
-): void {
+function applySharpen(data: Uint8ClampedArray, width: number, height: number, amount: number): void {
   ensureSharpenBuffer(data.length);
   const original = sharpenOriginalBuffer!;
   original.set(data);
@@ -342,14 +333,11 @@ function applySharpen(
           ki = 0;
         for (let ky = -1; ky <= 1; ky++) {
           for (let kx = -1; kx <= 1; kx++) {
-            sum +=
-              original[((y + ky) * width + (x + kx)) * 4 + c]! * kernel[ki++]!;
+            sum += original[((y + ky) * width + (x + kx)) * 4 + c]! * kernel[ki++]!;
           }
         }
         const orig = original[idx + c]!;
-        data[idx + c] = Math.round(
-          orig + (Math.max(0, Math.min(255, sum)) - orig) * amount
-        );
+        data[idx + c] = Math.round(orig + (Math.max(0, Math.min(255, sum)) - orig) * amount);
       }
     }
   }
@@ -360,14 +348,8 @@ function applySharpen(
 // ============================================================================
 
 function hasColorWheelAdjustments(state: ColorWheelsState): boolean {
-  const isDefault = (w: ColorWheelValue) =>
-    w.r === 0 && w.g === 0 && w.b === 0 && w.y === 0;
-  return (
-    !isDefault(state.lift) ||
-    !isDefault(state.gamma) ||
-    !isDefault(state.gain) ||
-    !isDefault(state.master)
-  );
+  const isDefault = (w: ColorWheelValue) => w.r === 0 && w.g === 0 && w.b === 0 && w.y === 0;
+  return !isDefault(state.lift) || !isDefault(state.gamma) || !isDefault(state.gain) || !isDefault(state.master);
 }
 
 function isDefaultCDL(cdl: CDLValues): boolean {
@@ -409,12 +391,7 @@ function isDefaultCurves(curves: ColorCurvesData): boolean {
   const isDefaultChannel = (ch: CurveChannel) => {
     if (!ch.enabled) return true;
     if (ch.points.length !== 2) return false;
-    return (
-      ch.points[0]!.x === 0 &&
-      ch.points[0]!.y === 0 &&
-      ch.points[1]!.x === 1 &&
-      ch.points[1]!.y === 1
-    );
+    return ch.points[0]!.x === 0 && ch.points[0]!.y === 0 && ch.points[1]!.x === 1 && ch.points[1]!.y === 1;
   };
   return (
     isDefaultChannel(curves.master) &&
@@ -451,7 +428,7 @@ function calculateHSLMatte(
   l: number,
   hue: HSLRange,
   saturation: HSLRange,
-  luminance: HSLRange
+  luminance: HSLRange,
 ): number {
   return calculateHueMatch(h, hue) * calculateLinearMatch(s, saturation) * calculateLinearMatch(l, luminance);
 }
@@ -461,7 +438,7 @@ function applyHSLCorrection(
   s: number,
   l: number,
   correction: HSLCorrection,
-  matte: number
+  matte: number,
 ): { h: number; s: number; l: number } {
   let newH = h + correction.hueShift * matte;
   while (newH < 0) newH += 360;
@@ -493,25 +470,20 @@ function applyHSLCorrection(
  * 9. Color Inversion (1.0 - value)
  * 10. Channel Isolation (channel select)
  */
-function applyMergedPerPixelEffects(
-  data: Uint8ClampedArray,
-  state: AllEffectsState
-): void {
+function applyMergedPerPixelEffects(data: Uint8ClampedArray, state: AllEffectsState): void {
   const len = data.length;
   const ca = state.colorAdjustments;
 
   // ---- Pre-compute flags ----
-  const hasHS = ca.highlights !== 0 || ca.shadows !== 0 ||
-                ca.whites !== 0 || ca.blacks !== 0;
+  const hasHS = ca.highlights !== 0 || ca.shadows !== 0 || ca.whites !== 0 || ca.blacks !== 0;
   const hasVibrance = ca.vibrance !== 0;
   const hasHueRotation = !isIdentityHueRotation(ca.hueRotation);
   const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
   const hasCDL = !isDefaultCDL(state.cdlValues);
   const hasCurves = !isDefaultCurves(state.curvesData);
   const hasHSLQualifier = state.hslQualifierState && state.hslQualifierState.enabled;
-  const hasToneMapping = state.toneMappingState &&
-    state.toneMappingState.enabled &&
-    state.toneMappingState.operator !== 'off';
+  const hasToneMapping =
+    state.toneMappingState && state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
   const hasInversion = state.colorInversionEnabled;
   const hasChannelIsolation = state.channelMode !== 'rgb';
 
@@ -536,18 +508,25 @@ function applyMergedPerPixelEffects(
 
   // ---- Pre-compute color wheels ----
   const wheels = state.colorWheelsState;
-  const hasMaster = hasColorWheels && (wheels.master.r !== 0 || wheels.master.g !== 0 ||
-                    wheels.master.b !== 0 || wheels.master.y !== 0);
-  const hasLift = hasColorWheels && (wheels.lift.r !== 0 || wheels.lift.g !== 0 ||
-                  wheels.lift.b !== 0 || wheels.lift.y !== 0);
-  const hasGamma = hasColorWheels && (wheels.gamma.r !== 0 || wheels.gamma.g !== 0 ||
-                   wheels.gamma.b !== 0 || wheels.gamma.y !== 0);
-  const hasGain = hasColorWheels && (wheels.gain.r !== 0 || wheels.gain.g !== 0 ||
-                  wheels.gain.b !== 0 || wheels.gain.y !== 0);
+  const hasMaster =
+    hasColorWheels &&
+    (wheels.master.r !== 0 || wheels.master.g !== 0 || wheels.master.b !== 0 || wheels.master.y !== 0);
+  const hasLift =
+    hasColorWheels && (wheels.lift.r !== 0 || wheels.lift.g !== 0 || wheels.lift.b !== 0 || wheels.lift.y !== 0);
+  const hasGamma =
+    hasColorWheels && (wheels.gamma.r !== 0 || wheels.gamma.g !== 0 || wheels.gamma.b !== 0 || wheels.gamma.y !== 0);
+  const hasGain =
+    hasColorWheels && (wheels.gain.r !== 0 || wheels.gain.g !== 0 || wheels.gain.b !== 0 || wheels.gain.y !== 0);
 
-  const gammaR = hasGamma ? 1.0 - wheels.gamma.r * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
-  const gammaG = hasGamma ? 1.0 - wheels.gamma.g * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
-  const gammaB = hasGamma ? 1.0 - wheels.gamma.b * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
+  const gammaR = hasGamma
+    ? 1.0 - wheels.gamma.r * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR
+    : 1.0;
+  const gammaG = hasGamma
+    ? 1.0 - wheels.gamma.g * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR
+    : 1.0;
+  const gammaB = hasGamma
+    ? 1.0 - wheels.gamma.b * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR
+    : 1.0;
 
   const gainR = hasGain ? 1.0 + wheels.gain.r * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
   const gainG = hasGain ? 1.0 + wheels.gain.g * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
@@ -575,15 +554,17 @@ function applyMergedPerPixelEffects(
 
   // ---- Pre-compute tone mapping ----
   const tmOperator = hasToneMapping ? state.toneMappingState.operator : '';
-  const tmParams = hasToneMapping ? {
-    reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
-    filmicExposureBias: state.toneMappingState.filmicExposureBias,
-    filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
-    dragoBias: state.toneMappingState.dragoBias,
-    dragoLwa: state.toneMappingState.dragoLwa,
-    dragoLmax: state.toneMappingState.dragoLmax,
-    dragoBrightness: state.toneMappingState.dragoBrightness,
-  } : undefined;
+  const tmParams = hasToneMapping
+    ? {
+        reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
+        filmicExposureBias: state.toneMappingState.filmicExposureBias,
+        filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+        dragoBias: state.toneMappingState.dragoBias,
+        dragoLwa: state.toneMappingState.dragoLwa,
+        dragoLmax: state.toneMappingState.dragoLmax,
+        dragoBrightness: state.toneMappingState.dragoBrightness,
+      }
+    : undefined;
 
   const channelMode = state.channelMode;
 
@@ -755,8 +736,12 @@ function applyMergedPerPixelEffects(
       const hsl = rgbToHsl(r, g, b);
 
       let matte = calculateHSLMatte(
-        hsl.h, hsl.s * 100, hsl.l * 100,
-        hslState.hue, hslState.saturation, hslState.luminance
+        hsl.h,
+        hsl.s * 100,
+        hsl.l * 100,
+        hslState.hue,
+        hslState.saturation,
+        hslState.luminance,
       );
 
       if (hslState.invert) {
@@ -777,7 +762,9 @@ function applyMergedPerPixelEffects(
     // ---- 8. Tone Mapping ----
     if (hasToneMapping) {
       const tm = applyToneMappingToRGB(r, g, b, tmOperator, tmParams);
-      r = tm.r; g = tm.g; b = tm.b;
+      r = tm.r;
+      g = tm.g;
+      b = tm.b;
     }
 
     // ---- 9. Color Inversion ----
@@ -830,12 +817,7 @@ function applyMergedPerPixelEffects(
 // Half-Resolution Variants
 // ============================================================================
 
-function applyClarityHalfRes(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  ca: ColorAdjustments
-): void {
+function applyClarityHalfRes(data: Uint8ClampedArray, width: number, height: number, ca: ColorAdjustments): void {
   const clarity = ca.clarity / 100;
   const len = data.length;
 
@@ -876,12 +858,7 @@ function applyClarityHalfRes(
   }
 }
 
-function applySharpenHalfRes(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  amount: number
-): void {
+function applySharpenHalfRes(data: Uint8ClampedArray, width: number, height: number, amount: number): void {
   // Downsample to half resolution
   const half = downsample2x(data, width, height);
   const halfW = half.width;
@@ -904,7 +881,8 @@ function applySharpenHalfRes(
     for (let x = 1; x < halfW - 1; x++) {
       const idx = (y * halfW + x) * 4;
       for (let c = 0; c < 3; c++) {
-        let sum = 0, ki = 0;
+        let sum = 0,
+          ki = 0;
         for (let ky = -1; ky <= 1; ky++) {
           for (let kx = -1; kx <= 1; kx++) {
             sum += halfOriginal[((y + ky) * halfW + (x + kx)) * 4 + c]! * kernel[ki++]!;
@@ -955,8 +933,8 @@ function applySharpenHalfRes(
       const d11 = (y1 * halfW + x1) * 3;
 
       for (let c = 0; c < 3; c++) {
-        const delta = halfDelta[d00 + c]! * w00 + halfDelta[d10 + c]! * w10 +
-                      halfDelta[d01 + c]! * w01 + halfDelta[d11 + c]! * w11;
+        const delta =
+          halfDelta[d00 + c]! * w00 + halfDelta[d10 + c]! * w10 + halfDelta[d01 + c]! * w01 + halfDelta[d11 + c]! * w11;
         data[dstIdx + c] = Math.max(0, Math.min(255, Math.round(data[dstIdx + c]! + delta * amount)));
       }
     }
@@ -972,34 +950,44 @@ function processEffects(
   width: number,
   height: number,
   state: AllEffectsState,
-  halfRes = false
+  halfRes = false,
 ): void {
   const ca = state.colorAdjustments;
   const hasCDL = !isDefaultCDL(state.cdlValues);
   const hasCurves = !isDefaultCurves(state.curvesData);
   const hasSharpen = state.filterSettings.sharpen > 0;
   const hasChannel = state.channelMode !== 'rgb';
-  const hasHS =
-    ca.highlights !== 0 ||
-    ca.shadows !== 0 ||
-    ca.whites !== 0 ||
-    ca.blacks !== 0;
+  const hasHS = ca.highlights !== 0 || ca.shadows !== 0 || ca.whites !== 0 || ca.blacks !== 0;
   const hasVibrance = ca.vibrance !== 0;
   const hasClarity = ca.clarity !== 0;
   const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
-  const hasHSLQualifier =
-    state.hslQualifierState && state.hslQualifierState.enabled;
+  const hasHSLQualifier = state.hslQualifierState && state.hslQualifierState.enabled;
   const hasHueRotation = !isIdentityHueRotation(ca.hueRotation);
-  const hasToneMapping = state.toneMappingState &&
-    state.toneMappingState.enabled &&
-    state.toneMappingState.operator !== 'off';
+  const hasToneMapping =
+    state.toneMappingState && state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
   const hasInversion = state.colorInversionEnabled;
-  const hasDeinterlace = !!(state.deinterlaceParams && state.deinterlaceParams.enabled && state.deinterlaceParams.method !== 'weave');
-  const hasFilmEmulation = !!(state.filmEmulationParams && state.filmEmulationParams.enabled && state.filmEmulationParams.intensity > 0);
+  const hasDeinterlace = !!(
+    state.deinterlaceParams &&
+    state.deinterlaceParams.enabled &&
+    state.deinterlaceParams.method !== 'weave'
+  );
+  const hasFilmEmulation = !!(
+    state.filmEmulationParams &&
+    state.filmEmulationParams.enabled &&
+    state.filmEmulationParams.intensity > 0
+  );
 
-  const hasPerPixelEffects = hasHS || hasVibrance || hasHueRotation ||
-    hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
-    hasInversion || hasChannel;
+  const hasPerPixelEffects =
+    hasHS ||
+    hasVibrance ||
+    hasHueRotation ||
+    hasColorWheels ||
+    hasCDL ||
+    hasCurves ||
+    hasHSLQualifier ||
+    hasToneMapping ||
+    hasInversion ||
+    hasChannel;
 
   // Early return if no effects are active
   if (!hasPerPixelEffects && !hasSharpen && !hasClarity && !hasDeinterlace && !hasFilmEmulation) {
@@ -1007,10 +995,24 @@ function processEffects(
   }
 
   // ---- SIMD fast-path: when only simple bitwise operations are needed ----
-  const hasComplexEffects = hasHS || hasVibrance || hasHueRotation ||
-    hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
+  const hasComplexEffects =
+    hasHS ||
+    hasVibrance ||
+    hasHueRotation ||
+    hasColorWheels ||
+    hasCDL ||
+    hasCurves ||
+    hasHSLQualifier ||
+    hasToneMapping;
 
-  if (!hasComplexEffects && !hasClarity && !hasSharpen && !hasDeinterlace && !hasFilmEmulation && (hasInversion || hasChannel)) {
+  if (
+    !hasComplexEffects &&
+    !hasClarity &&
+    !hasSharpen &&
+    !hasDeinterlace &&
+    !hasFilmEmulation &&
+    (hasInversion || hasChannel)
+  ) {
     if (hasInversion) {
       applyColorInversionSIMD(data);
     }

@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  exportAnnotationsPDF,
-  previewAnnotationsPDF,
-} from './AnnotationPDFExporter';
+import { exportAnnotationsPDF, previewAnnotationsPDF } from './AnnotationPDFExporter';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { Session } from '../../core/session/Session';
 
@@ -219,7 +216,7 @@ describe('AnnotationPDFExporter', () => {
       });
 
       // Give async operation time to complete
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(window.open).toHaveBeenCalledWith('', '_blank', 'width=800,height=600');
       expect(mockPrintWindow.document.write).toHaveBeenCalled();
@@ -234,9 +231,9 @@ describe('AnnotationPDFExporter', () => {
 
       const renderFrame = vi.fn().mockResolvedValue(document.createElement('canvas'));
 
-      await expect(
-        exportAnnotationsPDF(paintEngine, session, renderFrame)
-      ).rejects.toThrow('Failed to open print window');
+      await expect(exportAnnotationsPDF(paintEngine, session, renderFrame)).rejects.toThrow(
+        'Failed to open print window',
+      );
 
       window.open = originalOpen;
     });

@@ -10,7 +10,7 @@
 
 import { BaseGroupNode } from './BaseGroupNode';
 import { RegisterNode } from '../base/NodeFactory';
-import { IPImage } from '../../core/image/Image';
+import { type IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 
 /**

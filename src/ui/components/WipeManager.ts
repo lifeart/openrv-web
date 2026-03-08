@@ -10,7 +10,7 @@
  */
 
 import { DEFAULT_WIPE_STATE } from './WipeControl';
-import type { WipeState, WipeMode } from '../../core/types/wipe';
+import type { WipeState, WipeMode, StencilBox } from '../../core/types/wipe';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -18,23 +18,18 @@ import {
   calculateWipePosition,
   setWipeLabels as setWipeLabelsUtil,
   getWipeLabels as getWipeLabelsUtil,
-  WipeUIElements,
+  type WipeUIElements,
 } from './ViewerWipe';
 import {
-  SplitScreenState,
-  SplitScreenUIElements,
+  type SplitScreenState,
+  type SplitScreenUIElements,
   createSplitScreenUIElements,
   updateSplitScreenPosition,
   isPointerOnSplitLine,
   calculateSplitPosition,
   isSplitScreenMode,
 } from './ViewerSplitScreen';
-import type { StencilBox } from '../../core/types/wipe';
-import {
-  DEFAULT_STENCIL_BOX,
-  computeHorizontalWipeBoxes,
-  computeVerticalWipeBoxes,
-} from '../../core/types/wipe';
+import { DEFAULT_STENCIL_BOX, computeHorizontalWipeBoxes, computeVerticalWipeBoxes } from '../../core/types/wipe';
 
 // Wipe label constants
 const DEFAULT_WIPE_LABEL_A = 'Original';
@@ -141,12 +136,7 @@ export class WipeManager {
   // UI Position Updates
   // =========================================================================
 
-  updateWipeLine(
-    containerRect: DOMRect,
-    canvasRect: DOMRect,
-    displayWidth: number,
-    displayHeight: number
-  ): void {
+  updateWipeLine(containerRect: DOMRect, canvasRect: DOMRect, displayWidth: number, displayHeight: number): void {
     if (!this._wipeElements) return;
 
     // If split screen mode is active, hide the wipe line (split screen has its own UI)
@@ -157,21 +147,14 @@ export class WipeManager {
       return;
     }
 
-    updateWipeLinePosition(
-      this._state,
-      this._wipeElements,
-      containerRect,
-      canvasRect,
-      displayWidth,
-      displayHeight
-    );
+    updateWipeLinePosition(this._state, this._wipeElements, containerRect, canvasRect, displayWidth, displayHeight);
   }
 
   updateSplitScreenLine(
     containerRect: DOMRect,
     canvasRect: DOMRect,
     displayWidth: number,
-    displayHeight: number
+    displayHeight: number,
   ): void {
     if (!this._splitScreenElements) return;
 
@@ -196,7 +179,7 @@ export class WipeManager {
       containerRect,
       canvasRect,
       displayWidth,
-      displayHeight
+      displayHeight,
     );
   }
 
@@ -238,7 +221,7 @@ export class WipeManager {
     canvasRect: DOMRect,
     containerRect: DOMRect,
     displayWidth: number,
-    displayHeight: number
+    displayHeight: number,
   ): boolean {
     // Handle split screen dragging
     if (this._isDraggingSplit) {
@@ -246,13 +229,7 @@ export class WipeManager {
         mode: this._state.mode as 'splitscreen-h' | 'splitscreen-v',
         position: this._state.position,
       };
-      this._state.position = calculateSplitPosition(
-        e,
-        splitState,
-        canvasRect,
-        displayWidth,
-        displayHeight
-      );
+      this._state.position = calculateSplitPosition(e, splitState, canvasRect, displayWidth, displayHeight);
       this.updateSplitScreenLine(containerRect, canvasRect, displayWidth, displayHeight);
       return true;
     }
@@ -260,13 +237,7 @@ export class WipeManager {
     // Handle regular wipe dragging
     if (!this._isDraggingWipe) return false;
 
-    this._state.position = calculateWipePosition(
-      e,
-      this._state,
-      canvasRect,
-      displayWidth,
-      displayHeight
-    );
+    this._state.position = calculateWipePosition(e, this._state, canvasRect, displayWidth, displayHeight);
     this.updateWipeLine(containerRect, canvasRect, displayWidth, displayHeight);
     return true;
   }

@@ -23,7 +23,7 @@ import {
   importCurvesJSON,
   CURVE_PRESETS,
   CurveLUTCache,
-  ColorCurvesData,
+  type ColorCurvesData,
 } from './ColorCurves';
 
 describe('ColorCurves', () => {
@@ -75,7 +75,10 @@ describe('ColorCurves', () => {
     it('CC-006: returns true when channel is disabled', () => {
       const data = createDefaultCurvesData();
       data.master.enabled = false;
-      data.master.points = [{ x: 0, y: 0.5 }, { x: 1, y: 0.5 }];
+      data.master.points = [
+        { x: 0, y: 0.5 },
+        { x: 1, y: 0.5 },
+      ];
       expect(isDefaultCurves(data)).toBe(true);
     });
   });
@@ -99,7 +102,10 @@ describe('ColorCurves', () => {
     });
 
     it('CC-010: clamps values at curve boundaries', () => {
-      const points = [{ x: 0.2, y: 0.3 }, { x: 0.8, y: 0.9 }];
+      const points = [
+        { x: 0.2, y: 0.3 },
+        { x: 0.8, y: 0.9 },
+      ];
       expect(evaluateCurveAtPoint(points, 0)).toBe(0.3);
       expect(evaluateCurveAtPoint(points, 0.1)).toBe(0.3);
       expect(evaluateCurveAtPoint(points, 1)).toBe(0.9);
@@ -151,7 +157,10 @@ describe('ColorCurves', () => {
     });
 
     it('CC-016: creates inverted LUT for inverted curve', () => {
-      const points = [{ x: 0, y: 1 }, { x: 1, y: 0 }];
+      const points = [
+        { x: 0, y: 1 },
+        { x: 1, y: 0 },
+      ];
       const lut = buildCurveLUT(points);
       expect(lut[0]).toBe(255);
       expect(lut[255]).toBe(0);
@@ -172,7 +181,10 @@ describe('ColorCurves', () => {
     it('CC-018: uses identity LUT for disabled channel', () => {
       const curves = createDefaultCurvesData();
       curves.red.enabled = false;
-      curves.red.points = [{ x: 0, y: 1 }, { x: 1, y: 0 }]; // Inverted
+      curves.red.points = [
+        { x: 0, y: 1 },
+        { x: 1, y: 0 },
+      ]; // Inverted
       const luts = buildAllCurveLUTs(curves);
       // Should still be identity since disabled
       expect(luts.red[0]).toBe(0);
@@ -194,7 +206,10 @@ describe('ColorCurves', () => {
 
     it('CC-020: applies red channel curve', () => {
       const curves = createDefaultCurvesData();
-      curves.red.points = [{ x: 0, y: 0.5 }, { x: 1, y: 0.5 }]; // Flatten red
+      curves.red.points = [
+        { x: 0, y: 0.5 },
+        { x: 1, y: 0.5 },
+      ]; // Flatten red
       const luts = buildAllCurveLUTs(curves);
       const result = applyCurvesToPixel(0, 100, 200, luts);
       expect(result.r).toBeCloseTo(128, 0);
@@ -205,7 +220,10 @@ describe('ColorCurves', () => {
 
     it('CC-021: applies master curve after channel curves', () => {
       const curves = createDefaultCurvesData();
-      curves.master.points = [{ x: 0, y: 1 }, { x: 1, y: 0 }]; // Invert
+      curves.master.points = [
+        { x: 0, y: 1 },
+        { x: 1, y: 0 },
+      ]; // Invert
       const luts = buildAllCurveLUTs(curves);
       const result = applyCurvesToPixel(0, 127, 255, luts);
       expect(result.r).toBe(255);
@@ -217,8 +235,14 @@ describe('ColorCurves', () => {
   describe('applyCurvesToImageData', () => {
     it('CC-022: does not modify image with default curves', () => {
       const imageData = new ImageData(2, 2);
-      imageData.data[0] = 100; imageData.data[1] = 150; imageData.data[2] = 200; imageData.data[3] = 255;
-      imageData.data[4] = 50; imageData.data[5] = 100; imageData.data[6] = 150; imageData.data[7] = 255;
+      imageData.data[0] = 100;
+      imageData.data[1] = 150;
+      imageData.data[2] = 200;
+      imageData.data[3] = 255;
+      imageData.data[4] = 50;
+      imageData.data[5] = 100;
+      imageData.data[6] = 150;
+      imageData.data[7] = 255;
 
       const curves = createDefaultCurvesData();
       applyCurvesToImageData(imageData, curves);
@@ -230,11 +254,20 @@ describe('ColorCurves', () => {
 
     it('CC-023: modifies image with non-default curves', () => {
       const imageData = new ImageData(2, 2);
-      imageData.data[0] = 0; imageData.data[1] = 0; imageData.data[2] = 0; imageData.data[3] = 255;
-      imageData.data[4] = 255; imageData.data[5] = 255; imageData.data[6] = 255; imageData.data[7] = 255;
+      imageData.data[0] = 0;
+      imageData.data[1] = 0;
+      imageData.data[2] = 0;
+      imageData.data[3] = 255;
+      imageData.data[4] = 255;
+      imageData.data[5] = 255;
+      imageData.data[6] = 255;
+      imageData.data[7] = 255;
 
       const curves = createDefaultCurvesData();
-      curves.master.points = [{ x: 0, y: 0.5 }, { x: 1, y: 0.5 }]; // Flatten to mid-gray
+      curves.master.points = [
+        { x: 0, y: 0.5 },
+        { x: 1, y: 0.5 },
+      ]; // Flatten to mid-gray
       applyCurvesToImageData(imageData, curves);
 
       expect(imageData.data[0]).toBeCloseTo(128, 0);
@@ -243,10 +276,16 @@ describe('ColorCurves', () => {
 
     it('CC-024: preserves alpha channel', () => {
       const imageData = new ImageData(1, 1);
-      imageData.data[0] = 100; imageData.data[1] = 100; imageData.data[2] = 100; imageData.data[3] = 128;
+      imageData.data[0] = 100;
+      imageData.data[1] = 100;
+      imageData.data[2] = 100;
+      imageData.data[3] = 128;
 
       const curves = createDefaultCurvesData();
-      curves.master.points = [{ x: 0, y: 1 }, { x: 1, y: 0 }]; // Invert
+      curves.master.points = [
+        { x: 0, y: 1 },
+        { x: 1, y: 0 },
+      ]; // Invert
       applyCurvesToImageData(imageData, curves);
 
       expect(imageData.data[3]).toBe(128); // Alpha unchanged
@@ -293,7 +332,7 @@ describe('ColorCurves', () => {
   describe('CURVE_PRESETS', () => {
     it('CC-030: contains expected presets', () => {
       expect(CURVE_PRESETS.length).toBeGreaterThan(0);
-      const names = CURVE_PRESETS.map(p => p.name);
+      const names = CURVE_PRESETS.map((p) => p.name);
       expect(names).toContain('Linear (Default)');
       expect(names).toContain('S-Curve (Mild)');
       expect(names).toContain('Film Look');
@@ -449,7 +488,11 @@ describe('ColorCurves', () => {
     it('CC-048: round-trips curves correctly', () => {
       const original = createDefaultCurvesData();
       original.master = createSCurve(0.3);
-      original.red.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }];
+      original.red.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.6 },
+        { x: 1, y: 1 },
+      ];
 
       const json = exportCurvesJSON(original);
       const imported = importCurvesJSON(json);
@@ -484,9 +527,27 @@ describe('ColorCurves', () => {
             { x: 1, y: 1 },
           ],
         },
-        red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-        blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        red: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        green: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
+        blue: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        },
       };
 
       const luts2 = cache.getLUTs(curves2);
@@ -559,7 +620,11 @@ describe('ColorCurves', () => {
 
       // Change red channel
       const redMod = createDefaultCurvesData();
-      redMod.red.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }];
+      redMod.red.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.6 },
+        { x: 1, y: 1 },
+      ];
       cache.clear();
       cache.getLUTs(baseCurves); // reset
       const redLUTs = cache.getLUTs(redMod);
@@ -567,7 +632,11 @@ describe('ColorCurves', () => {
 
       // Change green channel
       const greenMod = createDefaultCurvesData();
-      greenMod.green.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.3 }, { x: 1, y: 1 }];
+      greenMod.green.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.3 },
+        { x: 1, y: 1 },
+      ];
       cache.clear();
       cache.getLUTs(baseCurves);
       const greenLUTs = cache.getLUTs(greenMod);
@@ -575,7 +644,10 @@ describe('ColorCurves', () => {
 
       // Change blue channel
       const blueMod = createDefaultCurvesData();
-      blueMod.blue.points = [{ x: 0, y: 0.05 }, { x: 1, y: 0.95 }];
+      blueMod.blue.points = [
+        { x: 0, y: 0.05 },
+        { x: 1, y: 0.95 },
+      ];
       cache.clear();
       cache.getLUTs(baseCurves);
       const blueLUTs = cache.getLUTs(blueMod);

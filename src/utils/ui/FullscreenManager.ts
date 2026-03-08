@@ -5,7 +5,7 @@
  * with event emission for state changes and proper cleanup.
  */
 
-import { EventEmitter, EventMap } from '../EventEmitter';
+import { EventEmitter, type EventMap } from '../EventEmitter';
 
 /**
  * Safari vendor-prefixed fullscreen API on HTMLElement.
@@ -95,7 +95,8 @@ export class FullscreenManager extends EventEmitter<FullscreenEvents> {
   }
 
   private handleFullscreenChange(): void {
-    const fullscreenElement = document.fullscreenElement || (document as unknown as WebkitDocument).webkitFullscreenElement;
+    const fullscreenElement =
+      document.fullscreenElement || (document as unknown as WebkitDocument).webkitFullscreenElement;
     this._isFullscreen = !!fullscreenElement;
     this.emit('fullscreenChanged', this._isFullscreen);
   }

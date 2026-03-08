@@ -1,6 +1,6 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { ExportFormat } from '../../utils/export/FrameExporter';
-import { getIconSvg, IconName } from './shared/Icons';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
+import { type ExportFormat } from '../../utils/export/FrameExporter';
+import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 
 export interface ExportRequest {
@@ -150,7 +150,11 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private boundHandleDocumentClick: (e: MouseEvent) => void;
 
   private handleDocumentClick(e: MouseEvent): void {
-    if (this.isDropdownOpen && !this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
+    if (
+      this.isDropdownOpen &&
+      !this.container.contains(e.target as Node) &&
+      !this.dropdown.contains(e.target as Node)
+    ) {
       this.closeDropdown();
     }
   }
@@ -220,12 +224,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.dropdown.appendChild(header);
   }
 
-  private addMenuItem(
-    icon: IconName,
-    labelText: string,
-    action: () => void,
-    shortcut?: string
-  ): void {
+  private addMenuItem(icon: IconName, labelText: string, action: () => void, shortcut?: string): void {
     const row = document.createElement('button');
     row.type = 'button';
     row.setAttribute('role', 'menuitem');

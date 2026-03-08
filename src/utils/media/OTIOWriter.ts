@@ -26,11 +26,11 @@ import type {
 export interface OTIOExportClip {
   sourceName: string;
   sourceUrl: string;
-  inPoint: number;       // 1-based frame within source
-  outPoint: number;      // 1-based frame within source
+  inPoint: number; // 1-based frame within source
+  outPoint: number; // 1-based frame within source
   globalStartFrame: number;
-  duration: number;      // outPoint - inPoint + 1
-  fps: number;           // clip-level FPS (may differ per source)
+  duration: number; // outPoint - inPoint + 1
+  fps: number; // clip-level FPS (may differ per source)
 }
 
 /** Transition to insert between two clips */

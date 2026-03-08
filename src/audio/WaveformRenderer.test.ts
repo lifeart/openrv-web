@@ -82,7 +82,7 @@ describe('WaveformRenderer', () => {
         const blob = new Blob(['test']);
         // Mock blob.arrayBuffer if it doesn't exist in environment
         if (!blob.arrayBuffer) {
-           (blob as any).arrayBuffer = async () => new ArrayBuffer(0);
+          (blob as any).arrayBuffer = async () => new ArrayBuffer(0);
         }
 
         // Start first load
@@ -115,12 +115,20 @@ describe('WaveformRenderer', () => {
     };
 
     beforeEach(() => {
-      vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
-      }));
+      vi.stubGlobal(
+        'AudioContext',
+        vi.fn(function () {
+          return mockAudioContext;
+        }),
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+        }),
+      );
     });
 
     afterEach(() => {
@@ -130,7 +138,7 @@ describe('WaveformRenderer', () => {
     it('EXT-001: extractAudioFromVideo handles success', async () => {
       const video = document.createElement('video');
       video.src = 'test.mp4';
-      
+
       const result = await extractAudioFromVideo(video);
       expect(result).not.toBeNull();
       expect(result?.duration).toBe(1);
@@ -138,14 +146,17 @@ describe('WaveformRenderer', () => {
     });
 
     it('EXT-002: extractAudioFromVideo handles fetch error', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-      }));
-      
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+        }),
+      );
+
       const video = document.createElement('video');
       video.src = 'test.mp4';
-      
+
       const result = await extractAudioFromVideo(video);
       expect(result).toBeNull();
     });
@@ -155,7 +166,7 @@ describe('WaveformRenderer', () => {
       if (!blob.arrayBuffer) {
         blob.arrayBuffer = async () => new ArrayBuffer(0);
       }
-      
+
       const result = await extractAudioFromBlob(blob);
       expect(result).not.toBeNull();
       expect(mockAudioContext.close).toHaveBeenCalled();
@@ -202,15 +213,18 @@ describe('WaveformRenderer', () => {
 
     it('EXT-007: extractAudioFromVideo handles timeout', async () => {
       // Create a fetch that never resolves within timeout
-      vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, options: { signal?: AbortSignal }) => {
-        return new Promise((_, reject) => {
-          if (options?.signal) {
-            options.signal.addEventListener('abort', () => {
-              reject(new DOMException('Aborted', 'AbortError'));
-            });
-          }
-        });
-      }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((_url: string, options: { signal?: AbortSignal }) => {
+          return new Promise((_, reject) => {
+            if (options?.signal) {
+              options.signal.addEventListener('abort', () => {
+                reject(new DOMException('Aborted', 'AbortError'));
+              });
+            }
+          });
+        }),
+      );
 
       const video = document.createElement('video');
       video.src = 'test.mp4';
@@ -224,11 +238,14 @@ describe('WaveformRenderer', () => {
     });
 
     it('EXT-008: extractAudioFromVideo handles network error', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+        }),
+      );
 
       const video = document.createElement('video');
       video.src = 'test.mp4';
@@ -289,10 +306,13 @@ describe('WaveformRenderer', () => {
 
         await extractAudioFromVideo(video);
 
-        expect(fetch).toHaveBeenCalledWith('https://cdn.example.com/test.mp4', expect.objectContaining({
-          cache: 'force-cache',
-          mode: 'cors',
-        }));
+        expect(fetch).toHaveBeenCalledWith(
+          'https://cdn.example.com/test.mp4',
+          expect.objectContaining({
+            cache: 'force-cache',
+            mode: 'cors',
+          }),
+        );
       });
 
       it('EXT-012: Blob URL fetch does NOT use force-cache', async () => {
@@ -302,12 +322,18 @@ describe('WaveformRenderer', () => {
         await extractAudioFromVideo(video);
 
         expect(fetch).toHaveBeenCalledTimes(1);
-        expect(fetch).toHaveBeenCalledWith('blob:http://localhost:3000/abc-123', expect.objectContaining({
-          mode: 'same-origin',
-        }));
-        expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-          cache: expect.anything(),
-        }));
+        expect(fetch).toHaveBeenCalledWith(
+          'blob:http://localhost:3000/abc-123',
+          expect.objectContaining({
+            mode: 'same-origin',
+          }),
+        );
+        expect(fetch).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            cache: expect.anything(),
+          }),
+        );
       });
 
       it('EXT-013: Data URL fetch does NOT use force-cache', async () => {
@@ -317,12 +343,18 @@ describe('WaveformRenderer', () => {
         await extractAudioFromVideo(video);
 
         expect(fetch).toHaveBeenCalledTimes(1);
-        expect(fetch).toHaveBeenCalledWith('data:video/mp4;base64,AAAA', expect.objectContaining({
-          mode: 'same-origin',
-        }));
-        expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-          cache: expect.anything(),
-        }));
+        expect(fetch).toHaveBeenCalledWith(
+          'data:video/mp4;base64,AAAA',
+          expect.objectContaining({
+            mode: 'same-origin',
+          }),
+        );
+        expect(fetch).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            cache: expect.anything(),
+          }),
+        );
       });
     });
   });
@@ -342,12 +374,20 @@ describe('WaveformRenderer', () => {
     };
 
     beforeEach(() => {
-      vi.stubGlobal('AudioContext', vi.fn(function() { return mockAudioContext; }));
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
-      }));
+      vi.stubGlobal(
+        'AudioContext',
+        vi.fn(function () {
+          return mockAudioContext;
+        }),
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+        }),
+      );
     });
 
     afterEach(() => {

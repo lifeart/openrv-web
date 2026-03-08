@@ -61,14 +61,7 @@ export interface DraggableContainer {
 import { createButton } from './Button';
 
 export function createDraggableContainer(options: DraggableContainerOptions): DraggableContainer {
-  const {
-    id,
-    title,
-    initialPosition = { top: '10px', left: '10px' },
-    zIndex = 100,
-    onClose,
-    testId,
-  } = options;
+  const { id, title, initialPosition = { top: '10px', left: '10px' }, zIndex = 100, onClose, testId } = options;
 
   // Track current position
   let currentX = 0;

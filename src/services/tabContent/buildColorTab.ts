@@ -36,37 +36,55 @@ export function buildColorTab(deps: BuildColorTabDeps): HTMLElement {
   colorContent.appendChild(ContextToolbar.createDivider());
 
   // Curves toggle button
-  const curvesButton = ContextToolbar.createButton('Curves', () => {
-    registry.curvesControl.toggle();
-  }, { title: 'Toggle color curves panel (U)', icon: 'curves' });
+  const curvesButton = ContextToolbar.createButton(
+    'Curves',
+    () => {
+      registry.curvesControl.toggle();
+    },
+    { title: 'Toggle color curves panel (U)', icon: 'curves' },
+  );
   curvesButton.dataset.testid = 'curves-toggle-button';
   colorContent.appendChild(curvesButton);
 
-  addUnsubscriber(registry.curvesControl.on('visibilityChanged', (visible) => {
-    setButtonActive(curvesButton, visible, 'ghost');
-  }));
+  addUnsubscriber(
+    registry.curvesControl.on('visibilityChanged', (visible) => {
+      setButtonActive(curvesButton, visible, 'ghost');
+    }),
+  );
 
   // Color Wheels toggle button
   const colorWheels = viewer.getColorWheels();
-  const colorWheelsButton = ContextToolbar.createButton('Wheels', () => {
-    colorWheels.toggle();
-  }, { title: 'Toggle Lift/Gamma/Gain color wheels (Shift+Alt+W)', icon: 'palette' });
+  const colorWheelsButton = ContextToolbar.createButton(
+    'Wheels',
+    () => {
+      colorWheels.toggle();
+    },
+    { title: 'Toggle Lift/Gamma/Gain color wheels (Shift+Alt+W)', icon: 'palette' },
+  );
   colorWheelsButton.dataset.testid = 'color-wheels-toggle-button';
   colorContent.appendChild(colorWheelsButton);
 
-  addUnsubscriber(colorWheels.on('visibilityChanged', (visible) => {
-    setButtonActive(colorWheelsButton, visible, 'ghost');
-  }));
+  addUnsubscriber(
+    colorWheels.on('visibilityChanged', (visible) => {
+      setButtonActive(colorWheelsButton, visible, 'ghost');
+    }),
+  );
 
   // LUT Pipeline toggle button
-  const lutPipelineButton = ContextToolbar.createButton('LUT Graph', () => {
-    registry.lutPipelinePanel.toggle();
-  }, { title: 'Toggle LUT pipeline panel (Shift+L on Color tab)', icon: 'monitor' });
+  const lutPipelineButton = ContextToolbar.createButton(
+    'LUT Graph',
+    () => {
+      registry.lutPipelinePanel.toggle();
+    },
+    { title: 'Toggle LUT pipeline panel (Shift+L on Color tab)', icon: 'monitor' },
+  );
   lutPipelineButton.dataset.testid = 'lut-pipeline-toggle-button';
   colorContent.appendChild(lutPipelineButton);
-  addUnsubscriber(registry.lutPipelinePanel.on('visibilityChanged', (visible) => {
-    setButtonActive(lutPipelineButton, visible, 'ghost');
-  }));
+  addUnsubscriber(
+    registry.lutPipelinePanel.on('visibilityChanged', (visible) => {
+      setButtonActive(lutPipelineButton, visible, 'ghost');
+    }),
+  );
 
   return colorContent;
 }

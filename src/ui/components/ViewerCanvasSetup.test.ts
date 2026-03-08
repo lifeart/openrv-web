@@ -97,27 +97,58 @@ function createMockSetupContext(overrides: Partial<CanvasSetupContext> = {}): Ca
     getCropManager: () => cropManager as any,
     getOverlayManager: () => overlayManager as any,
     getPerspectiveGridOverlay: () => perspectiveGridOverlay as any,
-    getContainerRect: () => ({ width: 1920, height: 1080, x: 0, y: 0, top: 0, left: 0, bottom: 1080, right: 1920, toJSON: () => {} }) as DOMRect,
+    getContainerRect: () =>
+      ({
+        width: 1920,
+        height: 1080,
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        bottom: 1080,
+        right: 1920,
+        toJSON: () => {},
+      }) as DOMRect,
     getDisplayWidth: () => displayWidth,
     getDisplayHeight: () => displayHeight,
-    setDisplayWidth: (w: number) => { displayWidth = w; },
-    setDisplayHeight: (h: number) => { displayHeight = h; },
+    setDisplayWidth: (w: number) => {
+      displayWidth = w;
+    },
+    setDisplayHeight: (h: number) => {
+      displayHeight = h;
+    },
     getSourceWidth: () => sourceWidth,
     getSourceHeight: () => sourceHeight,
-    setSourceWidth: (w: number) => { sourceWidth = w; },
-    setSourceHeight: (h: number) => { sourceHeight = h; },
+    setSourceWidth: (w: number) => {
+      sourceWidth = w;
+    },
+    setSourceHeight: (h: number) => {
+      sourceHeight = h;
+    },
     getPhysicalWidth: () => physicalWidth,
     getPhysicalHeight: () => physicalHeight,
-    setPhysicalWidth: (w: number) => { physicalWidth = w; },
-    setPhysicalHeight: (h: number) => { physicalHeight = h; },
+    setPhysicalWidth: (w: number) => {
+      physicalWidth = w;
+    },
+    setPhysicalHeight: (h: number) => {
+      physicalHeight = h;
+    },
     getPaintLogicalWidth: () => paintLogicalWidth,
     getPaintLogicalHeight: () => paintLogicalHeight,
-    setPaintLogicalWidth: (w: number) => { paintLogicalWidth = w; },
-    setPaintLogicalHeight: (h: number) => { paintLogicalHeight = h; },
+    setPaintLogicalWidth: (w: number) => {
+      paintLogicalWidth = w;
+    },
+    setPaintLogicalHeight: (h: number) => {
+      paintLogicalHeight = h;
+    },
     getPaintOffsetX: () => paintOffsetX,
     getPaintOffsetY: () => paintOffsetY,
-    setPaintOffsetX: (x: number) => { paintOffsetX = x; },
-    setPaintOffsetY: (y: number) => { paintOffsetY = y; },
+    setPaintOffsetX: (x: number) => {
+      paintOffsetX = x;
+    },
+    setPaintOffsetY: (y: number) => {
+      paintOffsetY = y;
+    },
     setPaintDirty: vi.fn(),
     setWatermarkDirty: vi.fn(),
     ...overrides,
@@ -568,7 +599,10 @@ describe('ViewerCanvasSetup', () => {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
       };
-      vi.stubGlobal('matchMedia', vi.fn(() => mqlMock));
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => mqlMock),
+      );
 
       const previousCleanup = vi.fn();
       listenForDPRChange(vi.fn(), previousCleanup);
@@ -581,7 +615,10 @@ describe('ViewerCanvasSetup', () => {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
       };
-      vi.stubGlobal('matchMedia', vi.fn(() => mqlMock));
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => mqlMock),
+      );
 
       const result = listenForDPRChange(vi.fn(), null);
 

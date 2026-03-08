@@ -8,7 +8,7 @@
  * No DOM dependencies - pure logic.
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   type OCIOState,
   getAvailableConfigs,

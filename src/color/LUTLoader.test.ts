@@ -3,14 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  isLUT3D,
-  isLUT1D,
-  parseCubeLUT,
-  applyLUT3D,
-  applyLUT1D,
-  applyLUTToImageData,
-} from './LUTLoader';
+import { isLUT3D, isLUT1D, parseCubeLUT, applyLUT3D, applyLUT1D, applyLUTToImageData } from './LUTLoader';
 import { createSampleCubeLUT, createSample1DLUT } from '../../test/utils';
 
 describe('LUTLoader', () => {
@@ -456,7 +449,7 @@ LUT_1D_SIZE 4
         // Create simple test ImageData
         const imageData = new ImageData(2, 2);
         imageData.data[0] = 128; // R
-        imageData.data[1] = 64;  // G
+        imageData.data[1] = 64; // G
         imageData.data[2] = 192; // B
         imageData.data[3] = 255; // A
 

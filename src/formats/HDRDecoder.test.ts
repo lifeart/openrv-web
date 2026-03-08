@@ -9,7 +9,7 @@ import { isHDRFile, getHDRInfo, decodeHDR } from './HDRDecoder';
  * Encode a string to bytes
  */
 function strToBytes(str: string): number[] {
-  return Array.from(str).map(c => c.charCodeAt(0));
+  return Array.from(str).map((c) => c.charCodeAt(0));
 }
 
 /**
@@ -102,8 +102,8 @@ function createTestHDR(options?: {
   if (options?.rawPixelBytes) {
     pixelBytes = options.rawPixelBytes;
   } else {
-    const pixels = options?.pixels ??
-      Array.from({ length: width * height }, () => [1.0, 0.5, 0.25] as [number, number, number]);
+    const pixels =
+      options?.pixels ?? Array.from({ length: width * height }, () => [1.0, 0.5, 0.25] as [number, number, number]);
     pixelBytes = [];
     for (const [r, g, b] of pixels) {
       const [re, ge, be, ee] = floatToRGBE(r, g, b);
@@ -621,10 +621,10 @@ describe('HDRDecoder', () => {
       let scanHeight: number, scanWidth: number;
       if (isTransposed) {
         scanHeight = W; // first dim = width = 3
-        scanWidth = H;  // second dim = height = 2
+        scanWidth = H; // second dim = height = 2
       } else {
         scanHeight = H; // first dim = height = 2
-        scanWidth = W;  // second dim = width = 3
+        scanWidth = W; // second dim = width = 3
       }
 
       // Build scan-order pixel list
@@ -634,11 +634,11 @@ describe('HDRDecoder', () => {
           // Map (row, col) in scan space back to (stdX, stdY) in standard space
           let stdX: number, stdY: number;
           if (!isTransposed) {
-            stdY = firstAxis === '-Y' ? row : (scanHeight - 1 - row);
-            stdX = secondAxis === '+X' ? col : (scanWidth - 1 - col);
+            stdY = firstAxis === '-Y' ? row : scanHeight - 1 - row;
+            stdX = secondAxis === '+X' ? col : scanWidth - 1 - col;
           } else {
-            stdX = firstAxis === '+X' ? row : (scanHeight - 1 - row);
-            stdY = secondAxis === '-Y' ? col : (scanWidth - 1 - col);
+            stdX = firstAxis === '+X' ? row : scanHeight - 1 - row;
+            stdY = secondAxis === '-Y' ? col : scanWidth - 1 - col;
           }
           scanPixels.push(standardGrid[stdY]![stdX]!);
         }
@@ -660,8 +660,8 @@ describe('HDRDecoder', () => {
       const { scanPixels, resLine, expectedWidth, expectedHeight } = buildOrientationTestData(firstAxis, secondAxis);
 
       const buffer = createTestHDR({
-        width: 0,   // ignored since we override resLine
-        height: 0,  // ignored since we override resLine
+        width: 0, // ignored since we override resLine
+        height: 0, // ignored since we override resLine
         resLine,
         pixels: scanPixels,
       });
@@ -754,8 +754,14 @@ describe('HDRDecoder', () => {
     it('HDR-U060: 1x1 image works with all orientations', async () => {
       const pixel: [number, number, number] = [0.5, 0.25, 0.125];
       const orientations: [string, string][] = [
-        ['-Y', '+X'], ['-Y', '-X'], ['+Y', '+X'], ['+Y', '-X'],
-        ['+X', '-Y'], ['+X', '+Y'], ['-X', '-Y'], ['-X', '+Y'],
+        ['-Y', '+X'],
+        ['-Y', '-X'],
+        ['+Y', '+X'],
+        ['+Y', '-X'],
+        ['+X', '-Y'],
+        ['+X', '+Y'],
+        ['-X', '-Y'],
+        ['-X', '+Y'],
       ];
 
       for (const [first, second] of orientations) {

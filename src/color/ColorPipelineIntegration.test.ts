@@ -7,20 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  parseCubeLUT,
-  applyLUT3D,
-  applyLUTToImageData,
-  isLUT3D,
-  type LUT3D,
-} from './LUTLoader';
-import {
-  applyCDL,
-  applyCDLToImageData,
-  type CDLValues,
-  DEFAULT_CDL,
-  parseCDLXML,
-} from './CDL';
+import { parseCubeLUT, applyLUT3D, applyLUTToImageData, isLUT3D, type LUT3D } from './LUTLoader';
+import { applyCDL, applyCDLToImageData, type CDLValues, DEFAULT_CDL, parseCDLXML } from './CDL';
 import {
   multiplyMatrixVector,
   srgbEncode,
@@ -58,11 +46,7 @@ import {
   applyDisplayColorManagementToImageData,
   DEFAULT_DISPLAY_COLOR_STATE,
 } from './DisplayTransfer';
-import {
-  createTestImageData,
-  createGradientImageData,
-  createSampleCubeLUT,
-} from '../../test/utils';
+import { createTestImageData, createGradientImageData, createSampleCubeLUT } from '../../test/utils';
 import { buildHueRotationMatrix } from './HueRotation';
 import { applyLUT3DTetrahedral, compareInterpolationMethods } from './TetrahedralInterp';
 
@@ -392,9 +376,9 @@ describe('CDL + Color Space Integration', () => {
     // R: (100/255 * 1.2 + 0.01)^1.0 * 255 = (0.47058... + 0.01) * 255 = 122.55
     // G: (100/255 * 0.9 + (-0.02))^1.0 * 255 = (0.35294... - 0.02) * 255 = 84.90
     // B: (100/255 * 1.1 + 0.03)^1.0 * 255 = (0.43137... + 0.03) * 255 = 117.60
-    const expectedR = (100 / 255 * 1.2 + 0.01) * 255;
-    const expectedG = (100 / 255 * 0.9 + (-0.02)) * 255;
-    const expectedB = (100 / 255 * 1.1 + 0.03) * 255;
+    const expectedR = ((100 / 255) * 1.2 + 0.01) * 255;
+    const expectedG = ((100 / 255) * 0.9 + -0.02) * 255;
+    const expectedB = ((100 / 255) * 1.1 + 0.03) * 255;
 
     expect(result.r).toBeCloseTo(expectedR, 1);
     expect(result.g).toBeCloseTo(expectedG, 1);
@@ -525,7 +509,7 @@ describe('LUT Pipeline Integration', () => {
 
     // Verify CDL was applied (red boosted, blue reduced)
     expect(imageData.data[0]!).toBeGreaterThan(128); // Red boosted
-    expect(imageData.data[2]!).toBeLessThan(128);    // Blue reduced
+    expect(imageData.data[2]!).toBeLessThan(128); // Blue reduced
 
     // Step 2: Apply identity LUT (should not change values beyond rounding)
     const cubeContent = createSampleCubeLUT(2);
@@ -542,12 +526,7 @@ describe('LUT Pipeline Integration', () => {
   it('INT-035: LUT parsing with custom domain (0.0-2.0) correctly remaps HDR values', () => {
     // Build a .cube file with domain 0-2
     const size = 2;
-    const lines = [
-      'TITLE "HDR LUT"',
-      `LUT_3D_SIZE ${size}`,
-      'DOMAIN_MIN 0.0 0.0 0.0',
-      'DOMAIN_MAX 2.0 2.0 2.0',
-    ];
+    const lines = ['TITLE "HDR LUT"', `LUT_3D_SIZE ${size}`, 'DOMAIN_MIN 0.0 0.0 0.0', 'DOMAIN_MAX 2.0 2.0 2.0'];
     for (let r = 0; r < size; r++) {
       for (let g = 0; g < size; g++) {
         for (let b = 0; b < size; b++) {
@@ -591,8 +570,8 @@ describe('Display Output Pipeline', () => {
     // Apply full display color management with gamma override and brightness
     const state = {
       ...DEFAULT_DISPLAY_COLOR_STATE,
-      displayGamma: 1.2,         // Slightly lighter gamma
-      displayBrightness: 0.9,    // Slightly dim
+      displayGamma: 1.2, // Slightly lighter gamma
+      displayBrightness: 0.9, // Slightly dim
     };
 
     const [r, g, b] = applyDisplayColorManagement(linearInput, linearInput, linearInput, state);
@@ -742,12 +721,7 @@ describe('Full Pipeline Stress Test', () => {
       ...DEFAULT_CDL,
       slope: { r: 1.2, g: 1.0, b: 0.9 },
     };
-    const cdlResult = applyCDL(
-      acescg[0] * 255,
-      acescg[1] * 255,
-      acescg[2] * 255,
-      cdl,
-    );
+    const cdlResult = applyCDL(acescg[0] * 255, acescg[1] * 255, acescg[2] * 255, cdl);
 
     // Step 4: Apply identity LUT
     const identityLUT = buildIdentityLUT();

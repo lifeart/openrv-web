@@ -29,16 +29,12 @@ export function validateImageDimensions(
   }
 
   if (width > maxDimension || height > maxDimension) {
-    throw new Error(
-      `${formatName} dimensions ${width}x${height} exceed maximum of ${maxDimension}x${maxDimension}`
-    );
+    throw new Error(`${formatName} dimensions ${width}x${height} exceed maximum of ${maxDimension}x${maxDimension}`);
   }
 
   const totalPixels = width * height;
   if (totalPixels > maxPixels) {
-    throw new Error(
-      `${formatName} image has ${totalPixels} pixels, exceeding maximum of ${maxPixels}`
-    );
+    throw new Error(`${formatName} image has ${totalPixels} pixels, exceeding maximum of ${maxPixels}`);
   }
 }
 
@@ -55,12 +51,7 @@ export function validateImageDimensions(
  * @param inputChannels - Number of channels in source data (3 or 4)
  * @returns RGBA Float32Array with 4 channels per pixel
  */
-export function toRGBA(
-  data: Float32Array,
-  width: number,
-  height: number,
-  inputChannels: number,
-): Float32Array {
+export function toRGBA(data: Float32Array, width: number, height: number, inputChannels: number): Float32Array {
   if (inputChannels === 4) {
     return data;
   }
@@ -191,14 +182,38 @@ export function applyOrientationRGBA(
       let dx: number, dy: number;
 
       switch (orientation) {
-        case 2: dx = W - 1 - x; dy = y; break;
-        case 3: dx = W - 1 - x; dy = H - 1 - y; break;
-        case 4: dx = x; dy = H - 1 - y; break;
-        case 5: dx = y; dy = x; break;
-        case 6: dx = H - 1 - y; dy = x; break;
-        case 7: dx = H - 1 - y; dy = W - 1 - x; break;
-        case 8: dx = y; dy = W - 1 - x; break;
-        default: dx = x; dy = y; break;
+        case 2:
+          dx = W - 1 - x;
+          dy = y;
+          break;
+        case 3:
+          dx = W - 1 - x;
+          dy = H - 1 - y;
+          break;
+        case 4:
+          dx = x;
+          dy = H - 1 - y;
+          break;
+        case 5:
+          dx = y;
+          dy = x;
+          break;
+        case 6:
+          dx = H - 1 - y;
+          dy = x;
+          break;
+        case 7:
+          dx = H - 1 - y;
+          dy = W - 1 - x;
+          break;
+        case 8:
+          dx = y;
+          dy = W - 1 - x;
+          break;
+        default:
+          dx = x;
+          dy = y;
+          break;
       }
 
       const dstIdx = (dy * outW + dx) * 4;

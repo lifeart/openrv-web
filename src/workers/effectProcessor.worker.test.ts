@@ -50,10 +50,34 @@ function createDefaultWorkerEffectsState(): WorkerEffectsState {
       saturation: 1,
     },
     curvesData: {
-      master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      master: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      red: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      green: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      blue: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
     },
     filterSettings: { sharpen: 0 },
     channelMode: 'rgb',
@@ -89,7 +113,7 @@ function createSolidPixelData(
   r: number,
   g: number,
   b: number,
-  a = 255
+  a = 255,
 ): Uint8ClampedArray {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < data.length; i += 4) {
@@ -144,7 +168,10 @@ describe('Effect Processor Worker', () => {
       // Bright pixels should be affected by highlight adjustment
       let changed = false;
       for (let i = 0; i < data.length; i++) {
-        if (data[i] !== original[i]) { changed = true; break; }
+        if (data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
     });
@@ -172,10 +199,22 @@ describe('Effect Processor Worker', () => {
       const width = 2;
       const height = 2;
       const data = new Uint8ClampedArray(width * height * 4);
-      data[0] = 0; data[1] = 0; data[2] = 0; data[3] = 255; // black pixel
-      data[4] = 255; data[5] = 255; data[6] = 255; data[7] = 255; // white pixel
-      data[8] = 100; data[9] = 150; data[10] = 200; data[11] = 255;
-      data[12] = 50; data[13] = 100; data[14] = 150; data[15] = 255;
+      data[0] = 0;
+      data[1] = 0;
+      data[2] = 0;
+      data[3] = 255; // black pixel
+      data[4] = 255;
+      data[5] = 255;
+      data[6] = 255;
+      data[7] = 255; // white pixel
+      data[8] = 100;
+      data[9] = 150;
+      data[10] = 200;
+      data[11] = 255;
+      data[12] = 50;
+      data[13] = 100;
+      data[14] = 150;
+      data[15] = 255;
 
       const state = createDefaultWorkerEffectsState();
       state.colorInversionEnabled = true;
@@ -205,8 +244,14 @@ describe('Effect Processor Worker', () => {
 
       // Two pixels: one bright (230), one mid-tone (128)
       const data = new Uint8ClampedArray(width * height * 4);
-      data[0] = 230; data[1] = 230; data[2] = 230; data[3] = 255; // bright
-      data[4] = 128; data[5] = 128; data[6] = 128; data[7] = 255; // mid-tone
+      data[0] = 230;
+      data[1] = 230;
+      data[2] = 230;
+      data[3] = 255; // bright
+      data[4] = 128;
+      data[5] = 128;
+      data[6] = 128;
+      data[7] = 255; // mid-tone
       const original = new Uint8ClampedArray(data);
 
       const state = createDefaultWorkerEffectsState();
@@ -231,8 +276,14 @@ describe('Effect Processor Worker', () => {
 
       // One near-white pixel, one near-black pixel
       const data = new Uint8ClampedArray(width * height * 4);
-      data[0] = 240; data[1] = 240; data[2] = 240; data[3] = 255; // near-white
-      data[4] = 15;  data[5] = 15;  data[6] = 15;  data[7] = 255; // near-black
+      data[0] = 240;
+      data[1] = 240;
+      data[2] = 240;
+      data[3] = 255; // near-white
+      data[4] = 15;
+      data[5] = 15;
+      data[6] = 15;
+      data[7] = 255; // near-black
 
       const state = createDefaultWorkerEffectsState();
       state.colorAdjustments.whites = 50;
@@ -257,8 +308,11 @@ describe('Effect Processor Worker', () => {
         for (let x = 0; x < width; x++) {
           const i = (y * width + x) * 4;
           // Midtone checkerboard: alternating 100 and 156
-          const v = ((x + y) % 2 === 0) ? 100 : 156;
-          data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+          const v = (x + y) % 2 === 0 ? 100 : 156;
+          data[i] = v;
+          data[i + 1] = v;
+          data[i + 2] = v;
+          data[i + 3] = 255;
         }
       }
       const original = new Uint8ClampedArray(data);
@@ -270,14 +324,17 @@ describe('Effect Processor Worker', () => {
       // Clarity should have changed some pixels
       let changed = false;
       for (let i = 0; i < data.length; i++) {
-        if (data[i] !== original[i]) { changed = true; break; }
+        if (data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
 
       // The midtone mask should weight midtones more heavily.
       // Verify via getMidtoneMask that the worker's mask is a bell curve.
       const mask = getMidtoneMask();
-      expect(mask[128]!).toBeGreaterThan(mask[0]!);   // midtone > shadow
+      expect(mask[128]!).toBeGreaterThan(mask[0]!); // midtone > shadow
       expect(mask[128]!).toBeGreaterThan(mask[255]!); // midtone > highlight
     });
 
@@ -288,8 +345,14 @@ describe('Effect Processor Worker', () => {
       const width = 2;
       const height = 1;
       const data = new Uint8ClampedArray(width * height * 4);
-      data[0] = 0;   data[1] = 255; data[2] = 0;   data[3] = 255; // pure green
-      data[4] = 0;   data[5] = 0;   data[6] = 255; data[7] = 255; // pure blue
+      data[0] = 0;
+      data[1] = 255;
+      data[2] = 0;
+      data[3] = 255; // pure green
+      data[4] = 0;
+      data[5] = 0;
+      data[6] = 255;
+      data[7] = 255; // pure blue
 
       const state = createDefaultWorkerEffectsState();
       state.channelMode = 'luminance';
@@ -310,8 +373,14 @@ describe('Effect Processor Worker', () => {
       const width = 2;
       const height = 1;
       const data = new Uint8ClampedArray(width * height * 4);
-      data[0] = 30;  data[1] = 30;  data[2] = 30;  data[3] = 255; // dark pixel
-      data[4] = 220; data[5] = 220; data[6] = 220; data[7] = 255; // bright pixel
+      data[0] = 30;
+      data[1] = 30;
+      data[2] = 30;
+      data[3] = 255; // dark pixel
+      data[4] = 220;
+      data[5] = 220;
+      data[6] = 220;
+      data[7] = 255; // bright pixel
       const original = new Uint8ClampedArray(data);
 
       const state = createDefaultWorkerEffectsState();
@@ -332,11 +401,20 @@ describe('Effect Processor Worker', () => {
       const height = 1;
       const data = new Uint8ClampedArray(width * height * 4);
       // Shadow pixel (dark)
-      data[0] = 30;  data[1] = 30;  data[2] = 30;  data[3] = 255;
+      data[0] = 30;
+      data[1] = 30;
+      data[2] = 30;
+      data[3] = 255;
       // Midtone pixel
-      data[4] = 128; data[5] = 128; data[6] = 128; data[7] = 255;
+      data[4] = 128;
+      data[5] = 128;
+      data[6] = 128;
+      data[7] = 255;
       // Highlight pixel (bright)
-      data[8] = 225; data[9] = 225; data[10] = 225; data[11] = 255;
+      data[8] = 225;
+      data[9] = 225;
+      data[10] = 225;
+      data[11] = 255;
       const original = new Uint8ClampedArray(data);
 
       const state = createDefaultWorkerEffectsState();
@@ -359,9 +437,18 @@ describe('Effect Processor Worker', () => {
       const width = 3;
       const height = 1;
       const data = new Uint8ClampedArray(width * height * 4);
-      data[0] = 255; data[1] = 50;  data[2] = 50;  data[3] = 255; // red-ish pixel
-      data[4] = 50;  data[5] = 255; data[6] = 50;  data[7] = 255; // green-ish pixel
-      data[8] = 50;  data[9] = 50;  data[10] = 255; data[11] = 255; // blue-ish pixel
+      data[0] = 255;
+      data[1] = 50;
+      data[2] = 50;
+      data[3] = 255; // red-ish pixel
+      data[4] = 50;
+      data[5] = 255;
+      data[6] = 50;
+      data[7] = 255; // green-ish pixel
+      data[8] = 50;
+      data[9] = 50;
+      data[10] = 255;
+      data[11] = 255; // blue-ish pixel
       const original = new Uint8ClampedArray(data);
 
       const state = createDefaultWorkerEffectsState();
@@ -381,12 +468,15 @@ describe('Effect Processor Worker', () => {
       expect(redChanged).toBe(true);
 
       // Green pixel should be mostly unchanged (hue ~120, outside qualifier range)
-      const greenDelta = Math.abs(data[4]! - original[4]!) + Math.abs(data[5]! - original[5]!) + Math.abs(data[6]! - original[6]!);
+      const greenDelta =
+        Math.abs(data[4]! - original[4]!) + Math.abs(data[5]! - original[5]!) + Math.abs(data[6]! - original[6]!);
       // Blue pixel should be mostly unchanged (hue ~240, outside qualifier range)
-      const blueDelta = Math.abs(data[8]! - original[8]!) + Math.abs(data[9]! - original[9]!) + Math.abs(data[10]! - original[10]!);
+      const blueDelta =
+        Math.abs(data[8]! - original[8]!) + Math.abs(data[9]! - original[9]!) + Math.abs(data[10]! - original[10]!);
 
       // The red pixel should be affected far more than green or blue
-      const redDelta = Math.abs(data[0]! - original[0]!) + Math.abs(data[1]! - original[1]!) + Math.abs(data[2]! - original[2]!);
+      const redDelta =
+        Math.abs(data[0]! - original[0]!) + Math.abs(data[1]! - original[1]!) + Math.abs(data[2]! - original[2]!);
       expect(redDelta).toBeGreaterThan(greenDelta);
       expect(redDelta).toBeGreaterThan(blueDelta);
     });
@@ -397,7 +487,10 @@ describe('Effect Processor Worker', () => {
       const width = 1;
       const height = 1;
       const data = new Uint8ClampedArray(4);
-      data[0] = 200; data[1] = 80; data[2] = 80; data[3] = 255; // reddish pixel
+      data[0] = 200;
+      data[1] = 80;
+      data[2] = 80;
+      data[3] = 255; // reddish pixel
       const original = new Uint8ClampedArray(data);
 
       const state = createDefaultWorkerEffectsState();
@@ -426,9 +519,15 @@ describe('Effect Processor Worker', () => {
       const height = 1;
       const data = new Uint8ClampedArray(width * height * 4);
       // Bright pixel (lum ~230)
-      data[0] = 230; data[1] = 230; data[2] = 230; data[3] = 255;
+      data[0] = 230;
+      data[1] = 230;
+      data[2] = 230;
+      data[3] = 255;
       // Dark pixel (lum ~30)
-      data[4] = 30; data[5] = 30; data[6] = 30; data[7] = 255;
+      data[4] = 30;
+      data[5] = 30;
+      data[6] = 30;
+      data[7] = 255;
 
       const state = createDefaultWorkerEffectsState();
       state.colorAdjustments.highlights = 100;
@@ -451,9 +550,15 @@ describe('Effect Processor Worker', () => {
       const height = 1;
       const data = new Uint8ClampedArray(width * height * 4);
       // Dark pixel (lum ~30)
-      data[0] = 30; data[1] = 30; data[2] = 30; data[3] = 255;
+      data[0] = 30;
+      data[1] = 30;
+      data[2] = 30;
+      data[3] = 255;
       // Bright pixel (lum ~230)
-      data[4] = 230; data[5] = 230; data[6] = 230; data[7] = 255;
+      data[4] = 230;
+      data[5] = 230;
+      data[6] = 230;
+      data[7] = 255;
 
       const state = createDefaultWorkerEffectsState();
       state.colorAdjustments.shadows = 100;
@@ -698,11 +803,32 @@ describe('Effect Processor Worker', () => {
       // Create inverted curve: (0,1) and (1,0)
       state.curvesData.master = {
         enabled: true,
-        points: [{ x: 0, y: 1 }, { x: 1, y: 0 }],
+        points: [
+          { x: 0, y: 1 },
+          { x: 1, y: 0 },
+        ],
       };
-      state.curvesData.red = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
-      state.curvesData.green = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
-      state.curvesData.blue = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      state.curvesData.red = {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      };
+      state.curvesData.green = {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      };
+      state.curvesData.blue = {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      };
       processEffects(data, width, height, state);
 
       // With a Catmull-Rom inverted master curve (2 points), the curve is not perfectly
@@ -724,12 +850,34 @@ describe('Effect Processor Worker', () => {
       // Red curve: boost (midpoint up)
       state.curvesData.red = {
         enabled: true,
-        points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.8 }, { x: 1, y: 1 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.8 },
+          { x: 1, y: 1 },
+        ],
       };
       // Green, blue: identity
-      state.curvesData.green = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
-      state.curvesData.blue = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
-      state.curvesData.master = { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] };
+      state.curvesData.green = {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      };
+      state.curvesData.blue = {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      };
+      state.curvesData.master = {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      };
       processEffects(data, width, height, state);
 
       // Red should be boosted above 128
@@ -748,7 +896,10 @@ describe('Effect Processor Worker', () => {
       // Dramatically alter the red curve but disable it
       state.curvesData.red = {
         enabled: false,
-        points: [{ x: 0, y: 1 }, { x: 1, y: 0 }],
+        points: [
+          { x: 0, y: 1 },
+          { x: 1, y: 0 },
+        ],
       };
       processEffects(data, width, height, state);
 
@@ -764,8 +915,14 @@ describe('Effect Processor Worker', () => {
       const height = 1;
       // Desaturated pixel: gray-ish
       const data = new Uint8ClampedArray([
-        140, 128, 128, 255, // slightly warm gray
-        255, 0, 0, 255,     // fully saturated red
+        140,
+        128,
+        128,
+        255, // slightly warm gray
+        255,
+        0,
+        0,
+        255, // fully saturated red
       ]);
       const origGray = new Uint8ClampedArray(data.slice(0, 4));
       const origRed = new Uint8ClampedArray(data.slice(4, 8));
@@ -812,12 +969,7 @@ describe('Effect Processor Worker', () => {
     it('EPW-060: inversion is its own inverse', () => {
       const width = 2;
       const height = 2;
-      const original = new Uint8ClampedArray([
-        50, 100, 200, 255,
-        0, 255, 128, 200,
-        255, 0, 0, 100,
-        128, 128, 128, 0,
-      ]);
+      const original = new Uint8ClampedArray([50, 100, 200, 255, 0, 255, 128, 200, 255, 0, 0, 100, 128, 128, 128, 0]);
       const data = new Uint8ClampedArray(original);
 
       const state = createDefaultWorkerEffectsState();
@@ -841,9 +993,9 @@ describe('Effect Processor Worker', () => {
       processEffects(data, width, height, state);
 
       expect(data[0]).toBe(155); // 255-100
-      expect(data[1]).toBe(55);  // 255-200
+      expect(data[1]).toBe(55); // 255-200
       expect(data[2]).toBe(205); // 255-50
-      expect(data[3]).toBe(42);  // alpha unchanged
+      expect(data[3]).toBe(42); // alpha unchanged
     });
   });
 
@@ -859,7 +1011,11 @@ describe('Effect Processor Worker', () => {
       // Curves applies clamp at 200/255
       state.curvesData.master = {
         enabled: true,
-        points: [{ x: 0, y: 0 }, { x: 200 / 255, y: 200 / 255 }, { x: 1, y: 200 / 255 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 200 / 255, y: 200 / 255 },
+          { x: 1, y: 200 / 255 },
+        ],
       };
       processEffects(data, width, height, state);
 
@@ -892,7 +1048,10 @@ describe('Effect Processor Worker', () => {
       const height = 4;
       const data = new Uint8ClampedArray(width * height * 4);
       for (let i = 0; i < data.length; i += 4) {
-        data[i] = 180; data[i + 1] = 100; data[i + 2] = 50; data[i + 3] = 255;
+        data[i] = 180;
+        data[i + 1] = 100;
+        data[i + 2] = 50;
+        data[i + 3] = 255;
       }
 
       const state = createDefaultWorkerEffectsState();
@@ -944,7 +1103,10 @@ describe('Effect Processor Worker', () => {
       const height = 4;
       const data = new Uint8ClampedArray(width * height * 4);
       for (let i = 0; i < data.length; i += 4) {
-        data[i] = 255; data[i + 1] = 255; data[i + 2] = 255; data[i + 3] = 255;
+        data[i] = 255;
+        data[i + 1] = 255;
+        data[i + 2] = 255;
+        data[i + 3] = 255;
       }
       const state = createDefaultWorkerEffectsState();
       state.colorAdjustments.highlights = -100;
@@ -962,7 +1124,10 @@ describe('Effect Processor Worker', () => {
       const height = 4;
       const data = new Uint8ClampedArray(width * height * 4);
       for (let i = 0; i < data.length; i += 4) {
-        data[i] = 128; data[i + 1] = 128; data[i + 2] = 128; data[i + 3] = 255;
+        data[i] = 128;
+        data[i + 1] = 128;
+        data[i + 2] = 128;
+        data[i + 3] = 255;
       }
       const state = createDefaultWorkerEffectsState();
       state.filterSettings.sharpen = 100;
@@ -974,7 +1139,10 @@ describe('Effect Processor Worker', () => {
       const height = 8;
       const data = new Uint8ClampedArray(width * height * 4);
       for (let i = 0; i < data.length; i += 4) {
-        data[i] = 128; data[i + 1] = 128; data[i + 2] = 128; data[i + 3] = 255;
+        data[i] = 128;
+        data[i + 1] = 128;
+        data[i + 2] = 128;
+        data[i + 3] = 255;
       }
       const state = createDefaultWorkerEffectsState();
       state.colorAdjustments.clarity = 100;
@@ -1062,7 +1230,10 @@ describe('Effect Processor Worker', () => {
       const height = 4;
       const data = new Uint8ClampedArray(width * height * 4);
       for (let i = 0; i < data.length; i += 4) {
-        data[i] = 180; data[i + 1] = 100; data[i + 2] = 60; data[i + 3] = 255;
+        data[i] = 180;
+        data[i + 1] = 100;
+        data[i + 2] = 60;
+        data[i + 3] = 255;
       }
       const original = new Uint8ClampedArray(data);
 
@@ -1078,7 +1249,11 @@ describe('Effect Processor Worker', () => {
       state.cdlValues.offset = { r: 0.02, g: -0.01, b: 0 };
       state.curvesData.master = {
         enabled: true,
-        points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.6 },
+          { x: 1, y: 1 },
+        ],
       };
       state.colorWheelsState.gain = { r: 0.1, g: 0, b: -0.1, y: 0 };
       state.colorInversionEnabled = true;
@@ -1088,7 +1263,10 @@ describe('Effect Processor Worker', () => {
       // Data should definitely have changed with all these effects active
       let changed = false;
       for (let i = 0; i < data.length; i++) {
-        if (data[i] !== original[i]) { changed = true; break; }
+        if (data[i] !== original[i]) {
+          changed = true;
+          break;
+        }
       }
       expect(changed).toBe(true);
 

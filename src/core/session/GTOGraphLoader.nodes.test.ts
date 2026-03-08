@@ -15,11 +15,7 @@ import { NodeFactory } from '../../nodes/base/NodeFactory';
  * The mock node's `properties.has` returns true for all keys by default
  * (override via `hasFilter`), and `properties.setValue` is a vi.fn() spy.
  */
-function setupMockNode(
-  type: string,
-  name: string,
-  hasFilter?: (key: string) => boolean,
-) {
+function setupMockNode(type: string, name: string, hasFilter?: (key: string) => boolean) {
   const mockNode = {
     type,
     name,
@@ -78,7 +74,7 @@ function createMockDTO(config: {
     }),
   });
 
-  const createMockObject = (obj: typeof objects[0]) => ({
+  const createMockObject = (obj: (typeof objects)[0]) => ({
     name: obj.name,
     protocol: obj.protocol,
     component: (name: string) => createMockComponent(obj.components?.[name]),
@@ -503,10 +499,7 @@ describe('GTOGraphLoader - Node Types', () => {
 
       loadGTOGraph(dto);
 
-      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
-        'stencilVisibleBox',
-        [0.25, 0.75, 0.1, 0.9]
-      );
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilVisibleBox', [0.25, 0.75, 0.1, 0.9]);
     });
 
     it('preserves exact float values in stencil.visibleBox', () => {
@@ -531,10 +524,7 @@ describe('GTOGraphLoader - Node Types', () => {
 
       loadGTOGraph(dto);
 
-      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
-        'stencilVisibleBox',
-        exactValues
-      );
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilVisibleBox', exactValues);
     });
 
     it('parses stencil.visibleBox with all zeros [0, 0, 0, 0]', () => {
@@ -558,10 +548,7 @@ describe('GTOGraphLoader - Node Types', () => {
 
       loadGTOGraph(dto);
 
-      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
-        'stencilVisibleBox',
-        [0, 0, 0, 0]
-      );
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilVisibleBox', [0, 0, 0, 0]);
     });
 
     it('parses stencil.visibleBox with default [0, 1, 0, 1]', () => {
@@ -585,10 +572,7 @@ describe('GTOGraphLoader - Node Types', () => {
 
       loadGTOGraph(dto);
 
-      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
-        'stencilVisibleBox',
-        [0, 1, 0, 1]
-      );
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilVisibleBox', [0, 1, 0, 1]);
     });
   });
 

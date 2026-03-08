@@ -170,23 +170,47 @@ export class ViewerGLRenderer {
   private _luminanceAnalyzer: LuminanceAnalyzer | null = null;
   private _gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
 
-  get glCanvas(): HTMLCanvasElement | null { return this._glCanvas; }
-  get glRenderer(): Renderer | null { return this._glRenderer; }
-  get hdrRenderActive(): boolean { return this._hdrRenderActive; }
-  get sdrWebGLRenderActive(): boolean { return this._sdrWebGLRenderActive; }
-  get renderWorkerProxy(): RenderWorkerProxy | null { return this._renderWorkerProxy; }
-  get isAsyncRenderer(): boolean { return this._isAsyncRenderer; }
-  get capabilities(): DisplayCapabilities | undefined { return this._capabilities; }
+  get glCanvas(): HTMLCanvasElement | null {
+    return this._glCanvas;
+  }
+  get glRenderer(): Renderer | null {
+    return this._glRenderer;
+  }
+  get hdrRenderActive(): boolean {
+    return this._hdrRenderActive;
+  }
+  get sdrWebGLRenderActive(): boolean {
+    return this._sdrWebGLRenderActive;
+  }
+  get renderWorkerProxy(): RenderWorkerProxy | null {
+    return this._renderWorkerProxy;
+  }
+  get isAsyncRenderer(): boolean {
+    return this._isAsyncRenderer;
+  }
+  get capabilities(): DisplayCapabilities | undefined {
+    return this._capabilities;
+  }
   /** True when the WebGPU HDR blit module is initialized and ready to display. */
-  get isWebGPUBlitReady(): boolean { return this._webgpuBlit?.initialized === true; }
+  get isWebGPUBlitReady(): boolean {
+    return this._webgpuBlit?.initialized === true;
+  }
   /** True when the Canvas2D HDR blit module is initialized and ready to display. */
-  get isCanvas2DBlitReady(): boolean { return this._canvas2dBlit?.initialized === true; }
+  get isCanvas2DBlitReady(): boolean {
+    return this._canvas2dBlit?.initialized === true;
+  }
   /** True when the WebGPU HDR blit initialization failed. */
-  get webgpuBlitFailed(): boolean { return this._webgpuBlitFailed; }
+  get webgpuBlitFailed(): boolean {
+    return this._webgpuBlitFailed;
+  }
   /** Get the last rendered IPImage (for scope readback). Returns null if GC'd or not yet rendered. */
-  get lastRenderedImage(): IPImage | null { return this._lastRenderedImage?.deref() ?? null; }
+  get lastRenderedImage(): IPImage | null {
+    return this._lastRenderedImage?.deref() ?? null;
+  }
   /** Last HDR blit float frame in WebGL row order (bottom-to-top). */
-  get lastHDRBlitFrame(): { data: Float32Array; width: number; height: number } | null { return this._lastHDRBlitFrame; }
+  get lastHDRBlitFrame(): { data: Float32Array; width: number; height: number } | null {
+    return this._lastHDRBlitFrame;
+  }
 
   /**
    * Invalidate the render cache so the next renderHDRWithWebGL/renderSDRWithWebGL
@@ -238,15 +262,15 @@ export class ViewerGLRenderer {
     // converted source primaries → BT.709 working space. Creative gamut
     // mapping always operates in BT.709 space, so source is always 'srgb'.
     const hasInputNormalization =
-      image.metadata?.colorPrimaries === 'bt2020' ||
-      image.metadata?.colorPrimaries === 'p3';
+      image.metadata?.colorPrimaries === 'bt2020' || image.metadata?.colorPrimaries === 'p3';
 
     const sourceGamut: GamutIdentifier = hasInputNormalization
       ? 'srgb' // already normalized to BT.709 by input primaries conversion
       : 'srgb';
     const targetGamut: GamutIdentifier =
       this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
-        ? 'display-p3' : 'srgb';
+        ? 'display-p3'
+        : 'srgb';
 
     // No mapping needed if source matches target or source is sRGB
     if (sourceGamut === 'srgb' || (sourceGamut as string) === (targetGamut as string)) {
@@ -286,9 +310,10 @@ export class ViewerGLRenderer {
 
     // Prefer explicit texture prep when available (sync Renderer), fallback to current binding.
     const textureProvider = renderer as unknown as { ensureImageTexture?: (img: IPImage) => WebGLTexture | null };
-    const sourceTexture = typeof textureProvider.ensureImageTexture === 'function'
-      ? textureProvider.ensureImageTexture(image)
-      : (gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null);
+    const sourceTexture =
+      typeof textureProvider.ensureImageTexture === 'function'
+        ? textureProvider.ensureImageTexture(image)
+        : (gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null);
     if (!sourceTexture) return;
 
     const inputTransfer = this.getInputTransferCode(image);
@@ -362,18 +387,23 @@ export class ViewerGLRenderer {
     const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true || !!isTest;
     if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
       try {
-        if (typeof OffscreenCanvas !== 'undefined' &&
-            'transferControlToOffscreen' in this._glCanvas &&
-            typeof Worker !== 'undefined') {
+        if (
+          typeof OffscreenCanvas !== 'undefined' &&
+          'transferControlToOffscreen' in this._glCanvas &&
+          typeof Worker !== 'undefined'
+        ) {
           const proxy = new RenderWorkerProxy();
           proxy.initialize(this._glCanvas, this._capabilities);
           // initAsync runs in background — the proxy buffers messages until ready
-          proxy.initAsync().then(() => {
-            console.log(`[Viewer] Render worker initialized, HDR output: ${proxy.getHDROutputMode()}`);
-          }).catch((err) => {
-            console.warn('[Viewer] Render worker init failed, falling back to sync:', err);
-            this.fallbackToSyncRenderer();
-          });
+          proxy
+            .initAsync()
+            .then(() => {
+              console.log(`[Viewer] Render worker initialized, HDR output: ${proxy.getHDROutputMode()}`);
+            })
+            .catch((err) => {
+              console.warn('[Viewer] Render worker init failed, falling back to sync:', err);
+              this.fallbackToSyncRenderer();
+            });
 
           // Set up context loss/restore callbacks
           proxy.setOnContextLost(() => {
@@ -476,7 +506,10 @@ export class ViewerGLRenderer {
     const lut = colorPipeline.currentLUT;
 
     // Start with false color state from FalseColor component
-    let falseColorState = { enabled: this.ctx.getFalseColor().isEnabled(), lut: this.ctx.getFalseColor().getColorLUT() };
+    let falseColorState = {
+      enabled: this.ctx.getFalseColor().isEnabled(),
+      lut: this.ctx.getFalseColor().getColorLUT(),
+    };
 
     // Luminance vis: override false color LUT for HSV/Random modes
     const lumVis = this.ctx.getLuminanceVisualization();
@@ -511,9 +544,10 @@ export class ViewerGLRenderer {
       falseColor: falseColorState,
       zebraStripes: this.ctx.getZebraStripes().getState(),
       channelMode: this.ctx.getChannelMode(),
-      lut: lut && colorPipeline.lutIntensity > 0
-        ? { data: lut.data, size: lut.size, intensity: colorPipeline.lutIntensity }
-        : { data: null, size: 0, intensity: 0 },
+      lut:
+        lut && colorPipeline.lutIntensity > 0
+          ? { data: lut.data, size: lut.size, intensity: colorPipeline.lutIntensity }
+          : { data: null, size: 0, intensity: 0 },
       displayColor: {
         transferFunction: DISPLAY_TRANSFER_CODES[colorPipeline.displayColorState.transferFunction],
         displayGamma: colorPipeline.displayColorState.displayGamma,
@@ -553,7 +587,7 @@ export class ViewerGLRenderer {
     }
     const lutData = bakeFilmLUT(fe.stock) ?? null;
     const intensity = Math.max(0, Math.min(1, fe.intensity / 100));
-    const grainIntensity = (Math.max(0, Math.min(1, fe.grainIntensity / 100))) * stock.grainAmount;
+    const grainIntensity = Math.max(0, Math.min(1, fe.grainIntensity / 100)) * stock.grainAmount;
     return {
       enabled: true,
       intensity,
@@ -576,7 +610,6 @@ export class ViewerGLRenderer {
     };
   }
 
-
   /**
    * Render an HDR IPImage through the WebGL shader pipeline.
    * Returns true if rendering succeeded, false if fallback is needed.
@@ -585,11 +618,7 @@ export class ViewerGLRenderer {
    * WebGPU HDR is available, uses the hybrid blit path:
    *   WebGL2 FBO (RGBA16F) → readPixels(FLOAT) → WebGPU HDR canvas
    */
-  renderHDRWithWebGL(
-    image: IPImage,
-    displayWidth: number,
-    displayHeight: number,
-  ): boolean {
+  renderHDRWithWebGL(image: IPImage, displayWidth: number, displayHeight: number): boolean {
     const blitReady = this._webgpuBlit?.initialized === true;
 
     // If the blit is ready but the current renderer is a worker proxy,
@@ -611,16 +640,19 @@ export class ViewerGLRenderer {
       const cp = image.metadata?.colorPrimaries ?? 'unset';
       const tf = image.metadata?.transferFunction ?? 'unset';
       const cs = image.metadata?.colorSpace ?? 'unset';
-      const peak = image.dataType === 'float32' ? (() => {
-        const arr = image.getTypedArray() as Float32Array;
-        let max = 0;
-        for (let i = 0; i < Math.min(arr.length, 200000); i++) max = Math.max(max, arr[i]!);
-        return max.toFixed(3);
-      })() : 'N/A';
+      const peak =
+        image.dataType === 'float32'
+          ? (() => {
+              const arr = image.getTypedArray() as Float32Array;
+              let max = 0;
+              for (let i = 0; i < Math.min(arr.length, 200000); i++) max = Math.max(max, arr[i]!);
+              return max.toFixed(3);
+            })()
+          : 'N/A';
       console.log(
         `[HDR Render] format=${fmt} tf=${tf} cp=${cp} cs=${cs} peak=${peak} ` +
-        `hdrOutput=${renderer.getHDROutputMode()} blitReady=${this._webgpuBlit?.initialized === true} ` +
-        `hasFloatReadback=${hasFloatReadback} size=${image.width}x${image.height} dtype=${image.dataType}`
+          `hdrOutput=${renderer.getHDROutputMode()} blitReady=${this._webgpuBlit?.initialized === true} ` +
+          `hasFloatReadback=${hasFloatReadback} size=${image.width}x${image.height} dtype=${image.dataType}`,
       );
     }
 
@@ -687,13 +719,13 @@ export class ViewerGLRenderer {
     if (this._lastRenderedImage?.deref() !== image) {
       console.log(
         `[HDR Render] state: isHDROutput=${isHDROutput}` +
-        ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
-        ` displayTransfer=${state.displayColor.transferFunction}` +
-        ` displayGamma=${state.displayColor.displayGamma}` +
-        ` displayBrightness=${state.displayColor.displayBrightness}` +
-        ` exposure=${state.colorAdjustments.exposure}` +
-        ` gamma=${state.colorAdjustments.gamma}` +
-        ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`
+          ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
+          ` displayTransfer=${state.displayColor.transferFunction}` +
+          ` displayGamma=${state.displayColor.displayGamma}` +
+          ` displayBrightness=${state.displayColor.displayBrightness}` +
+          ` exposure=${state.colorAdjustments.exposure}` +
+          ` gamma=${state.colorAdjustments.gamma}` +
+          ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`,
       );
     }
 
@@ -740,7 +772,10 @@ export class ViewerGLRenderer {
    * @returns true if rendering succeeded
    */
   renderTiledHDR(
-    tiles: { image: import('../../core/image/Image').IPImage; viewport: import('../../nodes/groups/LayoutGroupNode').TileViewport }[],
+    tiles: {
+      image: import('../../core/image/Image').IPImage;
+      viewport: import('../../nodes/groups/LayoutGroupNode').TileViewport;
+    }[],
     displayWidth: number,
     displayHeight: number,
   ): boolean {
@@ -846,11 +881,11 @@ export class ViewerGLRenderer {
     if (this._lastRenderedImage?.deref() !== image) {
       console.log(
         `[HDR Blit] state:` +
-        ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
-        ` displayTransfer=${state.displayColor.transferFunction}` +
-        ` exposure=${state.colorAdjustments.exposure}` +
-        ` gamma=${state.colorAdjustments.gamma}` +
-        ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`
+          ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
+          ` displayTransfer=${state.displayColor.transferFunction}` +
+          ` exposure=${state.colorAdjustments.exposure}` +
+          ` gamma=${state.colorAdjustments.gamma}` +
+          ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`,
       );
     }
 
@@ -951,11 +986,11 @@ export class ViewerGLRenderer {
     if (this._lastRenderedImage?.deref() !== image) {
       console.log(
         `[Canvas2D Blit] state:` +
-        ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
-        ` displayTransfer=${state.displayColor.transferFunction}` +
-        ` exposure=${state.colorAdjustments.exposure}` +
-        ` gamma=${state.colorAdjustments.gamma}` +
-        ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`
+          ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
+          ` displayTransfer=${state.displayColor.transferFunction}` +
+          ` exposure=${state.colorAdjustments.exposure}` +
+          ` gamma=${state.colorAdjustments.gamma}` +
+          ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`,
       );
     }
 
@@ -1385,7 +1420,6 @@ export class ViewerGLRenderer {
     }
   }
 
-
   /**
    * Return the GPU's MAX_TEXTURE_SIZE, or a safe default if no GL context exists.
    */
@@ -1430,7 +1464,12 @@ export class ViewerGLRenderer {
     this._glRenderer?.setToneMappingState(state);
   }
 
-  setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void {
+  setDisplayColorState(state: {
+    transferFunction: number;
+    displayGamma: number;
+    displayBrightness: number;
+    customGamma: number;
+  }): void {
     this._glRenderer?.setDisplayColorState(state);
   }
 

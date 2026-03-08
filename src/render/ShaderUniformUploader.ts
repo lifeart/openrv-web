@@ -8,8 +8,8 @@
 
 import type { ShaderProgram } from './ShaderProgram';
 import type { InternalShaderState, TextureCallbacks } from './ShaderStateTypes';
-import { TONE_MAPPING_OPERATOR_CODES } from './ShaderConstants';
 import {
+  TONE_MAPPING_OPERATOR_CODES,
   DIRTY_COLOR,
   DIRTY_TONE_MAPPING,
   DIRTY_INVERSION,
@@ -81,23 +81,35 @@ export function applyUniforms(
 
     const expBuf = buffers.exposureRGBBuffer;
     if (adj.exposureRGB) {
-      expBuf[0] = adj.exposureRGB[0]; expBuf[1] = adj.exposureRGB[1]; expBuf[2] = adj.exposureRGB[2];
+      expBuf[0] = adj.exposureRGB[0];
+      expBuf[1] = adj.exposureRGB[1];
+      expBuf[2] = adj.exposureRGB[2];
     } else {
-      expBuf[0] = adj.exposure; expBuf[1] = adj.exposure; expBuf[2] = adj.exposure;
+      expBuf[0] = adj.exposure;
+      expBuf[1] = adj.exposure;
+      expBuf[2] = adj.exposure;
     }
 
     const gamBuf = buffers.gammaRGBBuffer;
     if (adj.gammaRGB) {
-      gamBuf[0] = adj.gammaRGB[0]; gamBuf[1] = adj.gammaRGB[1]; gamBuf[2] = adj.gammaRGB[2];
+      gamBuf[0] = adj.gammaRGB[0];
+      gamBuf[1] = adj.gammaRGB[1];
+      gamBuf[2] = adj.gammaRGB[2];
     } else {
-      gamBuf[0] = adj.gamma; gamBuf[1] = adj.gamma; gamBuf[2] = adj.gamma;
+      gamBuf[0] = adj.gamma;
+      gamBuf[1] = adj.gamma;
+      gamBuf[2] = adj.gamma;
     }
 
     const conBuf = buffers.contrastRGBBuffer;
     if (adj.contrastRGB) {
-      conBuf[0] = adj.contrastRGB[0]; conBuf[1] = adj.contrastRGB[1]; conBuf[2] = adj.contrastRGB[2];
+      conBuf[0] = adj.contrastRGB[0];
+      conBuf[1] = adj.contrastRGB[1];
+      conBuf[2] = adj.contrastRGB[2];
     } else {
-      conBuf[0] = adj.contrast; conBuf[1] = adj.contrast; conBuf[2] = adj.contrast;
+      conBuf[0] = adj.contrast;
+      conBuf[1] = adj.contrast;
+      conBuf[2] = adj.contrast;
     }
 
     const safeGamBuf = buffers.safeGammaRGBBuffer;
@@ -113,17 +125,25 @@ export function applyUniforms(
     const sclBuf = buffers.scaleRGBBuffer;
     const scaleScalar = adj.scale ?? 1;
     if (adj.scaleRGB) {
-      sclBuf[0] = adj.scaleRGB[0]; sclBuf[1] = adj.scaleRGB[1]; sclBuf[2] = adj.scaleRGB[2];
+      sclBuf[0] = adj.scaleRGB[0];
+      sclBuf[1] = adj.scaleRGB[1];
+      sclBuf[2] = adj.scaleRGB[2];
     } else {
-      sclBuf[0] = scaleScalar; sclBuf[1] = scaleScalar; sclBuf[2] = scaleScalar;
+      sclBuf[0] = scaleScalar;
+      sclBuf[1] = scaleScalar;
+      sclBuf[2] = scaleScalar;
     }
 
     const offBuf = buffers.offsetRGBBuffer;
     const offsetScalar = adj.offset ?? 0;
     if (adj.offsetRGB) {
-      offBuf[0] = adj.offsetRGB[0]; offBuf[1] = adj.offsetRGB[1]; offBuf[2] = adj.offsetRGB[2];
+      offBuf[0] = adj.offsetRGB[0];
+      offBuf[1] = adj.offsetRGB[1];
+      offBuf[2] = adj.offsetRGB[2];
     } else {
-      offBuf[0] = offsetScalar; offBuf[1] = offsetScalar; offBuf[2] = offsetScalar;
+      offBuf[0] = offsetScalar;
+      offBuf[1] = offsetScalar;
+      offBuf[2] = offsetScalar;
     }
 
     shader.setUniform('u_exposureRGB', safeExpBuf);
@@ -148,9 +168,7 @@ export function applyUniforms(
 
   // Tone mapping
   if (dirty.has(DIRTY_TONE_MAPPING)) {
-    const toneMappingCode = s.toneMappingState.enabled
-      ? TONE_MAPPING_OPERATOR_CODES[s.toneMappingState.operator]
-      : 0;
+    const toneMappingCode = s.toneMappingState.enabled ? TONE_MAPPING_OPERATOR_CODES[s.toneMappingState.operator] : 0;
     shader.setUniformInt('u_toneMappingOperator', toneMappingCode);
     shader.setUniform('u_tmReinhardWhitePoint', s.toneMappingState.reinhardWhitePoint ?? 4.0);
     shader.setUniform('u_tmFilmicExposureBias', s.toneMappingState.filmicExposureBias ?? 2.0);
@@ -388,7 +406,7 @@ export function applyUniforms(
   }
 
   // Texel size - also needed for deinterlace
-  if ((dirty.has(DIRTY_DEINTERLACE)) && s.deinterlaceEnabled) {
+  if (dirty.has(DIRTY_DEINTERLACE) && s.deinterlaceEnabled) {
     shader.setUniform('u_texelSize', s.texelSize);
   }
 

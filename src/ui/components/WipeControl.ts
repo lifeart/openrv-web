@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { DEFAULT_WIPE_STATE } from '../../core/types/wipe';
 import type { WipeMode, WipeSide, WipeState } from '../../core/types/wipe';

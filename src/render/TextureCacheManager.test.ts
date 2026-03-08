@@ -107,42 +107,16 @@ describe('TextureCacheManager', () => {
     it('TEX-U004: sets correct texture parameters', () => {
       cache.getTexture('frame-1', 100, 100);
 
-      expect(gl.texParameteri).toHaveBeenCalledWith(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_WRAP_S,
-        gl.CLAMP_TO_EDGE
-      );
-      expect(gl.texParameteri).toHaveBeenCalledWith(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_WRAP_T,
-        gl.CLAMP_TO_EDGE
-      );
-      expect(gl.texParameteri).toHaveBeenCalledWith(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_MIN_FILTER,
-        gl.LINEAR
-      );
-      expect(gl.texParameteri).toHaveBeenCalledWith(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_MAG_FILTER,
-        gl.LINEAR
-      );
+      expect(gl.texParameteri).toHaveBeenCalledWith(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      expect(gl.texParameteri).toHaveBeenCalledWith(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      expect(gl.texParameteri).toHaveBeenCalledWith(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      expect(gl.texParameteri).toHaveBeenCalledWith(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     });
 
     it('TEX-U005: uses custom internal format', () => {
       cache.getTexture('frame-1', 100, 100, gl.RGBA32F, gl.RGBA, gl.FLOAT);
 
-      expect(gl.texImage2D).toHaveBeenCalledWith(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA32F,
-        100,
-        100,
-        0,
-        gl.RGBA,
-        gl.FLOAT,
-        null
-      );
+      expect(gl.texImage2D).toHaveBeenCalledWith(gl.TEXTURE_2D, 0, gl.RGBA32F, 100, 100, 0, gl.RGBA, gl.FLOAT, null);
     });
   });
 
@@ -294,7 +268,7 @@ describe('TextureCacheManager', () => {
       // Insert D -- should evict B (now the oldest)
       smallCache.getTexture('D', 10, 10);
 
-      expect(smallCache.hasTexture('A')).toBe(true);  // refreshed via updateTexture
+      expect(smallCache.hasTexture('A')).toBe(true); // refreshed via updateTexture
       expect(smallCache.hasTexture('B')).toBe(false); // evicted as oldest
       expect(smallCache.hasTexture('C')).toBe(true);
       expect(smallCache.hasTexture('D')).toBe(true);
@@ -334,7 +308,7 @@ describe('TextureCacheManager', () => {
       // Insert D -- should evict B (oldest after A was re-created)
       smallCache.getTexture('D', 10, 10);
 
-      expect(smallCache.hasTexture('A')).toBe(true);  // re-created at MRU position
+      expect(smallCache.hasTexture('A')).toBe(true); // re-created at MRU position
       expect(smallCache.hasTexture('B')).toBe(false); // evicted as oldest
       expect(smallCache.hasTexture('C')).toBe(true);
       expect(smallCache.hasTexture('D')).toBe(true);
@@ -353,7 +327,7 @@ describe('TextureCacheManager', () => {
       // Insert C -- exceeds memory, should evict B (the oldest)
       smallCache.getTexture('C', 10, 10);
 
-      expect(smallCache.hasTexture('A')).toBe(true);  // refreshed, survived
+      expect(smallCache.hasTexture('A')).toBe(true); // refreshed, survived
       expect(smallCache.hasTexture('B')).toBe(false); // evicted as oldest
       expect(smallCache.hasTexture('C')).toBe(true);
     });

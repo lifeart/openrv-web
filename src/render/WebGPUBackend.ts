@@ -19,7 +19,16 @@
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import type {
+  ToneMappingState,
+  ZebraState,
+  HighlightsShadowsState,
+  VibranceState,
+  ClarityState,
+  SharpenState,
+  FalseColorState,
+  GamutMappingState,
+} from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { TextureFilterMode } from '../core/types/filter';
@@ -200,13 +209,7 @@ export class WebGPUBackend implements RendererBackend {
     // WebGPU clears via GPURenderPassDescriptor.colorAttachments[].loadOp = 'clear'
   }
 
-  renderImage(
-    _image: IPImage,
-    _offsetX = 0,
-    _offsetY = 0,
-    _scaleX = 1,
-    _scaleY = 1,
-  ): void {
+  renderImage(_image: IPImage, _offsetX = 0, _offsetY = 0, _scaleX = 1, _scaleY = 1): void {
     // STUB: WebGPU render pipeline not yet implemented.
     // Future implementation will:
     // 1. Upload image data to a GPUTexture
@@ -215,7 +218,9 @@ export class WebGPUBackend implements RendererBackend {
     // 4. Draw a fullscreen quad
   }
 
-  renderTiledImages(_tiles: { image: IPImage; viewport: import('../nodes/groups/LayoutGroupNode').TileViewport }[]): void {
+  renderTiledImages(
+    _tiles: { image: IPImage; viewport: import('../nodes/groups/LayoutGroupNode').TileViewport }[],
+  ): void {
     // STUB: WebGPU tiled rendering not yet implemented.
   }
 
@@ -326,37 +331,110 @@ export class WebGPUBackend implements RendererBackend {
 
   // --- HDR effects stubs (Phase 1-3: not yet implemented for WebGPU) ---
 
-  setBackgroundPattern(_state: BackgroundPatternState): void { /* STUB */ }
-  readPixelFloat(_x: number, _y: number, _width: number, _height: number): Float32Array | null { return null; }
-  setCDL(_cdl: CDLValues): void { /* STUB */ }
-  setCurvesLUT(_luts: CurveLUTs | null): void { /* STUB */ }
-  setColorWheels(_state: ColorWheelsState): void { /* STUB */ }
-  setFalseColor(_state: FalseColorState): void { /* STUB */ }
-  setZebraStripes(_state: ZebraState): void { /* STUB */ }
-  setChannelMode(_mode: ChannelMode): void { /* STUB */ }
+  setBackgroundPattern(_state: BackgroundPatternState): void {
+    /* STUB */
+  }
+  readPixelFloat(_x: number, _y: number, _width: number, _height: number): Float32Array | null {
+    return null;
+  }
+  setCDL(_cdl: CDLValues): void {
+    /* STUB */
+  }
+  setCurvesLUT(_luts: CurveLUTs | null): void {
+    /* STUB */
+  }
+  setColorWheels(_state: ColorWheelsState): void {
+    /* STUB */
+  }
+  setFalseColor(_state: FalseColorState): void {
+    /* STUB */
+  }
+  setZebraStripes(_state: ZebraState): void {
+    /* STUB */
+  }
+  setChannelMode(_mode: ChannelMode): void {
+    /* STUB */
+  }
 
   // --- 3D LUT (multi-point pipeline) ---
-  setLUT(_lutData: Float32Array | null, _lutSize: number, _intensity: number): void { /* STUB */ }
-  setFileLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
-  setLookLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
-  setDisplayLUT(_data: Float32Array | null, _size: number, _intensity: number, _domainMin?: [number, number, number], _domainMax?: [number, number, number]): void { /* STUB */ }
+  setLUT(_lutData: Float32Array | null, _lutSize: number, _intensity: number): void {
+    /* STUB */
+  }
+  setFileLUT(
+    _data: Float32Array | null,
+    _size: number,
+    _intensity: number,
+    _domainMin?: [number, number, number],
+    _domainMax?: [number, number, number],
+  ): void {
+    /* STUB */
+  }
+  setLookLUT(
+    _data: Float32Array | null,
+    _size: number,
+    _intensity: number,
+    _domainMin?: [number, number, number],
+    _domainMax?: [number, number, number],
+  ): void {
+    /* STUB */
+  }
+  setDisplayLUT(
+    _data: Float32Array | null,
+    _size: number,
+    _intensity: number,
+    _domainMin?: [number, number, number],
+    _domainMax?: [number, number, number],
+  ): void {
+    /* STUB */
+  }
 
   // --- Display color management ---
-  setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }
+  setDisplayColorState(_state: {
+    transferFunction: number;
+    displayGamma: number;
+    displayBrightness: number;
+    customGamma: number;
+  }): void {
+    /* STUB */
+  }
 
   // --- Phase 1B: New GPU shader effects (stubs) ---
-  setHighlightsShadows(_state: HighlightsShadowsState): void { /* STUB */ }
-  setVibrance(_state: VibranceState): void { /* STUB */ }
-  setClarity(_state: ClarityState): void { /* STUB */ }
-  setSharpen(_state: SharpenState): void { /* STUB */ }
-  setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
-  setGamutMapping(_state: GamutMappingState): void { /* STUB */ }
-  setPremultMode(_mode: number): void { /* STUB */ }
-  getPremultMode(): number { return 0; }
-  setDitherMode(_mode: number): void { /* STUB */ }
-  getDitherMode(): number { return 0; }
-  setQuantizeBits(_bits: number): void { /* STUB */ }
-  getQuantizeBits(): number { return 0; }
+  setHighlightsShadows(_state: HighlightsShadowsState): void {
+    /* STUB */
+  }
+  setVibrance(_state: VibranceState): void {
+    /* STUB */
+  }
+  setClarity(_state: ClarityState): void {
+    /* STUB */
+  }
+  setSharpen(_state: SharpenState): void {
+    /* STUB */
+  }
+  setHSLQualifier(_state: HSLQualifierState): void {
+    /* STUB */
+  }
+  setGamutMapping(_state: GamutMappingState): void {
+    /* STUB */
+  }
+  setPremultMode(_mode: number): void {
+    /* STUB */
+  }
+  getPremultMode(): number {
+    return 0;
+  }
+  setDitherMode(_mode: number): void {
+    /* STUB */
+  }
+  getDitherMode(): number {
+    return 0;
+  }
+  setQuantizeBits(_bits: number): void {
+    /* STUB */
+  }
+  getQuantizeBits(): number {
+    return 0;
+  }
 
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);

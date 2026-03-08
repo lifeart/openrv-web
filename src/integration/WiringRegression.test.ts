@@ -8,14 +8,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  ConvergenceMeasure,
-} from '../ui/components/ConvergenceMeasure';
+import { ConvergenceMeasure } from '../ui/components/ConvergenceMeasure';
 import { SlateEditor } from '../ui/components/SlateEditor';
 import { extractStereoEyes } from '../stereo/StereoRenderer';
-import {
-  detectFloatingWindowViolations,
-} from '../stereo/FloatingWindowDetector';
+import { detectFloatingWindowViolations } from '../stereo/FloatingWindowDetector';
 import { generateSlateFrame } from '../export/SlateRenderer';
 
 // ---------------------------------------------------------------------------
@@ -35,12 +31,7 @@ function createImageData(width: number, height: number, fill?: number): ImageDat
   return new ImageData(data, width, height);
 }
 
-function createSideBySideStereoImage(
-  width: number,
-  height: number,
-  leftFill: number,
-  rightFill: number,
-): ImageData {
+function createSideBySideStereoImage(width: number, height: number, leftFill: number, rightFill: number): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
   const halfWidth = Math.floor(width / 2);
   for (let y = 0; y < height; y++) {
@@ -283,9 +274,9 @@ describe('SlateEditor form fields update state', () => {
     });
     const config = editor.generateConfig();
     expect(config.fields.length).toBeGreaterThan(0);
-    expect(config.fields.some(f => f.value === 'My Show')).toBe(true);
-    expect(config.fields.some(f => f.value === 'sh020')).toBe(true);
-    expect(config.fields.some(f => f.value === 'v01')).toBe(true);
+    expect(config.fields.some((f) => f.value === 'My Show')).toBe(true);
+    expect(config.fields.some((f) => f.value === 'sh020')).toBe(true);
+    expect(config.fields.some((f) => f.value === 'v01')).toBe(true);
   });
 });
 

@@ -131,11 +131,7 @@ describe('FrameburnCompositor', () => {
         codec: undefined,
         date: undefined,
       };
-      const fields: FrameburnField[] = [
-        { type: 'colorspace' },
-        { type: 'codec' },
-        { type: 'shotName' },
-      ];
+      const fields: FrameburnField[] = [{ type: 'colorspace' }, { type: 'codec' }, { type: 'shotName' }];
       const lines = buildTextLines(fields, ctx);
 
       // colorspace and codec are empty and get skipped
@@ -149,10 +145,7 @@ describe('FrameburnCompositor', () => {
     });
 
     it('adds label prefix to any field type', () => {
-      const lines = buildTextLines(
-        [{ type: 'frame', label: 'Frame' }],
-        baseContext
-      );
+      const lines = buildTextLines([{ type: 'frame', label: 'Frame' }], baseContext);
       expect(lines[0]).toBe('Frame: 48 / 240');
     });
 
@@ -172,14 +165,18 @@ describe('FrameburnCompositor', () => {
 
       compositeFrameburn(ctx, 1920, 1080, baseConfig, baseContext);
 
-      const texts = fillTextSpy.mock.calls.map(c => c[0]);
+      const texts = fillTextSpy.mock.calls.map((c) => c[0]);
       expect(texts).toContain('00:00:01:23');
     });
 
     it('BURN-002: positions text correctly for each position option', () => {
       const positions = [
-        'top-left', 'top-center', 'top-right',
-        'bottom-left', 'bottom-center', 'bottom-right',
+        'top-left',
+        'top-center',
+        'top-right',
+        'bottom-left',
+        'bottom-center',
+        'bottom-right',
       ] as const;
 
       for (const pos of positions) {
@@ -214,24 +211,20 @@ describe('FrameburnCompositor', () => {
 
       const config: FrameburnConfig = {
         enabled: true,
-        fields: [
-          { type: 'timecode' },
-          { type: 'shotName' },
-          { type: 'resolution' },
-        ],
+        fields: [{ type: 'timecode' }, { type: 'shotName' }, { type: 'resolution' }],
       };
       compositeFrameburn(ctx, 1920, 1080, config, baseContext);
 
       // 3 fields = 3 fillText calls
       expect(fillTextSpy).toHaveBeenCalledTimes(3);
 
-      const texts = fillTextSpy.mock.calls.map(c => c[0]);
+      const texts = fillTextSpy.mock.calls.map((c) => c[0]);
       expect(texts).toContain('00:00:01:23');
       expect(texts).toContain('vfx_010_020');
       expect(texts).toContain('1920x1080');
 
       // Each line should have a different Y coordinate
-      const yPositions = fillTextSpy.mock.calls.map(c => c[2] as number);
+      const yPositions = fillTextSpy.mock.calls.map((c) => c[2] as number);
       expect(yPositions[1]).toBeGreaterThan(yPositions[0]!);
       expect(yPositions[2]).toBeGreaterThan(yPositions[1]!);
     });

@@ -41,10 +41,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  EXRWindowOverlay,
-  DEFAULT_EXR_WINDOW_OVERLAY_STATE,
-} from '../ui/components/EXRWindowOverlay';
+import { EXRWindowOverlay, DEFAULT_EXR_WINDOW_OVERLAY_STATE } from '../ui/components/EXRWindowOverlay';
 import { BugOverlay } from '../ui/components/BugOverlay';
 import type { EXRBox2i } from '../formats/EXRDecoder';
 
@@ -308,10 +305,7 @@ describe('EXRWindowOverlay E2E Integration', () => {
       const overlay = viewer.getEXRWindowOverlay();
 
       // isVisible() requires both enabled AND windows to be set
-      overlay.setWindows(
-        { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
-        { xMin: 0, yMin: 0, xMax: 199, yMax: 199 }
-      );
+      overlay.setWindows({ xMin: 0, yMin: 0, xMax: 99, yMax: 99 }, { xMin: 0, yMin: 0, xMax: 199, yMax: 199 });
 
       overlay.enable();
       expect(overlay.isVisible()).toBe(true);
@@ -334,9 +328,7 @@ describe('EXRWindowOverlay E2E Integration', () => {
       overlay.setState({ enabled: true, lineWidth: 3 });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true, lineWidth: 3 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, lineWidth: 3 }));
     });
 
     it('EXR-E2E-032: individual visibility toggles (showDataWindow, showDisplayWindow)', () => {
@@ -447,10 +439,7 @@ describe('EXRWindowOverlay E2E Integration', () => {
       };
 
       // This is what the wiring SHOULD do:
-      overlay.setWindows(
-        mockAttributes.dataWindow as EXRBox2i,
-        mockAttributes.displayWindow as EXRBox2i,
-      );
+      overlay.setWindows(mockAttributes.dataWindow as EXRBox2i, mockAttributes.displayWindow as EXRBox2i);
       // User could then enable via a toggle button (also missing)
       overlay.enable();
       viewer.updateOverlayDimensions();

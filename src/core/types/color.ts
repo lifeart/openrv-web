@@ -58,7 +58,19 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   blacks: 0,
 };
 
-export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection' | 'exposureRGB' | 'gammaRGB' | 'contrastRGB' | 'scaleRGB' | 'offsetRGB' | 'scale' | 'offset' | 'inlineLUT' | 'lutChannels'>;
+export type NumericAdjustmentKey = Exclude<
+  keyof ColorAdjustments,
+  | 'vibranceSkinProtection'
+  | 'exposureRGB'
+  | 'gammaRGB'
+  | 'contrastRGB'
+  | 'scaleRGB'
+  | 'offsetRGB'
+  | 'scale'
+  | 'offset'
+  | 'inlineLUT'
+  | 'lutChannels'
+>;
 
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 

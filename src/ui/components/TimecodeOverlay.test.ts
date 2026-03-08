@@ -5,12 +5,8 @@
  * Based on test cases TC-001 through TC-005
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import {
-  TimecodeOverlay,
-  OverlayPosition,
-  DEFAULT_TIMECODE_OVERLAY_STATE,
-} from './TimecodeOverlay';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { TimecodeOverlay, type OverlayPosition, DEFAULT_TIMECODE_OVERLAY_STATE } from './TimecodeOverlay';
 import { frameToTimecode, formatTimecode } from './TimecodeDisplay';
 
 // Mock Session
@@ -87,9 +83,7 @@ describe('TimecodeOverlay', () => {
       timecodeOverlay.enable();
 
       expect(timecodeOverlay.isVisible()).toBe(true);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('TC-011: disable hides overlay', () => {
@@ -100,9 +94,7 @@ describe('TimecodeOverlay', () => {
       timecodeOverlay.disable();
 
       expect(timecodeOverlay.isVisible()).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('TC-001: toggle enables/disables (FEATURES.md TC-001)', () => {
@@ -132,9 +124,7 @@ describe('TimecodeOverlay', () => {
 
       timecodeOverlay.setPosition('bottom-right');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ position: 'bottom-right' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ position: 'bottom-right' }));
     });
 
     it('TC-021: default position is top-left', () => {
@@ -157,9 +147,7 @@ describe('TimecodeOverlay', () => {
 
       timecodeOverlay.setFontSize('large');
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ fontSize: 'large' })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 'large' }));
     });
 
     it('TC-032: default font size is medium', () => {
@@ -187,9 +175,7 @@ describe('TimecodeOverlay', () => {
 
       timecodeOverlay.setBackgroundOpacity(0.3);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ backgroundOpacity: 0.3 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ backgroundOpacity: 0.3 }));
     });
   });
 
@@ -212,9 +198,7 @@ describe('TimecodeOverlay', () => {
 
       timecodeOverlay.setShowFrameCounter(false);
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showFrameCounter: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showFrameCounter: false }));
     });
   });
 

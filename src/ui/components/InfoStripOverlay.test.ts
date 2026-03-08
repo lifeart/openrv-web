@@ -4,12 +4,8 @@
  * Tests for Info Strip Overlay component (Plan 19)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import {
-  InfoStripOverlay,
-  DEFAULT_INFO_STRIP_OVERLAY_STATE,
-  extractBasename,
-} from './InfoStripOverlay';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { InfoStripOverlay, DEFAULT_INFO_STRIP_OVERLAY_STATE, extractBasename } from './InfoStripOverlay';
 
 // Mock Session
 interface MockSession {
@@ -129,9 +125,7 @@ describe('InfoStripOverlay', () => {
       overlay.enable();
 
       expect(overlay.isVisible()).toBe(true);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('IS-022: disable() hides overlay', () => {
@@ -142,9 +136,7 @@ describe('InfoStripOverlay', () => {
       overlay.disable();
 
       expect(overlay.isVisible()).toBe(false);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: false })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     });
   });
 
@@ -327,7 +319,9 @@ describe('InfoStripOverlay', () => {
     it('IS-061: toggle button click toggles path mode', () => {
       expect(overlay.getState().showFullPath).toBe(false);
 
-      const button = overlay.getElement().querySelector('[data-testid="info-strip-overlay-toggle"]') as HTMLButtonElement;
+      const button = overlay
+        .getElement()
+        .querySelector('[data-testid="info-strip-overlay-toggle"]') as HTMLButtonElement;
       button.click();
 
       expect(overlay.getState().showFullPath).toBe(true);
@@ -337,16 +331,18 @@ describe('InfoStripOverlay', () => {
       const handler = vi.fn();
       overlay.on('stateChanged', handler);
 
-      const button = overlay.getElement().querySelector('[data-testid="info-strip-overlay-toggle"]') as HTMLButtonElement;
+      const button = overlay
+        .getElement()
+        .querySelector('[data-testid="info-strip-overlay-toggle"]') as HTMLButtonElement;
       button.click();
 
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showFullPath: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showFullPath: true }));
     });
 
     it('IS-063: contextmenu event on toggle button calls stopPropagation', () => {
-      const button = overlay.getElement().querySelector('[data-testid="info-strip-overlay-toggle"]') as HTMLButtonElement;
+      const button = overlay
+        .getElement()
+        .querySelector('[data-testid="info-strip-overlay-toggle"]') as HTMLButtonElement;
 
       const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
       const stopPropagationSpy = vi.spyOn(event, 'stopPropagation');
@@ -363,7 +359,7 @@ describe('InfoStripOverlay', () => {
     it('IS-070: sourceLoaded event triggers update', () => {
       // Get the sourceLoaded callback that was registered
       const sourceLoadedCall = mockSession.on.mock.calls.find(
-        (call: [string, () => void]) => call[0] === 'sourceLoaded'
+        (call: [string, () => void]) => call[0] === 'sourceLoaded',
       );
       expect(sourceLoadedCall).toBeDefined();
 
@@ -395,9 +391,7 @@ describe('InfoStripOverlay', () => {
       overlay.toggle();
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ enabled: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
     });
 
     it('IS-081: setState emits stateChanged', () => {
@@ -407,9 +401,7 @@ describe('InfoStripOverlay', () => {
       overlay.setState({ backgroundOpacity: 0.8 });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ backgroundOpacity: 0.8 })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ backgroundOpacity: 0.8 }));
     });
 
     it('IS-082: togglePathMode emits stateChanged', () => {
@@ -419,9 +411,7 @@ describe('InfoStripOverlay', () => {
       overlay.togglePathMode();
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ showFullPath: true })
-      );
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ showFullPath: true }));
     });
   });
 

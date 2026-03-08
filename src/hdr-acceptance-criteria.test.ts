@@ -14,19 +14,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Phase 1 imports
+import type { DisplayCapabilities } from './color/DisplayCapabilities';
 import {
-  DisplayCapabilities,
   DEFAULT_CAPABILITIES,
   detectDisplayCapabilities,
   resolveActiveColorSpace,
   queryHDRHeadroom,
 } from './color/DisplayCapabilities';
 import { safeCanvasContext2D, createViewerCanvas } from './color/SafeCanvasContext';
-import {
-  getActiveOutputColorSpace,
-  detectBrowserColorSpace,
-  canvasSupportsDisplayP3,
-} from './color/BrowserColorSpace';
+import { getActiveOutputColorSpace, detectBrowserColorSpace, canvasSupportsDisplayP3 } from './color/BrowserColorSpace';
 
 // Phase 2 imports
 import { Renderer } from './render/Renderer';
@@ -47,10 +43,7 @@ import { createRenderer } from './render/createRenderer';
 import type { RendererBackend } from './render/RendererBackend';
 
 // Shared mock factories
-import {
-  createMockRendererGL as createMockGL,
-  initRendererWithMockGL,
-} from '../test/mocks';
+import { createMockRendererGL as createMockGL, initRendererWithMockGL } from '../test/mocks';
 
 // ============================================================================
 // Test Helpers
@@ -116,7 +109,9 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
     it('AC-P1-1.1d: every detection probe is wrapped in try/catch', () => {
       // Force all APIs to throw - detection should still succeed
       const originalMatchMedia = globalThis.matchMedia;
-      globalThis.matchMedia = (() => { throw new Error('matchMedia broken'); }) as typeof globalThis.matchMedia;
+      globalThis.matchMedia = (() => {
+        throw new Error('matchMedia broken');
+      }) as typeof globalThis.matchMedia;
 
       expect(() => detectDisplayCapabilities()).not.toThrow();
       const caps = detectDisplayCapabilities();
@@ -184,7 +179,7 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       renderer.initialize(canvas, makeCaps());
 
       // Verify getContext was called with webgl2 and standard options
-      const webgl2Call = getContextSpy.mock.calls.find(call => call[0] === 'webgl2');
+      const webgl2Call = getContextSpy.mock.calls.find((call) => call[0] === 'webgl2');
       expect(webgl2Call).toBeDefined();
       const options = webgl2Call![1] as Record<string, unknown>;
       expect(options.alpha).toBe(false);
@@ -219,11 +214,14 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
 
       safeCanvasContext2D(canvas, { alpha: false, willReadFrequently: true }, 'display-p3');
 
-      expect(spy).toHaveBeenCalledWith('2d', expect.objectContaining({
-        alpha: false,
-        willReadFrequently: true,
-        colorSpace: 'display-p3',
-      }));
+      expect(spy).toHaveBeenCalledWith(
+        '2d',
+        expect.objectContaining({
+          alpha: false,
+          willReadFrequently: true,
+          colorSpace: 'display-p3',
+        }),
+      );
     });
 
     it('AC-P1-1.3b: safeCanvasContext2D omits colorSpace when not provided', () => {
@@ -357,11 +355,19 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
   // =====================================================================
   describe('1.6 DisplayProfileControl transfer function selection', () => {
     beforeEach(() => {
-      try { localStorage.removeItem('openrv-display-profile'); } catch { /* noop */ }
+      try {
+        localStorage.removeItem('openrv-display-profile');
+      } catch {
+        /* noop */
+      }
     });
     afterEach(() => {
       vi.restoreAllMocks();
-      try { localStorage.removeItem('openrv-display-profile'); } catch { /* noop */ }
+      try {
+        localStorage.removeItem('openrv-display-profile');
+      } catch {
+        /* noop */
+      }
     });
 
     it('AC-P1-1.6a: default transfer function is sRGB', () => {
@@ -482,10 +488,11 @@ describe('Phase 2: HDR Extended Range Output', () => {
 
     it('AC-P2-2.1h: queryHDRHeadroom returns positive number when available', async () => {
       // getScreenDetails is declared optional on Window (webgl-hdr.d.ts)
-      window.getScreenDetails = () => Promise.resolve({
-        currentScreen: { highDynamicRangeHeadroom: 3.5 },
-        screens: [],
-      } as unknown as ScreenDetails);
+      window.getScreenDetails = () =>
+        Promise.resolve({
+          currentScreen: { highDynamicRangeHeadroom: 3.5 },
+          screens: [],
+        } as unknown as ScreenDetails);
 
       const result = await queryHDRHeadroom();
       expect(result).toBe(3.5);
@@ -496,15 +503,18 @@ describe('Phase 2: HDR Extended Range Output', () => {
     it('AC-P2-2.1i: all detection failures are silent', () => {
       const consoleSpy = vi.spyOn(console, 'error');
       const originalMatchMedia = globalThis.matchMedia;
-      globalThis.matchMedia = (() => { throw new Error('broken'); }) as typeof globalThis.matchMedia;
+      globalThis.matchMedia = (() => {
+        throw new Error('broken');
+      }) as typeof globalThis.matchMedia;
 
       detectDisplayCapabilities();
 
       // No console.error should have been called by the detection
-      const detectionErrors = consoleSpy.mock.calls.filter(call =>
-        String(call[0]).includes('DisplayCapabilities') ||
-        String(call[0]).includes('colorSpace') ||
-        String(call[0]).includes('drawingBuffer')
+      const detectionErrors = consoleSpy.mock.calls.filter(
+        (call) =>
+          String(call[0]).includes('DisplayCapabilities') ||
+          String(call[0]).includes('colorSpace') ||
+          String(call[0]).includes('drawingBuffer'),
       );
       expect(detectionErrors).toHaveLength(0);
 
@@ -1265,9 +1275,13 @@ describe('Phase 3: Comprehensive Pipeline Updates', () => {
 
     it('AC-P3-3.5d: all stereo modes operate on ImageData without canvas dependency', () => {
       const modes: StereoState['mode'][] = [
-        'side-by-side', 'over-under', 'mirror',
-        'anaglyph', 'anaglyph-luminance',
-        'checkerboard', 'scanline',
+        'side-by-side',
+        'over-under',
+        'mirror',
+        'anaglyph',
+        'anaglyph-luminance',
+        'checkerboard',
+        'scanline',
       ];
 
       const before = document.querySelectorAll('canvas').length;
@@ -1314,12 +1328,25 @@ describe('Phase 4: WebGPU Migration Path', () => {
   // =====================================================================
   describe('4.1 RendererBackend interface', () => {
     const REQUIRED_METHODS: (keyof RendererBackend)[] = [
-      'initialize', 'initAsync', 'dispose', 'resize', 'clear', 'renderImage',
-      'setColorAdjustments', 'getColorAdjustments', 'resetColorAdjustments',
-      'setColorInversion', 'getColorInversion',
-      'setToneMappingState', 'getToneMappingState', 'resetToneMappingState',
-      'setHDROutputMode', 'getHDROutputMode',
-      'createTexture', 'deleteTexture', 'getContext',
+      'initialize',
+      'initAsync',
+      'dispose',
+      'resize',
+      'clear',
+      'renderImage',
+      'setColorAdjustments',
+      'getColorAdjustments',
+      'resetColorAdjustments',
+      'setColorInversion',
+      'getColorInversion',
+      'setToneMappingState',
+      'getToneMappingState',
+      'resetToneMappingState',
+      'setHDROutputMode',
+      'getHDROutputMode',
+      'createTexture',
+      'deleteTexture',
+      'getContext',
     ];
 
     it('AC-P4-4.1a: WebGL2Backend (Renderer) implements RendererBackend', () => {
@@ -1442,9 +1469,11 @@ describe('Phase 4: WebGPU Migration Path', () => {
         await backend.initAsync();
 
         // Second call should use standard
-        expect(configureFn).toHaveBeenLastCalledWith(expect.objectContaining({
-          toneMapping: { mode: 'standard' },
-        }));
+        expect(configureFn).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            toneMapping: { mode: 'standard' },
+          }),
+        );
         expect(backend.hasExtendedToneMapping()).toBe(false);
       } finally {
         if (originalGpu === undefined) {

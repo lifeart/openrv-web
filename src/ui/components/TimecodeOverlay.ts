@@ -9,8 +9,8 @@
  * - Support for drop-frame timecode
  */
 
-import { Session } from '../../core/session/Session';
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { type Session } from '../../core/session/Session';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { frameToTimecode, formatTimecode } from './TimecodeDisplay';
 
 export type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

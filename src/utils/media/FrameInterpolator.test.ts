@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  blendFrames,
-  blendCanvasFrames,
-  FrameInterpolator,
-  SubFramePosition,
-} from './FrameInterpolator';
+import { blendFrames, blendCanvasFrames, FrameInterpolator, type SubFramePosition } from './FrameInterpolator';
 
 /**
  * Helper to create an ImageData-like object for testing.
@@ -14,9 +9,9 @@ function createImageData(width: number, height: number, fill: number[]): ImageDa
   const length = width * height * 4;
   const data = new Uint8ClampedArray(length);
   for (let i = 0; i < length; i += 4) {
-    data[i] = fill[0] ?? 0;       // R
-    data[i + 1] = fill[1] ?? 0;   // G
-    data[i + 2] = fill[2] ?? 0;   // B
+    data[i] = fill[0] ?? 0; // R
+    data[i + 1] = fill[1] ?? 0; // G
+    data[i + 2] = fill[2] ?? 0; // B
     data[i + 3] = fill[3] ?? 255; // A
   }
   return new ImageData(data, width, height);
@@ -86,8 +81,8 @@ describe('FrameInterpolator', () => {
       expect(result).not.toBeNull();
       // Midpoint: (0*0.5 + 200*0.5 + 0.5) | 0 = 100
       expect(result!.data[0]).toBe(100); // R
-      expect(result!.data[1]).toBe(50);  // G
-      expect(result!.data[2]).toBe(25);  // B
+      expect(result!.data[1]).toBe(50); // G
+      expect(result!.data[2]).toBe(25); // B
       expect(result!.data[3]).toBe(255); // A (same on both sides)
     });
 
@@ -97,9 +92,9 @@ describe('FrameInterpolator', () => {
       const result = blendFrames(frameA, frameB, 0.25);
       expect(result).not.toBeNull();
       // (0 * 0.75 + 200 * 0.25 + 0.5) | 0 = 50
-      expect(result!.data[0]).toBe(50);  // R
-      expect(result!.data[1]).toBe(25);  // G
-      expect(result!.data[2]).toBe(0);   // B
+      expect(result!.data[0]).toBe(50); // R
+      expect(result!.data[1]).toBe(25); // G
+      expect(result!.data[2]).toBe(0); // B
     });
 
     it('FI-U008: ratio=0.75 blends closer to frameB', () => {
@@ -109,8 +104,8 @@ describe('FrameInterpolator', () => {
       expect(result).not.toBeNull();
       // (0 * 0.25 + 200 * 0.75 + 0.5) | 0 = 150
       expect(result!.data[0]).toBe(150); // R
-      expect(result!.data[1]).toBe(75);  // G
-      expect(result!.data[2]).toBe(0);   // B
+      expect(result!.data[1]).toBe(75); // G
+      expect(result!.data[2]).toBe(0); // B
     });
 
     it('FI-U009: clamps negative ratio to 0', () => {
@@ -149,9 +144,9 @@ describe('FrameInterpolator', () => {
       expect(result!.height).toBe(4);
       // Check all pixels are blended
       for (let i = 0; i < result!.data.length; i += 4) {
-        expect(result!.data[i]).toBe(60);     // R: (10*0.5 + 110*0.5 + 0.5)|0
-        expect(result!.data[i + 1]).toBe(70);  // G: (20*0.5 + 120*0.5 + 0.5)|0
-        expect(result!.data[i + 2]).toBe(80);  // B: (30*0.5 + 130*0.5 + 0.5)|0
+        expect(result!.data[i]).toBe(60); // R: (10*0.5 + 110*0.5 + 0.5)|0
+        expect(result!.data[i + 1]).toBe(70); // G: (20*0.5 + 120*0.5 + 0.5)|0
+        expect(result!.data[i + 2]).toBe(80); // B: (30*0.5 + 130*0.5 + 0.5)|0
         expect(result!.data[i + 3]).toBe(255); // A
       }
     });

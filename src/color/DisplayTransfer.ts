@@ -18,24 +18,18 @@ import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../utils/prefere
 /**
  * Available display transfer functions
  */
-export type DisplayTransferFunction =
-  | 'linear'
-  | 'srgb'
-  | 'rec709'
-  | 'gamma2.2'
-  | 'gamma2.4'
-  | 'custom';
+export type DisplayTransferFunction = 'linear' | 'srgb' | 'rec709' | 'gamma2.2' | 'gamma2.4' | 'custom';
 
 /**
  * Integer codes for GLSL uniform communication
  */
 export const DISPLAY_TRANSFER_CODES: Record<DisplayTransferFunction, number> = {
-  'linear': 0,
-  'srgb': 1,
-  'rec709': 2,
+  linear: 0,
+  srgb: 1,
+  rec709: 2,
   'gamma2.2': 3,
   'gamma2.4': 4,
-  'custom': 5,
+  custom: 5,
 };
 
 /**
@@ -43,10 +37,10 @@ export const DISPLAY_TRANSFER_CODES: Record<DisplayTransferFunction, number> = {
  */
 export interface DisplayColorState {
   transferFunction: DisplayTransferFunction;
-  displayGamma: number;       // 0.1 to 4.0, default 1.0
-  displayBrightness: number;  // 0.0 to 2.0, default 1.0
-  customGamma: number;        // 0.1 to 10.0, default 2.2
-  outputGamut?: 'auto' | 'srgb' | 'display-p3';  // default: 'auto'
+  displayGamma: number; // 0.1 to 4.0, default 1.0
+  displayBrightness: number; // 0.0 to 2.0, default 1.0
+  customGamma: number; // 0.1 to 10.0, default 2.2
+  outputGamut?: 'auto' | 'srgb' | 'display-p3'; // default: 'auto'
 }
 
 /**
@@ -64,36 +58,30 @@ export const DEFAULT_DISPLAY_COLOR_STATE: DisplayColorState = {
  * Profile cycle order for Shift+Alt+D keyboard shortcut.
  * Linear is skipped during cycling since sRGB is the default start.
  */
-export const PROFILE_CYCLE_ORDER: DisplayTransferFunction[] = [
-  'linear',
-  'srgb',
-  'rec709',
-  'gamma2.2',
-  'gamma2.4',
-];
+export const PROFILE_CYCLE_ORDER: DisplayTransferFunction[] = ['linear', 'srgb', 'rec709', 'gamma2.2', 'gamma2.4'];
 
 /**
  * Display labels for profiles
  */
 export const PROFILE_LABELS: Record<DisplayTransferFunction, string> = {
-  'linear': 'Linear',
-  'srgb': 'sRGB',
-  'rec709': '709',
+  linear: 'Linear',
+  srgb: 'sRGB',
+  rec709: '709',
   'gamma2.2': '2.2',
   'gamma2.4': '2.4',
-  'custom': 'Custom',
+  custom: 'Custom',
 };
 
 /**
  * Full display labels for dropdown
  */
 export const PROFILE_FULL_LABELS: Record<DisplayTransferFunction, string> = {
-  'linear': 'Linear (Bypass)',
-  'srgb': 'sRGB (IEC 61966-2-1)',
-  'rec709': 'Rec. 709 OETF',
+  linear: 'Linear (Bypass)',
+  srgb: 'sRGB (IEC 61966-2-1)',
+  rec709: 'Rec. 709 OETF',
   'gamma2.2': 'Gamma 2.2',
   'gamma2.4': 'Gamma 2.4',
-  'custom': 'Custom Gamma',
+  custom: 'Custom Gamma',
 };
 
 // =============================================================================
@@ -189,10 +177,7 @@ export function applyDisplayColorManagement(
 /**
  * Apply display color management to ImageData (CPU fallback, in-place)
  */
-export function applyDisplayColorManagementToImageData(
-  imageData: ImageData,
-  state: DisplayColorState,
-): void {
+export function applyDisplayColorManagementToImageData(imageData: ImageData, state: DisplayColorState): void {
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
     let r = data[i]! / 255;
@@ -212,11 +197,7 @@ export function applyDisplayColorManagementToImageData(
  * Check whether the display state represents a non-default (active) configuration
  */
 export function isDisplayStateActive(state: DisplayColorState): boolean {
-  return (
-    state.transferFunction !== 'srgb' ||
-    state.displayGamma !== 1.0 ||
-    state.displayBrightness !== 1.0
-  );
+  return state.transferFunction !== 'srgb' || state.displayGamma !== 1.0 || state.displayBrightness !== 1.0;
 }
 
 // =============================================================================
@@ -236,7 +217,12 @@ export function saveDisplayProfile(state: DisplayColorState): void {
  * Load display profile from localStorage
  */
 const VALID_TRANSFER_FUNCTIONS: ReadonlySet<string> = new Set([
-  'linear', 'srgb', 'rec709', 'gamma2.2', 'gamma2.4', 'custom',
+  'linear',
+  'srgb',
+  'rec709',
+  'gamma2.2',
+  'gamma2.4',
+  'custom',
 ]);
 
 export function loadDisplayProfile(): DisplayColorState | null {
@@ -244,11 +230,15 @@ export function loadDisplayProfile(): DisplayColorState | null {
   if (parsed) {
     // Validate deserialized data
     if (
-      typeof parsed !== 'object' || parsed === null ||
+      typeof parsed !== 'object' ||
+      parsed === null ||
       !VALID_TRANSFER_FUNCTIONS.has(parsed.transferFunction) ||
-      typeof parsed.displayGamma !== 'number' || !Number.isFinite(parsed.displayGamma) ||
-      typeof parsed.displayBrightness !== 'number' || !Number.isFinite(parsed.displayBrightness) ||
-      typeof parsed.customGamma !== 'number' || !Number.isFinite(parsed.customGamma)
+      typeof parsed.displayGamma !== 'number' ||
+      !Number.isFinite(parsed.displayGamma) ||
+      typeof parsed.displayBrightness !== 'number' ||
+      !Number.isFinite(parsed.displayBrightness) ||
+      typeof parsed.customGamma !== 'number' ||
+      !Number.isFinite(parsed.customGamma)
     ) {
       return null;
     }

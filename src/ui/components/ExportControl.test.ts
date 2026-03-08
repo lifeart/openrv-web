@@ -77,9 +77,7 @@ describe('ExportControl', () => {
 
       control.quickExport();
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'png' })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format: 'png' }));
     });
 
     it('EXPORT-U022: quickExport can use jpeg format', () => {
@@ -88,9 +86,7 @@ describe('ExportControl', () => {
 
       control.quickExport('jpeg');
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'jpeg' })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format: 'jpeg' }));
     });
 
     it('EXPORT-U023: quickExport can use webp format', () => {
@@ -99,9 +95,7 @@ describe('ExportControl', () => {
 
       control.quickExport('webp');
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'webp' })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format: 'webp' }));
     });
 
     it('EXPORT-U024: quickExport includes quality setting', () => {
@@ -110,9 +104,7 @@ describe('ExportControl', () => {
 
       control.quickExport();
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ quality: expect.any(Number) })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ quality: expect.any(Number) }));
     });
 
     it('EXPORT-U025: quickExport includes includeAnnotations setting', () => {
@@ -121,9 +113,7 @@ describe('ExportControl', () => {
 
       control.quickExport();
 
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ includeAnnotations: expect.any(Boolean) })
-      );
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ includeAnnotations: expect.any(Boolean) }));
     });
   });
 
@@ -152,7 +142,7 @@ describe('ExportControl', () => {
           format: 'png',
           includeAnnotations: expect.any(Boolean),
           quality: expect.any(Number),
-        })
+        }),
       );
     });
 
@@ -231,9 +221,7 @@ describe('ExportControl', () => {
 
         control.quickExport(format);
 
-        expect(callback).toHaveBeenCalledWith(
-          expect.objectContaining({ format })
-        );
+        expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format }));
       });
     });
   });
@@ -492,9 +480,7 @@ describe('ExportControl keyboard accessibility', () => {
     firstItem.click();
 
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(
-      expect.objectContaining({ format: 'png' })
-    );
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format: 'png' }));
   });
 
   it('EXP-H10c-2: selecting source export item should emit sourceExportRequested', () => {
@@ -503,15 +489,14 @@ describe('ExportControl keyboard accessibility', () => {
 
     openDropdown();
     const dropdown = getDropdown();
-    const sourceItem = Array.from(dropdown.querySelectorAll('button'))
-      .find((btn) => btn.textContent?.includes('Save Source as PNG')) as HTMLButtonElement | undefined;
+    const sourceItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save Source as PNG'),
+    ) as HTMLButtonElement | undefined;
 
     expect(sourceItem).toBeDefined();
     sourceItem!.click();
 
-    expect(callback).toHaveBeenCalledWith(
-      expect.objectContaining({ format: 'png' })
-    );
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ format: 'png' }));
   });
 
   it('EXP-H10c-3: selecting video export item should emit videoExportRequested', () => {
@@ -520,15 +505,14 @@ describe('ExportControl keyboard accessibility', () => {
 
     openDropdown();
     const dropdown = getDropdown();
-    const videoItem = Array.from(dropdown.querySelectorAll('button'))
-      .find((btn) => btn.textContent?.includes('Export MP4 In/Out Range')) as HTMLButtonElement | undefined;
+    const videoItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export MP4 In/Out Range'),
+    ) as HTMLButtonElement | undefined;
 
     expect(videoItem).toBeDefined();
     videoItem!.click();
 
-    expect(callback).toHaveBeenCalledWith(
-      expect.objectContaining({ useInOutRange: true, includeAnnotations: true })
-    );
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ useInOutRange: true, includeAnnotations: true }));
   });
 
   it('EXP-H10d: export button should have aria-haspopup="menu" attribute', () => {

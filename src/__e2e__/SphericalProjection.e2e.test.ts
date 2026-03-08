@@ -210,13 +210,7 @@ describe('SphericalProjection E2E Integration', () => {
       sp.setFOV(45);
 
       const classUV = sp.screenToEquirectUV(0.7, 0.2, 1280, 720);
-      const cpuUV = cpuSphericalProject(
-        0.7, 0.2,
-        45 * DEG2RAD,
-        1280 / 720,
-        120 * DEG2RAD,
-        -45 * DEG2RAD,
-      );
+      const cpuUV = cpuSphericalProject(0.7, 0.2, 45 * DEG2RAD, 1280 / 720, 120 * DEG2RAD, -45 * DEG2RAD);
 
       expect(classUV.u).toBeCloseTo(cpuUV.u, 4);
       expect(classUV.v).toBeCloseTo(cpuUV.v, 4);
@@ -227,7 +221,11 @@ describe('SphericalProjection E2E Integration', () => {
       sp.setFOV(90);
 
       const corners = [
-        [0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5],
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [0.5, 0.5],
       ] as const;
 
       for (const [su, sv] of corners) {
@@ -361,9 +359,7 @@ describe('SphericalProjection E2E Integration', () => {
         yaw: uniforms.u_yaw,
         pitch: uniforms.u_pitch,
       });
-      expect(mockViewer.setSphericalProjection).toHaveBeenLastCalledWith(
-        expect.objectContaining({ enabled: true }),
-      );
+      expect(mockViewer.setSphericalProjection).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true }));
 
       // Simulate toggle OFF
       sp.disable();
@@ -375,9 +371,7 @@ describe('SphericalProjection E2E Integration', () => {
         yaw: uniforms.u_yaw,
         pitch: uniforms.u_pitch,
       });
-      expect(mockViewer.setSphericalProjection).toHaveBeenLastCalledWith(
-        expect.objectContaining({ enabled: false }),
-      );
+      expect(mockViewer.setSphericalProjection).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: false }));
     });
 
     it('SP-E2E-041: disable resets yaw/pitch/fov to defaults', () => {

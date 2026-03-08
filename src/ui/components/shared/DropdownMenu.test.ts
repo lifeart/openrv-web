@@ -293,9 +293,7 @@ describe('DropdownMenu', () => {
 
   describe('item rendering', () => {
     it('DM-050: renders color indicator', () => {
-      dropdown.setItems([
-        { value: 'red', label: 'Red', color: '#ff0000' },
-      ]);
+      dropdown.setItems([{ value: 'red', label: 'Red', color: '#ff0000' }]);
 
       dropdown.open(anchor);
       const colorDot = dropdown.getElement().querySelector('span[style*="border-radius: 50%"]');
@@ -304,9 +302,7 @@ describe('DropdownMenu', () => {
     });
 
     it('DM-053: renders text/emoji icon', () => {
-      dropdown.setItems([
-        { value: 'star', label: 'Star', icon: '⭐' },
-      ]);
+      dropdown.setItems([{ value: 'star', label: 'Star', icon: '⭐' }]);
 
       dropdown.open(anchor);
       expect(dropdown.getElement().textContent).toContain('⭐');
@@ -314,9 +310,7 @@ describe('DropdownMenu', () => {
     });
 
     it('DM-054: icon is rendered as text content (not HTML) for security', () => {
-      dropdown.setItems([
-        { value: 'test', label: 'Test', icon: '<script>alert("xss")</script>' },
-      ]);
+      dropdown.setItems([{ value: 'test', label: 'Test', icon: '<script>alert("xss")</script>' }]);
 
       dropdown.open(anchor);
       // The malicious script should be rendered as text, not executed
@@ -327,9 +321,7 @@ describe('DropdownMenu', () => {
     });
 
     it('DM-051: renders shortcut hint', () => {
-      dropdown.setItems([
-        { value: 'item1', label: 'Item 1', shortcut: 'Ctrl+1' },
-      ]);
+      dropdown.setItems([{ value: 'item1', label: 'Item 1', shortcut: 'Ctrl+1' }]);
 
       dropdown.open(anchor);
       expect(dropdown.getElement().textContent).toContain('Ctrl+1');
@@ -338,9 +330,7 @@ describe('DropdownMenu', () => {
     it('DM-052: disabled items are not clickable', () => {
       const onSelect = vi.fn();
       const dropdownWithCallback = new DropdownMenu({ onSelect });
-      dropdownWithCallback.setItems([
-        { value: 'item1', label: 'Item 1', disabled: true },
-      ]);
+      dropdownWithCallback.setItems([{ value: 'item1', label: 'Item 1', disabled: true }]);
 
       dropdownWithCallback.open(anchor);
       const button = dropdownWithCallback.getElement().querySelector('button');
@@ -419,9 +409,7 @@ describe('DropdownMenu', () => {
 
       // Navigate through all items
       for (let i = 0; i < 3; i++) {
-        const selectedCount = Array.from(buttons).filter(
-          (b) => b.getAttribute('aria-selected') === 'true'
-        ).length;
+        const selectedCount = Array.from(buttons).filter((b) => b.getAttribute('aria-selected') === 'true').length;
         expect(selectedCount).toBe(1);
 
         if (i < 2) {
@@ -538,9 +526,7 @@ describe('DropdownMenu', () => {
       for (let i = 0; i < buttons.length; i++) {
         (buttons[i] as HTMLButtonElement).dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
-        const selectedCount = Array.from(buttons).filter(
-          (b) => b.getAttribute('aria-selected') === 'true'
-        ).length;
+        const selectedCount = Array.from(buttons).filter((b) => b.getAttribute('aria-selected') === 'true').length;
         expect(selectedCount).toBe(1);
         expect((buttons[i] as HTMLButtonElement).getAttribute('aria-selected')).toBe('true');
       }
@@ -649,9 +635,7 @@ describe('DropdownMenu', () => {
       expect(dropdown.getHighlightedIndex()).toBe(1);
 
       // Verify only one selected
-      const selectedCount = Array.from(buttons).filter(
-        (b) => b.getAttribute('aria-selected') === 'true'
-      ).length;
+      const selectedCount = Array.from(buttons).filter((b) => b.getAttribute('aria-selected') === 'true').length;
       expect(selectedCount).toBe(1);
     });
   });

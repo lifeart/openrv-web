@@ -1,4 +1,4 @@
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { createCheckboxRow } from './shared/FormElements';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
@@ -144,35 +144,60 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('pointerenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
-    resetBtn.addEventListener('pointerleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
+    resetBtn.addEventListener('pointerenter', () => {
+      resetBtn.style.background = 'var(--text-muted)';
+    });
+    resetBtn.addEventListener('pointerleave', () => {
+      resetBtn.style.background = 'var(--border-secondary)';
+    });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
     this.panel.appendChild(header);
 
     // Enabled checkbox
-    const enabledRow = createCheckboxRow('Enabled', this.params.enabled, (checked) => {
-      this.params.enabled = checked;
-      this.emitChange();
-    }, 'stabilization-enabled-checkbox');
+    const enabledRow = createCheckboxRow(
+      'Enabled',
+      this.params.enabled,
+      (checked) => {
+        this.params.enabled = checked;
+        this.emitChange();
+      },
+      'stabilization-enabled-checkbox',
+    );
     enabledRow.checkbox.dataset.testid = 'stabilization-enabled-checkbox';
     this.enabledCheckbox = enabledRow.checkbox;
     this.panel.appendChild(enabledRow.container);
 
     // Smoothing Strength slider
-    const smoothingResult = this.createSlider('Smoothing Strength', 0, 100, 1, this.params.smoothingStrength, (value) => {
-      this.params.smoothingStrength = value;
-      this.emitChange();
-    }, 'stabilization-smoothing-slider');
+    const smoothingResult = this.createSlider(
+      'Smoothing Strength',
+      0,
+      100,
+      1,
+      this.params.smoothingStrength,
+      (value) => {
+        this.params.smoothingStrength = value;
+        this.emitChange();
+      },
+      'stabilization-smoothing-slider',
+    );
     this.smoothingSlider = smoothingResult.slider;
     this.smoothingValueLabel = smoothingResult.valueLabel;
 
     // Crop Amount slider
-    const cropResult = this.createSlider('Crop Amount', 0, 64, 1, this.params.cropAmount, (value) => {
-      this.params.cropAmount = value;
-      this.emitChange();
-    }, 'stabilization-crop-slider');
+    const cropResult = this.createSlider(
+      'Crop Amount',
+      0,
+      64,
+      1,
+      this.params.cropAmount,
+      (value) => {
+        this.params.cropAmount = value;
+        this.emitChange();
+      },
+      'stabilization-crop-slider',
+    );
     this.cropSlider = cropResult.slider;
     this.cropValueLabel = cropResult.valueLabel;
   }
@@ -253,9 +278,10 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     });
 
     slider.addEventListener('dblclick', () => {
-      const defaultVal = label === 'Smoothing Strength'
-        ? DEFAULT_STABILIZATION_PARAMS.smoothingStrength
-        : DEFAULT_STABILIZATION_PARAMS.cropAmount;
+      const defaultVal =
+        label === 'Smoothing Strength'
+          ? DEFAULT_STABILIZATION_PARAMS.smoothingStrength
+          : DEFAULT_STABILIZATION_PARAMS.cropAmount;
       slider.value = String(defaultVal);
       valueEl.textContent = String(defaultVal);
       onChange(defaultVal);
@@ -326,7 +352,9 @@ export class StabilizationControl extends EventEmitter<StabilizationControlEvent
     if (this.enabledCheckbox) this.enabledCheckbox.checked = DEFAULT_STABILIZATION_PARAMS.enabled;
     if (this.smoothingSlider) {
       this.smoothingSlider.value = String(DEFAULT_STABILIZATION_PARAMS.smoothingStrength);
-      if (this.smoothingValueLabel) this.smoothingValueLabel.textContent = String(DEFAULT_STABILIZATION_PARAMS.smoothingStrength);
+      if (this.smoothingValueLabel) {
+        this.smoothingValueLabel.textContent = String(DEFAULT_STABILIZATION_PARAMS.smoothingStrength);
+      }
     }
     if (this.cropSlider) {
       this.cropSlider.value = String(DEFAULT_STABILIZATION_PARAMS.cropAmount);

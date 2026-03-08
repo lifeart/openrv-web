@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PaintRenderer, RenderOptions } from './PaintRenderer';
-import { PenStroke, TextAnnotation, BrushType, StrokeMode, TextOrigin, LineCap, LineJoin } from './types';
+import { PaintRenderer, type RenderOptions } from './PaintRenderer';
+import { type PenStroke, type TextAnnotation, BrushType, StrokeMode, TextOrigin, LineCap, LineJoin } from './types';
 
 describe('PaintRenderer', () => {
   let renderer: PaintRenderer;
@@ -190,10 +190,7 @@ describe('PaintRenderer', () => {
       };
 
       expect(() => {
-        renderer.renderAnnotations(
-          [{ annotation: stroke, opacity: 1 }],
-          { ...defaultOptions, opacity: 0.5 }
-        );
+        renderer.renderAnnotations([{ annotation: stroke, opacity: 1 }], { ...defaultOptions, opacity: 0.5 });
       }).not.toThrow();
     });
   });
@@ -488,8 +485,12 @@ describe('PaintRenderer', () => {
       // Ensure the letterSpacing property is observable (jsdom may not support it natively)
       let capturedSpacing: string | undefined;
       Object.defineProperty(internalCtx, 'letterSpacing', {
-        get() { return capturedSpacing; },
-        set(v: string) { capturedSpacing = v; },
+        get() {
+          return capturedSpacing;
+        },
+        set(v: string) {
+          capturedSpacing = v;
+        },
         configurable: true,
       });
 
@@ -527,8 +528,12 @@ describe('PaintRenderer', () => {
 
       let capturedSpacing: string | undefined;
       Object.defineProperty(internalCtx, 'letterSpacing', {
-        get() { return capturedSpacing; },
-        set(v: string) { capturedSpacing = v; },
+        get() {
+          return capturedSpacing;
+        },
+        set(v: string) {
+          capturedSpacing = v;
+        },
         configurable: true,
       });
 
@@ -563,8 +568,12 @@ describe('PaintRenderer', () => {
 
       let capturedSpacing: string | undefined;
       Object.defineProperty(internalCtx, 'letterSpacing', {
-        get() { return capturedSpacing; },
-        set(v: string) { capturedSpacing = v; },
+        get() {
+          return capturedSpacing;
+        },
+        set(v: string) {
+          capturedSpacing = v;
+        },
         configurable: true,
       });
 
@@ -711,7 +720,7 @@ describe('PaintRenderer', () => {
         5,
         BrushType.Circle,
         false,
-        newOptions
+        newOptions,
       );
 
       const canvas = renderer.getCanvas();

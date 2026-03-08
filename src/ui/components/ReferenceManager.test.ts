@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  ReferenceManager,
-  ReferenceImage,
-  ReferenceState,
-  ReferenceViewMode,
-} from './ReferenceManager';
+import { ReferenceManager, type ReferenceImage, type ReferenceState, type ReferenceViewMode } from './ReferenceManager';
 
 describe('ReferenceManager', () => {
   let mgr: ReferenceManager;

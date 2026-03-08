@@ -4,13 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PaintEngine } from './PaintEngine';
-import {
-  BrushType,
-  StrokeMode,
-  DEFAULT_STROKE_COLOR,
-  DEFAULT_STROKE_WIDTH,
-  DEFAULT_PAINT_EFFECTS,
-} from './types';
+import { BrushType, StrokeMode, DEFAULT_STROKE_COLOR, DEFAULT_STROKE_WIDTH, DEFAULT_PAINT_EFFECTS } from './types';
 
 describe('PaintEngine', () => {
   let engine: PaintEngine;
@@ -91,7 +85,20 @@ describe('PaintEngine', () => {
     it('PE-L57a: PaintTool type should not include unused tool types', () => {
       // Verify that the valid paint tools are exactly the implemented set
       // 'select' was removed as it had no toolbar button, keyboard shortcut, or pointer handler
-      const validTools: string[] = ['pen', 'text', 'eraser', 'none', 'rectangle', 'ellipse', 'line', 'arrow', 'dodge', 'burn', 'clone', 'smudge'];
+      const validTools: string[] = [
+        'pen',
+        'text',
+        'eraser',
+        'none',
+        'rectangle',
+        'ellipse',
+        'line',
+        'arrow',
+        'dodge',
+        'burn',
+        'clone',
+        'smudge',
+      ];
       for (const tool of validTools) {
         engine.tool = tool as import('./PaintEngine').PaintTool;
         expect(engine.tool).toBe(tool);
@@ -543,7 +550,7 @@ describe('PaintEngine', () => {
       engine.endStroke();
       engine.beginStroke(0, { x: 0.2, y: 0.2 });
       engine.endStroke();
-      
+
       expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
 
       // 2. Clear frame
@@ -555,7 +562,7 @@ describe('PaintEngine', () => {
       const result = engine.undo();
       expect(result).toBe(true);
       expect(engine.getAnnotationsForFrame(0)).toHaveLength(2);
-      
+
       // 4. Redo -> should clear frame again
       const redoResult = engine.redo();
       expect(redoResult).toBe(true);
@@ -579,7 +586,7 @@ describe('PaintEngine', () => {
 
       const beforeClear = engine.getAnnotationsForFrame(0);
       expect(beforeClear).toHaveLength(2);
-      const ids = beforeClear.map(a => a.id);
+      const ids = beforeClear.map((a) => a.id);
 
       // Clear and undo
       engine.clearFrame(0);
@@ -590,7 +597,7 @@ describe('PaintEngine', () => {
       expect(restored).toHaveLength(2);
 
       // Verify the restored annotations have matching IDs and data
-      expect(restored.map(a => a.id)).toEqual(ids);
+      expect(restored.map((a) => a.id)).toEqual(ids);
       const firstStroke = restored[0] as import('./types').PenStroke;
       expect(firstStroke.color).toEqual([1, 0, 0, 1]);
       expect(firstStroke.width).toBe(5);
@@ -776,10 +783,20 @@ describe('PaintEngine', () => {
       engine.on('strokeAdded', addedListener);
 
       engine.addRemoteAnnotation({
-        type: 'pen', id: 'r1', frame: 3, user: 'bob',
-        color: [0, 1, 0, 1], width: 2, brush: 0,
-        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
-        splat: false, mode: 0, startFrame: 3, duration: 0,
+        type: 'pen',
+        id: 'r1',
+        frame: 3,
+        user: 'bob',
+        color: [0, 1, 0, 1],
+        width: 2,
+        brush: 0,
+        points: [{ x: 0, y: 0 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 3,
+        duration: 0,
       } as any);
 
       expect(changedListener).toHaveBeenCalledWith(3);
@@ -788,10 +805,20 @@ describe('PaintEngine', () => {
 
     it('removeRemoteAnnotation removes without affecting undo stack', () => {
       engine.addRemoteAnnotation({
-        type: 'pen', id: 'r2', frame: 1, user: 'alice',
-        color: [1, 0, 0, 1], width: 3, brush: 0,
-        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
-        splat: false, mode: 0, startFrame: 1, duration: 0,
+        type: 'pen',
+        id: 'r2',
+        frame: 1,
+        user: 'alice',
+        color: [1, 0, 0, 1],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0, y: 0 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 1,
+        duration: 0,
       } as any);
 
       const removed = engine.removeRemoteAnnotation('r2', 1);
@@ -801,17 +828,37 @@ describe('PaintEngine', () => {
 
     it('clearRemoteFrame clears all annotations on frame', () => {
       engine.addRemoteAnnotation({
-        type: 'pen', id: 'c1', frame: 2, user: 'alice',
-        color: [1, 0, 0, 1], width: 3, brush: 0,
-        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
-        splat: false, mode: 0, startFrame: 2, duration: 0,
+        type: 'pen',
+        id: 'c1',
+        frame: 2,
+        user: 'alice',
+        color: [1, 0, 0, 1],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0, y: 0 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 2,
+        duration: 0,
       } as any);
       engine.addRemoteAnnotation({
-        type: 'text', id: 'c2', frame: 2, user: 'bob',
-        position: { x: 0.5, y: 0.5 }, color: [0, 0, 1, 1],
-        text: 'Hello', size: 24, scale: 1, rotation: 0,
-        spacing: 0, font: 'sans-serif', origin: 4,
-        startFrame: 2, duration: 0,
+        type: 'text',
+        id: 'c2',
+        frame: 2,
+        user: 'bob',
+        position: { x: 0.5, y: 0.5 },
+        color: [0, 0, 1, 1],
+        text: 'Hello',
+        size: 24,
+        scale: 1,
+        rotation: 0,
+        spacing: 0,
+        font: 'sans-serif',
+        origin: 4,
+        startFrame: 2,
+        duration: 0,
       } as any);
 
       expect(engine.getAnnotationsForFrame(2)).toHaveLength(2);
@@ -821,10 +868,20 @@ describe('PaintEngine', () => {
 
     it('addRemoteAnnotation updates nextId to avoid collisions', () => {
       engine.addRemoteAnnotation({
-        type: 'pen', id: '100', frame: 0, user: 'alice',
-        color: [1, 0, 0, 1], width: 3, brush: 0,
-        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
-        splat: false, mode: 0, startFrame: 0, duration: 0,
+        type: 'pen',
+        id: '100',
+        frame: 0,
+        user: 'alice',
+        color: [1, 0, 0, 1],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0, y: 0 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 0,
+        duration: 0,
       } as any);
 
       // Next local annotation should get id > 100
@@ -836,10 +893,20 @@ describe('PaintEngine', () => {
 
     it('addRemoteAnnotation handles prefixed IDs for nextId', () => {
       engine.addRemoteAnnotation({
-        type: 'pen', id: 'user1-50', frame: 0, user: 'alice',
-        color: [1, 0, 0, 1], width: 3, brush: 0,
-        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
-        splat: false, mode: 0, startFrame: 0, duration: 0,
+        type: 'pen',
+        id: 'user1-50',
+        frame: 0,
+        user: 'alice',
+        color: [1, 0, 0, 1],
+        width: 3,
+        brush: 0,
+        points: [{ x: 0, y: 0 }],
+        join: 3,
+        cap: 2,
+        splat: false,
+        mode: 0,
+        startFrame: 0,
+        duration: 0,
       } as any);
 
       // nextId should be updated based on the numeric suffix
@@ -888,7 +955,11 @@ describe('PaintEngine', () => {
 
     it('PAINT-034: prefix applies to polygon annotations', () => {
       engine.setIdPrefix('peer4');
-      const shape = engine.addPolygon(0, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0.5, y: 1 }]);
+      const shape = engine.addPolygon(0, [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0.5, y: 1 },
+      ]);
       expect(shape.id).toMatch(/^peer4-\d+$/);
     });
 
@@ -1059,7 +1130,11 @@ describe('PaintEngine', () => {
 
     it('PAINT-053: registerAdvancedTool throws when overwriting built-in tool', () => {
       const customTool = {
-        name: 'dodge', apply: vi.fn(), beginStroke: vi.fn(), endStroke: vi.fn(), reset: vi.fn(),
+        name: 'dodge',
+        apply: vi.fn(),
+        beginStroke: vi.fn(),
+        endStroke: vi.fn(),
+        reset: vi.fn(),
       };
       expect(() => engine.registerAdvancedTool('dodge', customTool)).toThrow('Cannot overwrite built-in advanced tool');
     });

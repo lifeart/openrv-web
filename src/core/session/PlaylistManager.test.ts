@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PlaylistManager, PlaylistState } from './PlaylistManager';
+import { PlaylistManager, type PlaylistState } from './PlaylistManager';
 
 describe('PlaylistManager', () => {
   let manager: PlaylistManager;
@@ -127,9 +127,7 @@ describe('PlaylistManager', () => {
       manager.addClip(0, 'Source 1', 1, 100);
       manager.setCurrentFrame(80);
 
-      manager.replaceClips([
-        { sourceIndex: 0, sourceName: 'Short', inPoint: 1, outPoint: 10 },
-      ]);
+      manager.replaceClips([{ sourceIndex: 0, sourceName: 'Short', inPoint: 1, outPoint: 10 }]);
 
       expect(manager.getCurrentFrame()).toBe(10);
     });
@@ -138,7 +136,7 @@ describe('PlaylistManager', () => {
   describe('getClipAtFrame', () => {
     it('should return correct clip and local frame', () => {
       manager.addClip(0, 'Source 1', 10, 59); // 50 frames, global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // 30 frames, global 51-80
+      manager.addClip(1, 'Source 2', 1, 30); // 30 frames, global 51-80
 
       // Frame 25 is in first clip
       let mapping = manager.getClipAtFrame(25);
@@ -240,8 +238,8 @@ describe('PlaylistManager', () => {
     });
 
     it('should sum all clip durations', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // 50 frames
-      manager.addClip(1, 'Source 2', 1, 30);  // 30 frames
+      manager.addClip(0, 'Source 1', 1, 50); // 50 frames
+      manager.addClip(1, 'Source 2', 1, 30); // 30 frames
       manager.addClip(2, 'Source 3', 10, 29); // 20 frames
 
       expect(manager.getTotalDuration()).toBe(100);
@@ -306,7 +304,15 @@ describe('PlaylistManager', () => {
     it('should restore state', () => {
       const savedState: PlaylistState = {
         clips: [
-          { id: 'clip-1', sourceIndex: 0, sourceName: 'Test', inPoint: 1, outPoint: 100, globalStartFrame: 1, duration: 100 },
+          {
+            id: 'clip-1',
+            sourceIndex: 0,
+            sourceName: 'Test',
+            inPoint: 1,
+            outPoint: 100,
+            globalStartFrame: 1,
+            duration: 100,
+          },
         ],
         enabled: true,
         currentFrame: 50,
@@ -328,7 +334,7 @@ describe('PlaylistManager', () => {
       expect(edl).toContain('TITLE:');
       expect(edl).toContain('FCM: NON-DROP FRAME');
       // No edit entries
-      expect(edl.split('\n').filter(l => l.match(/^\d{3}/))).toHaveLength(0);
+      expect(edl.split('\n').filter((l) => l.match(/^\d{3}/))).toHaveLength(0);
     });
 
     it('should export clips in EDL format', () => {
@@ -406,9 +412,9 @@ FCM: NON-DROP FRAME
 
   describe('goToNextClip', () => {
     it('NAV-001: returns next clip start frame', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
-      manager.addClip(2, 'Source 3', 1, 20);  // Global 81-100
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30); // Global 51-80
+      manager.addClip(2, 'Source 3', 1, 20); // Global 81-100
 
       // From middle of first clip -> second clip
       const result = manager.goToNextClip(25);
@@ -424,8 +430,8 @@ FCM: NON-DROP FRAME
     });
 
     it('NAV-002: wraps to first clip when loopMode=all', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30); // Global 51-80
       manager.setLoopMode('all');
 
       // From last clip -> should wrap to first
@@ -436,8 +442,8 @@ FCM: NON-DROP FRAME
     });
 
     it('NAV-003: returns null at end when loopMode=none', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30); // Global 51-80
       manager.setLoopMode('none');
 
       // From last clip -> null
@@ -446,7 +452,7 @@ FCM: NON-DROP FRAME
     });
 
     it('NAV-007: single clip with loopMode=all wraps to itself', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
       manager.setLoopMode('all');
 
       const result = manager.goToNextClip(25);
@@ -477,7 +483,7 @@ FCM: NON-DROP FRAME
     });
 
     it('returns first clip when frame is outside any clip', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
 
       const result = manager.goToNextClip(999);
       expect(result).not.toBeNull();
@@ -487,8 +493,8 @@ FCM: NON-DROP FRAME
 
   describe('goToPreviousClip', () => {
     it('NAV-004: returns current clip start when mid-clip', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30); // Global 51-80
 
       // Mid-way through second clip -> start of second clip
       const result = manager.goToPreviousClip(65);
@@ -498,8 +504,8 @@ FCM: NON-DROP FRAME
     });
 
     it('NAV-005: returns previous clip when at start of clip', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30); // Global 51-80
 
       // At start of second clip (within 1 frame) -> previous clip
       const result = manager.goToPreviousClip(51);
@@ -515,8 +521,8 @@ FCM: NON-DROP FRAME
     });
 
     it('NAV-006: wraps to last clip when loopMode=all', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
-      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30); // Global 51-80
       manager.setLoopMode('all');
 
       // At start of first clip -> wrap to last clip
@@ -556,7 +562,7 @@ FCM: NON-DROP FRAME
     });
 
     it('returns last clip when frame is outside any clip', () => {
-      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(0, 'Source 1', 1, 50); // Global 1-50
 
       const result = manager.goToPreviousClip(999);
       expect(result).not.toBeNull();

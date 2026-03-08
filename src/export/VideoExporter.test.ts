@@ -219,12 +219,12 @@ describe('VideoExporter', () => {
       expect(progressEvents.length).toBeGreaterThanOrEqual(10);
 
       // Check first encoding progress
-      const firstEncoding = progressEvents.find(p => p.status === 'encoding' && p.percentage > 0);
+      const firstEncoding = progressEvents.find((p) => p.status === 'encoding' && p.percentage > 0);
       expect(firstEncoding).toBeDefined();
       expect(firstEncoding!.percentage).toBe(10); // 1/10 = 10%
 
       // Check complete
-      const complete = progressEvents.find(p => p.status === 'complete');
+      const complete = progressEvents.find((p) => p.status === 'complete');
       expect(complete).toBeDefined();
       expect(complete!.percentage).toBe(100);
     });
@@ -354,18 +354,20 @@ describe('VideoExporter', () => {
 
       // Start first encoding (don't await)
       const first = exporter.encode(config, async () => {
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise((r) => setTimeout(r, 10));
         return document.createElement('canvas');
       });
 
       // Second encoding should reject immediately
-      await expect(
-        exporter.encode(config, canvasProvider())
-      ).rejects.toThrow('already encoding');
+      await expect(exporter.encode(config, canvasProvider())).rejects.toThrow('already encoding');
 
       // Cancel first to clean up
       exporter.cancel();
-      try { await first; } catch { /* ExportCancelledError */ }
+      try {
+        await first;
+      } catch {
+        /* ExportCancelledError */
+      }
     });
 
     it('rejects invalid frame range', async () => {
@@ -392,13 +394,11 @@ describe('VideoExporter', () => {
       const result = await exporter.encode(config, canvasProvider());
 
       // Frames 0, 4, 8 should be keyframes (0-indexed in encode loop)
-      const keyIndices = result.chunks
-        .map((c, i) => c.type === 'key' ? i : -1)
-        .filter(i => i >= 0);
+      const keyIndices = result.chunks.map((c, i) => (c.type === 'key' ? i : -1)).filter((i) => i >= 0);
 
-      expect(keyIndices).toContain(0);  // First frame always key
-      expect(keyIndices).toContain(4);  // GOP boundary
-      expect(keyIndices).toContain(8);  // GOP boundary
+      expect(keyIndices).toContain(0); // First frame always key
+      expect(keyIndices).toContain(4); // GOP boundary
+      expect(keyIndices).toContain(8); // GOP boundary
     });
 
     it('VIDEO-007: output timestamps are monotonically increasing', async () => {
@@ -428,9 +428,7 @@ describe('VideoExporter', () => {
 
       const result = await exporter.encode(config, canvasProvider());
 
-      const keyIndices = result.chunks
-        .map((c, i) => c.type === 'key' ? i : -1)
-        .filter(i => i >= 0);
+      const keyIndices = result.chunks.map((c, i) => (c.type === 'key' ? i : -1)).filter((i) => i >= 0);
 
       expect(keyIndices).toContain(0);
       expect(keyIndices).toContain(24);
@@ -511,7 +509,9 @@ describe('VideoExporter', () => {
       const config = defaultConfig({ frameRange: { start: 1, end: 3 } });
       try {
         await exporter.encode(config, canvasProvider());
-      } catch { /* expected */ }
+      } catch {
+        /* expected */
+      }
       expect(exporter.isEncoding).toBe(false);
     });
 
@@ -523,7 +523,9 @@ describe('VideoExporter', () => {
       };
       try {
         await exporter.encode(config, provider);
-      } catch { /* expected */ }
+      } catch {
+        /* expected */
+      }
       expect(exporter.isEncoding).toBe(false);
     });
   });

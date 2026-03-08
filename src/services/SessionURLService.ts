@@ -6,14 +6,8 @@
  * top-level orchestrator.
  */
 
-import {
-  decodeSessionState,
-  type SessionURLState,
-} from '../core/session/SessionURLManager';
-import {
-  decodeWebRTCURLSignal,
-  WEBRTC_URL_SIGNAL_PARAM,
-} from '../network/WebRTCURLSignaling';
+import { decodeSessionState, type SessionURLState } from '../core/session/SessionURLManager';
+import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
 import type { Transform2D } from '../core/types/transform';
 
 // ---------------------------------------------------------------------------
@@ -79,11 +73,7 @@ export interface URLNetworkSyncManager {
   };
   setPinCode(pin: string): void;
   joinRoom(roomCode: string, userName: string, pin?: string): void;
-  joinServerlessRoomFromOfferToken(
-    token: string,
-    userName: string,
-    pin?: string
-  ): Promise<string | null>;
+  joinServerlessRoomFromOfferToken(token: string, userName: string, pin?: string): Promise<string | null>;
 }
 
 /** Subset of NetworkControl used by URL state management. */
@@ -139,14 +129,16 @@ export class SessionURLService {
       transform: viewer.getTransform(),
       wipeMode: compareControl.getWipeMode(),
       wipePosition: compareControl.getWipePosition(),
-      ocio: ocioState.enabled ? {
-        enabled: ocioState.enabled,
-        configName: ocioState.configName,
-        inputColorSpace: ocioState.inputColorSpace,
-        display: ocioState.display,
-        view: ocioState.view,
-        look: ocioState.look,
-      } : undefined,
+      ocio: ocioState.enabled
+        ? {
+            enabled: ocioState.enabled,
+            configName: ocioState.configName,
+            inputColorSpace: ocioState.inputColorSpace,
+            display: ocioState.display,
+            view: ocioState.view,
+            look: ocioState.look,
+          }
+        : undefined,
     };
   }
 
@@ -238,7 +230,7 @@ export class SessionURLService {
         const answerToken = await networkSyncManager.joinServerlessRoomFromOfferToken(
           webrtcSignalToken,
           'User',
-          pinCode ?? signal.pinCode
+          pinCode ?? signal.pinCode,
         );
         if (answerToken) {
           const responseURL = new URL(this.deps.getLocationHref());
@@ -254,13 +246,13 @@ export class SessionURLService {
           networkControl.setShareLinkKind('response');
           networkControl.setResponseToken(answerToken);
           networkControl.showInfo(
-            'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.'
+            'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
           );
         }
       } else if (signal?.type === 'answer') {
         handledServerlessOffer = true;
         networkControl.showInfo(
-          'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.'
+          'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.',
         );
       }
     }

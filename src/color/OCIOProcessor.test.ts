@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  OCIOProcessor,
-  getSharedOCIOProcessor,
-  disposeSharedOCIOProcessor,
-  MediaMetadata,
-} from './OCIOProcessor';
+import { OCIOProcessor, getSharedOCIOProcessor, disposeSharedOCIOProcessor, type MediaMetadata } from './OCIOProcessor';
 import { DEFAULT_OCIO_STATE } from './OCIOConfig';
 import { createTestImageData } from '../../test/utils';
 
@@ -884,9 +879,12 @@ describe('OCIOProcessor', () => {
     it('OCIO-V2-P016: detects sRGB/BT.709 primaries', () => {
       const result = processor.detectColorSpace({
         chromaticities: {
-          redX: 0.64, redY: 0.33,
-          greenX: 0.30, greenY: 0.60,
-          blueX: 0.15, blueY: 0.06,
+          redX: 0.64,
+          redY: 0.33,
+          greenX: 0.3,
+          greenY: 0.6,
+          blueX: 0.15,
+          blueY: 0.06,
         },
       });
       expect(result).toBe('Linear sRGB');
@@ -895,9 +893,12 @@ describe('OCIOProcessor', () => {
     it('OCIO-V2-P017: detects ACES AP1 (ACEScg) primaries', () => {
       const result = processor.detectColorSpace({
         chromaticities: {
-          redX: 0.713, redY: 0.293,
-          greenX: 0.165, greenY: 0.83,
-          blueX: 0.128, blueY: 0.044,
+          redX: 0.713,
+          redY: 0.293,
+          greenX: 0.165,
+          greenY: 0.83,
+          blueX: 0.128,
+          blueY: 0.044,
         },
       });
       expect(result).toBe('ACEScg');
@@ -906,9 +907,12 @@ describe('OCIOProcessor', () => {
     it('OCIO-V2-P018: detects DCI-P3 primaries', () => {
       const result = processor.detectColorSpace({
         chromaticities: {
-          redX: 0.68, redY: 0.32,
-          greenX: 0.265, greenY: 0.69,
-          blueX: 0.15, blueY: 0.06,
+          redX: 0.68,
+          redY: 0.32,
+          greenX: 0.265,
+          greenY: 0.69,
+          blueX: 0.15,
+          blueY: 0.06,
         },
       });
       expect(result).toBe('DCI-P3');
@@ -917,9 +921,12 @@ describe('OCIOProcessor', () => {
     it('OCIO-V2-P019: returns null for unknown chromaticities', () => {
       const result = processor.detectColorSpace({
         chromaticities: {
-          redX: 0.5, redY: 0.5,
-          greenX: 0.5, greenY: 0.5,
-          blueX: 0.5, blueY: 0.5,
+          redX: 0.5,
+          redY: 0.5,
+          greenX: 0.5,
+          greenY: 0.5,
+          blueX: 0.5,
+          blueY: 0.5,
         },
       });
       expect(result).toBe(null);
@@ -928,7 +935,8 @@ describe('OCIOProcessor', () => {
     it('OCIO-V2-P020: returns null for incomplete chromaticities', () => {
       const result = processor.detectColorSpace({
         chromaticities: {
-          redX: 0.64, redY: 0.33,
+          redX: 0.64,
+          redY: 0.33,
         },
       });
       expect(result).toBe(null);
@@ -939,9 +947,12 @@ describe('OCIOProcessor', () => {
         manufacturer: 'ARRI',
         gammaProfile: 'LogC4',
         chromaticities: {
-          redX: 0.64, redY: 0.33,
-          greenX: 0.30, greenY: 0.60,
-          blueX: 0.15, blueY: 0.06,
+          redX: 0.64,
+          redY: 0.33,
+          greenX: 0.3,
+          greenY: 0.6,
+          blueX: 0.15,
+          blueY: 0.06,
         },
       });
       expect(result).toBe('ARRI LogC4');
@@ -980,9 +991,10 @@ describe('OCIOProcessor', () => {
       expect(lut1).not.toBe(lut2);
       // Data should differ at a sampled point
       const midIdx = (8 * 17 * 17 + 8 * 17 + 8) * 3;
-      const same = lut1.data[midIdx] === lut2.data[midIdx] &&
-                   lut1.data[midIdx + 1] === lut2.data[midIdx + 1] &&
-                   lut1.data[midIdx + 2] === lut2.data[midIdx + 2];
+      const same =
+        lut1.data[midIdx] === lut2.data[midIdx] &&
+        lut1.data[midIdx + 1] === lut2.data[midIdx + 1] &&
+        lut1.data[midIdx + 2] === lut2.data[midIdx + 2];
       expect(same).toBe(false);
     });
 
@@ -1001,7 +1013,7 @@ describe('OCIOProcessor', () => {
     it('OCIO-LUT-004b: getDisplayViewPairs includes all displays from config', () => {
       const displays = processor.getAvailableDisplays();
       const pairs = processor.getDisplayViewPairs();
-      const pairDisplays = new Set(pairs.map(p => p.display));
+      const pairDisplays = new Set(pairs.map((p) => p.display));
       for (const display of displays) {
         expect(pairDisplays.has(display)).toBe(true);
       }

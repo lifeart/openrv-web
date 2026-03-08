@@ -129,11 +129,7 @@ export class OCIOVirtualFS {
    * @param url - URL to fetch the file from
    * @param options - Load options
    */
-  async loadFromURL(
-    virtualPath: string,
-    url: string,
-    options: VFSLoadOptions = {},
-  ): Promise<void> {
+  async loadFromURL(virtualPath: string, url: string, options: VFSLoadOptions = {}): Promise<void> {
     if (this.disposed) throw new Error('OCIOVirtualFS is disposed');
     const fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
 
@@ -173,9 +169,7 @@ export class OCIOVirtualFS {
 
     const promises = entries.map(async ({ virtualPath, url }) => {
       try {
-        const resolvedUrl = options.baseUrl
-          ? resolveUrl(options.baseUrl, url)
-          : url;
+        const resolvedUrl = options.baseUrl ? resolveUrl(options.baseUrl, url) : url;
         await this.loadFromURL(virtualPath, resolvedUrl, options);
         loaded.push(virtualPath);
       } catch (e) {
@@ -238,7 +232,10 @@ export class OCIOVirtualFS {
         const value = stripQuotes(trimmed.substring('search_path:'.length).trim());
         if (value) {
           // Single-line colon-separated form: search_path: luts:shared
-          return value.split(':').map(p => p.trim()).filter(Boolean);
+          return value
+            .split(':')
+            .map((p) => p.trim())
+            .filter(Boolean);
         }
         // YAML list form:
         //   search_path:
@@ -309,8 +306,7 @@ function normalizePath(path: string): string {
 }
 
 function stripQuotes(s: string): string {
-  if ((s.startsWith('"') && s.endsWith('"')) ||
-      (s.startsWith("'") && s.endsWith("'"))) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     return s.slice(1, -1);
   }
   return s;

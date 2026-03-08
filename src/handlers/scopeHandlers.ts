@@ -94,7 +94,7 @@ export function updateGamutDiagram(context: SessionBridgeContext, scopeData?: Sc
  */
 export function computeHistogramData(
   context: SessionBridgeContext,
-  scopeData?: ScopeImageData | null
+  scopeData?: ScopeImageData | null,
 ): import('../ui/components/Histogram').HistogramData | null {
   const data = scopeData !== undefined ? scopeData : getScopeData(context);
   if (!data) return null;
@@ -120,7 +120,7 @@ export function computeHistogramData(
  */
 export function createScopeScheduler(
   context: SessionBridgeContext,
-  options?: { onHistogramData?: (data: import('../ui/components/Histogram').HistogramData) => void }
+  options?: { onHistogramData?: (data: import('../ui/components/Histogram').HistogramData) => void },
 ): { schedule: () => void; isPending: () => boolean } {
   let pendingScopeUpdate = false;
 
@@ -146,9 +146,7 @@ export function createScopeScheduler(
             const histogram = context.getHistogram();
             // Use fresh data if full histogram was visible (already computed above),
             // otherwise compute independently for the mini histogram
-            const histData = histogram.isVisible()
-              ? histogram.getData()
-              : computeHistogramData(context, scopeData);
+            const histData = histogram.isVisible() ? histogram.getData() : computeHistogramData(context, scopeData);
             if (histData) {
               options.onHistogramData(histData);
             }

@@ -132,7 +132,7 @@ describe('ThemeControl', () => {
       const allOptions = document.querySelectorAll('.dropdown-menu [role="option"]');
       expect(allOptions.length).toBe(3);
 
-      const values = Array.from(allOptions).map(opt => (opt as HTMLElement).dataset.value);
+      const values = Array.from(allOptions).map((opt) => (opt as HTMLElement).dataset.value);
       expect(values).toEqual(['auto', 'dark', 'light']);
     });
   });
@@ -287,12 +287,8 @@ describe('ThemeControl', () => {
       // Get the handlers that were passed to 'on'
       const onSpy = vi.mocked(themeManager.on);
       const offSpy = vi.mocked(themeManager.off);
-      const onModeChangedCall = onSpy.mock.calls.find(
-        (call: unknown[]) => call[0] === 'modeChanged'
-      );
-      const onThemeChangedCall = onSpy.mock.calls.find(
-        (call: unknown[]) => call[0] === 'themeChanged'
-      );
+      const onModeChangedCall = onSpy.mock.calls.find((call: unknown[]) => call[0] === 'modeChanged');
+      const onThemeChangedCall = onSpy.mock.calls.find((call: unknown[]) => call[0] === 'themeChanged');
 
       expect(onModeChangedCall).toBeDefined();
       expect(onThemeChangedCall).toBeDefined();

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { OverlayManager, OverlayManagerCallbacks } from './OverlayManager';
+import { OverlayManager, type OverlayManagerCallbacks } from './OverlayManager';
 import { Session } from '../../core/session/Session';
 
 function createMockCallbacks(): OverlayManagerCallbacks {
@@ -34,9 +34,7 @@ describe('OverlayManager', () => {
 
   describe('Lazy-Create DOM Overlay Canvases', () => {
     it('OM-LAZY-001: only matte overlay canvas created at construction time', () => {
-      const canvasChildren = Array.from(container.children).filter(
-        (el) => el instanceof HTMLCanvasElement
-      );
+      const canvasChildren = Array.from(container.children).filter((el) => el instanceof HTMLCanvasElement);
       // Matte overlay is eagerly created so its DOM element is always present
       expect(canvasChildren.length).toBe(1);
     });
