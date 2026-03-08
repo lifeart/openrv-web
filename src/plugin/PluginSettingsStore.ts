@@ -88,6 +88,9 @@ export class PluginSettingsStore {
    * Must be called before accessing settings.
    */
   registerSchema(pluginId: PluginId, schema: PluginSettingsSchema): void {
+    if (this.schemas.has(pluginId)) {
+      console.warn(`[plugin:${pluginId}] Settings schema re-registered; previous in-memory changes may be lost`);
+    }
     this.schemas.set(pluginId, schema);
     // Load from storage or initialize with defaults
     this.loadSettings(pluginId, schema);
@@ -304,18 +307,26 @@ export class PluginSettingsStore {
       localStorage.setItem(storageKey(pluginId), JSON.stringify(settings));
     } catch {
       // localStorage may be full or unavailable
+      console.warn(`[plugin:${pluginId}] Failed to persist settings to localStorage`);
     }
   }
 
   private validateValue(pluginId: PluginId, setting: PluginSetting, value: unknown): void {
     switch (setting.type) {
       case 'string':
-      case 'color':
         if (typeof value !== 'string') {
           throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be a string`);
         }
         if (setting.maxLength !== undefined && (value as string).length > setting.maxLength) {
           throw new Error(`Plugin "${pluginId}": setting "${setting.key}" exceeds max length ${setting.maxLength}`);
+        }
+        break;
+      case 'color':
+        if (typeof value !== 'string') {
+          throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be a string`);
+        }
+        if (!/^#[0-9a-fA-F]{3,8}$/.test(value as string)) {
+          throw new Error(`Plugin "${pluginId}": setting "${setting.key}" must be a valid hex color (e.g. #ff0000)`);
         }
         break;
       case 'number':

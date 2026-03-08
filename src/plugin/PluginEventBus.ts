@@ -24,6 +24,7 @@ export type AppEventName =
   | 'app:speedChange'
   | 'app:volumeChange'
   | 'app:muteChange'
+  | 'app:audioScrubEnabledChange'
   | 'app:loopModeChange'
   | 'app:inOutChange'
   | 'app:markerChange'
@@ -42,6 +43,7 @@ export interface AppEventDataMap {
   'app:speedChange': OpenRVEventData['speedChange'];
   'app:volumeChange': OpenRVEventData['volumeChange'];
   'app:muteChange': OpenRVEventData['muteChange'];
+  'app:audioScrubEnabledChange': OpenRVEventData['audioScrubEnabledChange'];
   'app:loopModeChange': OpenRVEventData['loopModeChange'];
   'app:inOutChange': OpenRVEventData['inOutChange'];
   'app:markerChange': OpenRVEventData['markerChange'];
@@ -82,6 +84,7 @@ const APP_EVENT_TO_API: Partial<Record<AppEventName, OpenRVEventName>> = {
   'app:speedChange': 'speedChange',
   'app:volumeChange': 'volumeChange',
   'app:muteChange': 'muteChange',
+  'app:audioScrubEnabledChange': 'audioScrubEnabledChange',
   'app:loopModeChange': 'loopModeChange',
   'app:inOutChange': 'inOutChange',
   'app:markerChange': 'markerChange',
@@ -93,7 +96,7 @@ const APP_EVENT_TO_API: Partial<Record<AppEventName, OpenRVEventName>> = {
 // PluginEventBus
 // ---------------------------------------------------------------------------
 
-/** Maximum listeners per plugin (prevents leaks from forgotten unsubscribes) */
+/** Diagnostic warning threshold per plugin — not a hard cap. Exceeding this count logs a warning to help detect potential listener leaks. */
 const MAX_LISTENERS_PER_PLUGIN = 50;
 
 export class PluginEventBus {

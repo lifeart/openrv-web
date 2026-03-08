@@ -146,6 +146,22 @@ describe('PluginEventBus', () => {
       expect(cb1).not.toHaveBeenCalled();
     });
 
+    it('PEVT-035: manual unsubscribe removes from tracking, dispose does not error', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      const unsub = sub.onApp('plugin:activated', cb);
+
+      // Manually unsubscribe before dispose
+      unsub();
+
+      // Dispose should not error even though the subscription was already removed
+      expect(() => bus.disposePlugin('test.plugin')).not.toThrow();
+
+      // The callback should not fire after manual unsubscribe
+      bus.emitPluginLifecycle('plugin:activated', { id: 'x' });
+      expect(cb).not.toHaveBeenCalled();
+    });
+
     it('PEVT-031: disposePlugin is idempotent', () => {
       bus.disposePlugin('nonexistent');
       expect(() => bus.disposePlugin('nonexistent')).not.toThrow();

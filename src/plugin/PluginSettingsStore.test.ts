@@ -269,6 +269,19 @@ describe('PluginSettingsStore', () => {
       store.setSetting('test.plugin', 'accent', '#00ff00');
       expect(store.getSetting('test.plugin', 'accent')).toBe('#00ff00');
     });
+
+    it('PSET-082: color type rejects invalid format', () => {
+      store.registerSchema('test.plugin', testSchema);
+      expect(() => store.setSetting('test.plugin', 'accent', 'not-a-color')).toThrow('must be a valid hex color');
+      expect(() => store.setSetting('test.plugin', 'accent', '#xyz')).toThrow('must be a valid hex color');
+      expect(() => store.setSetting('test.plugin', 'accent', '')).toThrow('must be a valid hex color');
+    });
+
+    it('PSET-083: color accepts valid short hex (#fff)', () => {
+      store.registerSchema('test.plugin', testSchema);
+      store.setSetting('test.plugin', 'accent', '#fff');
+      expect(store.getSetting('test.plugin', 'accent')).toBe('#fff');
+    });
   });
 
   describe('number edge cases', () => {
@@ -335,6 +348,57 @@ describe('PluginSettingsStore', () => {
 
       store.setSetting('test.plugin', 'name', 'changed');
       expect(store.getSetting('other.plugin', 'name')).toBe('other-default');
+    });
+  });
+
+  describe('string maxLength validation', () => {
+    const maxLenSchema: PluginSettingsSchema = {
+      settings: [{ key: 'short', label: 'Short', type: 'string', default: 'hi', maxLength: 5 }],
+    };
+
+    it('PSET-090: rejects string exceeding maxLength', () => {
+      store.registerSchema('test.plugin', maxLenSchema);
+      expect(() => store.setSetting('test.plugin', 'short', 'toolong')).toThrow('exceeds max length');
+    });
+
+    it('PSET-091: accepts string at exactly maxLength', () => {
+      store.registerSchema('test.plugin', maxLenSchema);
+      store.setSetting('test.plugin', 'short', 'abcde');
+      expect(store.getSetting('test.plugin', 'short')).toBe('abcde');
+    });
+  });
+
+  describe('re-register schema warning', () => {
+    it('PSET-110: re-registering schema logs warning', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      store.registerSchema('test.plugin', testSchema);
+      store.registerSchema('test.plugin', testSchema);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Settings schema re-registered'));
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('resetSettings edge cases', () => {
+    it('PSET-022: resetSettings for unregistered plugin is a no-op', () => {
+      expect(() => store.resetSettings('nonexistent.plugin')).not.toThrow();
+    });
+  });
+
+  describe('accessor unsubscribe', () => {
+    it('PSET-044: accessor onChange returns working unsubscribe function', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const accessor = store.createAccessor('test.plugin');
+
+      const cb = vi.fn();
+      const unsub = accessor.onChange('count', cb);
+
+      accessor.set('count', 42);
+      expect(cb).toHaveBeenCalledTimes(1);
+
+      unsub();
+      accessor.set('count', 99);
+      expect(cb).toHaveBeenCalledTimes(1);
     });
   });
 });
