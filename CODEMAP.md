@@ -658,7 +658,7 @@ openrv-web/
 │   ├── AppStackWiring.ts        # Stack compositing integration (subscription-tracked)
 │   ├── AppTransformWiring.ts    # Transform integration (subscription-tracked)
 │   ├── AppViewWiring.ts         # View system integration (subscription-tracked)
-│   ├── AppWiringContext.ts      # Wiring context setup
+│   ├── AppWiringContext.ts      # Wiring context setup (WiringResult/StatefulWiringResult return types)
 │   ├── KeyboardWiring.ts        # Keyboard shortcut wiring
 │   ├── main.ts                  # Entry point (plugin bootstrap wiring)
 │   ├── test-helper.ts           # Test utilities
@@ -989,6 +989,6 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] SessionTypes.ts extracted from Session for type definitions
 - [x] ShaderStateManager decomposed (ShaderConstants, ShaderStateTypes, ShaderUniformUploader, ShaderBatchApplicator)
 - [x] defineNodeProperty factory for property boilerplate reduction
-- [x] Viewer.ts decomposed (4 modules extracted: ViewerEffects, ViewerExport, ViewerInteraction, ViewerPrerender)
+- [x] Viewer.ts decomposed (10 modules extracted: ViewerEffects, ViewerExport, ViewerInteraction, ViewerPrerender, ViewerCanvasSetup, ViewerGLRenderer, ViewerImageRenderer, ViewerIndicators, ViewerInputHandler, ViewerPixelEffects)
 - [x] Generic FormatDecoder\<TOptions\> for typed decoder interfaces
 - [x] ESLint v9 + Prettier + pre-commit hooks + CI lint workflow

@@ -566,7 +566,7 @@ src/
 │   ├── TextureCacheManager.ts   # LRU texture cache
 │   ├── RenderWorkerProxy.ts     # Off-main-thread rendering
 │   ├── LuminanceAnalyzer.ts     # Scene luminance analysis
-│   └── webgpu/                  # WebGPU backend modules
+│   └── webgpu/                  # WebGPU backend modules (Phase 1: passthrough rendering)
 │       ├── WebGPUTypes.ts       # WebGPU type definitions
 │       ├── WebGPUDevice.ts      # GPU device management
 │       ├── WebGPURenderPipeline.ts # Render pipeline setup
@@ -741,6 +741,7 @@ The codebase includes comprehensive test coverage with **20,000+ unit tests** ac
 - **gl-matrix** -- matrix/vector math
 - **ESLint v9** (flat config) + **Prettier** -- code quality and formatting
 - **simple-git-hooks** + **lint-staged** -- pre-commit hooks
+- **GitHub Actions CI** -- lint, format, and typecheck on PRs (`.github/workflows/lint.yml`)
 
 ## Browser Support
 
