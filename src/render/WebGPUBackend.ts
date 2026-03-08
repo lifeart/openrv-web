@@ -42,7 +42,11 @@ import { WebGPURenderPipelineManager } from './webgpu/WebGPURenderPipeline';
 import { WebGPUShaderPipeline } from './webgpu/WebGPUShaderPipeline';
 import { WebGPUPingPong } from './webgpu/WebGPUPingPong';
 import { WebGPUStateUploader } from './webgpu/WebGPUStateUploader';
+import { WebGPUTextureManager } from './webgpu/WebGPUTextureManager';
 import { ShaderStateManager } from './ShaderStateManager';
+import { WebGPU3DLUT } from './webgpu/WebGPU3DLUT';
+import type { LUTSlot } from './webgpu/WebGPU3DLUT';
+import { WebGPUReadback } from './webgpu/WebGPUReadback';
 
 // ---------------------------------------------------------------------------
 // WebGPUBackend
@@ -60,6 +64,9 @@ export class WebGPUBackend implements RendererBackend {
   private currentTextureWidth = 0;
   private currentTextureHeight = 0;
 
+  // --- Texture manager (Phase 3: centralized texture lifecycle) ---
+  private textureManager = new WebGPUTextureManager();
+
   // --- Shader pipeline (Phase 2) ---
   private shaderPipeline = new WebGPUShaderPipeline();
   private shaderPingPong = new WebGPUPingPong();
@@ -75,8 +82,29 @@ export class WebGPUBackend implements RendererBackend {
   // Whether extended tone mapping is active (vs. standard fallback)
   private extendedToneMapping = false;
 
+  // Whether HDR output is enabled (canvas uses rgba16float)
+  private hdrOutputEnabled = false;
+
+  // HDR headroom value (peak brightness / SDR white)
+  private hdrHeadroomValue = 1.0;
+
+  // Input transfer function code (0=sRGB, 1=HLG, 2=PQ)
+  private inputTransferCode = 0;
+
   // Texture filter mode
   private _textureFilterMode: TextureFilterMode = 'linear';
+
+  // --- Phase 4: Advanced features ---
+  private lut3d = new WebGPU3DLUT();
+  private readbackHelper = new WebGPUReadback();
+
+  /** Set when the GPU device is lost. Rejects all future operations. */
+  private _deviceLost = false;
+
+  /** Whether the GPU device has been lost. */
+  get deviceLost(): boolean {
+    return this._deviceLost;
+  }
 
   // --- Lifecycle ---
 
@@ -135,6 +163,15 @@ export class WebGPUBackend implements RendererBackend {
     const device = await adapter.requestDevice(deviceDesc);
     this.device = device;
 
+    // Register device lost handler (Phase 4)
+    if ((device as unknown as { lost?: Promise<{ message: string }> }).lost) {
+      (device as unknown as { lost: Promise<{ message: string }> }).lost.then((info) => {
+        console.warn(`[WebGPUBackend] GPU device lost: ${info.message}`);
+        this._deviceLost = true;
+        this.device = null;
+      });
+    }
+
     // Configure canvas context with HDR settings
     this.configureContext(device, 'extended');
 
@@ -172,13 +209,13 @@ export class WebGPUBackend implements RendererBackend {
   }
 
   dispose(): void {
-    // Clean up image texture
-    if (this.currentTexture) {
-      this.currentTexture.destroy();
-      this.currentTexture = null;
-      this.currentTextureWidth = 0;
-      this.currentTextureHeight = 0;
-    }
+    // Clean up texture manager (Phase 3)
+    this.textureManager.dispose();
+
+    // Clean up legacy image texture tracking
+    this.currentTexture = null;
+    this.currentTextureWidth = 0;
+    this.currentTextureHeight = 0;
 
     // Clean up pipeline resources
     this.pipelineManager.dispose();
@@ -188,6 +225,10 @@ export class WebGPUBackend implements RendererBackend {
     this.shaderPingPong.dispose();
     this.stateUploader.dispose();
     this.stateManager.dispose();
+
+    // Clean up Phase 4 resources
+    this.lut3d.dispose();
+    this.readbackHelper.dispose();
 
     if (this.gpuContext) {
       try {
@@ -237,30 +278,23 @@ export class WebGPUBackend implements RendererBackend {
     if (!this.device || !this.gpuContext) return;
 
     const isFloat = image.dataType === 'float32';
+    const isHDRContent = isFloat || !!image.videoFrame;
 
-    // Upload image data to GPU texture
+    // Upload image data via TextureManager
     let texture: WGPUTexture;
     if (image.videoFrame) {
-      texture = this.pipelineManager.uploadExternalTexture(this.device, image.videoFrame, image.width, image.height);
+      texture = this.textureManager.uploadVideoFrame(this.device, image.videoFrame, image.width, image.height);
     } else if (image.imageBitmap) {
-      texture = this.pipelineManager.uploadExternalTexture(this.device, image.imageBitmap, image.width, image.height);
+      texture = this.textureManager.uploadImageBitmap(this.device, image.imageBitmap, image.width, image.height);
     } else {
-      // Get the appropriate typed array view for the image data
       const data = isFloat ? new Float32Array(image.data) : new Uint8Array(image.data);
-
-      // Ensure we have 4-channel RGBA data
-      if (image.channels !== 4) {
-        // For non-RGBA data, expand to RGBA (passthrough only supports RGBA)
-        const rgbaData = this.expandToRGBA(data, image.width, image.height, image.channels, isFloat);
-        texture = this.pipelineManager.uploadImageTexture(this.device, rgbaData, image.width, image.height, isFloat);
-      } else {
-        texture = this.pipelineManager.uploadImageTexture(this.device, data, image.width, image.height, isFloat);
-      }
+      texture = this.textureManager.uploadImageData(this.device, data, image.width, image.height, image.channels);
     }
 
-    // Destroy previous texture if dimensions changed
+    // Destroy previous texture if dimensions changed (legacy tracking for passthrough path)
     if (
       this.currentTexture &&
+      this.currentTexture !== texture &&
       (this.currentTextureWidth !== image.width || this.currentTextureHeight !== image.height)
     ) {
       this.currentTexture.destroy();
@@ -279,6 +313,9 @@ export class WebGPUBackend implements RendererBackend {
       const internalState = this.stateManager.getInternalState();
       this.stateManager.setTexelSize(1.0 / image.width, 1.0 / image.height);
 
+      // Ensure ping-pong textures match HDR format when HDR is enabled
+      const useHDR = isHDRContent || this.hdrOutputEnabled;
+
       this.shaderPipeline.execute(
         this.device,
         textureView,
@@ -286,7 +323,7 @@ export class WebGPUBackend implements RendererBackend {
         internalState,
         image.width,
         image.height,
-        isFloat,
+        useHDR,
         offsetX,
         offsetY,
         scaleX,
@@ -322,46 +359,6 @@ export class WebGPUBackend implements RendererBackend {
     pass.end();
 
     this.device.queue.submit([encoder.finish()]);
-  }
-
-  /**
-   * Expand 1/2/3-channel image data to 4-channel RGBA.
-   */
-  private expandToRGBA(
-    data: ArrayBufferView,
-    width: number,
-    height: number,
-    channels: number,
-    isFloat: boolean,
-  ): Float32Array | Uint8Array {
-    const pixelCount = width * height;
-    const src = isFloat ? (data as Float32Array) : (data as Uint8Array);
-    const dst = isFloat ? new Float32Array(pixelCount * 4) : new Uint8Array(pixelCount * 4);
-
-    const alpha = isFloat ? 1.0 : 255;
-    for (let i = 0; i < pixelCount; i++) {
-      const si = i * channels;
-      const di = i * 4;
-      const v0 = src[si] as number;
-
-      if (channels === 1) {
-        dst[di] = v0;
-        dst[di + 1] = v0;
-        dst[di + 2] = v0;
-        dst[di + 3] = alpha;
-      } else if (channels === 2) {
-        dst[di] = v0;
-        dst[di + 1] = v0;
-        dst[di + 2] = v0;
-        dst[di + 3] = src[si + 1] as number;
-      } else if (channels === 3) {
-        dst[di] = v0;
-        dst[di + 1] = src[si + 1] as number;
-        dst[di + 2] = src[si + 2] as number;
-        dst[di + 3] = alpha;
-      }
-    }
-    return dst;
   }
 
   renderTiledImages(
@@ -417,6 +414,30 @@ export class WebGPUBackend implements RendererBackend {
 
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', _capabilities: DisplayCapabilities): boolean {
     this.hdrOutputMode = mode;
+    const wantHDR = mode !== 'sdr';
+
+    if (wantHDR !== this.hdrOutputEnabled && this.device && this.gpuContext) {
+      this.hdrOutputEnabled = wantHDR;
+      // Reconfigure canvas: HDR uses rgba16float, SDR uses rgba8unorm
+      if (wantHDR) {
+        this.configureContext(this.device, 'extended');
+      } else {
+        try {
+          this.gpuContext.configure({
+            device: this.device,
+            format: 'rgba8unorm',
+            alphaMode: 'opaque',
+          });
+          this.extendedToneMapping = false;
+        } catch {
+          // Fall back to HDR config if SDR config fails
+          this.configureContext(this.device, 'standard');
+        }
+      }
+    } else {
+      this.hdrOutputEnabled = wantHDR;
+    }
+
     return true;
   }
 
@@ -424,8 +445,35 @@ export class WebGPUBackend implements RendererBackend {
     return this.hdrOutputMode;
   }
 
-  setHDRHeadroom(_headroom: number): void {
-    // TODO: implement for WebGPU pipeline when HDR rendering is added
+  /** Whether HDR output is currently enabled. */
+  isHDROutputEnabled(): boolean {
+    return this.hdrOutputEnabled;
+  }
+
+  setHDRHeadroom(headroom: number): void {
+    this.hdrHeadroomValue = headroom;
+    this.shaderPipeline.setGlobalHDRHeadroom(headroom);
+  }
+
+  /** Get the current HDR headroom value. */
+  getHDRHeadroom(): number {
+    return this.hdrHeadroomValue;
+  }
+
+  /**
+   * Set the input transfer function code for the linearize stage.
+   * 0 = sRGB/linear, 1 = HLG, 2 = PQ
+   */
+  setInputTransferFunction(code: number): void {
+    this.inputTransferCode = code;
+    // The input transfer code is consumed by the linearize WGSL stage
+    // via the state uploader's packLinearize(). It is NOT a field on
+    // ShaderStateManager — it is set per-frame in the stage uniform.
+  }
+
+  /** Get the current input transfer function code. */
+  getInputTransferFunction(): number {
+    return this.inputTransferCode;
   }
 
   // --- Texture filter mode (IMPLEMENTED - state management) ---
@@ -486,7 +534,26 @@ export class WebGPUBackend implements RendererBackend {
     /* STUB */
   }
   readPixelFloat(_x: number, _y: number, _width: number, _height: number): Float32Array | null {
+    // Synchronous readback is not possible with WebGPU; use readPixelFloatAsync instead.
     return null;
+  }
+
+  /**
+   * Async pixel readback from the current render texture (Phase 4).
+   * Returns RGBA float data for the given region, or null if unavailable.
+   */
+  async readPixelFloatAsync(x: number, y: number, width: number, height: number): Promise<Float32Array | null> {
+    if (this._deviceLost || !this.device || !this.gpuContext) return null;
+    try {
+      const canvasTexture = this.gpuContext.getCurrentTexture();
+      if (width === 1 && height === 1) {
+        const pixel = await this.readbackHelper.readPixelFloat(this.device, x, y, canvasTexture);
+        return new Float32Array(pixel);
+      }
+      return await this.readbackHelper.readRegion(this.device, x, y, width, height, canvasTexture);
+    } catch {
+      return null;
+    }
   }
   setCDL(_cdl: CDLValues): void {
     /* STUB */
@@ -507,36 +574,72 @@ export class WebGPUBackend implements RendererBackend {
     /* STUB */
   }
 
-  // --- 3D LUT (multi-point pipeline) ---
-  setLUT(_lutData: Float32Array | null, _lutSize: number, _intensity: number): void {
-    /* STUB */
+  // --- 3D LUT (Phase 4: backed by WebGPU3DLUT) ---
+
+  setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void {
+    this.set3DLUT('file', lutData, lutSize, intensity);
   }
+
   setFileLUT(
-    _data: Float32Array | null,
-    _size: number,
-    _intensity: number,
-    _domainMin?: [number, number, number],
-    _domainMax?: [number, number, number],
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
   ): void {
-    /* STUB */
+    this.set3DLUT('file', data, size, intensity, domainMin, domainMax);
   }
+
   setLookLUT(
-    _data: Float32Array | null,
-    _size: number,
-    _intensity: number,
-    _domainMin?: [number, number, number],
-    _domainMax?: [number, number, number],
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
   ): void {
-    /* STUB */
+    this.set3DLUT('look', data, size, intensity, domainMin, domainMax);
   }
+
   setDisplayLUT(
-    _data: Float32Array | null,
-    _size: number,
-    _intensity: number,
-    _domainMin?: [number, number, number],
-    _domainMax?: [number, number, number],
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
   ): void {
-    /* STUB */
+    this.set3DLUT('display', data, size, intensity, domainMin, domainMax);
+  }
+
+  /**
+   * Upload 3D LUT data to a GPU texture slot (Phase 4).
+   */
+  set3DLUT(
+    slot: LUTSlot,
+    data: Float32Array | null,
+    size: number,
+    intensity: number = 1.0,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): void {
+    if (this._deviceLost || !this.device) return;
+
+    if (!data) {
+      this.lut3d.clear(slot);
+      return;
+    }
+
+    this.lut3d.upload(this.device, slot, data, size);
+    this.lut3d.setEnabled(slot, true, intensity);
+    if (domainMin && domainMax) {
+      this.lut3d.setDomain(slot, domainMin, domainMax);
+    }
+  }
+
+  /**
+   * Enable or disable a LUT slot and set its blend intensity (Phase 4).
+   */
+  setLUTEnabled(slot: LUTSlot, enabled: boolean, intensity: number = 1.0): void {
+    this.lut3d.setEnabled(slot, enabled, intensity);
   }
 
   // --- Display color management ---

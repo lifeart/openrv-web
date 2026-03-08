@@ -32,12 +32,12 @@ export interface WGPUQueue {
     dest: { texture: WGPUTexture },
     data: ArrayBufferView,
     layout: { bytesPerRow: number; rowsPerImage: number },
-    size: { width: number; height: number },
+    size: { width: number; height: number; depthOrArrayLayers?: number },
   ): void;
   writeBuffer(buffer: WGPUBuffer, offset: number, data: ArrayBufferView): void;
   copyExternalImageToTexture(
     source: { source: VideoFrame | ImageBitmap },
-    dest: { texture: WGPUTexture },
+    dest: { texture: WGPUTexture; colorSpace?: string },
     size: { width: number; height: number },
   ): void;
   submit(commands: WGPUCommandBuffer[]): void;
@@ -111,9 +111,10 @@ export interface WGPUBufferDescriptor {
 }
 
 export interface WGPUBuffer {
-  getMappedRange(): ArrayBuffer;
+  getMappedRange(offset?: number, size?: number): ArrayBuffer;
   unmap(): void;
   destroy(): void;
+  mapAsync(mode: number, offset?: number, size?: number): Promise<void>;
 }
 
 export interface WGPUSampler {}
@@ -123,9 +124,10 @@ export interface WGPUSampler {}
 // ---------------------------------------------------------------------------
 
 export interface WGPUTextureDescriptor {
-  size: { width: number; height: number };
+  size: { width: number; height: number; depthOrArrayLayers?: number };
   format: string;
   usage: number;
+  dimension?: '1d' | '2d' | '3d';
 }
 
 export interface WGPUTexture {
@@ -141,6 +143,11 @@ export interface WGPUTextureView {}
 
 export interface WGPUCommandEncoder {
   beginRenderPass(desc: WGPURenderPassDescriptor): WGPURenderPassEncoder;
+  copyTextureToBuffer(
+    source: { texture: WGPUTexture; origin?: { x: number; y: number; z?: number } },
+    destination: { buffer: WGPUBuffer; bytesPerRow: number; rowsPerImage?: number },
+    size: { width: number; height: number; depthOrArrayLayers?: number },
+  ): void;
   finish(): WGPUCommandBuffer;
 }
 
@@ -206,4 +213,9 @@ export const GPUBufferUsage = {
   COPY_DST: 0x08,
   UNIFORM: 0x40,
   VERTEX: 0x20,
+} as const;
+
+export const GPUMapMode = {
+  READ: 0x01,
+  WRITE: 0x02,
 } as const;
