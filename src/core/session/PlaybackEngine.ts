@@ -695,211 +695,236 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     if (this._hdrBuffering) return;
 
     const source = this._host?.getCurrentSource();
-    const tc = this._timingController;
 
     // Check if using mediabunny for smooth frame-accurate playback
     if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
-      const { frameDuration } = tc.accumulateDelta(
-        this._ts, this._fps, this._playbackSpeed, this._playDirection,
+      this.updateMediabunnyPlayback(source);
+    } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
+      this.updateNativeVideoPlayback(source.element);
+    } else {
+      this.updateImagePlayback(source ?? null);
+    }
+  }
+
+  /**
+   * Mediabunny video playback path: frame-accurate playback with cache,
+   * starvation handling, play-all-frames support, and audio sync.
+   */
+  private updateMediabunnyPlayback(source: MediaSource): void {
+    const tc = this._timingController;
+    const videoSourceNode = source.videoSourceNode!;
+
+    const { frameDuration } = tc.accumulateDelta(
+      this._ts, this._fps, this._playbackSpeed, this._playDirection,
+    );
+
+    while (tc.hasAccumulatedFrame(this._ts, frameDuration)) {
+      const nextFrame = tc.computeNextFrame(
+        this._currentFrame, this._playDirection,
+        this._inPoint, this._outPoint, this._loopMode,
       );
 
-      while (tc.hasAccumulatedFrame(this._ts, frameDuration)) {
-        const nextFrame = tc.computeNextFrame(
-          this._currentFrame, this._playDirection,
-          this._inPoint, this._outPoint, this._loopMode,
+      if (videoSourceNode.hasFrameCached(nextFrame)) {
+        PerfTrace.count('frame.cacheHit');
+        tc.onFrameDisplayed(this._ts);
+        this._pendingFetchFrame = null;
+        tc.consumeFrame(this._ts, frameDuration);
+        this.advanceFrame(this._playDirection);
+        // Update source B's playback buffer for split screen support
+        this.updateSourceBPlaybackBuffer(nextFrame);
+        videoSourceNode.updatePlaybackBuffer(nextFrame);
+
+        // Clear play-all-frames buffering state when a waited-for frame arrives
+        if (this._playAllFramesBuffering) {
+          this._playAllFramesBuffering = false;
+          this._playAllFramesWaitStart = null;
+          this.emit('buffering', false);
+        }
+
+        // Only advance one frame per tick in play-all-frames mode
+        if (this._playbackMode === 'playAllFrames') {
+          break;
+        }
+      } else {
+        PerfTrace.count('frame.cacheMiss');
+        tc.capAccumulator(this._ts, frameDuration);
+        tc.beginStarvation(this._ts);
+
+        const starvation = tc.checkStarvation(
+          this._ts, nextFrame, this._inPoint, this._outPoint, this._playDirection,
         );
 
-        if (source.videoSourceNode.hasFrameCached(nextFrame)) {
-          PerfTrace.count('frame.cacheHit');
-          tc.onFrameDisplayed(this._ts);
-          this._pendingFetchFrame = null;
-          tc.consumeFrame(this._ts, frameDuration);
-          this.advanceFrame(this._playDirection);
-          // Update source B's playback buffer for split screen support
-          this.updateSourceBPlaybackBuffer(nextFrame);
-          source.videoSourceNode.updatePlaybackBuffer(nextFrame);
-
-          // Clear play-all-frames buffering state when a waited-for frame arrives
-          if (this._playAllFramesBuffering) {
-            this._playAllFramesBuffering = false;
-            this._playAllFramesWaitStart = null;
-            this.emit('buffering', false);
-          }
-
-          // Only advance one frame per tick in play-all-frames mode
+        if (starvation.timedOut) {
+          // In play-all-frames mode, wait indefinitely (with absolute timeout safety net)
           if (this._playbackMode === 'playAllFrames') {
-            break;
-          }
-        } else {
-          PerfTrace.count('frame.cacheMiss');
-          tc.capAccumulator(this._ts, frameDuration);
-          tc.beginStarvation(this._ts);
+            this._playAllFramesWaitStart ??= performance.now();
+            const waitElapsed = performance.now() - this._playAllFramesWaitStart;
 
-          const starvation = tc.checkStarvation(
-            this._ts, nextFrame, this._inPoint, this._outPoint, this._playDirection,
-          );
-
-          if (starvation.timedOut) {
-            // In play-all-frames mode, wait indefinitely (with absolute timeout safety net)
-            if (this._playbackMode === 'playAllFrames') {
-              this._playAllFramesWaitStart ??= performance.now();
-              const waitElapsed = performance.now() - this._playAllFramesWaitStart;
-
-              if (waitElapsed > PLAY_ALL_FRAMES_ABSOLUTE_TIMEOUT_MS) {
-                // Safety net: after 60 seconds, the frame is likely undecodable.
-                // Skip it, emit a warning, and continue.
-                log.warn(`Frame ${nextFrame} play-all-frames absolute timeout (${Math.round(waitElapsed)}ms) - skipping frame`);
-                this._playAllFramesWaitStart = null;
-                if (this._playAllFramesBuffering) {
-                  this._playAllFramesBuffering = false;
-                  this.emit('buffering', false);
-                }
-                this.emit('frameDecodeTimeout', nextFrame);
-                tc.trackDroppedFrame(this._ts);
-                tc.resetStarvation(this._ts);
-                this._pendingFetchFrame = null;
-                tc.consumeFrame(this._ts, frameDuration);
-                this.advanceFrame(this._playDirection);
-                continue;
-              } else {
-                // Emit buffering event so UI shows a loading indicator
-                if (!this._playAllFramesBuffering) {
-                  this._playAllFramesBuffering = true;
-                  this.emit('buffering', true);
-                }
-                // Reset starvation timer to avoid triggering the pause logic,
-                // but do NOT consume the frame or advance.
-                tc.resetStarvation(this._ts);
-                break;
+            if (waitElapsed > PLAY_ALL_FRAMES_ABSOLUTE_TIMEOUT_MS) {
+              // Safety net: after 60 seconds, the frame is likely undecodable.
+              // Skip it, emit a warning, and continue.
+              log.warn(`Frame ${nextFrame} play-all-frames absolute timeout (${Math.round(waitElapsed)}ms) - skipping frame`);
+              this._playAllFramesWaitStart = null;
+              if (this._playAllFramesBuffering) {
+                this._playAllFramesBuffering = false;
+                this.emit('buffering', false);
               }
-            }
-
-            // --- Realtime mode starvation handling below ---
-            if (starvation.shouldPause) {
-              log.warn(
-                `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
-                `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`
-              );
-              if (source.element instanceof HTMLVideoElement) {
-                source.element.pause();
-              }
-              this.triggerStarvationRecoveryPreload(source.videoSourceNode, nextFrame, this._playDirection);
+              this.emit('frameDecodeTimeout', nextFrame);
+              tc.trackDroppedFrame(this._ts);
               tc.resetStarvation(this._ts);
               this._pendingFetchFrame = null;
+              tc.consumeFrame(this._ts, frameDuration);
+              this.advanceFrame(this._playDirection);
+              continue;
+            } else {
+              // Emit buffering event so UI shows a loading indicator
+              if (!this._playAllFramesBuffering) {
+                this._playAllFramesBuffering = true;
+                this.emit('buffering', true);
+              }
+              // Reset starvation timer to avoid triggering the pause logic,
+              // but do NOT consume the frame or advance.
+              tc.resetStarvation(this._ts);
+              break;
+            }
+          }
+
+          // --- Realtime mode starvation handling below ---
+          if (starvation.shouldPause) {
+            log.warn(
+              `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
+              `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`
+            );
+            if (source.element instanceof HTMLVideoElement) {
+              source.element.pause();
+            }
+            this.triggerStarvationRecoveryPreload(videoSourceNode, nextFrame, this._playDirection);
+            tc.resetStarvation(this._ts);
+            this._pendingFetchFrame = null;
+            this.pause();
+            return;
+          }
+
+          if (starvation.nearEnd) {
+            if (this._loopMode === 'loop') {
+              this._currentFrame = this._playDirection > 0 ? this._inPoint : this._outPoint;
+              tc.resetStarvation(this._ts);
+              this._pendingFetchFrame = null;
+              if (source.element instanceof HTMLVideoElement) {
+                const video = source.element;
+                video.currentTime = (this._currentFrame - 1) / this._fps;
+                if (this._playDirection === 1) {
+                  this._host?.safeVideoPlay(video);
+                }
+              }
+              this.emit('frameChanged', this._currentFrame);
+              tc.consumeFrame(this._ts, frameDuration);
+              continue;
+            } else {
               this.pause();
               return;
             }
-
-            if (starvation.nearEnd) {
-              if (this._loopMode === 'loop') {
-                this._currentFrame = this._playDirection > 0 ? this._inPoint : this._outPoint;
-                tc.resetStarvation(this._ts);
-                this._pendingFetchFrame = null;
-                if (source.element instanceof HTMLVideoElement) {
-                  const video = source.element;
-                  video.currentTime = (this._currentFrame - 1) / this._fps;
-                  if (this._playDirection === 1) {
-                    this._host?.safeVideoPlay(video);
-                  }
-                }
-                this.emit('frameChanged', this._currentFrame);
-                tc.consumeFrame(this._ts, frameDuration);
-                continue;
-              } else {
-                this.pause();
-                return;
-              }
-            }
-
-            log.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
-            tc.trackDroppedFrame(this._ts);
-            tc.resetStarvation(this._ts);
-            this._pendingFetchFrame = null;
-            tc.consumeFrame(this._ts, frameDuration);
-            this.advanceFrame(this._playDirection);
-            continue;
           }
 
-          if (this._pendingFetchFrame !== nextFrame) {
-            this._pendingFetchFrame = nextFrame;
-
-            if (tc.incrementBuffering(this._ts)) {
-              this.emit('buffering', true);
-            }
-
-            source.videoSourceNode.getFrameAsync(nextFrame).then(() => {
-              source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
-              this.updateSourceBPlaybackBuffer(nextFrame);
-              this.decrementBufferingCount();
-            }).catch(err => {
-              if (err?.name !== 'AbortError') {
-                log.warn('Frame fetch error:', err);
-              }
-              this.decrementBufferingCount();
-            });
-          }
-          break;
+          log.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
+          tc.trackDroppedFrame(this._ts);
+          tc.resetStarvation(this._ts);
+          this._pendingFetchFrame = null;
+          tc.consumeFrame(this._ts, frameDuration);
+          this.advanceFrame(this._playDirection);
+          continue;
         }
-      }
 
-      // Compute sub-frame position for interpolation during slow-motion
-      this.emitSubFrameUpdate(frameDuration);
+        if (this._pendingFetchFrame !== nextFrame) {
+          this._pendingFetchFrame = nextFrame;
 
-      // Sync HTMLVideoElement for audio
-      if (this._host?.getAudioSyncEnabled() && source.element instanceof HTMLVideoElement) {
-        const video = source.element;
-        const targetTime = (this._currentFrame - 1) / this._fps;
-
-        if (video.paused || video.ended) {
-          video.currentTime = targetTime;
-          this._host?.safeVideoPlay(video);
-        } else {
-          const drift = Math.abs(video.currentTime - targetTime);
-          if (drift > 1.0) {
-            video.currentTime = targetTime;
+          if (tc.incrementBuffering(this._ts)) {
+            this.emit('buffering', true);
           }
+
+          videoSourceNode.getFrameAsync(nextFrame).then(() => {
+            source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
+            this.updateSourceBPlaybackBuffer(nextFrame);
+            this.decrementBufferingCount();
+          }).catch(err => {
+            if (err?.name !== 'AbortError') {
+              log.warn('Frame fetch error:', err);
+            }
+            this.decrementBufferingCount();
+          });
         }
+        break;
       }
-    } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
-      // Fallback: For video with forward playback, sync frame from video time
+    }
+
+    // Compute sub-frame position for interpolation during slow-motion
+    this.emitSubFrameUpdate(frameDuration);
+
+    // Sync HTMLVideoElement for audio
+    if (this._host?.getAudioSyncEnabled() && source.element instanceof HTMLVideoElement) {
       const video = source.element;
-      const currentTime = video.currentTime;
-      const frame = Math.floor(currentTime * this._fps) + 1;
+      const targetTime = (this._currentFrame - 1) / this._fps;
 
-      if (frame !== this._currentFrame) {
-        this._currentFrame = clamp(frame, this._inPoint, this._outPoint);
-        this.emit('frameChanged', this._currentFrame);
-      }
-
-      if (video.ended || frame >= this._outPoint) {
-        if (this._loopMode === 'loop') {
-          video.currentTime = (this._inPoint - 1) / this._fps;
-          this._host?.safeVideoPlay(video);
-        } else if (this._loopMode === 'once') {
-          this.pause();
+      if (video.paused || video.ended) {
+        video.currentTime = targetTime;
+        this._host?.safeVideoPlay(video);
+      } else {
+        const drift = Math.abs(video.currentTime - targetTime);
+        if (drift > 1.0) {
+          video.currentTime = targetTime;
         }
       }
-    } else {
-      // For images or video with reverse playback (no mediabunny)
-      const { framesToAdvance, frameDuration } = tc.accumulateFrames(
-        this._ts, this._fps, this._playbackSpeed, this._playDirection,
-        this._playbackMode,
-      );
+    }
+  }
 
-      if (framesToAdvance > 1) {
-        tc.trackDroppedFrame(this._ts, framesToAdvance - 1);
+  /**
+   * Native video fallback path: for forward video playback without mediabunny,
+   * syncs frame from video element's currentTime.
+   */
+  private updateNativeVideoPlayback(video: HTMLVideoElement): void {
+    const currentTime = video.currentTime;
+    const frame = Math.floor(currentTime * this._fps) + 1;
+
+    if (frame !== this._currentFrame) {
+      this._currentFrame = clamp(frame, this._inPoint, this._outPoint);
+      this.emit('frameChanged', this._currentFrame);
+    }
+
+    if (video.ended || frame >= this._outPoint) {
+      if (this._loopMode === 'loop') {
+        video.currentTime = (this._inPoint - 1) / this._fps;
+        this._host?.safeVideoPlay(video);
+      } else if (this._loopMode === 'once') {
+        this.pause();
       }
+    }
+  }
 
-      for (let i = 0; i < framesToAdvance; i++) {
-        this.advanceFrame(this._playDirection);
-      }
+  /**
+   * Image/reverse playback path: accumulates timing and advances frames,
+   * used for image sequences or video with reverse playback (no mediabunny).
+   */
+  private updateImagePlayback(source: MediaSource | null): void {
+    const tc = this._timingController;
 
-      this.emitSubFrameUpdate(frameDuration);
+    const { framesToAdvance, frameDuration } = tc.accumulateFrames(
+      this._ts, this._fps, this._playbackSpeed, this._playDirection,
+      this._playbackMode,
+    );
 
-      if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-        const targetTime = (this._currentFrame - 1) / this._fps;
-        source.element.currentTime = targetTime;
-      }
+    if (framesToAdvance > 1) {
+      tc.trackDroppedFrame(this._ts, framesToAdvance - 1);
+    }
+
+    for (let i = 0; i < framesToAdvance; i++) {
+      this.advanceFrame(this._playDirection);
+    }
+
+    this.emitSubFrameUpdate(frameDuration);
+
+    if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+      const targetTime = (this._currentFrame - 1) / this._fps;
+      source.element.currentTime = targetTime;
     }
   }
 
