@@ -8,16 +8,16 @@ import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import type { TextureFilterMode } from '../../core/types/filter';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
-import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
+import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
 import type { GamutMappingState } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
-import { DEFAULT_NOISE_REDUCTION_PARAMS, isNoiseReductionActive, applyNoiseReduction } from '../../filters/NoiseReduction';
+import { DEFAULT_NOISE_REDUCTION_PARAMS, isNoiseReductionActive } from '../../filters/NoiseReduction';
 import { createNoiseReductionProcessor } from '../../filters/WebGLNoiseReduction';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
-import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
+import { DEFAULT_FILM_EMULATION_PARAMS } from '../../filters/FilmEmulation';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
-import { DEFAULT_STABILIZATION_PARAMS, isStabilizationActive, applyStabilization } from '../../filters/StabilizeMotion';
+import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
 import { CropState, CropRegion, UncropState } from './CropControl';
 import { CropManager } from './CropManager';
 import {
@@ -26,32 +26,22 @@ import {
   GPULUTChain,
   isLUT3D,
   type CDLValues,
-  isDefaultCDL,
-  applyCDLToImageData,
   type ColorCurvesData,
-  isDefaultCurves,
-  applyColorInversion,
   type DisplayColorState,
   DEFAULT_DISPLAY_COLOR_STATE,
   DISPLAY_TRANSFER_CODES,
-  applyDisplayColorManagementToImageData,
-  isDisplayStateActive,
   type DisplayCapabilities,
   safeCanvasContext2D,
-  applyHueRotationInto as applyHueRotationPixelInto,
-  isIdentityHueRotation,
 } from '../../color/ColorProcessingFacade';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/export/FrameExporter';
 import { StackLayer } from './StackControl';
-import { compositeImageData, BlendMode } from '../../composite/BlendModes';
-import { isStencilBoxActive } from '../../core/types/wipe';
 import { getIconSvg } from './shared/Icons';
-import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
+import { ChannelMode } from './ChannelSelect';
 import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
 import { extractStereoEyes } from '../../stereo/StereoRenderer';
-import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
+import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import type { SafeAreasOverlay } from './SafeAreasOverlay';
 import type { MatteOverlay } from './MatteOverlay';
@@ -72,11 +62,9 @@ import { MissingFrameOverlay } from './MissingFrameOverlay';
 import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
-import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 
 // Extracted effect processing utilities
-import { applyHighlightsShadows, applyVibrance, applyToneMappingWithParams } from './ViewerEffects';
-import { yieldToMain, EffectProcessor } from '../../utils/effects/EffectProcessor';
+import { EffectProcessor } from '../../utils/effects/EffectProcessor';
 import { WipeManager } from './WipeManager';
 import type { GhostFrameState } from './GhostFrameControl';
 import { ColorPipelineManager } from './ColorPipelineManager';
@@ -95,7 +83,7 @@ import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { ToneMappingState } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/media/PixelAspectRatio';
 import { Logger } from '../../utils/Logger';
-import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern, PATTERN_COLORS } from './BackgroundPatternControl';
+import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern } from './BackgroundPatternControl';
 import { FrameInterpolator } from '../../utils/media/FrameInterpolator';
 import {
   isViewerContentElement as isViewerContentElementUtil,
@@ -105,7 +93,6 @@ import {
   FilterStringCache,
   getCanvasFilterString as getCanvasFilterStringUtil,
   buildContainerFilterString,
-  drawPlaceholder as drawPlaceholderUtil,
   calculateDisplayDimensions,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
@@ -115,7 +102,6 @@ import {
   createExportCanvas as createExportCanvasUtil,
   createSourceExportCanvas as createSourceExportCanvasUtil,
   renderFrameToCanvas as renderFrameToCanvasUtil,
-  renderSourceToImageData as renderSourceToImageDataUtil,
 } from './ViewerExport';
 import type { FrameburnTimecodeOptions } from './FrameburnCompositor';
 import {
@@ -127,6 +113,47 @@ import {
 } from './ViewerPrerender';
 import { ViewerInputHandler } from './ViewerInputHandler';
 import { InteractionQualityManager } from './InteractionQualityManager';
+
+// Extracted modules
+import {
+  type PixelEffectsContext,
+  isToneMappingEnabled as isToneMappingEnabledUtil,
+  compositeImageDataOverBackground as compositeImageDataOverBackgroundUtil,
+  applyBatchedPixelEffects as applyBatchedPixelEffectsUtil,
+  applyBatchedPixelEffectsAsync as applyBatchedPixelEffectsAsyncUtil,
+  applyLightweightEffects as applyLightweightEffectsUtil,
+} from './ViewerPixelEffects';
+import {
+  type ImageRendererContext,
+  renderWithWipe as renderWithWipeUtil,
+  renderSplitScreen as renderSplitScreenUtil,
+  renderGhostFrames as renderGhostFramesUtil,
+  renderBlendMode as renderBlendModeUtil,
+  renderDifferenceMatte as renderDifferenceMatteUtil,
+  compositeStackLayers as compositeStackLayersUtil,
+  drawClippedSource as drawClippedSourceUtil,
+  renderSourceToImageData as renderSourceToImageDataUtil,
+} from './ViewerImageRenderer';
+import {
+  createLutIndicator,
+  createABIndicator,
+  createFilterModeBadge,
+  updateABIndicator as updateABIndicatorUtil,
+  showFilterModeIndicator as showFilterModeIndicatorUtil,
+  showFitModeIndicator as showFitModeIndicatorUtil,
+  loadFilterModePreference,
+  persistFilterModePreference,
+} from './ViewerIndicators';
+import {
+  type CanvasSetupContext,
+  initializeCanvas as initializeCanvasUtil,
+  setCanvasSize as setCanvasSizeUtil,
+  updatePaintCanvasSize as updatePaintCanvasSizeUtil,
+  drawPlaceholder as drawPlaceholderCanvasUtil,
+  updateCanvasPosition as updateCanvasPositionUtil,
+  updateCSSBackground as updateCSSBackgroundUtil,
+  listenForDPRChange as listenForDPRChangeUtil,
+} from './ViewerCanvasSetup';
 
 export interface ViewerConfig {
   session: Session;
@@ -143,10 +170,7 @@ export interface ViewerConfig {
 }
 
 const log = new Logger('Viewer');
-const MIN_PAINT_OVERDRAW_PX = 128;
-const PAINT_OVERDRAW_STEP_PX = 64;
 const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
-const FILTER_MODE_STORAGE_KEY = 'openrv.filterMode';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
@@ -355,12 +379,20 @@ export class Viewer {
   // WebGL/HDR rendering manager (owns GL canvas, Renderer, worker proxy)
   private glRendererManager!: ViewerGLRenderer;
 
+  // Cached context adapters (lazily created, reused across calls)
+  private _glRendererContext: GLRendererContext | null = null;
+  private _inputContext: import('./ViewerInputHandler').ViewerInputContext | null = null;
+  private _pixelEffectsContext: PixelEffectsContext | null = null;
+  private _imageRendererContext: ImageRendererContext | null = null;
+  private _canvasSetupContext: CanvasSetupContext | null = null;
+
   /**
    * Create a GLRendererContext adapter that the ViewerGLRenderer uses
    * to access Viewer state without tight coupling.
    */
   private asGLRendererContext(): GLRendererContext {
-    return {
+    if (this._glRendererContext) return this._glRendererContext;
+    this._glRendererContext = {
       getCanvasContainer: () => this.canvasContainer,
       getImageCanvas: () => this.imageCanvas,
       getPaintCanvas: () => this.paintCanvas,
@@ -385,6 +417,7 @@ export class Viewer {
       getNoiseReductionParams: () => this.getNoiseReductionParams(),
       getLuminanceVisualization: () => this.overlayManager.getLuminanceVisualization(),
     };
+    return this._glRendererContext;
   }
 
   /**
@@ -392,7 +425,8 @@ export class Viewer {
    * state and invoke side-effects without tight coupling.
    */
   private asInputContext(): import('./ViewerInputHandler').ViewerInputContext {
-    return {
+    if (this._inputContext) return this._inputContext;
+    this._inputContext = {
       getContainer: () => this.container,
       getCanvasContainer: () => this.canvasContainer,
       getImageCanvas: () => this.imageCanvas,
@@ -424,6 +458,119 @@ export class Viewer {
       renderPaint: () => this.renderPaint(),
       invalidateGLRenderCache: () => this.glRendererManager.invalidateRenderCache(),
     };
+    return this._inputContext;
+  }
+
+  /**
+   * Create a PixelEffectsContext adapter for ViewerPixelEffects.
+   */
+  private asPixelEffectsContext(): PixelEffectsContext {
+    if (this._pixelEffectsContext) return this._pixelEffectsContext;
+    this._pixelEffectsContext = {
+      getColorPipeline: () => this.colorPipeline,
+      getFilterSettings: () => this.filterSettings,
+      getChannelMode: () => this.channelMode,
+      getColorWheels: () => this.colorWheels,
+      getHSLQualifier: () => this.hslQualifier,
+      getOverlayManager: () => this.overlayManager,
+      getEffectProcessor: () => this.effectProcessor,
+      getSharpenProcessor: () => this.sharpenProcessor,
+      getNoiseReductionProcessor: () => this.noiseReductionProcessor,
+      getDeinterlaceParams: () => this.deinterlaceParams,
+      getFilmEmulationParams: () => this.filmEmulationParams,
+      getStabilizationParams: () => this.stabilizationParams,
+      getNoiseReductionParams: () => this.noiseReductionParams,
+      getBackgroundPatternState: () => this.backgroundPatternState,
+      getInteractionQuality: () => this.interactionQuality,
+      getImageCtx: () => this.imageCtx,
+      getCanvasColorSpace: () => this.canvasColorSpace,
+      getBgCompositeTempCanvas: () => this.bgCompositeTempCanvas,
+      setBgCompositeTempCanvas: (canvas) => { this.bgCompositeTempCanvas = canvas; },
+      getBgCompositeTempCtx: () => this.bgCompositeTempCtx,
+      setBgCompositeTempCtx: (ctx) => { this.bgCompositeTempCtx = ctx; },
+      getAsyncEffectsGeneration: () => this._asyncEffectsGeneration,
+      getCropManager: () => this.cropManager,
+    };
+    return this._pixelEffectsContext;
+  }
+
+  /**
+   * Create an ImageRendererContext adapter for ViewerImageRenderer.
+   */
+  private asImageRendererContext(): ImageRendererContext {
+    if (this._imageRendererContext) return this._imageRendererContext;
+    this._imageRendererContext = {
+      getSession: () => this.session,
+      getImageCtx: () => this.imageCtx,
+      getWipeManager: () => this.wipeManager,
+      getGhostFrameManager: () => this.ghostFrameManager,
+      getTransform: () => this.transformManager.transform,
+      getTextureFilterMode: () => this._textureFilterMode,
+      getCanvasFilterString: () => this.getCanvasFilterString(),
+      getStackLayers: () => this.stackLayers,
+      isStackEnabled: () => this.isStackEnabled(),
+      isBlendModeEnabled: () => this.isBlendModeEnabled(),
+      getBlendModeState: () => this.blendModeState,
+      getDifferenceMatteState: () => this.differenceMatteState,
+      getPrerenderBuffer: () => this.prerenderBuffer,
+      getFrameFetchTracker: () => this.frameFetchTracker,
+      getFrameInterpolator: () => this.frameInterpolator,
+      getCanvasColorSpace: () => this.canvasColorSpace,
+      getDisplayWidth: () => this.displayWidth,
+      getDisplayHeight: () => this.displayHeight,
+      drawWithTransform: (ctx, element, w, h) => this.drawWithTransform(ctx, element, w, h),
+      renderSourceToImageData: (sourceIndex, width, height) => this.renderSourceToImageData(sourceIndex, width, height),
+      drawClippedSource: (canvasCtx, element, clipX, clipY, clipWidth, clipHeight, displayWidth, displayHeight) =>
+        this.drawClippedSource(canvasCtx, element, clipX, clipY, clipWidth, clipHeight, displayWidth, displayHeight),
+      refresh: () => this.refresh(),
+    };
+    return this._imageRendererContext;
+  }
+
+  /**
+   * Create a CanvasSetupContext adapter for ViewerCanvasSetup.
+   */
+  private asCanvasSetupContext(): CanvasSetupContext {
+    if (this._canvasSetupContext) return this._canvasSetupContext;
+    this._canvasSetupContext = {
+      getContainer: () => this.container,
+      getCanvasContainer: () => this.canvasContainer,
+      getImageCanvas: () => this.imageCanvas,
+      getWatermarkCanvas: () => this.watermarkCanvas,
+      getPaintCanvas: () => this.paintCanvas,
+      getImageCtx: () => this.imageCtx,
+      getWatermarkCtx: () => this.watermarkCtx,
+      getPaintCtx: () => this.paintCtx,
+      getTransformManager: () => this.transformManager,
+      getGLRendererManager: () => this.glRendererManager,
+      getCropManager: () => this.cropManager,
+      getOverlayManager: () => this.overlayManager,
+      getPerspectiveGridOverlay: () => this.perspectiveGridOverlay,
+      getContainerRect: () => this.getContainerRect(),
+      getDisplayWidth: () => this.displayWidth,
+      getDisplayHeight: () => this.displayHeight,
+      setDisplayWidth: (w) => { this.displayWidth = w; },
+      setDisplayHeight: (h) => { this.displayHeight = h; },
+      getSourceWidth: () => this.sourceWidth,
+      getSourceHeight: () => this.sourceHeight,
+      setSourceWidth: (w) => { this.sourceWidth = w; },
+      setSourceHeight: (h) => { this.sourceHeight = h; },
+      getPhysicalWidth: () => this.physicalWidth,
+      getPhysicalHeight: () => this.physicalHeight,
+      setPhysicalWidth: (w) => { this.physicalWidth = w; },
+      setPhysicalHeight: (h) => { this.physicalHeight = h; },
+      getPaintLogicalWidth: () => this.paintLogicalWidth,
+      getPaintLogicalHeight: () => this.paintLogicalHeight,
+      setPaintLogicalWidth: (w) => { this.paintLogicalWidth = w; },
+      setPaintLogicalHeight: (h) => { this.paintLogicalHeight = h; },
+      getPaintOffsetX: () => this.paintOffsetX,
+      getPaintOffsetY: () => this.paintOffsetY,
+      setPaintOffsetX: (x) => { this.paintOffsetX = x; },
+      setPaintOffsetY: (y) => { this.paintOffsetY = y; },
+      setPaintDirty: (dirty) => { this.paintDirty = dirty; },
+      setWatermarkDirty: (dirty) => { this.watermarkDirty = dirty; },
+    };
+    return this._canvasSetupContext;
   }
 
   constructor(config: ViewerConfig) {
@@ -656,69 +803,19 @@ export class Viewer {
     this.wipeManager.initUI(this.container);
 
     // Create LUT indicator badge
-    this.lutIndicator = document.createElement('div');
-    this.lutIndicator.className = 'lut-indicator';
-    this.lutIndicator.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(var(--accent-primary-rgb), 0.8);
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      z-index: 60;
-      display: none;
-      pointer-events: none;
-    `;
-    this.lutIndicator.textContent = 'LUT';
+    this.lutIndicator = createLutIndicator();
     this.container.appendChild(this.lutIndicator);
 
     // Create A/B indicator badge
-    this.abIndicator = document.createElement('div');
-    this.abIndicator.className = 'ab-indicator';
-    this.abIndicator.dataset.testid = 'ab-indicator';
-    this.abIndicator.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 60px;
-      background: rgba(255, 180, 50, 0.9);
-      color: var(--bg-primary);
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 700;
-      z-index: 60;
-      display: none;
-      pointer-events: none;
-    `;
-    this.abIndicator.textContent = 'A';
+    this.abIndicator = createABIndicator();
     this.container.appendChild(this.abIndicator);
 
     // Create filter mode persistent badge (hidden when mode is 'linear', shown for 'nearest')
-    this.filterModeBadge = document.createElement('div');
-    this.filterModeBadge.className = 'filter-mode-badge';
-    this.filterModeBadge.dataset.testid = 'filter-mode-badge';
-    this.filterModeBadge.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 110px;
-      background: rgba(120, 200, 255, 0.9);
-      color: #000;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 700;
-      z-index: 60;
-      display: none;
-      pointer-events: none;
-    `;
-    this.filterModeBadge.textContent = 'NN';
+    this.filterModeBadge = createFilterModeBadge();
     this.container.appendChild(this.filterModeBadge);
 
     // Load filter mode from localStorage
-    this._textureFilterMode = this.loadFilterModePreference();
+    this._textureFilterMode = loadFilterModePreference();
     if (this._textureFilterMode === 'nearest') {
       this.glRendererManager.setFilterMode('nearest');
       if (this.filterModeBadge) this.filterModeBadge.style.display = 'block';
@@ -798,23 +895,7 @@ export class Viewer {
   }
 
   private initializeCanvas(): void {
-    // Set initial canvas size for placeholder
-    this.sourceWidth = 640;
-    this.sourceHeight = 360;
-    this.displayWidth = 640;
-    this.displayHeight = 360;
-
-    // Configure paint canvas at physical resolution for retina annotations
-    const dpr = window.devicePixelRatio || 1;
-    this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
-    this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
-    const containerRect = this.getContainerRect();
-    this.updatePaintCanvasSize(this.displayWidth, this.displayHeight, containerRect.width, containerRect.height);
-
-    // Draw placeholder with hi-DPI support
-    this.drawPlaceholder();
-    this.updateOverlayDimensions();
-    this.updateCanvasPosition();
+    initializeCanvasUtil(this.asCanvasSetupContext());
   }
 
   /**
@@ -824,41 +905,7 @@ export class Viewer {
    * physical (DPR-scaled) resolution for retina sharpness.
    */
   private setCanvasSize(width: number, height: number): void {
-    this.displayWidth = width;
-    this.displayHeight = height;
-
-    // Compute physical dimensions for GL path (DPR-aware)
-    const dpr = window.devicePixelRatio || 1;
-    this.physicalWidth = Math.max(1, Math.round(width * dpr));
-    this.physicalHeight = Math.max(1, Math.round(height * dpr));
-
-    // Cap physical dimensions at GPU MAX_TEXTURE_SIZE (proportional to preserve aspect ratio)
-    const maxSize = this.glRendererManager.getMaxTextureSize();
-    if (this.physicalWidth > maxSize || this.physicalHeight > maxSize) {
-      const capScale = maxSize / Math.max(this.physicalWidth, this.physicalHeight);
-      this.physicalWidth = Math.max(1, Math.round(this.physicalWidth * capScale));
-      this.physicalHeight = Math.max(1, Math.round(this.physicalHeight * capScale));
-    }
-
-    // Reset image canvas at LOGICAL resolution (no DPR scaling for CPU effects)
-    resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
-    // Watermark overlay canvas matches image canvas logical dimensions.
-    resetCanvasFromHiDPI(this.watermarkCanvas, this.watermarkCtx, width, height);
-    this.watermarkDirty = true;
-
-    // Paint canvas at PHYSICAL resolution with CSS logical sizing for retina annotations
-    const containerRect = this.getContainerRect();
-    this.updatePaintCanvasSize(width, height, containerRect.width, containerRect.height);
-
-    this.cropManager.resetOverlayCanvas(width, height);
-
-    // Resize WebGL canvas at PHYSICAL resolution for retina sharpness.
-    // Pass logical (display) dims for exact CSS sizing (avoids rounding drift).
-    this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight, width, height);
-
-    this.updateOverlayDimensions();
-    this.perspectiveGridOverlay.setViewerDimensions(width, height);
-    this.updateCanvasPosition();
+    setCanvasSizeUtil(this.asCanvasSetupContext(), width, height);
   }
 
   /**
@@ -871,64 +918,7 @@ export class Viewer {
     containerWidth?: number,
     containerHeight?: number,
   ): void {
-    const viewW = (containerWidth && containerWidth > 0) ? containerWidth : logicalWidth;
-    const viewH = (containerHeight && containerHeight > 0) ? containerHeight : logicalHeight;
-
-    const centerX = (viewW - logicalWidth) / 2 + this.transformManager.panX;
-    const centerY = (viewH - logicalHeight) / 2 + this.transformManager.panY;
-
-    const visibleLeft = Math.max(0, centerX);
-    const visibleTop = Math.max(0, centerY);
-    const visibleRight = Math.max(0, viewW - (centerX + logicalWidth));
-    const visibleBottom = Math.max(0, viewH - (centerY + logicalHeight));
-
-    const maxPadX = viewW + MIN_PAINT_OVERDRAW_PX;
-    const maxPadY = viewH + MIN_PAINT_OVERDRAW_PX;
-    const snap = (v: number, step: number) => Math.ceil(v / step) * step;
-
-    const leftPad = Math.min(maxPadX, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleLeft), PAINT_OVERDRAW_STEP_PX));
-    const rightPad = Math.min(maxPadX, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleRight), PAINT_OVERDRAW_STEP_PX));
-    const topPad = Math.min(maxPadY, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleTop), PAINT_OVERDRAW_STEP_PX));
-    const bottomPad = Math.min(maxPadY, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleBottom), PAINT_OVERDRAW_STEP_PX));
-
-    const nextLogicalW = Math.max(1, Math.round(logicalWidth + leftPad + rightPad));
-    const nextLogicalH = Math.max(1, Math.round(logicalHeight + topPad + bottomPad));
-    const dpr = window.devicePixelRatio || 1;
-    const nextPhysicalW = Math.max(1, Math.round(nextLogicalW * dpr));
-    const nextPhysicalH = Math.max(1, Math.round(nextLogicalH * dpr));
-
-    if (
-      this.paintLogicalWidth === nextLogicalW &&
-      this.paintLogicalHeight === nextLogicalH &&
-      this.paintOffsetX === leftPad &&
-      this.paintOffsetY === topPad &&
-      this.paintCanvas.width === nextPhysicalW &&
-      this.paintCanvas.height === nextPhysicalH
-    ) {
-      return;
-    }
-
-    this.paintLogicalWidth = nextLogicalW;
-    this.paintLogicalHeight = nextLogicalH;
-    this.paintOffsetX = leftPad;
-    this.paintOffsetY = topPad;
-
-    this.paintCanvas.width = nextPhysicalW;
-    this.paintCanvas.height = nextPhysicalH;
-    this.paintCanvas.style.width = `${nextLogicalW}px`;
-    this.paintCanvas.style.height = `${nextLogicalH}px`;
-    this.paintCanvas.style.left = `${-leftPad}px`;
-    this.paintCanvas.style.top = `${-topPad}px`;
-    this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
-    // Canvas resize clears content; force repaint on next renderPaint()
-    this.paintDirty = true;
-  }
-
-  /**
-   * Update overlay dimensions to match display size.
-   */
-  private updateOverlayDimensions(): void {
-    this.overlayManager.updateDimensions(this.displayWidth, this.displayHeight);
+    updatePaintCanvasSizeUtil(this.asCanvasSetupContext(), logicalWidth, logicalHeight, containerWidth, containerHeight);
   }
 
   /**
@@ -936,16 +926,7 @@ export class Viewer {
    * Sets up the canvas for hi-DPI rendering before drawing.
    */
   private drawPlaceholder(): void {
-    // Setup hi-DPI canvas for crisp placeholder text
-    setupHiDPICanvas({
-      canvas: this.imageCanvas,
-      ctx: this.imageCtx,
-      width: this.displayWidth,
-      height: this.displayHeight,
-    });
-
-    // Draw the placeholder content using logical coordinates
-    drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.transformManager.zoom);
+    drawPlaceholderCanvasUtil(this.asCanvasSetupContext());
   }
 
   /**
@@ -1029,8 +1010,6 @@ export class Viewer {
    */
   private _dprCleanup: (() => void) | null = null;
   private listenForDPRChange(): void {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-
     const onDPRChange = () => {
       // Recompute physical dims and re-render
       if (this.displayWidth > 0 && this.displayHeight > 0) {
@@ -1047,12 +1026,7 @@ export class Viewer {
       this.listenForDPRChange();
     };
 
-    // Clean up previous listener
-    this._dprCleanup?.();
-
-    const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-    mql.addEventListener('change', onDPRChange, { once: true });
-    this._dprCleanup = () => mql.removeEventListener('change', onDPRChange);
+    this._dprCleanup = listenForDPRChangeUtil(onDPRChange, this._dprCleanup);
   }
 
   /**
@@ -1248,48 +1222,7 @@ export class Viewer {
    * Show a brief transient indicator when fit mode changes.
    */
   private showFitModeIndicator(mode: 'all' | 'width' | 'height'): void {
-    const labels: Record<string, string> = {
-      all: 'Fit All',
-      width: 'Fit Width',
-      height: 'Fit Height',
-    };
-    const label = labels[mode] ?? mode;
-
-    // Remove any existing indicator
-    const existing = this.container.querySelector('.fit-mode-indicator');
-    if (existing) {
-      existing.remove();
-    }
-
-    const indicator = document.createElement('div');
-    indicator.className = 'fit-mode-indicator';
-    indicator.textContent = label;
-    indicator.style.cssText = `
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      pointer-events: none;
-      z-index: 1000;
-      transition: opacity 0.3s ease;
-      opacity: 1;
-    `;
-    this.container.appendChild(indicator);
-
-    setTimeout(() => {
-      indicator.style.opacity = '0';
-      setTimeout(() => {
-        if (indicator.parentNode) {
-          indicator.remove();
-        }
-      }, 300);
-    }, 1200);
+    showFitModeIndicatorUtil(this.container, mode);
   }
 
   /**
@@ -1370,39 +1303,7 @@ export class Viewer {
   }
 
   private updateCanvasPosition(): void {
-    const containerRect = this.getContainerRect();
-    const containerWidth = containerRect.width;
-    const containerHeight = containerRect.height;
-    const fitMode = this.transformManager.fitMode;
-
-    // Apply pan clamping based on active fit mode
-    if (fitMode === 'all') {
-      // In fit-all mode, no pan is needed
-      this.transformManager.panX = 0;
-      this.transformManager.panY = 0;
-    } else if (fitMode === 'width') {
-      // Lock horizontal pan, clamp vertical pan with margin
-      this.transformManager.panX = 0;
-      const margin = Math.min(50, containerHeight * 0.1);
-      const maxPanY = Math.max(0, (this.displayHeight - containerHeight) / 2 + margin);
-      this.transformManager.panY = Math.max(-maxPanY, Math.min(maxPanY, this.transformManager.panY));
-    } else if (fitMode === 'height') {
-      // Lock vertical pan, clamp horizontal pan with margin
-      this.transformManager.panY = 0;
-      const margin = Math.min(50, containerWidth * 0.1);
-      const maxPanX = Math.max(0, (this.displayWidth - containerWidth) / 2 + margin);
-      this.transformManager.panX = Math.max(-maxPanX, Math.min(maxPanX, this.transformManager.panX));
-    }
-
-    // Calculate base position (centered)
-    const baseX = (containerWidth - this.displayWidth) / 2;
-    const baseY = (containerHeight - this.displayHeight) / 2;
-
-    // Apply pan offset
-    const centerX = baseX + this.transformManager.panX;
-    const centerY = baseY + this.transformManager.panY;
-
-    this.canvasContainer.style.transform = `translate(${centerX}px, ${centerY}px)`;
+    updateCanvasPositionUtil(this.asCanvasSetupContext());
   }
 
   private invalidateLayoutCache(): void {
@@ -2217,47 +2118,7 @@ export class Viewer {
     displayWidth: number,
     displayHeight: number
   ): void {
-    const ctx = this.imageCtx;
-
-    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
-    ctx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
-    ctx.imageSmoothingQuality = 'high';
-
-    // Compute stencil boxes from wipe position/mode.
-    // boxA = original (no filter) region, boxB = adjusted (with filter) region.
-    const [boxA, boxB] = this.wipeManager.computeStencilBoxes();
-
-    ctx.save();
-
-    // Draw original region (boxA) without filters
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(
-      Math.floor(displayWidth * boxA[0]),
-      Math.floor(displayHeight * boxA[2]),
-      Math.ceil(displayWidth * (boxA[1] - boxA[0])),
-      Math.ceil(displayHeight * (boxA[3] - boxA[2]))
-    );
-    ctx.clip();
-    ctx.filter = 'none';
-    this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-    ctx.restore();
-
-    // Draw adjusted region (boxB) with color filters
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(
-      Math.floor(displayWidth * boxB[0]),
-      Math.floor(displayHeight * boxB[2]),
-      Math.ceil(displayWidth * (boxB[1] - boxB[0])),
-      Math.ceil(displayHeight * (boxB[3] - boxB[2]))
-    );
-    ctx.clip();
-    ctx.filter = this.getCanvasFilterString();
-    this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-    ctx.restore();
-
-    ctx.restore();
+    renderWithWipeUtil(this.asImageRendererContext(), element, displayWidth, displayHeight);
   }
 
   /**
@@ -2265,110 +2126,14 @@ export class Viewer {
    * Shows source A on one side and source B on the other, using canvas clipping.
    */
   private renderSplitScreen(displayWidth: number, displayHeight: number): void {
-    const sourceA = this.session.sourceA;
-    const sourceB = this.session.sourceB;
-
-    if (!sourceA?.element || !sourceB?.element) {
-      // Fallback to current source if A/B not properly set up
-      const currentSource = this.session.currentSource;
-      if (currentSource?.element) {
-        this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
-      }
-      return;
-    }
-
-    const ctx = this.imageCtx;
-    const pos = this.wipeManager.position;
-    const currentFrame = this.session.currentFrame;
-
-    // Determine the element to use for source A
-    // For mediabunny videos, use source A's own cached frame canvas.
-    // Do not read via session.getVideoFrameCanvas(), which follows currentSource
-    // and can incorrectly return source B when AB is toggled during playback.
-    let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceA.element;
-    if (sourceA.type === 'video' && sourceA.videoSourceNode?.isUsingMediabunny()) {
-      const frameCanvas = sourceA.videoSourceNode.getCachedFrameCanvas(currentFrame);
-      if (frameCanvas) {
-        elementA = frameCanvas;
-      }
-    }
-
-    // Determine the element to use for source B
-    // For mediabunny videos, use the cached frame canvas
-    let elementB: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceB.element;
-    if (sourceB.type === 'video' && this.session.isSourceBUsingMediabunny()) {
-      const frameCanvas = this.session.getSourceBFrameCanvas(currentFrame);
-      if (frameCanvas) {
-        elementB = frameCanvas;
-        // Cache this frame canvas to use as fallback while next frame loads
-        this.frameFetchTracker.lastSourceBFrameCanvas = frameCanvas;
-        this.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame = true;
-        this.frameFetchTracker.pendingSourceBFrameFetch = null;
-        this.frameFetchTracker.pendingSourceBFrameNumber = 0;
-      } else {
-        // Frame not cached - fetch it asynchronously
-        if (!this.frameFetchTracker.pendingSourceBFrameFetch || this.frameFetchTracker.pendingSourceBFrameNumber !== currentFrame) {
-          this.frameFetchTracker.pendingSourceBFrameNumber = currentFrame;
-          const frameToFetch = currentFrame;
-
-          this.frameFetchTracker.pendingSourceBFrameFetch = this.session.fetchSourceBVideoFrame(frameToFetch)
-            .then(() => {
-              if (this.frameFetchTracker.pendingSourceBFrameNumber === frameToFetch) {
-                this.frameFetchTracker.pendingSourceBFrameFetch = null;
-                this.frameFetchTracker.pendingSourceBFrameNumber = 0;
-                this.refresh();
-              }
-            })
-            .catch((err) => {
-              log.warn('Failed to fetch source B video frame', err);
-              if (this.frameFetchTracker.pendingSourceBFrameNumber === frameToFetch) {
-                this.frameFetchTracker.pendingSourceBFrameFetch = null;
-                this.frameFetchTracker.pendingSourceBFrameNumber = 0;
-              }
-            });
-        }
-
-        // Use fallback while frame is being fetched
-        if (this.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame && this.frameFetchTracker.lastSourceBFrameCanvas) {
-          // Use the last successfully rendered frame to prevent flickering
-          elementB = this.frameFetchTracker.lastSourceBFrameCanvas;
-        } else {
-          // First render - use HTMLVideoElement as initial fallback
-          elementB = sourceB.element;
-        }
-      }
-    }
-
-    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
-    ctx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
-    ctx.imageSmoothingQuality = 'high';
-
-    ctx.save();
-
-    if (this.wipeManager.mode === 'splitscreen-h') {
-      // Horizontal split: A on left, B on right
-      const splitX = Math.floor(displayWidth * pos);
-      this.drawClippedSource(ctx, elementA, 0, 0, splitX, displayHeight, displayWidth, displayHeight);
-      this.drawClippedSource(ctx, elementB, splitX, 0, displayWidth - splitX, displayHeight, displayWidth, displayHeight);
-    } else if (this.wipeManager.mode === 'splitscreen-v') {
-      // Vertical split: A on top, B on bottom
-      const splitY = Math.floor(displayHeight * pos);
-      this.drawClippedSource(ctx, elementA, 0, 0, displayWidth, splitY, displayWidth, displayHeight);
-      this.drawClippedSource(ctx, elementB, 0, splitY, displayWidth, displayHeight - splitY, displayWidth, displayHeight);
-    }
-
-    ctx.restore();
+    renderSplitScreenUtil(this.asImageRendererContext(), displayWidth, displayHeight);
 
     // Update split screen UI elements
     this.updateSplitScreenLine();
   }
 
-  /**
-   * Draw a source element clipped to a specific region.
-   * Used by split screen rendering to show different sources in different areas.
-   */
   private drawClippedSource(
-    ctx: CanvasRenderingContext2D,
+    canvasCtx: CanvasRenderingContext2D,
     element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
     clipX: number,
     clipY: number,
@@ -2377,26 +2142,11 @@ export class Viewer {
     displayWidth: number,
     displayHeight: number
   ): void {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(clipX, clipY, clipWidth, clipHeight);
-    ctx.clip();
-    ctx.filter = this.getCanvasFilterString();
-    this.drawSourceToContext(ctx, element, displayWidth, displayHeight);
-    ctx.restore();
+    drawClippedSourceUtil(this.asImageRendererContext(), canvasCtx, element, clipX, clipY, clipWidth, clipHeight, displayWidth, displayHeight);
   }
 
-  /**
-   * Draw a source element to a context, handling different element types.
-   */
-  private drawSourceToContext(
-    ctx: CanvasRenderingContext2D,
-    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
-    width: number,
-    height: number
-  ): void {
-    // Apply transform and draw
-    drawWithTransformUtil(ctx, element, width, height, this.transformManager.transform, this._textureFilterMode === 'linear');
+  private renderSourceToImageData(sourceIndex: number, width: number, height: number): ImageData | null {
+    return renderSourceToImageDataUtil(this.asImageRendererContext(), sourceIndex, width, height);
   }
 
   private getCanvasFilterString(): string {
@@ -2561,11 +2311,7 @@ export class Viewer {
     this._textureFilterMode = this._textureFilterMode === 'linear' ? 'nearest' : 'linear';
 
     // Persist preference
-    try {
-      localStorage.setItem(FILTER_MODE_STORAGE_KEY, this._textureFilterMode);
-    } catch {
-      // localStorage may be unavailable (e.g. private browsing)
-    }
+    persistFilterModePreference(this._textureFilterMode);
 
     // Update GL renderer
     this.glRendererManager.setFilterMode(this._textureFilterMode);
@@ -2586,57 +2332,15 @@ export class Viewer {
     return this._textureFilterMode;
   }
 
-  private loadFilterModePreference(): TextureFilterMode {
-    try {
-      const stored = localStorage.getItem(FILTER_MODE_STORAGE_KEY);
-      if (stored === 'nearest' || stored === 'linear') return stored;
-    } catch {
-      // localStorage may be unavailable
-    }
-    return 'linear';
-  }
-
   private showFilterModeIndicator(mode: TextureFilterMode): void {
-    // Remove previous indicator
-    if (this.filterModeIndicator?.parentNode) {
-      this.filterModeIndicator.remove();
-    }
-    if (this.filterModeTimeout) {
-      clearTimeout(this.filterModeTimeout);
-    }
-
-    const indicator = document.createElement('div');
-    indicator.dataset.testid = 'filter-mode-indicator';
-    indicator.textContent = mode === 'nearest' ? 'Nearest Neighbor' : 'Bilinear';
-    indicator.style.cssText = `
-      position: absolute;
-      top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.75);
-      color: #fff;
-      font-family: monospace;
-      font-size: 12px;
-      padding: 6px 14px;
-      border-radius: 4px;
-      z-index: 100;
-      pointer-events: none;
-      opacity: 1;
-      transition: opacity 0.3s ease-out;
-    `;
-
-    this.canvasContainer.appendChild(indicator);
-    this.filterModeIndicator = indicator;
-
-    this.filterModeTimeout = setTimeout(() => {
-      indicator.style.opacity = '0';
-      setTimeout(() => {
-        if (indicator.parentNode) indicator.remove();
-        if (this.filterModeIndicator === indicator) {
-          this.filterModeIndicator = null;
-        }
-      }, 300);
-    }, 1200);
+    const result = showFilterModeIndicatorUtil(
+      this.canvasContainer,
+      mode,
+      this.filterModeIndicator,
+      this.filterModeTimeout
+    );
+    this.filterModeIndicator = result.indicator;
+    this.filterModeTimeout = result.timeout;
   }
 
   // LUT methods
@@ -2737,32 +2441,7 @@ export class Viewer {
    * Update A/B indicator visibility and text
    */
   updateABIndicator(current?: 'A' | 'B'): void {
-    if (!this.abIndicator) return;
-
-    const ab = current ?? this.session.currentAB;
-    const available = this.session.abCompareAvailable;
-
-    // Hide the A/B indicator in split screen mode since both sources are visible
-    // with their own labels (A and B) on each side of the split
-    if (this.wipeManager.isSplitScreen) {
-      this.abIndicator.style.display = 'none';
-      return;
-    }
-
-    if (available) {
-      this.abIndicator.style.display = 'block';
-      this.abIndicator.textContent = ab;
-      // Different colors for A and B
-      if (ab === 'A') {
-        this.abIndicator.style.background = 'rgba(var(--accent-primary-rgb), 0.9)';
-        this.abIndicator.style.color = 'white';
-      } else {
-        this.abIndicator.style.background = 'rgba(255, 180, 50, 0.9)';
-        this.abIndicator.style.color = 'var(--bg-primary)';
-      }
-    } else {
-      this.abIndicator.style.display = 'none';
-    }
+    updateABIndicatorUtil(this.abIndicator, this.session, this.wipeManager, current);
   }
 
   /**
@@ -3081,447 +2760,29 @@ export class Viewer {
 
   /**
    * Apply batched pixel-level effects to the canvas.
-   * Uses a single getImageData/putImageData pair for all pixel-level effects:
-   * highlights/shadows, vibrance, clarity, hue rotation, color wheels, CDL,
-   * curves, HSL qualifier, tone mapping, color inversion, sharpen, channel
-   * isolation, display color management, false color, luminance visualization,
-   * zebra stripes, and clipping overlay.
-   * This reduces GPU-to-CPU transfers from N to 1.
+   * Delegates to ViewerPixelEffects module.
    */
   private applyBatchedPixelEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
-    const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
-    const hasSharpen = this.filterSettings.sharpen > 0;
-    const hasNoiseReduction = isNoiseReductionActive(this.noiseReductionParams);
-    const hasChannel = this.channelMode !== 'rgb';
-    const hasHighlightsShadows = this.colorPipeline.colorAdjustments.highlights !== 0 || this.colorPipeline.colorAdjustments.shadows !== 0 ||
-                                 this.colorPipeline.colorAdjustments.whites !== 0 || this.colorPipeline.colorAdjustments.blacks !== 0;
-    const hasVibrance = this.colorPipeline.colorAdjustments.vibrance !== 0;
-    const hasClarity = this.colorPipeline.colorAdjustments.clarity !== 0;
-    const hasHueRotation = !isIdentityHueRotation(this.colorPipeline.colorAdjustments.hueRotation);
-    const hasColorWheels = this.colorWheels.hasAdjustments();
-    const hasHSLQualifier = this.hslQualifier.isEnabled();
-    const hasFalseColor = this.overlayManager.getFalseColor().isEnabled();
-    const hasLuminanceVis = this.overlayManager.getLuminanceVisualization().getMode() !== 'off' && this.overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
-    const hasZebras = this.overlayManager.getZebraStripes().isEnabled();
-    const hasClippingOverlay = this.overlayManager.getClippingOverlay().isEnabled();
-    const hasToneMapping = this.isToneMappingEnabled();
-    const hasInversion = this.colorPipeline.colorInversionEnabled;
-    const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
-    const hasDeinterlace = isDeinterlaceActive(this.deinterlaceParams);
-    const hasFilmEmulation = isFilmEmulationActive(this.filmEmulationParams);
-    const hasStabilization = isStabilizationActive(this.stabilizationParams) && this.stabilizationParams.cropAmount > 0;
-
-    // Early return if no pixel effects are active
-    // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasNoiseReduction && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
-      return;
-    }
-
-    // Single getImageData call
-    const imageData = ctx.getImageData(0, 0, width, height);
-
-    // Apply stabilization (spatial transform, before deinterlace)
-    if (hasStabilization) {
-      applyStabilization(imageData, { dx: 0, dy: 0, cropAmount: this.stabilizationParams.cropAmount });
-    }
-
-    // Apply deinterlace (spatial, before color adjustments)
-    if (hasDeinterlace) {
-      applyDeinterlace(imageData, this.deinterlaceParams);
-    }
-
-    // Apply highlight/shadow recovery (before other adjustments for best results)
-    if (hasHighlightsShadows) {
-      applyHighlightsShadows(imageData, {
-        highlights: this.colorPipeline.colorAdjustments.highlights,
-        shadows: this.colorPipeline.colorAdjustments.shadows,
-        whites: this.colorPipeline.colorAdjustments.whites,
-        blacks: this.colorPipeline.colorAdjustments.blacks,
-      });
-    }
-
-    // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
-    if (hasVibrance) {
-      applyVibrance(imageData, {
-        vibrance: this.colorPipeline.colorAdjustments.vibrance,
-        skinProtection: this.colorPipeline.colorAdjustments.vibranceSkinProtection,
-      });
-    }
-
-    // Apply clarity (local contrast enhancement in midtones)
-    // Uses EffectProcessor with half-res optimization during interactions
-    if (hasClarity) {
-      const halfRes = this.interactionQuality.cpuHalfRes;
-      this.effectProcessor.applyClarity(imageData, width, height, this.colorPipeline.colorAdjustments, halfRes);
-    }
-
-    // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
-    if (hasHueRotation) {
-      const data = imageData.data;
-      const len = data.length;
-      const hueOut: [number, number, number] = [0, 0, 0];
-      for (let i = 0; i < len; i += 4) {
-        const r = data[i]! / 255;
-        const g = data[i + 1]! / 255;
-        const b = data[i + 2]! / 255;
-        applyHueRotationPixelInto(r, g, b, this.colorPipeline.colorAdjustments.hueRotation, hueOut);
-        data[i] = Math.round(hueOut[0] * 255);
-        data[i + 1] = Math.round(hueOut[1] * 255);
-        data[i + 2] = Math.round(hueOut[2] * 255);
-      }
-    }
-
-    // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)
-    if (hasColorWheels) {
-      this.colorWheels.apply(imageData);
-    }
-
-    // Apply CDL color correction
-    if (hasCDL) {
-      applyCDLToImageData(imageData, this.colorPipeline.cdlValues);
-    }
-
-    // Apply color curves
-    if (hasCurves) {
-      this.colorPipeline.curveLUTCache.apply(imageData, this.colorPipeline.curvesData);
-    }
-
-    // Apply HSL Qualifier (secondary color correction - after primary corrections)
-    if (hasHSLQualifier) {
-      this.hslQualifier.apply(imageData);
-    }
-
-    // Apply tone mapping (after color adjustments, before channel isolation)
-    if (hasToneMapping) {
-      applyToneMappingWithParams(imageData, this.colorPipeline.toneMappingState);
-    }
-
-    // Apply color inversion (after all color corrections, before sharpen/channel isolation)
-    if (hasInversion) {
-      applyColorInversion(imageData);
-    }
-
-    // Apply film emulation (after color corrections, before sharpen/channel isolation)
-    if (hasFilmEmulation) {
-      applyFilmEmulation(imageData, this.filmEmulationParams);
-    }
-
-    // Apply noise reduction (edge-preserving denoise before sharpen).
-    // Try GPU first, fall back to CPU.
-    if (hasNoiseReduction) {
-      if (this.noiseReductionProcessor) {
-        this.noiseReductionProcessor.processInPlace(imageData, this.noiseReductionParams);
-      } else {
-        applyNoiseReduction(imageData, this.noiseReductionParams);
-      }
-    }
-
-    // Apply sharpen filter — prefer GPU (faster than even CPU half-res), fall back to CPU with half-res during interactions
-    if (hasSharpen) {
-      if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
-        this.sharpenProcessor.applyInPlace(imageData, this.filterSettings.sharpen);
-      } else {
-        const halfRes = this.interactionQuality.cpuHalfRes;
-        this.effectProcessor.applySharpenCPU(imageData, width, height, this.filterSettings.sharpen / 100, halfRes);
-      }
-    }
-
-    // Apply channel isolation (before false color so we can see individual channel exposure)
-    if (hasChannel) {
-      applyChannelIsolation(imageData, this.channelMode);
-    }
-
-    // Apply display color management (final pipeline stage before diagnostic overlays)
-    if (hasDisplayColorMgmt) {
-      applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
-    }
-
-    // Apply luminance visualization modes (HSV, random color, contour) or false color
-    // These replace pixel colors for analysis, so they're mutually exclusive
-    if (hasLuminanceVis) {
-      this.overlayManager.getLuminanceVisualization().apply(imageData);
-    } else if (hasFalseColor) {
-      this.overlayManager.getFalseColor().apply(imageData);
-    }
-
-    // Apply zebra stripes (overlay on top of other effects for exposure warnings)
-    // Note: Zebras work on original image luminance, so they're applied after false color
-    // (typically you'd use one or the other, not both)
-    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
-      this.overlayManager.getZebraStripes().apply(imageData);
-    }
-
-    // Apply clipping overlay (shows clipped highlights/shadows)
-    // Applied last as it's a diagnostic overlay
-    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
-      this.overlayManager.getClippingOverlay().apply(imageData);
-    }
-
-    // Single putImageData call
-    ctx.putImageData(imageData, 0, 0);
+    applyBatchedPixelEffectsUtil(this.asPixelEffectsContext(), ctx, width, height);
   }
 
   /**
    * Async version of applyBatchedPixelEffects that yields to the event loop
-   * between major effect passes. This keeps each blocking period under ~16ms,
-   * preventing janky UI during paused frame updates, export rendering, or
-   * interactive slider dragging on CPU fallback.
-   *
-   * Produces identical pixel output to the sync applyBatchedPixelEffects().
-   * During playback, the sync version is used instead (workers handle CPU effects).
+   * between major effect passes.
    */
   private async applyBatchedPixelEffectsAsync(
     ctx: CanvasRenderingContext2D, width: number, height: number,
     generation: number, cropClipActive: boolean
   ): Promise<void> {
-    try {
-    const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
-    const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
-    const hasSharpen = this.filterSettings.sharpen > 0;
-    const hasNoiseReduction = isNoiseReductionActive(this.noiseReductionParams);
-    const hasChannel = this.channelMode !== 'rgb';
-    const hasHighlightsShadows = this.colorPipeline.colorAdjustments.highlights !== 0 || this.colorPipeline.colorAdjustments.shadows !== 0 ||
-                                 this.colorPipeline.colorAdjustments.whites !== 0 || this.colorPipeline.colorAdjustments.blacks !== 0;
-    const hasVibrance = this.colorPipeline.colorAdjustments.vibrance !== 0;
-    const hasClarity = this.colorPipeline.colorAdjustments.clarity !== 0;
-    const hasHueRotation = !isIdentityHueRotation(this.colorPipeline.colorAdjustments.hueRotation);
-    const hasColorWheels = this.colorWheels.hasAdjustments();
-    const hasHSLQualifier = this.hslQualifier.isEnabled();
-    const hasFalseColor = this.overlayManager.getFalseColor().isEnabled();
-    const hasLuminanceVis = this.overlayManager.getLuminanceVisualization().getMode() !== 'off' && this.overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
-    const hasZebras = this.overlayManager.getZebraStripes().isEnabled();
-    const hasClippingOverlay = this.overlayManager.getClippingOverlay().isEnabled();
-    const hasToneMapping = this.isToneMappingEnabled();
-    const hasInversion = this.colorPipeline.colorInversionEnabled;
-    const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
-    const hasDeinterlace = isDeinterlaceActive(this.deinterlaceParams);
-    const hasFilmEmulation = isFilmEmulationActive(this.filmEmulationParams);
-    const hasStabilization = isStabilizationActive(this.stabilizationParams) && this.stabilizationParams.cropAmount > 0;
-
-    // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasNoiseReduction && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
-      return;
-    }
-
-    // Single getImageData call
-    const imageData = ctx.getImageData(0, 0, width, height);
-
-    // --- Pass 0: Stabilization (spatial transform, before deinterlace) ---
-    if (hasStabilization) {
-      applyStabilization(imageData, { dx: 0, dy: 0, cropAmount: this.stabilizationParams.cropAmount });
-      await yieldToMain();
-      if (this._asyncEffectsGeneration !== generation) return;
-    }
-
-    // --- Pass 1: Deinterlace (spatial, before color adjustments) ---
-    if (hasDeinterlace) {
-      applyDeinterlace(imageData, this.deinterlaceParams);
-      await yieldToMain();
-      if (this._asyncEffectsGeneration !== generation) return;
-    }
-
-    // --- Pass 2: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
-    // Uses EffectProcessor with half-res optimization and chunked async yielding
-    if (hasClarity) {
-      const halfRes = this.interactionQuality.cpuHalfRes;
-      await this.effectProcessor.applyClarityChunked(imageData, width, height, this.colorPipeline.colorAdjustments, halfRes);
-      await yieldToMain();
-      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
-    }
-
-    // --- Pass 3: Per-pixel color effects (merged where possible) ---
-    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion || hasFilmEmulation;
-
-    if (hasPerPixelEffects) {
-      // Apply highlight/shadow recovery
-      if (hasHighlightsShadows) {
-        applyHighlightsShadows(imageData, {
-          highlights: this.colorPipeline.colorAdjustments.highlights,
-          shadows: this.colorPipeline.colorAdjustments.shadows,
-          whites: this.colorPipeline.colorAdjustments.whites,
-          blacks: this.colorPipeline.colorAdjustments.blacks,
-        });
-      }
-
-      // Apply vibrance
-      if (hasVibrance) {
-        applyVibrance(imageData, {
-          vibrance: this.colorPipeline.colorAdjustments.vibrance,
-          skinProtection: this.colorPipeline.colorAdjustments.vibranceSkinProtection,
-        });
-      }
-
-      // Apply hue rotation
-      if (hasHueRotation) {
-        const data = imageData.data;
-        const len = data.length;
-        const hueOut: [number, number, number] = [0, 0, 0];
-        for (let i = 0; i < len; i += 4) {
-          const r = data[i]! / 255;
-          const g = data[i + 1]! / 255;
-          const b = data[i + 2]! / 255;
-          applyHueRotationPixelInto(r, g, b, this.colorPipeline.colorAdjustments.hueRotation, hueOut);
-          data[i] = Math.round(hueOut[0] * 255);
-          data[i + 1] = Math.round(hueOut[1] * 255);
-          data[i + 2] = Math.round(hueOut[2] * 255);
-        }
-      }
-
-      // Apply color wheels
-      if (hasColorWheels) {
-        this.colorWheels.apply(imageData);
-      }
-
-      // Apply CDL color correction
-      if (hasCDL) {
-        applyCDLToImageData(imageData, this.colorPipeline.cdlValues);
-      }
-
-      // Apply color curves
-      if (hasCurves) {
-        this.colorPipeline.curveLUTCache.apply(imageData, this.colorPipeline.curvesData);
-      }
-
-      // Apply HSL Qualifier
-      if (hasHSLQualifier) {
-        this.hslQualifier.apply(imageData);
-      }
-
-      // Apply tone mapping
-      if (hasToneMapping) {
-        applyToneMappingWithParams(imageData, this.colorPipeline.toneMappingState);
-      }
-
-      // Apply color inversion
-      if (hasInversion) {
-        applyColorInversion(imageData);
-      }
-
-      // Apply film emulation
-      if (hasFilmEmulation) {
-        applyFilmEmulation(imageData, this.filmEmulationParams);
-      }
-
-      await yieldToMain();
-      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
-    }
-
-    // --- Pass 4: Noise reduction (inter-pixel bilateral filter) ---
-    // Try GPU first, fall back to CPU.
-    if (hasNoiseReduction) {
-      if (this.noiseReductionProcessor) {
-        this.noiseReductionProcessor.processInPlace(imageData, this.noiseReductionParams);
-      } else {
-        applyNoiseReduction(imageData, this.noiseReductionParams);
-      }
-      await yieldToMain();
-      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
-    }
-
-    // --- Pass 5: Sharpen — prefer GPU, fall back to CPU with half-res during interactions ---
-    if (hasSharpen) {
-      if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
-        this.sharpenProcessor.applyInPlace(imageData, this.filterSettings.sharpen);
-      } else {
-        const halfRes = this.interactionQuality.cpuHalfRes;
-        await this.effectProcessor.applySharpenCPUChunked(imageData, width, height, this.filterSettings.sharpen / 100, halfRes);
-      }
-      await yieldToMain();
-      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
-    }
-
-    // --- Pass 6: Channel isolation + display color management ---
-    if (hasChannel) {
-      applyChannelIsolation(imageData, this.channelMode);
-    }
-
-    if (hasDisplayColorMgmt) {
-      applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
-    }
-
-    // --- Pass 7: Diagnostic overlays ---
-    if (hasLuminanceVis) {
-      this.overlayManager.getLuminanceVisualization().apply(imageData);
-    } else if (hasFalseColor) {
-      this.overlayManager.getFalseColor().apply(imageData);
-    }
-
-    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
-      this.overlayManager.getZebraStripes().apply(imageData);
-    }
-
-    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
-      this.overlayManager.getClippingOverlay().apply(imageData);
-    }
-
-    // Final generation check before writing pixels — avoid overwriting a newer frame.
-    if (this._asyncEffectsGeneration !== generation) return;
-
-    // Single putImageData call
-    ctx.putImageData(imageData, 0, 0);
-
-    // Apply crop clipping after putImageData (putImageData ignores clip regions)
-    if (cropClipActive) {
-      this.cropManager.clearOutsideCropRegion(ctx, width, height);
-    }
-    } catch (err) {
-      console.error('Async batched pixel effects processing failed:', err);
-    }
+    return applyBatchedPixelEffectsAsyncUtil(this.asPixelEffectsContext(), ctx, width, height, generation, cropClipActive);
   }
 
   /**
    * Apply only lightweight diagnostic overlays and display color management.
-   * Used during playback with prerender buffer to maintain visual diagnostics
-   * without blocking on expensive CPU effects (handled by workers).
-   * These are all O(n) single-pass with no heavy computation (<5ms at 1080p).
+   * Delegates to ViewerPixelEffects module.
    */
   private applyLightweightEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const hasChannel = this.channelMode !== 'rgb';
-    const hasFalseColor = this.overlayManager.getFalseColor().isEnabled();
-    const hasLuminanceVis = this.overlayManager.getLuminanceVisualization().getMode() !== 'off' && this.overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
-    const hasZebras = this.overlayManager.getZebraStripes().isEnabled();
-    const hasClippingOverlay = this.overlayManager.getClippingOverlay().isEnabled();
-    const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
-
-    // Early return if no lightweight effects are active
-    if (!hasChannel && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasDisplayColorMgmt) {
-      return;
-    }
-
-    // Single getImageData call
-    const imageData = ctx.getImageData(0, 0, width, height);
-
-    // Channel isolation (fast channel swizzle)
-    if (hasChannel) {
-      applyChannelIsolation(imageData, this.channelMode);
-    }
-
-    // Display color management (final pipeline stage before diagnostic overlays)
-    if (hasDisplayColorMgmt) {
-      applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
-    }
-
-    // Luminance visualization or false color (mutually exclusive)
-    if (hasLuminanceVis) {
-      this.overlayManager.getLuminanceVisualization().apply(imageData);
-    } else if (hasFalseColor) {
-      this.overlayManager.getFalseColor().apply(imageData);
-    }
-
-    // Zebra stripes
-    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
-      this.overlayManager.getZebraStripes().apply(imageData);
-    }
-
-    // Clipping overlay
-    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
-      this.overlayManager.getClippingOverlay().apply(imageData);
-    }
-
-    // Single putImageData call
-    ctx.putImageData(imageData, 0, 0);
+    applyLightweightEffectsUtil(this.asPixelEffectsContext(), ctx, width, height);
   }
 
   // Lens distortion methods (delegated to LensDistortionManager)
@@ -3786,55 +3047,10 @@ export class Viewer {
 
   /**
    * Update CSS backgrounds on the viewer container and canvas to match
-   * the current background pattern. This ensures the pattern is visible
-   * in letterbox areas and around the canvas, not just on the canvas surface
-   * (which is covered by opaque content).
+   * the current background pattern.
    */
   private updateCSSBackground(): void {
-    const { pattern, checkerSize, customColor } = this.backgroundPatternState;
-
-    if (pattern === 'black') {
-      // Restore theme default for container, keep canvas black
-      this.container.style.background = 'var(--viewer-bg)';
-      this.imageCanvas.style.background = '#000';
-      return;
-    }
-
-    let cssBg: string;
-
-    switch (pattern) {
-      case 'grey18':
-        cssBg = PATTERN_COLORS.grey18 ?? '#2e2e2e';
-        break;
-      case 'grey50':
-        cssBg = PATTERN_COLORS.grey50 ?? '#808080';
-        break;
-      case 'white':
-        cssBg = '#ffffff';
-        break;
-      case 'checker': {
-        const sizes = { small: 8, medium: 16, large: 32 };
-        const sz = sizes[checkerSize];
-        const light = PATTERN_COLORS.checkerLight ?? '#808080';
-        const dark = PATTERN_COLORS.checkerDark ?? '#404040';
-        cssBg = `repeating-conic-gradient(${dark} 0% 25%, ${light} 0% 50%) 0 0 / ${sz * 2}px ${sz * 2}px`;
-        break;
-      }
-      case 'crosshatch': {
-        const bg = PATTERN_COLORS.crosshatchBg ?? '#404040';
-        const line = PATTERN_COLORS.crosshatchLine ?? '#808080';
-        cssBg = `repeating-linear-gradient(45deg, transparent, transparent 5px, ${line} 5px, ${line} 6px), repeating-linear-gradient(-45deg, transparent, transparent 5px, ${line} 5px, ${line} 6px), ${bg}`;
-        break;
-      }
-      case 'custom':
-        cssBg = customColor || '#1a1a1a';
-        break;
-      default:
-        cssBg = '#000';
-    }
-
-    this.container.style.background = cssBg;
-    this.imageCanvas.style.background = cssBg;
+    updateCSSBackgroundUtil(this.container, this.imageCanvas, this.backgroundPatternState);
   }
 
   /**
@@ -3860,152 +3076,22 @@ export class Viewer {
 
   /**
    * Composite ImageData onto the canvas while preserving the background pattern.
-   * putImageData() ignores compositing and overwrites pixels directly, so we
-   * write to a temporary canvas first, then use drawImage() which respects
-   * alpha compositing and preserves the background pattern underneath.
+   * Delegates to ViewerPixelEffects module.
    */
   private compositeImageDataOverBackground(imageData: ImageData, width: number, height: number): void {
-    if (this.backgroundPatternState.pattern === 'black') {
-      // No background pattern - putImageData is fine
-      this.imageCtx.putImageData(imageData, 0, 0);
-      return;
-    }
-
-    // Ensure temp canvas is the right size
-    if (!this.bgCompositeTempCanvas || !this.bgCompositeTempCtx) {
-      this.bgCompositeTempCanvas = document.createElement('canvas');
-      this.bgCompositeTempCtx = safeCanvasContext2D(this.bgCompositeTempCanvas, {}, this.canvasColorSpace);
-    }
-    if (!this.bgCompositeTempCtx) {
-      // Fallback if context creation fails
-      this.imageCtx.putImageData(imageData, 0, 0);
-      return;
-    }
-    if (this.bgCompositeTempCanvas.width !== width || this.bgCompositeTempCanvas.height !== height) {
-      this.bgCompositeTempCanvas.width = width;
-      this.bgCompositeTempCanvas.height = height;
-    }
-
-    // Write ImageData to temp canvas, then drawImage onto main canvas
-    this.bgCompositeTempCtx.putImageData(imageData, 0, 0);
-    this.imageCtx.drawImage(this.bgCompositeTempCanvas, 0, 0);
+    compositeImageDataOverBackgroundUtil(this.asPixelEffectsContext(), imageData, width, height);
   }
 
   isToneMappingEnabled(): boolean {
-    return this.colorPipeline.toneMappingState.enabled && this.colorPipeline.toneMappingState.operator !== 'off';
+    return isToneMappingEnabledUtil(this.asPixelEffectsContext());
   }
 
   /**
-   * Get a canvas from the ghost frame pool, creating one if needed.
-   * All pooled canvases share the same dimensions; if the display size changes,
-   * the pool is re-sized.
-   */
-  /**
    * Render ghost frames (onion skin overlay) behind the main frame.
-   * Shows semi-transparent previous/next frames for animation review.
+   * Delegates to ViewerImageRenderer module.
    */
   private renderGhostFrames(displayWidth: number, displayHeight: number): void {
-    const gfm = this.ghostFrameManager;
-    const gfs = gfm.state;
-    if (!gfs.enabled) return;
-
-    const currentFrame = this.session.currentFrame;
-    const source = this.session.currentSource;
-    if (!source) return;
-
-    const duration = source.duration ?? 1;
-    const ctx = this.imageCtx;
-
-    // Image smoothing respects texture filter mode (nearest = pixel-accurate QC)
-    ctx.imageSmoothingEnabled = this._textureFilterMode === 'linear';
-    ctx.imageSmoothingQuality = 'high';
-
-    // Collect frames to render (before frames first, then after frames)
-    const framesToRender: { frame: number; distance: number; isBefore: boolean }[] = [];
-
-    // Frames before current (rendered first, farthest first)
-    for (let i = gfs.framesBefore; i >= 1; i--) {
-      const frame = currentFrame - i;
-      if (frame >= 1) {
-        framesToRender.push({ frame, distance: i, isBefore: true });
-      }
-    }
-
-    // Frames after current (rendered second, farthest first)
-    for (let i = gfs.framesAfter; i >= 1; i--) {
-      const frame = currentFrame + i;
-      if (frame <= duration) {
-        framesToRender.push({ frame, distance: i, isBefore: false });
-      }
-    }
-
-    // Render ghost frames
-    let poolIndex = 0;
-    for (const { frame, distance, isBefore } of framesToRender) {
-      // Calculate opacity with falloff
-      const opacity = gfs.opacityBase *
-        Math.pow(gfs.opacityFalloff, distance - 1);
-
-      // Try to get the frame from prerender cache
-      let frameCanvas: HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null = null;
-
-      if (this.prerenderBuffer) {
-        const cached = this.prerenderBuffer.getFrame(frame);
-        if (cached) {
-          frameCanvas = cached.canvas;
-        }
-      }
-
-      // If not in cache, try to get from sequence or video
-      if (!frameCanvas) {
-        if (source.type === 'sequence') {
-          // Synchronous check for cached sequence frame
-          const seqFrame = this.session.getSequenceFrameSync(frame);
-          if (seqFrame) {
-            // Use pooled canvas from ghost frame manager
-            const poolEntry = gfm.getPoolCanvas(poolIndex, displayWidth, displayHeight, this.canvasColorSpace);
-            if (poolEntry) {
-              poolEntry.ctx.clearRect(0, 0, displayWidth, displayHeight);
-              poolEntry.ctx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
-              frameCanvas = poolEntry.canvas;
-              poolIndex++;
-            }
-          }
-        } else if (source.type === 'video') {
-          // Try mediabunny cached frame
-          const videoFrame = this.session.getVideoFrameCanvas(frame);
-          if (videoFrame) {
-            frameCanvas = videoFrame;
-          }
-        }
-      }
-
-      if (!frameCanvas) continue;
-
-      // Draw ghost frame with opacity and optional color tint
-      ctx.save();
-      ctx.globalAlpha = opacity;
-
-      if (gfs.colorTint) {
-        // Apply color tint using composite operations
-        // First draw the frame
-        this.drawWithTransform(ctx, frameCanvas, displayWidth, displayHeight);
-
-        // Then overlay color tint
-        ctx.globalCompositeOperation = 'multiply';
-        ctx.fillStyle = isBefore ? 'rgba(255, 100, 100, 1)' : 'rgba(100, 255, 100, 1)';
-        ctx.fillRect(0, 0, displayWidth, displayHeight);
-        ctx.globalCompositeOperation = 'source-over';
-      } else {
-        // Just draw with opacity
-        this.drawWithTransform(ctx, frameCanvas, displayWidth, displayHeight);
-      }
-
-      ctx.restore();
-    }
-
-    // Trim pool to actual number of canvases used
-    gfm.trimPool(poolIndex);
+    renderGhostFramesUtil(this.asImageRendererContext(), displayWidth, displayHeight);
   }
 
   // Stack/composite methods
@@ -4029,117 +3115,27 @@ export class Viewer {
   }
 
   /**
-   * Render a single source to a canvas and return its ImageData
-   */
-  private renderSourceToImageData(
-    sourceIndex: number,
-    width: number,
-    height: number
-  ): ImageData | null {
-    return renderSourceToImageDataUtil(
-      this.session,
-      sourceIndex,
-      width,
-      height,
-      this.transformManager.transform
-    );
-  }
-
-  /**
    * Render A/B blend modes (onion skin, flicker, blend ratio).
+   * Delegates to ViewerImageRenderer module.
    */
   private renderBlendMode(width: number, height: number): ImageData | null {
-    const sourceA = this.session.sourceA;
-    const sourceB = this.session.sourceB;
-    if (!sourceA?.element || !sourceB?.element) return null;
-
-    const dataA = this.renderSourceToImageData(this.session.sourceAIndex, width, height);
-    const dataB = this.renderSourceToImageData(this.session.sourceBIndex, width, height);
-    if (!dataA || !dataB) return null;
-
-    switch (this.blendModeState.mode) {
-      case 'onionskin':
-        return compositeImageData(dataA, dataB, 'normal', this.blendModeState.onionOpacity);
-      case 'blend':
-        return compositeImageData(dataA, dataB, 'normal', this.blendModeState.blendRatio);
-      case 'flicker': {
-        const src = this.blendModeState.flickerFrame === 0 ? dataA : dataB;
-        return new ImageData(new Uint8ClampedArray(src.data), width, height);
-      }
-      default:
-        return null;
-    }
+    return renderBlendModeUtil(this.asImageRendererContext(), width, height);
   }
 
   /**
-   * Render difference matte between A and B sources
-   * Shows absolute pixel difference, optionally as heatmap
+   * Render difference matte between A and B sources.
+   * Delegates to ViewerImageRenderer module.
    */
   private renderDifferenceMatte(width: number, height: number): ImageData | null {
-    const sourceA = this.session.sourceA;
-    const sourceB = this.session.sourceB;
-
-    if (!sourceA?.element || !sourceB?.element) return null;
-
-    // Render both sources to ImageData
-    const dataA = this.renderSourceToImageData(this.session.sourceAIndex, width, height);
-    const dataB = this.renderSourceToImageData(this.session.sourceBIndex, width, height);
-
-    if (!dataA || !dataB) return null;
-
-    // Apply difference matte algorithm
-    return applyDifferenceMatte(
-      dataA,
-      dataB,
-      this.differenceMatteState.gain,
-      this.differenceMatteState.heatmap
-    );
+    return renderDifferenceMatteUtil(this.asImageRendererContext(), width, height);
   }
 
   /**
    * Composite multiple stack layers together.
-   * Applies per-layer stencilBox clipping when present.
+   * Delegates to ViewerImageRenderer module.
    */
   private compositeStackLayers(width: number, height: number): ImageData | null {
-    if (this.stackLayers.length === 0) return null;
-
-    // Start with transparent
-    let result = new ImageData(width, height);
-
-    // Composite each visible layer from bottom to top
-    for (const layer of this.stackLayers) {
-      if (!layer.visible || layer.opacity === 0) continue;
-
-      const layerData = this.renderSourceToImageData(layer.sourceIndex, width, height);
-      if (!layerData) continue;
-
-      // Apply stencil box clipping: zero out pixels outside the visible region
-      if (layer.stencilBox && isStencilBoxActive(layer.stencilBox)) {
-        const [xMin, xMax, yMin, yMax] = layer.stencilBox;
-        const pxMinX = Math.floor(xMin * width);
-        const pxMaxX = Math.ceil(xMax * width);
-        const pxMinY = Math.floor(yMin * height);
-        const pxMaxY = Math.ceil(yMax * height);
-        const data = layerData.data;
-
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            if (x < pxMinX || x >= pxMaxX || y < pxMinY || y >= pxMaxY) {
-              const idx = (y * width + x) * 4;
-              data[idx] = 0;
-              data[idx + 1] = 0;
-              data[idx + 2] = 0;
-              data[idx + 3] = 0;
-            }
-          }
-        }
-      }
-
-      // Composite this layer onto result
-      result = compositeImageData(result, layerData, layer.blendMode as BlendMode, layer.opacity);
-    }
-
-    return result;
+    return compositeStackLayersUtil(this.asImageRendererContext(), width, height);
   }
 
   setCropPanelOpen(isOpen: boolean): void {
