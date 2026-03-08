@@ -9,6 +9,7 @@ import {
   type FilmEmulationParams,
   type FilmStockId,
 } from '../../filters/FilmEmulation';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Film emulation effect node.
@@ -23,30 +24,21 @@ export class FilmEmulationNode extends EffectNode {
   readonly category: EffectCategory = 'color';
   readonly label = 'Film Emulation';
 
+  declare stock: string;
+  declare intensity: number;
+  declare grainIntensity: number;
+  declare grainSeed: number;
+  declare filmEnabled: boolean;
+
   constructor(name?: string) {
     super('FilmEmulation', name);
 
-    this.properties.add({ name: 'stock', defaultValue: 'kodak-portra-400' as string });
-    this.properties.add({ name: 'intensity', defaultValue: 50, min: 0, max: 100, step: 1 });
-    this.properties.add({ name: 'grainIntensity', defaultValue: 0, min: 0, max: 100, step: 1 });
-    this.properties.add({ name: 'grainSeed', defaultValue: 0, min: 0, max: 99999, step: 1 });
-    this.properties.add({ name: 'filmEnabled', defaultValue: false });
+    defineNodeProperty(this, 'stock', { defaultValue: 'kodak-portra-400' as string });
+    defineNodeProperty(this, 'intensity', { defaultValue: 50, min: 0, max: 100, step: 1 });
+    defineNodeProperty(this, 'grainIntensity', { defaultValue: 0, min: 0, max: 100, step: 1 });
+    defineNodeProperty(this, 'grainSeed', { defaultValue: 0, min: 0, max: 99999, step: 1 });
+    defineNodeProperty(this, 'filmEnabled', { defaultValue: false });
   }
-
-  get stock(): string { return this.properties.getValue('stock') as string; }
-  set stock(v: string) { this.properties.setValue('stock', v); }
-
-  get intensity(): number { return this.properties.getValue('intensity') as number; }
-  set intensity(v: number) { this.properties.setValue('intensity', v); }
-
-  get grainIntensity(): number { return this.properties.getValue('grainIntensity') as number; }
-  set grainIntensity(v: number) { this.properties.setValue('grainIntensity', v); }
-
-  get grainSeed(): number { return this.properties.getValue('grainSeed') as number; }
-  set grainSeed(v: number) { this.properties.setValue('grainSeed', v); }
-
-  get filmEnabled(): boolean { return this.properties.getValue('filmEnabled') as boolean; }
-  set filmEnabled(v: boolean) { this.properties.setValue('filmEnabled', v); }
 
   getParams(): FilmEmulationParams {
     return {

@@ -12,6 +12,7 @@ import {
   type MotionVector,
   type ApplyStabilizationParams,
 } from '../../filters/StabilizeMotion';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * 2D motion stabilization effect node.
@@ -37,50 +38,28 @@ export class StabilizationNode extends EffectNode {
   /** Frame number of the previous frame (for consecutive-frame detection). */
   private previousFrameNumber: number = -1;
 
+  declare stabilizationEnabled: boolean;
+  declare smoothingStrength: number;
+  declare cropAmount: number;
+
   constructor(name?: string) {
     super('Stabilization', name);
 
-    this.properties.add({
-      name: 'stabilizationEnabled',
+    defineNodeProperty(this, 'stabilizationEnabled', {
       defaultValue: false,
     });
-    this.properties.add({
-      name: 'smoothingStrength',
+    defineNodeProperty(this, 'smoothingStrength', {
       defaultValue: 50,
       min: 0,
       max: 100,
       step: 1,
     });
-    this.properties.add({
-      name: 'cropAmount',
+    defineNodeProperty(this, 'cropAmount', {
       defaultValue: 8,
       min: 0,
       max: 64,
       step: 1,
     });
-  }
-
-  // -- Property accessors --
-
-  get stabilizationEnabled(): boolean {
-    return this.properties.getValue('stabilizationEnabled') as boolean;
-  }
-  set stabilizationEnabled(v: boolean) {
-    this.properties.setValue('stabilizationEnabled', v);
-  }
-
-  get smoothingStrength(): number {
-    return this.properties.getValue('smoothingStrength') as number;
-  }
-  set smoothingStrength(v: number) {
-    this.properties.setValue('smoothingStrength', v);
-  }
-
-  get cropAmount(): number {
-    return this.properties.getValue('cropAmount') as number;
-  }
-  set cropAmount(v: number) {
-    this.properties.setValue('cropAmount', v);
   }
 
   /**

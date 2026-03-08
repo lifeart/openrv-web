@@ -1,4 +1,5 @@
 import { RegisterNode } from '../base/NodeFactory';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
@@ -19,59 +20,38 @@ export class CDLNode extends EffectNode {
   readonly category: EffectCategory = 'color';
   readonly label = 'ASC CDL';
 
+  declare slopeR: number;
+  declare slopeG: number;
+  declare slopeB: number;
+  declare offsetR: number;
+  declare offsetG: number;
+  declare offsetB: number;
+  declare powerR: number;
+  declare powerG: number;
+  declare powerB: number;
+  declare saturation: number;
+
   constructor(name?: string) {
     super('CDL', name);
 
     // Slope per channel (multiplier)
-    this.properties.add({ name: 'slopeR', defaultValue: 1.0, min: 0, max: 10, step: 0.01 });
-    this.properties.add({ name: 'slopeG', defaultValue: 1.0, min: 0, max: 10, step: 0.01 });
-    this.properties.add({ name: 'slopeB', defaultValue: 1.0, min: 0, max: 10, step: 0.01 });
+    defineNodeProperty(this, 'slopeR', { defaultValue: 1.0, min: 0, max: 10, step: 0.01 });
+    defineNodeProperty(this, 'slopeG', { defaultValue: 1.0, min: 0, max: 10, step: 0.01 });
+    defineNodeProperty(this, 'slopeB', { defaultValue: 1.0, min: 0, max: 10, step: 0.01 });
 
     // Offset per channel (addition)
-    this.properties.add({ name: 'offsetR', defaultValue: 0.0, min: -1, max: 1, step: 0.001 });
-    this.properties.add({ name: 'offsetG', defaultValue: 0.0, min: -1, max: 1, step: 0.001 });
-    this.properties.add({ name: 'offsetB', defaultValue: 0.0, min: -1, max: 1, step: 0.001 });
+    defineNodeProperty(this, 'offsetR', { defaultValue: 0.0, min: -1, max: 1, step: 0.001 });
+    defineNodeProperty(this, 'offsetG', { defaultValue: 0.0, min: -1, max: 1, step: 0.001 });
+    defineNodeProperty(this, 'offsetB', { defaultValue: 0.0, min: -1, max: 1, step: 0.001 });
 
     // Power per channel (gamma)
-    this.properties.add({ name: 'powerR', defaultValue: 1.0, min: 0.1, max: 4, step: 0.01 });
-    this.properties.add({ name: 'powerG', defaultValue: 1.0, min: 0.1, max: 4, step: 0.01 });
-    this.properties.add({ name: 'powerB', defaultValue: 1.0, min: 0.1, max: 4, step: 0.01 });
+    defineNodeProperty(this, 'powerR', { defaultValue: 1.0, min: 0.1, max: 4, step: 0.01 });
+    defineNodeProperty(this, 'powerG', { defaultValue: 1.0, min: 0.1, max: 4, step: 0.01 });
+    defineNodeProperty(this, 'powerB', { defaultValue: 1.0, min: 0.1, max: 4, step: 0.01 });
 
     // Saturation (applied after SOP)
-    this.properties.add({ name: 'saturation', defaultValue: 1.0, min: 0, max: 4, step: 0.01 });
+    defineNodeProperty(this, 'saturation', { defaultValue: 1.0, min: 0, max: 4, step: 0.01 });
   }
-
-  // -- Property accessors --
-
-  get slopeR(): number { return this.properties.getValue('slopeR') as number; }
-  set slopeR(v: number) { this.properties.setValue('slopeR', v); }
-
-  get slopeG(): number { return this.properties.getValue('slopeG') as number; }
-  set slopeG(v: number) { this.properties.setValue('slopeG', v); }
-
-  get slopeB(): number { return this.properties.getValue('slopeB') as number; }
-  set slopeB(v: number) { this.properties.setValue('slopeB', v); }
-
-  get offsetR(): number { return this.properties.getValue('offsetR') as number; }
-  set offsetR(v: number) { this.properties.setValue('offsetR', v); }
-
-  get offsetG(): number { return this.properties.getValue('offsetG') as number; }
-  set offsetG(v: number) { this.properties.setValue('offsetG', v); }
-
-  get offsetB(): number { return this.properties.getValue('offsetB') as number; }
-  set offsetB(v: number) { this.properties.setValue('offsetB', v); }
-
-  get powerR(): number { return this.properties.getValue('powerR') as number; }
-  set powerR(v: number) { this.properties.setValue('powerR', v); }
-
-  get powerG(): number { return this.properties.getValue('powerG') as number; }
-  set powerG(v: number) { this.properties.setValue('powerG', v); }
-
-  get powerB(): number { return this.properties.getValue('powerB') as number; }
-  set powerB(v: number) { this.properties.setValue('powerB', v); }
-
-  get saturation(): number { return this.properties.getValue('saturation') as number; }
-  set saturation(v: number) { this.properties.setValue('saturation', v); }
 
   /**
    * Build a CDLValues struct from the current property values.

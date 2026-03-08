@@ -4,6 +4,7 @@ import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applySharpenCPU } from '../../ui/components/ViewerEffects';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Sharpening effect node.
@@ -19,16 +20,13 @@ export class SharpenNode extends EffectNode {
   readonly category: EffectCategory = 'spatial';
   readonly label = 'Sharpen';
 
+  declare amount: number;
+
   constructor(name?: string) {
     super('Sharpen', name);
 
-    this.properties.add({ name: 'amount', defaultValue: 0, min: 0, max: 100, step: 1 });
+    defineNodeProperty(this, 'amount', { defaultValue: 0, min: 0, max: 100, step: 1 });
   }
-
-  // -- Property accessors --
-
-  get amount(): number { return this.properties.getValue('amount') as number; }
-  set amount(v: number) { this.properties.setValue('amount', v); }
 
   isIdentity(): boolean {
     return this.amount <= 0;

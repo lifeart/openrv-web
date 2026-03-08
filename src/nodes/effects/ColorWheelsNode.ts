@@ -1,4 +1,5 @@
 import { RegisterNode } from '../base/NodeFactory';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 import { EffectNode } from './EffectNode';
 import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
@@ -22,89 +23,50 @@ export class ColorWheelsNode extends EffectNode {
   readonly category: EffectCategory = 'color';
   readonly label = 'Color Wheels';
 
+  declare liftR: number;
+  declare liftG: number;
+  declare liftB: number;
+  declare liftY: number;
+  declare gammaR: number;
+  declare gammaG: number;
+  declare gammaB: number;
+  declare gammaY: number;
+  declare gainR: number;
+  declare gainG: number;
+  declare gainB: number;
+  declare gainY: number;
+  declare masterR: number;
+  declare masterG: number;
+  declare masterB: number;
+  declare masterY: number;
+
   constructor(name?: string) {
     super('ColorWheels', name);
 
     // Lift (shadows)
-    this.properties.add({ name: 'liftR', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'liftG', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'liftB', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'liftY', defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'liftR', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'liftG', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'liftB', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'liftY', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
 
     // Gamma (midtones)
-    this.properties.add({ name: 'gammaR', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'gammaG', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'gammaB', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'gammaY', defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gammaR', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gammaG', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gammaB', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gammaY', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
 
     // Gain (highlights)
-    this.properties.add({ name: 'gainR', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'gainG', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'gainB', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'gainY', defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gainR', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gainG', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gainB', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'gainY', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
 
     // Master (global)
-    this.properties.add({ name: 'masterR', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'masterG', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'masterB', defaultValue: 0, min: -1, max: 1, step: 0.01 });
-    this.properties.add({ name: 'masterY', defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'masterR', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'masterG', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'masterB', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
+    defineNodeProperty(this, 'masterY', { defaultValue: 0, min: -1, max: 1, step: 0.01 });
   }
-
-  // -- Lift accessors --
-
-  get liftR(): number { return this.properties.getValue('liftR') as number; }
-  set liftR(v: number) { this.properties.setValue('liftR', v); }
-
-  get liftG(): number { return this.properties.getValue('liftG') as number; }
-  set liftG(v: number) { this.properties.setValue('liftG', v); }
-
-  get liftB(): number { return this.properties.getValue('liftB') as number; }
-  set liftB(v: number) { this.properties.setValue('liftB', v); }
-
-  get liftY(): number { return this.properties.getValue('liftY') as number; }
-  set liftY(v: number) { this.properties.setValue('liftY', v); }
-
-  // -- Gamma accessors --
-
-  get gammaR(): number { return this.properties.getValue('gammaR') as number; }
-  set gammaR(v: number) { this.properties.setValue('gammaR', v); }
-
-  get gammaG(): number { return this.properties.getValue('gammaG') as number; }
-  set gammaG(v: number) { this.properties.setValue('gammaG', v); }
-
-  get gammaB(): number { return this.properties.getValue('gammaB') as number; }
-  set gammaB(v: number) { this.properties.setValue('gammaB', v); }
-
-  get gammaY(): number { return this.properties.getValue('gammaY') as number; }
-  set gammaY(v: number) { this.properties.setValue('gammaY', v); }
-
-  // -- Gain accessors --
-
-  get gainR(): number { return this.properties.getValue('gainR') as number; }
-  set gainR(v: number) { this.properties.setValue('gainR', v); }
-
-  get gainG(): number { return this.properties.getValue('gainG') as number; }
-  set gainG(v: number) { this.properties.setValue('gainG', v); }
-
-  get gainB(): number { return this.properties.getValue('gainB') as number; }
-  set gainB(v: number) { this.properties.setValue('gainB', v); }
-
-  get gainY(): number { return this.properties.getValue('gainY') as number; }
-  set gainY(v: number) { this.properties.setValue('gainY', v); }
-
-  // -- Master accessors --
-
-  get masterR(): number { return this.properties.getValue('masterR') as number; }
-  set masterR(v: number) { this.properties.setValue('masterR', v); }
-
-  get masterG(): number { return this.properties.getValue('masterG') as number; }
-  set masterG(v: number) { this.properties.setValue('masterG', v); }
-
-  get masterB(): number { return this.properties.getValue('masterB') as number; }
-  set masterB(v: number) { this.properties.setValue('masterB', v); }
-
-  get masterY(): number { return this.properties.getValue('masterY') as number; }
-  set masterY(v: number) { this.properties.setValue('masterY', v); }
 
   isIdentity(): boolean {
     return (

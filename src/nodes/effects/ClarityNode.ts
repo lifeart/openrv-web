@@ -4,6 +4,7 @@ import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyClarity } from '../../ui/components/ViewerEffects';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Clarity effect node.
@@ -18,14 +19,13 @@ export class ClarityNode extends EffectNode {
   readonly category: EffectCategory = 'spatial';
   readonly label = 'Clarity';
 
+  declare clarity: number;
+
   constructor(name?: string) {
     super('Clarity', name);
 
-    this.properties.add({ name: 'clarity', defaultValue: 0, min: -100, max: 100, step: 1 });
+    defineNodeProperty(this, 'clarity', { defaultValue: 0, min: -100, max: 100, step: 1 });
   }
-
-  get clarity(): number { return this.properties.getValue('clarity') as number; }
-  set clarity(v: number) { this.properties.setValue('clarity', v); }
 
   isIdentity(): boolean {
     return this.clarity === 0;

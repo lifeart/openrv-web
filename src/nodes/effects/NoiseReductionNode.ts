@@ -8,6 +8,7 @@ import {
   isNoiseReductionActive,
   type NoiseReductionParams,
 } from '../../filters/NoiseReduction';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Edge-preserving noise reduction effect node.
@@ -25,28 +26,19 @@ export class NoiseReductionNode extends EffectNode {
   readonly category: EffectCategory = 'spatial';
   readonly label = 'Noise Reduction';
 
+  declare strength: number;
+  declare luminanceStrength: number;
+  declare chromaStrength: number;
+  declare radius: number;
+
   constructor(name?: string) {
     super('NoiseReduction', name);
 
-    this.properties.add({ name: 'strength', defaultValue: 0, min: 0, max: 100, step: 1 });
-    this.properties.add({ name: 'luminanceStrength', defaultValue: 50, min: 0, max: 100, step: 1 });
-    this.properties.add({ name: 'chromaStrength', defaultValue: 75, min: 0, max: 100, step: 1 });
-    this.properties.add({ name: 'radius', defaultValue: 2, min: 1, max: 5, step: 1 });
+    defineNodeProperty(this, 'strength', { defaultValue: 0, min: 0, max: 100, step: 1 });
+    defineNodeProperty(this, 'luminanceStrength', { defaultValue: 50, min: 0, max: 100, step: 1 });
+    defineNodeProperty(this, 'chromaStrength', { defaultValue: 75, min: 0, max: 100, step: 1 });
+    defineNodeProperty(this, 'radius', { defaultValue: 2, min: 1, max: 5, step: 1 });
   }
-
-  // -- Property accessors --
-
-  get strength(): number { return this.properties.getValue('strength') as number; }
-  set strength(v: number) { this.properties.setValue('strength', v); }
-
-  get luminanceStrength(): number { return this.properties.getValue('luminanceStrength') as number; }
-  set luminanceStrength(v: number) { this.properties.setValue('luminanceStrength', v); }
-
-  get chromaStrength(): number { return this.properties.getValue('chromaStrength') as number; }
-  set chromaStrength(v: number) { this.properties.setValue('chromaStrength', v); }
-
-  get radius(): number { return this.properties.getValue('radius') as number; }
-  set radius(v: number) { this.properties.setValue('radius', v); }
 
   /**
    * Build a NoiseReductionParams struct from the current property values.

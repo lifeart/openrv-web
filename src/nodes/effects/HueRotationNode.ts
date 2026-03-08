@@ -4,6 +4,7 @@ import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyHueRotationInto, isIdentityHueRotation } from '../../color/HueRotation';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Luminance-preserving hue rotation effect node.
@@ -22,14 +23,13 @@ export class HueRotationNode extends EffectNode {
   readonly category: EffectCategory = 'color';
   readonly label = 'Hue Rotation';
 
+  declare degrees: number;
+
   constructor(name?: string) {
     super('HueRotation', name);
 
-    this.properties.add({ name: 'degrees', defaultValue: 0, min: -180, max: 180, step: 1 });
+    defineNodeProperty(this, 'degrees', { defaultValue: 0, min: -180, max: 180, step: 1 });
   }
-
-  get degrees(): number { return this.properties.getValue('degrees') as number; }
-  set degrees(v: number) { this.properties.setValue('degrees', v); }
 
   isIdentity(): boolean {
     return isIdentityHueRotation(this.degrees);

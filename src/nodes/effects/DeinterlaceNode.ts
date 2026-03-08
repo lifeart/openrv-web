@@ -10,6 +10,7 @@ import {
   type DeinterlaceMethod,
   type FieldOrder,
 } from '../../filters/Deinterlace';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Deinterlace effect node.
@@ -24,22 +25,17 @@ export class DeinterlaceNode extends EffectNode {
   readonly category: EffectCategory = 'spatial';
   readonly label = 'Deinterlace';
 
+  declare method: string;
+  declare fieldOrder: string;
+  declare deinterlaceEnabled: boolean;
+
   constructor(name?: string) {
     super('Deinterlace', name);
 
-    this.properties.add({ name: 'method', defaultValue: 'bob' as string });
-    this.properties.add({ name: 'fieldOrder', defaultValue: 'tff' as string });
-    this.properties.add({ name: 'deinterlaceEnabled', defaultValue: false });
+    defineNodeProperty(this, 'method', { defaultValue: 'bob' as string });
+    defineNodeProperty(this, 'fieldOrder', { defaultValue: 'tff' as string });
+    defineNodeProperty(this, 'deinterlaceEnabled', { defaultValue: false });
   }
-
-  get method(): string { return this.properties.getValue('method') as string; }
-  set method(v: string) { this.properties.setValue('method', v); }
-
-  get fieldOrder(): string { return this.properties.getValue('fieldOrder') as string; }
-  set fieldOrder(v: string) { this.properties.setValue('fieldOrder', v); }
-
-  get deinterlaceEnabled(): boolean { return this.properties.getValue('deinterlaceEnabled') as boolean; }
-  set deinterlaceEnabled(v: boolean) { this.properties.setValue('deinterlaceEnabled', v); }
 
   getParams(): DeinterlaceParams {
     return {

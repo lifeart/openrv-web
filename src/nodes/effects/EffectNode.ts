@@ -1,4 +1,5 @@
 import { IPNode } from '../base/IPNode';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 
@@ -31,33 +32,22 @@ export abstract class EffectNode extends IPNode {
   /** Human-readable label for UI display. */
   abstract readonly label: string;
 
+  /** Whether the effect is currently enabled. */
+  declare enabled: boolean;
+
+  /** Mix/opacity of the effect (0 = bypass, 1 = full). */
+  declare mix: number;
+
   constructor(type: string, name?: string) {
     super(type, name);
-    this.properties.add({ name: 'enabled', defaultValue: true });
-    this.properties.add({
-      name: 'mix',
+    defineNodeProperty(this, 'enabled', { defaultValue: true });
+    defineNodeProperty(this, 'mix', {
       defaultValue: 1.0,
       min: 0,
       max: 1,
       step: 0.01,
       label: 'Mix',
     });
-  }
-
-  /** Whether the effect is currently enabled. */
-  get enabled(): boolean {
-    return this.properties.getValue('enabled') as boolean;
-  }
-  set enabled(value: boolean) {
-    this.properties.setValue('enabled', value);
-  }
-
-  /** Mix/opacity of the effect (0 = bypass, 1 = full). */
-  get mix(): number {
-    return this.properties.getValue('mix') as number;
-  }
-  set mix(value: number) {
-    this.properties.setValue('mix', value);
   }
 
   /**

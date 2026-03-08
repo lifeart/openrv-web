@@ -4,6 +4,7 @@ import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyVibrance, type VibranceParams } from '../../ui/components/ViewerEffects';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Vibrance effect node.
@@ -18,18 +19,15 @@ export class VibranceNode extends EffectNode {
   readonly category: EffectCategory = 'color';
   readonly label = 'Vibrance';
 
+  declare vibrance: number;
+  declare skinProtection: boolean;
+
   constructor(name?: string) {
     super('Vibrance', name);
 
-    this.properties.add({ name: 'vibrance', defaultValue: 0, min: -100, max: 100, step: 1 });
-    this.properties.add({ name: 'skinProtection', defaultValue: true });
+    defineNodeProperty(this, 'vibrance', { defaultValue: 0, min: -100, max: 100, step: 1 });
+    defineNodeProperty(this, 'skinProtection', { defaultValue: true });
   }
-
-  get vibrance(): number { return this.properties.getValue('vibrance') as number; }
-  set vibrance(v: number) { this.properties.setValue('vibrance', v); }
-
-  get skinProtection(): boolean { return this.properties.getValue('skinProtection') as boolean; }
-  set skinProtection(v: boolean) { this.properties.setValue('skinProtection', v); }
 
   getParams(): VibranceParams {
     return {

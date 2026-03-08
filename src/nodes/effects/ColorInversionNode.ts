@@ -4,6 +4,7 @@ import type { EffectCategory } from './EffectNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { applyColorInversion } from '../../color/Inversion';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Color inversion (negation) effect node.
@@ -18,14 +19,13 @@ export class ColorInversionNode extends EffectNode {
   readonly category: EffectCategory = 'color';
   readonly label = 'Color Inversion';
 
+  declare inverted: boolean;
+
   constructor(name?: string) {
     super('ColorInversion', name);
 
-    this.properties.add({ name: 'inverted', defaultValue: false });
+    defineNodeProperty(this, 'inverted', { defaultValue: false });
   }
-
-  get inverted(): boolean { return this.properties.getValue('inverted') as boolean; }
-  set inverted(v: boolean) { this.properties.setValue('inverted', v); }
 
   isIdentity(): boolean {
     return !this.inverted;

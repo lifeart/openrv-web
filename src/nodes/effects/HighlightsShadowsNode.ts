@@ -7,6 +7,7 @@ import {
   applyHighlightsShadows,
   type HighlightsShadowsParams,
 } from '../../ui/components/ViewerEffects';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 
 /**
  * Highlights and shadows recovery effect node.
@@ -26,28 +27,19 @@ export class HighlightsShadowsNode extends EffectNode {
   readonly category: EffectCategory = 'tone';
   readonly label = 'Highlights/Shadows';
 
+  declare highlights: number;
+  declare shadows: number;
+  declare whites: number;
+  declare blacks: number;
+
   constructor(name?: string) {
     super('HighlightsShadows', name);
 
-    this.properties.add({ name: 'highlights', defaultValue: 0, min: -100, max: 100, step: 1 });
-    this.properties.add({ name: 'shadows', defaultValue: 0, min: -100, max: 100, step: 1 });
-    this.properties.add({ name: 'whites', defaultValue: 0, min: -100, max: 100, step: 1 });
-    this.properties.add({ name: 'blacks', defaultValue: 0, min: -100, max: 100, step: 1 });
+    defineNodeProperty(this, 'highlights', { defaultValue: 0, min: -100, max: 100, step: 1 });
+    defineNodeProperty(this, 'shadows', { defaultValue: 0, min: -100, max: 100, step: 1 });
+    defineNodeProperty(this, 'whites', { defaultValue: 0, min: -100, max: 100, step: 1 });
+    defineNodeProperty(this, 'blacks', { defaultValue: 0, min: -100, max: 100, step: 1 });
   }
-
-  // -- Property accessors --
-
-  get highlights(): number { return this.properties.getValue('highlights') as number; }
-  set highlights(v: number) { this.properties.setValue('highlights', v); }
-
-  get shadows(): number { return this.properties.getValue('shadows') as number; }
-  set shadows(v: number) { this.properties.setValue('shadows', v); }
-
-  get whites(): number { return this.properties.getValue('whites') as number; }
-  set whites(v: number) { this.properties.setValue('whites', v); }
-
-  get blacks(): number { return this.properties.getValue('blacks') as number; }
-  set blacks(v: number) { this.properties.setValue('blacks', v); }
 
   /**
    * Build a HighlightsShadowsParams struct from the current property values.
