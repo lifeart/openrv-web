@@ -12,7 +12,7 @@ import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/Proced
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { MediaType } from '../types/session';
-import type { MediaSource, UnsupportedCodecInfo } from './Session';
+import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
 import type { IPImage } from '../../core/image/Image';
 import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';

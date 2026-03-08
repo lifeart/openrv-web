@@ -13,7 +13,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import type { LoopMode, PlaybackMode } from '../types/session';
-import type { MediaSource, AudioPlaybackError } from './Session';
+import type { MediaSource, AudioPlaybackError } from './SessionTypes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackEngine } from './PlaybackEngine';
 import type { FPSMeasurement } from './PlaybackEngine';

@@ -1,6 +1,7 @@
 import { GTOBuilder, SimpleWriter } from 'gto-js';
 import type { GTOData, ObjectData } from 'gto-js';
-import type { Session, MediaSource } from './Session';
+import type { Session } from './Session';
+import type { MediaSource } from './SessionTypes';
 import type { PaintEngine } from '../../paint/PaintEngine';
 import type { PaintEffects } from '../../paint/types';
 

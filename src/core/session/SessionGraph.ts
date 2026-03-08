@@ -18,7 +18,7 @@ import type {
 } from './PropertyResolver';
 import { parseInitialSettings as _parseInitialSettings } from './GTOSettingsParser';
 import { getNumberValue, getNumberArray } from './AnnotationStore';
-import type { SessionMetadata, GTOViewSettings } from './Session';
+import type { SessionMetadata, GTOViewSettings } from './SessionTypes';
 import type { PlaybackMode } from '../types/session';
 import type { UncropState } from '../types/transform';
 import { Logger } from '../../utils/Logger';

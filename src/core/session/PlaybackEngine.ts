@@ -1,7 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 import type { LoopMode, PlaybackMode } from '../types/session';
-import type { MediaSource } from './Session';
+import type { MediaSource } from './SessionTypes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import type { TimingState } from './PlaybackTimingController';

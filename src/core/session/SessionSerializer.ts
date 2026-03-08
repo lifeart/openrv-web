@@ -4,7 +4,8 @@
  * Handles saving and loading of OpenRV Web projects (.orvproject files).
  */
 
-import type { Session, MediaSource } from './Session';
+import type { Session } from './Session';
+import type { MediaSource } from './SessionTypes';
 import type {
   SessionState,
   MediaReference,

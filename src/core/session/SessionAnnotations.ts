@@ -4,7 +4,7 @@ import { NoteManager } from './NoteManager';
 import { VersionManager } from './VersionManager';
 import { StatusManager } from './StatusManager';
 import { AnnotationStore } from './AnnotationStore';
-import type { ParsedAnnotations, MatteSettings } from './Session';
+import type { ParsedAnnotations, MatteSettings } from './SessionTypes';
 import type { PaintEffects } from '../../paint/types';
 
 export interface SessionAnnotationEvents extends EventMap {

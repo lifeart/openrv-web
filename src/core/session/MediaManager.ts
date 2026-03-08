@@ -1,5 +1,5 @@
 import type { ManagerBase } from '../ManagerBase';
-import type { MediaSource, UnsupportedCodecInfo } from './Session';
+import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
 import type { MediaType } from '../types/session';
 import {
   createSequenceInfo,

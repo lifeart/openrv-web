@@ -12,7 +12,7 @@ import {
   RV_PEN_WIDTH_SCALE,
   RV_TEXT_SIZE_SCALE,
 } from '../../paint/types';
-import type { GTOComponentDTO, ParsedAnnotations, MatteSettings } from './Session';
+import type { GTOComponentDTO, ParsedAnnotations, MatteSettings } from './SessionTypes';
 import { Logger } from '../../utils/Logger';
 
 const log = new Logger('AnnotationStore');

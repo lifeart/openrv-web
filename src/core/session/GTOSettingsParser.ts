@@ -20,7 +20,7 @@ import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
-import type { GTOViewSettings } from './Session';
+import type { GTOViewSettings } from './SessionTypes';
 
 /**
  * Orchestrate parsing of all view settings from a GTO DTO.
