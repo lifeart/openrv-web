@@ -5,14 +5,13 @@ import {
   setCanvasSize,
   updatePaintCanvasSize,
   updateOverlayDimensions,
-  drawPlaceholder,
   updateCanvasPosition,
   updateCSSBackground,
   listenForDPRChange,
 } from './ViewerCanvasSetup';
 import type { BackgroundPatternState } from './BackgroundPatternControl';
 
-// Mock dependencies
+// Mock dependencies needed by initializeCanvas and setCanvasSize
 vi.mock('../../utils/ui/HiDPICanvas', () => ({
   setupHiDPICanvas: vi.fn(),
   resetCanvasFromHiDPI: vi.fn(),
@@ -215,8 +214,8 @@ describe('ViewerCanvasSetup', () => {
       const ctx = createMockSetupContext();
       setCanvasSize(ctx, 0, 0);
 
-      expect(ctx.getPhysicalWidth()).toBeGreaterThanOrEqual(1);
-      expect(ctx.getPhysicalHeight()).toBeGreaterThanOrEqual(1);
+      expect(ctx.getPhysicalWidth()).toBe(1);
+      expect(ctx.getPhysicalHeight()).toBe(1);
     });
   });
 
@@ -325,28 +324,9 @@ describe('ViewerCanvasSetup', () => {
     });
   });
 
-  describe('drawPlaceholder', () => {
-    it('should call setupHiDPICanvas with correct parameters', async () => {
-      const { setupHiDPICanvas: mockSetup } = await import('../../utils/ui/HiDPICanvas');
-      const ctx = createMockSetupContext();
-      drawPlaceholder(ctx);
-
-      expect(mockSetup).toHaveBeenCalledWith({
-        canvas: ctx.getImageCanvas(),
-        ctx: ctx.getImageCtx(),
-        width: 640,
-        height: 360,
-      });
-    });
-
-    it('should call drawPlaceholder utility', async () => {
-      const { drawPlaceholder: mockDraw } = await import('./ViewerRenderingUtils');
-      const ctx = createMockSetupContext();
-      drawPlaceholder(ctx);
-
-      expect(mockDraw).toHaveBeenCalledWith(ctx.getImageCtx(), 640, 360, 1);
-    });
-  });
+  // drawPlaceholder is a thin delegation wrapper that calls setupHiDPICanvas
+  // and drawPlaceholderUtil. Testing it would only verify mock-to-mock wiring.
+  // The underlying utilities have their own dedicated tests.
 
   describe('updateCanvasPosition', () => {
     it('should center canvas in container with fitMode all', () => {
@@ -491,18 +471,18 @@ describe('ViewerCanvasSetup', () => {
       const state: BackgroundPatternState = { pattern: 'grey18', checkerSize: 'medium', customColor: '#1a1a1a' };
       updateCSSBackground(container, imageCanvas, state);
 
-      expect(container.style.background).toBeTruthy();
-      expect(imageCanvas.style.background).toBeTruthy();
-      // Both should have the same value
-      expect(container.style.background).toBe(imageCanvas.style.background);
+      // PATTERN_COLORS.grey18 = '#2e2e2e', jsdom normalizes to rgb
+      expect(container.style.background).toMatch(/rgb\(46,\s*46,\s*46\)|#2e2e2e/);
+      expect(imageCanvas.style.background).toMatch(/rgb\(46,\s*46,\s*46\)|#2e2e2e/);
     });
 
     it('should set grey50 background', () => {
       const state: BackgroundPatternState = { pattern: 'grey50', checkerSize: 'medium', customColor: '#1a1a1a' };
       updateCSSBackground(container, imageCanvas, state);
 
-      expect(container.style.background).toBeTruthy();
-      expect(container.style.background).toBe(imageCanvas.style.background);
+      // PATTERN_COLORS.grey50 = '#808080', jsdom normalizes to rgb
+      expect(container.style.background).toMatch(/rgb\(128,\s*128,\s*128\)|#808080/);
+      expect(imageCanvas.style.background).toMatch(/rgb\(128,\s*128,\s*128\)|#808080/);
     });
 
     it('should set white background', () => {

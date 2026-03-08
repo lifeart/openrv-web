@@ -113,10 +113,31 @@ export interface ActivePixelEffectFlags {
 }
 
 /**
+ * Extended result of detectActivePixelEffects that includes both the flags
+ * and the fetched context objects, so callers can reuse them without
+ * redundant getter calls. Extends ActivePixelEffectFlags to preserve
+ * backward compatibility for code that only reads the flag properties.
+ */
+export interface DetectedPixelEffects extends ActivePixelEffectFlags {
+  colorPipeline: ColorPipelineManager;
+  filterSettings: FilterSettings;
+  colorWheels: ColorWheels;
+  hslQualifier: HSLQualifier;
+  overlayManager: OverlayManager;
+  deinterlaceParams: DeinterlaceParams;
+  filmEmulationParams: FilmEmulationParams;
+  stabilizationParams: StabilizationParams;
+  noiseReductionParams: NoiseReductionParams;
+  interactionQuality: InteractionQualityManager;
+  channelMode: ChannelMode;
+}
+
+/**
  * Detect which pixel effects are currently active.
  * Shared between sync and async applyBatchedPixelEffects to avoid duplication.
+ * Returns both the flags and the fetched context objects so callers can reuse them.
  */
-export function detectActivePixelEffects(ctx: PixelEffectsContext): ActivePixelEffectFlags {
+export function detectActivePixelEffects(ctx: PixelEffectsContext): DetectedPixelEffects {
   const colorPipeline = ctx.getColorPipeline();
   const filterSettings = ctx.getFilterSettings();
   const channelMode = ctx.getChannelMode();
@@ -160,6 +181,17 @@ export function detectActivePixelEffects(ctx: PixelEffectsContext): ActivePixelE
     hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
     hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
     anyActive,
+    colorPipeline,
+    filterSettings,
+    colorWheels,
+    hslQualifier,
+    overlayManager,
+    deinterlaceParams,
+    filmEmulationParams,
+    stabilizationParams,
+    noiseReductionParams,
+    interactionQuality: ctx.getInteractionQuality(),
+    channelMode,
   };
 }
 
@@ -222,8 +254,8 @@ export function applyBatchedPixelEffects(
   width: number,
   height: number
 ): void {
-  const flags = detectActivePixelEffects(ctx);
-  if (!flags.anyActive) return;
+  const detected = detectActivePixelEffects(ctx);
+  if (!detected.anyActive) return;
 
   const {
     hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
@@ -231,22 +263,13 @@ export function applyBatchedPixelEffects(
     hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
     hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
     hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
-  } = flags;
-
-  const colorPipeline = ctx.getColorPipeline();
-  const filterSettings = ctx.getFilterSettings();
-  const colorWheels = ctx.getColorWheels();
-  const hslQualifier = ctx.getHSLQualifier();
-  const overlayManager = ctx.getOverlayManager();
+    colorPipeline, filterSettings, colorWheels, hslQualifier, overlayManager,
+    deinterlaceParams, filmEmulationParams, stabilizationParams,
+    noiseReductionParams, interactionQuality, channelMode,
+  } = detected;
   const effectProcessor = ctx.getEffectProcessor();
   const sharpenProcessor = ctx.getSharpenProcessor();
   const noiseReductionProcessor = ctx.getNoiseReductionProcessor();
-  const deinterlaceParams = ctx.getDeinterlaceParams();
-  const filmEmulationParams = ctx.getFilmEmulationParams();
-  const stabilizationParams = ctx.getStabilizationParams();
-  const noiseReductionParams = ctx.getNoiseReductionParams();
-  const interactionQuality = ctx.getInteractionQuality();
-  const channelMode = ctx.getChannelMode();
 
   // Single getImageData call
   const imageData = canvasCtx.getImageData(0, 0, width, height);
@@ -399,8 +422,8 @@ export async function applyBatchedPixelEffectsAsync(
   cropClipActive: boolean
 ): Promise<void> {
   try {
-    const flags = detectActivePixelEffects(ctx);
-    if (!flags.anyActive) return;
+    const detected = detectActivePixelEffects(ctx);
+    if (!detected.anyActive) return;
 
     const {
       hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
@@ -408,22 +431,13 @@ export async function applyBatchedPixelEffectsAsync(
       hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
       hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
       hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
-    } = flags;
-
-    const colorPipeline = ctx.getColorPipeline();
-    const filterSettings = ctx.getFilterSettings();
-    const channelMode = ctx.getChannelMode();
-    const colorWheels = ctx.getColorWheels();
-    const hslQualifier = ctx.getHSLQualifier();
-    const overlayManager = ctx.getOverlayManager();
+      colorPipeline, filterSettings, colorWheels, hslQualifier, overlayManager,
+      deinterlaceParams, filmEmulationParams, stabilizationParams,
+      noiseReductionParams, interactionQuality, channelMode,
+    } = detected;
     const effectProcessor = ctx.getEffectProcessor();
     const sharpenProcessor = ctx.getSharpenProcessor();
     const noiseReductionProcessor = ctx.getNoiseReductionProcessor();
-    const deinterlaceParams = ctx.getDeinterlaceParams();
-    const filmEmulationParams = ctx.getFilmEmulationParams();
-    const stabilizationParams = ctx.getStabilizationParams();
-    const noiseReductionParams = ctx.getNoiseReductionParams();
-    const interactionQuality = ctx.getInteractionQuality();
 
     // Single getImageData call
     const imageData = canvasCtx.getImageData(0, 0, width, height);
