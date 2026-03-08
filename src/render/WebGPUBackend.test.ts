@@ -22,17 +22,70 @@ import type { RenderState } from './RenderState';
 // =============================================================================
 
 /** Create a mock WGPUCanvasContext */
-function createMockGPUContext() {
+function createMockGPUContext(device?: ReturnType<typeof createMockDevice>) {
+  const mockTextureView = {};
+  const mockCanvasTexture = {
+    createView: vi.fn().mockReturnValue(mockTextureView),
+    destroy: vi.fn(),
+  };
+  if (device) {
+    device._mockCanvasTexture = mockCanvasTexture;
+  }
   return {
     configure: vi.fn(),
     unconfigure: vi.fn(),
+    getCurrentTexture: vi.fn().mockReturnValue(mockCanvasTexture),
   };
 }
 
-/** Create a mock WGPUDevice */
+/** Create a mock WGPUDevice with full pipeline support */
 function createMockDevice() {
+  const mockTextureView = {};
+  const mockTexture = {
+    createView: vi.fn().mockReturnValue(mockTextureView),
+    destroy: vi.fn(),
+  };
+  const mockBindGroupLayout = {};
+  const mockPipeline = {
+    getBindGroupLayout: vi.fn().mockReturnValue(mockBindGroupLayout),
+  };
+  const mockBuffer = {
+    getMappedRange: vi.fn().mockReturnValue(new ArrayBuffer(16)),
+    unmap: vi.fn(),
+    destroy: vi.fn(),
+  };
+  const mockCanvasTexture = {
+    createView: vi.fn().mockReturnValue(mockTextureView),
+    destroy: vi.fn(),
+  };
+  const mockPassEncoder = {
+    setPipeline: vi.fn(),
+    setBindGroup: vi.fn(),
+    draw: vi.fn(),
+    end: vi.fn(),
+  };
+  const mockCommandEncoder = {
+    beginRenderPass: vi.fn().mockReturnValue(mockPassEncoder),
+    finish: vi.fn().mockReturnValue({}),
+  };
   return {
     destroy: vi.fn(),
+    createShaderModule: vi.fn().mockReturnValue({}),
+    createRenderPipeline: vi.fn().mockReturnValue(mockPipeline),
+    createSampler: vi.fn().mockReturnValue({}),
+    createTexture: vi.fn().mockReturnValue(mockTexture),
+    createBindGroup: vi.fn().mockReturnValue({}),
+    createBuffer: vi.fn().mockReturnValue(mockBuffer),
+    createCommandEncoder: vi.fn().mockReturnValue(mockCommandEncoder),
+    queue: {
+      writeTexture: vi.fn(),
+      writeBuffer: vi.fn(),
+      submit: vi.fn(),
+      copyExternalImageToTexture: vi.fn(),
+    },
+    _mockCanvasTexture: mockCanvasTexture,
+    _mockPassEncoder: mockPassEncoder,
+    _mockCommandEncoder: mockCommandEncoder,
   };
 }
 
@@ -398,19 +451,87 @@ describe('WebGPUBackend', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Rendering stubs
+  // Rendering
   // ---------------------------------------------------------------------------
 
-  describe('rendering stubs', () => {
-    it('clear does not throw', () => {
+  describe('rendering', () => {
+    it('clear does not throw when uninitialized', () => {
       const backend = new WebGPUBackend();
       expect(() => backend.clear()).not.toThrow();
     });
 
-    it('renderImage does not throw', () => {
+    it('clear creates render pass with clear color when initialized', async () => {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
       const backend = new WebGPUBackend();
-      const image = { width: 100, height: 100, data: new Uint8ClampedArray(100 * 100 * 4), channels: 4 };
+      const canvas = createWebGPUCanvas(gpuCtx);
+      backend.initialize(canvas);
+      await backend.initAsync();
+
+      backend.clear(0.2, 0.3, 0.4, 1.0);
+
+      expect(gpuCtx.getCurrentTexture).toHaveBeenCalled();
+      expect(device.createCommandEncoder).toHaveBeenCalled();
+      expect(device.queue.submit).toHaveBeenCalled();
+    });
+
+    it('renderImage does not throw when uninitialized', () => {
+      const backend = new WebGPUBackend();
+      const image = { width: 100, height: 100, data: new ArrayBuffer(100 * 100 * 4), channels: 4, dataType: 'uint8' as const, metadata: {} };
       expect(() => backend.renderImage(image as any)).not.toThrow();
+    });
+
+    it('renderImage uploads SDR image and draws', async () => {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
+      const backend = new WebGPUBackend();
+      const canvas = createWebGPUCanvas(gpuCtx);
+      backend.initialize(canvas);
+      await backend.initAsync();
+
+      const image = {
+        width: 10,
+        height: 10,
+        data: new ArrayBuffer(10 * 10 * 4),
+        channels: 4,
+        dataType: 'uint8' as const,
+        metadata: {},
+        videoFrame: null,
+        imageBitmap: null,
+      };
+      backend.renderImage(image as any, 0, 0, 1, 1);
+
+      // Should have created texture and submitted commands
+      expect(device.createTexture).toHaveBeenCalled();
+      expect(device.queue.writeTexture).toHaveBeenCalled();
+      expect(device.queue.submit).toHaveBeenCalled();
+    });
+
+    it('renderImage uploads Float32 HDR image', async () => {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
+      const backend = new WebGPUBackend();
+      const canvas = createWebGPUCanvas(gpuCtx);
+      backend.initialize(canvas);
+      await backend.initAsync();
+
+      const image = {
+        width: 5,
+        height: 5,
+        data: new ArrayBuffer(5 * 5 * 4 * 4), // float32 RGBA
+        channels: 4,
+        dataType: 'float32' as const,
+        metadata: {},
+        videoFrame: null,
+        imageBitmap: null,
+      };
+      backend.renderImage(image as any, 0.5, -0.5, 2.0, 2.0);
+
+      expect(device.queue.writeBuffer).toHaveBeenCalled();
+      expect(device.queue.submit).toHaveBeenCalled();
     });
 
     it('renderSDRFrame returns null', () => {
@@ -422,6 +543,23 @@ describe('WebGPUBackend', () => {
     it('readPixelFloat returns null', () => {
       const backend = new WebGPUBackend();
       expect(backend.readPixelFloat(0, 0, 1, 1)).toBeNull();
+    });
+
+    it('isShaderReady returns true after initAsync', async () => {
+      const device = createMockDevice();
+      const gpuCtx = createMockGPUContext(device);
+      setupNavigatorGPU(createMockAdapter(device));
+      const backend = new WebGPUBackend();
+      const canvas = createWebGPUCanvas(gpuCtx);
+      backend.initialize(canvas);
+      await backend.initAsync();
+
+      expect(backend.isShaderReady()).toBe(true);
+    });
+
+    it('isShaderReady returns false before initAsync', () => {
+      const backend = new WebGPUBackend();
+      expect(backend.isShaderReady()).toBe(false);
     });
   });
 

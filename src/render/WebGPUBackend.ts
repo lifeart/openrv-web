@@ -1,19 +1,18 @@
 /**
  * WebGPUBackend - WebGPU-based rendering backend
  *
- * Phase 4: Implements the RendererBackend interface using the WebGPU API.
+ * Implements the RendererBackend interface using the WebGPU API.
  * This backend is selected when the display supports WebGPU with HDR output.
  *
  * Current status:
- * - initialize(): IMPLEMENTED - requests adapter/device, configures HDR canvas
+ * - initialize()/initAsync(): IMPLEMENTED - requests adapter/device, configures HDR canvas, creates pipeline
  * - dispose(): IMPLEMENTED - releases GPU resources
- * - renderImage(): STUB - renders nothing (pipeline TBD in future phases)
+ * - renderImage(): IMPLEMENTED - passthrough rendering (no color processing yet)
+ * - clear(): IMPLEMENTED - via render pass with clear color
+ * - resize(): IMPLEMENTED - updates canvas dimensions
  * - Color/tone-mapping state: IMPLEMENTED - stores state for future pipeline use
  * - setHDROutputMode(): IMPLEMENTED - reconfigures canvas tone mapping
  * - createTexture/deleteTexture/getContext: STUB - returns null (WebGPU uses different types)
- *
- * WebGPU APIs are experimental and not in the TypeScript DOM lib, so we use
- * local interfaces and type assertions throughout this module.
  */
 
 import type { IPImage } from '../core/image/Image';
@@ -37,42 +36,8 @@ import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState } from './RenderState';
-
-// ---------------------------------------------------------------------------
-// WebGPU type shims (experimental API, not in TS DOM lib)
-// These are minimal shapes used only for type-safe interactions; the actual
-// runtime objects come from the browser's WebGPU implementation.
-// ---------------------------------------------------------------------------
-
-/** Minimal GPUAdapter shape. */
-interface WGPUAdapter {
-  limits?: { maxBufferSize?: number };
-  requestDevice(desc?: { requiredLimits?: Record<string, number> }): Promise<WGPUDevice>;
-}
-
-/** Minimal GPUDevice shape. */
-interface WGPUDevice {
-  destroy(): void;
-}
-
-/** Minimal GPUCanvasContext shape for configuration. */
-interface WGPUCanvasContext {
-  configure(config: WGPUCanvasConfiguration): void;
-  unconfigure(): void;
-}
-
-interface WGPUCanvasConfiguration {
-  device: WGPUDevice;
-  format: string;
-  colorSpace?: string;
-  toneMapping?: { mode: string };
-  alphaMode?: string;
-}
-
-/** Shape of navigator.gpu. */
-interface WGPUNavigatorGPU {
-  requestAdapter(options?: { powerPreference?: string }): Promise<WGPUAdapter | null>;
-}
+import type { WGPUDevice, WGPUCanvasContext, WGPUNavigatorGPU, WGPUTexture } from './webgpu/WebGPUTypes';
+import { WebGPURenderPipelineManager } from './webgpu/WebGPURenderPipeline';
 
 // ---------------------------------------------------------------------------
 // WebGPUBackend
@@ -84,6 +49,12 @@ export class WebGPUBackend implements RendererBackend {
   private gpuContext: WGPUCanvasContext | null = null;
   private canvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 
+  // --- Render pipeline ---
+  private pipelineManager = new WebGPURenderPipelineManager();
+  private currentTexture: WGPUTexture | null = null;
+  private currentTextureWidth = 0;
+  private currentTextureHeight = 0;
+
   // --- State (mirrors WebGL2Backend for identical behavior) ---
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private colorInversionEnabled = false;
@@ -93,7 +64,7 @@ export class WebGPUBackend implements RendererBackend {
   // Whether extended tone mapping is active (vs. standard fallback)
   private extendedToneMapping = false;
 
-  // Texture filter mode (stored for future WebGPU pipeline implementation)
+  // Texture filter mode
   private _textureFilterMode: TextureFilterMode = 'linear';
 
   // --- Lifecycle ---
@@ -104,19 +75,14 @@ export class WebGPUBackend implements RendererBackend {
    * Performs synchronous validation that WebGPU is available and obtains a
    * canvas context. Full GPU adapter/device initialization requires the
    * async initAsync() method.
-   *
-   * Throws if WebGPU is not available or the canvas context cannot be created.
    */
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, _capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
-    // Synchronous guard: navigator.gpu must exist
     if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
       throw new Error('WebGPU is not available');
     }
 
-    // Attempt to get a 'webgpu' context to verify support.
-    // WebGPU only works with HTMLCanvasElement, not OffscreenCanvas.
     const ctx = (canvas as HTMLCanvasElement).getContext('webgpu' as string);
     if (!ctx) {
       throw new Error('WebGPU canvas context not available');
@@ -126,6 +92,7 @@ export class WebGPUBackend implements RendererBackend {
 
   /**
    * Complete async GPU initialization.
+   * Creates adapter, device, configures canvas, and initializes render pipeline.
    * Must be called after initialize() before any rendering.
    */
   async initAsync(): Promise<void> {
@@ -139,16 +106,30 @@ export class WebGPUBackend implements RendererBackend {
     if (!adapter) {
       throw new Error('WebGPU adapter not available');
     }
-    // Request higher maxBufferSize for large HDR images (default 256MB is too small for 4K+ RGBA32Float)
+
+    // Detect float32-filterable for linear sampling of HDR textures
+    const hasFloat32Filterable = adapter.features?.has('float32-filterable') === true;
+
+    // Request higher maxBufferSize for large HDR images
     const adapterMaxBuffer = adapter.limits?.maxBufferSize ?? 268435456;
-    const desiredMaxBuffer = Math.min(adapterMaxBuffer, 1024 * 1024 * 1024); // up to 1GB
-    const device = await adapter.requestDevice({
+    const desiredMaxBuffer = Math.min(adapterMaxBuffer, 1024 * 1024 * 1024);
+
+    const deviceDesc: { requiredFeatures?: string[]; requiredLimits?: Record<string, number> } = {
       requiredLimits: { maxBufferSize: desiredMaxBuffer },
-    });
+    };
+    if (hasFloat32Filterable) {
+      deviceDesc.requiredFeatures = ['float32-filterable'];
+    }
+
+    const device = await adapter.requestDevice(deviceDesc);
     this.device = device;
 
     // Configure canvas context with HDR settings
     this.configureContext(device, 'extended');
+
+    // Initialize render pipeline
+    const filterMode = hasFloat32Filterable ? 'linear' : 'nearest';
+    this.pipelineManager.initialize(device, filterMode);
   }
 
   /**
@@ -169,7 +150,6 @@ export class WebGPUBackend implements RendererBackend {
       this.extendedToneMapping = toneMappingMode === 'extended';
     } catch {
       if (toneMappingMode === 'extended') {
-        // Fall back to standard tone mapping
         this.configureContext(device, 'standard');
       } else {
         throw new Error('WebGPU canvas configuration failed');
@@ -178,6 +158,17 @@ export class WebGPUBackend implements RendererBackend {
   }
 
   dispose(): void {
+    // Clean up image texture
+    if (this.currentTexture) {
+      this.currentTexture.destroy();
+      this.currentTexture = null;
+      this.currentTextureWidth = 0;
+      this.currentTextureHeight = 0;
+    }
+
+    // Clean up pipeline resources
+    this.pipelineManager.dispose();
+
     if (this.gpuContext) {
       try {
         this.gpuContext.unconfigure();
@@ -195,27 +186,140 @@ export class WebGPUBackend implements RendererBackend {
     this.canvas = null;
   }
 
-  // --- Rendering (STUBS) ---
+  // --- Rendering ---
 
   resize(width: number, height: number): void {
     if (!this.canvas) return;
     this.canvas.width = width;
     this.canvas.height = height;
-    // WebGPU automatically handles viewport through canvas size
   }
 
-  clear(_r = 0.1, _g = 0.1, _b = 0.1, _a = 1): void {
-    // STUB: Full render pass clear will be implemented in a future phase.
-    // WebGPU clears via GPURenderPassDescriptor.colorAttachments[].loadOp = 'clear'
+  clear(r = 0.1, g = 0.1, b = 0.1, a = 1): void {
+    if (!this.device || !this.gpuContext) return;
+
+    const canvasTexture = this.gpuContext.getCurrentTexture();
+    const encoder = this.device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: canvasTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r, g, b, a },
+        },
+      ],
+    });
+    pass.end();
+    this.device.queue.submit([encoder.finish()]);
   }
 
-  renderImage(_image: IPImage, _offsetX = 0, _offsetY = 0, _scaleX = 1, _scaleY = 1): void {
-    // STUB: WebGPU render pipeline not yet implemented.
-    // Future implementation will:
-    // 1. Upload image data to a GPUTexture
-    // 2. Create a render pipeline with vertex/fragment shaders
-    // 3. Bind color adjustment uniforms
-    // 4. Draw a fullscreen quad
+  renderImage(image: IPImage, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1): void {
+    if (!this.device || !this.gpuContext) return;
+
+    const isFloat = image.dataType === 'float32';
+
+    // Upload image data to GPU texture
+    let texture: WGPUTexture;
+    if (image.videoFrame) {
+      texture = this.pipelineManager.uploadExternalTexture(this.device, image.videoFrame, image.width, image.height);
+    } else if (image.imageBitmap) {
+      texture = this.pipelineManager.uploadExternalTexture(this.device, image.imageBitmap, image.width, image.height);
+    } else {
+      // Get the appropriate typed array view for the image data
+      const data = isFloat ? new Float32Array(image.data) : new Uint8Array(image.data);
+
+      // Ensure we have 4-channel RGBA data
+      if (image.channels !== 4) {
+        // For non-RGBA data, expand to RGBA (passthrough only supports RGBA)
+        const rgbaData = this.expandToRGBA(data, image.width, image.height, image.channels, isFloat);
+        texture = this.pipelineManager.uploadImageTexture(this.device, rgbaData, image.width, image.height, isFloat);
+      } else {
+        texture = this.pipelineManager.uploadImageTexture(this.device, data, image.width, image.height, isFloat);
+      }
+    }
+
+    // Destroy previous texture if dimensions changed
+    if (
+      this.currentTexture &&
+      (this.currentTextureWidth !== image.width || this.currentTextureHeight !== image.height)
+    ) {
+      this.currentTexture.destroy();
+    }
+    this.currentTexture = texture;
+    this.currentTextureWidth = image.width;
+    this.currentTextureHeight = image.height;
+
+    // Update uniforms (offset and scale)
+    this.pipelineManager.updateUniforms(this.device, offsetX, offsetY, scaleX, scaleY);
+
+    // Get bind groups
+    const textureView = texture.createView();
+    const textureBindGroup = this.pipelineManager.getTextureBindGroup(this.device, textureView);
+    const uniformBindGroup = this.pipelineManager.uniforms;
+
+    if (!textureBindGroup || !uniformBindGroup || !this.pipelineManager.renderPipeline) return;
+
+    // Create render pass
+    const canvasTexture = this.gpuContext.getCurrentTexture();
+    const encoder = this.device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: canvasTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
+        },
+      ],
+    });
+
+    pass.setPipeline(this.pipelineManager.renderPipeline);
+    pass.setBindGroup(0, textureBindGroup);
+    pass.setBindGroup(1, uniformBindGroup);
+    pass.draw(3); // Fullscreen triangle
+    pass.end();
+
+    this.device.queue.submit([encoder.finish()]);
+  }
+
+  /**
+   * Expand 1/2/3-channel image data to 4-channel RGBA.
+   */
+  private expandToRGBA(
+    data: ArrayBufferView,
+    width: number,
+    height: number,
+    channels: number,
+    isFloat: boolean,
+  ): Float32Array | Uint8Array {
+    const pixelCount = width * height;
+    const src = isFloat ? (data as Float32Array) : (data as Uint8Array);
+    const dst = isFloat ? new Float32Array(pixelCount * 4) : new Uint8Array(pixelCount * 4);
+
+    const alpha = isFloat ? 1.0 : 255;
+    for (let i = 0; i < pixelCount; i++) {
+      const si = i * channels;
+      const di = i * 4;
+      const v0 = src[si] as number;
+
+      if (channels === 1) {
+        dst[di] = v0;
+        dst[di + 1] = v0;
+        dst[di + 2] = v0;
+        dst[di + 3] = alpha;
+      } else if (channels === 2) {
+        dst[di] = v0;
+        dst[di + 1] = v0;
+        dst[di + 2] = v0;
+        dst[di + 3] = src[si + 1] as number;
+      } else if (channels === 3) {
+        dst[di] = v0;
+        dst[di + 1] = src[si + 1] as number;
+        dst[di + 2] = src[si + 2] as number;
+        dst[di + 3] = alpha;
+      }
+    }
+    return dst;
   }
 
   renderTiledImages(
@@ -265,8 +369,6 @@ export class WebGPUBackend implements RendererBackend {
   // --- HDR output (IMPLEMENTED) ---
 
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', _capabilities: DisplayCapabilities): boolean {
-    // WebGPU handles HDR through canvas configuration rather than
-    // drawingBufferColorSpace. For now, store the mode.
     this.hdrOutputMode = mode;
     return true;
   }
@@ -283,7 +385,6 @@ export class WebGPUBackend implements RendererBackend {
 
   setTextureFilterMode(mode: TextureFilterMode): void {
     this._textureFilterMode = mode;
-    // WebGPU pipeline will apply via GPUSamplerDescriptor when implemented.
   }
 
   getTextureFilterMode(): TextureFilterMode {
@@ -293,27 +394,22 @@ export class WebGPUBackend implements RendererBackend {
   // --- Texture management (STUBS - WebGPU uses GPUTexture, not WebGLTexture) ---
 
   createTexture(): TextureHandle {
-    // WebGPU uses GPUTexture objects, not WebGLTexture.
-    // Returns null; callers should use WebGPU-specific texture creation.
     return null;
   }
 
   deleteTexture(_texture: TextureHandle): void {
-    // No-op for WebGPU backend; WebGLTexture is not applicable.
+    // No-op for WebGPU backend
   }
 
   // --- Shader compilation status ---
 
   isShaderReady(): boolean {
-    // WebGPU pipelines are created asynchronously in initAsync().
-    // Once initAsync() resolves, shaders are ready.
-    return this.device !== null;
+    return this.device !== null && this.pipelineManager.renderPipeline !== null;
   }
 
   // --- Context access ---
 
   getContext(): WebGL2RenderingContext | null {
-    // WebGPU backend does not have a WebGL2 context.
     return null;
   }
 
@@ -329,7 +425,7 @@ export class WebGPUBackend implements RendererBackend {
     return this.extendedToneMapping;
   }
 
-  // --- HDR effects stubs (Phase 1-3: not yet implemented for WebGPU) ---
+  // --- HDR effects stubs (Phase 2-4: not yet implemented for WebGPU) ---
 
   setBackgroundPattern(_state: BackgroundPatternState): void {
     /* STUB */
@@ -398,7 +494,7 @@ export class WebGPUBackend implements RendererBackend {
     /* STUB */
   }
 
-  // --- Phase 1B: New GPU shader effects (stubs) ---
+  // --- New GPU shader effects (stubs) ---
   setHighlightsShadows(_state: HighlightsShadowsState): void {
     /* STUB */
   }
@@ -469,7 +565,7 @@ export class WebGPUBackend implements RendererBackend {
     return false;
   }
 
-  // --- SDR frame rendering (Phase 1A) ---
+  // --- SDR frame rendering ---
   renderSDRFrame(
     _source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
   ): HTMLCanvasElement | null {
