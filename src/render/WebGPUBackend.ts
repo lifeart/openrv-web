@@ -7,11 +7,12 @@
  * Current status:
  * - initialize()/initAsync(): IMPLEMENTED - requests adapter/device, configures HDR canvas, creates pipeline
  * - dispose(): IMPLEMENTED - releases GPU resources
- * - renderImage(): IMPLEMENTED - passthrough rendering (no color processing yet)
+ * - renderImage(): IMPLEMENTED - passthrough rendering with shader pipeline integration
  * - clear(): IMPLEMENTED - via render pass with clear color
  * - resize(): IMPLEMENTED - updates canvas dimensions
- * - Color/tone-mapping state: IMPLEMENTED - stores state for future pipeline use
+ * - Color/tone-mapping state: IMPLEMENTED - feeds InternalShaderState via ShaderStateManager
  * - setHDROutputMode(): IMPLEMENTED - reconfigures canvas tone mapping
+ * - Shader pipeline: Phase 2 - multi-pass pipeline infrastructure integrated
  * - createTexture/deleteTexture/getContext: STUB - returns null (WebGPU uses different types)
  */
 
@@ -38,6 +39,10 @@ import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState } from './RenderState';
 import type { WGPUDevice, WGPUCanvasContext, WGPUNavigatorGPU, WGPUTexture } from './webgpu/WebGPUTypes';
 import { WebGPURenderPipelineManager } from './webgpu/WebGPURenderPipeline';
+import { WebGPUShaderPipeline } from './webgpu/WebGPUShaderPipeline';
+import { WebGPUPingPong } from './webgpu/WebGPUPingPong';
+import { WebGPUStateUploader } from './webgpu/WebGPUStateUploader';
+import { ShaderStateManager } from './ShaderStateManager';
 
 // ---------------------------------------------------------------------------
 // WebGPUBackend
@@ -54,6 +59,12 @@ export class WebGPUBackend implements RendererBackend {
   private currentTexture: WGPUTexture | null = null;
   private currentTextureWidth = 0;
   private currentTextureHeight = 0;
+
+  // --- Shader pipeline (Phase 2) ---
+  private shaderPipeline = new WebGPUShaderPipeline();
+  private shaderPingPong = new WebGPUPingPong();
+  private stateUploader = new WebGPUStateUploader();
+  private stateManager = new ShaderStateManager();
 
   // --- State (mirrors WebGL2Backend for identical behavior) ---
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
@@ -130,6 +141,9 @@ export class WebGPUBackend implements RendererBackend {
     // Initialize render pipeline
     const filterMode = hasFloat32Filterable ? 'linear' : 'nearest';
     this.pipelineManager.initialize(device, filterMode);
+
+    // Initialize shader pipeline (Phase 2)
+    this.shaderPipeline.initializeSharedResources(device);
   }
 
   /**
@@ -168,6 +182,12 @@ export class WebGPUBackend implements RendererBackend {
 
     // Clean up pipeline resources
     this.pipelineManager.dispose();
+
+    // Clean up shader pipeline (Phase 2)
+    this.shaderPipeline.dispose();
+    this.shaderPingPong.dispose();
+    this.stateUploader.dispose();
+    this.stateManager.dispose();
 
     if (this.gpuContext) {
       try {
@@ -249,23 +269,45 @@ export class WebGPUBackend implements RendererBackend {
     this.currentTextureWidth = image.width;
     this.currentTextureHeight = image.height;
 
-    // Update uniforms (offset and scale)
+    // Get canvas output
+    const canvasTexture = this.gpuContext.getCurrentTexture();
+    const canvasView = canvasTexture.createView();
+    const textureView = texture.createView();
+
+    // Try shader pipeline path if ready
+    if (this.isShaderPipelineReady()) {
+      const internalState = this.stateManager.getInternalState();
+      this.stateManager.setTexelSize(1.0 / image.width, 1.0 / image.height);
+
+      this.shaderPipeline.execute(
+        this.device,
+        textureView,
+        canvasView,
+        internalState,
+        image.width,
+        image.height,
+        isFloat,
+        offsetX,
+        offsetY,
+        scaleX,
+        scaleY,
+      );
+      return;
+    }
+
+    // Fallback: passthrough rendering (existing Phase 1 path)
     this.pipelineManager.updateUniforms(this.device, offsetX, offsetY, scaleX, scaleY);
 
-    // Get bind groups
-    const textureView = texture.createView();
     const textureBindGroup = this.pipelineManager.getTextureBindGroup(this.device, textureView);
     const uniformBindGroup = this.pipelineManager.uniforms;
 
     if (!textureBindGroup || !uniformBindGroup || !this.pipelineManager.renderPipeline) return;
 
-    // Create render pass
-    const canvasTexture = this.gpuContext.getCurrentTexture();
     const encoder = this.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {
-          view: canvasTexture.createView(),
+          view: canvasView,
           loadOp: 'clear',
           storeOp: 'store',
           clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
@@ -332,6 +374,7 @@ export class WebGPUBackend implements RendererBackend {
 
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorAdjustments = { ...adjustments };
+    this.stateManager.setColorAdjustments(adjustments);
   }
 
   getColorAdjustments(): ColorAdjustments {
@@ -340,12 +383,14 @@ export class WebGPUBackend implements RendererBackend {
 
   resetColorAdjustments(): void {
     this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+    this.stateManager.resetColorAdjustments();
   }
 
   // --- Color inversion (IMPLEMENTED - state management) ---
 
   setColorInversion(enabled: boolean): void {
     this.colorInversionEnabled = enabled;
+    this.stateManager.setColorInversion(enabled);
   }
 
   getColorInversion(): boolean {
@@ -356,6 +401,7 @@ export class WebGPUBackend implements RendererBackend {
 
   setToneMappingState(state: ToneMappingState): void {
     this.toneMappingState = { ...state };
+    this.stateManager.setToneMappingState(state);
   }
 
   getToneMappingState(): ToneMappingState {
@@ -364,6 +410,7 @@ export class WebGPUBackend implements RendererBackend {
 
   resetToneMappingState(): void {
     this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+    this.stateManager.resetToneMappingState();
   }
 
   // --- HDR output (IMPLEMENTED) ---
@@ -405,6 +452,14 @@ export class WebGPUBackend implements RendererBackend {
 
   isShaderReady(): boolean {
     return this.device !== null && this.pipelineManager.renderPipeline !== null;
+  }
+
+  /**
+   * Whether the shader pipeline is ready for multi-pass rendering.
+   * When false, renderImage() falls back to passthrough.
+   */
+  isShaderPipelineReady(): boolean {
+    return this.device !== null && this.shaderPipeline.isReady();
   }
 
   // --- Context access ---
@@ -562,7 +617,7 @@ export class WebGPUBackend implements RendererBackend {
   }
 
   hasPendingStateChanges(): boolean {
-    return false;
+    return this.stateManager.hasPendingStateChanges();
   }
 
   // --- SDR frame rendering ---
