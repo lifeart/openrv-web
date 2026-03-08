@@ -1,5 +1,8 @@
 # Implementation Plan: WebGPU Backend Readiness
 
+> **Status:** Phase 1 (Basic Rendering) is **COMPLETE** (commit `cd55d94`).
+> Phases 2-4 remain as future work.
+
 ## Current State
 
 | Module | Lines | Status |

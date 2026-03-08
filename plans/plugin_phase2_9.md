@@ -1,5 +1,8 @@
 # Implementation Plan: Plugin System Phase 2
 
+> **Status:** P0 (Event Subscriptions), P1 (Settings), P2 (Hot-Reload) are **COMPLETE**
+> (commits `338312e`, `c246ca8`, `eddd816`). P3 (Marketplace/Discovery) remains as future work.
+
 ## Phase 1 Recap (Current State)
 
 - **Manifest-driven** with `PluginId`, `SemVer`, dependency declarations, cycle detection
