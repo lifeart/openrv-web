@@ -1,18 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PlaybackEngine, type PlaybackEngineHost } from './PlaybackEngine';
 import { PLAYBACK_SPEED_PRESETS } from '../../config/PlaybackConfig';
-
-function createMockHost(duration: number = 100): PlaybackEngineHost {
-  return {
-    getCurrentSource: vi.fn().mockReturnValue({ duration, type: 'image' }),
-    getSourceB: vi.fn().mockReturnValue(null),
-    applyVolumeToVideo: vi.fn(),
-    safeVideoPlay: vi.fn(),
-    initVideoPreservesPitch: vi.fn(),
-    getAudioSyncEnabled: vi.fn().mockReturnValue(false),
-    setAudioSyncEnabled: vi.fn(),
-  };
-}
+import { createMockPlaybackEngineHost } from '../../../test/mocks';
 
 describe('PlaybackEngine', () => {
   let engine: PlaybackEngine;
@@ -20,7 +9,7 @@ describe('PlaybackEngine', () => {
 
   beforeEach(() => {
     engine = new PlaybackEngine();
-    host = createMockHost(100);
+    host = createMockPlaybackEngineHost(100);
     engine.setHost(host);
     engine.setOutPointInternal(100);
   });
@@ -718,6 +707,192 @@ describe('PlaybackEngine', () => {
     it('PE-133: dispose can be called multiple times safely', () => {
       engine.dispose();
       expect(() => engine.dispose()).not.toThrow();
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // advanceFrame
+  // ---------------------------------------------------------------
+  describe('advanceFrame', () => {
+    it('PE-140: forward direction advances frame by 1', () => {
+      engine.currentFrame = 10;
+      engine.advanceFrame(1);
+      expect(engine.currentFrame).toBe(11);
+    });
+
+    it('PE-141: reverse direction decreases frame by 1', () => {
+      engine.currentFrame = 10;
+      engine.advanceFrame(-1);
+      expect(engine.currentFrame).toBe(9);
+    });
+
+    it('PE-142: respects frameIncrement via stepForward', () => {
+      engine.frameIncrement = 2;
+      engine.currentFrame = 10;
+      engine.stepForward();
+      expect(engine.currentFrame).toBe(12);
+    });
+
+    it('PE-143: wraps at outPoint in loop mode', () => {
+      engine.setInOutRange(1, 10);
+      engine.loopMode = 'loop';
+      engine.currentFrame = 10;
+      engine.advanceFrame(1);
+      expect(engine.currentFrame).toBe(1);
+    });
+
+    it('PE-144: stops at outPoint in once mode', () => {
+      engine.setInOutRange(1, 10);
+      engine.loopMode = 'once';
+      engine.play();
+      engine.currentFrame = 10;
+      engine.advanceFrame(1);
+      expect(engine.currentFrame).toBe(10);
+      expect(engine.isPlaying).toBe(false);
+    });
+
+    it('PE-145: reverses at outPoint in pingpong mode', () => {
+      engine.setInOutRange(1, 10);
+      engine.loopMode = 'pingpong';
+      engine.currentFrame = 10;
+      engine.advanceFrame(1);
+      expect(engine.playDirection).toBe(-1);
+      expect(engine.currentFrame).toBe(9);
+    });
+
+    it('PE-146: wraps at inPoint when going reverse in loop mode', () => {
+      engine.setInOutRange(5, 20);
+      engine.loopMode = 'loop';
+      engine.currentFrame = 5;
+      engine.advanceFrame(-1);
+      expect(engine.currentFrame).toBe(20);
+    });
+
+    it('PE-147: stops at inPoint when going reverse in once mode', () => {
+      engine.setInOutRange(5, 20);
+      engine.loopMode = 'once';
+      engine.play();
+      engine.currentFrame = 5;
+      engine.advanceFrame(-1);
+      expect(engine.currentFrame).toBe(5);
+      expect(engine.isPlaying).toBe(false);
+    });
+
+    it('PE-148: reverses at inPoint when going reverse in pingpong mode', () => {
+      engine.setInOutRange(5, 20);
+      engine.loopMode = 'pingpong';
+      engine.setPlayDirectionInternal(-1);
+      engine.currentFrame = 5;
+      engine.advanceFrame(-1);
+      expect(engine.playDirection).toBe(1);
+      expect(engine.currentFrame).toBe(6);
+    });
+
+    it('PE-149: FPS tracking updates effectiveFps after 500ms window', () => {
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      // Start playing to enable FPS measurement
+      perfNowSpy.mockReturnValue(0);
+      engine.play();
+
+      engine.setInOutRange(1, 100);
+      engine.currentFrame = 1;
+
+      // Advance several frames within the first 500ms - effectiveFps stays 0
+      for (let i = 0; i < 10; i++) {
+        perfNowSpy.mockReturnValue(i * 20); // each advance at 20ms intervals
+        engine.advanceFrame(1);
+      }
+      // Still within 500ms window, effectiveFps should not have updated yet
+      // (fpsLastTime was set at play() time)
+
+      // Now jump past the 500ms boundary
+      perfNowSpy.mockReturnValue(600);
+      engine.advanceFrame(1);
+
+      // effectiveFps should now be non-zero
+      expect(engine.effectiveFps).toBeGreaterThan(0);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('PE-150: boundary frame numbers are 1-based (frame 1 is minimum)', () => {
+      engine.setInOutRange(1, 100);
+      engine.currentFrame = 1;
+      engine.loopMode = 'once';
+      engine.play();
+      engine.advanceFrame(-1);
+      // Should stay at inPoint (1), not go to 0
+      expect(engine.currentFrame).toBe(1);
+    });
+
+    it('PE-151: advanceFrame emits frameChanged', () => {
+      engine.currentFrame = 10;
+      const listener = vi.fn();
+      engine.on('frameChanged', listener);
+      engine.advanceFrame(1);
+      expect(listener).toHaveBeenCalledWith(11);
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // effectiveFps / droppedFrameCount
+  // ---------------------------------------------------------------
+  describe('effectiveFps / droppedFrameCount', () => {
+    it('PE-160: effectiveFps returns 0 when not playing', () => {
+      expect(engine.effectiveFps).toBe(0);
+    });
+
+    it('PE-161: effectiveFps reflects actual playback rate during play', () => {
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(0);
+      engine.play();
+      engine.setInOutRange(1, 200);
+      engine.currentFrame = 1;
+
+      // Simulate 24 frames advanced over ~1000ms
+      // Advance 12 frames, then cross the 500ms boundary
+      for (let i = 1; i <= 12; i++) {
+        perfNowSpy.mockReturnValue(i * (500 / 12));
+        engine.advanceFrame(1);
+      }
+
+      // Cross the 500ms measurement window
+      perfNowSpy.mockReturnValue(510);
+      engine.advanceFrame(1);
+
+      // effectiveFps should now reflect the measured rate
+      expect(engine.effectiveFps).toBeGreaterThan(0);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('PE-162: droppedFrameCount starts at 0', () => {
+      expect(engine.droppedFrameCount).toBe(0);
+    });
+
+    it('PE-163: droppedFrameCount resets on play', () => {
+      // Manually set droppedFrameCount via the internal timing state
+      (engine as unknown as { _ts: { droppedFrameCount: number } })._ts.droppedFrameCount = 5;
+      expect(engine.droppedFrameCount).toBe(5);
+
+      engine.play();
+      // play() calls resetFpsTracking which resets droppedFrameCount
+      expect(engine.droppedFrameCount).toBe(0);
+    });
+
+    it('PE-164: frame drop detection when frames are skipped', () => {
+      // The timing controller's trackDroppedFrame increments droppedFrameCount
+      // Access the internal timing controller to simulate a dropped frame
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+      expect(ts.droppedFrameCount).toBe(0);
+
+      // Simulate dropped frames by calling the timing controller directly
+      const tc = (engine as unknown as { _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void } })._timingController;
+      tc.trackDroppedFrame(ts, 3);
+      expect(engine.droppedFrameCount).toBe(3);
+
+      tc.trackDroppedFrame(ts);
+      expect(engine.droppedFrameCount).toBe(4);
     });
   });
 });

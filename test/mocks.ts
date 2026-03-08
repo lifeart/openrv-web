@@ -9,6 +9,8 @@ import { vi } from 'vitest';
 import type { Renderer } from '../src/render/Renderer';
 import type { MediaSource } from '../src/core/session/Session';
 import type { SessionBridgeContext } from '../src/AppSessionBridge';
+import type { PlaybackEngineHost } from '../src/core/session/PlaybackEngine';
+import type { GTOComponentDTO } from '../src/core/session/SessionTypes';
 
 // ---------------------------------------------------------------------------
 // WebGL2 – Renderer-style mock
@@ -948,4 +950,43 @@ export function createMockSessionBridgeContext(overrides?: Record<string, unknow
   } as unknown as SessionBridgeContext;
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// PlaybackEngineHost mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock PlaybackEngineHost with vi.fn() stubs.
+ *
+ * Used by: PlaybackEngine.test.ts, PlaybackEngine.setInOutRange.test.ts
+ */
+export function createMockPlaybackEngineHost(duration: number = 100): PlaybackEngineHost {
+  return {
+    getCurrentSource: vi.fn().mockReturnValue({ duration, type: 'image' }),
+    getSourceB: vi.fn().mockReturnValue(null),
+    applyVolumeToVideo: vi.fn(),
+    safeVideoPlay: vi.fn(),
+    initVideoPreservesPitch: vi.fn(),
+    getAudioSyncEnabled: vi.fn().mockReturnValue(false),
+    setAudioSyncEnabled: vi.fn(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GTO ComponentDTO mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock GTOComponentDTO whose `.property(name).value()` returns the
+ * matching entry from `props`.
+ *
+ * Used by: AnnotationStore.test.ts
+ */
+export function createMockGTOComponentDTO(props: Record<string, unknown>): GTOComponentDTO {
+  return {
+    property(name: string) {
+      return { value: () => props[name] };
+    },
+  };
 }

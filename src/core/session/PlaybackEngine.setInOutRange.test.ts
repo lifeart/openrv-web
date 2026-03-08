@@ -1,17 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaybackEngine, type PlaybackEngineHost } from './PlaybackEngine';
-
-function createMockHost(duration: number = 100): PlaybackEngineHost {
-  return {
-    getCurrentSource: vi.fn().mockReturnValue({ duration, type: 'image' }),
-    getSourceB: vi.fn().mockReturnValue(null),
-    applyVolumeToVideo: vi.fn(),
-    safeVideoPlay: vi.fn(),
-    initVideoPreservesPitch: vi.fn(),
-    getAudioSyncEnabled: vi.fn().mockReturnValue(false),
-    setAudioSyncEnabled: vi.fn(),
-  };
-}
+import { createMockPlaybackEngineHost } from '../../../test/mocks';
 
 describe('PlaybackEngine.setInOutRange', () => {
   let engine: PlaybackEngine;
@@ -19,7 +8,7 @@ describe('PlaybackEngine.setInOutRange', () => {
 
   beforeEach(() => {
     engine = new PlaybackEngine();
-    host = createMockHost(100);
+    host = createMockPlaybackEngineHost(100);
     engine.setHost(host);
     // Set initial out point so we have a range to work with
     engine.setOutPointInternal(100);

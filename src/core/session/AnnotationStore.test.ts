@@ -8,7 +8,6 @@ import {
   AnnotationStore,
   type AnnotationStoreCallbacks,
 } from './AnnotationStore';
-import type { GTOComponentDTO } from './SessionTypes';
 import {
   BrushType,
   LineJoin,
@@ -18,16 +17,7 @@ import {
   RV_PEN_WIDTH_SCALE,
   RV_TEXT_SIZE_SCALE,
 } from '../../paint/types';
-
-// ---- Helper ----
-
-function createMockComponent(props: Record<string, unknown>): GTOComponentDTO {
-  return {
-    property(name: string) {
-      return { value: () => props[name] };
-    },
-  };
-}
+import { createMockGTOComponentDTO as createMockComponent } from '../../../test/mocks';
 
 function createCallbacks(): AnnotationStoreCallbacks & {
   onAnnotationsLoaded: ReturnType<typeof vi.fn>;
@@ -848,6 +838,353 @@ describe('AnnotationStore', () => {
       store.dispose();
       expect(() => store.setMatteSettings({ show: true })).not.toThrow();
       expect(callbacks.onMatteChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---- parsePaintAnnotations ----
+
+  describe('parsePaintAnnotations', () => {
+    const aspectRatio = 2.0;
+
+    // Helper to create a mock PropertyDTO
+    function mockProperty(val: unknown): { value(): unknown; exists(): boolean } {
+      return {
+        value() { return val; },
+        exists() { return val !== undefined; },
+      };
+    }
+
+    // Helper to create a mock ComponentDTO (with name, for components() iteration)
+    function mockComponentDTO(
+      compName: string,
+      props: Record<string, unknown>,
+    ) {
+      return {
+        name: compName,
+        property(name: string) {
+          return mockProperty(props[name]);
+        },
+        exists() { return true; },
+      };
+    }
+
+    // Helper to create a mock ObjectDTO (paint object)
+    function mockPaintObject(opts: {
+      name?: string;
+      comps: ReturnType<typeof mockComponentDTO>[];
+      namedComps?: Record<string, ReturnType<typeof mockComponentDTO>>;
+    }) {
+      const namedComps = opts.namedComps ?? {};
+      const nullComp = {
+        name: '',
+        property(_n: string) { return mockProperty(undefined); },
+        exists() { return false; },
+      };
+      return {
+        name: opts.name ?? 'paint0',
+        components() { return opts.comps; },
+        component(name: string) {
+          return namedComps[name] ?? nullComp;
+        },
+      };
+    }
+
+    // Helper to create a mock GTODTO
+    function mockDTO(paintObjects: ReturnType<typeof mockPaintObject>[]) {
+      return {
+        byProtocol(protocol: string) {
+          if (protocol === 'RVPaint') {
+            return paintObjects;
+          }
+          return [];
+        },
+      } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    }
+
+    // Helper to wrap a frame component so its order property has exists()
+    function withExists(comp: ReturnType<typeof mockComponentDTO>) {
+      return {
+        ...comp,
+        property(name: string) {
+          const prop = comp.property(name);
+          return { ...prop, exists() { return prop.value() !== undefined; } };
+        },
+      };
+    }
+
+    it('AS-136: empty DTO (no RVPaint objects) — callback not invoked', () => {
+      const dto = mockDTO([]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+      expect(callbacks.onAnnotationsLoaded).not.toHaveBeenCalled();
+    });
+
+    it('AS-137: single stroke on frame 1 — correct annotation returned', () => {
+      const penComp = mockComponentDTO('pen:1:1:Alice', {
+        points: [[0.2, 0.1]],
+        color: [1, 0, 0, 1],
+        width: 0.01,
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:Alice'],
+      }));
+
+      const paintObj = mockPaintObject({ comps: [frameComp, penComp] });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      expect(callbacks.onAnnotationsLoaded).toHaveBeenCalledOnce();
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.annotations).toHaveLength(1);
+      expect(result.annotations[0].type).toBe('pen');
+      expect(result.annotations[0].frame).toBe(1);
+      expect(result.annotations[0].user).toBe('Alice');
+      expect(result.annotations[0].id).toBe('1');
+    });
+
+    it('AS-138: multiple strokes on same frame — all returned', () => {
+      const pen1 = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+        color: [1, 0, 0, 1],
+      });
+      const pen2 = mockComponentDTO('pen:2:1:User', {
+        points: [[0.5, 0.5]],
+        color: [0, 1, 0, 1],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User', 'pen:2:1:User'],
+      }));
+
+      const paintObj = mockPaintObject({ comps: [frameComp, pen1, pen2] });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      expect(callbacks.onAnnotationsLoaded).toHaveBeenCalledOnce();
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.annotations).toHaveLength(2);
+      expect(result.annotations[0].id).toBe('1');
+      expect(result.annotations[1].id).toBe('2');
+    });
+
+    it('AS-139: mixed pen and text annotations', () => {
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+        color: [1, 0, 0, 1],
+      });
+      const textComp = mockComponentDTO('text:2:1:User', {
+        text: 'hello',
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User', 'text:2:1:User'],
+      }));
+
+      const paintObj = mockPaintObject({ comps: [frameComp, penComp, textComp] });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.annotations).toHaveLength(2);
+      expect(result.annotations[0].type).toBe('pen');
+      expect(result.annotations[1].type).toBe('text');
+    });
+
+    it('AS-140: paint effects extracted from paint component', () => {
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User'],
+      }));
+      const paintComp = mockComponentDTO('paint', {
+        ghost: true,
+        hold: false,
+        ghostBefore: 3,
+        ghostAfter: 5,
+      });
+
+      const paintObj = mockPaintObject({
+        comps: [frameComp, penComp],
+        namedComps: { paint: paintComp },
+      });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.effects).toBeDefined();
+      expect(result.effects.ghost).toBe(true);
+      expect(result.effects.hold).toBe(false);
+      expect(result.effects.ghostBefore).toBe(3);
+      expect(result.effects.ghostAfter).toBe(5);
+    });
+
+    it('AS-141: tag effects extracted from tag component', () => {
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User'],
+      }));
+      const tagComp = mockComponentDTO('tag', {
+        annotate: '{"ghost": true, "ghostBefore": 2}',
+      });
+
+      const paintObj = mockPaintObject({
+        comps: [frameComp, penComp],
+        namedComps: { tag: tagComp },
+      });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.effects).toBeDefined();
+      expect(result.effects.ghost).toBe(true);
+      expect(result.effects.ghostBefore).toBe(2);
+    });
+
+    it('AS-142: annotation effects extracted from annotation component', () => {
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User'],
+      }));
+      const annotationComp = mockComponentDTO('annotation', {
+        ghost: true,
+        hold: true,
+        ghostBefore: 4,
+        ghostAfter: 6,
+      });
+
+      const paintObj = mockPaintObject({
+        comps: [frameComp, penComp],
+        namedComps: { annotation: annotationComp },
+      });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.effects).toBeDefined();
+      expect(result.effects.ghost).toBe(true);
+      expect(result.effects.hold).toBe(true);
+      expect(result.effects.ghostBefore).toBe(4);
+      expect(result.effects.ghostAfter).toBe(6);
+    });
+
+    it('AS-143: correct aspectRatio passed through to coordinate transforms', () => {
+      const rawX = 1.0;
+      const rawY = 0.25;
+      const customAspect = 1.5;
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[rawX, rawY]],
+        color: [1, 0, 0, 1],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User'],
+      }));
+
+      const paintObj = mockPaintObject({ comps: [frameComp, penComp] });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, customAspect);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const point = result.annotations[0].points[0];
+      expect(point.x).toBeCloseTo(rawX / customAspect + 0.5);
+      expect(point.y).toBeCloseTo(rawY + 0.5);
+    });
+
+    it('AS-144: callback receives correct ParsedAnnotations structure', () => {
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+        color: [1, 0, 0, 1],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User'],
+      }));
+      const paintComp = mockComponentDTO('paint', { ghost: true });
+
+      const paintObj = mockPaintObject({
+        comps: [frameComp, penComp],
+        namedComps: { paint: paintComp },
+      });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      expect(callbacks.onAnnotationsLoaded).toHaveBeenCalledOnce();
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result).toHaveProperty('annotations');
+      expect(result).toHaveProperty('effects');
+      expect(Array.isArray(result.annotations)).toBe(true);
+    });
+
+    it('AS-145: multiple paint objects in DTO', () => {
+      const pen1 = mockComponentDTO('pen:1:1:UserA', {
+        points: [[0, 0]],
+        color: [1, 0, 0, 1],
+      });
+      const frame1 = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:UserA'],
+      }));
+      const paintObj1 = mockPaintObject({ name: 'paint0', comps: [frame1, pen1] });
+
+      const pen2 = mockComponentDTO('pen:2:5:UserB', {
+        points: [[0.5, 0.5]],
+        color: [0, 1, 0, 1],
+      });
+      const frame5 = withExists(mockComponentDTO('frame:5', {
+        order: ['pen:2:5:UserB'],
+      }));
+      const paintObj2 = mockPaintObject({ name: 'paint1', comps: [frame5, pen2] });
+
+      const dto = mockDTO([paintObj1, paintObj2]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.annotations).toHaveLength(2);
+      expect(result.annotations[0].frame).toBe(1);
+      expect(result.annotations[1].frame).toBe(5);
+    });
+
+    it('AS-146: frame ordering preserved', () => {
+      const pen1 = mockComponentDTO('pen:1:3:User', { points: [[0, 0]] });
+      const pen2 = mockComponentDTO('pen:2:3:User', { points: [[0.1, 0.1]] });
+      const pen3 = mockComponentDTO('pen:3:3:User', { points: [[0.2, 0.2]] });
+      const frameComp = withExists(mockComponentDTO('frame:3', {
+        order: ['pen:1:3:User', 'pen:2:3:User', 'pen:3:3:User'],
+      }));
+
+      const paintObj = mockPaintObject({ comps: [frameComp, pen1, pen2, pen3] });
+      const dto = mockDTO([paintObj]);
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      expect(result.annotations).toHaveLength(3);
+      expect(result.annotations[0].id).toBe('1');
+      expect(result.annotations[1].id).toBe('2');
+      expect(result.annotations[2].id).toBe('3');
+    });
+
+    it('AS-147: missing components handled gracefully (no crash)', () => {
+      const paintObj = mockPaintObject({ comps: [] });
+      const dto = mockDTO([paintObj]);
+      expect(() => store.parsePaintAnnotations(dto, aspectRatio)).not.toThrow();
+      expect(callbacks.onAnnotationsLoaded).not.toHaveBeenCalled();
+    });
+
+    it('AS-148: dispose prevents callback invocation', () => {
+      const penComp = mockComponentDTO('pen:1:1:User', {
+        points: [[0, 0]],
+        color: [1, 0, 0, 1],
+      });
+      const frameComp = withExists(mockComponentDTO('frame:1', {
+        order: ['pen:1:1:User'],
+      }));
+
+      const paintObj = mockPaintObject({ comps: [frameComp, penComp] });
+      const dto = mockDTO([paintObj]);
+
+      store.dispose();
+      store.parsePaintAnnotations(dto, aspectRatio);
+
+      expect(callbacks.onAnnotationsLoaded).not.toHaveBeenCalled();
     });
   });
 });
