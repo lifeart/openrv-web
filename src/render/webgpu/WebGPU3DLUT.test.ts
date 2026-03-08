@@ -385,4 +385,81 @@ describe('WebGPU3DLUT', () => {
       expect(lut.isSlotActive('look')).toBe(true);
     });
   });
+
+  describe('validation and edge cases', () => {
+    it('WGPU-LUT-080: size < 2 throws on upload', () => {
+      const device = createMockDevice();
+      const lut = new WebGPU3DLUT();
+
+      expect(() => lut.upload(device, 'file', new Float32Array(4), 1)).toThrow(/at least 2/);
+      expect(() => lut.upload(device, 'file', new Float32Array(0), 0)).toThrow(/at least 2/);
+    });
+
+    it('WGPU-LUT-081: invalid slot name throws', () => {
+      const device = createMockDevice();
+      const lut = new WebGPU3DLUT();
+
+      expect(() => lut.upload(device, 'invalid' as LUTSlot, createLUTData(2), 2)).toThrow(/Unknown LUT slot/);
+      expect(() => lut.setEnabled('invalid' as LUTSlot, true)).toThrow(/Unknown LUT slot/);
+    });
+
+    it('WGPU-LUT-082: getSlotState returns a defensive copy', () => {
+      const device = createMockDevice();
+      const lut = new WebGPU3DLUT();
+      lut.upload(device, 'file', createLUTData(17), 17);
+      lut.setDomain('file', [0.1, 0.2, 0.3], [0.9, 0.8, 0.7]);
+
+      const snapshot = lut.getSlotState('file');
+      // Mutate the returned arrays
+      (snapshot.domainMin as number[])[0] = 999;
+      (snapshot.domainMax as number[])[2] = 888;
+
+      // Internal state should be unaffected
+      const fresh = lut.getSlotState('file');
+      expect(fresh.domainMin[0]).toBe(0.1);
+      expect(fresh.domainMax[2]).toBe(0.7);
+    });
+
+    it('WGPU-LUT-083: setDomain with same values does not mark dirty', () => {
+      const lut = new WebGPU3DLUT();
+      // Default domain is [0,0,0] to [1,1,1]
+      lut.setDomain('file', [0, 0, 0], [1, 1, 1]);
+      expect(lut.getSlotState('file').dirty).toBe(false);
+    });
+
+    it('WGPU-LUT-084: getBindGroupEntries returns null after clear', () => {
+      const device = createMockDevice();
+      const lut = new WebGPU3DLUT();
+      lut.upload(device, 'file', createLUTData(17), 17);
+
+      // Before clear, entries should exist
+      expect(lut.getBindGroupEntries('file', 0, 1)).not.toBeNull();
+
+      lut.clear('file');
+
+      // After clear, entries should be null
+      expect(lut.getBindGroupEntries('file', 0, 1)).toBeNull();
+    });
+
+    it('WGPU-LUT-085: hasDirtySlots returns false when no slots are dirty', () => {
+      const lut = new WebGPU3DLUT();
+      expect(lut.hasDirtySlots()).toBe(false);
+
+      // Upload makes it dirty, then clear dirty
+      const device = createMockDevice();
+      lut.upload(device, 'file', createLUTData(17), 17);
+      lut.clearDirty('file');
+      expect(lut.hasDirtySlots()).toBe(false);
+    });
+
+    it('WGPU-LUT-086: double dispose does not throw', () => {
+      const device = createMockDevice();
+      const lut = new WebGPU3DLUT();
+      lut.upload(device, 'file', createLUTData(17), 17);
+      lut.upload(device, 'look', createLUTData(17), 17);
+
+      lut.dispose();
+      expect(() => lut.dispose()).not.toThrow();
+    });
+  });
 });

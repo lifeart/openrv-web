@@ -862,6 +862,20 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     };
   }
 
+  /**
+   * Set the input transfer function code for the linearize stage.
+   * 0 = sRGB/linear, 1 = HLG, 2 = PQ, 7 = SMPTE240M
+   */
+  setInputTransferFunction(code: number): void {
+    this.state.linearizeInputTransfer = code;
+    this.dirtyFlags.add(DIRTY_LINEARIZE);
+  }
+
+  /** Get the current input transfer function code. */
+  getInputTransferFunction(): number {
+    return this.state.linearizeInputTransfer;
+  }
+
   setInlineLUT(lutData: Float32Array | null, channels: 1 | 3): void {
     this.dirtyFlags.add(DIRTY_INLINE_LUT);
     if (!lutData || lutData.length === 0) {

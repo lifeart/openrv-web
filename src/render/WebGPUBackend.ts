@@ -413,10 +413,20 @@ export class WebGPUBackend implements RendererBackend {
   // --- HDR output (IMPLEMENTED) ---
 
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', _capabilities: DisplayCapabilities): boolean {
-    this.hdrOutputMode = mode;
-    const wantHDR = mode !== 'sdr';
+    if (!this.device || !this.gpuContext) {
+      return false;
+    }
 
-    if (wantHDR !== this.hdrOutputEnabled && this.device && this.gpuContext) {
+    const wantHDR = mode !== 'sdr';
+    const modeChanged = mode !== this.hdrOutputMode;
+
+    if (!modeChanged) {
+      return false;
+    }
+
+    this.hdrOutputMode = mode;
+
+    if (wantHDR !== this.hdrOutputEnabled) {
       this.hdrOutputEnabled = wantHDR;
       // Reconfigure canvas: HDR uses rgba16float, SDR uses rgba8unorm
       if (wantHDR) {
@@ -426,6 +436,7 @@ export class WebGPUBackend implements RendererBackend {
           this.gpuContext.configure({
             device: this.device,
             format: 'rgba8unorm',
+            colorSpace: 'srgb',
             alphaMode: 'opaque',
           });
           this.extendedToneMapping = false;
@@ -434,8 +445,6 @@ export class WebGPUBackend implements RendererBackend {
           this.configureContext(this.device, 'standard');
         }
       }
-    } else {
-      this.hdrOutputEnabled = wantHDR;
     }
 
     return true;
@@ -466,9 +475,7 @@ export class WebGPUBackend implements RendererBackend {
    */
   setInputTransferFunction(code: number): void {
     this.inputTransferCode = code;
-    // The input transfer code is consumed by the linearize WGSL stage
-    // via the state uploader's packLinearize(). It is NOT a field on
-    // ShaderStateManager — it is set per-frame in the stage uniform.
+    this.stateManager.setInputTransferFunction(code);
   }
 
   /** Get the current input transfer function code. */
@@ -546,11 +553,13 @@ export class WebGPUBackend implements RendererBackend {
     if (this._deviceLost || !this.device || !this.gpuContext) return null;
     try {
       const canvasTexture = this.gpuContext.getCurrentTexture();
+      // rgba16float = 8 bytes/pixel, rgba32float = 16 bytes/pixel
+      const bytesPerPixel = this.hdrOutputEnabled ? 8 : 16;
       if (width === 1 && height === 1) {
-        const pixel = await this.readbackHelper.readPixelFloat(this.device, x, y, canvasTexture);
+        const pixel = await this.readbackHelper.readPixelFloat(this.device, x, y, canvasTexture, bytesPerPixel);
         return new Float32Array(pixel);
       }
-      return await this.readbackHelper.readRegion(this.device, x, y, width, height, canvasTexture);
+      return await this.readbackHelper.readRegion(this.device, x, y, width, height, canvasTexture, bytesPerPixel);
     } catch {
       return null;
     }
@@ -577,7 +586,7 @@ export class WebGPUBackend implements RendererBackend {
   // --- 3D LUT (Phase 4: backed by WebGPU3DLUT) ---
 
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void {
-    this.set3DLUT('file', lutData, lutSize, intensity);
+    this.set3DLUT('look', lutData, lutSize, intensity);
   }
 
   setFileLUT(
@@ -628,7 +637,23 @@ export class WebGPUBackend implements RendererBackend {
       return;
     }
 
-    this.lut3d.upload(this.device, slot, data, size);
+    // WebGPU3DLUT.upload() expects RGBA data (size^3*4 floats).
+    // Input may be RGB (size^3*3 floats) — expand to RGBA with alpha=1.0.
+    let rgbaData = data;
+    const expectedRGBA = size * size * size * 4;
+    const expectedRGB = size * size * size * 3;
+    if (data.length === expectedRGB) {
+      rgbaData = new Float32Array(expectedRGBA);
+      const texelCount = size * size * size;
+      for (let i = 0; i < texelCount; i++) {
+        rgbaData[i * 4] = data[i * 3]!;
+        rgbaData[i * 4 + 1] = data[i * 3 + 1]!;
+        rgbaData[i * 4 + 2] = data[i * 3 + 2]!;
+        rgbaData[i * 4 + 3] = 1.0;
+      }
+    }
+
+    this.lut3d.upload(this.device, slot, rgbaData, size);
     this.lut3d.setEnabled(slot, true, intensity);
     if (domainMin && domainMax) {
       this.lut3d.setDomain(slot, domainMin, domainMax);

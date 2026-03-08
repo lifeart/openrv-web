@@ -78,6 +78,17 @@ export class WebGPUTextureManager {
     height: number,
     channels: number,
   ): WGPUTexture {
+    if (channels < 1 || channels > 4) {
+      throw new Error(`Invalid channel count: ${channels}. Expected 1-4.`);
+    }
+    if (width <= 0 || height <= 0) {
+      throw new Error(`Invalid dimensions: ${width}x${height}. Width and height must be greater than 0.`);
+    }
+    if (data.length < width * height * channels) {
+      throw new Error(
+        `Data too short: got ${data.length} elements, expected at least ${width * height * channels} (${width}x${height}x${channels}).`,
+      );
+    }
     const isFloat = data instanceof Float32Array;
     const format = isFloat ? 'rgba32float' : 'rgba8unorm';
 
@@ -121,6 +132,9 @@ export class WebGPUTextureManager {
    * Uses display-p3 color space for HDR content.
    */
   uploadVideoFrame(device: WGPUDevice, frame: VideoFrame, width: number, height: number): WGPUTexture {
+    if (width <= 0 || height <= 0) {
+      throw new Error(`Invalid dimensions: ${width}x${height}. Width and height must be greater than 0.`);
+    }
     // Always recreate for VideoFrame since format may differ
     if (
       !this.imageTexture ||
@@ -155,6 +169,9 @@ export class WebGPUTextureManager {
    * Upload an ImageBitmap to a GPU texture via copyExternalImageToTexture.
    */
   uploadImageBitmap(device: WGPUDevice, bitmap: ImageBitmap, width: number, height: number): WGPUTexture {
+    if (width <= 0 || height <= 0) {
+      throw new Error(`Invalid dimensions: ${width}x${height}. Width and height must be greater than 0.`);
+    }
     if (
       !this.imageTexture ||
       this.imageWidth !== width ||
@@ -195,6 +212,9 @@ export class WebGPUTextureManager {
   ): WGPUTexture {
     if (!LUT_1D_SLOTS.has(slot)) {
       throw new Error(`Invalid 1D LUT slot: ${slot}. Expected one of: ${[...LUT_1D_SLOTS].join(', ')}`);
+    }
+    if (width <= 0) {
+      throw new Error(`Invalid 1D LUT width: ${width}. Width must be greater than 0.`);
     }
 
     // Destroy old texture
@@ -239,6 +259,14 @@ export class WebGPUTextureManager {
   upload3DLUT(device: WGPUDevice, slot: LUTSlot, data: Float32Array, size: number): WGPUTexture {
     if (!LUT_3D_SLOTS.has(slot)) {
       throw new Error(`Invalid 3D LUT slot: ${slot}. Expected one of: ${[...LUT_3D_SLOTS].join(', ')}`);
+    }
+    if (size < 2) {
+      throw new Error(`Invalid 3D LUT size: ${size}. Size must be at least 2.`);
+    }
+    if (data.length < size * size * size * 3) {
+      throw new Error(
+        `3D LUT data too short: got ${data.length} elements, expected at least ${size * size * size * 3} (${size}x${size}x${size}x3).`,
+      );
     }
 
     // Destroy old texture

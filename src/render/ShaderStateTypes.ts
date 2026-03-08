@@ -175,6 +175,7 @@ export interface InternalShaderState {
   linearizeSRGB2linear: boolean;
   linearizeRec709ToLinear: boolean;
   linearizeFileGamma: number;
+  linearizeInputTransfer: number; // 0=sRGB/linear, 1=HLG, 2=PQ, 7=SMPTE240M
   linearizeAlphaType: number;
 
   // Inline 1D LUT (from RVColor luminanceLUT)
@@ -324,6 +325,7 @@ export function createDefaultInternalState(): InternalShaderState {
     linearizeSRGB2linear: false,
     linearizeRec709ToLinear: false,
     linearizeFileGamma: 1.0,
+    linearizeInputTransfer: 0,
     linearizeAlphaType: 0,
     inlineLUTEnabled: false,
     inlineLUTChannels: 1,

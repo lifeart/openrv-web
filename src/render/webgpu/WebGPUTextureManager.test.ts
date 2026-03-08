@@ -540,4 +540,85 @@ describe('WebGPUTextureManager', () => {
       expect(manager.isImageDirty()).toBe(false);
     });
   });
+
+  // ─── Validation and edge cases ──────────────────────────────────────
+
+  describe('validation and edge cases', () => {
+    it('WGPU-TEX-080: invalid channel count (0 or 5) throws', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      expect(() => manager.uploadImageData(device, new Uint8Array(4), 1, 1, 0)).toThrow(/Invalid channel count/);
+      expect(() => manager.uploadImageData(device, new Uint8Array(5), 1, 1, 5)).toThrow(/Invalid channel count/);
+    });
+
+    it('WGPU-TEX-081: zero-dimension image throws', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      expect(() => manager.uploadImageData(device, new Uint8Array(4), 0, 1, 4)).toThrow(/Invalid dimensions/);
+      expect(() => manager.uploadImageData(device, new Uint8Array(4), 1, 0, 4)).toThrow(/Invalid dimensions/);
+      expect(() => manager.uploadImageData(device, new Uint8Array(4), 0, 0, 4)).toThrow(/Invalid dimensions/);
+    });
+
+    it('WGPU-TEX-082: data too short for dimensions throws', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      // 2x2 RGBA = 16 elements, but only 8 provided
+      expect(() => manager.uploadImageData(device, new Uint8Array(8), 2, 2, 4)).toThrow(/Data too short/);
+    });
+
+    it('WGPU-TEX-083: double dispose does not throw', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      manager.uploadImageData(device, new Uint8Array(16), 2, 2, 4);
+      manager.upload1DLUT(device, 'curves', new Uint8Array(32), 8, 4);
+
+      manager.dispose();
+      expect(() => manager.dispose()).not.toThrow();
+    });
+
+    it('WGPU-TEX-084: format switching SDR to HDR to SDR recreates texture each time', () => {
+      const device = createMockDevice();
+      const textures: ReturnType<typeof createMockTexture>[] = [];
+      device.createTexture.mockImplementation(() => {
+        const t = createMockTexture();
+        textures.push(t);
+        return t;
+      });
+
+      const manager = new WebGPUTextureManager();
+
+      // SDR upload (rgba8unorm)
+      manager.uploadImageData(device, new Uint8Array(4 * 4 * 4), 4, 4, 4);
+      expect(textures).toHaveLength(1);
+
+      // HDR upload (rgba32float) — format change forces texture recreation
+      manager.uploadImageData(device, new Float32Array(4 * 4 * 4), 4, 4, 4);
+      expect(textures).toHaveLength(2);
+      expect(textures[0]!.destroy).toHaveBeenCalled();
+
+      // Back to SDR — format change again forces texture recreation
+      manager.uploadImageData(device, new Uint8Array(4 * 4 * 4), 4, 4, 4);
+      expect(textures).toHaveLength(3);
+      expect(textures[1]!.destroy).toHaveBeenCalled();
+    });
+
+    it('WGPU-TEX-085: upload3DLUT with size < 2 throws', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      expect(() => manager.upload3DLUT(device, 'file3D', new Float32Array(3), 1)).toThrow(/at least 2/);
+      expect(() => manager.upload3DLUT(device, 'file3D', new Float32Array(0), 0)).toThrow(/at least 2/);
+    });
+
+    it('WGPU-TEX-086: upload1DLUT with width=0 throws', () => {
+      const device = createMockDevice();
+      const manager = new WebGPUTextureManager();
+
+      expect(() => manager.upload1DLUT(device, 'curves', new Uint8Array(0), 0, 4)).toThrow(/Width must be greater than 0/);
+    });
+  });
 });

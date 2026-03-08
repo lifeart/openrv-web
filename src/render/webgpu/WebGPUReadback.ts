@@ -41,6 +41,8 @@ export class WebGPUReadback {
   private activeIndex = 0;
   /** Whether a buffer is currently being mapped (prevents concurrent use). */
   private mapping: [boolean, boolean] = [false, false];
+  /** Whether this readback instance has been disposed. */
+  private _disposed = false;
 
   /**
    * Read a single pixel from a render texture.
@@ -56,8 +58,15 @@ export class WebGPUReadback {
     x: number,
     y: number,
     renderTexture: WGPUTexture,
+    bytesPerPixel: number = BYTES_PER_PIXEL_F32,
   ): Promise<[number, number, number, number]> {
-    const result = await this.readRegion(device, x, y, 1, 1, renderTexture);
+    if (this._disposed) {
+      throw new Error('WebGPUReadback: instance has been disposed');
+    }
+    if (x < 0 || y < 0) {
+      throw new Error('WebGPUReadback: x and y must be non-negative');
+    }
+    const result = await this.readRegion(device, x, y, 1, 1, renderTexture, bytesPerPixel);
     return [result[0]!, result[1]!, result[2]!, result[3]!];
   }
 
@@ -79,9 +88,20 @@ export class WebGPUReadback {
     width: number,
     height: number,
     renderTexture: WGPUTexture,
+    bytesPerPixel: number = BYTES_PER_PIXEL_F32,
   ): Promise<Float32Array> {
+    if (this._disposed) {
+      throw new Error('WebGPUReadback: instance has been disposed');
+    }
+    if (x < 0 || y < 0) {
+      throw new Error('WebGPUReadback: x and y must be non-negative');
+    }
+    if (width <= 0 || height <= 0) {
+      throw new Error('WebGPUReadback: width and height must be positive');
+    }
+
     // Calculate aligned bytes per row
-    const unalignedBytesPerRow = width * BYTES_PER_PIXEL_F32;
+    const unalignedBytesPerRow = width * bytesPerPixel;
     const bytesPerRow = alignTo(unalignedBytesPerRow, BYTES_PER_ROW_ALIGNMENT);
 
     // Total buffer size needed
@@ -112,29 +132,49 @@ export class WebGPUReadback {
 
     // Map the buffer for reading
     this.mapping[bufIdx] = true;
+    let mapSucceeded = false;
     try {
       await buffer.mapAsync(GPUMapMode.READ);
+      mapSucceeded = true;
 
       const mappedRange = buffer.getMappedRange(0, bufferSize);
-      const rawData = new Float32Array(mappedRange);
 
       // Copy data out, handling row alignment padding
       const pixelData = new Float32Array(width * height * 4);
-      const srcFloatsPerRow = bytesPerRow / 4; // floats per padded row
       const dstFloatsPerRow = width * 4; // floats per unpadded row
 
-      for (let row = 0; row < height; row++) {
-        const srcOffset = row * srcFloatsPerRow;
-        const dstOffset = row * dstFloatsPerRow;
-        for (let i = 0; i < dstFloatsPerRow; i++) {
-          pixelData[dstOffset + i] = rawData[srcOffset + i]!;
+      if (bytesPerPixel === BYTES_PER_PIXEL_F32) {
+        // rgba32float: 4 bytes per float, 4 channels = 16 bytes/pixel
+        const rawData = new Float32Array(mappedRange);
+        const srcFloatsPerRow = bytesPerRow / 4;
+        for (let row = 0; row < height; row++) {
+          const srcOffset = row * srcFloatsPerRow;
+          const dstOffset = row * dstFloatsPerRow;
+          for (let i = 0; i < dstFloatsPerRow; i++) {
+            pixelData[dstOffset + i] = rawData[srcOffset + i]!;
+          }
+        }
+      } else {
+        // rgba16float: 2 bytes per half-float, 4 channels = 8 bytes/pixel
+        const rawData = new Uint16Array(mappedRange);
+        const srcHalfsPerRow = bytesPerRow / 2;
+        for (let row = 0; row < height; row++) {
+          const srcOffset = row * srcHalfsPerRow;
+          const dstOffset = row * dstFloatsPerRow;
+          for (let i = 0; i < dstFloatsPerRow; i++) {
+            pixelData[dstOffset + i] = float16ToFloat32(rawData[srcOffset + i]!);
+          }
         }
       }
 
-      buffer.unmap();
       return pixelData;
     } finally {
-      this.mapping[bufIdx] = false;
+      if (mapSucceeded) {
+        buffer.unmap();
+      }
+      if (!this._disposed) {
+        this.mapping[bufIdx] = false;
+      }
     }
   }
 
@@ -142,6 +182,7 @@ export class WebGPUReadback {
    * Release all GPU readback buffers.
    */
   dispose(): void {
+    this._disposed = true;
     for (let i = 0; i < 2; i++) {
       const buf = this.buffers[i];
       if (buf) {
@@ -194,4 +235,28 @@ export class WebGPUReadback {
  */
 export function alignTo(value: number, alignment: number): number {
   return Math.ceil(value / alignment) * alignment;
+}
+
+/**
+ * Convert an IEEE 754 half-precision (float16) value to a float32 number.
+ */
+function float16ToFloat32(h: number): number {
+  const sign = (h >>> 15) & 0x1;
+  const exponent = (h >>> 10) & 0x1f;
+  const mantissa = h & 0x3ff;
+
+  if (exponent === 0) {
+    // Subnormal or zero
+    if (mantissa === 0) return sign ? -0 : 0;
+    // Subnormal: value = (-1)^sign * 2^(-14) * (mantissa / 1024)
+    return (sign ? -1 : 1) * Math.pow(2, -14) * (mantissa / 1024);
+  }
+
+  if (exponent === 0x1f) {
+    // Inf or NaN
+    return mantissa === 0 ? (sign ? -Infinity : Infinity) : NaN;
+  }
+
+  // Normalized: value = (-1)^sign * 2^(exponent-15) * (1 + mantissa/1024)
+  return (sign ? -1 : 1) * Math.pow(2, exponent - 15) * (1 + mantissa / 1024);
 }

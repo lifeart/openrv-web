@@ -335,4 +335,78 @@ describe('WebGPUReadback', () => {
       expect(() => readback.dispose()).not.toThrow();
     });
   });
+
+  describe('error handling', () => {
+    it('WGPU-RB-053: mapAsync rejection propagates error and resets mapping flag', async () => {
+      const buffer = createMockBuffer(new Float32Array(256 / 4));
+      buffer.mapAsync.mockRejectedValue(new Error('GPU device lost'));
+      const device = createMockDevice(buffer);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      await expect(readback.readRegion(device, 0, 0, 1, 1, texture)).rejects.toThrow('GPU device lost');
+
+      // Mapping flag should be reset so subsequent reads don't throw "still mapped"
+      buffer.mapAsync.mockResolvedValue(undefined);
+      const result = await readback.readRegion(device, 0, 0, 1, 1, texture);
+      expect(result).toBeInstanceOf(Float32Array);
+    });
+
+    it('WGPU-RB-054: zero-size region throws', async () => {
+      const buffer = createMockBuffer(new Float32Array(256 / 4));
+      const device = createMockDevice(buffer);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      await expect(readback.readRegion(device, 0, 0, 0, 0, texture)).rejects.toThrow();
+    });
+
+    it('WGPU-RB-055: negative coordinates throw', async () => {
+      const buffer = createMockBuffer(new Float32Array(256 / 4));
+      const device = createMockDevice(buffer);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      await expect(readback.readPixelFloat(device, -1, -1, texture)).rejects.toThrow();
+    });
+
+    it('WGPU-RB-056: concurrent read on same buffer index throws', async () => {
+      // Create a buffer whose mapAsync never resolves
+      const buffer1 = createMockBuffer(new Float32Array(256 / 4));
+      buffer1.mapAsync.mockReturnValue(new Promise(() => {})); // never resolves
+      const buffer2 = createMockBuffer(new Float32Array(256 / 4));
+      let bIdx = 0;
+
+      const device = createMockDevice(buffer1);
+      device.createBuffer.mockImplementation(() => [buffer1, buffer2][bIdx++]!);
+
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      // First read uses buffer 0 (index 0), never resolves
+      void readback.readRegion(device, 0, 0, 1, 1, texture);
+
+      // Second read uses buffer 1 (index 1), also never resolves
+      buffer2.mapAsync.mockReturnValue(new Promise(() => {}));
+      void readback.readRegion(device, 0, 0, 1, 1, texture);
+
+      // Third read would try buffer 0 again, which is still mapping
+      await expect(readback.readRegion(device, 0, 0, 1, 1, texture)).rejects.toThrow(
+        /still mapped/,
+      );
+    });
+
+    it('WGPU-RB-057: double dispose does not throw', async () => {
+      const buffer = createMockBuffer(new Float32Array(256 / 4));
+      const device = createMockDevice(buffer);
+      const texture = createMockTexture();
+      const readback = new WebGPUReadback();
+
+      await readback.readRegion(device, 0, 0, 1, 1, texture);
+
+      readback.dispose();
+      readback.dispose();
+      // No error means success — destroy on null buffers is a no-op
+    });
+  });
 });

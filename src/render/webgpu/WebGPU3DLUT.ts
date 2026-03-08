@@ -71,6 +71,17 @@ export class WebGPU3DLUT {
   }
 
   /**
+   * Get the state for a slot, throwing if the slot doesn't exist.
+   */
+  private getSlotStateOrThrow(slot: LUTSlot): LUTSlotState {
+    const state = this.slots.get(slot);
+    if (!state) {
+      throw new Error(`Unknown LUT slot '${slot}'. Valid slots are: file, look, display.`);
+    }
+    return state;
+  }
+
+  /**
    * Upload Float32Array LUT data to a `rgba32float` `texture_3d`.
    *
    * @param device - GPU device
@@ -79,7 +90,12 @@ export class WebGPU3DLUT {
    * @param size - Cube dimension (e.g. 17 for a 17x17x17 LUT)
    */
   upload(device: WGPUDevice, slot: LUTSlot, data: Float32Array, size: number): void {
-    const state = this.slots.get(slot)!;
+    const state = this.getSlotStateOrThrow(slot);
+
+    // Validate minimum size
+    if (size < 2) {
+      throw new Error(`LUT size must be at least 2, got ${size}`);
+    }
 
     // Validate data length
     const expectedLength = size * size * size * 4;
@@ -130,7 +146,7 @@ export class WebGPU3DLUT {
    * Set the enabled state and intensity for a LUT slot.
    */
   setEnabled(slot: LUTSlot, enabled: boolean, intensity: number = 1.0): void {
-    const state = this.slots.get(slot)!;
+    const state = this.getSlotStateOrThrow(slot);
     if (state.enabled !== enabled || state.intensity !== intensity) {
       state.enabled = enabled;
       state.intensity = intensity;
@@ -142,17 +158,26 @@ export class WebGPU3DLUT {
    * Set the domain range for a LUT slot.
    */
   setDomain(slot: LUTSlot, domainMin: [number, number, number], domainMax: [number, number, number]): void {
-    const state = this.slots.get(slot)!;
-    state.domainMin = [...domainMin];
-    state.domainMax = [...domainMax];
-    state.dirty = true;
+    const state = this.getSlotStateOrThrow(slot);
+    const minChanged = state.domainMin[0] !== domainMin[0] || state.domainMin[1] !== domainMin[1] || state.domainMin[2] !== domainMin[2];
+    const maxChanged = state.domainMax[0] !== domainMax[0] || state.domainMax[1] !== domainMax[1] || state.domainMax[2] !== domainMax[2];
+    if (minChanged || maxChanged) {
+      state.domainMin = [...domainMin];
+      state.domainMax = [...domainMax];
+      state.dirty = true;
+    }
   }
 
   /**
    * Get the current state for a LUT slot (read-only snapshot).
    */
   getSlotState(slot: LUTSlot): Readonly<LUTSlotState> {
-    return this.slots.get(slot)!;
+    const state = this.getSlotStateOrThrow(slot);
+    return {
+      ...state,
+      domainMin: [...state.domainMin] as [number, number, number],
+      domainMax: [...state.domainMax] as [number, number, number],
+    };
   }
 
   /**
@@ -164,7 +189,7 @@ export class WebGPU3DLUT {
    * @returns Array of bind group entries, or null if the slot has no texture
    */
   getBindGroupEntries(slot: LUTSlot, samplerBinding: number, textureBinding: number): WGPUBindGroupEntry[] | null {
-    const state = this.slots.get(slot)!;
+    const state = this.getSlotStateOrThrow(slot);
     if (!state.textureView || !this.sampler) {
       return null;
     }
@@ -179,7 +204,7 @@ export class WebGPU3DLUT {
    * Check whether a slot has a texture uploaded and is enabled.
    */
   isSlotActive(slot: LUTSlot): boolean {
-    const state = this.slots.get(slot)!;
+    const state = this.getSlotStateOrThrow(slot);
     return state.enabled && state.texture !== null;
   }
 
@@ -187,7 +212,7 @@ export class WebGPU3DLUT {
    * Clear the dirty flag for a slot (call after consuming the state).
    */
   clearDirty(slot: LUTSlot): void {
-    this.slots.get(slot)!.dirty = false;
+    this.getSlotStateOrThrow(slot).dirty = false;
   }
 
   /**
@@ -204,7 +229,7 @@ export class WebGPU3DLUT {
    * Remove LUT data from a slot (disables and destroys the texture).
    */
   clear(slot: LUTSlot): void {
-    const state = this.slots.get(slot)!;
+    const state = this.getSlotStateOrThrow(slot);
     if (state.texture) {
       state.texture.destroy();
     }
@@ -230,6 +255,9 @@ export class WebGPU3DLUT {
       state.textureView = null;
       state.enabled = false;
       state.size = 0;
+      state.intensity = 1.0;
+      state.domainMin = [0, 0, 0];
+      state.domainMax = [1, 1, 1];
       state.dirty = false;
     }
     this.sampler = null;

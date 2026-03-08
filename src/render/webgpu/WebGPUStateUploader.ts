@@ -461,6 +461,7 @@ export class WebGPUStateUploader {
     off = packFloat(view, off, state.linearizeSRGB2linear ? 1 : 0);
     off = packFloat(view, off, state.linearizeRec709ToLinear ? 1 : 0);
     off = packFloat(view, off, state.linearizeFileGamma);
+    off = packFloat(view, off, state.linearizeInputTransfer);
     off = packFloat(view, off, state.linearizeAlphaType);
     off = packFloat(view, off, state.inputPrimariesEnabled ? 1 : 0);
     // Align to 16 for mat3
