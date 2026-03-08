@@ -433,6 +433,9 @@ openrv-web/
 │   │   │   ├── WebGPUTypes.ts       # Shared WebGPU type shims
 │   │   │   ├── WebGPUDevice.ts      # Device/adapter/context wrapper
 │   │   │   ├── WebGPURenderPipeline.ts # Pipeline, uniform, texture management
+│   │   │   ├── WebGPUTextureManager.ts # Format-aware texture lifecycle, VideoFrame zero-copy, HDR canvas config
+│   │   │   ├── WebGPU3DLUT.ts       # 3D LUT management (3 slots), rgba32float texture_3d, trilinear interpolation
+│   │   │   ├── WebGPUReadback.ts    # GPU pixel readback, double-buffered MAP_READ, 256-byte alignment
 │   │   │   └── shaders/
 │   │   │       └── passthrough.wgsl # WGSL passthrough shader
 │   │   ├── createRenderer.ts    # Renderer factory
@@ -682,6 +685,9 @@ openrv-web/
 | `WebGPURenderer` | `src/render/WebGPUBackend.ts` | WebGPU rendering backend (full renderImage/clear/resize) |
 | `WebGPUDevice` | `src/render/webgpu/WebGPUDevice.ts` | Device/adapter/context wrapper |
 | `WebGPURenderPipeline` | `src/render/webgpu/WebGPURenderPipeline.ts` | Pipeline, uniform, texture management |
+| `WebGPUTextureManager` | `src/render/webgpu/WebGPUTextureManager.ts` | Format-aware texture lifecycle, VideoFrame zero-copy upload, HDR canvas config |
+| `WebGPU3DLUT` | `src/render/webgpu/WebGPU3DLUT.ts` | 3D LUT management (file/look/display slots), rgba32float texture_3d, dirty tracking |
+| `WebGPUReadback` | `src/render/webgpu/WebGPUReadback.ts` | GPU pixel readback, double-buffered MAP_READ buffers, 256-byte alignment |
 | `ShaderProgram` | `src/render/ShaderProgram.ts` | WebGL shader compilation |
 | `TextureCache` | `src/render/TextureCacheManager.ts` | Texture cache management |
 | `Session` | `src/core/session/Session.ts` | Session facade (decomposed into 4 services) |
@@ -984,7 +990,7 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Plugin architecture (PluginRegistry, 6 contribution types, ExporterRegistry, HDRDecoderPlugin example)
 - [x] Effect nodes (EffectNode base, 13 concrete nodes, EffectChain pipeline, GPU processor stubs)
 - [x] Plugin Phase 2 (PluginEventBus, PluginSettingsStore, HotReloadManager, unregister support)
-- [x] WebGPU backend internals (WebGPUDevice, WebGPURenderPipeline, WebGPUTypes, WGSL passthrough shader)
+- [x] WebGPU backend internals (WebGPUDevice, WebGPURenderPipeline, WebGPUTypes, WGSL passthrough shader) — all phases complete (Phase 1: device/pipeline, Phase 2: render pipeline, Phase 3: HDR texture management, Phase 4: 3D LUT / readback)
 - [x] PlaybackEngine.update() refactored into focused sub-methods
 - [x] SessionTypes.ts extracted from Session for type definitions
 - [x] ShaderStateManager decomposed (ShaderConstants, ShaderStateTypes, ShaderUniformUploader, ShaderBatchApplicator)

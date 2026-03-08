@@ -686,13 +686,16 @@ Adaptive proxy rendering dynamically adjusts rendering quality based on interact
 
 ## Experimental WebGPU Backend
 
-An experimental WebGPU rendering backend (`src/render/WebGPUBackend.ts`) is available at Phase 1 maturity, providing basic passthrough rendering as a foundation for future GPU compute and advanced rendering features. The backend is split into focused modules under `src/render/webgpu/`:
+An experimental WebGPU rendering backend (`src/render/WebGPUBackend.ts`) provides rendering with HDR support, 3D LUT processing, and GPU pixel readback. The backend is split into focused modules under `src/render/webgpu/`:
 
-- **`WebGPUDevice`** (`WebGPUDevice.ts`): Wraps adapter negotiation, device creation, canvas context configuration, and resource cleanup. Handles both SDR (`rgba8unorm`) and HDR (`rgba32float`) surface formats.
+- **`WebGPUDevice`** (`WebGPUDevice.ts`): Wraps adapter negotiation, device creation, canvas context configuration, and resource cleanup. Handles both SDR (`rgba8unorm`) and HDR (`rgba32float`) surface formats. Includes a `device.lost` handler for GPU recovery.
 - **`WebGPURenderPipeline`** (`WebGPURenderPipeline.ts`): Manages pipeline creation, texture uploads (including `VideoFrame` and `ImageBitmap` sources), bind group layout, and the render pass. Recreates pipelines and textures on resize.
+- **`WebGPUTextureManager`** (`WebGPUTextureManager.ts`): Format-aware texture lifecycle management. Supports VideoFrame zero-copy upload via `copyExternalImageToTexture`, HDR canvas configuration with `rgba16float`, and texture caching/reuse to minimize GPU allocations.
+- **`WebGPU3DLUT`** (`WebGPU3DLUT.ts`): 3D LUT management with three slots (file, look, display). LUT data is stored as `rgba32float` `texture_3d` textures with trilinear interpolation. Dirty tracking avoids redundant uploads.
+- **`WebGPUReadback`** (`WebGPUReadback.ts`): GPU pixel readback using double-buffered `MAP_READ` staging buffers with 256-byte row alignment. Exposes `readPixelFloatAsync()` for asynchronous pixel inspection.
 - **`WebGPUTypes`** (`WebGPUTypes.ts`): Shared type definitions for device state, pipeline configuration, and texture metadata.
 
-The current WGSL shader (`src/render/webgpu/shaders/passthrough.wgsl`) implements texture sampling with a full-screen quad. Phase 1 supports `renderImage()`, `clear()`, and `resize()` operations. The full color correction pipeline remains on the WebGL2 path; the WebGPU backend is opt-in and requires explicit activation. Browser support for WebGPU varies; the application falls back to WebGL2 when WebGPU is unavailable.
+The current WGSL shader (`src/render/webgpu/shaders/passthrough.wgsl`) implements texture sampling with a full-screen quad. The backend supports `renderImage()`, `clear()`, `resize()`, `set3DLUT()`, `setLUTEnabled()`, and `readPixelFloatAsync()` operations. The full color correction pipeline remains on the WebGL2 path; the WebGPU backend is opt-in and requires explicit activation. Browser support for WebGPU varies; the application falls back to WebGL2 when WebGPU is unavailable.
 
 ## Premultiply / Unpremultiply Alpha
 

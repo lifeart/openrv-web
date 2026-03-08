@@ -1,7 +1,8 @@
 # Implementation Plan: WebGPU Backend Readiness
 
-> **Status:** Phase 1 (Basic Rendering) is **COMPLETE** (commit `cd55d94`).
-> Phases 2-4 remain as future work.
+> **Status:** All phases **COMPLETE**.
+> Phase 1: commit `cd55d94`, Phase 2: commit `72baa98`, Phases 3-4: commit `8df835a`.
+> 146 WebGPU tests passing. Plan can be removed.
 
 ## Current State
 
