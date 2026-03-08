@@ -14,6 +14,7 @@ import {
   DIRTY_BACKGROUND,
 } from './ShaderConstants';
 import { float32ArrayEquals } from './ShaderStateTypes';
+import type { InternalShaderState } from './ShaderStateTypes';
 
 /**
  * Apply a full RenderState to the manager, marking only groups whose values
@@ -24,7 +25,7 @@ import { float32ArrayEquals } from './ShaderStateTypes';
  * This eliminates ~65 redundant uniform uploads per frame.
  */
 export function applyRenderState(manager: ShaderStateManager, renderState: RenderState): void {
-  const s = manager.getInternalState() as import('./ShaderStateTypes').InternalShaderState;
+  const s = manager.getInternalState() as InternalShaderState;
 
   // --- Color adjustments (8+ uniforms) ---
   {
@@ -88,7 +89,7 @@ export function applyRenderState(manager: ShaderStateManager, renderState: Rende
         s.bgColor1[0] === oldC1_0 && s.bgColor1[1] === oldC1_1 && s.bgColor1[2] === oldC1_2 &&
         s.bgColor2[0] === oldC2_0 && s.bgColor2[1] === oldC2_1 && s.bgColor2[2] === oldC2_2 &&
         s.bgCheckerSize === oldChecker) {
-      manager.getDirtyFlags().delete(DIRTY_BACKGROUND);
+      manager.clearDirtyFlag(DIRTY_BACKGROUND);
     }
   }
 

@@ -1182,8 +1182,7 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.fps !== undefined) this.fps = state.fps;
     if (state.loopMode !== undefined) {
       this._loopMode = state.loopMode;
-      // No direct emit — PlaybackEngine.loopMode setter already emits,
-      // which chains through SessionPlayback → Session event forwarding.
+      // Emits via PlaybackEngine.loopMode setter → SessionPlayback → Session event forwarding.
     }
     if (state.playbackMode !== undefined) this.playbackMode = state.playbackMode;
     if (state.volume !== undefined) this.volume = state.volume;

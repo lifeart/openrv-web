@@ -83,6 +83,87 @@ export function isToneMappingEnabled(ctx: PixelEffectsContext): boolean {
 }
 
 /**
+ * Flags indicating which pixel effects are active.
+ * Returned by detectActivePixelEffects() to avoid duplicating detection logic
+ * between the sync and async versions of applyBatchedPixelEffects.
+ */
+export interface ActivePixelEffectFlags {
+  hasCDL: boolean;
+  hasCurves: boolean;
+  hasSharpen: boolean;
+  hasNoiseReduction: boolean;
+  hasChannel: boolean;
+  hasHighlightsShadows: boolean;
+  hasVibrance: boolean;
+  hasClarity: boolean;
+  hasHueRotation: boolean;
+  hasColorWheels: boolean;
+  hasHSLQualifier: boolean;
+  hasFalseColor: boolean;
+  hasLuminanceVis: boolean;
+  hasZebras: boolean;
+  hasClippingOverlay: boolean;
+  hasToneMapping: boolean;
+  hasInversion: boolean;
+  hasDisplayColorMgmt: boolean;
+  hasDeinterlace: boolean;
+  hasFilmEmulation: boolean;
+  hasStabilization: boolean;
+  anyActive: boolean;
+}
+
+/**
+ * Detect which pixel effects are currently active.
+ * Shared between sync and async applyBatchedPixelEffects to avoid duplication.
+ */
+export function detectActivePixelEffects(ctx: PixelEffectsContext): ActivePixelEffectFlags {
+  const colorPipeline = ctx.getColorPipeline();
+  const filterSettings = ctx.getFilterSettings();
+  const channelMode = ctx.getChannelMode();
+  const colorWheels = ctx.getColorWheels();
+  const hslQualifier = ctx.getHSLQualifier();
+  const overlayManager = ctx.getOverlayManager();
+  const deinterlaceParams = ctx.getDeinterlaceParams();
+  const filmEmulationParams = ctx.getFilmEmulationParams();
+  const stabilizationParams = ctx.getStabilizationParams();
+  const noiseReductionParams = ctx.getNoiseReductionParams();
+
+  const hasCDL = !isDefaultCDL(colorPipeline.cdlValues);
+  const hasCurves = !isDefaultCurves(colorPipeline.curvesData);
+  const hasSharpen = filterSettings.sharpen > 0;
+  const hasNoiseReduction = isNoiseReductionActive(noiseReductionParams);
+  const hasChannel = channelMode !== 'rgb';
+  const hasHighlightsShadows = colorPipeline.colorAdjustments.highlights !== 0 || colorPipeline.colorAdjustments.shadows !== 0 ||
+                               colorPipeline.colorAdjustments.whites !== 0 || colorPipeline.colorAdjustments.blacks !== 0;
+  const hasVibrance = colorPipeline.colorAdjustments.vibrance !== 0;
+  const hasClarity = colorPipeline.colorAdjustments.clarity !== 0;
+  const hasHueRotation = !isIdentityHueRotation(colorPipeline.colorAdjustments.hueRotation);
+  const hasColorWheels = colorWheels.hasAdjustments();
+  const hasHSLQualifier = hslQualifier.isEnabled();
+  const hasFalseColor = overlayManager.getFalseColor().isEnabled();
+  const hasLuminanceVis = overlayManager.getLuminanceVisualization().getMode() !== 'off' && overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
+  const hasZebras = overlayManager.getZebraStripes().isEnabled();
+  const hasClippingOverlay = overlayManager.getClippingOverlay().isEnabled();
+  const hasToneMapping = isToneMappingEnabled(ctx);
+  const hasInversion = colorPipeline.colorInversionEnabled;
+  const hasDisplayColorMgmt = isDisplayStateActive(colorPipeline.displayColorState);
+  const hasDeinterlace = isDeinterlaceActive(deinterlaceParams);
+  const hasFilmEmulation = isFilmEmulationActive(filmEmulationParams);
+  const hasStabilization = isStabilizationActive(stabilizationParams) && stabilizationParams.cropAmount > 0;
+
+  const anyActive = hasCDL || hasCurves || hasSharpen || hasNoiseReduction || hasChannel || hasHighlightsShadows || hasVibrance || hasClarity || hasHueRotation || hasColorWheels || hasHSLQualifier || hasFalseColor || hasLuminanceVis || hasZebras || hasClippingOverlay || hasToneMapping || hasInversion || hasDisplayColorMgmt || hasDeinterlace || hasFilmEmulation || hasStabilization;
+
+  return {
+    hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
+    hasHighlightsShadows, hasVibrance, hasClarity, hasHueRotation,
+    hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
+    hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
+    hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
+    anyActive,
+  };
+}
+
+/**
  * Composite ImageData onto the canvas while preserving the background pattern.
  * putImageData() ignores compositing and overwrites pixels directly, so we
  * write to a temporary canvas first, then use drawImage() which respects
@@ -141,9 +222,19 @@ export function applyBatchedPixelEffects(
   width: number,
   height: number
 ): void {
+  const flags = detectActivePixelEffects(ctx);
+  if (!flags.anyActive) return;
+
+  const {
+    hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
+    hasHighlightsShadows, hasVibrance, hasClarity, hasHueRotation,
+    hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
+    hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
+    hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
+  } = flags;
+
   const colorPipeline = ctx.getColorPipeline();
   const filterSettings = ctx.getFilterSettings();
-  const channelMode = ctx.getChannelMode();
   const colorWheels = ctx.getColorWheels();
   const hslQualifier = ctx.getHSLQualifier();
   const overlayManager = ctx.getOverlayManager();
@@ -155,34 +246,7 @@ export function applyBatchedPixelEffects(
   const stabilizationParams = ctx.getStabilizationParams();
   const noiseReductionParams = ctx.getNoiseReductionParams();
   const interactionQuality = ctx.getInteractionQuality();
-
-  const hasCDL = !isDefaultCDL(colorPipeline.cdlValues);
-  const hasCurves = !isDefaultCurves(colorPipeline.curvesData);
-  const hasSharpen = filterSettings.sharpen > 0;
-  const hasNoiseReduction = isNoiseReductionActive(noiseReductionParams);
-  const hasChannel = channelMode !== 'rgb';
-  const hasHighlightsShadows = colorPipeline.colorAdjustments.highlights !== 0 || colorPipeline.colorAdjustments.shadows !== 0 ||
-                               colorPipeline.colorAdjustments.whites !== 0 || colorPipeline.colorAdjustments.blacks !== 0;
-  const hasVibrance = colorPipeline.colorAdjustments.vibrance !== 0;
-  const hasClarity = colorPipeline.colorAdjustments.clarity !== 0;
-  const hasHueRotation = !isIdentityHueRotation(colorPipeline.colorAdjustments.hueRotation);
-  const hasColorWheels = colorWheels.hasAdjustments();
-  const hasHSLQualifier = hslQualifier.isEnabled();
-  const hasFalseColor = overlayManager.getFalseColor().isEnabled();
-  const hasLuminanceVis = overlayManager.getLuminanceVisualization().getMode() !== 'off' && overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
-  const hasZebras = overlayManager.getZebraStripes().isEnabled();
-  const hasClippingOverlay = overlayManager.getClippingOverlay().isEnabled();
-  const hasToneMapping = isToneMappingEnabled(ctx);
-  const hasInversion = colorPipeline.colorInversionEnabled;
-  const hasDisplayColorMgmt = isDisplayStateActive(colorPipeline.displayColorState);
-  const hasDeinterlace = isDeinterlaceActive(deinterlaceParams);
-  const hasFilmEmulation = isFilmEmulationActive(filmEmulationParams);
-  const hasStabilization = isStabilizationActive(stabilizationParams) && stabilizationParams.cropAmount > 0;
-
-  // Early return if no pixel effects are active
-  if (!hasCDL && !hasCurves && !hasSharpen && !hasNoiseReduction && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
-    return;
-  }
+  const channelMode = ctx.getChannelMode();
 
   // Single getImageData call
   const imageData = canvasCtx.getImageData(0, 0, width, height);
@@ -335,6 +399,17 @@ export async function applyBatchedPixelEffectsAsync(
   cropClipActive: boolean
 ): Promise<void> {
   try {
+    const flags = detectActivePixelEffects(ctx);
+    if (!flags.anyActive) return;
+
+    const {
+      hasCDL, hasCurves, hasSharpen, hasNoiseReduction, hasChannel,
+      hasHighlightsShadows, hasVibrance, hasClarity, hasHueRotation,
+      hasColorWheels, hasHSLQualifier, hasFalseColor, hasLuminanceVis,
+      hasZebras, hasClippingOverlay, hasToneMapping, hasInversion,
+      hasDisplayColorMgmt, hasDeinterlace, hasFilmEmulation, hasStabilization,
+    } = flags;
+
     const colorPipeline = ctx.getColorPipeline();
     const filterSettings = ctx.getFilterSettings();
     const channelMode = ctx.getChannelMode();
@@ -349,34 +424,6 @@ export async function applyBatchedPixelEffectsAsync(
     const stabilizationParams = ctx.getStabilizationParams();
     const noiseReductionParams = ctx.getNoiseReductionParams();
     const interactionQuality = ctx.getInteractionQuality();
-
-    const hasCDL = !isDefaultCDL(colorPipeline.cdlValues);
-    const hasCurves = !isDefaultCurves(colorPipeline.curvesData);
-    const hasSharpen = filterSettings.sharpen > 0;
-    const hasNoiseReduction = isNoiseReductionActive(noiseReductionParams);
-    const hasChannel = channelMode !== 'rgb';
-    const hasHighlightsShadows = colorPipeline.colorAdjustments.highlights !== 0 || colorPipeline.colorAdjustments.shadows !== 0 ||
-                                 colorPipeline.colorAdjustments.whites !== 0 || colorPipeline.colorAdjustments.blacks !== 0;
-    const hasVibrance = colorPipeline.colorAdjustments.vibrance !== 0;
-    const hasClarity = colorPipeline.colorAdjustments.clarity !== 0;
-    const hasHueRotation = !isIdentityHueRotation(colorPipeline.colorAdjustments.hueRotation);
-    const hasColorWheels = colorWheels.hasAdjustments();
-    const hasHSLQualifier = hslQualifier.isEnabled();
-    const hasFalseColor = overlayManager.getFalseColor().isEnabled();
-    const hasLuminanceVis = overlayManager.getLuminanceVisualization().getMode() !== 'off' && overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
-    const hasZebras = overlayManager.getZebraStripes().isEnabled();
-    const hasClippingOverlay = overlayManager.getClippingOverlay().isEnabled();
-    const hasToneMapping = isToneMappingEnabled(ctx);
-    const hasInversion = colorPipeline.colorInversionEnabled;
-    const hasDisplayColorMgmt = isDisplayStateActive(colorPipeline.displayColorState);
-    const hasDeinterlace = isDeinterlaceActive(deinterlaceParams);
-    const hasFilmEmulation = isFilmEmulationActive(filmEmulationParams);
-    const hasStabilization = isStabilizationActive(stabilizationParams) && stabilizationParams.cropAmount > 0;
-
-    // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasNoiseReduction && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
-      return;
-    }
 
     // Single getImageData call
     const imageData = canvasCtx.getImageData(0, 0, width, height);

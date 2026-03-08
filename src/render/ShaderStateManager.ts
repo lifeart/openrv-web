@@ -118,9 +118,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   // Public accessors
   // -----------------------------------------------------------------------
 
-  /** Get current dirty flags (mutable for batch applicator). */
-  getDirtyFlags(): Set<string> {
+  /** Get current dirty flags (read-only intent; prefer clearDirtyFlag() for removal). */
+  getDirtyFlags(): ReadonlySet<string> {
     return this.dirtyFlags;
+  }
+
+  /** Remove a single dirty flag (e.g. when batch applicator determines no change). */
+  clearDirtyFlag(flag: string): void {
+    this.dirtyFlags.delete(flag);
   }
 
   /** Mark all flags dirty (e.g. after context restore). */
@@ -326,6 +331,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
 
   setCDLColorspace(colorspace: number): void {
     this.state.cdlColorspace = colorspace;
+    this.dirtyFlags.add(DIRTY_CDL);
   }
 
   setContour(state: { enabled: boolean; levels: number; desaturate: boolean; lineColor: [number, number, number] }): void {
