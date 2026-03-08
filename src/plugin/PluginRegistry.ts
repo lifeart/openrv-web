@@ -17,6 +17,8 @@ import { Signal } from '../core/graph/Signal';
 import { decoderRegistry } from '../formats/DecoderRegistry';
 import { NodeFactory } from '../nodes/base/NodeFactory';
 import { ExporterRegistry } from './ExporterRegistry';
+import { PluginEventBus } from './PluginEventBus';
+import { PluginSettingsStore } from './PluginSettingsStore';
 import type {
   Plugin,
   PluginId,
@@ -30,6 +32,7 @@ import type { FormatDecoder } from '../formats/DecoderRegistry';
 import type { IPNode } from '../nodes/base/IPNode';
 import type { PaintToolInterface } from '../paint/AdvancedPaintTools';
 import type { PaintEngine } from '../paint/PaintEngine';
+import type { EventsAPI } from '../api/EventsAPI';
 
 interface PluginEntry {
   plugin: Plugin;
@@ -58,6 +61,12 @@ export class PluginRegistry {
   /** Emitted when a plugin changes state */
   readonly pluginStateChanged = new Signal<{ id: PluginId; state: PluginState }>();
 
+  /** Event bus for plugin event subscriptions */
+  readonly eventBus = new PluginEventBus();
+
+  /** Settings store for plugin preferences */
+  readonly settingsStore = new PluginSettingsStore();
+
   /** Reference to the OpenRV API instance, set during app bootstrap */
   private apiRef: import('../api/OpenRVAPI').OpenRVAPI | null = null;
 
@@ -66,6 +75,14 @@ export class PluginRegistry {
 
   setAPI(api: import('../api/OpenRVAPI').OpenRVAPI): void {
     this.apiRef = api;
+  }
+
+  /**
+   * Set the EventsAPI reference for plugin event subscriptions.
+   * Called during bootstrap.
+   */
+  setEventsAPI(eventsAPI: EventsAPI): void {
+    this.eventBus.setEventsAPI(eventsAPI);
   }
 
   /**
@@ -121,6 +138,12 @@ export class PluginRegistry {
         uiPanels: [],
       },
     });
+
+    // Register settings schema if present
+    if (manifest.settingsSchema) {
+      this.settingsStore.registerSchema(id, manifest.settingsSchema);
+    }
+
     this.pluginStateChanged.emit({ id, state: 'registered' }, { id, state: 'registered' });
   }
 
@@ -174,10 +197,12 @@ export class PluginRegistry {
       entry.state = 'active';
 
       this.pluginStateChanged.emit({ id, state: entry.state }, { id, state: 'initialized' });
+      this.eventBus.emitPluginLifecycle('plugin:activated', { id });
     } catch (err) {
       entry.state = 'error';
       entry.error = err instanceof Error ? err : new Error(String(err));
       this.pluginStateChanged.emit({ id, state: entry.state }, { id, state: previousState });
+      this.eventBus.emitPluginLifecycle('plugin:error', { id, error: String(err) });
       throw err;
     }
   }
@@ -201,8 +226,12 @@ export class PluginRegistry {
     // Unregister all contributions from domain-specific registries
     this.unregisterContributions(entry);
 
+    // Clean up event subscriptions for this plugin
+    this.eventBus.disposePlugin(id);
+
     entry.state = 'inactive';
     this.pluginStateChanged.emit({ id, state: entry.state }, { id, state: 'active' });
+    this.eventBus.emitPluginLifecycle('plugin:deactivated', { id });
   }
 
   async dispose(id: PluginId): Promise<void> {
@@ -231,6 +260,23 @@ export class PluginRegistry {
     // Retain the entry in the Map with 'disposed' state instead of deleting it.
     // This ensures getState(id) returns 'disposed' rather than undefined.
     this.pluginStateChanged.emit({ id, state: 'disposed' }, { id, state: previousState });
+
+    // Clean up settings schema registration
+    this.settingsStore.unregisterSchema(id);
+  }
+
+  /**
+   * Unregister a disposed plugin, removing it from the registry entirely.
+   * Required for hot-reload: allows re-registration with the same ID.
+   * Throws if the plugin is not in 'disposed' state.
+   */
+  unregister(id: PluginId): void {
+    const entry = this.plugins.get(id);
+    if (!entry) return;
+    if (entry.state !== 'disposed') {
+      throw new Error(`Plugin "${id}" must be disposed before unregistering (current state: ${entry.state})`);
+    }
+    this.plugins.delete(id);
   }
 
   // -----------------------------------------------------------------------
@@ -361,6 +407,8 @@ export class PluginRegistry {
         if (!registry.apiRef) throw new Error('OpenRV API not yet initialized');
         return registry.apiRef;
       },
+      events: registry.eventBus.createSubscription(manifest.id),
+      settings: registry.settingsStore.createAccessor(manifest.id),
       log: {
         info: (msg: string, ...args: unknown[]) => console.log(`[plugin:${manifest.id}]`, msg, ...args),
         warn: (msg: string, ...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, msg, ...args),

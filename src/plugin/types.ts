@@ -39,6 +39,8 @@ export interface PluginManifest {
   dependencies?: PluginId[];
   /** Which contribution types this plugin provides */
   contributes: PluginContributionType[];
+  /** Optional settings schema for configurable plugins */
+  settingsSchema?: import('./PluginSettingsStore').PluginSettingsSchema;
 }
 
 export type PluginContributionType = 'decoder' | 'node' | 'processor' | 'tool' | 'exporter' | 'blendMode' | 'uiPanel';
@@ -70,11 +72,10 @@ export interface PluginContext {
   registerUIPanel(panel: UIPanelContribution): void;
   /** Access the public OpenRV API (late-bound via closure over PluginRegistry) */
   readonly api: import('../api/OpenRVAPI').OpenRVAPI;
-  /**
-   * NOTE: onEvent() is deferred to Phase 2. The existing EventsAPI uses a closed
-   * OpenRVEventName union that cannot accommodate arbitrary plugin event strings.
-   * Shipping a no-op stub would violate the principle of least surprise.
-   */
+  /** Event subscription system (app events + plugin-to-plugin custom events) */
+  readonly events: import('./PluginEventBus').PluginEventSubscription;
+  /** Settings accessor (requires settingsSchema in manifest) */
+  readonly settings: import('./PluginSettingsStore').PluginSettingsAccessor;
   /** Logger scoped to this plugin */
   readonly log: {
     info(msg: string, ...args: unknown[]): void;
@@ -117,6 +118,18 @@ export interface Plugin {
    * Called once; the plugin cannot be reactivated after this.
    */
   dispose?(context: PluginContext): Promise<void> | void;
+
+  /**
+   * Serialize plugin state for hot-reload preservation.
+   * Called before the plugin is disposed during a hot-reload cycle.
+   */
+  getState?(): unknown;
+
+  /**
+   * Restore state after hot-reload.
+   * Called after the new version is activated with the state from getState().
+   */
+  restoreState?(state: unknown): void;
 }
 
 // ---------------------------------------------------------------------------
