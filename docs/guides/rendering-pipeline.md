@@ -93,6 +93,13 @@ flowchart TD
 
 ## Uniform Architecture
 
+The uniform management layer is implemented by `ShaderStateManager` (`src/render/ShaderStateManager.ts`), which has been split into focused modules for maintainability:
+
+- **`ShaderConstants.ts`**: Dirty flags, operator codes, and constant matrices.
+- **`ShaderStateTypes.ts`**: The `InternalShaderState` interface, state factory, and helper functions.
+- **`ShaderUniformUploader.ts`**: The `applyUniforms()` function that uploads state to GL uniform locations.
+- **`ShaderBatchApplicator.ts`**: The `applyRenderState()` function that batches high-level render state into uniform updates.
+
 The fragment shader communicates with the TypeScript renderer through a comprehensive set of uniforms. Each stage has one or more uniforms that control its behavior. Boolean-guarded stages (`u_cdlEnabled`, `u_colorWheelsEnabled`, etc.) compile to simple uniform branches that the GPU's branch predictor handles efficiently -- disabled stages add negligible cost.
 
 Key uniform categories:
@@ -676,6 +683,16 @@ The render worker offloads rendering to a background thread using `OffscreenCanv
 ## Adaptive Proxy Rendering
 
 Adaptive proxy rendering dynamically adjusts rendering quality based on interaction state to maintain smooth frame rates. During active interactions (panning, zooming, scrubbing), the renderer drops to a lower-resolution proxy by reducing the canvas backing store relative to the display DPI. When interaction stops, the full-resolution render is restored. The system also leverages GL mipmaps for static textures and cache-level resize to minimize GPU memory pressure on large images.
+
+## Experimental WebGPU Backend
+
+An experimental WebGPU rendering backend (`src/render/WebGPUBackend.ts`) is available at Phase 1 maturity, providing basic passthrough rendering as a foundation for future GPU compute and advanced rendering features. The backend is split into focused modules under `src/render/webgpu/`:
+
+- **`WebGPUDevice`** (`WebGPUDevice.ts`): Wraps adapter negotiation, device creation, canvas context configuration, and resource cleanup. Handles both SDR (`rgba8unorm`) and HDR (`rgba32float`) surface formats.
+- **`WebGPURenderPipeline`** (`WebGPURenderPipeline.ts`): Manages pipeline creation, texture uploads (including `VideoFrame` and `ImageBitmap` sources), bind group layout, and the render pass. Recreates pipelines and textures on resize.
+- **`WebGPUTypes`** (`WebGPUTypes.ts`): Shared type definitions for device state, pipeline configuration, and texture metadata.
+
+The current WGSL shader (`src/render/webgpu/shaders/passthrough.wgsl`) implements texture sampling with a full-screen quad. Phase 1 supports `renderImage()`, `clear()`, and `resize()` operations. The full color correction pipeline remains on the WebGL2 path; the WebGPU backend is opt-in and requires explicit activation. Browser support for WebGPU varies; the application falls back to WebGL2 when WebGPU is unavailable.
 
 ## Premultiply / Unpremultiply Alpha
 

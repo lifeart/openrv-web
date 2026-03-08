@@ -442,10 +442,13 @@ EXR -> DPX -> Cineon -> Float TIFF -> RAW Preview -> JPEG Gainmap
     -> JPEG XL -> JPEG 2000 -> MXF
 ```
 
-Each decoder implements the `FormatDecoder` interface:
+Each decoder implements the generic `FormatDecoder<TOptions>` interface:
 
+- **`formatName: string`** -- Human-readable format name (e.g., `"OpenEXR"`, `"DPX"`)
 - **`canDecode(buffer: ArrayBuffer): boolean`** -- Tests magic bytes for format identification
-- **`decode(buffer: ArrayBuffer, options?): Promise<DecodeResult>`** -- Performs the actual decode, returning width, height, Float32Array data, channel count, color space, and metadata
+- **`decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>`** -- Performs the actual decode, returning width, height, Float32Array data, channel count, color space, and metadata
+
+The generic `TOptions` parameter allows each decoder to declare its own strongly typed options (e.g., EXR layer selection, DPX log-to-linear parameters) while the registry operates on the common `FormatDecoder` base.
 
 The registry is extensible: custom decoders can be registered via `decoderRegistry.registerDecoder()` for plugin formats. Decoders are matched in registration order, so format-specific decoders (like Float TIFF) must precede more general ones (like RAW Preview, which also matches TIFF headers).
 

@@ -268,6 +268,7 @@ openrv-web/
 │   │       ├── SessionMedia.ts  # Media sources, loading, frame cache
 │   │       ├── SessionPlayback.ts # Playback engine, volume, A/B compare
 │   │       ├── SessionState.ts  # Serializable state types
+│   │       ├── SessionTypes.ts  # Extracted session type definitions
 │   │       ├── SessionSerializer.ts # .orvproject save/load
 │   │       ├── SessionGTOStore.ts # GTO property storage/retrieval
 │   │       ├── SessionGTOExporter.ts # Export session to GTO format
@@ -279,7 +280,7 @@ openrv-web/
 │   │       ├── MarkerManager.ts  # Timeline marker management
 │   │       ├── MediaManager.ts   # Media management
 │   │       ├── NoteManager.ts    # Notes/annotations
-│   │       ├── PlaybackEngine.ts # Playback engine (core)
+│   │       ├── PlaybackEngine.ts # Playback engine (core, update() split into focused sub-methods)
 │   │       ├── PlaybackTimingController.ts # Playback timing
 │   │       ├── PlaylistManager.ts # Multi-clip playlist management
 │   │       ├── PropertyResolver.ts # Property resolution
@@ -316,7 +317,7 @@ openrv-web/
 │   ├── formats/                 # File format decoders
 │   │   ├── CineonDecoder.ts     # Cineon format decoder
 │   │   ├── DPXDecoder.ts        # DPX format decoder
-│   │   ├── DecoderRegistry.ts   # Format decoder registry
+│   │   ├── DecoderRegistry.ts   # Format decoder registry (generic FormatDecoder<TOptions> for typed decoders)
 │   │   ├── EXRDecoder.ts        # OpenEXR decoder (via exr.js)
 │   │   ├── JPEGGainmapDecoder.ts # JPEG gainmap HDR decoder
 │   │   ├── LogLinear.ts         # Log-to-linear conversion
@@ -348,7 +349,7 @@ openrv-web/
 │   ├── nodes/                   # Processing nodes
 │   │   ├── CacheLUTNode.ts      # GPU-cached LUT node
 │   │   ├── base/                # Base node types
-│   │   │   ├── IPNode.ts        # Abstract base (inputs/outputs/properties/dispose)
+│   │   │   ├── IPNode.ts        # Abstract base (inputs/outputs/properties/dispose, defineNodeProperty factory)
 │   │   │   ├── NodeFactory.ts   # Node registry + @RegisterNode decorator + unregister()
 │   │   │   └── NodeProcessor.ts # Node processing strategy interface
 │   │   ├── processors/          # Node processor implementations
@@ -397,12 +398,16 @@ openrv-web/
 │   │   ├── PaintRenderer.ts     # Paint rendering to canvas
 │   │   └── types.ts             # Paint type definitions
 │   │
-│   ├── plugin/                  # Plugin architecture
-│   │   ├── PluginRegistry.ts    # Lifecycle orchestrator (register/activate/deactivate/dispose)
+│   ├── plugin/                  # Plugin architecture (Phase 2: eventBus, settings, hot reload)
+│   │   ├── PluginRegistry.ts    # Lifecycle orchestrator (register/activate/deactivate/dispose/unregister, integrates eventBus + settingsStore)
+│   │   ├── PluginEventBus.ts    # Event subscription system (app events bridged from EventsAPI, plugin-to-plugin custom events, auto-cleanup)
+│   │   ├── PluginSettingsStore.ts # Schema-driven persistent settings with validation, localStorage persistence
 │   │   ├── ExporterRegistry.ts  # Exporter contribution registry
 │   │   ├── types.ts             # PluginManifest, PluginState, contribution types
 │   │   ├── builtins/            # Built-in plugin examples
 │   │   │   └── HDRDecoderPlugin.ts # HDR decoder as plugin example
+│   │   ├── dev/                 # Development tooling
+│   │   │   └── HotReloadManager.ts # Development-time hot reload with state preservation
 │   │   └── index.ts             # Module exports
 │   │
 │   ├── render/                  # WebGL/WebGPU rendering
@@ -417,13 +422,19 @@ openrv-web/
 │   │   ├── ShaderPipeline.ts    # Multi-pass shader pipeline orchestrator
 │   │   ├── ShaderProgram.ts     # WebGL shader compilation + handle getter
 │   │   ├── ShaderStage.ts       # Stage descriptors (11 composable stages)
-│   │   ├── ShaderStateManager.ts # Centralized shader state
+│   │   ├── ShaderStateManager.ts # Centralized shader state (decomposed into ShaderConstants, ShaderStateTypes, ShaderUniformUploader, ShaderBatchApplicator)
 │   │   ├── SphericalProjection.ts # Spherical/360 projection
 │   │   ├── StateAccessor.ts     # State accessor interface
 │   │   ├── TextureCacheManager.ts # Texture cache management
 │   │   ├── TransitionRenderer.ts # Transition effects
-│   │   ├── WebGPUBackend.ts     # WebGPU rendering backend
+│   │   ├── WebGPUBackend.ts     # WebGPU rendering backend (full renderImage/clear/resize)
 │   │   ├── WebGPUHDRBlit.ts     # WebGPU HDR blitting
+│   │   ├── webgpu/              # WebGPU backend internals
+│   │   │   ├── WebGPUTypes.ts       # Shared WebGPU type shims
+│   │   │   ├── WebGPUDevice.ts      # Device/adapter/context wrapper
+│   │   │   ├── WebGPURenderPipeline.ts # Pipeline, uniform, texture management
+│   │   │   └── shaders/
+│   │   │       └── passthrough.wgsl # WGSL passthrough shader
 │   │   ├── createRenderer.ts    # Renderer factory
 │   │   └── shaders/             # GLSL shader files
 │   │       ├── viewer.vert.glsl # Main vertex shader
@@ -446,11 +457,11 @@ openrv-web/
 │   │
 │   ├── ui/                      # User interface
 │   │   └── components/          # UI components
-│   │       ├── Viewer.ts            # Main WebGL canvas viewer
-│   │       ├── ViewerEffects.ts     # Viewer effects pipeline
-│   │       ├── ViewerExport.ts      # Viewer frame export
-│   │       ├── ViewerInteraction.ts # Viewer input handling (pan/zoom/mouse)
-│   │       ├── ViewerPrerender.ts   # Viewer frame pre-rendering
+│   │       ├── Viewer.ts            # Main WebGL canvas viewer (4 modules extracted)
+│   │       ├── ViewerEffects.ts     # Viewer effects pipeline (extracted from Viewer.ts)
+│   │       ├── ViewerExport.ts      # Viewer frame export (extracted from Viewer.ts)
+│   │       ├── ViewerInteraction.ts # Viewer input handling (pan/zoom/mouse, extracted from Viewer.ts)
+│   │       ├── ViewerPrerender.ts   # Viewer frame pre-rendering (extracted from Viewer.ts)
 │   │       ├── ViewerRenderingUtils.ts # Viewer rendering helpers
 │   │       ├── ViewerSplitScreen.ts # Split screen A/B comparison
 │   │       ├── ViewerWipe.ts        # Wipe comparison overlay
@@ -668,7 +679,9 @@ openrv-web/
 | `ManagedVideoFrame` | `src/core/image/ManagedVideoFrame.ts` | Ref-counted VideoFrame wrapper (VRAM leak prevention) |
 | `ImageRenderer` | `src/render/Renderer.ts` | WebGL2 renderer with fragment shader pipeline |
 | `RendererBackend` | `src/render/RendererBackend.ts` | Renderer backend abstraction |
-| `WebGPURenderer` | `src/render/WebGPUBackend.ts` | WebGPU rendering backend |
+| `WebGPURenderer` | `src/render/WebGPUBackend.ts` | WebGPU rendering backend (full renderImage/clear/resize) |
+| `WebGPUDevice` | `src/render/webgpu/WebGPUDevice.ts` | Device/adapter/context wrapper |
+| `WebGPURenderPipeline` | `src/render/webgpu/WebGPURenderPipeline.ts` | Pipeline, uniform, texture management |
 | `ShaderProgram` | `src/render/ShaderProgram.ts` | WebGL shader compilation |
 | `TextureCache` | `src/render/TextureCacheManager.ts` | Texture cache management |
 | `Session` | `src/core/session/Session.ts` | Session facade (decomposed into 4 services) |
@@ -676,6 +689,7 @@ openrv-web/
 | `SessionGraph` | `src/core/session/SessionGraph.ts` | GTO graph, metadata, EDL |
 | `SessionMedia` | `src/core/session/SessionMedia.ts` | Media sources, loading, frame cache |
 | `SessionPlayback` | `src/core/session/SessionPlayback.ts` | Playback engine, volume, A/B compare |
+| `SessionTypes` | `src/core/session/SessionTypes.ts` | Extracted session type definitions |
 | GTO I/O | `gto-js` library | Already implemented |
 | `GTOGraphLoader` | `src/core/session/GTOGraphLoader.ts` | Node graph from GTO files |
 | `SessionGTOStore` | `src/core/session/SessionGTOStore.ts` | GTO property storage/retrieval |
@@ -717,7 +731,10 @@ openrv-web/
 | FilmEmulationNode | `src/nodes/effects/FilmEmulationNode.ts` | Film stock emulation node |
 | StabilizationNode | `src/nodes/effects/StabilizationNode.ts` | Motion stabilization node |
 | ColorWheelsNode | `src/nodes/effects/ColorWheelsNode.ts` | Lift/gamma/gain color node |
-| PluginRegistry | `src/plugin/PluginRegistry.ts` | Plugin lifecycle orchestrator |
+| PluginRegistry | `src/plugin/PluginRegistry.ts` | Plugin lifecycle orchestrator (integrates eventBus, settingsStore, unregister) |
+| PluginEventBus | `src/plugin/PluginEventBus.ts` | Event subscription system (app events, plugin-to-plugin, auto-cleanup) |
+| PluginSettingsStore | `src/plugin/PluginSettingsStore.ts` | Schema-driven persistent settings with validation |
+| HotReloadManager | `src/plugin/dev/HotReloadManager.ts` | Development-time hot reload with state preservation |
 | ExporterRegistry | `src/plugin/ExporterRegistry.ts` | Exporter contribution registry |
 | ShaderPipeline | `src/render/ShaderPipeline.ts` | Multi-pass shader pipeline orchestrator |
 | FBOPingPong | `src/render/FBOPingPong.ts` | Ping-pong FBO manager |
@@ -966,3 +983,12 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Signal connection leak fixes (DisposableSubscriptionManager, 7 wiring modules, 16 UI components migrated)
 - [x] Plugin architecture (PluginRegistry, 6 contribution types, ExporterRegistry, HDRDecoderPlugin example)
 - [x] Effect nodes (EffectNode base, 13 concrete nodes, EffectChain pipeline, GPU processor stubs)
+- [x] Plugin Phase 2 (PluginEventBus, PluginSettingsStore, HotReloadManager, unregister support)
+- [x] WebGPU backend internals (WebGPUDevice, WebGPURenderPipeline, WebGPUTypes, WGSL passthrough shader)
+- [x] PlaybackEngine.update() refactored into focused sub-methods
+- [x] SessionTypes.ts extracted from Session for type definitions
+- [x] ShaderStateManager decomposed (ShaderConstants, ShaderStateTypes, ShaderUniformUploader, ShaderBatchApplicator)
+- [x] defineNodeProperty factory for property boilerplate reduction
+- [x] Viewer.ts decomposed (4 modules extracted: ViewerEffects, ViewerExport, ViewerInteraction, ViewerPrerender)
+- [x] Generic FormatDecoder\<TOptions\> for typed decoder interfaces
+- [x] ESLint v9 + Prettier + pre-commit hooks + CI lint workflow

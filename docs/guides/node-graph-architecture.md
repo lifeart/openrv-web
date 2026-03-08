@@ -69,6 +69,17 @@ The `PropertyContainer` class (`src/core/graph/Property.ts`) provides typed, obs
 - **Keyframe animation**: Properties marked as `animatable` support keyframe-based animation with linear, step, and smooth interpolation modes
 - **Serialization**: `toJSON()` and `fromJSON()` for session persistence
 
+#### `defineNodeProperty` Factory
+
+The `defineNodeProperty` helper (`src/nodes/base/defineNodeProperty.ts`) reduces boilerplate when declaring node properties. It combines `PropertyContainer.add()` registration with a typed getter/setter on the node instance in a single call:
+
+```typescript
+defineNodeProperty(this, 'enabled', { defaultValue: true });
+defineNodeProperty(this, 'mix', { defaultValue: 1.0, min: 0, max: 1 });
+```
+
+This replaces the previous pattern of manually calling `properties.add()` and then defining a separate `get`/`set` accessor pair. All effect nodes and many source/group nodes use `defineNodeProperty` for their property declarations.
+
 ### Signal System
 
 The `Signal<T>` class (`src/core/graph/Signal.ts`) implements a simple publish-subscribe pattern:
@@ -462,7 +473,7 @@ Desktop OpenRV uses a similar DAG architecture but with important differences:
 |--------|---------------|------------|
 | Language | C++ with Mu/Python scripting | TypeScript |
 | Node registration | Compiled plugin system | `@RegisterNode` decorator + `NodeFactory` |
-| Property system | GTO-native property types | `PropertyContainer` with `Signal` change notifications |
+| Property system | GTO-native property types | `PropertyContainer` with `Signal` change notifications; `defineNodeProperty` factory for concise declarations |
 | Effect extensibility | Mu/Python scripts + GLSL | `EffectNode` subclass + optional `NodeProcessor` for GPU |
 | Graph evaluation | Multi-threaded pull evaluation | Single-threaded pull with frame-level caching |
 | Compositing | GPU-only (OpenGL) | CPU fallback with GPU path for supported blend modes |

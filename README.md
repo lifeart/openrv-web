@@ -565,7 +565,13 @@ src/
 │   ├── SphericalProjection.ts   # 360-degree panorama projection
 │   ├── TextureCacheManager.ts   # LRU texture cache
 │   ├── RenderWorkerProxy.ts     # Off-main-thread rendering
-│   └── LuminanceAnalyzer.ts     # Scene luminance analysis
+│   ├── LuminanceAnalyzer.ts     # Scene luminance analysis
+│   └── webgpu/                  # WebGPU backend modules
+│       ├── WebGPUTypes.ts       # WebGPU type definitions
+│       ├── WebGPUDevice.ts      # GPU device management
+│       ├── WebGPURenderPipeline.ts # Render pipeline setup
+│       └── shaders/
+│           └── passthrough.wgsl # WGSL passthrough shader
 ├── color/
 │   ├── CDL.ts                   # ASC CDL processing
 │   ├── ColorCurves.ts           # Color curves
@@ -624,6 +630,11 @@ src/
 │   ├── SyncStateManager.ts      # Sync state tracking
 │   ├── PinEncryption.ts         # PIN-based message encryption
 │   └── MessageProtocol.ts       # Typed message protocol
+├── plugin/
+│   ├── PluginEventBus.ts        # Plugin event subscriptions
+│   ├── PluginSettingsStore.ts   # Plugin settings persistence
+│   └── dev/
+│       └── HotReloadManager.ts  # Plugin hot-reload
 ├── integrations/
 │   ├── DCCBridge.ts             # Maya/Nuke/Houdini WebSocket bridge
 │   └── ShotGridBridge.ts        # ShotGrid REST API integration
@@ -684,7 +695,12 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (19,800+ tests)
+# Lint and format
+pnpm lint                # ESLint check
+pnpm format:check        # Prettier check
+pnpm format              # Prettier fix
+
+# Run unit tests (20,000+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -700,7 +716,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **19,800+ unit tests** across 483 test files and **103 e2e test suites**.
+The codebase includes comprehensive test coverage with **20,000+ unit tests** across 500+ test files and **103 e2e test suites**.
 
 ---
 
@@ -711,7 +727,7 @@ The codebase includes comprehensive test coverage with **19,800+ unit tests** ac
 - **Vitest** -- unit testing framework
 - **Playwright** -- end-to-end testing
 - **WebGL2** -- GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
-- **WebGPU** -- experimental HDR rendering backend
+- **WebGPU** -- experimental backend alongside WebGL2 (rgba16float, extended tone mapping)
 - **WebAssembly** -- high-performance EXR, JPEG XL, JPEG 2000, HEIC, and OCIO decoding
 - **WebCodecs API** -- frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny) and video encoding for export
 - **Web Audio API** -- audio playback, waveform generation, volume control, and pitch correction
@@ -723,6 +739,8 @@ The codebase includes comprehensive test coverage with **19,800+ unit tests** ac
 - **@jsquash/jxl** -- JPEG XL WebAssembly decoder (libjxl)
 - **libheif-js** -- HEIC/HEIF WebAssembly decoder (libheif)
 - **gl-matrix** -- matrix/vector math
+- **ESLint v9** (flat config) + **Prettier** -- code quality and formatting
+- **simple-git-hooks** + **lint-staged** -- pre-commit hooks
 
 ## Browser Support
 

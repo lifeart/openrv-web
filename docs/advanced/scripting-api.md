@@ -398,6 +398,135 @@ openrv.plugins.register({
 });
 ```
 
+### Plugin Settings Schema
+
+Plugins can declare a `settingsSchema` in their manifest to expose configurable settings. Values are validated against the schema and persisted to localStorage.
+
+```javascript
+openrv.plugins.register({
+  id: 'com.example.overlay',
+  name: 'Overlay Plugin',
+  version: '1.0.0',
+  contributes: ['uiPanel'],
+  settingsSchema: {
+    settings: [
+      { key: 'opacity', label: 'Overlay Opacity', type: 'range', default: 0.8, min: 0, max: 1, step: 0.05 },
+      { key: 'color', label: 'Overlay Color', type: 'color', default: '#ff0000' },
+      { key: 'position', label: 'Position', type: 'select', default: 'top-right',
+        options: [
+          { value: 'top-left', label: 'Top Left' },
+          { value: 'top-right', label: 'Top Right' },
+          { value: 'bottom-left', label: 'Bottom Left' },
+          { value: 'bottom-right', label: 'Bottom Right' }
+        ]
+      },
+      { key: 'label', label: 'Display Label', type: 'string', default: 'Overlay', maxLength: 50 },
+      { key: 'enabled', label: 'Show Overlay', type: 'boolean', default: true }
+    ]
+  },
+  activate(context) {
+    // Read settings
+    const opacity = context.settings.get('opacity');
+    const allSettings = context.settings.getAll();
+
+    // Update a setting
+    context.settings.set('opacity', 0.5);
+
+    // React to changes
+    context.settings.onChange('opacity', (newValue, oldValue) => {
+      console.log(`Opacity changed from ${oldValue} to ${newValue}`);
+    });
+
+    // Reset all to defaults
+    // context.settings.reset();
+  }
+});
+```
+
+Supported setting types: `string`, `number`, `boolean`, `select`, `color`, `range`. See the [API reference](../api/index.md#plugin-settings-accessor) for full details.
+
+### Hot-Reload State Preservation
+
+Plugins can implement `getState()` and `restoreState()` to preserve state across hot-reload cycles. The `HotReloadManager` calls `getState()` before disposing the old version and `restoreState()` after activating the new version.
+
+```javascript
+openrv.plugins.register({
+  id: 'com.example.annotations',
+  name: 'Annotations',
+  version: '1.0.0',
+  contributes: ['tool'],
+
+  _annotations: [],
+
+  activate(context) {
+    // ... register tools, set up UI
+  },
+
+  // Called before hot-reload disposal
+  getState() {
+    return { annotations: this._annotations };
+  },
+
+  // Called after hot-reload activation
+  restoreState(state) {
+    this._annotations = state.annotations || [];
+    // Re-render UI with restored data
+  }
+});
+```
+
+### Custom Plugin-to-Plugin Events
+
+Plugins can communicate with each other via custom events. Events emitted with `emitPlugin()` are automatically namespaced with the emitting plugin's ID. Other plugins subscribe using the full namespaced name.
+
+```javascript
+// Plugin A: emits events
+openrv.plugins.register({
+  id: 'com.example.analyzer',
+  name: 'Frame Analyzer',
+  version: '1.0.0',
+  contributes: ['processor'],
+  activate(context) {
+    // Emitted as "com.example.analyzer:analysis-complete"
+    context.events.emitPlugin('analysis-complete', {
+      frame: 42,
+      histogram: [/* ... */]
+    });
+  }
+});
+
+// Plugin B: listens to Plugin A's events
+openrv.plugins.register({
+  id: 'com.example.dashboard',
+  name: 'Dashboard',
+  version: '1.0.0',
+  contributes: ['uiPanel'],
+  activate(context) {
+    // Subscribe using the full namespaced event name
+    context.events.onPlugin('com.example.analyzer:analysis-complete', (data) => {
+      console.log('Analysis result for frame', data.frame);
+    });
+
+    // Subscribe to app events
+    context.events.onApp('app:frameChange', (data) => {
+      console.log('Frame changed to', data.frame);
+    });
+
+    // One-shot subscription
+    context.events.onceApp('app:sourceLoaded', (data) => {
+      console.log('Source loaded:', data.name);
+    });
+
+    // Listen for plugin lifecycle events
+    context.events.onApp('plugin:activated', (data) => {
+      console.log('Plugin activated:', data.id);
+    });
+  }
+});
+```
+
+All subscriptions created via `context.events` are automatically cleaned up when the plugin is deactivated.
+
 ---
 
 ## Error Handling
