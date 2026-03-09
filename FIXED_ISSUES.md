@@ -47,3 +47,23 @@
 - **Fix**: Updated the selector from `ab-indicator-badge` to `ab-indicator` (one-line change).
 - **Verification**: All 43 ViewerIndicators unit tests pass. No remaining stale references to `ab-indicator-badge` in code.
 - **Files Changed**: `e2e/ab-compare.spec.ts`
+
+## Issue #22: ViewerGLRenderer's fallback auto gamut-mapping path is self-cancelling
+
+- **Severity**: Low
+- **Area**: Rendering logic, gamut mapping
+- **Root Cause**: In `detectGamutMapping()`, both branches of a ternary assigned `'srgb'` to `sourceGamut`, making the subsequent `sourceGamut === 'srgb'` guard always fire and turn gamut mapping off — the method was a no-op.
+- **Fix**: Replaced the self-cancelling ternary with actual source gamut detection from `image.metadata.colorPrimaries`: `bt2020` → `'rec2020'`, `p3` → `'display-p3'`, default → `'srgb'`. Simplified the "no mapping needed" guard to `sourceGamut === targetGamut || sourceGamut === 'srgb'`.
+- **Regression Tests**: Added VGLR-094 through VGLR-099 covering: mode-off bypass, bt2020 detection, p3 detection, sRGB-to-sRGB off, bt2020-to-p3 compress, and p3-to-p3 identity.
+- **Verification**: All 90 ViewerGLRenderer tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ViewerGLRenderer.ts`, `src/ui/components/ViewerGLRenderer.test.ts`
+
+## Issue #14: Plugin app-event subscriptions are inert because the registry never receives the Events API
+
+- **Severity**: High
+- **Area**: Plugin bootstrap, services
+- **Root Cause**: `src/main.ts` called `pluginRegistry.setAPI()` and `pluginRegistry.setPaintEngine()` but never called `pluginRegistry.setEventsAPI()`, leaving `PluginEventBus.eventsAPI` null — all `onApp()` subscriptions warned and no-oped.
+- **Fix**: Added `pluginRegistry.setEventsAPI(window.openrv.events)` in `src/main.ts` between the other `set*` bootstrap calls.
+- **Regression Tests**: Added PINT-041 (happy path: plugin subscribes to app events after wiring, no warnings, events bridged correctly) and PINT-042 (negative path: without wiring, subscription emits "EventsAPI not available" warning).
+- **Verification**: All 147 plugin tests pass, TypeScript clean.
+- **Files Changed**: `src/main.ts`, `src/plugin/PluginRegistry.integration.test.ts`

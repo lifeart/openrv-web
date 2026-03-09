@@ -28,4 +28,5 @@ window.openrv = new OpenRVAPI(app.getAPIConfig());
 
 // Wire plugin registry dependencies
 pluginRegistry.setAPI(window.openrv);
+pluginRegistry.setEventsAPI(window.openrv.events);
 pluginRegistry.setPaintEngine(app.getPaintEngine());

@@ -603,6 +603,54 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The panel looks like it supports manual browse-based recovery, but those buttons do nothing unless a host page adds its own handlers.
   - In the shipped app, users are effectively limited to dropdown suggestions and auto-relink, even though the UI advertises richer recovery actions.
 
+### 50. Notes import silently replaces the entire local note set
+
+- Severity: Medium
+- Area: Notes UI, import safety
+- Evidence:
+  - The Notes panel `Import` action reads the JSON file and passes its `notes` array straight into `noteManager.fromSerializable(...)` in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L846).
+  - `NoteManager.fromSerializable()` starts by clearing all existing notes before inserting the imported ones in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L247).
+  - The UI does not label this as a replace operation and does not ask for confirmation beforehand.
+- Impact:
+  - Importing a notes file can wipe current local review notes unexpectedly instead of merging them.
+  - That is a risky behavior mismatch for a panel action labeled only `Import`, especially in collaborative review workflows where users may expect additive import.
+
+### 51. The Notes panel badge exists in code and tests but is never attached to the real toolbar
+
+- Severity: Low
+- Area: Annotate UI, note awareness
+- Evidence:
+  - `NotePanel` implements `createBadge()` and keeps it updated with the open-note count for the current source in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L289).
+  - The badge behavior is explicitly tested in [src/ui/components/NotePanel.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.test.ts#L748).
+  - Production Annotate-tab wiring only renders the `Notes` button in [src/services/tabContent/buildAnnotateTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildAnnotateTab.ts#L63), and the only production `createBadge()` mount I found is for luminance visualization in [src/services/tabContent/buildQCTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildQCTab.ts#L61).
+- Impact:
+  - Users do not get the intended at-a-glance note count indicator even though the panel already implements it.
+  - That makes open notes easier to miss during review, especially when the Notes panel is closed.
+
+### 52. Client Mode hides almost none of the real UI because its restriction selectors do not match production DOM
+
+- Severity: High
+- Area: Review-safe UI mode, presentation locking
+- Evidence:
+  - `ClientMode` defines its restricted UI surface entirely through selectors like `[data-panel="color"]` and `[data-toolbar="editing"]` in [src/ui/components/ClientMode.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClientMode.ts#L79).
+  - `LayoutOrchestrator.applyClientModeRestrictions()` just queries those selectors and sets `display: none` in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L615).
+  - I could not find any production elements that actually use `data-panel=` or `data-toolbar=` attributes; the only matches are tests and the selector list itself.
+- Impact:
+  - URL-locked client mode can still leave most editing UI visible even though the feature is supposed to present a review-safe interface.
+  - That creates a misleading “locked” mode where parts of the UI still look available even if some actions are blocked elsewhere.
+
+### 53. The right inspector can reopen with stale or empty content because it drops updates while hidden
+
+- Severity: Medium
+- Area: Right panel UI, media/scopes awareness
+- Evidence:
+  - `RightPanelContent.updateInfo()` bails out entirely when the panel root has `display: none` in [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L170).
+  - That behavior is explicitly tested in [src/ui/layout/panels/RightPanelContent.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.test.ts#L158), where reopening still shows `No media loaded`.
+  - The embedded `MiniHistogram` has the same hidden-update guard in [src/ui/layout/panels/MiniHistogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/MiniHistogram.ts#L99), and its tests also confirm skipped updates while hidden.
+- Impact:
+  - If the inspector is hidden during a source change or histogram update, reopening it can show stale metadata or the placeholder instead of the current source state.
+  - That makes the right-side review panel less trustworthy exactly when users rely on it for quick context after switching media.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

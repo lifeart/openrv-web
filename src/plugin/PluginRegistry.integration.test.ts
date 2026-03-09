@@ -141,6 +141,76 @@ describe('PluginRegistry Integration', () => {
     expect(registry.getState('integ.b')).toBe('active');
   });
 
+  it('PINT-041: setEventsAPI wires events so plugins can subscribe to app events without warnings', async () => {
+    // Create a mock EventsAPI
+    const listeners = new Map<string, Set<Function>>();
+    const mockEventsAPI = {
+      on: vi.fn((event: string, cb: Function) => {
+        if (!listeners.has(event)) listeners.set(event, new Set());
+        listeners.get(event)!.add(cb);
+        return () => listeners.get(event)?.delete(cb);
+      }),
+      once: vi.fn(),
+      off: vi.fn(),
+    };
+
+    // Wire the EventsAPI
+    registry.setEventsAPI(mockEventsAPI as any);
+
+    const receivedFrames: number[] = [];
+    const plugin: Plugin = {
+      manifest: createManifest({ id: 'integ.events', contributes: ['decoder'] }),
+      activate(ctx: PluginContext) {
+        ctx.events.onApp('app:frameChange', (data) => {
+          receivedFrames.push(data.frame);
+        });
+      },
+    };
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    registry.register(plugin);
+    await registry.activate('integ.events');
+
+    // No "EventsAPI not available" warning should have been logged
+    const eventsApiWarnings = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('EventsAPI not available'),
+    );
+    expect(eventsApiWarnings).toHaveLength(0);
+
+    // The subscription should have been bridged to the EventsAPI
+    expect(mockEventsAPI.on).toHaveBeenCalledWith('frameChange', expect.any(Function));
+
+    // Simulate an app event and verify the plugin receives it
+    listeners.get('frameChange')?.forEach((cb) => cb({ frame: 99 }));
+    expect(receivedFrames).toEqual([99]);
+
+    warnSpy.mockRestore();
+  });
+
+  it('PINT-042: without setEventsAPI, plugin app-event subscriptions warn and no-op', async () => {
+    // Do NOT call registry.setEventsAPI(...)
+    const plugin: Plugin = {
+      manifest: createManifest({ id: 'integ.noevents', contributes: ['decoder'] }),
+      activate(ctx: PluginContext) {
+        ctx.events.onApp('app:frameChange', vi.fn());
+      },
+    };
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    registry.register(plugin);
+    await registry.activate('integ.noevents');
+
+    // Should have warned about EventsAPI not available
+    const eventsApiWarnings = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('EventsAPI not available'),
+    );
+    expect(eventsApiWarnings.length).toBeGreaterThan(0);
+
+    warnSpy.mockRestore();
+  });
+
   it('PINT-040: plugin re-activation after deactivate: contributions re-registered, init() not re-called', async () => {
     const testNodeType = 'IntegReactivateNode040';
     cleanupNodes.push(testNodeType);
