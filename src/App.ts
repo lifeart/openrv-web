@@ -549,7 +549,9 @@ export class App {
       wireStackControls(wiringCtx),
     ];
     for (const result of wiringResults) {
-      this.wiringSubscriptions.add(() => result.subscriptions.dispose());
+      if (result?.subscriptions) {
+        this.wiringSubscriptions.add(() => result.subscriptions.dispose());
+      }
     }
 
     // Virtual slider controller (key-hold-to-adjust color parameters)
@@ -776,7 +778,7 @@ export class App {
     // Dispose all wiring subscriptions first (before component disposal)
     this.wiringSubscriptions.dispose();
 
-    if (this.colorWiringState.state.colorHistoryTimer) {
+    if (this.colorWiringState?.state?.colorHistoryTimer) {
       clearTimeout(this.colorWiringState.state.colorHistoryTimer);
       this.colorWiringState.state.colorHistoryTimer = null;
     }

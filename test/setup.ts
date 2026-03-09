@@ -166,15 +166,27 @@ class MockCanvasRenderingContext2D {
 }
 
 // Mock HTMLCanvasElement.getContext
-HTMLCanvasElement.prototype.getContext = vi.fn(function (
-  this: HTMLCanvasElement,
-  contextId: string
-) {
-  if (contextId === '2d') {
-    return new MockCanvasRenderingContext2D() as unknown as CanvasRenderingContext2D;
-  }
-  return null;
-}) as typeof HTMLCanvasElement.prototype.getContext;
+// This function creates a fresh vi.fn mock. We apply it on setup and also
+// re-apply in beforeEach so it survives vi.restoreAllMocks() in other tests.
+function createGetContextMock() {
+  return vi.fn(function (
+    this: HTMLCanvasElement,
+    contextId: string
+  ) {
+    if (contextId === '2d') {
+      return new MockCanvasRenderingContext2D() as unknown as CanvasRenderingContext2D;
+    }
+    return null;
+  }) as typeof HTMLCanvasElement.prototype.getContext;
+}
+
+HTMLCanvasElement.prototype.getContext = createGetContextMock();
+
+// Re-apply mock before each test so it survives vi.restoreAllMocks()
+import { beforeEach } from 'vitest';
+beforeEach(() => {
+  HTMLCanvasElement.prototype.getContext = createGetContextMock();
+});
 
 // Mock HTMLCanvasElement.toDataURL since jsdom doesn't support it without canvas npm package
 HTMLCanvasElement.prototype.toDataURL = vi.fn(function (

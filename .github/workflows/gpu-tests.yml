@@ -1,0 +1,55 @@
+name: GPU Integration Tests
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/render/**'
+      - 'vitest.browser.config.ts'
+      - 'test/gpu-setup.ts'
+      - '.github/workflows/gpu-tests.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/render/**'
+      - 'vitest.browser.config.ts'
+      - 'test/gpu-setup.ts'
+      - '.github/workflows/gpu-tests.yml'
+
+concurrency:
+  group: gpu-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gpu-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run GPU integration tests
+        run: pnpm test:gpu
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gpu-test-results
+          path: test-results/
+          retention-days: 7
