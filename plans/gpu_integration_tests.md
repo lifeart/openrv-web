@@ -1,7 +1,7 @@
 # Implementation Plan: GPU Integration Tests via Vitest Browser Mode + Playwright
 
-> **Status:** Phases 1-3 & 6 COMPLETE. Phases 4-5 remain.
-> **Estimated remaining effort:** ~2 engineer-weeks (Phases 4-5)
+> **Status:** All phases COMPLETE (1-6).
+> **Estimated remaining effort:** None — all phases implemented.
 
 ## Motivation
 
@@ -658,7 +658,7 @@ describe('WGSL Shader Compilation (real GPU)', () => {
 
 ---
 
-## Phase 4: Test Categories (P1 — Single-Stage Pixel Accuracy) — NOT STARTED
+## Phase 4: Test Categories (P1 — Single-Stage Pixel Accuracy) ✅ COMPLETE
 
 **Effort:** ~5 days
 **Deliverables:** Pixel-verified tests for each of the 11 pipeline stages
@@ -738,7 +738,7 @@ Similar patterns for:
 
 ---
 
-## Phase 5: Test Categories (P2-P4) — NOT STARTED
+## Phase 5: Test Categories (P2-P4) ✅ COMPLETE
 
 **Effort:** ~5 days
 
@@ -1048,8 +1048,8 @@ openrv-web/
 | **1** | Infrastructure: config, scripts, CI, smoke test | 3 days | None | ✅ COMPLETE |
 | **2** | Test helpers & utilities | 4 days | Phase 1 | ✅ COMPLETE |
 | **3** | P0: Shader compilation & linking | 2 days | Phase 2 | ✅ COMPLETE |
-| **4** | P1: Single-stage pixel accuracy (all 11 stages) | 5 days | Phase 2 | NOT STARTED |
-| **5** | P2-P4: Full pipeline, cross-backend, texture sampling | 5 days | Phase 4 | NOT STARTED |
+| **4** | P1: Single-stage pixel accuracy (all 11 stages) | 5 days | Phase 2 | ✅ COMPLETE |
+| **5** | P2-P4: Full pipeline, cross-backend, texture sampling | 5 days | Phase 4 | ✅ COMPLETE |
 | **6** | CI workflow, SwiftShader tuning, documentation | 2 days | Phase 5 | ✅ COMPLETE |
 
 Phases 1-3 and 6 are complete. Phases 4-5 (pixel accuracy & pipeline integration tests) remain.
