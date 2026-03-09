@@ -10,6 +10,7 @@ import { BaseSourceNode } from './BaseSourceNode';
 import { IPImage, type TransferFunction, type ColorPrimaries } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
+import { basename } from '../../utils/path';
 import {
   MediabunnyFrameExtractor,
   UnsupportedCodecException,
@@ -172,7 +173,7 @@ export class VideoSourceNode extends BaseSourceNode {
         const duration = Math.ceil(video.duration * fps);
 
         this.metadata = {
-          name: name ?? url.split('/').pop() ?? 'video',
+          name: name ?? (basename(url) || 'video'),
           width: video.videoWidth,
           height: video.videoHeight,
           duration,

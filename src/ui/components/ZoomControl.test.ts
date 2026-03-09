@@ -118,39 +118,39 @@ describe('ZoomControl', () => {
       expect(button.textContent).toContain('Fit Height');
     });
 
-    it('ZOOM-U031: button shows 1:4 for 0.25 zoom', () => {
+    it('ZOOM-U031: button shows 25% for 0.25 zoom', () => {
       const el = control.render();
       control.setZoom(0.25);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('1:4');
+      expect(button.textContent).toContain('25%');
     });
 
-    it('ZOOM-U032: button shows 1:2 for 0.5 zoom', () => {
+    it('ZOOM-U032: button shows 50% for 0.5 zoom', () => {
       const el = control.render();
       control.setZoom(0.5);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('1:2');
+      expect(button.textContent).toContain('50%');
     });
 
-    it('ZOOM-U033: button shows 1:1 for 1 zoom', () => {
+    it('ZOOM-U033: button shows 100% for 1 zoom', () => {
       const el = control.render();
       control.setZoom(1);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('1:1');
+      expect(button.textContent).toContain('100%');
     });
 
-    it('ZOOM-U034: button shows 2:1 for 2 zoom', () => {
+    it('ZOOM-U034: button shows 200% for 2 zoom', () => {
       const el = control.render();
       control.setZoom(2);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('2:1');
+      expect(button.textContent).toContain('200%');
     });
 
-    it('ZOOM-U035: button shows 4:1 for 4 zoom', () => {
+    it('ZOOM-U035: button shows 400% for 4 zoom', () => {
       const el = control.render();
       control.setZoom(4);
       const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
-      expect(button.textContent).toContain('4:1');
+      expect(button.textContent).toContain('400%');
     });
   });
 
@@ -439,6 +439,80 @@ describe('ZoomControl dropdown visual selection', () => {
     button.click();
     expect((options[0] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
     expect((options[5] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
+
+    document.body.removeChild(el);
+  });
+});
+
+describe('ZoomControl button displays percentage notation consistently', () => {
+  let control: ZoomControl;
+
+  beforeEach(() => {
+    control = new ZoomControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('ZOOM-U090: selecting a preset displays that exact percentage in the button', () => {
+    const el = control.render();
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+
+    const presets: { value: ZoomLevel; expected: string }[] = [
+      { value: 0.25, expected: '25%' },
+      { value: 0.5, expected: '50%' },
+      { value: 1, expected: '100%' },
+      { value: 2, expected: '200%' },
+      { value: 4, expected: '400%' },
+    ];
+
+    for (const { value, expected } of presets) {
+      control.setZoom(value);
+      expect(button.textContent).toContain(expected);
+    }
+  });
+
+  it('ZOOM-U091: button never displays ratio notation like N:M for preset zoom levels', () => {
+    const el = control.render();
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+
+    const numericPresets: ZoomLevel[] = [0.25, 0.5, 1, 2, 4];
+
+    for (const value of numericPresets) {
+      control.setZoom(value);
+      const text = button.textContent ?? '';
+      expect(text).not.toMatch(/\d+:\d+/);
+      expect(text).toContain('%');
+    }
+  });
+
+  it('ZOOM-U092: custom zoom values from updateFromViewer display as percentages', () => {
+    const el = control.render();
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+
+    // Simulate a non-preset ratio via updateFromViewer
+    // zoom=3, fitScale=0.5 → ratio=1.5 → should show "150%"
+    control.updateFromViewer(3, 0.5);
+    const text = button.textContent ?? '';
+    expect(text).toContain('150%');
+    expect(text).not.toMatch(/\d+:\d+/);
+  });
+
+  it('ZOOM-U093: dropdown preset selection displays matching percentage in button', () => {
+    const el = control.render();
+    document.body.appendChild(el);
+
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+
+    // Open dropdown and click 200% (index 6)
+    button.click();
+    const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
+    const options = dropdown.querySelectorAll('button');
+    (options[6] as HTMLButtonElement).click();
+
+    expect(button.textContent).toContain('200%');
+    expect(button.textContent).not.toContain('2:1');
 
     document.body.removeChild(el);
   });

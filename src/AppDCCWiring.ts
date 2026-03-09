@@ -13,6 +13,7 @@ import type { DCCBridge, SyncColorMessage } from './integrations/DCCBridge';
 import type { ColorAdjustments } from './core/types/color';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { basename } from './utils/path';
 
 const log = new Logger('AppDCCWiring');
 
@@ -97,7 +98,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
     dccBridge.on('loadMedia', (msg) => {
       const path = msg.path;
       const ext = path.split('.').pop()?.toLowerCase() ?? '';
-      const name = path.split('/').pop() ?? path;
+      const name = basename(path);
       if (VIDEO_EXTENSIONS.includes(ext)) {
         session
           .loadVideo(name, path)

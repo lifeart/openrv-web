@@ -13,6 +13,7 @@ import type { EXRLayerInfo, EXRDecodeOptions, EXRChannelRemapping } from '../../
 import { decoderRegistry } from '../../formats/DecoderRegistry';
 import type { HEICGainmapInfo, HEICColorInfo } from '../../formats/HEICGainmapDecoder';
 import { isRAWExtension } from '../../formats/RAWPreviewDecoder';
+import { basename } from '../../utils/path';
 import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
 /**
@@ -602,7 +603,7 @@ export class FileSourceNode extends BaseSourceNode {
    * Load image from URL
    */
   async load(url: string, name?: string, originalUrl?: string): Promise<void> {
-    const filename = name ?? url.split('/').pop() ?? 'image';
+    const filename = name ?? (basename(url) || 'image');
 
     // Check if this is an EXR file
     if (isEXRExtension(filename)) {
