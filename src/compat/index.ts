@@ -15,6 +15,7 @@
 
 export { MuCommands } from './MuCommands';
 export { MuExtraCommands } from './MuExtraCommands';
+export { MuSourceBridge } from './MuSourceBridge';
 export { ModeManager } from './ModeManager';
 export * from './constants';
 export type {
@@ -25,6 +26,8 @@ export type {
   MinorModeDefinition,
   CommandSupportStatus,
   SettingsValue,
+  SourceMediaInfo,
+  MediaRepInfo,
 } from './types';
 
 import { MuCommands } from './MuCommands';

@@ -176,6 +176,106 @@ export interface NodeImageGeometry {
   orientation: string;
 }
 
+// --- Phase 6: Graph Evaluation & Image Query types ---
+
+/**
+ * Meta-evaluation info returned by metaEvaluate / metaEvaluateClosestByType.
+ * Describes a node encountered during graph traversal.
+ */
+export interface MetaEvalInfo {
+  /** Node name */
+  node: string;
+  /** Node type (e.g. "RVSource", "RVColor") */
+  nodeType: string;
+  /** Frame number at which this node was evaluated */
+  frame: number;
+}
+
+/**
+ * Pixel-level image hit-test result returned by imagesAtPixel.
+ */
+export interface PixelImageInfo {
+  /** Image/source name */
+  name: string;
+  /** Integer X coordinate in image space */
+  x: number;
+  /** Integer Y coordinate in image space */
+  y: number;
+  /** Precise X coordinate in image space (sub-pixel) */
+  px: number;
+  /** Precise Y coordinate in image space (sub-pixel) */
+  py: number;
+  /** Whether the point is inside the image bounds */
+  inside: boolean;
+  /** Whether the point is on the edge of the image */
+  edge: boolean;
+  /** 4x4 model matrix (column-major, 16 elements) */
+  modelMatrix: number[];
+}
+
+/**
+ * Info about a currently rendered image, returned by renderedImages().
+ */
+export interface RenderedImageInfo {
+  /** Image/source name */
+  name: string;
+  /** Render index (order in the compositing stack) */
+  index: number;
+  /** Image bounds minimum in view space [x, y] */
+  imageMin: [number, number];
+  /** Image bounds maximum in view space [x, y] */
+  imageMax: [number, number];
+  /** Native image width in pixels */
+  width: number;
+  /** Native image height in pixels */
+  height: number;
+  /** Node name that produced this image */
+  nodeName: string;
+}
+
+// --- Phase 4: Source Management types ---
+
+/**
+ * Source media info returned by sourceMediaInfo().
+ * Mirrors Mu's SourceMediaInfo struct with web-relevant fields.
+ */
+export interface SourceMediaInfo {
+  /** Source node name */
+  name: string;
+  /** Primary media file path / URL */
+  file: string;
+  /** Image width in pixels */
+  width: number;
+  /** Image height in pixels */
+  height: number;
+  /** Frames per second */
+  fps: number;
+  /** Duration in frames */
+  duration: number;
+  /** First frame number */
+  startFrame: number;
+  /** Last frame number */
+  endFrame: number;
+  /** Pixel aspect ratio */
+  pixelAspect: number;
+  /** Channel names (e.g. ["R", "G", "B", "A"]) */
+  channelNames: string[];
+  /** Number of channels */
+  numChannels: number;
+}
+
+/**
+ * Media representation info returned by sourceMediaReps-related commands.
+ */
+export interface MediaRepInfo {
+  /** Representation name (e.g. "full", "proxy", "editorial") */
+  name: string;
+  /** Associated node name */
+  nodeName: string;
+  /** Media paths for this representation */
+  mediaPaths: string[];
+}
+
 /** Cursor constants (matching Mu's enum, mapped to CSS cursor names) */
 export const MuCursor: Record<number, string> = {
   0: 'default',
