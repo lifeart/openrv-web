@@ -1,0 +1,320 @@
+/**
+ * ModeManager — Minor/Major mode system with event tables
+ *
+ * Implements the Mu-style mode manager where:
+ * - Minor modes can be activated/deactivated independently
+ * - Each mode has global bindings and override bindings
+ * - Event dispatch walks the mode stack (override tables first, then global)
+ * - Event tables can be pushed/popped independently of modes
+ */
+
+import type {
+  MinorModeDefinition,
+  EventTable,
+  MuEvent,
+  MuEventCallback,
+} from './types';
+
+export class ModeManager {
+  /** Registered mode definitions (name -> definition) */
+  private modes = new Map<string, MinorModeDefinition>();
+
+  /** Currently active modes, ordered by activation order */
+  private activeModes: string[] = [];
+
+  /** Event table stack (independent of modes) */
+  private eventTableStack: EventTable[] = [];
+
+  /** BBox constraints for event tables (tableName -> bbox string) */
+  private eventTableBBoxes = new Map<string, { tag: string; x: number; y: number; w: number; h: number }>();
+
+  /**
+   * Define a new minor mode.
+   */
+  defineMinorMode(
+    name: string,
+    order: number,
+    globalBindings: Array<[string, MuEventCallback, string]>,
+    overrideBindings: Array<[string, MuEventCallback, string]>,
+    activate?: () => void,
+    deactivate?: () => void,
+    icon?: string,
+  ): void {
+    const globalTable = this.createEventTable(`${name}_global`, globalBindings);
+    const overrideTable = this.createEventTable(`${name}_override`, overrideBindings);
+
+    this.modes.set(name, {
+      name,
+      order,
+      globalBindings: globalTable,
+      overrideBindings: overrideTable,
+      icon,
+      activate,
+      deactivate,
+    });
+  }
+
+  /**
+   * Activate a mode. Calls the mode's activate callback if defined.
+   */
+  activateMode(name: string): void {
+    if (!this.modes.has(name)) {
+      console.warn(`[ModeManager] Mode "${name}" is not defined`);
+      return;
+    }
+    if (this.activeModes.includes(name)) {
+      return; // Already active
+    }
+
+    this.activeModes.push(name);
+    // Sort by order (lower order = earlier in evaluation)
+    this.activeModes.sort((a, b) => {
+      const modeA = this.modes.get(a);
+      const modeB = this.modes.get(b);
+      return (modeA?.order ?? 0) - (modeB?.order ?? 0);
+    });
+
+    const mode = this.modes.get(name);
+    mode?.activate?.();
+  }
+
+  /**
+   * Deactivate a mode. Calls the mode's deactivate callback if defined.
+   */
+  deactivateMode(name: string): void {
+    const idx = this.activeModes.indexOf(name);
+    if (idx === -1) return;
+
+    this.activeModes.splice(idx, 1);
+
+    const mode = this.modes.get(name);
+    mode?.deactivate?.();
+  }
+
+  /**
+   * Check if a mode is currently active.
+   */
+  isModeActive(name: string): boolean {
+    return this.activeModes.includes(name);
+  }
+
+  /**
+   * Get list of all active mode names.
+   */
+  getActiveModes(): string[] {
+    return [...this.activeModes];
+  }
+
+  /**
+   * Push an event table onto the stack.
+   */
+  pushEventTable(name: string): void {
+    const existing = this.eventTableStack.find((t) => t.name === name);
+    if (existing) {
+      // Move to top
+      this.eventTableStack = this.eventTableStack.filter((t) => t.name !== name);
+      this.eventTableStack.push(existing);
+    } else {
+      this.eventTableStack.push({
+        name,
+        bindings: new Map(),
+      });
+    }
+  }
+
+  /**
+   * Pop an event table from the stack.
+   */
+  popEventTable(name: string): void {
+    this.eventTableStack = this.eventTableStack.filter((t) => t.name !== name);
+  }
+
+  /**
+   * Get list of active event table names (from stack).
+   */
+  getActiveEventTables(): string[] {
+    return this.eventTableStack.map((t) => t.name);
+  }
+
+  /**
+   * Set BBox constraint for an event table.
+   */
+  setEventTableBBox(
+    tableName: string,
+    tag: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void {
+    this.eventTableBBoxes.set(tableName, { tag, x, y, w, h });
+  }
+
+  /**
+   * Add a binding to a named event table (either on the stack or in a mode).
+   */
+  bind(
+    tableName: string,
+    eventName: string,
+    callback: MuEventCallback,
+    documentation: string = '',
+  ): void {
+    // Try to find the table on the stack
+    let table = this.eventTableStack.find((t) => t.name === tableName);
+    if (!table) {
+      // Create a new table on the stack
+      table = { name: tableName, bindings: new Map() };
+      this.eventTableStack.push(table);
+    }
+    table.bindings.set(eventName, { eventName, callback, documentation });
+  }
+
+  /**
+   * Remove a binding from a named event table.
+   */
+  unbind(tableName: string, eventName: string): void {
+    const table = this.eventTableStack.find((t) => t.name === tableName);
+    table?.bindings.delete(eventName);
+  }
+
+  /**
+   * Dispatch an event through the mode system.
+   * Walks override tables first, then global tables, then the event table stack.
+   * Returns true if the event was handled (not rejected).
+   */
+  dispatchEvent(event: MuEvent): boolean {
+    // 1. Check override tables from active modes (highest order first)
+    for (let i = this.activeModes.length - 1; i >= 0; i--) {
+      const modeName = this.activeModes[i]!;
+      const mode = this.modes.get(modeName);
+      if (!mode) continue;
+
+      const binding = mode.overrideBindings.bindings.get(event.name);
+      if (binding) {
+        binding.callback(event);
+        if (!event.reject) return true;
+        event.reject = false; // Reset for next handler
+      }
+    }
+
+    // 2. Check event table stack (top-down)
+    for (let i = this.eventTableStack.length - 1; i >= 0; i--) {
+      const table = this.eventTableStack[i]!;
+
+      // Check BBox constraint
+      if (event.pointer && this.eventTableBBoxes.has(table.name)) {
+        const bbox = this.eventTableBBoxes.get(table.name)!;
+        const { x, y } = event.pointer;
+        if (x < bbox.x || x > bbox.x + bbox.w || y < bbox.y || y > bbox.y + bbox.h) {
+          continue;
+        }
+      }
+
+      const binding = table.bindings.get(event.name);
+      if (binding) {
+        binding.callback(event);
+        if (!event.reject) return true;
+        event.reject = false;
+      }
+    }
+
+    // 3. Check global tables from active modes
+    for (let i = this.activeModes.length - 1; i >= 0; i--) {
+      const modeName = this.activeModes[i]!;
+      const mode = this.modes.get(modeName);
+      if (!mode) continue;
+
+      const binding = mode.globalBindings.bindings.get(event.name);
+      if (binding) {
+        binding.callback(event);
+        if (!event.reject) return true;
+        event.reject = false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get all active bindings as [eventName, documentation] pairs.
+   */
+  getBindings(): Array<[string, string]> {
+    const result: Array<[string, string]> = [];
+
+    // Collect from active modes
+    for (const modeName of this.activeModes) {
+      const mode = this.modes.get(modeName);
+      if (!mode) continue;
+      for (const [, binding] of mode.globalBindings.bindings) {
+        result.push([binding.eventName, binding.documentation]);
+      }
+      for (const [, binding] of mode.overrideBindings.bindings) {
+        result.push([binding.eventName, binding.documentation]);
+      }
+    }
+
+    // Collect from event table stack
+    for (const table of this.eventTableStack) {
+      for (const [, binding] of table.bindings) {
+        result.push([binding.eventName, binding.documentation]);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Get documentation for a specific binding.
+   */
+  getBindingDocumentation(tableName: string, eventName: string): string {
+    // Check event table stack
+    const table = this.eventTableStack.find((t) => t.name === tableName);
+    if (table) {
+      return table.bindings.get(eventName)?.documentation ?? '';
+    }
+
+    // Check mode tables
+    const mode = this.modes.get(tableName);
+    if (mode) {
+      return (
+        mode.globalBindings.bindings.get(eventName)?.documentation ??
+        mode.overrideBindings.bindings.get(eventName)?.documentation ??
+        ''
+      );
+    }
+
+    return '';
+  }
+
+  /**
+   * Check if a mode is defined (registered).
+   */
+  isModeDefined(name: string): boolean {
+    return this.modes.has(name);
+  }
+
+  /**
+   * Clear all modes and event tables.
+   */
+  dispose(): void {
+    this.modes.clear();
+    this.activeModes = [];
+    this.eventTableStack = [];
+    this.eventTableBBoxes.clear();
+  }
+
+  private createEventTable(
+    name: string,
+    bindings: Array<[string, MuEventCallback, string]>,
+  ): EventTable {
+    const table: EventTable = { name, bindings: new Map() };
+    for (const [eventName, callback, doc] of bindings) {
+      table.bindings.set(eventName, {
+        eventName,
+        callback,
+        documentation: doc,
+      });
+    }
+    return table;
+  }
+}
