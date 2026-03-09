@@ -41,6 +41,7 @@ import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
 import { WebGPUBackend } from './render/WebGPUBackend';
 import { createRenderer } from './render/createRenderer';
 import type { RendererBackend } from './render/RendererBackend';
+import type { WGPUDevice } from './render/webgpu/WebGPUTypes';
 
 // Shared mock factories
 import { createMockRendererGL as createMockGL, initRendererWithMockGL } from '../test/mocks';
@@ -1386,6 +1387,29 @@ describe('Phase 4: WebGPU Migration Path', () => {
   // 4.2 WebGPU HDR configuration
   // =====================================================================
   describe('4.2 WebGPU HDR configuration', () => {
+    /** Create a mock WGPUDevice with all methods needed by initAsync(). */
+    function createMockWGPUDevice(): WGPUDevice {
+      const noop = () => {};
+      const mockBindGroupLayout = {};
+      const mockPipeline = { getBindGroupLayout: () => mockBindGroupLayout };
+      const mockBuffer = { getMappedRange: () => new ArrayBuffer(0), unmap: noop, destroy: noop, mapAsync: () => Promise.resolve() };
+      return {
+        createShaderModule: () => ({}),
+        createRenderPipeline: () => mockPipeline,
+        createSampler: () => ({}),
+        createTexture: () => ({ createView: () => ({}), destroy: noop }),
+        createBindGroup: () => ({}),
+        createBuffer: () => mockBuffer,
+        createCommandEncoder: () => ({
+          beginRenderPass: () => ({ setPipeline: noop, setBindGroup: noop, draw: noop, end: noop }),
+          copyTextureToBuffer: noop,
+          finish: () => ({}),
+        }),
+        queue: { writeTexture: noop, writeBuffer: noop, copyExternalImageToTexture: noop, submit: noop },
+        destroy: noop,
+      };
+    }
+
     it('AC-P4-4.2a: WebGPUBackend configures with rgba16float, display-p3, extended', async () => {
       const backend = new WebGPUBackend();
       const canvas = document.createElement('canvas');
@@ -1398,7 +1422,7 @@ describe('Phase 4: WebGPU Migration Path', () => {
         getCurrentTexture: noop,
       };
 
-      const mockDevice = { destroy: noop };
+      const mockDevice = createMockWGPUDevice();
       const mockAdapter = {
         requestDevice: () => Promise.resolve(mockDevice),
       };
@@ -1449,7 +1473,7 @@ describe('Phase 4: WebGPU Migration Path', () => {
         unconfigure: noop,
       };
 
-      const mockDevice = { destroy: noop };
+      const mockDevice = createMockWGPUDevice();
       const mockAdapter = {
         requestDevice: () => Promise.resolve(mockDevice),
       };

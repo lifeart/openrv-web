@@ -810,15 +810,20 @@ describe('Viewer', () => {
       // First call creates canvas and calls getContext
       testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
 
-      // Spy on getContext of the pooled canvas
+      // Track getContext calls on this specific pooled canvas using an own-property spy.
+      // vi.spyOn would spy on the prototype (shared across all canvases), so we
+      // install a dedicated mock directly on the instance instead.
       const poolEntry = testable(viewer).ghostFrameManager.canvasPool[0];
-      const ctxSpy = vi.spyOn(poolEntry!.canvas, 'getContext');
+      const ctxSpy = vi.fn();
+      const originalGetContext = poolEntry!.canvas.getContext.bind(poolEntry!.canvas);
+      poolEntry!.canvas.getContext = ctxSpy.mockImplementation(originalGetContext);
 
       // Re-request same index - should reuse without calling getContext
       testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       expect(ctxSpy).not.toHaveBeenCalled();
 
-      ctxSpy.mockRestore();
+      // Restore by removing the own property so the prototype method is used again
+      delete (poolEntry!.canvas as any).getContext;
     });
   });
 });

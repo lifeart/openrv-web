@@ -164,10 +164,14 @@ describe('MediaManager', () => {
     vi.clearAllMocks();
     // Re-establish default mock implementations after clearAllMocks
     vi.mocked(FileSourceNode).mockImplementation(
-      (name?: string) => createMockFileSourceNode(name) as unknown as FileSourceNode,
+      function (name?: string) {
+        return createMockFileSourceNode(name) as unknown as FileSourceNode;
+      },
     );
     vi.mocked(VideoSourceNode).mockImplementation(
-      (name?: string) => createMockVideoSourceNode(name) as unknown as VideoSourceNode,
+      function (name?: string) {
+        return createMockVideoSourceNode(name) as unknown as VideoSourceNode;
+      },
     );
     manager = new MediaManager();
     host = createMockHost();
@@ -1392,15 +1396,16 @@ describe('MediaManager', () => {
       // Without host, it should default to 24
       const loadFileSpy = vi.fn().mockResolvedValue(undefined);
       vi.mocked(FileSourceNode).mockImplementationOnce(
-        () =>
-          ({
+        function () {
+          return {
             loadFile: loadFileSpy,
             isHDR: vi.fn().mockReturnValue(false),
             formatName: null,
             width: 100,
             height: 100,
             properties: { getValue: vi.fn().mockReturnValue('url') },
-          }) as unknown as FileSourceNode,
+          } as unknown as FileSourceNode;
+        },
       );
 
       // We can't easily verify the fps without checking the source
