@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests (shard ${{ matrix.shard }}/6)
-        run: pnpm test:e2e:ci --shard=${{ matrix.shard }}/6 --reporter=json --reporter=html
+        run: pnpm test:e2e:ci --shard=${{ matrix.shard }}/5 --reporter=json --reporter=html
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
 
