@@ -553,6 +553,7 @@ openrv.events.on('error', (data) => {
 
 ## Related Pages
 
+- [Mu Compat Layer](mu-compat.md) -- Desktop OpenRV Mu API compatibility bridge (`window.rv.commands`)
 - [DCC Integration](dcc-integration.md) -- WebSocket-based external application control
 - [Review Workflow](review-workflow.md) -- Automation in dailies and review processes
 - [Session Management](session-management.md) -- Session state that the API operates on

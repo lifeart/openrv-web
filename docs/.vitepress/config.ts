@@ -176,6 +176,7 @@ export default defineConfig({
             { text: 'DCC Integration', link: '/advanced/dcc-integration' },
             { text: 'Session Management', link: '/advanced/session-management' },
             { text: 'Scripting API', link: '/advanced/scripting-api' },
+            { text: 'Mu Compat Layer', link: '/advanced/mu-compat' },
             { text: 'Filters & Effects', link: '/advanced/filters-effects' },
             { text: 'Transforms', link: '/advanced/transforms' },
             { text: 'Overlays & Guides', link: '/advanced/overlays' },

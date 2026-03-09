@@ -62,6 +62,7 @@ features:
 
 ### For Pipeline TDs
 - [Scripting API](/advanced/scripting-api) -- Control OpenRV Web programmatically
+- [Mu Compat Layer](/advanced/mu-compat) -- Migrate existing Mu scripts to the browser
 - [API Reference](/api/) -- Full TypeDoc-generated API docs
 - [DCC Integration](/advanced/dcc-integration) -- Connect to Nuke, Maya, Houdini
 - [Session Compatibility](/guides/session-compatibility) -- RV session file support
