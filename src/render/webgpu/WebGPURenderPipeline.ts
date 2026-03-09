@@ -57,6 +57,9 @@ export class WebGPURenderPipelineManager {
   private sampler: WGPUSampler | null = null;
   private uniformBindGroup: WGPUBindGroup | null = null;
 
+  // Current filter mode (used to detect changes)
+  private filterMode: 'linear' | 'nearest' = 'linear';
+
   // Cache for texture bind groups (keyed by texture view identity)
   private lastTextureView: WGPUTextureView | null = null;
   private lastTextureBindGroup: WGPUBindGroup | null = null;
@@ -88,6 +91,7 @@ export class WebGPURenderPipelineManager {
     });
 
     // Create sampler
+    this.filterMode = filterMode;
     this.sampler = device.createSampler({
       magFilter: filterMode,
       minFilter: filterMode,
@@ -132,6 +136,25 @@ export class WebGPURenderPipelineManager {
     this.lastTextureView = textureView;
     this.lastTextureBindGroup = bindGroup;
     return bindGroup;
+  }
+
+  /**
+   * Update the sampler filter mode at runtime.
+   * Recreates the sampler and invalidates the texture bind group cache.
+   * No-op if the mode has not changed or the pipeline is not initialized.
+   */
+  setSamplerFilterMode(device: WGPUDevice, mode: 'linear' | 'nearest'): void {
+    if (mode === this.filterMode || !this.pipeline) return;
+
+    this.filterMode = mode;
+    this.sampler = device.createSampler({
+      magFilter: mode,
+      minFilter: mode,
+    });
+
+    // Invalidate cached texture bind group since it references the old sampler
+    this.lastTextureView = null;
+    this.lastTextureBindGroup = null;
   }
 
   get renderPipeline(): WGPURenderPipeline | null {

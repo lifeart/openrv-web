@@ -181,6 +181,9 @@ export class WebGPUShaderPipeline {
   private globalUBO: WGPUBuffer | null = null;
   private globalUBOData = new Float32Array(8);
 
+  /** User-selected default texture filter mode ('nearest' or 'linear'). */
+  private _defaultFilterMode: 'nearest' | 'linear' = 'linear';
+
   /** Renderer-set values for UBO fields not in InternalShaderState. */
   private _hdrHeadroom = 1.0;
   private _outputMode = 0;
@@ -232,6 +235,15 @@ export class WebGPUShaderPipeline {
     this.stageOrder = [...newOrder];
     this.sortStages();
     return true;
+  }
+
+  /**
+   * Set the default texture filter mode for the image sampler.
+   * Affects the passthrough blit and the first stage's input sampling.
+   * Stages that declare needsBilinearInput override this to 'linear'.
+   */
+  setDefaultFilterMode(mode: 'nearest' | 'linear'): void {
+    this._defaultFilterMode = mode;
   }
 
   /** Set the hdrHeadroom value for the global UBO. */
@@ -434,7 +446,9 @@ export class WebGPUShaderPipeline {
       });
     }
 
-    const sampler = this.linearSampler ?? this.nearestSampler;
+    const sampler = this._defaultFilterMode === 'nearest'
+      ? (this.nearestSampler ?? this.linearSampler)
+      : (this.linearSampler ?? this.nearestSampler);
     if (!sampler) return;
 
     const textureBindGroup = device.createBindGroup({
@@ -501,10 +515,22 @@ export class WebGPUShaderPipeline {
       this.pipelineCache.set(cacheKey, pipeline);
     }
 
-    // Choose sampler based on stage needs
-    const sampler = stage.needsBilinearInput && !isFirstStage
-      ? (this.linearSampler ?? this.nearestSampler)
-      : (this.nearestSampler ?? this.linearSampler);
+    // Choose sampler based on stage needs and user preference.
+    // - First stage samples the image texture: respect user's filter mode preference.
+    // - Intermediate stages: use nearest unless the stage explicitly needs bilinear.
+    let sampler: WGPUSampler | null;
+    if (isFirstStage) {
+      // First stage: user's filter mode determines sampling of the source image
+      sampler = this._defaultFilterMode === 'nearest'
+        ? (this.nearestSampler ?? this.linearSampler)
+        : (this.linearSampler ?? this.nearestSampler);
+    } else if (stage.needsBilinearInput) {
+      // Intermediate stage that needs bilinear (e.g. clarity, sharpen)
+      sampler = this.linearSampler ?? this.nearestSampler;
+    } else {
+      // Intermediate stage: nearest for pixel-exact processing
+      sampler = this.nearestSampler ?? this.linearSampler;
+    }
     if (!sampler) return;
 
     // Create texture bind group (group 0)

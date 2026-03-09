@@ -88,7 +88,6 @@ export class WebGPUBackend implements RendererBackend {
   private inputTransferCode = 0;
 
   // Texture filter mode
-  // TODO: _textureFilterMode is stored but not yet wired to GPU samplers
   private _textureFilterMode: TextureFilterMode = 'linear';
 
   // --- Phase 4: Advanced features ---
@@ -482,7 +481,16 @@ export class WebGPUBackend implements RendererBackend {
   // --- Texture filter mode (IMPLEMENTED - state management) ---
 
   setTextureFilterMode(mode: TextureFilterMode): void {
+    if (this._textureFilterMode === mode) return;
     this._textureFilterMode = mode;
+
+    // Propagate to passthrough pipeline sampler
+    if (this.device) {
+      this.pipelineManager.setSamplerFilterMode(this.device, mode);
+    }
+
+    // Propagate to shader pipeline default filter mode
+    this.shaderPipeline.setDefaultFilterMode(mode);
   }
 
   getTextureFilterMode(): TextureFilterMode {
