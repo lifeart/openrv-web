@@ -54,7 +54,7 @@ window.rv.extra_commands.stepForward(5);
 | `frameStart` | `() => number` | ADD | Get frame range start (local state) |
 | `frameEnd` | `() => number` | DIRECT | Get total frames |
 | `setFPS` | `(fps: number) => void` | ADD | Set FPS override (local state) |
-| `fps` | `() => number` | ADD | Get effective FPS (override or media) |
+| `fps` | `() => number` | PARTIAL | Get effective FPS (override or media) |
 | `realFPS` | `() => number` | ADD | Get measured FPS (stub: returns nominal) |
 | `setRealtime` | `(realtime: boolean) => void` | DIRECT | Set realtime playback mode |
 | `isRealtime` | `() => boolean` | DIRECT | Check if realtime mode is active |
@@ -83,19 +83,19 @@ window.rv.extra_commands.stepForward(5);
 
 | Command | Signature | Status | Description |
 |---|---|---|---|
-| `redraw` | `() => void` | DIRECT | Request viewport repaint via `requestAnimationFrame` |
+| `redraw` | `() => void` | STUB | Request viewport repaint via `requestAnimationFrame` |
 | `viewSize` | `() => [number, number]` | DIRECT | Get canvas size as `[width, height]` |
 | `setViewSize` | `(w: number, h: number) => void` | DIRECT | Set canvas size |
 | `resizeFit` | `() => void` | DIRECT | Fit image to viewport |
 | `fullScreenMode` | `(enable: boolean) => void` | DIRECT | Enter/exit fullscreen (async internally) |
 | `isFullScreen` | `() => boolean` | DIRECT | Check fullscreen state |
 | `setWindowTitle` | `(title: string) => void` | DIRECT | Set browser tab title |
-| `setFiltering` | `(mode: number) => void` | DIRECT | Set texture filter (0=Nearest, 1=Linear) |
-| `getFiltering` | `() => number` | DIRECT | Get current filter mode |
-| `setBGMethod` | `(method: string) => void` | DIRECT | Set background method |
-| `bgMethod` | `() => string` | DIRECT | Get background method |
-| `setMargins` | `(margins: number[], relative: boolean) => void` | DIRECT | Set viewport margins |
-| `margins` | `() => number[]` | DIRECT | Get viewport margins |
+| `setFiltering` | `(mode: number) => void` | ADD | Set texture filter (0=Nearest, 1=Linear) |
+| `getFiltering` | `() => number` | ADD | Get current filter mode |
+| `setBGMethod` | `(method: string) => void` | ADD | Set background method |
+| `bgMethod` | `() => string` | ADD | Get background method |
+| `setMargins` | `(margins: number[], relative: boolean) => void` | ADD | Set viewport margins |
+| `margins` | `() => number[]` | ADD | Get viewport margins |
 | `contentAspect` | `() => number` | PARTIAL | Get content aspect ratio (width/height) |
 | `devicePixelRatio` | `() => number` | DIRECT | Get device pixel ratio |
 
@@ -214,7 +214,7 @@ import { MuSourceBridge } from './compat';
 const sources = new MuSourceBridge();
 const list = sources.sources();                   // List all source names
 const info = sources.sourceMediaInfo('source0');   // Get media info for a source
-sources.addSource('path/to/media.exr');            // Add a new source
+sources.addSource(['/path/to/media.exr']);           // Add a new source
 const size = sources.getCurrentImageSize();        // [width, height]
 ```
 
@@ -305,7 +305,7 @@ const evalBridge = new MuEvalBridge(graph, nodeBridge);
 evalBridge.setViewTransform({ viewWidth: 1920, viewHeight: 1080, scale: 1, translation: [0, 0], imageWidth: 1920, imageHeight: 1080 });
 
 // Convert event coordinates to image space
-const [ix, iy] = evalBridge.eventToImageSpace(mouseX, mouseY);
+const [ix, iy] = evalBridge.eventToImageSpace('source0', [mouseX, mouseY]);
 
 // Query rendered images
 const images = evalBridge.renderedImages();

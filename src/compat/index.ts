@@ -15,20 +15,18 @@
 
 export { MuCommands } from './MuCommands';
 export { MuExtraCommands } from './MuExtraCommands';
-export { MuSourceBridge } from './MuSourceBridge';
+export { MuPropertyBridge } from './MuPropertyBridge';
+export { MuNodeBridge } from './MuNodeBridge';
+export { MuEventBridge } from './MuEventBridge';
 export { ModeManager } from './ModeManager';
+export { MuSourceBridge } from './MuSourceBridge';
+export { MuEvalBridge } from './MuEvalBridge';
+export { MuNetworkBridge } from './MuNetworkBridge';
+export { MuSettingsBridge } from './MuSettingsBridge';
+export { MuUtilsBridge } from './MuUtilsBridge';
+export * as stubs from './stubs';
+export * from './types';
 export * from './constants';
-export type {
-  MuEvent,
-  MuEventCallback,
-  EventTableBinding,
-  EventTable,
-  MinorModeDefinition,
-  CommandSupportStatus,
-  SettingsValue,
-  SourceMediaInfo,
-  MediaRepInfo,
-} from './types';
 
 import { MuCommands } from './MuCommands';
 import { MuExtraCommands } from './MuExtraCommands';
