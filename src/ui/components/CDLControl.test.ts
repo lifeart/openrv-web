@@ -121,7 +121,7 @@ describe('CDLControl', () => {
 
       control.setCDL(newCDL);
 
-      const emittedCDL = callback.mock.calls[0][0] as CDLValues;
+      const emittedCDL = callback.mock.calls[0]![0] as CDLValues;
       emittedCDL.slope.r = 999;
       expect(control.getCDL().slope.r).toBe(1.2);
     });

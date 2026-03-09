@@ -136,7 +136,7 @@ describe('SlateEditor E2E Integration', () => {
       editor.setMetadata({ showName: 'Test' });
 
       expect(callback).toHaveBeenCalledTimes(1);
-      const emittedState: SlateEditorState = callback.mock.calls[0][0];
+      const emittedState: SlateEditorState = callback.mock.calls[0]![0];
       expect(emittedState.metadata.showName).toBe('Test');
     });
 
@@ -614,7 +614,7 @@ describe('SlateEditor E2E Integration', () => {
       editor.setState({ width: 4096 });
 
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0].width).toBe(4096);
+      expect(callback.mock.calls[0]![0].width).toBe(4096);
     });
   });
 
@@ -797,7 +797,7 @@ describe('SlateEditor E2E Integration', () => {
       editor.generatePreview();
 
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toBeInstanceOf(HTMLCanvasElement);
+      expect(callback.mock.calls[0]![0]).toBeInstanceOf(HTMLCanvasElement);
     });
 
     it('SLATE-E2E-132: generatePreview also emits configGenerated', () => {

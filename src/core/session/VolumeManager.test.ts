@@ -13,7 +13,7 @@ describe('VolumeManager', () => {
     onVolumeChanged = vi.fn();
     onMutedChanged = vi.fn();
     onPreservesPitchChanged = vi.fn();
-    callbacks = { onVolumeChanged, onMutedChanged, onPreservesPitchChanged };
+    callbacks = { onVolumeChanged: onVolumeChanged as any, onMutedChanged: onMutedChanged as any, onPreservesPitchChanged: onPreservesPitchChanged as any };
     manager.setCallbacks(callbacks);
   });
 
@@ -221,7 +221,7 @@ describe('VolumeManager', () => {
 
     beforeEach(() => {
       onAudioScrubEnabledChanged = vi.fn();
-      callbacks.onAudioScrubEnabledChanged = onAudioScrubEnabledChanged;
+      callbacks.onAudioScrubEnabledChanged = onAudioScrubEnabledChanged as any;
       manager.setCallbacks(callbacks);
     });
 

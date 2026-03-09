@@ -121,7 +121,7 @@ describe('OCIOStateManager', () => {
       manager.applyPreset('acescct-srgb');
 
       expect(callback).toHaveBeenCalled();
-      const emittedState = callback.mock.calls[0][0];
+      const emittedState = callback.mock.calls[0]![0];
       expect(emittedState.enabled).toBe(true);
       expect(emittedState.inputColorSpace).toBe('ACEScct');
     });

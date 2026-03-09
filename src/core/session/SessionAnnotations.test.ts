@@ -190,8 +190,8 @@ describe('SessionAnnotations', () => {
       annotations.on('matteChanged', handler);
       annotations.annotationStore.setMatteSettings({ show: true, aspect: 2.35 });
       expect(handler).toHaveBeenCalledOnce();
-      expect(handler.mock.calls[0][0].show).toBe(true);
-      expect(handler.mock.calls[0][0].aspect).toBe(2.35);
+      expect(handler.mock.calls[0]![0].show).toBe(true);
+      expect(handler.mock.calls[0]![0].aspect).toBe(2.35);
     });
 
     it('SA-027: clearMarks emits marksChanged', () => {

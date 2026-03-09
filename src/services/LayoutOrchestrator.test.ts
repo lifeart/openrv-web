@@ -620,7 +620,7 @@ describe('LayoutOrchestrator', () => {
     expect(d.mocks.sessionBridge.setHistogramDataCallback).toHaveBeenCalledWith(expect.any(Function));
 
     // Get the callback and test it
-    const cb = d.mocks.sessionBridge.setHistogramDataCallback.mock.calls[0][0] as (data: unknown) => void;
+    const cb = d.mocks.sessionBridge.setHistogramDataCallback.mock.calls[0]![0] as (data: unknown) => void;
     const fakeData = { r: [], g: [], b: [] };
     cb(fakeData);
     expect(d.mocks.controls.rightPanelContent.updateHistogram).toHaveBeenCalledWith(fakeData);

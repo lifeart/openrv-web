@@ -183,7 +183,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -208,7 +208,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -235,7 +235,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -258,7 +258,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -281,7 +281,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -307,7 +307,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -327,7 +327,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
       await blit.initialize(); // second call
@@ -349,7 +349,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
 
       await blit.initialize();
 
@@ -387,7 +387,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
       await blit.initialize();
     }
 
@@ -540,7 +540,7 @@ describe('WebGPUHDRBlit', () => {
       });
 
       const blit = new WebGPUHDRBlit();
-      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as unknown as RenderingContext);
+      vi.spyOn(blit.getCanvas(), 'getContext').mockReturnValue(gpuCtx as any);
       await blit.initialize();
 
       return { blit, device: mock.device, gpuCtx };

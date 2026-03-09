@@ -9,7 +9,7 @@ describe('ABCompareManager', () => {
   beforeEach(() => {
     manager = new ABCompareManager();
     onABSourceChanged = vi.fn();
-    callbacks = { onABSourceChanged };
+    callbacks = { onABSourceChanged: onABSourceChanged as ABCompareManagerCallbacks['onABSourceChanged'] };
     manager.setCallbacks(callbacks);
   });
 

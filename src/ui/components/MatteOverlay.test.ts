@@ -344,7 +344,7 @@ describe('MatteOverlay', () => {
      * The mock setup creates a new MockCanvasRenderingContext2D per getContext('2d') call,
      * so we capture the context at construction time by intercepting getContext.
      */
-    let capturedCtx: ReturnType<HTMLCanvasElement['getContext']>;
+    let capturedCtx: CanvasRenderingContext2D | null;
     let coordOverlay: MatteOverlay;
 
     /**
@@ -355,7 +355,7 @@ describe('MatteOverlay', () => {
       const originalGetContext = HTMLCanvasElement.prototype.getContext;
       HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: [string, ...unknown[]]) {
         const ctx = originalGetContext.apply(this, args as Parameters<typeof originalGetContext>);
-        capturedCtx = ctx;
+        capturedCtx = ctx as CanvasRenderingContext2D | null;
         return ctx;
       } as typeof HTMLCanvasElement.prototype.getContext;
 

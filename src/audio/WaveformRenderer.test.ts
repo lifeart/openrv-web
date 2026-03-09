@@ -196,7 +196,7 @@ describe('WaveformRenderer', () => {
 
       expect(result).toBeNull();
       expect(onError).toHaveBeenCalled();
-      expect(onError.mock.calls[0][0].type).toBe('cors');
+      expect(onError.mock.calls[0]![0].type).toBe('cors');
     });
 
     it('EXT-006: extractAudioFromVideo handles no source', async () => {
@@ -208,7 +208,7 @@ describe('WaveformRenderer', () => {
 
       expect(result).toBeNull();
       expect(onError).toHaveBeenCalled();
-      expect(onError.mock.calls[0][0].type).toBe('no-source');
+      expect(onError.mock.calls[0]![0].type).toBe('no-source');
     });
 
     it('EXT-007: extractAudioFromVideo handles timeout', async () => {
@@ -234,7 +234,7 @@ describe('WaveformRenderer', () => {
 
       expect(result).toBeNull();
       expect(onError).toHaveBeenCalled();
-      expect(onError.mock.calls[0][0].type).toBe('timeout');
+      expect(onError.mock.calls[0]![0].type).toBe('timeout');
     });
 
     it('EXT-008: extractAudioFromVideo handles network error', async () => {
@@ -255,7 +255,7 @@ describe('WaveformRenderer', () => {
 
       expect(result).toBeNull();
       expect(onError).toHaveBeenCalled();
-      expect(onError.mock.calls[0][0].type).toBe('network');
+      expect(onError.mock.calls[0]![0].type).toBe('network');
     });
 
     it('EXT-009: extractAudioFromVideo handles decode error with callback', async () => {
@@ -269,7 +269,7 @@ describe('WaveformRenderer', () => {
 
       expect(result).toBeNull();
       expect(onError).toHaveBeenCalled();
-      expect(onError.mock.calls[0][0].type).toBe('decode');
+      expect(onError.mock.calls[0]![0].type).toBe('decode');
     });
 
     it('EXT-010: extractAudioFromVideo handles multi-channel audio', async () => {

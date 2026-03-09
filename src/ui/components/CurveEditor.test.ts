@@ -336,7 +336,7 @@ describe('CurveEditor', () => {
       editor.resetAll();
 
       expect(callback).toHaveBeenCalled();
-      const [eventData] = callback.mock.calls[0];
+      const [eventData] = callback.mock.calls[0]!;
       expect(eventData).toHaveProperty('channel');
       expect(eventData).toHaveProperty('curve');
     });

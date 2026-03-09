@@ -281,7 +281,7 @@ describe('ExportControl export request structure', () => {
 
     control.quickExport('png');
 
-    const [request] = callback.mock.calls[0];
+    const [request] = callback.mock.calls[0]!;
     expect(request).toHaveProperty('format');
     expect(request.format).toBe('png');
   });
@@ -292,7 +292,7 @@ describe('ExportControl export request structure', () => {
 
     control.quickExport();
 
-    const [request] = callback.mock.calls[0];
+    const [request] = callback.mock.calls[0]!;
     expect(request).toHaveProperty('includeAnnotations');
   });
 
@@ -302,7 +302,7 @@ describe('ExportControl export request structure', () => {
 
     control.quickExport();
 
-    const [request] = callback.mock.calls[0];
+    const [request] = callback.mock.calls[0]!;
     expect(request).toHaveProperty('quality');
     expect(typeof request.quality).toBe('number');
   });
@@ -313,7 +313,7 @@ describe('ExportControl export request structure', () => {
 
     control.quickExport();
 
-    const [request] = callback.mock.calls[0];
+    const [request] = callback.mock.calls[0]!;
     expect(request.quality).toBeGreaterThan(0);
     expect(request.quality).toBeLessThanOrEqual(1);
   });

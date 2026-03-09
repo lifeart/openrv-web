@@ -428,7 +428,7 @@ describe('SafeAreasControl', () => {
 
       overlay.enable();
 
-      const [state] = callback.mock.calls[0];
+      const [state] = callback.mock.calls[0]!;
       expect(state).toHaveProperty('enabled', true);
       expect(state).toHaveProperty('titleSafe');
       expect(state).toHaveProperty('actionSafe');

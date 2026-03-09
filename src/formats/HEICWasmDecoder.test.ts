@@ -121,7 +121,7 @@ describe('HEICWasmDecoder', () => {
       await decodeHEICToImageData(buf);
 
       expect(decodeFn).toHaveBeenCalledOnce();
-      const arg = decodeFn.mock.calls[0][0];
+      const arg = decodeFn.mock.calls[0]![0];
       expect(arg).toBeInstanceOf(Uint8Array);
       expect(arg.buffer).toBe(buf);
 

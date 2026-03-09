@@ -168,7 +168,7 @@ describe('ReferenceManager E2E Integration', () => {
       manager.captureReference({ width: 1, height: 1, data, channels: 4 });
 
       expect(callback).toHaveBeenCalledTimes(1);
-      const emittedRef: ReferenceImage = callback.mock.calls[0][0];
+      const emittedRef: ReferenceImage = callback.mock.calls[0]![0];
       expect(emittedRef.width).toBe(1);
       expect(emittedRef.height).toBe(1);
     });
@@ -181,7 +181,7 @@ describe('ReferenceManager E2E Integration', () => {
       manager.captureReference({ width: 1, height: 1, data, channels: 4 });
 
       expect(callback).toHaveBeenCalledTimes(1);
-      const emittedState: ReferenceState = callback.mock.calls[0][0];
+      const emittedState: ReferenceState = callback.mock.calls[0]![0];
       expect(emittedState.referenceImage).not.toBeNull();
     });
 
@@ -328,7 +328,7 @@ describe('ReferenceManager E2E Integration', () => {
       manager.enable();
 
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0].enabled).toBe(true);
+      expect(callback.mock.calls[0]![0].enabled).toBe(true);
     });
 
     it('REF-E2E-034: disable emits stateChanged with enabled=false', () => {
@@ -339,7 +339,7 @@ describe('ReferenceManager E2E Integration', () => {
       manager.disable();
 
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0].enabled).toBe(false);
+      expect(callback.mock.calls[0]![0].enabled).toBe(false);
     });
 
     it('REF-E2E-035: double enable does not emit duplicate events', () => {
@@ -406,7 +406,7 @@ describe('ReferenceManager E2E Integration', () => {
 
       manager.clearReference();
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0].referenceImage).toBeNull();
+      expect(callback.mock.calls[0]![0].referenceImage).toBeNull();
     });
 
     it('REF-E2E-043: clearReference is no-op when no reference exists', () => {
@@ -455,7 +455,7 @@ describe('ReferenceManager E2E Integration', () => {
       manager.setViewMode('toggle');
 
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0].viewMode).toBe('toggle');
+      expect(callback.mock.calls[0]![0].viewMode).toBe('toggle');
     });
 
     it('REF-E2E-053: setViewMode with same mode is no-op', () => {

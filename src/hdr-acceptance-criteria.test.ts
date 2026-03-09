@@ -172,17 +172,17 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
 
     it('AC-P1-1.2d: existing WebGL2 context creation options unchanged', () => {
       const canvas = document.createElement('canvas');
-      const getContextSpy = vi.spyOn(canvas, 'getContext').mockImplementation((contextId: string, _opts?: unknown) => {
+      const getContextSpy = vi.spyOn(canvas, 'getContext').mockImplementation(((contextId: string, _opts?: unknown) => {
         if (contextId === 'webgl2') return createMockGL();
         return null;
-      });
+      }) as any);
 
       renderer.initialize(canvas, makeCaps());
 
       // Verify getContext was called with webgl2 and standard options
-      const webgl2Call = getContextSpy.mock.calls.find((call) => call[0] === 'webgl2');
+      const webgl2Call = (getContextSpy.mock.calls as unknown as [string, unknown][]).find((call) => call[0] === 'webgl2');
       expect(webgl2Call).toBeDefined();
-      const options = webgl2Call![1] as Record<string, unknown>;
+      const options = webgl2Call![1] as unknown as Record<string, unknown>;
       expect(options.alpha).toBe(false);
       expect(options.antialias).toBe(false);
       expect(options.depth).toBe(false);
@@ -405,7 +405,7 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       control.on('stateChanged', handler);
       control.setTransferFunction('gamma2.2');
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler.mock.calls[0][0].transferFunction).toBe('gamma2.2');
+      expect(handler.mock.calls[0]![0].transferFunction).toBe('gamma2.2');
       control.dispose();
     });
   });

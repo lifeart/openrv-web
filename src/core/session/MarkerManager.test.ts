@@ -9,7 +9,7 @@ describe('MarkerManager', () => {
   beforeEach(() => {
     manager = new MarkerManager();
     onMarksChanged = vi.fn();
-    callbacks = { onMarksChanged };
+    callbacks = { onMarksChanged: onMarksChanged as MarkerManagerCallbacks['onMarksChanged'] };
     manager.setCallbacks(callbacks);
   });
 

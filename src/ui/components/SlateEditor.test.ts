@@ -688,7 +688,7 @@ describe('SlateEditor', () => {
 
       expect(configHandler).toHaveBeenCalledTimes(1);
       expect(previewHandler).toHaveBeenCalledTimes(1);
-      expect(previewHandler.mock.calls[0][0]).toBeInstanceOf(HTMLCanvasElement);
+      expect(previewHandler.mock.calls[0]![0]).toBeInstanceOf(HTMLCanvasElement);
     });
 
     it('SE-134: generatePreview with empty fields still renders', () => {

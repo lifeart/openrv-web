@@ -271,7 +271,7 @@ describe('ViewerIndicators', () => {
       showFitModeIndicator(container, 'width');
       const indicators = container.querySelectorAll('.fit-mode-indicator');
       expect(indicators.length).toBe(1);
-      expect(indicators[0].textContent).toBe('Fit Width');
+      expect(indicators[0]!.textContent).toBe('Fit Width');
     });
 
     it('VI-038: fades out after 1200ms', () => {

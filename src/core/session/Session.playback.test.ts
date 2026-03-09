@@ -3076,7 +3076,7 @@ describe('Session', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const measurement = listener.mock.calls[0][0];
+      const measurement = listener.mock.calls[0]![0];
       expect(measurement.effectiveTargetFps).toBe(48);
       expect(measurement.playbackSpeed).toBe(2);
       expect(measurement.droppedFrames).toBe(2);
@@ -3096,7 +3096,7 @@ describe('Session', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener.mock.calls[0][0].droppedFrames).toBe(7);
+      expect(listener.mock.calls[0]![0].droppedFrames).toBe(7);
     });
 
     it('SES-FPS-005: fpsUpdated ratio is clamped to max 1.0', () => {
@@ -3114,7 +3114,7 @@ describe('Session', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener.mock.calls[0][0].ratio).toBeLessThanOrEqual(1.0);
+      expect(listener.mock.calls[0]![0].ratio).toBeLessThanOrEqual(1.0);
     });
   });
 

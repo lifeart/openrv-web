@@ -71,14 +71,14 @@ function createMockContext(): GLRendererContext {
     scheduleRender: vi.fn(),
     isInteractionActive: vi.fn(() => false),
     isToneMappingEnabled: vi.fn(() => false),
-    getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
+    getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })) as any,
     getFilmEmulationParams: vi.fn(() => ({
       enabled: false,
       stock: 'kodak-portra-400',
       intensity: 100,
       grainIntensity: 30,
       grainSeed: 0,
-    })),
+    })) as any,
     getPerspectiveParams: vi.fn(() => ({
       enabled: false,
       topLeft: { x: 0, y: 0 },
@@ -86,7 +86,7 @@ function createMockContext(): GLRendererContext {
       bottomRight: { x: 1, y: 1 },
       bottomLeft: { x: 0, y: 1 },
       quality: 'bilinear',
-    })),
+    })) as any,
     getGamutMappingState: vi.fn(() => ({
       mode: 'off' as const,
       sourceGamut: 'srgb' as const,

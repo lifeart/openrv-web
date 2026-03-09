@@ -25,9 +25,9 @@ function createCallbacks(): AnnotationStoreCallbacks & {
   onMatteChanged: ReturnType<typeof vi.fn>;
 } {
   return {
-    onAnnotationsLoaded: vi.fn(),
-    onPaintEffectsLoaded: vi.fn(),
-    onMatteChanged: vi.fn(),
+    onAnnotationsLoaded: vi.fn() as any,
+    onPaintEffectsLoaded: vi.fn() as any,
+    onMatteChanged: vi.fn() as any,
   };
 }
 
@@ -350,7 +350,7 @@ describe('AnnotationStore', () => {
     it('AS-062: invokes onMatteChanged callback', () => {
       store.setMatteSettings({ show: true });
       expect(callbacks.onMatteChanged).toHaveBeenCalledOnce();
-      expect(callbacks.onMatteChanged.mock.calls[0][0].show).toBe(true);
+      expect(callbacks.onMatteChanged.mock.calls[0]![0].show).toBe(true);
     });
 
     it('AS-063: partial values fill in defaults', () => {
@@ -534,18 +534,18 @@ describe('AnnotationStore', () => {
       const rawY = 0.25;
       const comp = createMockComponent({ points: [[rawX, rawY]] });
       const stroke = store.parsePenStroke('pen:1:1:User', 1, comp, aspectRatio);
-      expect(stroke!.points[0].x).toBeCloseTo(rawX / aspectRatio + 0.5);
-      expect(stroke!.points[0].y).toBeCloseTo(rawY + 0.5);
+      expect(stroke!.points[0]!.x).toBeCloseTo(rawX / aspectRatio + 0.5);
+      expect(stroke!.points[0]!.y).toBeCloseTo(rawY + 0.5);
     });
 
     it('AS-092: coordinate transform: flat [x, y, x, y]', () => {
       const comp = createMockComponent({ points: [0.4, 0.1, 0.8, -0.2] });
       const stroke = store.parsePenStroke('pen:1:1:User', 1, comp, aspectRatio);
       expect(stroke!.points).toHaveLength(2);
-      expect(stroke!.points[0].x).toBeCloseTo(0.4 / aspectRatio + 0.5);
-      expect(stroke!.points[0].y).toBeCloseTo(0.1 + 0.5);
-      expect(stroke!.points[1].x).toBeCloseTo(0.8 / aspectRatio + 0.5);
-      expect(stroke!.points[1].y).toBeCloseTo(-0.2 + 0.5);
+      expect(stroke!.points[0]!.x).toBeCloseTo(0.4 / aspectRatio + 0.5);
+      expect(stroke!.points[0]!.y).toBeCloseTo(0.1 + 0.5);
+      expect(stroke!.points[1]!.x).toBeCloseTo(0.8 / aspectRatio + 0.5);
+      expect(stroke!.points[1]!.y).toBeCloseTo(-0.2 + 0.5);
     });
 
     it('AS-093: multiple nested points', () => {
@@ -949,7 +949,7 @@ describe('AnnotationStore', () => {
       store.parsePaintAnnotations(dto, aspectRatio);
 
       expect(callbacks.onAnnotationsLoaded).toHaveBeenCalledOnce();
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.annotations).toHaveLength(1);
       expect(result.annotations[0].type).toBe('pen');
       expect(result.annotations[0].frame).toBe(1);
@@ -977,7 +977,7 @@ describe('AnnotationStore', () => {
       store.parsePaintAnnotations(dto, aspectRatio);
 
       expect(callbacks.onAnnotationsLoaded).toHaveBeenCalledOnce();
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.annotations).toHaveLength(2);
       expect(result.annotations[0].id).toBe('1');
       expect(result.annotations[1].id).toBe('2');
@@ -1001,7 +1001,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj]);
       store.parsePaintAnnotations(dto, aspectRatio);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.annotations).toHaveLength(2);
       expect(result.annotations[0].type).toBe('pen');
       expect(result.annotations[1].type).toBe('text');
@@ -1030,7 +1030,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj]);
       store.parsePaintAnnotations(dto, aspectRatio);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.effects).toBeDefined();
       expect(result.effects.ghost).toBe(true);
       expect(result.effects.hold).toBe(false);
@@ -1058,7 +1058,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj]);
       store.parsePaintAnnotations(dto, aspectRatio);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.effects).toBeDefined();
       expect(result.effects.ghost).toBe(true);
       expect(result.effects.ghostBefore).toBe(2);
@@ -1087,7 +1087,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj]);
       store.parsePaintAnnotations(dto, aspectRatio);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.effects).toBeDefined();
       expect(result.effects.ghost).toBe(true);
       expect(result.effects.hold).toBe(true);
@@ -1113,7 +1113,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj]);
       store.parsePaintAnnotations(dto, customAspect);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       const point = result.annotations[0].points[0];
       expect(point.x).toBeCloseTo(rawX / customAspect + 0.5);
       expect(point.y).toBeCloseTo(rawY + 0.5);
@@ -1139,7 +1139,7 @@ describe('AnnotationStore', () => {
       store.parsePaintAnnotations(dto, aspectRatio);
 
       expect(callbacks.onAnnotationsLoaded).toHaveBeenCalledOnce();
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result).toHaveProperty('annotations');
       expect(result).toHaveProperty('effects');
       expect(Array.isArray(result.annotations)).toBe(true);
@@ -1171,7 +1171,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj1, paintObj2]);
       store.parsePaintAnnotations(dto, aspectRatio);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.annotations).toHaveLength(2);
       expect(result.annotations[0].frame).toBe(1);
       expect(result.annotations[1].frame).toBe(5);
@@ -1191,7 +1191,7 @@ describe('AnnotationStore', () => {
       const dto = mockDTO([paintObj]);
       store.parsePaintAnnotations(dto, aspectRatio);
 
-      const result = callbacks.onAnnotationsLoaded.mock.calls[0][0];
+      const result = callbacks.onAnnotationsLoaded.mock.calls[0]![0];
       expect(result.annotations).toHaveLength(3);
       expect(result.annotations[0].id).toBe('1');
       expect(result.annotations[1].id).toBe('2');

@@ -126,7 +126,7 @@ describe('DeinterlaceControl', () => {
 
       control.setParams({ method: 'blend', fieldOrder: 'bff', enabled: true });
 
-      const emitted = handler.mock.calls[0][0];
+      const emitted = handler.mock.calls[0]![0];
       emitted.method = 'weave';
       expect(control.getParams().method).toBe('blend');
     });

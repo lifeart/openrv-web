@@ -483,7 +483,7 @@ describe('Waveform GPU rendering', () => {
     const imageData = new ImageData(10, 10);
     waveform.update(imageData);
 
-    const call = mockProcessor.renderWaveform.mock.calls[0];
+    const call = mockProcessor.renderWaveform.mock.calls[0]!;
     expect(call[1]).toBe('rgb'); // mode parameter
   });
 
@@ -492,7 +492,7 @@ describe('Waveform GPU rendering', () => {
     const imageData = new ImageData(10, 10);
     waveform.update(imageData);
 
-    const call = mockProcessor.renderWaveform.mock.calls[0];
+    const call = mockProcessor.renderWaveform.mock.calls[0]!;
     expect(call[1]).toBe('parade');
   });
 
@@ -503,7 +503,7 @@ describe('Waveform GPU rendering', () => {
     const imageData = new ImageData(10, 10);
     waveform.update(imageData);
 
-    const call = mockProcessor.renderWaveform.mock.calls[0];
+    const call = mockProcessor.renderWaveform.mock.calls[0]!;
     expect(call[2]).toEqual({
       channels: { r: true, g: false, b: true },
       intensity: 0.22,
@@ -596,7 +596,7 @@ describe('Waveform updateFloat', () => {
     const floatData = new Float32Array(10 * 10 * 4);
     waveform.updateFloat(floatData, 10, 10);
 
-    const call = mockProcessor.renderWaveform.mock.calls[0];
+    const call = mockProcessor.renderWaveform.mock.calls[0]!;
     expect(call![1]).toBe('parade');
   });
 
@@ -607,7 +607,7 @@ describe('Waveform updateFloat', () => {
     const floatData = new Float32Array(10 * 10 * 4);
     waveform.updateFloat(floatData, 10, 10);
 
-    const call = mockProcessor.renderWaveform.mock.calls[0];
+    const call = mockProcessor.renderWaveform.mock.calls[0]!;
     expect(call![2]).toEqual({
       channels: { r: true, g: true, b: false },
       intensity: 0.18,

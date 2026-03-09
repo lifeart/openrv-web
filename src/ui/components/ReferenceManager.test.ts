@@ -60,7 +60,7 @@ describe('ReferenceManager', () => {
     mgr.captureReference(makeImage());
 
     expect(spy).toHaveBeenCalledTimes(1);
-    const captured: ReferenceImage = spy.mock.calls[0][0];
+    const captured: ReferenceImage = spy.mock.calls[0]![0];
     expect(captured.width).toBe(2);
     expect(captured.height).toBe(2);
   });
@@ -175,7 +175,7 @@ describe('ReferenceManager', () => {
 
     mgr.enable();
     expect(spy).toHaveBeenCalledTimes(1);
-    const emitted: ReferenceState = spy.mock.calls[0][0];
+    const emitted: ReferenceState = spy.mock.calls[0]![0];
     expect(emitted.enabled).toBe(true);
   });
 
@@ -187,7 +187,7 @@ describe('ReferenceManager', () => {
 
     mgr.disable();
     expect(spy).toHaveBeenCalledTimes(1);
-    const emitted: ReferenceState = spy.mock.calls[0][0];
+    const emitted: ReferenceState = spy.mock.calls[0]![0];
     expect(emitted.enabled).toBe(false);
   });
 

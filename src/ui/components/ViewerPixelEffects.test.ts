@@ -117,7 +117,7 @@ function createMockCanvasCtx() {
   };
 }
 
-function createMockCtx(overrides: Partial<PixelEffectsContext> = {}): PixelEffectsContext {
+function createMockCtx(overrides: Record<string, any> = {}): PixelEffectsContext {
   return {
     getColorPipeline: vi.fn(() => createMockColorPipeline()),
     getFilterSettings: vi.fn(() => ({ sharpen: 0 })),

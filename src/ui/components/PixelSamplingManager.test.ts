@@ -98,7 +98,7 @@ describe('PixelSamplingManager', () => {
       manager.handlePixelProbeData(pixels, position, 1, 1, true, false, mockEvent);
 
       expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledTimes(1);
-      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0];
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
       expect(args[0]).toBe(100); // x
       expect(args[1]).toBe(100); // y
       expect(args[2]).toBeCloseTo(0.5, 5); // r
@@ -194,7 +194,7 @@ describe('PixelSamplingManager', () => {
         mockEvent,
       );
 
-      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0];
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
       expect(args[2]).toBeCloseTo(0.5, 5); // avg r
       expect(args[3]).toBeCloseTo(0.7, 5); // avg g
       expect(args[4]).toBeCloseTo(0.65, 5); // avg b

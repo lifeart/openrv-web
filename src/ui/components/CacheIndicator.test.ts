@@ -585,7 +585,7 @@ describe('CacheIndicator', () => {
       indicator.setViewer(mockViewer as any);
 
       // Get the callback that was registered
-      const registeredCallback = mockViewer.setOnPrerenderCacheUpdate.mock.calls[0][0];
+      const registeredCallback = mockViewer.setOnPrerenderCacheUpdate.mock.calls[0]![0];
       expect(registeredCallback).toBeInstanceOf(Function);
 
       // Calling the callback should schedule an update

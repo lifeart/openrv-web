@@ -829,7 +829,7 @@ describe('Viewer', () => {
 
       expect(callback).toHaveBeenCalledWith({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
       // Should be a copy
-      const callArg = callback.mock.calls[0][0];
+      const callArg = callback.mock.calls[0]![0];
       expect(callArg).not.toBe(testable(viewer).cropManager._cropState.region);
     });
 

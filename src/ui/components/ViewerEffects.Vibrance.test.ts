@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyVibrance } from './ViewerEffects';
-import type { VibranceParams } from './ViewerEffects';
 
 /** Helper: create 1-pixel ImageData */
 function createImageData1px(r: number, g: number, b: number, a = 255): ImageData {
@@ -40,8 +39,6 @@ function rgbSaturation(r: number, g: number, b: number): number {
   const l = (max + min) / 2;
   return l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
 }
-
-const DEFAULT_PARAMS: VibranceParams = { vibrance: 0, skinProtection: false };
 
 describe('applyVibrance', () => {
   it('VIB-001: vibrance=0 leaves pixels unchanged', () => {

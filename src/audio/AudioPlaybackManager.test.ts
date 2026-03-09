@@ -391,7 +391,7 @@ describe('AudioPlaybackManager', () => {
       await manager.loadFromBlob(blob);
 
       expect(errorListener).toHaveBeenCalled();
-      const error: AudioPlaybackError = errorListener.mock.calls[0][0];
+      const error: AudioPlaybackError = errorListener.mock.calls[0]![0];
       expect(error.type).toBe('decode');
     });
 
@@ -514,7 +514,7 @@ describe('AudioPlaybackManager', () => {
       await manager.play();
 
       expect(errorListener).toHaveBeenCalled();
-      expect(errorListener.mock.calls[0][0].type).toBe('autoplay');
+      expect(errorListener.mock.calls[0]![0].type).toBe('autoplay');
     });
   });
 

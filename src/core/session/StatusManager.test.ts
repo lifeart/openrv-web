@@ -10,7 +10,7 @@ describe('StatusManager', () => {
     manager = new StatusManager();
     onStatusChanged = vi.fn();
     onStatusesChanged = vi.fn();
-    manager.setCallbacks({ onStatusChanged, onStatusesChanged });
+    manager.setCallbacks({ onStatusChanged: onStatusChanged as any, onStatusesChanged: onStatusesChanged as any });
   });
 
   afterEach(() => {

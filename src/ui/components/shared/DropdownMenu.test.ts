@@ -714,7 +714,7 @@ describe('DropdownMenu', () => {
 
   describe('multiselect mode', () => {
     let multiDropdown: DropdownMenu;
-    let onSelectionChange: ReturnType<typeof vi.fn>;
+    let onSelectionChange: (values: string[]) => void;
 
     beforeEach(() => {
       onSelectionChange = vi.fn();

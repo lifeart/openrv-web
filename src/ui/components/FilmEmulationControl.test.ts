@@ -205,7 +205,7 @@ describe('FilmEmulationControl', () => {
 
       control.setParams({ ...DEFAULT_FILM_EMULATION_PARAMS, enabled: true, stock: 'fuji-velvia-50' });
 
-      const emitted = handler.mock.calls[0][0];
+      const emitted = handler.mock.calls[0]![0];
       emitted.stock = 'kodak-tri-x-400';
       expect(control.getParams().stock).toBe('fuji-velvia-50');
     });

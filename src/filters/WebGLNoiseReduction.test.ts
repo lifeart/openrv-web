@@ -246,7 +246,7 @@ describe('WebGLNoiseReductionProcessor', () => {
 
       // Last bindFramebuffer call should be with null
       const calls = mockGl.bindFramebuffer.mock.calls;
-      expect(calls[calls.length - 1][1]).toBeNull();
+      expect(calls[calls.length - 1]![1]).toBeNull();
     });
 
     it('WGNR-021: uses shader program for rendering', () => {
@@ -265,7 +265,7 @@ describe('WebGLNoiseReductionProcessor', () => {
       processor.process(imageData, defaultParams);
 
       // gl.TRIANGLE_STRIP may be undefined in mock, so just check offset and count
-      const call = mockGl.drawArrays.mock.calls[0];
+      const call = mockGl.drawArrays.mock.calls[0]!;
       expect(call[1]).toBe(0); // offset
       expect(call[2]).toBe(4); // vertex count
     });

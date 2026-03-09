@@ -101,7 +101,7 @@ describe('MediaRepresentationManager', () => {
         getActiveRepresentationIndex: vi.fn(() => -1),
         setActiveRepresentationIndex: vi.fn(),
         applyRepresentationShim: vi.fn(),
-        getHDRResizeTier: vi.fn(() => 'none'),
+        getHDRResizeTier: vi.fn(() => 'none') as any,
         getCurrentFrame: vi.fn(() => 1),
       };
       manager.setAccessor(accessor);
@@ -617,7 +617,7 @@ describe('MediaRepresentationManager', () => {
         getActiveRepresentationIndex: vi.fn(() => -1),
         setActiveRepresentationIndex: vi.fn(),
         applyRepresentationShim: vi.fn(),
-        getHDRResizeTier: vi.fn(() => 'none'),
+        getHDRResizeTier: vi.fn(() => 'none') as any,
         getCurrentFrame: vi.fn(() => 1),
       };
       manager.setAccessor(accessor);

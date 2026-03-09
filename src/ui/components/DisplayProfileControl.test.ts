@@ -125,7 +125,7 @@ describe('DisplayProfileControl', () => {
       control.on('stateChanged', handler);
       control.setTransferFunction('linear');
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler.mock.calls[0][0].transferFunction).toBe('linear');
+      expect(handler.mock.calls[0]![0].transferFunction).toBe('linear');
     });
 
     it('DPC-012: setTransferFunction with same value does not emit', () => {
@@ -361,7 +361,7 @@ describe('DisplayProfileControl', () => {
       const handler = vi.fn();
       control.on('stateChanged', handler);
       control.resetToDefaults();
-      const emitted = handler.mock.calls[0][0] as DisplayColorState;
+      const emitted = handler.mock.calls[0]![0] as DisplayColorState;
       expect(emitted.transferFunction).toBe(DEFAULT_DISPLAY_COLOR_STATE.transferFunction);
       expect(emitted.displayGamma).toBe(DEFAULT_DISPLAY_COLOR_STATE.displayGamma);
       expect(emitted.displayBrightness).toBe(DEFAULT_DISPLAY_COLOR_STATE.displayBrightness);

@@ -359,7 +359,7 @@ describe('InfoStripOverlay', () => {
     it('IS-070: sourceLoaded event triggers update', () => {
       // Get the sourceLoaded callback that was registered
       const sourceLoadedCall = mockSession.on.mock.calls.find(
-        (call: [string, () => void]) => call[0] === 'sourceLoaded',
+        (call: unknown[]) => call[0] === 'sourceLoaded',
       );
       expect(sourceLoadedCall).toBeDefined();
 

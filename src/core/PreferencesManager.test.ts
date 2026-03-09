@@ -280,7 +280,7 @@ describe('PreferencesManager events', () => {
     manager.on('colorDefaultsChanged', cb);
     manager.setColorDefaults({ defaultExposure: 2 });
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0][0].defaultExposure).toBe(2);
+    expect(cb.mock.calls[0]![0].defaultExposure).toBe(2);
   });
 
   it('CPRF-041: emits exportDefaultsChanged on setExportDefaults', () => {
@@ -289,7 +289,7 @@ describe('PreferencesManager events', () => {
     manager.on('exportDefaultsChanged', cb);
     manager.setExportDefaults({ defaultFormat: 'webp' });
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0][0].defaultFormat).toBe('webp');
+    expect(cb.mock.calls[0]![0].defaultFormat).toBe('webp');
   });
 
   it('CPRF-042: emits generalPrefsChanged on setGeneralPrefs', () => {
@@ -298,7 +298,7 @@ describe('PreferencesManager events', () => {
     manager.on('generalPrefsChanged', cb);
     manager.setGeneralPrefs({ defaultFps: 60 });
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0][0].defaultFps).toBe(60);
+    expect(cb.mock.calls[0]![0].defaultFps).toBe(60);
   });
 
   it('CPRF-043: emits reset on resetAll', () => {

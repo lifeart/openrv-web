@@ -451,7 +451,7 @@ describe('ViewerCanvasSetup', () => {
     it('should not clamp pan when fitMode is none', () => {
       const ctx = createMockSetupContext();
       const tm = ctx.getTransformManager();
-      tm.fitMode = 'none';
+      tm.fitMode = null;
       tm.panX = 5000;
       tm.panY = 3000;
 
@@ -464,7 +464,7 @@ describe('ViewerCanvasSetup', () => {
     it('should apply pan offset to transform', () => {
       const ctx = createMockSetupContext();
       const tm = ctx.getTransformManager();
-      tm.fitMode = 'none';
+      tm.fitMode = null;
       tm.panX = 100;
       tm.panY = 50;
 
@@ -585,7 +585,6 @@ describe('ViewerCanvasSetup', () => {
 
   describe('listenForDPRChange', () => {
     it('should return null when window is undefined', () => {
-      const originalWindow = globalThis.window;
       // Cannot fully remove window in jsdom, so test the matchMedia path instead
       const result = listenForDPRChange(vi.fn(), null);
       // In jsdom window exists, so it depends on matchMedia support

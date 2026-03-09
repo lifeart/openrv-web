@@ -394,7 +394,7 @@ describe('ExternalPresentation', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const msg = listener.mock.calls[0][0] as SyncFrameMsg;
+      const msg = listener.mock.calls[0]![0] as SyncFrameMsg;
       expect(msg.frame).toBe(50);
       expect(msg.totalFrames).toBe(200);
     });

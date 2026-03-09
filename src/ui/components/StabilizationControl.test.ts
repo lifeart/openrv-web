@@ -115,7 +115,7 @@ describe('StabilizationControl', () => {
 
       control.setParams({ ...DEFAULT_STABILIZATION_PARAMS, enabled: true, smoothingStrength: 80 });
 
-      const emitted = handler.mock.calls[0][0];
+      const emitted = handler.mock.calls[0]![0];
       emitted.smoothingStrength = 0;
       expect(control.getParams().smoothingStrength).toBe(80);
     });

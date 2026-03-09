@@ -57,7 +57,7 @@ function createMockElement(): HTMLCanvasElement {
 // ---------------------------------------------------------------------------
 // Mock ImageRendererContext
 // ---------------------------------------------------------------------------
-function createMockContext(overrides: Partial<ImageRendererContext> = {}): ImageRendererContext {
+function createMockContext(overrides: Record<string, any> = {}): ImageRendererContext {
   const imageCtx = createMockCanvasCtx();
   return {
     getSession: vi.fn(() => ({
@@ -76,7 +76,7 @@ function createMockContext(overrides: Partial<ImageRendererContext> = {}): Image
       ]),
       position: 0.5,
       mode: 'splitscreen-h' as const,
-    })),
+    })) as any,
     getGhostFrameManager: vi.fn(() => ({
       state: {
         enabled: false,
@@ -88,8 +88,8 @@ function createMockContext(overrides: Partial<ImageRendererContext> = {}): Image
       },
       getPoolCanvas: vi.fn(),
       trimPool: vi.fn(),
-    })),
-    getTransform: vi.fn(() => ({ x: 0, y: 0, scale: 1, rotation: 0 })),
+    })) as any,
+    getTransform: vi.fn(() => ({ x: 0, y: 0, scale: 1, rotation: 0 })) as any,
     getTextureFilterMode: vi.fn(() => 'linear' as const),
     getCanvasFilterString: vi.fn(() => 'none'),
     getStackLayers: vi.fn(() => []),
@@ -113,8 +113,8 @@ function createMockContext(overrides: Partial<ImageRendererContext> = {}): Image
       hasDisplayedSourceBMediabunnyFrame: false,
       pendingSourceBFrameFetch: null,
       pendingSourceBFrameNumber: 0,
-    })),
-    getFrameInterpolator: vi.fn(() => ({})),
+    })) as any,
+    getFrameInterpolator: vi.fn(() => ({})) as any,
     getCanvasColorSpace: vi.fn(() => undefined),
     getDisplayWidth: vi.fn(() => 800),
     getDisplayHeight: vi.fn(() => 600),
@@ -500,7 +500,7 @@ describe('renderGhostFrames', () => {
       trimPool: vi.fn(),
     };
     const prerenderBuffer = {
-      getFrame: vi.fn((frame: number) => ({ canvas: ghostCanvas })),
+      getFrame: vi.fn((_frame: number) => ({ canvas: ghostCanvas })),
     };
 
     const ctx = createMockContext({

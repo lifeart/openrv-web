@@ -583,7 +583,7 @@ describe('Vectorscope GPU rendering', () => {
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
 
-    const call = mockProcessor.renderVectorscope.mock.calls[0];
+    const call = mockProcessor.renderVectorscope.mock.calls[0]!;
     expect(call[1]).toBe(2); // zoom parameter
   });
 
@@ -592,7 +592,7 @@ describe('Vectorscope GPU rendering', () => {
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
 
-    const call = mockProcessor.renderVectorscope.mock.calls[0];
+    const call = mockProcessor.renderVectorscope.mock.calls[0]!;
     expect(call[1]).toBe(4);
   });
 
@@ -622,7 +622,7 @@ describe('Vectorscope GPU rendering', () => {
     const imageData = new ImageData(10, 10);
     vectorscope.update(imageData);
 
-    const call = mockProcessor.renderVectorscope.mock.calls[0];
+    const call = mockProcessor.renderVectorscope.mock.calls[0]!;
     expect(call[0]).toBeInstanceOf(HTMLCanvasElement);
   });
 });

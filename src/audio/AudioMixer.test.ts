@@ -467,7 +467,7 @@ describe('AudioMixer', () => {
       mixer.on('trackAdded', listener);
       mixer.addTrack({ id: 'test' });
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener.mock.calls[0][0].id).toBe('test');
+      expect(listener.mock.calls[0]![0].id).toBe('test');
     });
 
     it('AM-MIX-041: emits trackRemoved', async () => {
@@ -611,7 +611,7 @@ describe('AudioMixer', () => {
 
       mixer.loadTrackBuffer('test', createMockAudioBuffer(2, 44100));
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener.mock.calls[0][0].id).toBe('test');
+      expect(listener.mock.calls[0]![0].id).toBe('test');
     });
   });
 

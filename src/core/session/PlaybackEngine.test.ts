@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaybackEngine, type PlaybackEngineHost } from './PlaybackEngine';
 import { PLAYBACK_SPEED_PRESETS } from '../../config/PlaybackConfig';
 import { createMockPlaybackEngineHost } from '../../../test/mocks';

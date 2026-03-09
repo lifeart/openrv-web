@@ -200,7 +200,7 @@ describe('LensControl', () => {
       });
 
       expect(callback).toHaveBeenCalled();
-      const emittedParams = callback.mock.calls[0][0] as LensDistortionParams;
+      const emittedParams = callback.mock.calls[0]![0] as LensDistortionParams;
       expect(emittedParams).toHaveProperty('k1');
       expect(emittedParams).toHaveProperty('k2');
       expect(emittedParams).toHaveProperty('centerX');
@@ -221,7 +221,7 @@ describe('LensControl', () => {
         scale: 1,
       });
 
-      const emittedParams = callback.mock.calls[0][0] as LensDistortionParams;
+      const emittedParams = callback.mock.calls[0]![0] as LensDistortionParams;
 
       // Modifying emitted params should not affect control state
       emittedParams.k1 = 999;

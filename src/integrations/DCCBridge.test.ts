@@ -185,7 +185,7 @@ describe('DCCBridge', () => {
       );
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const msg = listener.mock.calls[0][0] as LoadMediaMessage;
+      const msg = listener.mock.calls[0]![0] as LoadMediaMessage;
       expect(msg.path).toBe('/path/to/movie.mov');
       expect(msg.frame).toBe(42);
       bridge.dispose();
@@ -204,7 +204,7 @@ describe('DCCBridge', () => {
       );
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const msg = listener.mock.calls[0][0] as SyncFrameMessage;
+      const msg = listener.mock.calls[0]![0] as SyncFrameMessage;
       expect(msg.frame).toBe(100);
       bridge.dispose();
     });
@@ -224,7 +224,7 @@ describe('DCCBridge', () => {
       );
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const msg = listener.mock.calls[0][0] as SyncColorMessage;
+      const msg = listener.mock.calls[0]![0] as SyncColorMessage;
       expect(msg.exposure).toBe(1.5);
       expect(msg.gamma).toBe(2.2);
       expect(msg.temperature).toBe(6500);

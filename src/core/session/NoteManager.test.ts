@@ -8,7 +8,7 @@ describe('NoteManager', () => {
   beforeEach(() => {
     manager = new NoteManager();
     onNotesChanged = vi.fn();
-    manager.setCallbacks({ onNotesChanged });
+    manager.setCallbacks({ onNotesChanged: onNotesChanged as () => void });
   });
 
   afterEach(() => {

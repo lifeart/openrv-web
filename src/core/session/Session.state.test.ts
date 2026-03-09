@@ -1121,7 +1121,7 @@ describe('Session', () => {
       session.on('settingsLoaded', spy);
       (session as any)._sessionGraph.parseSession(dto);
       expect(spy).toHaveBeenCalled();
-      const settings = spy.mock.calls[0][0];
+      const settings = spy.mock.calls[0]![0];
       expect(settings.scopes.histogram).toBe(true);
     });
 

@@ -131,7 +131,7 @@ describe('ComparisonManager', () => {
       manager.on('stateChanged', callback);
       manager.setWipeMode('horizontal');
       expect(callback).toHaveBeenCalledTimes(1);
-      const emittedState = callback.mock.calls[0][0] as CompareState;
+      const emittedState = callback.mock.calls[0]![0] as CompareState;
       expect(emittedState.wipeMode).toBe('horizontal');
     });
 
@@ -383,7 +383,7 @@ describe('ComparisonManager', () => {
       manager.on('differenceMatteChanged', callback);
       manager.toggleDifferenceMatte();
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ enabled: true });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ enabled: true });
     });
 
     it('CM-056: toggleDifferenceMatte should emit stateChanged', () => {
@@ -438,7 +438,7 @@ describe('ComparisonManager', () => {
       manager.on('differenceMatteChanged', callback);
       manager.setDifferenceMatteGain(3.0);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ gain: 3.0 });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ gain: 3.0 });
     });
 
     it('CM-065: toggleDifferenceMatteHeatmap should enable heatmap', () => {
@@ -469,7 +469,7 @@ describe('ComparisonManager', () => {
       manager.on('differenceMatteChanged', callback);
       manager.setDifferenceMatteHeatmap(true);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ heatmap: true });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ heatmap: true });
     });
 
     it('CM-070: getDifferenceMatteState should return a copy', () => {
@@ -581,7 +581,7 @@ describe('ComparisonManager', () => {
       manager.on('blendModeChanged', callback);
       manager.setBlendMode('onionskin');
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ mode: 'onionskin' });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ mode: 'onionskin' });
     });
 
     it('CM-086: setBlendMode should emit stateChanged', () => {
@@ -651,7 +651,7 @@ describe('ComparisonManager', () => {
       manager.on('differenceMatteChanged', callback);
       manager.setBlendMode('blend');
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ enabled: false });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ enabled: false });
     });
 
     it('CM-096: enabling blend mode should disable quad view', () => {
@@ -720,7 +720,7 @@ describe('ComparisonManager', () => {
       manager.on('blendModeChanged', callback);
       manager.setOnionOpacity(0.8);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ onionOpacity: 0.8 });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ onionOpacity: 0.8 });
     });
 
     it('CM-106: default onion opacity should be 0.5', () => {
@@ -764,7 +764,7 @@ describe('ComparisonManager', () => {
       manager.on('blendModeChanged', callback);
       manager.setFlickerRate(8);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ flickerRate: 8 });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ flickerRate: 8 });
     });
 
     it('CM-113: default flicker rate should be 4', () => {
@@ -896,7 +896,7 @@ describe('ComparisonManager', () => {
       manager.on('blendModeChanged', callback);
       manager.setBlendRatio(0.8);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ blendRatio: 0.8 });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ blendRatio: 0.8 });
     });
 
     it('CM-129: default blend ratio should be 0.5', () => {
@@ -931,7 +931,7 @@ describe('ComparisonManager', () => {
       manager.on('quadViewChanged', callback);
       manager.setQuadViewEnabled(true);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ enabled: true });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ enabled: true });
     });
 
     it('CM-134: setQuadViewEnabled should emit stateChanged', () => {
@@ -977,7 +977,7 @@ describe('ComparisonManager', () => {
       manager.on('quadViewChanged', callback);
       manager.setQuadSource(1, 'D');
       expect(callback).toHaveBeenCalledTimes(1);
-      const emitted = callback.mock.calls[0][0] as QuadViewState;
+      const emitted = callback.mock.calls[0]![0] as QuadViewState;
       expect(emitted.sources[1]).toBe('D');
     });
 
@@ -1031,7 +1031,7 @@ describe('ComparisonManager', () => {
       manager.on('blendModeChanged', callback);
       manager.setQuadViewEnabled(true);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ mode: 'off' });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ mode: 'off' });
     });
 
     it('CM-148: enabling quad view should disable difference matte', () => {
@@ -1046,7 +1046,7 @@ describe('ComparisonManager', () => {
       manager.on('differenceMatteChanged', callback);
       manager.setQuadViewEnabled(true);
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0][0]).toMatchObject({ enabled: false });
+      expect(callback.mock.calls[0]![0]).toMatchObject({ enabled: false });
     });
 
     it('CM-150: enabling quad view should stop flicker interval', () => {
@@ -1574,7 +1574,7 @@ describe('ComparisonManager', () => {
       manager.setABSource('B');
       expect(callback).toHaveBeenCalledTimes(3);
       // Last call should have all updated fields
-      const lastState = callback.mock.calls[2][0] as CompareState;
+      const lastState = callback.mock.calls[2]![0] as CompareState;
       expect(lastState.wipeMode).toBe('horizontal');
       expect(lastState.wipePosition).toBe(0.3);
       expect(lastState.currentAB).toBe('B');
