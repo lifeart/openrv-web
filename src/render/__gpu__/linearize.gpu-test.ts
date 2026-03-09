@@ -5,7 +5,7 @@
  * full viewer.frag.glsl shader with all other stages set to identity,
  * then reading back float pixels from an FBO to verify EOTF math.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, afterEach } from 'vitest';
 import { createTestGL, compileShader, linkProgram, createFullscreenQuad } from './helpers/webgl2';
 import { readPixelsGLFloat, expectPixel } from './helpers/pixels';
 import { createSolidTexture } from './helpers/textures';

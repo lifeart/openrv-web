@@ -23,7 +23,6 @@ import {
   applyToneMappingHDR,
   applySharpenCPU,
   type HighlightsShadowsParams,
-  type VibranceParams,
 } from './ViewerEffects';
 import type { ToneMappingState } from './ToneMappingControl';
 
@@ -140,7 +139,6 @@ describe('applyHighlightsShadows', () => {
 
   it('positive whites lowers white clipping point (clips brights)', () => {
     const img = makePixel(230, 230, 230);
-    const before = img.data[0]!;
     applyHighlightsShadows(img, { highlights: 0, shadows: 0, whites: 100, blacks: 0 });
     // White point moves down from 255 to 200 — remapping stretches [0,200] to [0,255]
     // 230 is above the new whitePoint of 200, so should clip to 255

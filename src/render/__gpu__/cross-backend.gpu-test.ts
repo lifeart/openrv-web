@@ -9,7 +9,7 @@
  * than the monolithic GLSL viewer.frag, we test parity on individual
  * stages that have known reference values.
  */
-import { describe, it, afterEach } from 'vitest';
+import { describe, it } from 'vitest';
 import { createTestGL, compileShader, linkProgram, createFullscreenQuad } from './helpers/webgl2';
 import { readPixelsGLFloat, expectPixel } from './helpers/pixels';
 import { createSolidTexture } from './helpers/textures';
