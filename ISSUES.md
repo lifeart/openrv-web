@@ -457,6 +457,81 @@ This file tracks findings from exploratory review and targeted validation runs.
   - After detecting a violation on one stereo pair, the button can remain lit when the user switches to a different source that has never been checked.
   - That makes the QC indicator look like a live status for the current image when it is really just cached history from an earlier detection run.
 
+### 38. The Compare dropdown exposes a `Quad View` mode that is not wired to the viewer
+
+- Severity: High
+- Area: Compare UI, viewer integration
+- Evidence:
+  - The Compare dropdown exposes a full `Quad View` section with an enable toggle and quadrant selectors in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L579).
+  - The control emits `quadViewChanged` and updates its own active label/state in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L712) and [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L888).
+  - Production viewer wiring handles wipe, A/B, difference matte, and blend modes in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L87), but there is no `quadViewChanged` subscription there.
+- Impact:
+  - The UI can show Quad as active even though the viewer never receives a quad-view state change.
+  - This makes a prominent comparison mode look implemented while doing nothing in the actual image view.
+
+### 39. Quad-view source selectors expose `C` and `D` concepts that production UI never lets the user bind to real sources
+
+- Severity: High
+- Area: Compare UI, source assignment semantics
+- Evidence:
+  - The quad-view UI lets users assign quadrants to `A`, `B`, `C`, and `D` in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L624).
+  - Session-level production compare APIs only expose `setSourceA`, `setSourceB`, `toggleAB`, and `setCurrentAB` in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L336).
+  - `setSourceC()` and `setSourceD()` exist only inside the low-level compare manager in [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L155), and I found no production caller outside tests.
+- Impact:
+  - Even before renderer wiring is considered, part of the quad-view UI is semantically empty: users can choose labels that are never mapped to actual loaded media.
+  - The control suggests four-source comparison is available when the real app only exposes two-source assignment.
+
+### 40. Several advanced dropdowns and panels can render partly off-screen on narrow viewports
+
+- Severity: Medium
+- Area: UI layout, small-window/mobile usability
+- Evidence:
+  - `CompareControl` explicitly clamps its dropdown to viewport bounds in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L934).
+  - `DisplayProfileControl` positions its dropdown at `rect.left` with no clamping in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L453).
+  - `ToneMappingControl` does the same in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L657).
+  - `StereoControl` does the same in [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L265).
+  - `OCIOControl` uses `Math.min(rect.left, window.innerWidth - 360)` in [src/ui/components/OCIOControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOControl.ts#L1032), which still goes negative when the viewport is narrower than the panel.
+- Impact:
+  - On small windows or mobile-sized layouts, these controls can open clipped or partially unreachable.
+  - The app already has one control that solves this correctly, so this inconsistency shows up as avoidable UI breakage rather than a hard platform limit.
+
+### 41. The tone-mapping shortcut can toggle a hidden flag without actually enabling tone mapping
+
+- Severity: Medium
+- Area: Effects UI, keyboard semantics
+- Evidence:
+  - The tone-mapping control advertises `Shift+Alt+J` in its button title in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L88).
+  - The keyboard handler path simply calls `toggle()` in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L791).
+  - `toggle()` only flips `enabled` in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L713).
+  - The default state still has `operator: 'off'` in [src/core/types/effects.ts](/Users/lifeart/Repos/openrv-web/src/core/types/effects.ts#L24), and the control only considers itself active when `enabled && operator !== 'off'` in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L777).
+- Impact:
+  - On a fresh state, pressing the advertised shortcut can change internal state without making the control visibly active or changing output.
+  - That makes the shortcut feel broken until the user first opens the panel and manually picks a non-`off` operator.
+
+### 42. The Snapshot panel tells users to create snapshots but does not offer any create action on that surface
+
+- Severity: Medium
+- Area: Snapshot UI, empty-state usefulness
+- Evidence:
+  - The Snapshot panel toolbar contains only search and filter controls in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L126), and the footer only offers `Clear All` in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L183).
+  - Its empty state tells users `Create a snapshot to save your session state` in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L253).
+  - The actual create action exists only as `snapshot.create` in keyboard/persistence wiring in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L631) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L148).
+- Impact:
+  - The panel’s empty state sends the user toward an action that is not available anywhere in that panel.
+  - This makes the snapshot-management surface much less self-explanatory than it looks, especially for users who are exploring the UI rather than memorizing shortcuts.
+
+### 43. The volume popout is too narrow to cleanly fit both the slider and the audio-scrub toggle
+
+- Severity: Medium
+- Area: Header UI, audio controls
+- Evidence:
+  - The popout container is hard-capped to `96px` both on hover and when pinned open in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L149) and [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L193).
+  - The slider alone already consumes `80px` plus `16px` of horizontal margin in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L101).
+  - The audio-scrub checkbox and `Scrub` label are then appended after the slider in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L125), while the container itself has `overflow: hidden` in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L85).
+- Impact:
+  - The audio-scrub control is cramped or clipped inside the volume popout instead of being cleanly readable and clickable.
+  - A real playback option is present in the DOM and in app wiring, but its header UI makes it unnecessarily hard to discover and use.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
