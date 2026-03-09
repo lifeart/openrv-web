@@ -834,7 +834,8 @@ describe('NotePanel', () => {
       }
       const time15 = performance.now() - start15;
 
-      // Clear and add 150 notes
+      // Clear and add 150 notes (hide panel during bulk add to avoid O(n^2) rendering)
+      panel.hide();
       const allNotes = session.noteManager.getNotes();
       for (const n of allNotes) {
         session.noteManager.removeNote(n.id);
@@ -842,6 +843,7 @@ describe('NotePanel', () => {
       for (let i = 0; i < 150; i++) {
         session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
       }
+      panel.show();
       const start150 = performance.now();
       for (let r = 0; r < 10; r++) {
         panel.hide();

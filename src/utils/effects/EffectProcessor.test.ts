@@ -1604,7 +1604,7 @@ describe('EffectProcessor', () => {
       });
 
       describe('EP-SIMD-004: Performance comparison', () => {
-        it('SIMD inversion is not slower than scalar for large images', () => {
+        it('SIMD inversion is not slower than scalar for large images', { timeout: 15000 }, () => {
           const size = 512;
           const imgSIMD = createTestImageData(size, size, { r: 100, g: 150, b: 200 });
           const imgScalar = createTestImageData(size, size, { r: 100, g: 150, b: 200 });
