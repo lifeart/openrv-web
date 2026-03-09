@@ -57,7 +57,8 @@ function createMockElement(): HTMLCanvasElement {
 // ---------------------------------------------------------------------------
 // Mock ImageRendererContext
 // ---------------------------------------------------------------------------
-function createMockContext(overrides: Record<string, any> = {}): ImageRendererContext {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createMockContext(overrides: Partial<Record<keyof ImageRendererContext, any>> = {}): ImageRendererContext {
   const imageCtx = createMockCanvasCtx();
   return {
     getSession: vi.fn(() => ({
@@ -89,7 +90,13 @@ function createMockContext(overrides: Record<string, any> = {}): ImageRendererCo
       getPoolCanvas: vi.fn(),
       trimPool: vi.fn(),
     })) as any,
-    getTransform: vi.fn(() => ({ x: 0, y: 0, scale: 1, rotation: 0 })) as any,
+    getTransform: vi.fn(() => ({
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      scale: { x: 1, y: 1 },
+      translate: { x: 0, y: 0 },
+    })),
     getTextureFilterMode: vi.fn(() => 'linear' as const),
     getCanvasFilterString: vi.fn(() => 'none'),
     getStackLayers: vi.fn(() => []),

@@ -117,7 +117,8 @@ function createMockCanvasCtx() {
   };
 }
 
-function createMockCtx(overrides: Record<string, any> = {}): PixelEffectsContext {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createMockCtx(overrides: Partial<Record<keyof PixelEffectsContext, any>> = {}): PixelEffectsContext {
   return {
     getColorPipeline: vi.fn(() => createMockColorPipeline()),
     getFilterSettings: vi.fn(() => ({ sharpen: 0 })),
