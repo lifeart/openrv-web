@@ -471,7 +471,9 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     const layerName = this.exrLayerState.selectedLayer ?? 'RGBA';
     const truncatedName = layerName.length > 10 ? layerName.substring(0, 9) + '...' : layerName;
 
-    this.layerButton.innerHTML = `${getIconSvg('layers', 'sm')}<span>${truncatedName}</span>${getIconSvg('chevron-down', 'sm')}`;
+    this.layerButton.innerHTML = `${getIconSvg('layers', 'sm')}<span></span>${getIconSvg('chevron-down', 'sm')}`;
+    const labelSpan = this.layerButton.querySelector('span')!;
+    labelSpan.textContent = truncatedName;
 
     // Update button style based on active state
     if (this.exrLayerState.selectedLayer && this.exrLayerState.selectedLayer !== 'RGBA') {
