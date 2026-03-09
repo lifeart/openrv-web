@@ -2075,4 +2075,129 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.bgColor).toBeUndefined();
     });
   });
+
+  describe('RVStackGroup per-layer opacity and visibility parsing', () => {
+    function createStackNode() {
+      const setValueCalls: Array<[string, unknown]> = [];
+      const node = {
+        id: 'stack-id',
+        type: 'RVStackGroup',
+        name: 'stack',
+        properties: {
+          has: vi.fn().mockReturnValue(true),
+          setValue: vi.fn((key: string, value: unknown) => {
+            setValueCalls.push([key, value]);
+          }),
+        },
+        inputs: [] as unknown[],
+        outputs: [],
+        connectInput: vi.fn(),
+        disconnectInput: vi.fn(),
+      };
+      return { node, setValueCalls };
+    }
+
+    it('parses per-layer opacities from layerOutput component', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              layerOutput: { opacity: [1.0, 0.5, 0.75] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const opacityCall = setValueCalls.find(([key]) => key === 'layerOpacities');
+      expect(opacityCall).toBeDefined();
+      expect(opacityCall![1]).toEqual([1.0, 0.5, 0.75]);
+    });
+
+    it('parses per-layer visibility from layerOutput component', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              layerOutput: { visible: [1, 0, 1] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const visibleCall = setValueCalls.find(([key]) => key === 'layerVisible');
+      expect(visibleCall).toBeDefined();
+      expect(visibleCall![1]).toEqual([true, false, true]);
+    });
+
+    it('does not read opacities from output component (regression)', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              output: { opacity: [0.5, 0.3] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const opacityCall = setValueCalls.find(([key]) => key === 'layerOpacities');
+      expect(opacityCall).toBeUndefined();
+    });
+
+    it('parses both opacities and visibility together', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              layerOutput: { opacity: [1.0, 0.5], visible: [1, 0] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const opacityCall = setValueCalls.find(([key]) => key === 'layerOpacities');
+      expect(opacityCall).toBeDefined();
+      expect(opacityCall![1]).toEqual([1.0, 0.5]);
+
+      const visibleCall = setValueCalls.find(([key]) => key === 'layerVisible');
+      expect(visibleCall).toBeDefined();
+      expect(visibleCall![1]).toEqual([true, false]);
+    });
+  });
 });

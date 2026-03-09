@@ -172,6 +172,8 @@ export interface StackGroupSettings {
   layerBlendModes?: string[];
   /** Per-layer opacities (indexed by input, 0-1) */
   layerOpacities?: number[];
+  /** Per-layer visibility (indexed by input) */
+  layerVisible?: boolean[];
 }
 
 /**
@@ -737,9 +739,20 @@ export class SessionGTOExporter {
       stackObject.component('composite').string('type', settings.layerBlendModes).end();
     }
 
-    if (settings?.layerOpacities && settings.layerOpacities.length > 0) {
-      const outputComp = stackObject.component('layerOutput');
-      outputComp.float('opacity', settings.layerOpacities).end();
+    const hasOpacities = settings?.layerOpacities && settings.layerOpacities.length > 0;
+    const hasVisible = settings?.layerVisible && settings.layerVisible.length > 0;
+    if (hasOpacities || hasVisible) {
+      const layerOutputComp = stackObject.component('layerOutput');
+      if (hasOpacities) {
+        layerOutputComp.float('opacity', settings!.layerOpacities!);
+      }
+      if (hasVisible) {
+        layerOutputComp.int(
+          'visible',
+          settings!.layerVisible!.map((v) => (v ? 1 : 0)),
+        );
+      }
+      layerOutputComp.end();
     }
 
     stackObject.end();

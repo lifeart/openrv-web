@@ -132,7 +132,7 @@ test.describe('Session Recovery - Blob URL Handling', () => {
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
 
     // Click Save button using data-testid (more reliable than title attribute)
-    const saveButton = page.locator('[data-testid="save-button"], button[title*="Save"]');
+    const saveButton = page.locator('[data-testid="save-button"]');
     await saveButton.click();
 
     // Get the downloaded file

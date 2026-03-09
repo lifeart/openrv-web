@@ -631,6 +631,44 @@ describe('SessionGTOExporter.buildStackGroupObjects', () => {
     expect(modeComp.properties.alignStartFrames.data).toEqual([1]);
     expect(modeComp.properties.strictFrameRanges.data).toEqual([1]);
   });
+
+  it('creates RVStack with per-layer opacities in layerOutput component', () => {
+    const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+      layerOpacities: [1.0, 0.5, 0.75],
+    });
+    const stack = objects[1]!;
+    const components = stack.components as Record<string, any>;
+
+    const layerOutputComp = components['layerOutput'];
+    expect(layerOutputComp).toBeDefined();
+    expect(layerOutputComp.properties.opacity.data).toEqual([1.0, 0.5, 0.75]);
+  });
+
+  it('creates RVStack with per-layer visibility in layerOutput component', () => {
+    const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+      layerVisible: [true, false, true],
+    });
+    const stack = objects[1]!;
+    const components = stack.components as Record<string, any>;
+
+    const layerOutputComp = components['layerOutput'];
+    expect(layerOutputComp).toBeDefined();
+    expect(layerOutputComp.properties.visible.data).toEqual([1, 0, 1]);
+  });
+
+  it('creates RVStack with both opacities and visibility in same layerOutput component', () => {
+    const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+      layerOpacities: [1.0, 0.5],
+      layerVisible: [true, false],
+    });
+    const stack = objects[1]!;
+    const components = stack.components as Record<string, any>;
+
+    const layerOutputComp = components['layerOutput'];
+    expect(layerOutputComp).toBeDefined();
+    expect(layerOutputComp.properties.opacity.data).toEqual([1.0, 0.5]);
+    expect(layerOutputComp.properties.visible.data).toEqual([1, 0]);
+  });
 });
 
 describe('SessionGTOExporter.buildSequenceGroupObjects with EDL', () => {

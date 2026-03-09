@@ -651,6 +651,208 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If the inspector is hidden during a source change or histogram update, reopening it can show stale metadata or the placeholder instead of the current source state.
   - That makes the right-side review panel less trustworthy exactly when users rely on it for quick context after switching media.
 
+### 54. The multi-source layout button advertises an `L` shortcut that does not exist in production
+
+- Severity: Medium
+- Area: View toolbar, multi-source layout UI
+- Evidence:
+  - The mounted layout control button tooltip says `Layout modes (L)` in [src/ui/components/MultiSourceLayoutControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MultiSourceLayoutControl.ts#L60).
+  - There is no corresponding layout-mode `L` binding in the default shortcut map; `KeyL` is already bound to playback speed-up in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L59).
+  - The only layout keyboard bindings in production are preset switches on `Alt+1..Alt+4`, not a mode toggle.
+- Impact:
+  - The View toolbar advertises a keyboard affordance that users cannot actually use.
+  - Pressing `L` changes playback speed instead of opening or cycling layout modes, which is a misleading and easy-to-hit mismatch.
+
+### 55. The volume control still tells users mute is on `M`, but production mute is on `Shift+M`
+
+- Severity: Medium
+- Area: Header audio UI, shortcut discoverability
+- Evidence:
+  - The mounted mute button tooltip says `Toggle mute (M in video mode)` in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L49).
+  - The actual shortcut map binds audio mute to `Shift+M` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L753).
+  - The keyboard action map routes only `audio.toggleMute` to `session.toggleMute()` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L690).
+- Impact:
+  - Users following the visible tooltip will press `M` and get marker behavior instead of mute.
+  - That makes one of the few discoverable audio shortcuts actively misleading in review sessions.
+
+### 56. Sequence export uses a one-off popup instead of the real export progress dialog
+
+- Severity: Medium
+- Area: Export UI consistency, long-running workflow feedback
+- Evidence:
+  - Frame-sequence export builds its own bare `div` popup inline in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L269) and appends it directly to `document.body` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L329).
+  - That popup has no modal backdrop, no `role="dialog"`, no keyboard handling, and no focus management.
+  - Video export already uses the proper `ExportProgressDialog` component with backdrop, `aria-modal`, progress semantics, and Escape/cancel handling in [src/ui/components/ExportProgress.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportProgress.ts#L42).
+- Impact:
+  - Exporting a frame sequence gives a weaker, less accessible progress UI than exporting MP4 even though both are long-running export workflows.
+  - Background UI remains interactive during sequence export, and the user cannot rely on the same keyboard/modal behavior the app uses for video export.
+
+### 57. The Help menu exposes “Custom Key Bindings”, but production never surfaces the full shortcut editor with import/export
+
+- Severity: Low
+- Area: Help / customization UI
+- Evidence:
+  - The Help menu routes `Custom Key Bindings` into `showCustomBindingsDialog()` via [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L993).
+  - The production dialog is only a simple inline rebind table in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L474), with no import/export actions.
+  - A dedicated `ShortcutEditor` component already exists with `Reset All`, `Export`, and `Import` controls in [src/ui/components/ShortcutEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutEditor.ts#L306), but it is not what the real app opens from Help.
+- Impact:
+  - Users can rebind keys one-by-one, but they cannot import or export keybinding sets from the shipped customization entry point.
+  - The app carries a richer shortcut-management UI that is effectively unreachable, so the visible customization flow is less useful than the implemented feature set suggests.
+
+### 58. The app ships two different shortcut-reference UIs, and different entry points open different ones
+
+- Severity: Low
+- Area: Help / shortcut discoverability
+- Evidence:
+  - The `?` shortcut toggles the `ShortcutCheatSheet` overlay through `help.toggleCheatSheet` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L687), and that overlay is instantiated in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L353).
+  - The Help menu’s `Keyboard Shortcuts` item does not open that overlay; it routes to `showShortcutsDialog()` through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L992) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L57).
+  - `showShortcutsDialog()` is a separate hardcoded modal implementation in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L113), not the same component as `ShortcutCheatSheet`.
+- Impact:
+  - Users can reach two different “shortcut help” UIs depending on whether they press `?` or use the Help menu.
+  - That split creates duplicate display logic and makes the shortcut documentation surface easier to drift, which is already happening elsewhere in the app.
+
+### 59. The main tab bar is marked up as a tablist but does not support arrow-key tab navigation
+
+- Severity: Medium
+- Area: Primary navigation, keyboard accessibility
+- Evidence:
+  - The mounted control uses `role="tablist"` on the container and `role="tab"` on each tab button in [src/ui/components/layout/TabBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/TabBar.ts#L45) and [src/ui/components/layout/TabBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/TabBar.ts#L100).
+  - There are no per-tab `keydown` handlers for `ArrowLeft`, `ArrowRight`, `Home`, or `End`; the component only changes tabs on click and on the global number shortcuts handled by `handleKeyboard()` in [src/ui/components/layout/TabBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/TabBar.ts#L214).
+  - Focus is kept on the active tab via roving `tabindex`, so keyboard users naturally land on the tabstrip but cannot move between tabs with the expected keys.
+- Impact:
+  - Keyboard and assistive-technology users get a control that announces itself as a tablist but behaves more like a row of plain buttons.
+  - Once focus is in the tab bar, the expected left/right tab navigation does not work, which makes primary navigation less accessible than the markup implies.
+
+### 60. The left inspector’s “All Controls…” button can close the full color panel instead of opening it
+
+- Severity: Medium
+- Area: Left panel UI, color workflow
+- Evidence:
+  - The compact left-panel button is labeled `All Controls…` in [src/ui/layout/panels/LeftPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/LeftPanelContent.ts#L116).
+  - Its click handler calls `colorControls.toggle()` rather than a one-way open/show action in [src/ui/layout/panels/LeftPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/LeftPanelContent.ts#L131).
+- Impact:
+  - A button that reads like “open the full panel” can instead hide it if the color controls are already open.
+  - That makes the compact inspector feel unstable: the same affordance can either reveal more controls or unexpectedly remove them.
+
+### 61. Several review panels still stack in the same top-right slot and can obscure each other
+
+- Severity: Medium
+- Area: Floating panel layout, review workflow
+- Evidence:
+  - `HistoryPanel`, `MarkerListPanel`, and `NotePanel` all render at the same fixed corner position: `right: 10px; top: 60px` in [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L43), [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L72), and [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L80).
+  - Production wiring only declares mutual exclusion for `NotePanel` and `MarkerListPanel` in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L59).
+  - `HistoryPanel` is created alongside them in the same factory but is not part of that exclusion logic in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L53).
+- Impact:
+  - Users can open History together with Notes or Markers and end up with overlapping floating panels competing for the same space.
+  - That makes simultaneous review tasks harder because one panel can partially hide another instead of cooperating spatially.
+
+### 62. The export button says “Export current frame”, but clicking it only opens the menu
+
+- Severity: Low
+- Area: Header export UI, action semantics
+- Evidence:
+  - The mounted button is labeled and titled as `Export current frame (Ctrl+S)` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L61).
+  - Its click handler does not export anything; it only calls `toggleDropdown()` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L81).
+  - The actual quick-export path lives separately in the keyboard/action wiring, where `exportRequested` is handled by `viewer.exportFrame(...)` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L127).
+- Impact:
+  - The visible button copy suggests a primary one-click action, but the control actually behaves as a menu trigger.
+  - That mismatch makes the header less predictable: the keyboard shortcut performs a direct export, while the matching toolbar button does not.
+
+### 63. Side-panel tabs are marked up as tabs but do not behave like tabs
+
+- Severity: Medium
+- Area: Left/right inspector navigation, keyboard accessibility
+- Evidence:
+  - The side-panel tab strips are declared as `role="tablist"` in [src/ui/layout/LayoutManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutManager.ts#L214).
+  - Each tab button gets `role="tab"` and only a click handler in [src/ui/layout/LayoutManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutManager.ts#L463).
+  - The implementation does not add arrow-key handling, `Home`/`End` handling, `aria-controls`, or roving `tabindex`; it only swaps content visibility by setting `tab.element.style.display` in [src/ui/layout/LayoutManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutManager.ts#L481).
+- Impact:
+  - Keyboard users can tab onto the inspector tabs, but they do not get the expected tab semantics once there.
+  - The side inspectors present themselves as structured tab interfaces while behaving like uncoordinated buttons, which makes the navigation model inconsistent with the main app chrome.
+
+### 64. Keyboard zone navigation skips the left and right inspector panels entirely
+
+- Severity: Medium
+- Area: Keyboard accessibility, layout navigation
+- Evidence:
+  - `LayoutOrchestrator` registers focus zones only for `headerBar`, `tabBar`, `contextToolbar`, `viewer`, and `timeline` in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L314).
+  - The layout itself mounts separate left and right panel wrappers with interactive content in [src/ui/layout/LayoutManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutManager.ts#L136) and [src/ui/layout/LayoutManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutManager.ts#L241).
+  - Those side panels are never added to `FocusManager`, so the app’s documented F6-style zone navigation cannot land on them.
+- Impact:
+  - Users navigating by keyboard can cycle across the header, tab strip, viewer, and timeline, but not the side inspectors that hold color/history/media-info controls.
+  - That leaves part of the shipped UI effectively mouse-only even though the app already has a zone-navigation system intended to solve exactly this problem.
+
+### 65. Inspector accordion headers are mouse-only despite gating most side-panel content
+
+- Severity: Medium
+- Area: Left/right inspector usability, keyboard accessibility
+- Evidence:
+  - The reusable section header in [src/ui/layout/panels/CollapsibleSection.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/CollapsibleSection.ts#L30) is built as a plain `div`, not a button.
+  - Expansion/collapse is wired only through a click listener in [src/ui/layout/panels/CollapsibleSection.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/CollapsibleSection.ts#L59), with no `tabindex`, keyboard handler, or ARIA expanded state.
+  - Those sections gate core left/right panel content such as Color, History, Scopes, and Media Info in [src/ui/layout/panels/LeftPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/LeftPanelContent.ts#L90) and [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L47).
+- Impact:
+  - Users can visually see expandable sections in the side inspectors, but keyboard navigation cannot operate them.
+  - Because major inspector content is hidden behind these accordions, the side panels become partially unusable without a mouse.
+
+### 66. The right inspector’s scope buttons never show which scopes are actually active
+
+- Severity: Low
+- Area: Right panel UI truthfulness, scopes workflow
+- Evidence:
+  - `RightPanelContent` renders dedicated `H`, `W`, `V`, and `G` scope toggle buttons and stores them in `scopeButtons` in [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L59) and [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L96).
+  - Those buttons only call `scopesControl.toggleScope(type)` on click in [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L95); the component never listens for scope visibility changes and never updates button styling afterward.
+  - The rest of the app does maintain active-state wiring for scope controls elsewhere, for example in the QC toolbar listeners in [src/services/tabContent/buildQCTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildQCTab.ts#L108).
+- Impact:
+  - The right inspector offers scope toggles with no visible “on/off” truth, so users cannot tell from that panel which scopes are currently active.
+  - Scope state can be changed from the QC toolbar or shortcuts while the inspector buttons remain visually unchanged, which makes the panel a weak status surface.
+
+### 67. The header loop button advertises the wrong shortcut
+
+- Severity: Low
+- Area: Playback header, shortcut discoverability
+- Evidence:
+  - The loop button tooltip is set to `Cycle loop mode (L)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L318).
+  - The actual keybinding for `timeline.cycleLoopMode` is `Ctrl+L`, not plain `L`, in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L109).
+  - Plain `L` is already occupied by playback speed-up in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L59).
+- Impact:
+  - The playback header teaches a shortcut that triggers a different action than the one shown.
+  - Users relying on tooltips to learn the app will hit playback-speed changes when they expect loop-mode changes.
+
+### 68. The Info panel is shipped as a simple on/off overlay even though its real customization features have no UI
+
+- Severity: Low
+- Area: Review overlays, feature reachability
+- Evidence:
+  - `InfoPanel` implements configurable position and per-field visibility through `setPosition(...)`, `setFields(...)`, and `toggleField(...)` in [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L152), [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L168), and [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L184).
+  - The only production UI affordance wired for it is a single header toggle button in [src/services/tabContent/buildPanelToggles.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildPanelToggles.ts#L24), which just calls `registry.infoPanel.toggle()`.
+  - The runtime wiring updates the panel’s content data, but not its configuration surface, in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L558).
+- Impact:
+  - Users can turn the Info panel on and off, but they cannot actually choose its corner or which metadata fields it shows from the shipped UI.
+  - The component advertises a richer, review-friendly overlay model than the app currently makes reachable.
+
+### 69. The mini histogram promises to open the full histogram, but it actually toggles it
+
+- Severity: Low
+- Area: Right inspector, scopes UX
+- Evidence:
+  - The embedded histogram canvas advertises `Click to open full Histogram` in [src/ui/layout/panels/MiniHistogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/MiniHistogram.ts#L45).
+  - Its click handler does not perform a one-way open; it calls `scopesControl.toggleScope('histogram')` in [src/ui/layout/panels/MiniHistogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/MiniHistogram.ts#L55).
+- Impact:
+  - Clicking the mini histogram can close the full histogram when the user expected an “open” affordance.
+  - That makes the right-panel scopes preview less predictable, especially when users bounce between the inspector and the QC toolbar.
+
+### 70. The auto-save indicator is clickable for settings and retry, but it is not keyboard-focusable
+
+- Severity: Medium
+- Area: Header utility UI, keyboard accessibility
+- Evidence:
+  - `AutoSaveIndicator` builds its interactive root as a plain `div` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L42).
+  - That root gets a click handler for retry/settings behavior in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L89), but it is never given button semantics, `tabindex`, or keyboard activation handling.
+  - The component is mounted into the header utility area as a visible interactive status element through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L65) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1569).
+- Impact:
+  - Mouse users can open auto-save settings or retry a failed save, but keyboard users cannot focus the same control.
+  - A header element that visibly behaves like an action surface is effectively inaccessible unless the user happens to click it.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

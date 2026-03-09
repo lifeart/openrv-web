@@ -47,12 +47,12 @@ test.describe('Export Functionality', () => {
 
   test.describe('Export Controls', () => {
     test('EXPORT-001: should have export button in header', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await expect(exportButton).toBeVisible();
     });
 
     test('EXPORT-002: should show export options on click', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // Should show export format options
@@ -62,7 +62,7 @@ test.describe('Export Functionality', () => {
     });
 
     test('EXPORT-003: should have PNG export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // PNG option is shown as "Save as PNG" text in export panel
@@ -71,7 +71,7 @@ test.describe('Export Functionality', () => {
     });
 
     test('EXPORT-004: should have JPEG export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // JPEG option is shown as "Save as JPEG" text in export panel
@@ -80,7 +80,7 @@ test.describe('Export Functionality', () => {
     });
 
     test('EXPORT-005: should have WebP export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // WebP option is shown as "Save as WebP" text in export panel
@@ -113,7 +113,7 @@ test.describe('Export Functionality', () => {
 
   test.describe('Include Annotations Option', () => {
     test('EXPORT-020: should have option to include annotations', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // Look for annotations checkbox/toggle
@@ -124,7 +124,7 @@ test.describe('Export Functionality', () => {
 
   test.describe('Sequence Export', () => {
     test('EXPORT-030: should have sequence export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       const sequenceOption = page.locator('button, option').filter({ hasText: /Sequence|All Frames/ });
@@ -669,7 +669,7 @@ test.describe('Project Save/Load', () => {
     await loadVideoFile(page);
 
     // Look for save project button or use keyboard shortcut
-    const saveButton = page.locator('button[title*="Save"], button:has-text("Save")').first();
+    const saveButton = page.locator('[data-testid="save-button"]');
     // May exist in header or menu
   });
 

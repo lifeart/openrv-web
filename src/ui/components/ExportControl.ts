@@ -78,6 +78,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       outline: none;
     `;
 
+    this.exportButton.dataset.testid = 'export-button';
     this.exportButton.addEventListener('click', () => this.toggleDropdown());
     this.exportButton.addEventListener('pointerenter', () => {
       if (!this.isDropdownOpen) {

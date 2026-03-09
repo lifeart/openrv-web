@@ -1303,13 +1303,22 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         }
       }
 
-      // Parse per-layer opacities from output component
-      const outputComp = obj.component('output');
-      if (outputComp?.exists()) {
-        const opacities = outputComp.property('opacity').value() as number[];
+      // Parse per-layer opacities from layerOutput component
+      const layerOutputComp = obj.component('layerOutput');
+      if (layerOutputComp?.exists()) {
+        const opacities = layerOutputComp.property('opacity').value() as number[];
         if (Array.isArray(opacities)) {
           nodeInfo.properties.layerOpacities = opacities;
         }
+        const visibleInts = layerOutputComp.property('visible').value() as number[];
+        if (Array.isArray(visibleInts)) {
+          nodeInfo.properties.layerVisible = visibleInts.map((v) => v !== 0);
+        }
+      }
+
+      // Parse output component settings
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
         const chosenAudio = outputComp.property('chosenAudioInput').value() as number;
         if (typeof chosenAudio === 'number') {
           nodeInfo.properties.chosenAudioInput = chosenAudio;

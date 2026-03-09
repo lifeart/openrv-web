@@ -563,4 +563,12 @@ describe('ExportControl keyboard accessibility', () => {
     expect(dropdown.style.display).toBe('none');
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
+
+  describe('test IDs', () => {
+    it('EXPORT-U100: export button has data-testid="export-button"', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="export-button"]');
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+    });
+  });
 });

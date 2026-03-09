@@ -300,4 +300,24 @@ describe('VolumeControl', () => {
       expect(volumeControl.isSliderExpanded()).toBe(true);
     });
   });
+
+  describe('test IDs', () => {
+    it('VOL-100: mute button has data-testid="mute-button"', () => {
+      const el = volumeControl.render();
+      const button = el.querySelector('[data-testid="mute-button"]');
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+    });
+
+    it('VOL-101: volume slider has data-testid="volume-slider"', () => {
+      const el = volumeControl.render();
+      const slider = el.querySelector('[data-testid="volume-slider"]');
+      expect(slider).toBeInstanceOf(HTMLInputElement);
+      expect((slider as HTMLInputElement).type).toBe('range');
+    });
+
+    it('VOL-102: container has data-testid="volume-control"', () => {
+      const el = volumeControl.render();
+      expect(el.dataset.testid).toBe('volume-control');
+    });
+  });
 });

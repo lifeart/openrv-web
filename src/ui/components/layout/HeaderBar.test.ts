@@ -1837,4 +1837,12 @@ describe('HeaderBar', () => {
       loadEDLSpy.mockRestore();
     });
   });
+
+  describe('test IDs', () => {
+    it('HDR-U200: save button has data-testid="save-button"', () => {
+      const el = headerBar.render();
+      const button = el.querySelector('[data-testid="save-button"]');
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+    });
+  });
 });

@@ -36,6 +36,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'volume-control-container';
+    this.container.dataset.testid = 'volume-control';
     this.container.style.cssText = `
       display: flex;
       align-items: center;
@@ -46,6 +47,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     // Create mute button
     this.muteButton = document.createElement('button');
     this.updateMuteButton();
+    this.muteButton.dataset.testid = 'mute-button';
     this.muteButton.title = 'Toggle mute (M in video mode)';
     this.muteButton.setAttribute('aria-label', 'Toggle mute');
     this.muteButton.style.cssText = `
@@ -98,6 +100,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.volumeSlider.max = '1';
     this.volumeSlider.step = '0.01';
     this.volumeSlider.value = String(this._volume);
+    this.volumeSlider.dataset.testid = 'volume-slider';
     this.volumeSlider.style.cssText = `
       width: 80px;
       height: 4px;

@@ -36,12 +36,12 @@ const TIMING = {
 // Selector constants for consistent element access
 // Note: Prefer data-testid when available, fall back to semantic selectors
 const SELECTORS = {
-  /** Mute button - uses title attribute, case-insensitive */
-  MUTE_BUTTON: 'button[data-testid="mute-button"], button[title*="mute" i], button[title*="Mute" i]',
+  /** Mute button */
+  MUTE_BUTTON: '[data-testid="mute-button"]',
   /** Volume control container */
-  VOLUME_CONTROL: '[data-testid="volume-control"], .volume-control-container, [title*="volume" i]',
+  VOLUME_CONTROL: '[data-testid="volume-control"]',
   /** Volume slider input */
-  VOLUME_SLIDER: 'input[data-testid="volume-slider"], input[type="range"]',
+  VOLUME_SLIDER: '[data-testid="volume-slider"]',
   /** Main canvas */
   CANVAS: 'canvas',
 } as const;
