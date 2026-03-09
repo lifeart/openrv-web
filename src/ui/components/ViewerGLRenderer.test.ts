@@ -1493,6 +1493,72 @@ describe('ViewerGLRenderer', () => {
   });
 
   // =========================================================================
+  // detectGamutMapping — auto-detection from image metadata
+  // =========================================================================
+  describe('detectGamutMapping auto-detection', () => {
+    function callDetectGamutMapping(
+      renderer: ViewerGLRenderer,
+      image: IPImage,
+    ): { mode: string; sourceGamut?: string; targetGamut?: string } {
+      return (renderer as any).detectGamutMapping(image);
+    }
+
+    function makeImage(colorPrimaries?: string): IPImage {
+      return new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'float32',
+        metadata: colorPrimaries ? { colorPrimaries } : undefined,
+      } as any);
+    }
+
+    it('VGLR-094: returns mode off unchanged when mode is off', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('bt2020'));
+      expect(result.mode).toBe('off');
+    });
+
+    it('VGLR-095: detects rec2020 source from bt2020 primaries', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('bt2020'));
+      expect(result.sourceGamut).toBe('rec2020');
+    });
+
+    it('VGLR-096: detects display-p3 source from p3 primaries', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('p3'));
+      expect(result.sourceGamut).toBe('display-p3');
+    });
+
+    it('VGLR-097: srgb source with srgb display turns mode off', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage());
+      expect(result.mode).toBe('off');
+    });
+
+    it('VGLR-098: bt2020 source with p3 display keeps mode and sets target to display-p3', () => {
+      const r = new ViewerGLRenderer(createMockContext(), { displayGamut: 'p3' } as any);
+      r.setGamutMapping({ mode: 'compress', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('bt2020'));
+      expect(result.mode).toBe('compress');
+      expect(result.sourceGamut).toBe('rec2020');
+      expect(result.targetGamut).toBe('display-p3');
+    });
+
+    it('VGLR-099: p3 source with p3 display turns mode off (source matches target)', () => {
+      const r = new ViewerGLRenderer(createMockContext(), { displayGamut: 'p3' } as any);
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('p3'));
+      expect(result.mode).toBe('off');
+    });
+  });
+
+  // =========================================================================
   // hasGPUShaderEffectsActive — gamut mapping detection
   // =========================================================================
   describe('hasGPUShaderEffectsActive gamut mapping', () => {

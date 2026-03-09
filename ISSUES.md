@@ -532,6 +532,77 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The audio-scrub control is cramped or clipped inside the volume popout instead of being cleanly readable and clickable.
   - A real playback option is present in the DOM and in app wiring, but its header UI makes it unnecessarily hard to discover and use.
 
+### 44. Network Sync hardcodes participant names and never exposes the user name the rest of the app supports
+
+- Severity: Medium
+- Area: Collaboration UI, session identity
+- Evidence:
+  - `NetworkControl` defines `createRoom` / `joinRoom` events that carry a `userName` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L28).
+  - The actual UI emits hardcoded names instead of collecting or loading a real one: auto-join emits `User` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L421), manual join emits `User` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L972), and create emits `Host` from a truthy-object check in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L454).
+  - The app already has a real user-name preference and uses it in other collaboration-facing UI such as notes in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L949), but Network Sync never reads it and exposes no name input.
+- Impact:
+  - Every participant appears as a generic `User` or `Host`, which makes the connected-user list much less informative in real sessions.
+  - The collaboration stack supports user identity, but the UI strips that meaning away at the entry point.
+
+### 45. Closing HSL Qualifier can leave the eyedropper armed and the viewer in a hidden pick state
+
+- Severity: Medium
+- Area: QC UI, HSL Qualifier workflow
+- Evidence:
+  - The eyedropper only notifies the viewer callback when the button itself is toggled in [src/ui/components/HSLQualifierControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HSLQualifierControl.ts#L251).
+  - When the dropdown is closed, the close paths just hide the panel and remove listeners in [src/ui/components/HSLQualifierControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HSLQualifierControl.ts#L718) and [src/ui/components/HSLQualifierControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HSLQualifierControl.ts#L753); they never deactivate the eyedropper or call the callback with `false`.
+  - The QC tab wiring keeps a pending viewer click handler and crosshair cursor alive until that callback is explicitly deactivated in [src/services/tabContent/buildQCTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildQCTab.ts#L66).
+- Impact:
+  - A user can close the HSL panel and still have the next viewer click unexpectedly sampled as a color pick.
+  - That leaves the UI in a misleading hidden-tool state where the control looks closed but still captures viewer interaction semantics.
+
+### 46. Playlist OTIO export produces clips with empty media references
+
+- Severity: Medium
+- Area: Playlist UI, interchange/export usefulness
+- Evidence:
+  - The `Export as OTIO` action maps every playlist clip to an `OTIOExportClip` with `sourceUrl: ''` in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L802).
+  - The OTIO writer then serializes that value directly into `ExternalReference.target_url` in [src/utils/media/OTIOWriter.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOWriter.ts#L88).
+- Impact:
+  - The UI presents OTIO export as a real interchange action, but the resulting file does not identify the underlying media locations.
+  - That makes the exported timeline much less useful outside OpenRV, especially in pipelines that expect OTIO clips to carry resolvable source references.
+
+### 47. ShotGrid versions with frame-sequence paths are shown but cannot actually be loaded from the panel
+
+- Severity: Medium
+- Area: ShotGrid integration UI, media loading
+- Evidence:
+  - `ShotGridPanel.resolveMediaUrl()` only accepts uploaded-movie URLs or HTTP(S) movie paths in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L297).
+  - Rows with `sg_path_to_frames` but no movie URL are explicitly labeled `Frame sequence only` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L457), but their `Load` button is still disabled because `mediaUrl` is `null` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L475).
+  - The integration bridge then ignores `loadVersion` events with `null` media URLs in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L157).
+- Impact:
+  - The panel can successfully surface a ShotGrid version but still leave the user unable to load it if the version only exposes a frame sequence path.
+  - That is a real workflow hole for review pipelines that publish sequences instead of uploaded movies.
+
+### 48. History can be cleared in one click with no confirmation, unlike other destructive review panels
+
+- Severity: Low
+- Area: History UI, destructive action safety
+- Evidence:
+  - The History panel wires its `Clear` button directly to `clearHistory()` in [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L80).
+  - `clearHistory()` immediately calls `historyManager.clear()` with no confirmation or undo guard in [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L185).
+  - Comparable destructive panel actions do confirm first, such as marker clearing in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L292) and snapshot clearing in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L583).
+- Impact:
+  - A stray click can wipe the visible undo/redo history immediately.
+  - This is inconsistent with the rest of the app’s destructive-panel behavior and makes a debugging/review surface easier to erase accidentally than it should be.
+
+### 49. Conform panel browse-based relinking is stubbed out in production
+
+- Severity: Medium
+- Area: Conform / Re-link UI, media recovery workflow
+- Evidence:
+  - The panel exposes per-clip `Browse...` and `Re-link by Folder...` actions in [src/ui/components/ConformPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ConformPanel.ts#L308) and [src/ui/components/ConformPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ConformPanel.ts#L331).
+  - Both actions only dispatch custom DOM events instead of opening a picker or calling an application service in [src/ui/components/ConformPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ConformPanel.ts#L349).
+  - In production wiring, the app instantiates the panel in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L84) and shows it from [src/services/tabContent/buildPanelToggles.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildPanelToggles.ts#L87), but there are no non-test listeners for `conform-browse` or `conform-browse-folder`.
+- Impact:
+  - The panel looks like it supports manual browse-based recovery, but those buttons do nothing unless a host page adds its own handlers.
+  - In the shipped app, users are effectively limited to dropdown suggestions and auto-relink, even though the UI advertises richer recovery actions.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

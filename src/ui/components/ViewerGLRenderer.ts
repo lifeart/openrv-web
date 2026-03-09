@@ -258,22 +258,18 @@ export class ViewerGLRenderer {
       return this._gamutMappingState;
     }
 
-    // When auto primaries normalization is active, the shader has already
-    // converted source primaries → BT.709 working space. Creative gamut
-    // mapping always operates in BT.709 space, so source is always 'srgb'.
-    const hasInputNormalization =
-      image.metadata?.colorPrimaries === 'bt2020' || image.metadata?.colorPrimaries === 'p3';
-
-    const sourceGamut: GamutIdentifier = hasInputNormalization
-      ? 'srgb' // already normalized to BT.709 by input primaries conversion
-      : 'srgb';
+    // Determine source gamut from image color primaries metadata.
+    const primaries = image.metadata?.colorPrimaries;
+    const sourceGamut: GamutIdentifier =
+      primaries === 'bt2020' ? 'rec2020' : primaries === 'p3' ? 'display-p3' : 'srgb';
     const targetGamut: GamutIdentifier =
       this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
         ? 'display-p3'
         : 'srgb';
 
-    // No mapping needed if source matches target or source is sRGB
-    if (sourceGamut === 'srgb' || (sourceGamut as string) === (targetGamut as string)) {
+    // No mapping needed if source matches target or source is already
+    // within the target gamut (sRGB fits in any display gamut).
+    if (sourceGamut === targetGamut || sourceGamut === 'srgb') {
       return { ...this._gamutMappingState, mode: 'off' };
     }
 
