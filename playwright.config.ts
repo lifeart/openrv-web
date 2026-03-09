@@ -21,8 +21,8 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
-  workers: isCI ? 2 : '50%',
+  retries: isCI ? 1 : 0,
+  workers: isCI ? 4 : '50%',
   reporter: isCI ? [['html'], ['json', { outputFile: 'results.json' }]] : 'list',
   use: {
     baseURL: 'http://localhost:5173',
@@ -33,7 +33,14 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: isCI
+            ? ['--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization']
+            : [],
+        },
+      },
     },
     ...(isCI
       ? []
@@ -70,10 +77,10 @@ export default defineConfig({
     reuseExistingServer: !isCI,
     timeout: 120000,
   },
-  // SwiftShader in CI is 10-100x slower — increase timeouts
-  timeout: isCI ? 90000 : 30000,
+  // macOS ARM runners have real GPU — moderate timeout increase for CI
+  timeout: isCI ? 45000 : 30000,
   expect: {
-    timeout: isCI ? 30000 : 10000,
+    timeout: isCI ? 15000 : 10000,
     toHaveScreenshot: {
       maxDiffPixelRatio: 0.01,
       threshold: 0.3,
