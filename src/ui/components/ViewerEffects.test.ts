@@ -94,20 +94,17 @@ describe('applyHighlightsShadows', () => {
     const img = makePixel(200, 200, 200);
     const before = img.data[0]!;
     applyHighlightsShadows(img, { highlights: -100, shadows: 0, whites: 0, blacks: 0 });
-    // Should have increased (or clamped to 255)
-    expect(img.data[0]!).toBeGreaterThanOrEqual(before);
+    // Should have strictly increased
+    expect(img.data[0]!).toBeGreaterThan(before);
   });
 
-  it('positive highlights boosts bright pixels', () => {
+  it('positive highlights compresses (decreases) bright pixels', () => {
     // Moderately bright pixel — not already at 255
     const img = makePixel(180, 180, 180);
     const before = img.data[0]!;
     applyHighlightsShadows(img, { highlights: 100, shadows: 0, whites: 0, blacks: 0 });
-    // highlight boost subtracts negative adjustment => value decreases (boost = positive highlights * mask * 128 subtracted)
-    // Actually: highlightAdjust = highlights(+1) * mask * 128 => positive => r = r - positive => decreases
-    // So positive highlights actually dims highlights (photographic convention: compress highlights)
-    // Let's just verify it changed
-    expect(img.data[0]!).not.toBe(before);
+    // highlightAdjust = highlights(+1) * mask * 128 => positive => r = r - positive => decreases
+    expect(img.data[0]!).toBeLessThan(before);
   });
 
   it('does not affect dark pixels when adjusting highlights', () => {
@@ -157,14 +154,20 @@ describe('applyHighlightsShadows', () => {
     expect(img.data[0]!).toBe(0);
   });
 
-  it('clamps output values to [0, 255]', () => {
-    // Extreme combined settings
+  it('clamps output values to [0, 255] under extreme settings', () => {
+    // Extreme combined settings that would push values out of range without clamping
     const img = makePixel(250, 5, 128);
     applyHighlightsShadows(img, { highlights: -100, shadows: 100, whites: 100, blacks: 100 });
     for (let c = 0; c < 3; c++) {
-      expect(img.data[c]!).toBeGreaterThanOrEqual(0);
-      expect(img.data[c]!).toBeLessThanOrEqual(255);
+      const val = img.data[c]!;
+      expect(Number.isFinite(val)).toBe(true);
+      expect(Number.isInteger(val)).toBe(true);
+      expect(val).toBeGreaterThanOrEqual(0);
+      expect(val).toBeLessThanOrEqual(255);
     }
+    // Verify the extreme settings actually modified the pixel values (not a no-op)
+    const originalG = 5;
+    expect(img.data[1]!).not.toBe(originalG);
   });
 
   it('processes multi-pixel images correctly', () => {
@@ -247,6 +250,22 @@ describe('applyHighlightsShadowsHDR', () => {
       expect(img.data[c]!).toBeLessThanOrEqual(255);
     }
   });
+
+  it('whites/blacks clip HDR data correctly', () => {
+    // Bright HDR pixel — whites clips highlight region
+    const imgWhites = makePixel(255, 255, 255);
+    const hdrWhites = new Float32Array([0.9, 0.9, 0.9]);
+    applyHighlightsShadowsHDR(imgWhites, { highlights: 0, shadows: 0, whites: 100, blacks: 0 }, hdrWhites, 3, 1.0);
+    // With whites=100, whitePoint drops — 0.9 exceeds it so should clip to 255
+    expect(imgWhites.data[0]!).toBe(255);
+
+    // Dark HDR pixel — blacks clips shadow region
+    const imgBlacks = makePixel(128, 128, 128);
+    const hdrBlacks = new Float32Array([0.1, 0.1, 0.1]);
+    applyHighlightsShadowsHDR(imgBlacks, { highlights: 0, shadows: 0, whites: 0, blacks: 100 }, hdrBlacks, 3, 1.0);
+    // With blacks=100, blackPoint raises — 0.1 falls below it so should clip to 0
+    expect(imgBlacks.data[0]!).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -310,8 +329,10 @@ describe('applyVibrance', () => {
     // With skin protection, the change should be less pronounced
     const diffNoProtect = Math.abs(imgNoProtection.data[0]! - 179);
     const diffWithProtect = Math.abs(imgWithProtection.data[0]! - 179);
-    // With protection, change should be less than or equal to without
-    expect(diffWithProtect).toBeLessThanOrEqual(diffNoProtect);
+    // Guard: vibrance must actually change the pixel without protection
+    expect(diffNoProtect).toBeGreaterThan(0);
+    // With protection, change should be strictly less than without
+    expect(diffWithProtect).toBeLessThan(diffNoProtect);
   });
 
   it('clamps output to [0, 255]', () => {
@@ -456,10 +477,10 @@ describe('applyToneMapping', () => {
   it('reinhard operator compresses values', () => {
     const img = makePixel(200, 200, 200);
     applyToneMapping(img, 'reinhard');
-    // Reinhard maps x/(1+x) — output should be less than input for normalized values < 1
+    // Reinhard maps x/(1+x) — output should be less than input for values above midtone
     for (let c = 0; c < 3; c++) {
-      expect(img.data[c]!).toBeGreaterThanOrEqual(0);
-      expect(img.data[c]!).toBeLessThanOrEqual(255);
+      expect(img.data[c]!).toBeLessThan(200);
+      expect(img.data[c]!).toBeGreaterThan(0);
     }
   });
 
@@ -475,13 +496,14 @@ describe('applyToneMapping', () => {
     const img = makePixel(255, 255, 255);
     applyToneMapping(img, 'aces');
     for (let c = 0; c < 3; c++) {
-      expect(img.data[c]!).toBeGreaterThanOrEqual(0);
-      expect(img.data[c]!).toBeLessThanOrEqual(255);
+      // ACES compresses white — output should be less than 255
+      expect(img.data[c]!).toBeLessThan(255);
+      expect(img.data[c]!).toBeGreaterThan(0);
     }
   });
 
   it.each(['reinhard', 'filmic', 'aces', 'agx', 'pbrNeutral', 'gt', 'acesHill', 'drago'] as const)(
-    '%s operator produces valid output',
+    '%s operator produces valid output that differs from input',
     (operator) => {
       const img = makePixel(180, 90, 45);
       applyToneMapping(img, operator);
@@ -489,6 +511,8 @@ describe('applyToneMapping', () => {
         expect(img.data[c]!).toBeGreaterThanOrEqual(0);
         expect(img.data[c]!).toBeLessThanOrEqual(255);
       }
+      // Tone mapping should actually transform the pixel values
+      expect(img.data[0]!).not.toBe(180);
     },
   );
 });
@@ -552,6 +576,39 @@ describe('applyToneMappingWithParams', () => {
     applyToneMappingWithParams(img, { enabled: true, operator: 'filmic' });
     expect(img.data[3]).toBe(50);
   });
+
+  it('drago-specific parameters affect output', () => {
+    const img1 = makePixel(200, 200, 200);
+    const img2 = makePixel(200, 200, 200);
+
+    applyToneMappingWithParams(img1, {
+      enabled: true,
+      operator: 'drago',
+      dragoBias: 0.5,
+      dragoLwa: 0.1,
+      dragoLmax: 1.0,
+      dragoBrightness: 1.0,
+    });
+    applyToneMappingWithParams(img2, {
+      enabled: true,
+      operator: 'drago',
+      dragoBias: 1.0,
+      dragoLwa: 0.5,
+      dragoLmax: 5.0,
+      dragoBrightness: 4.0,
+    });
+
+    // Different drago parameters should produce different results
+    const same = img1.data[0] === img2.data[0] && img1.data[1] === img2.data[1];
+    expect(same).toBe(false);
+    // Both should still produce valid output
+    for (let c = 0; c < 3; c++) {
+      expect(img1.data[c]!).toBeGreaterThanOrEqual(0);
+      expect(img1.data[c]!).toBeLessThanOrEqual(255);
+      expect(img2.data[c]!).toBeGreaterThanOrEqual(0);
+      expect(img2.data[c]!).toBeLessThanOrEqual(255);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -602,11 +659,31 @@ describe('applyToneMappingHDR', () => {
     expect(img.data[3]).toBe(77);
   });
 
+  it('handles 4-channel HDR data (RGBA float)', () => {
+    const img = makePixel(0, 0, 0);
+    // 4-channel HDR data: R=2.0, G=1.0, B=0.5, A=1.0 (alpha channel in float data)
+    const hdr = new Float32Array([2.0, 1.0, 0.5, 1.0]);
+    applyToneMappingHDR(img, 'reinhard', hdr, 4);
+    // channels >= 3, so R, G, B are read from the first 3 floats
+    // Higher HDR value should produce higher output
+    expect(img.data[0]!).toBeGreaterThan(img.data[2]!);
+    expect(img.data[0]!).toBeGreaterThan(0);
+    expect(img.data[1]!).toBeGreaterThan(0);
+    expect(img.data[2]!).toBeGreaterThan(0);
+    // Alpha in ImageData should be preserved (unchanged from makePixel)
+    expect(img.data[3]!).toBe(255);
+  });
+
   it('handles NaN/Infinity in HDR data gracefully', () => {
     const img = makePixel(0, 0, 0);
     const hdr = new Float32Array([NaN, Infinity, -Infinity]);
     applyToneMappingHDR(img, 'reinhard', hdr, 3);
+    // NaN should map to 0 (the fallback path)
+    expect(img.data[0]!).toBe(0);
+    // All channels should be valid finite integers in [0, 255]
     for (let c = 0; c < 3; c++) {
+      expect(Number.isFinite(img.data[c]!)).toBe(true);
+      expect(Number.isInteger(img.data[c]!)).toBe(true);
       expect(img.data[c]!).toBeGreaterThanOrEqual(0);
       expect(img.data[c]!).toBeLessThanOrEqual(255);
     }
