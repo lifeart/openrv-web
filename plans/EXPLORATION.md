@@ -77,20 +77,15 @@ Implemented via `src/nodes/base/defineNodeProperty.ts` factory function for type
 
 ---
 
-### 4. Strengthen Decoder Options Typing (Priority: Low-Medium) — ⚠️ PARTIAL
+### 4. Strengthen Decoder Options Typing (Priority: Low-Medium) — ✅ COMPLETE
 
-Typed options added for EXR, DPX, JP2, and Cineon decoders. Generic `Record<string, unknown>` fallback remains in DecoderRegistry for unmapped decoders.
+Typed options for EXR, DPX, JP2, Cineon. `NoDecoderOptions` type for decoders with no options. `detectAndDecode` intentionally loosely typed; `decodeAs` is the type-safe path.
 
 ---
 
-### 5. Add Integration Tests for Under-Tested Core Files (Priority: Medium) — ⚠️ MOSTLY DONE
+### 5. Add Integration Tests for Under-Tested Core Files (Priority: Medium) — ✅ COMPLETE
 
-| File | Status |
-|------|--------|
-| `ColorSerializer.ts` | ✅ Test file added |
-| `PlaybackEngine.ts` | ✅ Test file added |
-| `AnnotationStore.ts` | ✅ Test file added |
-| `ViewerEffects.ts` | ❌ Still missing dedicated tests |
+All four files now have dedicated tests: ColorSerializer, PlaybackEngine, AnnotationStore, ViewerEffects (64 tests).
 
 ---
 
@@ -113,9 +108,9 @@ Implemented:
 
 ---
 
-### 8. WebGPU Backend Readiness (Priority: Low — Future) — ⚠️ MOSTLY DONE
+### 8. WebGPU Backend Readiness (Priority: Low — Future) — ✅ COMPLETE
 
-`WebGPUBackend.ts` is substantially implemented with only 1 TODO remaining.
+`WebGPUBackend.ts` fully implemented. Texture filter mode now wired to GPU samplers.
 
 ---
 
@@ -142,4 +137,4 @@ Implemented:
 | **Dependencies** | 9/10 | All major deps updated |
 | **DX/Tooling** | 9/10 | ESLint, Prettier, pre-commit hooks, lint-staged |
 
-**Overall**: A well-engineered, professional-grade codebase. Remaining improvements: split large files (proposal #2), ViewerEffects tests (#5), plugin marketplace (#9 P3), and GPU pixel accuracy tests.
+**Overall**: A well-engineered, professional-grade codebase. Remaining improvements: split large files (proposal #2) and plugin marketplace (#9 P3).

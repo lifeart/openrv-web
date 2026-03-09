@@ -1052,4 +1052,4 @@ openrv-web/
 | **5** | P2-P4: Full pipeline, cross-backend, texture sampling | 5 days | Phase 4 | ✅ COMPLETE |
 | **6** | CI workflow, SwiftShader tuning, documentation | 2 days | Phase 5 | ✅ COMPLETE |
 
-Phases 1-3 and 6 are complete. Phases 4-5 (pixel accuracy & pipeline integration tests) remain.
+All phases complete.
