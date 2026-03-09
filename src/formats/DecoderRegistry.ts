@@ -908,7 +908,9 @@ export class DecoderRegistry {
    */
   async detectAndDecode(
     buffer: ArrayBuffer,
-    options?: DecoderOptionsMap[keyof DecoderOptionsMap] | Record<string, unknown>,
+    // Intentionally loosely typed: the format isn't known until runtime.
+    // For compile-time type safety, use the standalone `decodeAs()` helper instead.
+    options?: Record<string, unknown>,
   ): Promise<(DecodeResult & { formatName: string }) | null> {
     const decoder = this.getDecoder(buffer);
     if (!decoder) {
@@ -961,8 +963,7 @@ export async function decodeAs<F extends keyof DecoderOptionsMap>(
   if (!decoder) {
     throw new Error(`No decoder registered for format: ${formatName}`);
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await decoder.decode(buffer, options as any);
+  const result = await decoder.decode(buffer, options as Record<string, unknown>);
   return { ...result, formatName };
 }
 
