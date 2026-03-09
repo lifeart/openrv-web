@@ -3,7 +3,7 @@
  * Configures global test environment
  */
 
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 
 // Workaround for jsdom 28 CSS parsing bugs (https://github.com/jsdom/jsdom/issues/4095):
 // 1. `border` shorthand with CSS var() values silently rejects entire cssText
@@ -183,7 +183,6 @@ function createGetContextMock() {
 HTMLCanvasElement.prototype.getContext = createGetContextMock();
 
 // Re-apply mock before each test so it survives vi.restoreAllMocks()
-import { beforeEach } from 'vitest';
 beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = createGetContextMock();
 });
