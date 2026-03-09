@@ -11,97 +11,12 @@ import { createTestGL, compileShader, linkProgram, createFullscreenQuad } from '
 import { readPixelsGLFloat, expectPixel } from './helpers/pixels';
 import { createSolidTexture } from './helpers/textures';
 import { EPSILON } from './helpers/tolerance';
+import { setupIdentityPipeline } from './helpers/pipeline';
 
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
 
 const W = 1, H = 1;
-
-function setupIdentityPipeline(gl: WebGL2RenderingContext, program: WebGLProgram) {
-  gl.useProgram(program);
-  gl.uniform2f(gl.getUniformLocation(program, 'u_offset'), 0, 0);
-  gl.uniform2f(gl.getUniformLocation(program, 'u_scale'), 1, 1);
-  gl.uniformMatrix2fv(gl.getUniformLocation(program, 'u_texRotationMatrix'), false, [1, 0, 0, 1]);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_texFlipH'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_texFlipV'), 0);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_exposureRGB'), 0, 0, 0);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_gammaRGB'), 1, 1, 1);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_saturation'), 1);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_contrastRGB'), 1, 1, 1);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_scaleRGB'), 1, 1, 1);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_offsetRGB'), 0, 0, 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_brightness'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_temperature'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tint'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_hueRotationEnabled'), 0);
-  gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_hueRotationMatrix'), false, [1,0,0,0,1,0,0,0,1]);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_toneMappingOperator'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmReinhardWhitePoint'), 4.0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmFilmicExposureBias'), 2.0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmFilmicWhitePoint'), 11.2);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmDragoBias'), 0.85);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmDragoLmax'), 1.0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmDragoLwa'), 0.5);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_tmDragoBrightness'), 2.0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_invert'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_outputMode'), 1); // HDR passthrough for float readback
-  gl.uniform1i(gl.getUniformLocation(program, 'u_inputTransfer'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_hdrHeadroom'), 1.0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_cdlEnabled'), 0);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_cdlSlope'), 1, 1, 1);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_cdlOffset'), 0, 0, 0);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_cdlPower'), 1, 1, 1);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_cdlSaturation'), 1);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_cdlColorspace'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_curvesEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_colorWheelsEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_falseColorEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_contourEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_zebraEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_channelMode'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_fileLUT3DEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_lookLUT3DEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_displayLUT3DEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_displayTransfer'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_displayGamma'), 1.0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_displayBrightness'), 1.0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_displayCustomGamma'), 2.2);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_backgroundPattern'), 0);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_bgColor1'), 0, 0, 0);
-  gl.uniform3f(gl.getUniformLocation(program, 'u_bgColor2'), 0, 0, 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_bgCheckerSize'), 8);
-  gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), 1, 1);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_hsEnabled'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_highlights'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_shadows'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_whites'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_blacks'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_vibranceEnabled'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_vibrance'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_clarityEnabled'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_clarity'), 0);
-  gl.uniform2f(gl.getUniformLocation(program, 'u_texelSize'), 1, 1);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_sharpenEnabled'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_sharpenAmount'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_hslQualifierEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_gamutMappingEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_inputPrimariesEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_outputPrimariesEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_linearizeLogType'), 0);
-  gl.uniform1f(gl.getUniformLocation(program, 'u_linearizeFileGamma'), 1.0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_linearizeSRGB2linear'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_linearizeRec709ToLinear'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_deinterlaceEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_filmEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_perspectiveEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_inlineLUTEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_outOfRange'), 0);
-  gl.uniform4i(gl.getUniformLocation(program, 'u_channelSwizzle'), 0, 1, 2, 3);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_premult'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_sphericalEnabled'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_ditherMode'), 0);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_quantizeBits'), 0);
-}
 
 function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: number) {
   const fbo = gl.createFramebuffer()!;

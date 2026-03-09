@@ -58,6 +58,8 @@ export function linkProgram(
   const program = gl.createProgram()!;
   gl.attachShader(program, vertShader);
   gl.attachShader(program, fragShader);
+  gl.bindAttribLocation(program, 0, 'a_position');
+  gl.bindAttribLocation(program, 1, 'a_texCoord');
   gl.linkProgram(program);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     const log = gl.getProgramInfoLog(program) || 'unknown error';
