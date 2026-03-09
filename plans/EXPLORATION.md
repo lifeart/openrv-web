@@ -48,18 +48,13 @@ src/
 
 ## Proposed Improvements
 
-### 1. Dependency Updates (Priority: High)
+### 1. Dependency Updates (Priority: High) — ✅ COMPLETE
 
-| Package | Current | Latest | Risk |
-|---------|---------|--------|------|
-| vitest + coverage-v8 | ^1.2.0 | 4.0.18 | **2 major versions behind** |
-| mediabunny | ^1.28.0 | 1.38.1 | Missing codec fixes |
-| jsdom | ^24.0.0 | 28.1.0 | Missing DOM APIs |
-| vite | ^6.0.7 | 7.3.1 | Build improvements |
-
-**Recommendation**: Upgrade vitest first (highest impact on DX), then mediabunny.
-
-**Detailed plan**: [dependency_updates_1.md](./dependency_updates_1.md)
+All packages updated to target versions:
+- vitest + coverage-v8: ^4.0.18
+- mediabunny: ^1.38.1
+- jsdom: ^28.1.0
+- vite: ^7.3.1
 
 ---
 
@@ -76,102 +71,60 @@ src/
 
 ---
 
-### 3. Reduce Property Boilerplate in Effect Nodes (Priority: Medium)
+### 3. Reduce Property Boilerplate in Effect Nodes (Priority: Medium) — ✅ COMPLETE
 
-115+ instances of repetitive getter/setter pairs across effect nodes:
-
-```typescript
-// Current (repeated 48+ times):
-get exposure(): number { return this.properties.getValue('exposure') as number; }
-set exposure(v: number) { this.properties.setValue('exposure', v); }
-```
-
-**Proposal**: A decorator or helper to auto-generate typed accessors:
-
-```typescript
-// Option A: Factory function
-defineProperty(this, 'exposure', { type: 'number', min: -6, max: 6, default: 0 });
-
-// Option B: Decorator (already using experimentalDecorators)
-@property({ min: -6, max: 6, default: 0 })
-declare exposure: number;
-```
-
-This would eliminate ~122 lines of boilerplate across 20 node files in `src/nodes/`.
-
-**Detailed plan**: [property_boilerplate_3.md](./property_boilerplate_3.md)
+Implemented via `src/nodes/base/defineNodeProperty.ts` factory function for typed property accessors.
 
 ---
 
-### 4. Strengthen Decoder Options Typing (Priority: Low-Medium)
+### 4. Strengthen Decoder Options Typing (Priority: Low-Medium) — ⚠️ PARTIAL
 
-Currently `Record<string, unknown>` — no IDE autocomplete or compile-time safety.
-
-```typescript
-// Current:
-decode(buffer: ArrayBuffer, options?: Record<string, unknown>): Promise<DecodeResult>;
-
-// Proposed: Generic per-decoder options
-interface EXRDecodeOptions { layer?: string; mipLevel?: number; }
-decode(buffer: ArrayBuffer, options?: EXRDecodeOptions): Promise<DecodeResult>;
-```
-
-**Detailed plan**: [decoder_typing_4.md](./decoder_typing_4.md)
+Typed options added for EXR, DPX, JP2, and Cineon decoders. Generic `Record<string, unknown>` fallback remains in DecoderRegistry for unmapped decoders.
 
 ---
 
-### 5. Add Integration Tests for Under-Tested Core Files (Priority: Medium)
+### 5. Add Integration Tests for Under-Tested Core Files (Priority: Medium) — ⚠️ MOSTLY DONE
 
-| File | Lines | Current Coverage |
-|------|-------|-----------------|
-| `ColorSerializer.ts` | 1,048 | No dedicated test file (18 builder methods) |
-| `PlaybackEngine.ts` | 1,152 | ~10 direct tests only |
-| `ViewerEffects.ts` | 606 | 82 tests, 3 functions untested |
-| `AnnotationStore.ts` | 586 | No dedicated test file |
-
-**Detailed plan**: [integration_tests_5.md](./integration_tests_5.md)
+| File | Status |
+|------|--------|
+| `ColorSerializer.ts` | ✅ Test file added |
+| `PlaybackEngine.ts` | ✅ Test file added |
+| `AnnotationStore.ts` | ✅ Test file added |
+| `ViewerEffects.ts` | ❌ Still missing dedicated tests |
 
 ---
 
-### 6. Introduce Event Bus for App Wiring (Priority: Low-Medium)
+### 6. Introduce Event Bus for App Wiring (Priority: Low-Medium) — ✅ COMPLETE
 
-Currently 7+ `AppXxxWiring.ts` modules manually connect signals between Session, Viewer, and controls (144 EventEmitter subclasses total). The current pattern is fundamentally sound; improvements should focus on:
-
-- Extracting cross-cutting side-effect patterns (`withSideEffects` helper)
-- Adding debugging/tracing infrastructure (`WiringEventLog`)
-- Standardizing return types (`WiringResult`)
-- Enabling plugin event subscriptions (Phase 2)
-
-**Detailed plan**: [event_bus_6.md](./event_bus_6.md)
+Implemented:
+- `src/utils/WiringEventLog.ts` — bounded ring buffer for debug tracing
+- `src/utils/WiringHelpers.ts` — `withSideEffects` helper, `WiringSideEffects` interface
+- `StatefulWiringResult` pattern used throughout wiring modules
+- Plugin event subscriptions delivered via Plugin Phase 2 P0
 
 ---
 
-### 7. Add Linting & Pre-Commit Hooks (Priority: Low)
+### 7. Add Linting & Pre-Commit Hooks (Priority: Low) — ✅ COMPLETE
 
-No ESLint config or pre-commit hooks found. With 467K LOC, automated linting would catch:
-- Consistent import ordering
-- Unused imports (beyond what `noUnusedLocals` catches)
-- Style consistency enforcement
-
-**Detailed plan**: [linting_hooks_7.md](./linting_hooks_7.md)
+Implemented:
+- `eslint.config.mjs` with typescript-eslint + import-x plugin
+- `simple-git-hooks` for pre-commit hooks
+- `lint-staged` running `eslint --fix --max-warnings=0` and `prettier --write` on `.ts` files
 
 ---
 
-### 8. WebGPU Backend Readiness (Priority: Low — Future)
+### 8. WebGPU Backend Readiness (Priority: Low — Future) — ⚠️ MOSTLY DONE
 
-`createRenderer.ts` already has WebGPU selection logic, but `WebGPUBackend.ts` has TODOs for HDR rendering. The `RendererBackend` interface is well-designed for this — just needs implementation work.
-
-**Detailed plan**: [webgpu_backend_8.md](./webgpu_backend_8.md)
+`WebGPUBackend.ts` is substantially implemented with only 1 TODO remaining.
 
 ---
 
-### 9. Plugin System Phase 2 (Priority: Low — Future)
+### 9. Plugin System Phase 2 (Priority: Low — Future) — ⚠️ MOSTLY DONE
 
-Current plugin system supports: decoders, nodes, tools, exporters, blend modes, UI panels. Missing:
-- Plugin event subscriptions (`onEvent()`)
-- Plugin settings/preferences
-- Plugin marketplace/discovery
-- Hot-reload for development
+- ✅ P0: Plugin event subscriptions (`PluginEventBus.ts`)
+- ✅ P1: Plugin settings/preferences (`PluginSettingsStore.ts`)
+- ✅ P2: Hot-reload for development (`dev/HotReloadManager.ts`)
+- ❌ P3: Plugin marketplace/discovery — not started
 
 **Detailed plan**: [plugin_phase2_9.md](./plugin_phase2_9.md)
 
@@ -186,7 +139,7 @@ Current plugin system supports: decoders, nodes, tools, exporters, blend modes, 
 | **Architecture** | 8.5/10 | Clean separation, some large files to split |
 | **Performance** | 9/10 | Workers, caching, lazy loading, memory management |
 | **Extensibility** | 8/10 | Plugin system Phase 1 solid, Phase 2 pending |
-| **Dependencies** | 6.5/10 | vitest 2 major versions behind |
-| **DX/Tooling** | 7/10 | No linter, no pre-commit hooks |
+| **Dependencies** | 9/10 | All major deps updated |
+| **DX/Tooling** | 9/10 | ESLint, Prettier, pre-commit hooks, lint-staged |
 
-**Overall**: A well-engineered, professional-grade codebase. The highest-impact improvements are dependency updates, splitting large files, and reducing effect node boilerplate.
+**Overall**: A well-engineered, professional-grade codebase. Remaining improvements: split large files (proposal #2), ViewerEffects tests (#5), plugin marketplace (#9 P3), and GPU pixel accuracy tests.

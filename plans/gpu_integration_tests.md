@@ -1,7 +1,7 @@
 # Implementation Plan: GPU Integration Tests via Vitest Browser Mode + Playwright
 
-> **Status:** NOT STARTED
-> **Estimated total effort:** ~5 engineer-weeks across 6 phases
+> **Status:** Phases 1-3 & 6 COMPLETE. Phases 4-5 remain.
+> **Estimated remaining effort:** ~2 engineer-weeks (Phases 4-5)
 
 ## Motivation
 
@@ -16,7 +16,7 @@ GPU integration tests running in a real browser (Chromium via Playwright) will c
 
 ---
 
-## Phase 1: Infrastructure Setup
+## Phase 1: Infrastructure Setup ✅ COMPLETE
 
 **Effort:** ~3 days
 **Deliverables:** Config files, npm scripts, CI workflow, first passing GPU test
@@ -150,7 +150,7 @@ describe('GPU Smoke Test', () => {
 
 ---
 
-## Phase 2: Test Helpers & Utilities
+## Phase 2: Test Helpers & Utilities ✅ COMPLETE
 
 **Effort:** ~4 days
 **Deliverables:** Reusable helper module at `src/render/__gpu__/helpers/`
@@ -535,7 +535,7 @@ export const EPSILON = {
 
 ---
 
-## Phase 3: Test Categories (P0 — Shader Compilation & Linking)
+## Phase 3: Test Categories (P0 — Shader Compilation & Linking) ✅ COMPLETE
 
 **Effort:** ~2 days
 **Deliverables:** All shaders proven to compile on a real GPU
@@ -658,7 +658,7 @@ describe('WGSL Shader Compilation (real GPU)', () => {
 
 ---
 
-## Phase 4: Test Categories (P1 — Single-Stage Pixel Accuracy)
+## Phase 4: Test Categories (P1 — Single-Stage Pixel Accuracy) — NOT STARTED
 
 **Effort:** ~5 days
 **Deliverables:** Pixel-verified tests for each of the 11 pipeline stages
@@ -738,7 +738,7 @@ Similar patterns for:
 
 ---
 
-## Phase 5: Test Categories (P2-P4)
+## Phase 5: Test Categories (P2-P4) — NOT STARTED
 
 **Effort:** ~5 days
 
@@ -839,7 +839,7 @@ Test cases:
 
 ---
 
-## Phase 6: CI Configuration
+## Phase 6: CI Configuration ✅ COMPLETE
 
 **Effort:** ~2 days
 **Deliverables:** GitHub Actions workflow, automated GPU test gate
@@ -1045,11 +1045,11 @@ openrv-web/
 
 | Phase | What | Estimated Effort | Dependencies |
 |-------|------|-----------------|--------------|
-| **1** | Infrastructure: config, scripts, CI, smoke test | 3 days | None |
-| **2** | Test helpers & utilities | 4 days | Phase 1 |
-| **3** | P0: Shader compilation & linking | 2 days | Phase 2 |
-| **4** | P1: Single-stage pixel accuracy (all 11 stages) | 5 days | Phase 2 |
-| **5** | P2-P4: Full pipeline, cross-backend, texture sampling | 5 days | Phase 4 |
-| **6** | CI workflow, SwiftShader tuning, documentation | 2 days | Phase 5 |
+| **1** | Infrastructure: config, scripts, CI, smoke test | 3 days | None | ✅ COMPLETE |
+| **2** | Test helpers & utilities | 4 days | Phase 1 | ✅ COMPLETE |
+| **3** | P0: Shader compilation & linking | 2 days | Phase 2 | ✅ COMPLETE |
+| **4** | P1: Single-stage pixel accuracy (all 11 stages) | 5 days | Phase 2 | NOT STARTED |
+| **5** | P2-P4: Full pipeline, cross-backend, texture sampling | 5 days | Phase 4 | NOT STARTED |
+| **6** | CI workflow, SwiftShader tuning, documentation | 2 days | Phase 5 | ✅ COMPLETE |
 
-Phase 1-3 should be merged first as a standalone PR. Phases 4-6 can be split across multiple PRs per stage.
+Phases 1-3 and 6 are complete. Phases 4-5 (pixel accuracy & pipeline integration tests) remain.
