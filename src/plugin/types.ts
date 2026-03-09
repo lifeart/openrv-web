@@ -59,7 +59,8 @@ export interface PluginContext {
   /** The plugin's own manifest */
   readonly manifest: PluginManifest;
   /** Register a format decoder */
-  registerDecoder(decoder: import('../formats/DecoderRegistry').FormatDecoder): void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  registerDecoder(decoder: import('../formats/DecoderRegistry').FormatDecoder<any>): void;
   /** Register a node type */
   registerNode(type: string, creator: () => import('../nodes/base/IPNode').IPNode): void;
   /** Register a paint tool (delegates to PaintEngine.registerAdvancedTool) */

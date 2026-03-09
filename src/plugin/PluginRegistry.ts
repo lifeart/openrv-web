@@ -375,7 +375,8 @@ export class PluginRegistry {
 
     return {
       manifest,
-      registerDecoder: (decoder: FormatDecoder) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      registerDecoder: (decoder: FormatDecoder<any>) => {
         decoderRegistry.registerDecoder(decoder);
         reg.decoders.push(decoder.formatName);
       },

@@ -39,16 +39,16 @@ export interface DecoderOptionsMap {
   exr: EXRDecodeOptions;
   DPX: DPXDecodeOptions;
   Cineon: CineonDecodeOptions;
-  TIFF: Record<string, never>;
-  'jpeg-gainmap': Record<string, never>;
-  'heic-gainmap': Record<string, never>;
-  'avif-gainmap': Record<string, never>;
-  avif: Record<string, never>;
-  'raw-preview': Record<string, never>;
-  hdr: Record<string, never>;
-  jxl: Record<string, never>;
+  TIFF: NoDecoderOptions;
+  'jpeg-gainmap': NoDecoderOptions;
+  'heic-gainmap': NoDecoderOptions;
+  'avif-gainmap': NoDecoderOptions;
+  avif: NoDecoderOptions;
+  'raw-preview': NoDecoderOptions;
+  hdr: NoDecoderOptions;
+  jxl: NoDecoderOptions;
   jp2: JP2DecodeOptions;
-  mxf: Record<string, never>;
+  mxf: NoDecoderOptions;
 }
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
@@ -61,7 +61,10 @@ export interface DecodeResult {
   metadata: Record<string, unknown>;
 }
 
-export interface FormatDecoder<TOptions = Record<string, unknown>> {
+/** Options type for decoders that accept no options */
+export type NoDecoderOptions = Record<string, never>;
+
+export interface FormatDecoder<TOptions = NoDecoderOptions> {
   formatName: string;
   canDecode(buffer: ArrayBuffer): boolean;
   decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>;
@@ -838,7 +841,8 @@ const avifDecoder: FormatDecoder = {
  * Detects format by magic number and dispatches to the appropriate decoder.
  */
 export class DecoderRegistry {
-  private decoders: FormatDecoder[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private decoders: FormatDecoder<any>[] = [];
 
   constructor() {
     // Register built-in decoders in detection order.
@@ -875,7 +879,8 @@ export class DecoderRegistry {
   /**
    * Get the appropriate decoder for a buffer
    */
-  getDecoder(buffer: ArrayBuffer): FormatDecoder | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getDecoder(buffer: ArrayBuffer): FormatDecoder<any> | null {
     for (const decoder of this.decoders) {
       if (decoder.canDecode(buffer)) {
         return decoder;
@@ -887,7 +892,8 @@ export class DecoderRegistry {
   /**
    * Get a decoder by its format name.
    */
-  getDecoderByName(name: string): FormatDecoder | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getDecoderByName(name: string): FormatDecoder<any> | null {
     return this.decoders.find((d) => d.formatName === name) ?? null;
   }
 
@@ -902,7 +908,7 @@ export class DecoderRegistry {
    */
   async detectAndDecode(
     buffer: ArrayBuffer,
-    options?: Record<string, unknown>,
+    options?: DecoderOptionsMap[keyof DecoderOptionsMap] | Record<string, unknown>,
   ): Promise<(DecodeResult & { formatName: string }) | null> {
     const decoder = this.getDecoder(buffer);
     if (!decoder) {
@@ -916,7 +922,8 @@ export class DecoderRegistry {
    * Register a new format decoder
    * New decoders are added to the end of the detection chain
    */
-  registerDecoder(decoder: FormatDecoder): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  registerDecoder(decoder: FormatDecoder<any>): void {
     // Avoid duplicates
     const existing = this.decoders.findIndex((d) => d.formatName === decoder.formatName);
     if (existing >= 0) {
@@ -954,7 +961,8 @@ export async function decodeAs<F extends keyof DecoderOptionsMap>(
   if (!decoder) {
     throw new Error(`No decoder registered for format: ${formatName}`);
   }
-  const result = await decoder.decode(buffer, options as Record<string, unknown>);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await decoder.decode(buffer, options as any);
   return { ...result, formatName };
 }
 

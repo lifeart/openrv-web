@@ -53,6 +53,7 @@ export {
   type FormatDecoder,
   type DecodeResult,
   type DecoderOptionsMap,
+  type NoDecoderOptions,
 } from './DecoderRegistry';
 export {
   isGainmapJPEG,
