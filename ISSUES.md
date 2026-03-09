@@ -433,6 +433,30 @@ This file tracks findings from exploratory review and targeted validation runs.
   - These tools can sample the wrong pixel or wrong stereo position when the viewer is zoomed, panned, rotated, letterboxed, or using layered render canvases.
   - The result is a QC workflow that looks available but becomes unreliable exactly in the more complex inspection cases where users need it most.
 
+### 36. The 360-view toolbar button can lie about the current spherical-projection state
+
+- Severity: Medium
+- Area: View UI, spherical projection
+- Evidence:
+  - The `360 View` button only updates its active styling inside its own click handler in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L161).
+  - The app also auto-enables and auto-disables spherical projection on source load in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L382).
+  - I found no subscription from the button to spherical-projection state changes outside that click path.
+- Impact:
+  - Loading a 360 source can turn spherical projection on while the toolbar still looks off.
+  - Loading a normal source afterward can turn it back off while the button still looks active, so the control stops reflecting the real viewing mode.
+
+### 37. Floating-window QC status can remain stale after switching sources
+
+- Severity: Medium
+- Area: View UI, stereo QC feedback
+- Evidence:
+  - The floating-window button becomes active from `lastResult?.hasViolation` in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L62).
+  - `FloatingWindowControl` persists the last detection result until `clearResult()` is called in [src/ui/components/FloatingWindowControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FloatingWindowControl.ts#L55) and [src/ui/components/FloatingWindowControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FloatingWindowControl.ts#L101).
+  - The only production clear path I found is when stereo is turned off in [src/AppControlRegistry.ts](/Users/lifeart/Repos/openrv-web/src/AppControlRegistry.ts#L518); I found no clear-on-source-change path.
+- Impact:
+  - After detecting a violation on one stereo pair, the button can remain lit when the user switches to a different source that has never been checked.
+  - That makes the QC indicator look like a live status for the current image when it is really just cached history from an earlier detection run.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
